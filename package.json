@@ -3,7 +3,17 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=dashboard --filter=api",
+    "dev:apps": "turbo run dev --filter=dashboard --filter=api",
+    "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/dev/docker-compose.yml down",
+    "db:wait": "pnpm --filter @repo/db db:wait",
+    "db:migrate": "pnpm --filter @repo/db db:migrate",
+    "db:seed:local": "pnpm --filter @repo/db db:seed:local",
+    "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
+    "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
+    "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
+    "db:reset:local": "docker compose -f infra/dev/docker-compose.yml down -v && pnpm setup:local",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
@@ -16,9 +26,5 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "npm@10.8.2",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  "packageManager": "pnpm@9.15.9"
 }

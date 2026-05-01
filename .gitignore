@@ -8,6 +8,9 @@ node_modules
 # Local env files
 .env
 .env.local
+
+# Per-tenant BigCapital env (provisioner)
+.stockix/
 .env.development.local
 .env.test.local
 .env.production.local

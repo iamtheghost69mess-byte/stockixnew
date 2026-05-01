@@ -1,0 +1,511 @@
+.form {
+  &__floating-footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    background: #fff;
+    padding: 14px 18px;
+    border-top: 1px solid #ececec;
+
+    .has-mini-sidebar & {
+      left: 50px;
+    }
+  }
+}
+
+// Form form.
+label.bp3-label {
+  color: #353535;
+  font-weight: 400;
+
+  .required {
+    color: red;
+  }
+
+  .bp3-form-group.bp3-inline & {
+    margin: 0 10px 0 0;
+    line-height: 1.6;
+    padding-top: calc(0.3rem + 1px);
+    padding-bottom: calc(0.3rem + 1px);
+  }
+}
+
+// Form input.
+.#{$ns}-input {
+  box-shadow: 0 0 0 transparent;
+  border: 1px solid #ced4da;
+  border-radius: 2px;
+  height: 32px;
+  line-height: 32px;
+  color: #333;
+
+  &:focus,
+  &.bp3-active {
+    box-shadow: 0 0 0 1px #116cd0;
+    border-color: #116cd0;
+  }
+
+  &.bp3-disabled,
+  &:disabled {
+    background: #e9ecef;
+  }
+
+  &.bp3-intent-danger {
+    box-shadow: 0 0 0 transparent;
+    border-color: #db3737;
+
+    &:focus,
+    &.bp3-active {
+      box-shadow: 0 0 0 1px #db3737;
+      border-color: #db3737;
+    }
+  }
+}
+
+.bp3-input-group{
+
+  &.bp3-intent-danger{
+    
+    .bp3-input{
+      box-shadow: 0 0 0 transparent;
+      border-color: #db3737;
+
+      &:focus,
+      &.bp3-active {
+        box-shadow: 0 0 0 1px #db3737;
+        border-color: #db3737;
+      }
+    }
+  }
+}
+
+.#{$ns}-form-group {
+  margin-bottom: 20px;
+
+  &.#{$ns}-intent-danger {
+    select {
+      box-shadow: 0 0 0 0 rgba(228, 226, 226, 0), 0 0 0 0 rgba(2, 2, 2, 0),
+        inset 0 0 0 1px #db3737, inset 0 0 0 1px rgba(16, 22, 26, 0.15),
+        inset 0 1px 1px rgba(16, 22, 26, 0.2);
+    }
+  }
+
+  .#{$ns}-label {
+    margin-bottom: 6px;
+  }
+}
+
+.#{$ns}-button:not([class*='.#{$ns}-intent-']) {
+  background-image: none;
+}
+
+.#{$ns}-html-select select,
+.#{$ns}-select select {
+  background-image: none;
+  border-radius: 2px;
+
+  &,
+  &:hover {
+    background: #fff;
+    box-shadow: none;
+    border: 1px solid #ced4da;
+  }
+
+  &:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    border-color: #80bdff;
+  }
+}
+
+.input-group-prepend {
+  .input-group-text {
+    display: flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    margin-bottom: 0;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #495057;
+    text-align: center;
+    white-space: nowrap;
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    height: 100%;
+
+    .bp3-form-group & {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      border-radius: 0.2rem;
+    }
+  }
+}
+
+.bp3-form-group {
+  .bp3-input-group {
+    flex: 1 1 auto;
+  }
+
+  .bp3-control-group {
+    >.input-group-prepend:first-child .input-group-text {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+  }
+}
+
+.#{$ns}-html-select {
+  .bp3-icon-double-caret-vertical {
+    display: none;
+  }
+}
+
+.bp3-datepicker-caption select {
+
+  &,
+  &:hover {
+    border-color: transparent;
+  }
+}
+
+// Dropdown arrow to html select and select list.
+.#{$ns}-html-select::after,
+.form-group--select-list .#{$ns}-button::after {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #8d8d8d;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  margin-top: -2px;
+  margin-right: 12px;
+  border-radius: 1px;
+}
+
+.form-group--select-list {
+
+  .form-group--select-list.bp3-intent-danger & {
+    & {
+      border-color: #db3737;
+    }
+  }
+
+  .#{$ns}-button {
+    color: #8d8d8d;
+    position: relative;
+    padding-right: 25px;
+    justify-content: start;
+
+    &:not([class*="bp3-intent-"]):not(.bp3-minimal) {
+
+      &,
+      &:hover {
+        outline: none;
+        box-shadow: 0 0 0 transparent;
+        border: 1px solid #ced4da;
+
+        &:not(:disabled) {
+          background: #fff;
+        }
+      }
+
+      &:focus {
+        box-shadow: 0 0 0 1px #116cd0;
+        border-color: #116cd0;
+      }
+    }
+  }
+
+  &.bp3-fill {
+    width: 100%;
+  }
+
+  .bp3-popover-target.bp3-popover-open {
+
+    .#{$ns}-button {
+
+      &:not([class*="bp3-intent-"]):not(.bp3-minimal):not(:disabled),
+      &:not([class*="bp3-intent-"]):not(.bp3-minimal):hover:not(:disabled) {
+        background-color: #fafafa;
+      }
+    }
+  }
+
+  .bp3-popover-target {
+    .bp3-icon {
+      position: absolute;
+      top: 0;
+      left: 0;
+      margin: 7px;
+
+      +.bp3-button-text {
+        padding-left: 20px;
+      }
+    }
+
+    .bp3-button {
+      padding-left: 10px;
+      color: #333;
+    }
+  }
+
+  &.bp3-intent-danger {
+    .bp3-button:not(.bp3-minimal) {
+      border-color: #db3737;
+    }
+  }
+}
+
+.select-list--fill-popover {
+  position: relative;
+
+  .bp3-transition-container,
+  .bp3-popover {
+    min-width: 100%;
+  }
+}
+
+.select-list--tooltip-items .bp3-popover-target {
+  display: block;
+}
+
+@mixin control-checked-colors($selector: ':checked') {
+  input#{$selector}~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background-color: $control-checked-background-color;
+    color: $white;
+  }
+
+  &:hover input#{$selector}~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background-color: $control-checked-background-color-hover;
+    border-color: $control-checked-background-color-active;
+  }
+
+  input:not(:disabled):active#{$selector}~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background-color: $control-checked-background-color-active;
+    border-color: $control-checked-background-color-active;
+  }
+
+  input:disabled#{$selector}~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background: rgba($control-checked-background-color, 0.5);
+  }
+}
+
+///@extend
+.#{$ns}-control {
+  input:checked~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background-color: transparent;
+    background-image: none;
+  }
+
+  &:hover input:checked~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background-color: transparent;
+  }
+
+  input:not(:disabled):active:checked~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background: transparent;
+  }
+
+  input:disabled:checked~.#{$ns}-control-indicator {
+    box-shadow: none;
+    background: transparent;
+  }
+
+  &.#{$ns}-disabled {
+    cursor: not-allowed;
+    color: $pt-text-color-disabled;
+  }
+
+  &.#{$ns}-inline {
+    display: inline-block;
+    margin-right: $pt-grid-size * 2;
+  }
+
+  .#{$ns}-control-indicator {
+    box-shadow: 0 0 0 transparent;
+    background-clip: padding-box;
+    background-color: transparent;
+    background-image: none;
+    width: 18px;
+    height: 18px;
+
+    &::before {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  &.bp3-large .#{$ns}-control-indicator {
+    width: 20px;
+    height: 20px;
+
+    &::before {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  &:hover .#{$ns}-control-indicator {
+    background-color: transparent;
+  }
+
+  input:not(:disabled):active~.#{$ns}-control-indicator {
+    box-shadow: 0 0 0 transparent;
+    background: transparent;
+  }
+
+  /*
+    Checkbox
+
+    Markup:
+    <label class="#{$ns}-control #{$ns}-checkbox {{.modifier}}">
+      <input type="checkbox" {{:modifier}} />
+      <span class="#{$ns}-control-indicator"></span>
+      Checkbox
+    </label>
+
+    :checked  - Checked
+    :disabled - Disabled. Also add <code>.#{$ns}-disabled</code> to <code>.#{$ns}-control</code> to change text color (not shown below).
+    :indeterminate - Indeterminate. Note that this style can only be achieved via JavaScript
+                     <code>input.indeterminate = true</code>.
+    .#{$ns}-align-right - Right-aligned indicator
+    .#{$ns}-large - Large
+
+    Styleguide checkbox
+  */
+  &.#{$ns}-checkbox {
+    &:hover input:indeterminate~.#{$ns}-control-indicator {
+      // box-shadow: 0 0 0 transparent;
+    }
+
+    @mixin indicator-inline-icon($icon) {
+      &::before {
+        // embed SVG icon image as backgroud-image above gradient.
+        // the SVG image content is inlined into the CSS, so use this sparingly.
+        height: 100%;
+        width: 100%;
+      }
+    }
+
+    @include control-checked-colors(':checked');
+
+    // make :indeterminate look like :checked _for Checkbox only_
+    @include control-checked-colors(':indeterminate');
+
+    .#{$ns}-control-indicator {
+      border: 1px solid #c6c6c6;
+      border-radius: $pt-border-radius;
+      background-color: #fff;
+    }
+
+    input:checked~.#{$ns}-control-indicator {
+      background-image: escape-svg($form-check-input-checked-bg-image);
+      border-color: $form-check-input-checked-bg-color;
+      background-color: $form-check-input-checked-bg-color;
+    }
+
+    input:indeterminate~.#{$ns}-control-indicator {
+      background-image: escape-svg($form-check-input-indeterminate-bg-image);
+      border-color: $form-check-input-checked-bg-color;
+      background-color: $form-check-input-checked-bg-color;
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+
+  /*
+    Radio
+
+    Markup:
+    <label class="#{$ns}-control #{$ns}-radio {{.modifier}}">
+      <input type="radio" name="docs-radio-regular" {{:modifier}} />
+      <span class="#{$ns}-control-indicator"></span>
+      Radio
+    </label>
+
+    :checked  - Selected
+    :disabled - Disabled. Also add <code>.#{$ns}-disabled</code> to <code>.#{$ns}-control</code> to change text color (not shown below).
+    .#{$ns}-align-right - Right-aligned indicator
+    .#{$ns}-large - Large
+
+    Styleguide radio
+  */
+  &.#{$ns}-radio {
+    .#{$ns}-control-indicator {
+      border: 2px solid #cecece;
+      background-color: #fff;
+
+      &::before {
+        height: 14px;
+        width: 14px;
+      }
+    }
+
+    input:checked~.#{$ns}-control-indicator {
+      border-color: $form-check-input-checked-bg-color;
+
+      &::before {
+        background-image: radial-gradient($form-check-input-checked-bg-color 40%,
+            transparent 40%);
+      }
+    }
+
+    input:checked:disabled~.#{$ns}-control-indicator::before {
+      opacity: 0.5;
+    }
+
+    input:focus~.#{$ns}-control-indicator {
+      -moz-outline-radius: $control-indicator-size;
+    }
+  }
+}
+
+.bp3-menu-item::before,
+.bp3-menu-item>.bp3-icon {
+  color: #4b5d6b;
+}
+
+.bp3-control-group {
+  .input-prepend {
+    &:not(.bp3-fixed) {
+      flex: 0;
+    }
+
+    &__text,
+    &__button {
+      display: flex;
+      align-items: center;
+      padding: 0.375rem 0.75rem;
+      margin: 0;
+      height: 32px;
+      font-size: 1rem;
+      font-weight: 400;
+      line-height: 1.5;
+      color: #495057;
+      text-align: center;
+      white-space: nowrap;
+      background-color: #e9ecef;
+      border: 1px solid #ced4da;
+      border-radius: 0 3px 3px 0;
+
+      .bp3-icon {
+        color: #848da0;
+      }
+    }
+  }
+}
+
+.bp3-control.bp3-checkbox .bp3-control-indicator{
+  border-color: #666;
+}

@@ -1,11 +1,21 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "PORT",
+    "DATABASE_URL",
+    "TENANT_ENV_ROOT",
+    "BIGCAPITAL_ROOT",
+    "ROOT_DOMAIN",
+    "MAX_TENANT_PORT",
+    "NEXT_PUBLIC_STOCKIX_API_URL",
+    "PUBLIC_BASE_URL_SCHEME"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]

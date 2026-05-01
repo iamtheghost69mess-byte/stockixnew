@@ -1,0 +1,31 @@
+{
+  "name": "@repo/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:wait": "node scripts/wait-local-postgres.mjs",
+    "db:seed:local": "node scripts/seed-local-owner.mjs",
+    "db:studio": "drizzle-kit studio",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.1",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "dotenv": "^16.6.1",
+    "drizzle-kit": "^0.31.8",
+    "eslint": "^9.39.1",
+    "typescript": "5.9.2"
+  }
+}

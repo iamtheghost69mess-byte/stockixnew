@@ -1,0 +1,21 @@
+# Local Stockix control-plane database only. Compose v2: `docker compose up -d`
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stockix_platform
+    ports:
+      # Host 5432 is often already taken by a local Postgres install — use 54330 for Stockix dev.
+      - "54330:5432"
+    volumes:
+      - stockix_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stockix_platform"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  stockix_pg_data:
