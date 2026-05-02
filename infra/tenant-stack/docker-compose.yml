@@ -21,10 +21,15 @@ services:
       - webapp
 
   webapp:
-    image: ghcr.io/stockixhq/webapp:latest
+    build:
+      context: ${STOCKIX_TENANT_APP_ROOT}
+      dockerfile: packages/webapp/Dockerfile
 
   server:
-    image: ghcr.io/stockixhq/server:latest
+    build:
+      context: ${STOCKIX_TENANT_APP_ROOT}
+      dockerfile: packages/server/Dockerfile
+      target: app
     restart: unless-stopped
     depends_on:
       mysql:
