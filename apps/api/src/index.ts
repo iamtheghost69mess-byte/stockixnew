@@ -25,7 +25,7 @@ import {
   setProvisionJob,
 } from "./provision-jobs.js";
 import { subscribeProvision } from "./provision-bus.js";
-import { provisionTenant } from "./provisioner.js";
+import { deprovisionTenant, provisionTenant } from "./provisioner.js";
 import {
   createProvisionTracer,
   type ProvisionEventPayload,
@@ -100,7 +100,10 @@ const corsOrigins = [
 app.use(
   "/*",
   cors({
-    origin: corsOrigins,
+    origin: [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+    ],
     allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type"],
   }),
@@ -142,6 +145,32 @@ app.get("/tenants", async (c) => {
     .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id));
 
   return c.json({ tenants: rows });
+});
+
+app.delete("/tenants/:tenantId", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+  const tenantId = c.req.param("tenantId");
+  const parsed = z.string().uuid().safeParse(tenantId);
+  if (!parsed.success) {
+    return c.json({ error: "tenantId must be a UUID" }, 400);
+  }
+  const removeVolumes =
+    c.req.query("volumes") === "1" || c.req.query("volumes") === "true";
+  const result = await deprovisionTenant(db, parsed.data, {
+    removeVolumes,
+    log: (m) => console.log(`[deprovision] ${m}`),
+  });
+  if (!result.ok) {
+    return c.json({ error: result.message }, 404);
+  }
+  return c.json({
+    deleted: true,
+    slug: result.slug,
+    composeProject: result.composeProject,
+    docker: result.docker,
+  });
 });
 
 const provisionBody = z.object({

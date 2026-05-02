@@ -6,7 +6,6 @@ import styled from 'styled-components';
 import { TransitionGroup, CSSTransition } from 'react-transition-group';
 
 import authenticationRoutes from '@/routes/authentication';
-import { Icon, FormattedMessage as T } from '@/components';
 import { useIsAuthenticated } from '@/hooks/state';
 
 import '@/style/pages/Authentication/Auth.scss';
@@ -24,7 +23,11 @@ export function Authentication() {
       <AuthPage>
         <AuthInsider>
           <AuthLogo>
-            <Icon icon="bigcapital" height={37} width={214} />
+            {/*
+              White-label: vendor wordmark hidden. Restore when your SVG paths are in
+              static/json/icons.tsx under the `bigcapital` key:
+              <Icon icon="bigcapital" height={37} width={214} />
+            */}
           </AuthLogo>
 
           <AuthMetaBootProvider>

@@ -1,25 +1,28 @@
 // @ts-nocheck
 import intl from 'react-intl-universal';
 
+import app from '@/constants/app';
+
+// BRAND: Replace `#` URLs and titles with your blog, docs, community, and homepage.
 export const getFooterLinks = () => [
   {
     title: intl.get('blog'),
-    link: 'https://docs.bigcapital.ly/blog',
+    link: '#',
   },
   {
     title: intl.get('community'),
-    link: 'https://discord.com/invite/c8nPBJafeb',
+    link: '#',
   },
   {
     title: intl.get('support'),
-    link: 'https://discord.com/invite/c8nPBJafeb',
+    link: '#',
   },
   {
     title: intl.get('docs'),
-    link: 'https://docs.bigcapital.ly',
+    link: '#',
   },
   {
-    title: 'Bigcapital',
-    link: 'http://bigcapital.ly',
+    title: app.app_name,
+    link: '#',
   },
 ];

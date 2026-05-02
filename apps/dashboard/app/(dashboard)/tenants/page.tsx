@@ -2,12 +2,39 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Trash2,
+} from "lucide-react";
+
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const apiBase =
   process.env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://localhost:4000";
+
+const publicScheme =
+  process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME ?? "http";
+const publicRootDomain =
+  process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
+
+function tenantAppOrigin(port: number) {
+  return `http://127.0.0.1:${port}`;
+}
+
+function tenantLoginUrl(port: number) {
+  return `${tenantAppOrigin(port)}/auth/login`;
+}
+
+/** Shown as “public” hint; routing/DNS must match your edge (Traefik) setup. */
+function tenantPublicBaseUrl(slug: string) {
+  return `${publicScheme}://${slug}.${publicRootDomain}`;
+}
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
@@ -101,6 +128,8 @@ export default function TenantsPage() {
     null,
   );
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -108,6 +137,16 @@ export default function TenantsPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
+
+  const copyText = useCallback(async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey(null), 2000);
+    } catch {
+      setError("Could not copy to clipboard");
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const [oRes, tRes] = await Promise.all([
@@ -126,8 +165,59 @@ export default function TenantsPage() {
     setTenants(t.tenants ?? []);
   }, []);
 
+  const removeTenant = useCallback(
+    async (tenantId: string, slug: string) => {
+      if (
+        !globalThis.confirm(
+          `Delete tenant "${slug}"?\n\nThis runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be undone.`,
+        )
+      ) {
+        return;
+      }
+      const wipeVolumes = globalThis.confirm(
+        "Also remove Docker volumes?\n\nOK = delete MySQL / Mongo / Redis data for this stack.\nCancel = keep data volumes (containers are still removed).",
+      );
+      setDeletingId(tenantId);
+      setError(null);
+      try {
+        const q = wipeVolumes ? "?volumes=true" : "";
+        const res = await fetch(`${apiBase}/tenants/${tenantId}${q}`, {
+          method: "DELETE",
+        });
+        const data = (await readJson(res)) as { error?: string };
+        if (!res.ok) {
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        }
+        setTenantAccess(null);
+        setOneTimePassword(null);
+        setProvisionHint(null);
+        await load();
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [apiBase, load],
+  );
+
   useEffect(() => {
     load().catch((e) => setError(String(e)));
+  }, [load]);
+
+  // Refetch when coming back from other routes or tabs (list + access links stay current).
+  useEffect(() => {
+    const refetch = () => {
+      if (document.visibilityState === "visible") {
+        load().catch((e) => setError(String(e)));
+      }
+    };
+    document.addEventListener("visibilitychange", refetch);
+    window.addEventListener("focus", refetch);
+    return () => {
+      document.removeEventListener("visibilitychange", refetch);
+      window.removeEventListener("focus", refetch);
+    };
   }, [load]);
 
   useEffect(() => {
@@ -309,12 +399,12 @@ export default function TenantsPage() {
   return (
     <div className="max-w-3xl space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">Tenants</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Provision a prod-shaped BigCapital stack per slug. Work runs in the
-          background (Docker). A live trace streams over SSE (with Postgres
-          audit rows); this page also polls status. Copy the one-time admin
-          password when it appears — it is not stored after the job expires.
+        <h1 className="text-xl font-semibold tracking-tight">Tenants</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          Create isolated tenant stacks (Docker). Progress streams live; when a
+          tenant is <strong>active</strong>, use <strong>Open login</strong> in
+          the list — it does not go away when you visit other pages. The
+          one-time admin password is shown only once at the end of provisioning.
         </p>
       </div>
 
@@ -364,19 +454,19 @@ export default function TenantsPage() {
       ) : null}
 
       {oneTimePassword || tenantAccess ? (
-        <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm space-y-3">
+        <div className="rounded-xl border border-border bg-muted/40 px-4 py-4 text-sm space-y-3">
           <div>
-            <p className="font-medium text-foreground">BigCapital admin login</p>
+            <p className="font-medium text-foreground">Tenant admin access</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              The admin email is the one you entered above. The password is{" "}
-              <strong>not</strong> your Stockix password — Stockix generates a
-              strong one-time password, registers that user in BigCapital, and
-              shows it here only until the provision job expires (~15 minutes
-              after completion).
+              Use the admin email you entered below. The password is{" "}
+              <strong>not</strong> your Stockix password — the platform issues a
+              one-time password once and registers that admin in the tenant app.
+              After you leave this page, use{" "}
+              <strong>Open login</strong> in the tenant list — it stays there.
             </p>
             {tenantAccess ? (
               <p className="mt-2 text-xs">
-                <span className="text-muted-foreground">Email:</span>{" "}
+                <span className="text-muted-foreground">Admin email:</span>{" "}
                 <span className="font-mono">{tenantAccess.adminEmail}</span>
               </p>
             ) : null}
@@ -388,44 +478,40 @@ export default function TenantsPage() {
             </div>
           ) : (
             <p className="text-xs text-amber-800 dark:text-amber-200">
-              Password not in this response (job may have expired). Use
-              BigCapital&apos;s password reset or check API logs from the original
-              provision run.
+              Password not in this response (job may have expired). Use password
+              reset in the tenant app or check API logs from the provision run.
             </p>
           )}
           {tenantAccess?.localUrl ? (
             <div className="flex flex-wrap items-center gap-2">
               <a
-                href={tenantAccess.localUrl}
+                href={`${tenantAccess.localUrl}/auth/login`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(buttonVariants({ variant: "default" }))}
               >
-                Open BigCapital (local)
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open login
               </a>
               <span className="text-xs text-muted-foreground">
-                Opens{" "}
-                <span className="font-mono">{tenantAccess.localUrl}</span> — sign
-                in with the email and one-time password above, then complete
-                BigCapital setup.
+                Same link stays under <span className="font-semibold">Existing tenants</span>{" "}
+                below.
               </span>
             </div>
           ) : null}
           {tenantAccess?.publicUrl ? (
             <p className="text-xs text-muted-foreground">
-              Public base URL in stack config:{" "}
-              <span className="font-mono">{tenantAccess.publicUrl}</span> (needs
-              DNS / hosts to match your slug for real TLS; local dev uses the
-              button above).
+              Public base URL in stack:{" "}
+              <span className="font-mono">{tenantAccess.publicUrl}</span> — wire
+              DNS / edge to your host port when moving beyond local dev.
             </p>
           ) : null}
           {provisionHint ? (
             <p className="text-xs text-muted-foreground">{provisionHint}</p>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            BigCapital&apos;s HTTP login API uses the field name{" "}
-            <span className="font-mono">crediential</span> (typo), not{" "}
-            <span className="font-mono">credential</span>.
+            Tenant login API expects field{" "}
+            <span className="font-mono">crediential</span> (upstream spelling).
           </p>
         </div>
       ) : null}
@@ -468,7 +554,7 @@ export default function TenantsPage() {
             />
           </label>
           <label className="space-y-1 text-xs sm:col-span-2">
-            <span className="text-muted-foreground">BigCapital admin email</span>
+            <span className="text-muted-foreground">Tenant admin email</span>
             <Input
               type="email"
               value={adminEmail}
@@ -500,31 +586,190 @@ export default function TenantsPage() {
         </Button>
       </div>
 
-      <div>
-        <h2 className="text-sm font-medium">Existing tenants</h2>
-        <ul className="mt-2 divide-y divide-border rounded-xl border border-border">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <h2 className="text-sm font-medium">Existing tenants</h2>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => load().catch((e) => setError(String(e)))}
+          >
+            Refresh list
+          </Button>
+        </div>
+        <div className="grid gap-3">
           {tenants.length === 0 ? (
-            <li className="px-3 py-4 text-sm text-muted-foreground">
-              No tenants yet.
-            </li>
+            <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+              No tenants yet. Provision one above — when it finishes, it appears
+              here with an <strong>Open login</strong> action (local URL uses the
+              allocated host port).
+            </div>
           ) : (
-            tenants.map((t) => (
-              <li key={t.tenantId} className="px-3 py-3 text-sm">
-                <div className="font-medium">
-                  {t.name}{" "}
-                  <span className="font-normal text-muted-foreground">
-                    ({t.slug})
-                  </span>
+            tenants.map((t) => {
+              const status = t.deploymentStatus ?? "unknown";
+              const statusChip =
+                status === "active"
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                  : status === "failed"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                    : status === "provisioning" || status === "pending"
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                      : "border-border bg-muted/50 text-muted-foreground";
+              const port = t.internalPort;
+              const canOpen = port != null && status === "active";
+              const loginHref =
+                port != null ? tenantLoginUrl(port) : null;
+              const localOrigin =
+                port != null ? tenantAppOrigin(port) : null;
+              const publicHint = tenantPublicBaseUrl(t.slug);
+              return (
+                <div
+                  key={t.tenantId}
+                  className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-foreground">
+                          {t.name}
+                        </span>
+                        <span className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                          {t.slug}
+                        </span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize",
+                            statusChip,
+                          )}
+                        >
+                          {status === "active" ? (
+                            <CheckCircle2 className="h-3 w-3" />
+                          ) : status === "failed" ? (
+                            <AlertCircle className="h-3 w-3" />
+                          ) : status === "provisioning" ||
+                            status === "pending" ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <AlertCircle className="h-3 w-3 opacity-60" />
+                          )}
+                          {status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Admin:{" "}
+                        <span className="font-mono text-foreground/90">
+                          {t.adminEmail}
+                        </span>
+                        {port != null ? (
+                          <>
+                            {" "}
+                            · Host port{" "}
+                            <span className="font-mono">{port}</span>
+                          </>
+                        ) : null}
+                      </p>
+                      {t.registrationCompletedAt ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Registered{" "}
+                          {new Date(
+                            t.registrationCompletedAt,
+                          ).toLocaleString()}
+                        </p>
+                      ) : null}
+                      {t.lastError ? (
+                        <p className="text-xs text-destructive">
+                          {t.lastError.slice(0, 280)}
+                          {t.lastError.length > 280 ? "…" : ""}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                      {canOpen && loginHref ? (
+                        <a
+                          href={loginHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            buttonVariants({ variant: "default", size: "sm" }),
+                            "justify-center gap-1.5",
+                          )}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Open login
+                        </a>
+                      ) : (
+                        <Button size="sm" variant="secondary" disabled>
+                          Open login
+                          {!port
+                            ? " (no port)"
+                            : status !== "active"
+                              ? ` (${status})`
+                              : ""}
+                        </Button>
+                      )}
+                      {localOrigin ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs"
+                          onClick={() =>
+                            void copyText(
+                              `origin-${t.tenantId}`,
+                              localOrigin,
+                            )
+                          }
+                          disabled={deletingId !== null}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          {copiedKey === `origin-${t.tenantId}`
+                            ? "Copied"
+                            : "Copy base URL"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={loading || deletingId !== null}
+                        onClick={() => void removeTenant(t.tenantId, t.slug)}
+                      >
+                        {deletingId === t.tenantId ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Deleting…
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="h-4 w-4" />
+                            Delete tenant
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
+                    <span>
+                      Public URL hint:{" "}
+                      <span className="font-mono text-foreground/80">
+                        {publicHint}
+                      </span>{" "}
+                      (edge/DNS)
+                    </span>
+                    {t.composeProject ? (
+                      <span className="font-mono">
+                        compose: {t.composeProject}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  admin {t.adminEmail} · status {t.deploymentStatus ?? "—"}
-                  {t.internalPort != null ? ` · port ${t.internalPort}` : ""}
-                  {t.lastError ? ` · error ${t.lastError.slice(0, 120)}` : ""}
-                </div>
-              </li>
-            ))
+              );
+            })
           )}
-        </ul>
+        </div>
       </div>
     </div>
   );

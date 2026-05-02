@@ -53,6 +53,7 @@ function SidebarHeadJSX({
       </div>
 
       <div className="sidebar__head-logo">
+        {/* BRAND: Mini mark paths in static/json/icons.tsx (`mini-bigcapital`). */}
         <Icon
           icon={'mini-bigcapital'}
           width={28}

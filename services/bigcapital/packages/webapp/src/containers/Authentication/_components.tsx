@@ -39,6 +39,7 @@ export const AuthInsiderCopyright = styled.div`
   color: #666;
   margin-top: 1.2rem;
 
+  /* BRAND: Matches placeholder logo in static/json/icons.tsx; adjust if you restore a multi-path mark. */
   .bp3-icon-bigcapital {
     svg {
       path {

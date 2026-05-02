@@ -75,6 +75,7 @@ export default function SetupLeftSection() {
     <section className={'setup-page__left-section'}>
       <div className={'content'}>
         <div className={'content__logo'}>
+          {/* BRAND: Full-width logo placeholder; customize in static/json/icons.tsx. */}
           <Icon
             icon="bigcapital"
             className={'bigcapital--alt'}

@@ -9,7 +9,8 @@ import t from '@/store/types';
 const initialState = {
   data: {
     organization: {
-      name: 'Bigcapital, LLC',
+      // BRAND: Default org label in persisted settings UI; real name comes from API when loaded.
+      name: 'Organization',
     },
     manualJournals: {
       tableSize: 'small',

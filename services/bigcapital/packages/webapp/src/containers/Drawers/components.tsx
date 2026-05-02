@@ -7,8 +7,10 @@ export const TemplateHeader = ({ defaultLabels }) => (
   <div className={'template__header'}>
     <div className={'template__header--title'}>
       <h1>{defaultLabels.name}</h1>
-      <p>info@bigcapital.ly </p>
+      {/* BRAND: Set your public support/contact email. */}
+      <p>support@example.com</p>
     </div>
+    {/* BRAND: Drawer header logo — paths in static/json/icons.tsx (`bigcapital`). */}
     <Icon icon="bigcapital" height={30} width={200} />
   </div>
 );

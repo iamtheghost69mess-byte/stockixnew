@@ -5,6 +5,7 @@ import { Service } from 'typedi';
 import { Tenant } from '@/system/models';
 import config from '@/config';
 
+// BRAND: Logo file at views/images/brand-email.png; cid must match mail/UserInvite.html.
 @Service()
 export default class SendInviteUsersMailMessage {
   /**
@@ -18,17 +19,17 @@ export default class SendInviteUsersMailMessage {
       .findById(tenantId)
       .withGraphFetched('metadata');
 
-    const root = path.join(global.__views_dir, '/images/bigcapital.png');
+    const root = path.join(global.__views_dir, '/images/brand-email.png');
 
     const mail = new Mail()
-      .setSubject(`${fromUser.firstName} has invited you to join a Bigcapital`)
+      .setSubject(`${fromUser.firstName} has invited you to join ${tenant.metadata.name}`)
       .setView('mail/UserInvite.html')
       .setTo(invite.email)
       .setAttachments([
         {
-          filename: 'bigcapital.png',
+          filename: 'brand-email.png',
           path: root,
-          cid: 'bigcapital_logo',
+          cid: 'brand_email_logo',
         },
       ])
       .setData({
