@@ -17,6 +17,10 @@ import { execa } from "execa";
 import { defaultTenantEnvRoot } from "./env-paths.js";
 import { getRepoRoot } from "./repo-root.js";
 import {
+  isMysqlAppCredentialMismatch,
+  mysqlCredentialMismatchHint,
+} from "./tenant-mysql-auth.js";
+import {
   createProvisionTracer,
   type ProvisionTracer,
 } from "./provision-trace.js";
@@ -112,6 +116,7 @@ function buildEnvFile(params: {
     `MAIL_FROM_ADDRESS=`,
     `AGENDASH_AUTH_USER=${params.agendashUser}`,
     `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`,
+    `BROWSER_WS_ENDPOINT=ws://browserless:3000`,
   ];
   return `${lines.join("\n")}\n`;
 }
@@ -623,6 +628,23 @@ export async function provisionTenant(
         break;
       } catch (e) {
         lastMigrationError = String(e);
+        if (isMysqlAppCredentialMismatch(lastMigrationError)) {
+          const hint = mysqlCredentialMismatchHint(input.slug);
+          log(`migration failed (non-retryable auth): ${hint}`);
+          await trace.event(
+            "migrate",
+            `${hint} Raw: ${lastMigrationError.slice(0, 600)}`,
+            {
+              level: "error",
+              meta: {
+                attempt: i + 1,
+                fullError: lastMigrationError.slice(0, 4000),
+                nonRetryableMysqlAuth: true,
+              },
+            },
+          );
+          throw new Error(`${hint}\n\n${lastMigrationError.slice(0, 2000)}`);
+        }
         log(`migration failed (retry): ${lastMigrationError}`);
         await trace.event(
           "migrate",
@@ -746,34 +768,48 @@ export async function provisionTenant(
       .catch(() => undefined);
 
     try {
-      const envPathGuess = join(tenantEnvRoot, input.slug, ".env");
-      const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
-      const rollbackTimeout = getProvisionConfig().dockerComposeTimeoutMs;
-      try {
-        await dockerCompose(
-          composeFile,
-          project,
-          envPathGuess,
-          composeEnv,
-          ["down"],
-          rollbackTimeout,
+      const skipComposeDown = isMysqlAppCredentialMismatch(message);
+      if (skipComposeDown) {
+        log(
+          `skip docker compose down (${project}) — MySQL auth mismatch; leave stack up for repair: pnpm repair:tenant-mysql -- ${input.slug}`,
         );
-        log(`docker compose down for ${project} (best effort)`);
-        await trace
-          .event("rollback", `docker compose down completed for ${project}`, {
-            level: "warn",
-          })
-          .catch(() => undefined);
-      } catch (rollbackErr) {
-        const rb = String(rollbackErr);
-        log(`docker compose down failed for ${project}: ${rb}`);
         await trace
           .event(
             "rollback",
-            `docker compose down failed (stack may still be running): ${rb.slice(0, 2000)}`,
-            { level: "error" },
+            `Skipped docker compose down so MySQL stays running for pnpm repair:tenant-mysql -- ${input.slug}`,
+            { level: "warn" },
           )
           .catch(() => undefined);
+      } else {
+        const envPathGuess = join(tenantEnvRoot, input.slug, ".env");
+        const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
+        const rollbackTimeout = getProvisionConfig().dockerComposeTimeoutMs;
+        try {
+          await dockerCompose(
+            composeFile,
+            project,
+            envPathGuess,
+            composeEnv,
+            ["down"],
+            rollbackTimeout,
+          );
+          log(`docker compose down for ${project} (best effort)`);
+          await trace
+            .event("rollback", `docker compose down completed for ${project}`, {
+              level: "warn",
+            })
+            .catch(() => undefined);
+        } catch (rollbackErr) {
+          const rb = String(rollbackErr);
+          log(`docker compose down failed for ${project}: ${rb}`);
+          await trace
+            .event(
+              "rollback",
+              `docker compose down failed (stack may still be running): ${rb.slice(0, 2000)}`,
+              { level: "error" },
+            )
+            .catch(() => undefined);
+        }
       }
     } catch {
       /* ignore rollback errors */

@@ -16,12 +16,26 @@ services:
     ports:
       - "${PUBLIC_PROXY_PORT}:80"
     tty: true
+    restart: unless-stopped
     depends_on:
-      - server
-      - webapp
+      server:
+        condition: service_started
+      webapp:
+        condition: service_started
 
   webapp:
     image: ghcr.io/bigcapitalhq/webapp:latest
+    restart: unless-stopped
+
+  # Headless Chrome for PDF generation (invoices, estimates, etc.). BigCapital PdfService uses Puppeteer connect().
+  browserless:
+    image: browserless/chrome:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - MAX_CONCURRENT_SESSIONS=10
+      - CONNECTION_TIMEOUT=120000
 
   server:
     image: ghcr.io/bigcapitalhq/server:latest
@@ -29,9 +43,13 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      database_migration:
+        condition: service_completed_successfully
       mongo:
         condition: service_started
       redis:
+        condition: service_started
+      browserless:
         condition: service_started
     environment:
       # Official image loads newrelic; without these it logs bootstrap errors locally.
@@ -58,6 +76,18 @@ services:
       - SIGNUP_DISABLED=${SIGNUP_DISABLED}
       - SIGNUP_ALLOWED_DOMAINS=${SIGNUP_ALLOWED_DOMAINS:-}
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
+      # Puppeteer → browserless (same Docker network). Match tenant .env / provisioner.
+      - BROWSER_WS_ENDPOINT=ws://browserless:3000
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O- http://127.0.0.1:3000/api/ping/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   database_migration:
     build:
@@ -76,6 +106,7 @@ services:
   mysql:
     build:
       context: ${BIGCAPITAL_ROOT}/docker/mariadb
+    restart: unless-stopped
     environment:
       - MYSQL_DATABASE=${SYSTEM_DB_NAME}
       - MYSQL_USER=${DB_USER}
@@ -99,6 +130,7 @@ services:
   mongo:
     build:
       context: ${BIGCAPITAL_ROOT}/docker/mongo
+    restart: unless-stopped
     expose:
       - "27017"
     volumes:
@@ -107,6 +139,7 @@ services:
   redis:
     build:
       context: ${BIGCAPITAL_ROOT}/docker/redis
+    restart: unless-stopped
     expose:
       - "6379"
     volumes:
