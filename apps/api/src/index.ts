@@ -6,8 +6,11 @@ import { serve } from "@hono/node-server";
 import { createDb } from "@repo/db";
 
 const apiDir = path.join(fileURLToPath(new URL("..", import.meta.url)));
-loadEnv({ path: path.join(apiDir, ".env") });
-// Gitignored overrides for local dev (wins over machine-level DATABASE_URL).
+const monorepoRoot = path.join(apiDir, "..", "..");
+// Use override so values from .env win over empty or stale DATABASE_URL in the shell
+// (dotenv does not override existing env vars by default).
+loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
+loadEnv({ path: path.join(apiDir, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 import { owners, tenantDeployments, tenants, tenantProvisionEvents } from "@repo/db/schema";
 import { asc, eq } from "drizzle-orm";
