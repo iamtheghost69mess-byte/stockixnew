@@ -119,6 +119,8 @@ services:
       dockerfile: apps/dashboard/Dockerfile
       args:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
+        NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
+        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: https
     restart: unless-stopped
     depends_on:
       - traefik

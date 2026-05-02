@@ -23,15 +23,6 @@ const publicScheme =
 const publicRootDomain =
   process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
 
-function tenantAppOrigin(port: number) {
-  return `http://127.0.0.1:${port}`;
-}
-
-function tenantLoginUrl(port: number) {
-  return `${tenantAppOrigin(port)}/auth/login`;
-}
-
-/** Shown as “public” hint; routing/DNS must match your edge (Traefik) setup. */
 function tenantPublicBaseUrl(slug: string) {
   return `${publicScheme}://${slug}.${publicRootDomain}`;
 }
@@ -116,10 +107,7 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oneTimePassword, setOneTimePassword] = useState<string | null>(null);
-  const [provisionHint, setProvisionHint] = useState<string | null>(null);
-  /** Shown after successful provision: local nginx URL + the admin email you typed (password is one-time only). */
   const [tenantAccess, setTenantAccess] = useState<{
-    localUrl: string | null;
     publicUrl: string | null;
     adminEmail: string;
   } | null>(null);
@@ -190,7 +178,6 @@ export default function TenantsPage() {
         }
         setTenantAccess(null);
         setOneTimePassword(null);
-        setProvisionHint(null);
         await load();
       } catch (e) {
         setError(String(e));
@@ -309,11 +296,6 @@ export default function TenantsPage() {
       if ("status" in sj && sj.status === "complete") {
         const ok = sj as ProvisionPollComplete;
         setOneTimePassword((prev) => ok.oneTimeAdminPassword ?? prev ?? null);
-        setProvisionHint(
-          ok.baseUrl && ok.internalPort != null
-            ? `Stack: ${ok.baseUrl} · nginx on host port ${ok.internalPort} (open http://127.0.0.1:${ok.internalPort} locally).`
-            : ok.note ?? null,
-        );
         await load();
         return ok;
       }
@@ -327,7 +309,6 @@ export default function TenantsPage() {
     const adminEmailForLogin = adminEmail.trim();
     setError(null);
     setOneTimePassword(null);
-    setProvisionHint(null);
     setTenantAccess(null);
     setProvisionLog([]);
     setStreamCorrelationId(null);
@@ -357,12 +338,7 @@ export default function TenantsPage() {
       if (res.status === 202 && data.accepted && data.correlationId) {
         setStreamCorrelationId(data.correlationId);
         const ok = await pollUntilDone(data.correlationId);
-        const localUrl =
-          ok.internalPort != null
-            ? `http://127.0.0.1:${ok.internalPort}`
-            : null;
         setTenantAccess({
-          localUrl,
           publicUrl: ok.baseUrl ?? null,
           adminEmail: adminEmailForLogin,
         });
@@ -482,10 +458,10 @@ export default function TenantsPage() {
               reset in the tenant app or check API logs from the provision run.
             </p>
           )}
-          {tenantAccess?.localUrl ? (
+          {tenantAccess?.publicUrl ? (
             <div className="flex flex-wrap items-center gap-2">
               <a
-                href={`${tenantAccess.localUrl}/auth/login`}
+                href={`${tenantAccess.publicUrl}/auth/login`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(buttonVariants({ variant: "default" }))}
@@ -494,25 +470,11 @@ export default function TenantsPage() {
                 Open login
               </a>
               <span className="text-xs text-muted-foreground">
-                Same link stays under <span className="font-semibold">Existing tenants</span>{" "}
-                below.
+                Same link stays under{" "}
+                <span className="font-semibold">Existing tenants</span> below.
               </span>
             </div>
           ) : null}
-          {tenantAccess?.publicUrl ? (
-            <p className="text-xs text-muted-foreground">
-              Public base URL in stack:{" "}
-              <span className="font-mono">{tenantAccess.publicUrl}</span> — wire
-              DNS / edge to your host port when moving beyond local dev.
-            </p>
-          ) : null}
-          {provisionHint ? (
-            <p className="text-xs text-muted-foreground">{provisionHint}</p>
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            Tenant login API expects field{" "}
-            <span className="font-mono">crediential</span> (upstream spelling).
-          </p>
         </div>
       ) : null}
 
@@ -618,12 +580,9 @@ export default function TenantsPage() {
                       ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
                       : "border-border bg-muted/50 text-muted-foreground";
               const port = t.internalPort;
-              const canOpen = port != null && status === "active";
-              const loginHref =
-                port != null ? tenantLoginUrl(port) : null;
-              const localOrigin =
-                port != null ? tenantAppOrigin(port) : null;
-              const publicHint = tenantPublicBaseUrl(t.slug);
+              const canOpen = status === "active";
+              const publicOrigin = tenantPublicBaseUrl(t.slug);
+              const loginHref = `${publicOrigin}/auth/login`;
               return (
                 <div
                   key={t.tenantId}
@@ -686,7 +645,7 @@ export default function TenantsPage() {
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                      {canOpen && loginHref ? (
+                      {canOpen ? (
                         <a
                           href={loginHref}
                           target="_blank"
@@ -701,34 +660,24 @@ export default function TenantsPage() {
                         </a>
                       ) : (
                         <Button size="sm" variant="secondary" disabled>
-                          Open login
-                          {!port
-                            ? " (no port)"
-                            : status !== "active"
-                              ? ` (${status})`
-                              : ""}
+                          Open login{status !== "active" ? ` (${status})` : ""}
                         </Button>
                       )}
-                      {localOrigin ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs"
-                          onClick={() =>
-                            void copyText(
-                              `origin-${t.tenantId}`,
-                              localOrigin,
-                            )
-                          }
-                          disabled={deletingId !== null}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          {copiedKey === `origin-${t.tenantId}`
-                            ? "Copied"
-                            : "Copy base URL"}
-                        </Button>
-                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs"
+                        onClick={() =>
+                          void copyText(`origin-${t.tenantId}`, publicOrigin)
+                        }
+                        disabled={deletingId !== null}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        {copiedKey === `origin-${t.tenantId}`
+                          ? "Copied"
+                          : "Copy URL"}
+                      </Button>
                       <Button
                         type="button"
                         variant="destructive"
@@ -752,13 +701,12 @@ export default function TenantsPage() {
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
-                    <span>
-                      Public URL hint:{" "}
-                      <span className="font-mono text-foreground/80">
-                        {publicHint}
-                      </span>{" "}
-                      (edge/DNS)
+                    <span className="font-mono text-foreground/80">
+                      {publicOrigin}
                     </span>
+                    {port != null ? (
+                      <span>host port <span className="font-mono">{port}</span></span>
+                    ) : null}
                     {t.composeProject ? (
                       <span className="font-mono">
                         compose: {t.composeProject}
