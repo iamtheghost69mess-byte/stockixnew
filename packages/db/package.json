@@ -9,7 +9,7 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "pnpm exec drizzle-kit migrate",
     "db:wait": "node scripts/wait-local-postgres.mjs",
     "db:seed:local": "node scripts/seed-local-owner.mjs",
     "db:studio": "drizzle-kit studio",
