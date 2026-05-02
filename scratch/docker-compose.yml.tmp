@@ -1,0 +1,129 @@
+# Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
+# Run from repo root context on the server:
+#   cd /opt/stockix/app/infra/prod && docker compose --env-file .env up -d --build
+#
+# Prerequisites: `.env` (see `.env.example`), repo cloned at STOCKIX_REPO (default ../..).
+#
+# Project name prefixes containers/volumes (e.g. stockix_postgres_data) so another Compose
+# stack on the same host stays separate — ports 80/443 must still not conflict (see DEPLOYMENT.md).
+
+name: stockix
+
+services:
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+      DOCKER_API_VERSION: "1.44"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+      - traefik_dynamic:/etc/traefik/dynamic
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=stockix_public
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.cloudflare.acme.dnschallenge=true
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+    networks:
+      - stockix_public
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-54330}:5432"
+    networks:
+      - stockix_public
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+      PORT: "4000"
+      REPO_ROOT: /opt/stockix/app
+      BIGCAPITAL_ROOT: /opt/stockix/app/services/bigcapital
+      TENANT_ENV_ROOT: /opt/stockix/tenants
+      TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
+      ROOT_DOMAIN: ${ROOT_DOMAIN}
+      PUBLIC_BASE_URL_SCHEME: https
+      TENANT_INTERNAL_HOST: host.docker.internal
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      DOCKER_API_VERSION: "1.44"
+    volumes:
+      - ${STOCKIX_REPO:-../..}:/opt/stockix/app
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefik_dynamic:/opt/stockix/traefik-dynamic
+      - stockix_tenants:/opt/stockix/tenants
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - stockix_public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=stockix_public
+      - "traefik.http.routers.stockix-api.rule=Host(`api.${ROOT_DOMAIN}`)"
+      - traefik.http.routers.stockix-api.entrypoints=websecure
+      - traefik.http.routers.stockix-api.tls.certresolver=cloudflare
+      - traefik.http.services.stockix-api.loadbalancer.server.port=4000
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - traefik
+    networks:
+      - stockix_public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=stockix_public
+      - "traefik.http.routers.stockix-dash.rule=Host(`${ROOT_DOMAIN}`) || Host(`www.${ROOT_DOMAIN}`)"
+      - traefik.http.routers.stockix-dash.entrypoints=websecure
+      - traefik.http.routers.stockix-dash.tls.certresolver=cloudflare
+      - traefik.http.routers.stockix-dash.tls.domains[0].main=${ROOT_DOMAIN}
+      - traefik.http.routers.stockix-dash.tls.domains[0].sans=*.${ROOT_DOMAIN}
+      - traefik.http.services.stockix-dash.loadbalancer.server.port=3000
+
+networks:
+  stockix_public:
+    name: stockix_public
+
+volumes:
+  postgres_data:
+  traefik_letsencrypt:
+  traefik_dynamic:
+  stockix_tenants:
