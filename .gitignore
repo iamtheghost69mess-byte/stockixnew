@@ -9,7 +9,7 @@ node_modules
 #.env
 #.env.local
 
-# VPS platform Postgres secrets (copy from infra/vps/.env.example)
+# After `pnpm bootstrap:env` from env/development/vps-postgres.env; override for production.
 infra/vps/.env
 
 # Per-tenant BigCapital env (provisioner)

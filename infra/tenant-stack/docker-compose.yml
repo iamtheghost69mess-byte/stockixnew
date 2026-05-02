@@ -1,5 +1,14 @@
 # Stockix per-tenant BigCapital stack (prod-shaped). Compose v2: `docker compose -p <project> ...`
-# Paths use BIGCAPITAL_ROOT (vendored BigCapital repo). Service name MUST be `mysql` (DB_HOST=mysql).
+#
+# Single source of truth for runtime images:
+#   stockix/bigcapital-webapp:${STOCKIX_BC_TAG:-latest}
+#   stockix/bigcapital-server:${STOCKIX_BC_TAG:-latest}
+#   stockix/bigcapital-nginx:${STOCKIX_BC_TAG:-latest}
+#   stockix/bigcapital-migration:${STOCKIX_BC_TAG:-latest}
+# Built from BIGCAPITAL_ROOT (vendored fork). CI should `docker build` + push the same tags to your registry,
+# then optionally set STOCKIX_BC_TAG / prefix — or build on the host before `up`.
+#
+# Paths use BIGCAPITAL_ROOT. Service name MUST be `mysql` (DB_HOST=mysql).
 # Traefik terminates TLS; nginx here is HTTP only (WEB_SSL=false).
 
 services:
@@ -10,6 +19,7 @@ services:
         - SERVER_PROXY_PORT=3000
         - WEB_SSL=false
         - SELF_SIGNED=false
+    image: stockix/bigcapital-nginx:${STOCKIX_BC_TAG:-latest}
     volumes:
       - ${BIGCAPITAL_ROOT}/data/logs/nginx:/var/log/nginx
       - ${BIGCAPITAL_ROOT}/docker/certbot/certs:/var/certs
@@ -24,7 +34,10 @@ services:
         condition: service_started
 
   webapp:
-    image: ghcr.io/bigcapitalhq/webapp:latest
+    build:
+      context: ${BIGCAPITAL_ROOT}
+      dockerfile: packages/webapp/Dockerfile
+    image: stockix/bigcapital-webapp:${STOCKIX_BC_TAG:-latest}
     restart: unless-stopped
 
   # Headless Chrome for PDF generation (invoices, estimates, etc.). BigCapital PdfService uses Puppeteer connect().
@@ -38,7 +51,10 @@ services:
       - CONNECTION_TIMEOUT=120000
 
   server:
-    image: ghcr.io/bigcapitalhq/server:latest
+    build:
+      context: ${BIGCAPITAL_ROOT}
+      dockerfile: packages/server/Dockerfile
+    image: stockix/bigcapital-server:${STOCKIX_BC_TAG:-latest}
     restart: unless-stopped
     depends_on:
       mysql:
@@ -93,6 +109,7 @@ services:
     build:
       context: ${BIGCAPITAL_ROOT}
       dockerfile: docker/migration/Dockerfile
+    image: stockix/bigcapital-migration:${STOCKIX_BC_TAG:-latest}
     environment:
       - DB_HOST=mysql
       - DB_USER=${DB_USER}

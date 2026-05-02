@@ -42,7 +42,7 @@ export function loadProvisionConfig(): ProvisionRuntimeConfig {
     ),
     healthFetchTimeoutMs: parseIntEnv(
       "PROVISION_HEALTH_FETCH_TIMEOUT_MS",
-      8_000,
+      45_000,
       2_000,
       120_000,
     ),

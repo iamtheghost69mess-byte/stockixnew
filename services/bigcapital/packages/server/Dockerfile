@@ -1,7 +1,9 @@
-FROM node:14.20-alpine as build
+# Node 18+ required: transitive deps (e.g. @so-ric/colorspace) use ||= — Node 14 crashes at runtime → nginx 502.
+FROM node:20-alpine AS build
 
 USER root
 
+# Build-time defaults are empty; runtime secrets come from docker compose / tenant .env (never commit real values).
 ARG MAIL_HOST= \
   MAIL_USERNAME= \
   MAIL_PASSWORD= \
@@ -32,9 +34,9 @@ ARG MAIL_HOST= \
   JWT_SECRET= \
   # Application
   BASE_URL= \
-  # Agendash
-  AGENDASH_AUTH_USER=agendash \
-  AGENDASH_AUTH_PASSWORD=123123 \
+  # Agendash (set in compose; no hardcoded credentials in the image)
+  AGENDASH_AUTH_USER= \
+  AGENDASH_AUTH_PASSWORD= \
   # Sign-up restriction
   SIGNUP_DISABLED= \
   SIGNUP_ALLOWED_DOMAINS= \
@@ -83,15 +85,25 @@ WORKDIR /app
 
 RUN chown node:node /
 
-# Copy application dependency manifests to the container image.
-COPY ./package*.json ./
-COPY ./packages/server/package*.json ./packages/server/
+# Monorepo has knex vs objection peer skew; do not use legacy package-lock.json in the image
+# (lockfileVersion 1 + npm 10 migrates full registry metadata and often fails in Docker).
+RUN npm config set legacy-peer-deps true \
+  && npm config set package-lock false \
+  && npm config set fetch-timeout 600000 \
+  && npm config set fetch-retries 10 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000
 
-COPY ./lerna.json ./lerna.json
+COPY package.json lerna.json ./
+COPY packages/server/package.json ./packages/server/package.json
+COPY packages/webapp/package.json ./packages/webapp/package.json
 
-# Install app dependencies for production.
-RUN npm install
-RUN npm run bootstrap
+ENV CI=1
+ENV HUSKY=0
+ENV NODE_OPTIONS=--max-old-space-size=8192
+
+# Target only @bigcapital/server; includes workspace root (lerna, etc.) for build scripts.
+RUN npm install -w @bigcapital/server --include-workspace-root --no-audit --no-fund
 
 COPY --chown=node:node ./packages/server ./packages/server
 

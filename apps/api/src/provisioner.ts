@@ -26,6 +26,7 @@ import {
 } from "./provision-trace.js";
 import { getProvisionConfig } from "./provision-config.js";
 import type { ProvisionRuntimeConfig } from "./provision-config.js";
+import { checkProvisionEnvironment } from "./provision-env-check.js";
 
 /** Plaintext today; replace with envelope/KMS encryption before production traffic. */
 function persistSecret(plaintext: string): string {
@@ -90,8 +91,11 @@ function buildEnvFile(params: {
   agendashUser: string;
   agendashPassword: string;
 }): string {
+  const stockixBcTag =
+    process.env.STOCKIX_BC_TAG?.trim() || "latest";
   const lines: string[] = [
     `BIGCAPITAL_ROOT=${params.bigcapitalRoot}`,
+    `STOCKIX_BC_TAG=${stockixBcTag}`,
     `BASE_URL=${params.baseUrl}`,
     `DB_HOST=mysql`,
     `DB_USER=bigcapital`,
@@ -173,6 +177,7 @@ function hintForPingFailure(
   errnoCode: string | undefined,
   pingUrl: string,
   lastDetail: string,
+  composeProject?: string,
 ): string {
   let port: string | undefined;
   try {
@@ -207,8 +212,21 @@ function hintForPingFailure(
   if (errnoCode === "ETIMEDOUT" || errnoCode === "UND_ERR_CONNECT_TIMEOUT") {
     return `Connection timed out reaching ${pingUrl} — firewall, Docker networking, or service overloaded.`;
   }
+  /* AbortSignal.timeout (default PROVISION_HEALTH_FETCH_TIMEOUT_MS) — cold MySQL/server often needs >8s. */
+  if (
+    lower.includes("aborted") &&
+    (lower.includes("timeout") || lower.includes("timed out"))
+  ) {
+    return `Single fetch to ${pingUrl} exceeded PROVISION_HEALTH_FETCH_TIMEOUT_MS (slow nginx→server or cold DB). Raise PROVISION_HEALTH_FETCH_TIMEOUT_MS in apps/api env and restart API; if 502 appears instead, fix upstream (docker logs server/nginx, pnpm repair:tenant).`;
+  }
   if (errnoCode === "ENOTFOUND" || errnoCode === "EAI_AGAIN") {
     return `DNS/hostname resolution failed for ${pingUrl}.`;
+  }
+  if (lastDetail.includes("HTTP 502")) {
+    const logCmd = composeProject
+      ? `docker logs ${composeProject}-server-1`
+      : "docker logs stockix-<tenant>-server-1";
+    return `HTTP 502 from nginx — server not serving /api/ping (crash-loop or still starting). Try: ${logCmd}. If logs show SyntaxError (||=), rebuild BigCapital server Docker image with Node 18+ (packages/server/Dockerfile); see infra/tenant-stack/README.md`;
   }
   return `Ping failed — full chain is in the trace; check Docker logs for nginx/server and host port mapping.`;
 }
@@ -273,6 +291,7 @@ async function waitForBigCapitalReady(
   cfg: ProvisionRuntimeConfig,
   log: (m: string) => void,
   trace?: ProvisionTracer,
+  composeProject?: string,
 ): Promise<void> {
   const timeoutMs = cfg.healthTimeoutMs;
   const url = `${internalBaseUrl}/api/ping/`;
@@ -312,7 +331,12 @@ async function waitForBigCapitalReady(
     }
     if (attempt === 1 || attempt % 10 === 0) {
       const remainingMs = Math.max(0, deadline - Date.now());
-      const hint = hintForPingFailure(lastErrno, url, lastDetail);
+      const hint = hintForPingFailure(
+        lastErrno,
+        url,
+        lastDetail,
+        composeProject,
+      );
       await trace?.event(
         "health",
         `Still waiting for /api/ping (attempt ${attempt}, ~${Math.round(remainingMs / 1000)}s left) — last: ${lastDetail.slice(0, 280)}`,
@@ -442,6 +466,26 @@ export async function provisionTenant(
   let oneTimeAdminPassword: string | undefined;
 
   try {
+    const envGate = await checkProvisionEnvironment({
+      repoRoot,
+      bigcapitalRoot,
+      composeFile,
+      tenantEnvRoot,
+    });
+    if (!envGate.ok) {
+      await trace.event("validate", envGate.message, {
+        level: "error",
+        meta: envGate.hint ? { hint: envGate.hint } : undefined,
+      });
+      return {
+        ok: false,
+        message: envGate.hint
+          ? `${envGate.message} (${envGate.hint})`
+          : envGate.message,
+        cause: envGate.hint,
+      };
+    }
+
     const cfg = getProvisionConfig();
     const provisionStartedAt = Date.now();
 
@@ -701,7 +745,7 @@ export async function provisionTenant(
         fastPollAttempts: cfg.healthFastPollAttempts,
       },
     });
-    await waitForBigCapitalReady(internalUrl, cfg, log, trace);
+    await waitForBigCapitalReady(internalUrl, cfg, log, trace, project);
 
     const adminBootstrapPassword = oneTimeAdminPassword;
 

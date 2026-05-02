@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 /**
- * Warms the Docker image cache for the Stockix tenant stack (BigCapital).
- * Run before first provision in CI or on a new host to avoid long pulls during provision.
- *
- * Does not build local `build:` services (nginx, mysql, etc.) — use
- * `docker compose -f infra/tenant-stack/docker-compose.yml build` for those.
+ * Before first provision: pull external base images, optionally pull Stockix BC images from your registry,
+ * then build anything still missing locally (unless STOCKIX_BC_SKIP_LOCAL_BUILD=1).
  */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -12,19 +9,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const composeFile = path.join(root, "infra/tenant-stack/docker-compose.yml");
+const pullScript = path.join(root, "scripts/stockix-docker-pull.mjs");
+const buildScript = path.join(root, "scripts/build-stockix-tenant-images.mjs");
 const bigcapitalDefault = path.join(root, "services/bigcapital");
 
 const bigcapitalRoot =
   process.env.BIGCAPITAL_ROOT?.trim() || bigcapitalDefault;
 
-if (!existsSync(composeFile)) {
-  console.error("Missing:", composeFile);
+if (!existsSync(path.join(root, "infra/tenant-stack/docker-compose.yml"))) {
+  console.error("Missing infra/tenant-stack/docker-compose.yml");
   process.exit(1);
 }
 if (!existsSync(bigcapitalRoot)) {
   console.error(
-    "BIGCAPITAL_ROOT not found. Clone vendored BigCapital or set BIGCAPITAL_ROOT.",
+    "BIGCAPITAL_ROOT not found:",
     bigcapitalRoot,
   );
   process.exit(1);
@@ -36,23 +34,28 @@ const env = {
   PUBLIC_PROXY_PORT: process.env.PUBLIC_PROXY_PORT || "39999",
 };
 
-const pullArgs = [
-  "compose",
-  "-f",
-  composeFile,
-  "pull",
-  "webapp",
-  "server",
-];
+console.log("node scripts/stockix-docker-pull.mjs");
+execFileSync(process.execPath, [pullScript], {
+  env,
+  cwd: root,
+  stdio: "inherit",
+});
 
-console.log("docker", pullArgs.join(" "));
+if (process.env.STOCKIX_BC_SKIP_LOCAL_BUILD === "1") {
+  console.log("STOCKIX_BC_SKIP_LOCAL_BUILD=1 — skipping local docker compose build.");
+  console.log("Provision cache warm finished OK.");
+  process.exit(0);
+}
+
+console.log("node scripts/build-stockix-tenant-images.mjs");
 try {
-  execFileSync("docker", pullArgs, {
+  execFileSync(process.execPath, [buildScript], {
     env,
     cwd: root,
     stdio: "inherit",
   });
-  console.log("Pull finished OK.");
 } catch {
   process.exit(1);
 }
+
+console.log("Provision cache warm finished OK.");

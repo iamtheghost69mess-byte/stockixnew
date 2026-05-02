@@ -1,5 +1,7 @@
 # Infrastructure
 
+**→ Send to DevOps:** **[`DEVOPS-HANDOFF.md`](./DEVOPS-HANDOFF.md)** (ordered steps, verification checklist, failure modes).
+
 ## Single VPS (`stockix.cloud` + Cloudflare) — do things in this order
 
 Put **`DATABASE_URL` last**: bring up Docker, tenant routing, and Stockix env **before** you paste the production Postgres URL into `apps/api/.env`.
@@ -14,7 +16,7 @@ Put **`DATABASE_URL` last**: bring up Docker, tenant routing, and Stockix env **
 
 | Failure | What to do |
 |--------|------------|
-| **502**, **`PROTOCOL_CONNECTION_LOST`** | Align MySQL user password with tenant `.env`: `pnpm repair:tenant-mysql -- <slug>`. Restart: `docker restart stockix-<slug>-server-1`. Do **not** rotate `DB_PASSWORD` without repairing or you recreate the mismatch. |
+| **502** | **MySQL:** **`PROTOCOL_CONNECTION_LOST`** → align passwords with `pnpm repair:tenant-mysql -- <slug>`, restart **`server`**. **Stale nginx upstream** (502 after container IP changed): nginx image must include **`resolver 127.0.0.11`** + variable **`proxy_pass`** (`server.template`) — rebuild **`nginx`**; see **`infra/tenant-stack/README.md`**. |
 | **nginx exits** | Build nginx from **`BIGCAPITAL_ROOT`** (`tenant-stack` compose); keep **`build-nginx.sh`** substituting only **`SERVER_PROXY_PORT`** so **`$host`** is not stripped. |
 | **`docker compose ps` empty / wrong** | Always use the **same** **`-p stockix-<slug>`** and **`--env-file`** as `up`. Trust **`docker ps`** and names like **`stockix-<slug>-server-1`**. |
 
@@ -32,22 +34,20 @@ On the VPS, configure **`apps/api/.env`** with production values:
 - **`PUBLIC_BASE_URL_SCHEME=https`**
 - **`TENANT_ENV_ROOT`** — Linux path for tenant `.env` files (default on Linux is **`/opt/stockix/tenants`**; create it and use consistent permissions).
 
-Configure **`apps/dashboard/.env`**:
+Configure the dashboard (typically **`apps/dashboard/.env.local`** after **`pnpm bootstrap:env`**):
 
 - **`NEXT_PUBLIC_STOCKIX_API_URL=https://api.stockix.cloud`** (your real API hostname).
 
 ### Phase 5 — Platform PostgreSQL on the same VPS (**then** `DATABASE_URL`)
 
-1. `cp infra/vps/.env.example infra/vps/.env` and set a strong **`POSTGRES_PASSWORD`**.
+1. From repo root run **`pnpm bootstrap:env`** (installs **`infra/vps/.env`** from **`env/development/vps-postgres.env`**) or set **`POSTGRES_PASSWORD`** yourself in **`infra/vps/.env`**.
 2. Start Postgres:
 
    ```bash
    docker compose -f infra/vps/docker-compose.postgres.yml --env-file infra/vps/.env up -d
    ```
 
-3. **Now** set **`DATABASE_URL`** in **`apps/api/.env`** (and root / **`packages/db/.env`** if you use Drizzle from repo root):
-
-   `postgresql://postgres:YOUR_PASSWORD@127.0.0.1:5432/stockix_platform`
+3. Set **`DATABASE_URL`** in **`apps/api/.env`** and **`packages/db/.env`** to match **`infra/vps/.env`** (same user/password/db), e.g. `postgresql://postgres:<password>@127.0.0.1:5432/stockix_platform`.
 
 4. Run migrations from the repo: **`pnpm db:migrate`** (after **`pnpm install`** and DB reachable).
 

@@ -1,0 +1,7 @@
+# Legacy lockfile (npm v5/v6, lockfileVersion 1) forces npm 10+ to re-resolve full metadata during
+# `docker build` and commonly fails (timeouts / OOM). Images install from package.json + workspace
+# roots using `npm install -w <workspace>` — reproducible supply-chain lockfiles should be
+# regenerated on the host/CI (npm 10, lockfile v3) when you are ready to commit a new lockfile.
+**/package-lock.json
+npm-debug.log*
+yarn-error.log*

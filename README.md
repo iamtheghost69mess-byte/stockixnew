@@ -12,7 +12,8 @@ Stockix is the **control plane** for a multi-tenant SaaS: owner dashboard, APIs,
 | `services/bigcapital` | Vendored BigCapital source (upstream `v0.9.9`, not a submodule) |
 | `packages/ui` | Shared React components (`@repo/ui`) |
 | `packages/eslint-config` / `typescript-config` | Shared tooling |
-| `infra/` | Reserved for Docker Compose and reverse proxy config |
+| `infra/` | Docker Compose (tenant stack, dev Postgres, VPS platform DB) |
+| `env/development/` | Committed development env files (`pnpm bootstrap:env`) |
 
 ## Prerequisites
 
@@ -27,7 +28,13 @@ pnpm install
 
 ## Environment
 
-Copy [`.env.example`](.env.example) to `.env` at the repo root (and/or `packages/db/.env`) and set `DATABASE_URL` for platform Postgres before running Drizzle migrations.
+Committed development variables live under **`env/development/`**. Install working `.env` files:
+
+```sh
+pnpm bootstrap:env
+```
+
+Then edit **`apps/api/.env`** for production domains (`ROOT_DOMAIN`, `PUBLIC_BASE_URL_SCHEME`, etc.). Platform Postgres URL must stay aligned across **`packages/db/.env`** and **`apps/api/.env`** for migrations.
 
 ## Platform database (Drizzle)
 

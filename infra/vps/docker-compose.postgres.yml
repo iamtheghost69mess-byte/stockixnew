@@ -1,7 +1,7 @@
 # Stockix control-plane PostgreSQL on your VPS (not Neon/Supabase).
 # Binds to loopback only — not reachable from the internet; API connects via 127.0.0.1.
 #
-#   cp infra/vps/.env.example infra/vps/.env   # set POSTGRES_PASSWORD
+#   pnpm bootstrap:env   # or create infra/vps/.env with POSTGRES_* (see env/development/vps-postgres.env)
 #   docker compose -f infra/vps/docker-compose.postgres.yml --env-file infra/vps/.env up -d
 #
 name: stockix-platform

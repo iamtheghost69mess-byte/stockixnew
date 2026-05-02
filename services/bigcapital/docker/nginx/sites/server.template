@@ -1,6 +1,11 @@
 server {
   listen 80 default_server;
 
+  # Docker embedded DNS (see https://docs.docker.com/network/drivers/bridge/#embedded-dns-server).
+  # Variable proxy_pass + resolver forces runtime DNS lookup on each request so upstream IPs
+  # stay correct after `docker compose up`/restart — the production fix for stale-upstream 502s.
+  resolver 127.0.0.11 ipv6=off valid=30s;
+
   # Upstream timeouts — avoids nginx 502 when Node/MySQL is slow after login.
   proxy_connect_timeout 75s;
   proxy_send_timeout 75s;
@@ -8,7 +13,8 @@ server {
   proxy_http_version 1.1;
 
   location /api {
-    proxy_pass http://server:${SERVER_PROXY_PORT};
+    set $bc_upstream_host server;
+    proxy_pass http://$bc_upstream_host:${SERVER_PROXY_PORT};
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -17,7 +23,8 @@ server {
   }
 
   location / {
-    proxy_pass http://webapp;
+    set $bc_upstream_webapp webapp;
+    proxy_pass http://$bc_upstream_webapp;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
