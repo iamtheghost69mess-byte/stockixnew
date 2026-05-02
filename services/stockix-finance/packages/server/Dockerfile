@@ -1,4 +1,4 @@
-FROM node:14.20-alpine as build
+FROM node:14.20-alpine as deps
 
 USER root
 
@@ -78,35 +78,45 @@ ENV MAIL_HOST=$MAIL_HOST \
   SIGNUP_ALLOWED_DOMAINS=$SIGNUP_ALLOWED_DOMAINS \
   SIGNUP_ALLOWED_EMAILS=$SIGNUP_ALLOWED_EMAILS
 
-# Create app directory.
 WORKDIR /app
 
 RUN chown node:node /
 
-# Copy application dependency manifests to the container image.
+# Migration / API images do not run Puppeteer in these containers; skipping Chromium
+# saves hundreds of MB and avoids install timeouts or Alpine glibc mismatches during `npm install`.
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+
 COPY ./package*.json ./
 COPY ./packages/server/package*.json ./packages/server/
+COPY ./.npmrc ./.npmrc
 
 COPY ./lerna.json ./lerna.json
 
-# Install app dependencies for production.
-RUN npm install
+# .npmrc sets legacy-peer-deps; flag kept for older npm that ignores the file in edge cases.
+RUN npm install --legacy-peer-deps
 RUN npm run bootstrap
 
+# -----------------------------------------------------------------------------
+# Migration image: only the CLI webpack bundle (`commands.js`). Skips Gulp/Sass
+# and the main app webpack build — those often fail on musl/Alpine or OOM on small VPS.
+# -----------------------------------------------------------------------------
+FROM deps AS build-migration
 COPY --chown=node:node ./packages/server ./packages/server
+RUN cd packages/server && npm run build:commands
 
-# # Creates a "dist" folder with the production build
-RUN npm run build:server --skip-nx-cache
-
-# One-off DB migrations for Compose (`docker compose run --rm database_migration`).
-# Built from local sources — does not pull ghcr.io (avoids 403 when the registry image is private).
-FROM build AS migration
+FROM build-migration AS migration
 USER root
 RUN apk add --no-cache bash git \
   && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
 WORKDIR /app/packages/server
 CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./build/commands.js", "system:migrate:latest"]
 
-# Default image when building this Dockerfile without `--target` (API server).
-FROM build AS app
+# -----------------------------------------------------------------------------
+# Full API server image: resources + app + CLI bundles.
+# -----------------------------------------------------------------------------
+FROM deps AS build-app
+COPY --chown=node:node ./packages/server ./packages/server
+RUN npm run build:server --skip-nx-cache
+
+FROM build-app AS app
 CMD [ "node", "./packages/server/build/index.js" ]

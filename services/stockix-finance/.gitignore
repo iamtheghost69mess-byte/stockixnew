@@ -1,4 +1,5 @@
 node_modules/
-data
+# Runtime / host data at repo root only — do not ignore packages/server/src/data (required for builds).
+/data
 .env
 test-results/
