@@ -2,6 +2,8 @@
 
 **Cloudflare already Active?** Use the ordered checklist: **[RUNBOOK_AFTER_CLOUDFLARE_ACTIVE.md](RUNBOOK_AFTER_CLOUDFLARE_ACTIVE.md)** (DNS → VPS → `.env` → compose → tests → GitHub secrets).
 
+**Full single-page guide (secrets, feedback tables):** **[DEPLOYMENT_FULL_GUIDE.md](DEPLOYMENT_FULL_GUIDE.md)**.
+
 This document walks from zero to **automatic deploys on every push to `main`** (and optional manual runs). The workflow file is [workflows/deploy.yml](workflows/deploy.yml).
 
 What the workflow does **on each run**:
