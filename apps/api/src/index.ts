@@ -78,14 +78,21 @@ async function loadProvisionEventsJson(correlationId: string) {
 
 const app = new Hono();
 
+const rootDomain = process.env.ROOT_DOMAIN?.trim();
+const corsOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  ...(rootDomain
+    ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
+    : []),
+  ...(process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+];
+
 app.use(
   "/*",
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-    ],
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    origin: corsOrigins,
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type"],
   }),
 );
