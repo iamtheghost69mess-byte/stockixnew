@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsup",
     "start": "node dist/index.js",
     "provision-smoke": "node scripts/provision-smoke.mjs",
     "provision-scenarios": "node scripts/provision-scenarios.mjs",
@@ -26,6 +29,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.15.3",
     "eslint": "^9.39.1",
+    "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "5.9.2"
   }
