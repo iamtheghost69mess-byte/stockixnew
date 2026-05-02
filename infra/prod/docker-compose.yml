@@ -10,20 +10,35 @@
 name: stockix
 
 services:
-  traefik:
-    image: traefik:v3.2
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.2
     restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      SERVICES: 1
+      TASKS: 1
+    networks:
+      - stockix_internal
+
+  traefik:
+    image: traefik:latest
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
     ports:
       - "80:80"
       - "443:443"
     environment:
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_letsencrypt:/letsencrypt
       - traefik_dynamic:/etc/traefik/dynamic
     command:
       - --providers.docker=true
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=stockix_public
       - --providers.file.directory=/etc/traefik/dynamic
@@ -39,6 +54,7 @@ services:
       - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
     networks:
       - stockix_public
+      - stockix_internal
 
   postgres:
     image: postgres:16-alpine
@@ -119,6 +135,9 @@ services:
 networks:
   stockix_public:
     name: stockix_public
+  stockix_internal:
+    name: stockix_internal
+    internal: true
 
 volumes:
   postgres_data:
