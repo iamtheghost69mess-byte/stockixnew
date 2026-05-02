@@ -81,6 +81,12 @@ async function loadProvisionEventsJson(correlationId: string) {
 
 const app = new Hono();
 
+app.onError((err, c) => {
+  console.error("[api]", err);
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: "internal_error", message }, 500);
+});
+
 app.use(
   "/*",
   cors({
