@@ -630,6 +630,8 @@ export async function deprovisionTenant(
     }
   }
 
+  await removeTenantTraefikConfig(slug).catch(() => undefined);
+
   await db
     .delete(tenantProvisionEvents)
     .where(eq(tenantProvisionEvents.tenantId, tenantId));
