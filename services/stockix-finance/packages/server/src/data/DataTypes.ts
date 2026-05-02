@@ -1,0 +1,6 @@
+export const DATATYPES_LENGTH = {
+  STRING: 255,
+  TEXT: 65535,
+  INT_10: 2147483647,
+  DECIMAL_13_3: 13,
+};
