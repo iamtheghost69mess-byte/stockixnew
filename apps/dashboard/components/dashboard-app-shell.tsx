@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Building2, LayoutDashboard, Settings } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Building2, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
 
-import { Button } from "@repo/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -24,8 +23,29 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tenants", label: "Tenants", icon: Building2 },
+  { href: "/owners", label: "Owners", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
+
+function LogoutButton() {
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
+  return (
+    <button
+      onClick={handleLogout}
+      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+    >
+      <LogOut className="h-4 w-4" />
+      Sign out
+    </button>
+  );
+}
 
 export function DashboardAppShell({
   children,
@@ -68,9 +88,7 @@ export function DashboardAppShell({
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-2">
-          <Button appName="Stockix" className="w-full text-xs">
-            @repo/ui
-          </Button>
+          <LogoutButton />
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex max-h-svh flex-col overflow-hidden">

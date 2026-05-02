@@ -1,0 +1,61 @@
+export const SESSION_COOKIE = "stockix-session";
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function hmacKey(): Promise<CryptoKey> {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error("SESSION_SECRET env var must be set (≥ 32 chars)");
+  }
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+}
+
+export async function signSession(sub: string): Promise<string> {
+  const payload = JSON.stringify({ sub, iat: Date.now() });
+  const payloadB64 = btoa(payload);
+  const key = await hmacKey();
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payload),
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return `${payloadB64}.${sigB64}`;
+}
+
+export async function verifySession(
+  token: string,
+): Promise<{ sub: string } | null> {
+  const dot = token.lastIndexOf(".");
+  if (dot < 1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sigB64 = token.slice(dot + 1);
+  let payload: string;
+  let sig: Uint8Array;
+  try {
+    payload = atob(payloadB64);
+    sig = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+  const key = await hmacKey();
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    sig,
+    new TextEncoder().encode(payload),
+  );
+  if (!valid) return null;
+  try {
+    const parsed = JSON.parse(payload) as { sub: string; iat: number };
+    if (Date.now() - parsed.iat > SESSION_TTL_MS) return null;
+    return { sub: parsed.sub };
+  } catch {
+    return null;
+  }
+}

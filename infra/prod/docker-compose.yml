@@ -120,6 +120,11 @@ services:
     restart: unless-stopped
     depends_on:
       - traefik
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET}
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
+      NODE_ENV: production
     networks:
       - stockix_public
     labels:

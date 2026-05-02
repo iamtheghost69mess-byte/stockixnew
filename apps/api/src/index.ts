@@ -117,9 +117,52 @@ app.get("/owners", async (c) => {
       id: owners.id,
       email: owners.email,
       name: owners.name,
+      createdAt: owners.createdAt,
     })
     .from(owners);
   return c.json({ owners: rows });
+});
+
+const ownerBody = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(120),
+});
+
+app.post("/owners", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  let body: z.infer<typeof ownerBody>;
+  try {
+    body = ownerBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
+  }
+  const [row] = await db
+    .insert(owners)
+    .values({ email: body.email, name: body.name })
+    .onConflictDoNothing()
+    .returning({ id: owners.id, email: owners.email, name: owners.name, createdAt: owners.createdAt });
+  if (!row) return c.json({ error: "email_already_exists" }, 409);
+  return c.json({ owner: row }, 201);
+});
+
+app.delete("/owners/:ownerId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
+  if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
+  try {
+    const [deleted] = await db
+      .delete(owners)
+      .where(eq(owners.id, parsed.data))
+      .returning({ id: owners.id, email: owners.email });
+    if (!deleted) return c.json({ error: "not_found" }, 404);
+    return c.json({ deleted: true, id: deleted.id, email: deleted.email });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("foreign key") || msg.includes("violates")) {
+      return c.json({ error: "owner_has_tenants", detail: "Reassign or delete the owner's tenants first." }, 409);
+    }
+    throw e;
+  }
 });
 
 app.get("/tenants", async (c) => {

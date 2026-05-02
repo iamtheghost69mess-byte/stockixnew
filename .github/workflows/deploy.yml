@@ -12,6 +12,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +33,8 @@ jobs:
           if [ -d /opt/stockix/stockixnew/.git ]; then cd /opt/stockix/stockixnew
           elif [ -d /opt/stockix/app/.git ]; then cd /opt/stockix/app
           else echo "Clone repo to /opt/stockix/stockixnew or /opt/stockix/app"; exit 1; fi
-          git pull --ff-only
+          git fetch --prune
+          git reset --hard origin/main
           set -a
           # shellcheck disable=SC1091
           source infra/prod/.env
