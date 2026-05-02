@@ -1,6 +1,6 @@
 # Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
-# Run from repo root context on the server:
-#   cd /opt/stockix/app/infra/prod && docker compose --env-file .env up -d --build
+# Run from repo root context on the server (adjust path — e.g. /opt/stockix/stockixnew):
+#   cd /opt/stockix/stockixnew/infra/prod && docker compose --env-file .env up -d --build
 #
 # Prerequisites: `.env` (see `.env.example`), repo cloned at STOCKIX_REPO (default ../..).
 #
@@ -88,8 +88,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
-      REPO_ROOT: /opt/stockix/app
-      STOCKIX_TENANT_APP_ROOT: /opt/stockix/app/services/stockix-finance
+      REPO_ROOT: /opt/stockix/stockixnew
+      STOCKIX_TENANT_APP_ROOT: /opt/stockix/stockixnew/services/stockix-finance
       TENANT_ENV_ROOT: /opt/stockix/tenants
       TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
       ROOT_DOMAIN: ${ROOT_DOMAIN}
@@ -97,7 +97,7 @@ services:
       TENANT_INTERNAL_HOST: host.docker.internal
       CORS_ORIGINS: ${CORS_ORIGINS:-}
     volumes:
-      - ${STOCKIX_REPO:-../..}:/opt/stockix/app
+      - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
       - /var/run/docker.sock:/var/run/docker.sock
       - traefik_dynamic:/opt/stockix/traefik-dynamic
       - stockix_tenants:/opt/stockix/tenants

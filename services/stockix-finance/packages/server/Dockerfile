@@ -98,4 +98,15 @@ COPY --chown=node:node ./packages/server ./packages/server
 # # Creates a "dist" folder with the production build
 RUN npm run build:server --skip-nx-cache
 
+# One-off DB migrations for Compose (`docker compose run --rm database_migration`).
+# Built from local sources — does not pull ghcr.io (avoids 403 when the registry image is private).
+FROM build AS migration
+USER root
+RUN apk add --no-cache bash git \
+  && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
+WORKDIR /app/packages/server
+CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./build/commands.js", "system:migrate:latest"]
+
+# Default image when building this Dockerfile without `--target` (API server).
+FROM build AS app
 CMD [ "node", "./packages/server/build/index.js" ]

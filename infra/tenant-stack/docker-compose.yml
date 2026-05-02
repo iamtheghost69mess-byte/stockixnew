@@ -21,10 +21,10 @@ services:
       - webapp
 
   webapp:
-    image: ghcr.io/bigcapitalhq/webapp:latest
+    image: ghcr.io/stockixhq/webapp:latest
 
   server:
-    image: ghcr.io/bigcapitalhq/server:latest
+    image: ghcr.io/stockixhq/server:latest
     restart: unless-stopped
     depends_on:
       mysql:
@@ -62,7 +62,8 @@ services:
   database_migration:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
-      dockerfile: docker/migration/Dockerfile
+      dockerfile: packages/server/Dockerfile
+      target: migration
     environment:
       - DB_HOST=mysql
       - DB_USER=${DB_USER}

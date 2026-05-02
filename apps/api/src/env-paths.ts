@@ -3,7 +3,10 @@ import { join } from "node:path";
 
 const isWin = process.platform === "win32";
 
-/** Root directory for per-tenant generated `.env` files (`{root}/{slug}/.env`). */
+/**
+ * Root directory for per-tenant generated `.env` files (`{root}/{slug}/.env`).
+ * Must match `TENANT_ENV_ROOT` on the API container (`infra/prod/docker-compose.yml`).
+ */
 export function defaultTenantEnvRoot(): string {
   const override = process.env.TENANT_ENV_ROOT?.trim();
   if (override) return override;
