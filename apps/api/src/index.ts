@@ -6,8 +6,11 @@ import { serve } from "@hono/node-server";
 import { createDb } from "@repo/db";
 
 const apiDir = path.join(fileURLToPath(new URL("..", import.meta.url)));
-loadEnv({ path: path.join(apiDir, ".env") });
-// Gitignored overrides for local dev (wins over machine-level DATABASE_URL).
+const monorepoRoot = path.join(apiDir, "..", "..");
+// Use override so values from .env win over empty or stale DATABASE_URL in the shell
+// (dotenv does not override existing env vars by default).
+loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
+loadEnv({ path: path.join(apiDir, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 import { owners, tenantDeployments, tenants, tenantProvisionEvents } from "@repo/db/schema";
 import { asc, eq } from "drizzle-orm";
@@ -77,6 +80,22 @@ async function loadProvisionEventsJson(correlationId: string) {
 }
 
 const app = new Hono();
+
+app.onError((err, c) => {
+  console.error("[api]", err);
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: "internal_error", message }, 500);
+});
+
+const rootDomain = process.env.ROOT_DOMAIN?.trim();
+const corsOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  ...(rootDomain
+    ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
+    : []),
+  ...(process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+];
 
 app.use(
   "/*",

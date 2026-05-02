@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/dist
+.git
+.github
+.turbo
+*.md
+.env
+.env.*
+!.env.example
+**/coverage
+services/bigcapital/node_modules
+services/bigcapital/**/.next

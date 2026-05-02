@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# aws configure   # or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN
+
+aws_region         = "us-east-1"
+vpc_id             = "vpc-07d37493c57f237ea"
+public_subnet_id   = "subnet-REPLACE_ME_PUBLIC"
+key_name           = "REPLACE_ME_KEY_PAIR_NAME"
+instance_type      = "t3.large"
+allowed_ssh_cidr   = "203.0.113.50/32"
+associate_elastic_ip = true
+root_volume_gb     = 100

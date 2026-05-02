@@ -20,6 +20,10 @@ import {
   createProvisionTracer,
   type ProvisionTracer,
 } from "./provision-trace.js";
+import {
+  removeTenantTraefikConfig,
+  writeTenantTraefikConfig,
+} from "./traefik-config.js";
 
 /** Plaintext today; replace with envelope/KMS encryption before production traffic. */
 function persistSecret(plaintext: string): string {
@@ -430,7 +434,9 @@ export async function provisionTenant(
       "-d",
     ]);
 
-    const internalUrl = `http://127.0.0.1:${port}`;
+    const tenantInternalHost =
+      process.env.TENANT_INTERNAL_HOST?.trim() || "127.0.0.1";
+    const internalUrl = `http://${tenantInternalHost}:${port}`;
     await trace.event("health", "Waiting for BigCapital HTTP health (/api/ping)", {
       meta: { internalUrl, timeoutMs: 180_000 },
     });
@@ -455,6 +461,19 @@ export async function provisionTenant(
         updatedAt: new Date(),
       })
       .where(eq(tenantDeployments.id, deploymentId));
+
+    try {
+      await writeTenantTraefikConfig(input.slug, port, rootDomain);
+      await trace.event("edge", "Traefik tenant route written", {
+        meta: { slug: input.slug, port },
+      });
+    } catch (e) {
+      await trace.event(
+        "edge",
+        `Traefik dynamic config failed: ${String(e)}`,
+        { level: "warn" },
+      );
+    }
 
     await trace.event("complete", "Provisioning finished — deployment active", {
       meta: { baseUrl, internalPort: port, composeProject: project },
@@ -486,6 +505,7 @@ export async function provisionTenant(
       .catch(() => undefined);
 
     try {
+      await removeTenantTraefikConfig(input.slug).catch(() => undefined);
       const envPathGuess = join(tenantEnvRoot, input.slug, ".env");
       const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
       await dockerCompose(composeFile, project, envPathGuess, composeEnv, [

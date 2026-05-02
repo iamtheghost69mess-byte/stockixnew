@@ -1,0 +1,45 @@
+name: Deploy Stockix
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-stockix
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Deploy over SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${EC2_HOST:-}" && test -n "${EC2_USER:-}"
+          ssh -o StrictHostKeyChecking=accept-new "${EC2_USER}@${EC2_HOST}" bash -s << 'REMOTE'
+          set -euo pipefail
+          if [ -d /opt/stockix/stockixnew/.git ]; then cd /opt/stockix/stockixnew
+          elif [ -d /opt/stockix/app/.git ]; then cd /opt/stockix/app
+          else echo "Clone repo to /opt/stockix/stockixnew or /opt/stockix/app"; exit 1; fi
+          git pull --ff-only
+          set -a
+          # shellcheck disable=SC1091
+          source infra/prod/.env
+          set +a
+          export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
+          corepack enable && corepack prepare pnpm@9.15.9 --activate
+          pnpm install --frozen-lockfile
+          pnpm --filter @repo/db db:migrate
+          cd infra/prod
+          docker compose --env-file .env up -d --build
+          REMOTE
