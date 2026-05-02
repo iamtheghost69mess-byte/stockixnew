@@ -36,10 +36,12 @@ export async function verifySession(
   const payloadB64 = token.slice(0, dot);
   const sigB64 = token.slice(dot + 1);
   let payload: string;
-  let sig: Uint8Array;
+  let sig: Uint8Array<ArrayBuffer>;
   try {
     payload = atob(payloadB64);
-    sig = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0));
+    const raw = atob(sigB64);
+    sig = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) sig[i] = raw.charCodeAt(i);
   } catch {
     return null;
   }
