@@ -1,9 +1,9 @@
 import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-// `override: true` so repo `.env` wins over a machine-level DATABASE_URL (common on Windows),
-// which often points at the wrong Postgres (e.g. :5432) and breaks migrate with 28P01.
-config({ path: ".env", override: true });
+// Load .env for local dev defaults; do NOT use override so an exported DATABASE_URL
+// (e.g. from CI or production deploy script) always takes precedence over the dev .env.
+config({ path: ".env" });
 config({ path: ".env.local", override: true });
 
 const databaseUrl =
