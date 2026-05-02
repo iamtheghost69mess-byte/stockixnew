@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
+import { Logo } from "@/components/logo";
 
 import {
   Sidebar,
@@ -57,8 +58,12 @@ export function DashboardAppShell({
   return (
     <SidebarProvider>
       <Sidebar>
+
         <SidebarHeader className="border-b border-sidebar-border p-3">
-          <span className="text-sm font-semibold tracking-tight">Stockix</span>
+          <div className="flex items-center gap-2">
+            <Logo className="h-6 w-auto text-sidebar-foreground" />
+            <span className="text-sm font-semibold tracking-tight">Stockix</span>
+          </div>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>

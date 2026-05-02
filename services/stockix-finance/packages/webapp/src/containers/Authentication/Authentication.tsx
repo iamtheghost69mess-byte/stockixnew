@@ -3,6 +3,7 @@ import React from 'react';
 import { Redirect, Route, Switch, useLocation } from 'react-router-dom';
 import BodyClassName from 'react-body-classname';
 import styled from 'styled-components';
+import { Icon } from '@/components';
 import { TransitionGroup, CSSTransition } from 'react-transition-group';
 
 import authenticationRoutes from '@/routes/authentication';
@@ -23,11 +24,7 @@ export function Authentication() {
       <AuthPage>
         <AuthInsider>
           <AuthLogo>
-            {/*
-              White-label: vendor wordmark hidden. Restore when your SVG paths are in
-              static/json/icons.tsx under the `stockix` key:
-              <Icon icon="stockix" height={37} width={214} />
-            */}
+            <Icon icon="stockix" height={37} width={214} />
           </AuthLogo>
 
           <AuthMetaBootProvider>
