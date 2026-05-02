@@ -62,7 +62,6 @@ export function DashboardAppShell({
         <SidebarHeader className="border-b border-sidebar-border p-3">
           <div className="flex items-center gap-2">
             <Logo className="h-6 w-auto text-sidebar-foreground" />
-            <span className="text-sm font-semibold tracking-tight">Stockix</span>
           </div>
         </SidebarHeader>
         <SidebarContent>
