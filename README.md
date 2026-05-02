@@ -48,6 +48,9 @@ Run **dashboard + API** together (recommended):
 
 ```sh
 pnpm dev
+# OR
+pnpm --parallel --filter dashboard --filter api dev
+
 ```
 
 | App | Port | Individual command |
