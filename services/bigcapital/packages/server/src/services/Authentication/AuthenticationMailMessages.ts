@@ -3,6 +3,7 @@ import { ISystemUser } from '@/interfaces';
 import config from '@/config';
 import Mail from '@/lib/Mail';
 
+// BRAND: Replace `views/images/brand-email.png` with your logo; keep cid in sync with mail/*.html <img src="cid:...">.
 @Service()
 export default class AuthenticationMailMesssages {
   /**
@@ -16,14 +17,14 @@ export default class AuthenticationMailMesssages {
     token: string
   ): Promise<void> {
     await new Mail()
-      .setSubject('Bigcapital - Password Reset')
+      .setSubject('Password reset')
       .setView('mail/ResetPassword.html')
       .setTo(user.email)
       .setAttachments([
         {
-          filename: 'bigcapital.png',
-          path: `${global.__views_dir}/images/bigcapital.png`,
-          cid: 'bigcapital_logo',
+          filename: 'brand-email.png',
+          path: `${global.__views_dir}/images/brand-email.png`,
+          cid: 'brand_email_logo',
         },
       ])
       .setData({

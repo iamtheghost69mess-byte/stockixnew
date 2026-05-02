@@ -3,7 +3,8 @@
   <head>
     <meta name="viewport" content="width=device-width" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <title>Bigcapital | Reset your password</title>
+    <!-- BRAND: Set your product name. -->
+    <title>Invitation</title>
     <style>
       /* -------------------------------------
           GLOBAL RESETS
@@ -336,15 +337,6 @@
         } 
       }
       
-    
-      [data-icon="bigcapital"] path {
-        fill: #004dd0;
-      }
-
-      [data-icon='bigcapital'] .path-1,
-      [data-icon='bigcapital'] .path-13 {
-        fill: #2d95fd;
-      }
     </style>
   </head>
   <body class="">
@@ -363,16 +355,17 @@
                   <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                     <tr>
                       <td>
+                        <!-- BRAND: Inline image = attachment cid from SendInviteUsersMailMessage (brand-email.png). -->
                         <p class="align-center">
-                          <img src="cid:bigcapital_logo" />
+                          <img src="cid:brand_email_logo" alt="" />
                         </p>
                         
                         <hr />
                         
                         <p class="align-center">
-                          <h3>Join {{ organizationName }} on Bigcapital</h3>
+                          <h3>Join {{ organizationName }}</h3>
                         </p>
-                        <p class="mgb-1x">{{ fullName }} ({{ email }}) has invited you to join the Bigcapital workspace {{ organizationName }}. Join now to start collaborating!</p>
+                        <p class="mgb-1x">{{ fullName }} ({{ email }}) has invited you to the {{ organizationName }} workspace. Accept the invitation below to get started.</p>
                         <p class="mgb-2-5x">Accept invitation The link blow to reset your password.</p>
                         
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="btn btn-primary">
@@ -405,7 +398,8 @@
               <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                 <tr>
                   <td class="content-block powered-by">
-                    Made by Bigcapital Technologies, Inc
+                    <!-- BRAND: Your company / legal line. -->
+                    This message was sent automatically.
                   </td>
                 </tr>
               </table>

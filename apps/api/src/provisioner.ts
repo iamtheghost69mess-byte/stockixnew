@@ -3,10 +3,15 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { allocateTenantPort, TenantPortExhaustedError } from "@repo/db";
-import { tenantDeployments, tenants } from "@repo/db/schema";
+import {
+  tenantDeployments,
+  tenantProvisionEvents,
+  tenants,
+} from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 import { eq } from "drizzle-orm";
+import { stat } from "node:fs/promises";
 import { execa } from "execa";
 
 import { defaultTenantEnvRoot } from "./env-paths.js";
@@ -513,4 +518,108 @@ export async function provisionTenant(
 
     return { ok: false, message, cause: String(err) };
   }
+}
+
+export type DeprovisionOptions = {
+  /** Pass `true` to run `docker compose down --volumes` (destroys MySQL/Mongo/Redis data). */
+  removeVolumes?: boolean;
+  log?: (message: string) => void;
+};
+
+export type DeprovisionResult =
+  | {
+      ok: true;
+      slug: string;
+      composeProject: string;
+      docker: "stopped" | "skipped" | "failed";
+    }
+  | { ok: false; message: string };
+
+/**
+ * Stops the tenant Docker stack (best effort), deletes provision audit rows, then deletes the tenant
+ * (cascades deployment + tenant_config). Idempotent if Docker or .env is already gone.
+ */
+export async function deprovisionTenant(
+  db: PostgresJsDatabase<typeof dbSchema>,
+  tenantId: string,
+  options: DeprovisionOptions = {},
+): Promise<DeprovisionResult> {
+  const log = options.log ?? (() => undefined);
+
+  const found = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      composeProject: tenantDeployments.composeProjectName,
+    })
+    .from(tenants)
+    .leftJoin(
+      tenantDeployments,
+      eq(tenantDeployments.tenantId, tenants.id),
+    )
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  const row = found[0];
+  if (!row) {
+    return { ok: false, message: "Tenant not found" };
+  }
+
+  const slug = row.slug;
+  const project =
+    row.composeProject ?? composeProjectName(slug);
+
+  const repoRoot = getRepoRoot();
+  const composeFile = join(repoRoot, "infra/tenant-stack/docker-compose.yml");
+  const bigcapitalRoot =
+    process.env.BIGCAPITAL_ROOT?.trim() || join(repoRoot, "services/bigcapital");
+  const tenantEnvRoot = defaultTenantEnvRoot();
+  const envPath = join(tenantEnvRoot, slug, ".env");
+  const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
+
+  let dockerStatus: "stopped" | "skipped" | "failed" = "skipped";
+
+  let envPresent = false;
+  try {
+    await stat(envPath);
+    envPresent = true;
+  } catch {
+    log(`deprovision: no .env at ${envPath} — skipping docker compose`);
+    dockerStatus = "skipped";
+  }
+
+  if (envPresent) {
+    const downArgs = options.removeVolumes
+      ? (["down", "--volumes"] as const)
+      : (["down"] as const);
+    try {
+      await dockerCompose(
+        composeFile,
+        project,
+        envPath,
+        composeEnv,
+        [...downArgs],
+      );
+      dockerStatus = "stopped";
+      log(`docker compose ${downArgs.join(" ")} completed for ${project}`);
+    } catch (e) {
+      dockerStatus = "failed";
+      log(
+        `deprovision: docker compose down failed (tenant row still removed): ${String(e)}`,
+      );
+    }
+  }
+
+  await db
+    .delete(tenantProvisionEvents)
+    .where(eq(tenantProvisionEvents.tenantId, tenantId));
+
+  await db.delete(tenants).where(eq(tenants.id, tenantId));
+
+  return {
+    ok: true,
+    slug,
+    composeProject: project,
+    docker: dockerStatus,
+  };
 }
