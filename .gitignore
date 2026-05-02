@@ -9,7 +9,7 @@ node_modules
 #.env
 #.env.local
 
-# Per-tenant BigCapital env (provisioner)
+# Per-tenant Stockix env (provisioner)
 .stockix/
 #.env.development.local
 #.env.test.local

@@ -1,0 +1,14 @@
+// BRAND: Tweak fills to match your logo once you swap SVG paths in static/json/icons.tsx.
+[data-icon='stockix'] {
+  path {
+    fill: #64748b;
+  }
+}
+
+.stockix--alt {
+  svg {
+    path {
+      fill: #fff;
+    }
+  }
+}

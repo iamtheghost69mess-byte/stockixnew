@@ -56,7 +56,7 @@ export type ProvisionResult =
       composeProjectName: string;
       internalPort: number;
       baseUrl: string;
-      /** Shown once — BigCapital admin login (not stored in Stockix Postgres). */
+      /** Shown once — Stockix admin login (not stored in Stockix Postgres). */
       oneTimeAdminPassword: string;
     }
   | { ok: false; message: string; cause?: string };
@@ -78,7 +78,7 @@ async function writeTenantEnvFile(
 }
 
 function buildEnvFile(params: {
-  bigcapitalRoot: string;
+  stockixFinanceRoot: string;
   baseUrl: string;
   jwtSecret: string;
   dbPassword: string;
@@ -89,17 +89,17 @@ function buildEnvFile(params: {
   agendashPassword: string;
 }): string {
   const lines: string[] = [
-    `BIGCAPITAL_ROOT=${params.bigcapitalRoot}`,
+    `STOCKIX_TENANT_APP_ROOT=${params.stockixFinanceRoot}`,
     `BASE_URL=${params.baseUrl}`,
     `DB_HOST=mysql`,
-    `DB_USER=bigcapital`,
+    `DB_USER=stockix_tenant`,
     `DB_PASSWORD=${params.dbPassword}`,
     `DB_ROOT_PASSWORD=${params.dbRootPassword}`,
     `DB_CHARSET=utf8`,
-    `SYSTEM_DB_NAME=bigcapital_system`,
-    `TENANT_DB_NAME_PERFIX=bigcapital_tenant_`,
+    `SYSTEM_DB_NAME=stockix_system`,
+    `TENANT_DB_NAME_PERFIX=stockix_tenant_`,
     `JWT_SECRET=${params.jwtSecret}`,
-    `MONGODB_DATABASE_URL=mongodb://mongo/bigcapital`,
+    `MONGODB_DATABASE_URL=mongodb://mongo/stockix`,
     `PUBLIC_PROXY_PORT=${params.publicProxyPort}`,
     `PUBLIC_PROXY_SSL_PORT=443`,
     `SIGNUP_DISABLED=true`,
@@ -142,7 +142,7 @@ async function dockerCompose(
   );
 }
 
-async function waitForBigCapitalReady(
+async function waitForStockixFinanceReady(
   internalBaseUrl: string,
   timeoutMs: number,
   log: (m: string) => void,
@@ -156,8 +156,8 @@ async function waitForBigCapitalReady(
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
       if (res.ok) {
-        log(`bigcapital healthy at ${url} (attempt ${attempt})`);
-        await trace?.event("health", "BigCapital /api/ping is healthy", {
+        log(`stockix finance healthy at ${url} (attempt ${attempt})`);
+        await trace?.event("health", "Stockix Finance /api/ping is healthy", {
           meta: { attempt, url },
         });
         return;
@@ -168,7 +168,7 @@ async function waitForBigCapitalReady(
     }
     await new Promise((r) => setTimeout(r, 2_000));
   }
-  throw new Error(`BigCapital did not become ready within ${timeoutMs}ms`);
+  throw new Error(`Stockix Finance did not become ready within ${timeoutMs}ms`);
 }
 
 async function registerAdmin(params: {
@@ -193,10 +193,10 @@ async function registerAdmin(params: {
   });
   const text = await res.text();
   if (res.ok) {
-    params.log("BigCapital POST /api/auth/register succeeded");
+    params.log("Stockix Finance POST /api/auth/register succeeded");
     await params.trace?.event(
       "auth",
-      "BigCapital admin registration succeeded",
+      "Stockix admin registration succeeded",
       { meta: { email: params.email } },
     );
     return;
@@ -211,7 +211,7 @@ async function registerAdmin(params: {
     lower.includes("registered")
   ) {
     params.log(
-      "BigCapital register rejected as duplicate — treating bootstrap as idempotent",
+      "Stockix register rejected as duplicate — treating bootstrap as idempotent",
     );
     await params.trace?.event(
       "auth",
@@ -226,7 +226,7 @@ async function registerAdmin(params: {
 }
 
 /**
- * BigCapital `POST /api/auth/login` validates **`crediential`** (typo), not `credential`.
+ * Stockix `POST /api/auth/login` validates **`crediential`** (typo), not `credential`.
  * Any login client must send `{ crediential: email, password }` or auth fails.
  */
 
@@ -251,8 +251,8 @@ export async function provisionTenant(
 
   const repoRoot = getRepoRoot();
   const composeFile = join(repoRoot, "infra/tenant-stack/docker-compose.yml");
-  const bigcapitalRoot =
-    process.env.BIGCAPITAL_ROOT?.trim() || join(repoRoot, "services/bigcapital");
+  const stockixFinanceRoot =
+    process.env.STOCKIX_TENANT_APP_ROOT?.trim() || join(repoRoot, "services/stockix-finance");
   const rootDomain =
     process.env.ROOT_DOMAIN?.trim() || "example.com";
   const publicScheme =
@@ -276,7 +276,7 @@ export async function provisionTenant(
 
   try {
     await trace.event("run", "Provisioner started", {
-      meta: { project, baseUrl, bigcapitalRoot },
+      meta: { project, baseUrl, stockixFinanceRoot },
     });
 
     const existing = await db
@@ -294,11 +294,11 @@ export async function provisionTenant(
       };
     }
 
-    await trace.event("prepare", "Ensuring BigCapital host directories exist");
-    await mkdir(join(bigcapitalRoot, "data/logs/nginx"), {
+    await trace.event("prepare", "Ensuring Stockix Finance host directories exist");
+    await mkdir(join(stockixFinanceRoot, "data/logs/nginx"), {
       recursive: true,
     });
-    await mkdir(join(bigcapitalRoot, "docker/certbot/certs"), {
+    await mkdir(join(stockixFinanceRoot, "docker/certbot/certs"), {
       recursive: true,
     });
 
@@ -306,7 +306,7 @@ export async function provisionTenant(
     const jwtSecret = persistSecret(randomSecret(32));
     const dbPassword = persistSecret(randomSecret(16));
     const dbRootPassword = persistSecret(randomSecret(16));
-    const mongoUrlPersisted = "mongodb://mongo/bigcapital";
+    const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = persistSecret(randomSecret(12));
 
@@ -368,7 +368,7 @@ export async function provisionTenant(
     );
 
     const envBody = buildEnvFile({
-      bigcapitalRoot,
+      stockixFinanceRoot,
       baseUrl,
       jwtSecret,
       dbPassword,
@@ -387,7 +387,7 @@ export async function provisionTenant(
       meta: { envPath },
     });
 
-    const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
+    const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
 
     await trace.event(
       "docker",
@@ -437,10 +437,10 @@ export async function provisionTenant(
     const tenantInternalHost =
       process.env.TENANT_INTERNAL_HOST?.trim() || "127.0.0.1";
     const internalUrl = `http://${tenantInternalHost}:${port}`;
-    await trace.event("health", "Waiting for BigCapital HTTP health (/api/ping)", {
+    await trace.event("health", "Waiting for Stockix Finance HTTP health (/api/ping)", {
       meta: { internalUrl, timeoutMs: 180_000 },
     });
-    await waitForBigCapitalReady(internalUrl, 180_000, log, trace);
+    await waitForStockixFinanceReady(internalUrl, 180_000, log, trace);
 
     await registerAdmin({
       internalBaseUrl: internalUrl,
@@ -507,7 +507,7 @@ export async function provisionTenant(
     try {
       await removeTenantTraefikConfig(input.slug).catch(() => undefined);
       const envPathGuess = join(tenantEnvRoot, input.slug, ".env");
-      const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
+      const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
       await dockerCompose(composeFile, project, envPathGuess, composeEnv, [
         "down",
       ]).catch(() => undefined);
@@ -591,11 +591,11 @@ export async function deprovisionTenant(
 
   const repoRoot = getRepoRoot();
   const composeFile = join(repoRoot, "infra/tenant-stack/docker-compose.yml");
-  const bigcapitalRoot =
-    process.env.BIGCAPITAL_ROOT?.trim() || join(repoRoot, "services/bigcapital");
+  const stockixFinanceRoot =
+    process.env.STOCKIX_TENANT_APP_ROOT?.trim() || join(repoRoot, "services/stockix-finance");
   const tenantEnvRoot = defaultTenantEnvRoot();
   const envPath = join(tenantEnvRoot, slug, ".env");
-  const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
+  const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
 
   let dockerStatus: "stopped" | "skipped" | "failed" = "skipped";
 

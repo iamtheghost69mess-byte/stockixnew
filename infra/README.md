@@ -22,4 +22,4 @@ docker compose --env-file .env up -d --build
 Other layouts:
 
 - Local control-plane DB only: `infra/dev/docker-compose.yml`
-- Per-tenant BigCapital: `infra/tenant-stack/docker-compose.yml`
+- Per-tenant Stockix: `infra/tenant-stack/docker-compose.yml`

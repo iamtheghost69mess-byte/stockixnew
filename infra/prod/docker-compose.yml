@@ -89,7 +89,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
       REPO_ROOT: /opt/stockix/app
-      BIGCAPITAL_ROOT: /opt/stockix/app/services/bigcapital
+      STOCKIX_TENANT_APP_ROOT: /opt/stockix/app/services/stockix-finance
       TENANT_ENV_ROOT: /opt/stockix/tenants
       TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
       ROOT_DOMAIN: ${ROOT_DOMAIN}

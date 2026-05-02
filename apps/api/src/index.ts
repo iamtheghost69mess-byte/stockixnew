@@ -1,4 +1,4 @@
-﻿import path from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { config as loadEnv } from "dotenv";
@@ -363,7 +363,7 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
         events,
         oneTimeAdminPassword: null,
         note:
-          "In-memory job expired — one-time password was only in the earlier status response. Check BigCapital reset flows or reprovision. Trace is still available in `events`.",
+          "In-memory job expired — one-time password was only in the earlier status response. Check Stockix reset flows or reprovision. Trace is still available in `events`.",
       });
     }
     if (last.phase === "failed") {
@@ -404,7 +404,7 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       oneTimeAdminPassword: r.oneTimeAdminPassword,
       events,
       note:
-        "BigCapital login API field is `crediential` (typo) if you call /api/auth/login.",
+        "Stockix login API field is `crediential` (typo) if you call /api/auth/login.",
     });
   }
 

@@ -1,16 +1,16 @@
-# Override: build webapp from your fork under BIGCAPITAL_ROOT instead of ghcr.io/bigcapitalhq/webapp.
+# Override: build webapp from your fork under STOCKIX_TENANT_APP_ROOT instead of ghcr.io/stockixhq/webapp.
 # (The base docker-compose.yml still uses upstream images — your local TS/React changes are NOT in those.)
 #
-# Usage (from this directory; tenant .env must set BIGCAPITAL_ROOT to .../stockix/services/bigcapital):
+# Usage (from this directory; tenant .env must set STOCKIX_TENANT_APP_ROOT to .../stockix/services/stockix-finance):
 #   docker compose -f docker-compose.yml -f docker-compose.local-webapp.yml build webapp --no-cache
 #   docker compose -f docker-compose.yml -f docker-compose.local-webapp.yml up -d
 #
-# Server changes (mail HTML, etc.): build from BIGCAPITAL_ROOT with packages/server/Dockerfile
+# Server changes (mail HTML, etc.): build from STOCKIX_TENANT_APP_ROOT with packages/server/Dockerfile
 # and set image: stockix-server:local on the server service, or use docker-compose.local-server.yml
 
 services:
   webapp:
     build:
-      context: ${BIGCAPITAL_ROOT}
+      context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
     image: stockix-webapp:local

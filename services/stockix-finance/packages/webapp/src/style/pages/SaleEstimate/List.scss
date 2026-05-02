@@ -1,0 +1,13 @@
+.dashboard__insider--sale_estimate {
+  .stockix-datatable {
+    .tbody {
+      .td.amount {
+        .cell-inner {
+          > span {
+            font-weight: 600;
+          }
+        }
+      }
+    }
+  }
+}

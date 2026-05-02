@@ -12,7 +12,7 @@
  *   PROVISION_MAX_MS  default 2700000 (45m)
  *
  * Admin password: NOT chosen by you. The API generates a one-time password server-side,
- * registers BigCapital with POST /api/auth/register, and returns it only in
+ * registers Stockix with POST /api/auth/register, and returns it only in
  * GET /tenants/provision-status/:id while the in-memory job exists (not stored in Postgres).
  */
 
@@ -52,7 +52,7 @@ Typical fixes:
   • No owner → pnpm --filter @repo/db db:seed:local
   • Docker not running / images → start Docker; first provision pulls images (slow)
   • Port in use / MAX_TENANT_PORT → check env and tenant_deployments.internal_port
-  • BigCapital health timeout → see API logs and docker compose logs for the stack
+  • Stockix health timeout → see API logs and docker compose logs for the stack
 `);
   process.exit(1);
 }
@@ -79,7 +79,7 @@ async function main() {
 
   if (!full) {
     console.log(`
-Dry run OK. To test full BigCapital provisioning (Docker required):
+Dry run OK. To test full Stockix provisioning (Docker required):
 
   pnpm --filter api exec node scripts/provision-smoke.mjs --full
 

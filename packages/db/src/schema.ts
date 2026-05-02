@@ -33,7 +33,7 @@ export const tenants = pgTable(
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => owners.id, { onDelete: "restrict" }),
-    /** BigCapital bootstrap admin (not the Stockix platform owner). */
+    /** Stockix bootstrap admin (not the Stockix platform owner). */
     adminEmail: text("admin_email").notNull(),
     adminFirstName: text("admin_first_name").notNull(),
     adminLastName: text("admin_last_name").notNull(),
@@ -62,8 +62,8 @@ export const tenantConfig = pgTable("tenant_config", {
 });
 
 /**
- * Per-tenant BigCapital Docker Compose stack metadata (MySQL/Mongo/Redis live in that stack —
- * not in Stockix Postgres). BigCapital handles internal multi-tenancy inside its MySQL layer.
+ * Per-tenant Stockix Docker Compose stack metadata (MySQL/Mongo/Redis live in that stack —
+ * not in Stockix Postgres). Stockix handles internal multi-tenancy inside its MySQL layer.
  */
 export const tenantDeployments = pgTable(
   "tenant_deployments",
@@ -83,7 +83,7 @@ export const tenantDeployments = pgTable(
     mysqlRootPassword: text("mysql_root_password").notNull(),
     /** TODO: encrypt at rest before production — store ciphertext only */
     jwtSecret: text("jwt_secret").notNull(),
-    /** MongoDB URL scoped to the tenant stack (e.g. mongodb://mongo/bigcapital). */
+    /** MongoDB URL scoped to the tenant stack (e.g. mongodb://mongo/stockix). */
     mongoUrl: text("mongo_url").notNull(),
     lastError: text("last_error"),
     registrationCompletedAt: timestamp("registration_completed_at", {
@@ -105,7 +105,7 @@ export const tenantDeployments = pgTable(
 );
 
 /**
- * Append-only audit + live trace for BigCapital provisioning (see migration 0003).
+ * Append-only audit + live trace for Stockix provisioning (see migration 0003).
  * `correlation_id` matches the async job id returned from POST /tenants.
  */
 export const tenantProvisionEvents = pgTable(

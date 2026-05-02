@@ -1,18 +1,18 @@
-# Stockix per-tenant BigCapital stack (prod-shaped). Compose v2: `docker compose -p <project> ...`
-# Paths use BIGCAPITAL_ROOT (vendored BigCapital repo). Service name MUST be `mysql` (DB_HOST=mysql).
+# Stockix per-tenant Stockix stack (prod-shaped). Compose v2: `docker compose -p <project> ...`
+# Paths use STOCKIX_TENANT_APP_ROOT (vendored Stockix repo). Service name MUST be `mysql` (DB_HOST=mysql).
 # Traefik terminates TLS; nginx here is HTTP only (WEB_SSL=false).
 
 services:
   nginx:
     build:
-      context: ${BIGCAPITAL_ROOT}/docker/nginx
+      context: ${STOCKIX_TENANT_APP_ROOT}/docker/nginx
       args:
         - SERVER_PROXY_PORT=3000
         - WEB_SSL=false
         - SELF_SIGNED=false
     volumes:
-      - ${BIGCAPITAL_ROOT}/data/logs/nginx:/var/log/nginx
-      - ${BIGCAPITAL_ROOT}/docker/certbot/certs:/var/certs
+      - ${STOCKIX_TENANT_APP_ROOT}/data/logs/nginx:/var/log/nginx
+      - ${STOCKIX_TENANT_APP_ROOT}/docker/certbot/certs:/var/certs
     ports:
       - "${PUBLIC_PROXY_PORT}:80"
     tty: true
@@ -36,7 +36,7 @@ services:
     environment:
       # Official image loads newrelic; without these it logs bootstrap errors locally.
       - NEW_RELIC_ENABLED=false
-      - NEW_RELIC_APP_NAME=bigcapital-local
+      - NEW_RELIC_APP_NAME=stockix-local
       - MAIL_HOST=${MAIL_HOST:-}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
@@ -51,7 +51,7 @@ services:
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
       - TENANT_DB_NAME_PERFIX=${TENANT_DB_NAME_PERFIX}
       - JWT_SECRET=${JWT_SECRET}
-      - MONGODB_DATABASE_URL=mongodb://mongo/bigcapital
+      - MONGODB_DATABASE_URL=mongodb://mongo/stockix
       - BASE_URL=${BASE_URL}
       - AGENDASH_AUTH_USER=${AGENDASH_AUTH_USER}
       - AGENDASH_AUTH_PASSWORD=${AGENDASH_AUTH_PASSWORD}
@@ -61,7 +61,7 @@ services:
 
   database_migration:
     build:
-      context: ${BIGCAPITAL_ROOT}
+      context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: docker/migration/Dockerfile
     environment:
       - DB_HOST=mysql
@@ -75,7 +75,7 @@ services:
 
   mysql:
     build:
-      context: ${BIGCAPITAL_ROOT}/docker/mariadb
+      context: ${STOCKIX_TENANT_APP_ROOT}/docker/mariadb
     environment:
       - MYSQL_DATABASE=${SYSTEM_DB_NAME}
       - MYSQL_USER=${DB_USER}
@@ -98,7 +98,7 @@ services:
 
   mongo:
     build:
-      context: ${BIGCAPITAL_ROOT}/docker/mongo
+      context: ${STOCKIX_TENANT_APP_ROOT}/docker/mongo
     expose:
       - "27017"
     volumes:
@@ -106,7 +106,7 @@ services:
 
   redis:
     build:
-      context: ${BIGCAPITAL_ROOT}/docker/redis
+      context: ${STOCKIX_TENANT_APP_ROOT}/docker/redis
     expose:
       - "6379"
     volumes:

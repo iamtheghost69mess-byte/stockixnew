@@ -7,6 +7,6 @@
 services:
   server:
     build:
-      context: ${BIGCAPITAL_ROOT}
+      context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
     image: stockix-server:local

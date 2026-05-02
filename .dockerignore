@@ -9,5 +9,5 @@
 .env.*
 !.env.example
 **/coverage
-services/bigcapital/node_modules
-services/bigcapital/**/.next
+services/stockix-finance/node_modules
+services/stockix-finance/**/.next

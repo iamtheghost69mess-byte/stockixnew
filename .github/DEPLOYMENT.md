@@ -33,7 +33,7 @@ The workflow is **not AWS-specific**. If you use **Hostinger KVM** (or Hetzner, 
 
 ### Sharing one VPS with another project
 
-- **Filesystem:** Keep Stockix only under **`/opt/stockix/`** (clone, `services/bigcapital`, tenant envs). Do not mix other apps into that tree.
+- **Filesystem:** Keep Stockix only under **`/opt/stockix/`** (clone, `services/stockix-finance`, tenant envs). Do not mix other apps into that tree.
 - **Docker:** `infra/prod/docker-compose.yml` sets **`name: stockix`** so containers/volumes are prefixed (**`stockix_*`**) and stay separate from another Compose project.
 - **Postgres:** Stockix publishes **localhost:`POSTGRES_HOST_PORT`** (default **54330**). If another DB uses **54330**, change **`POSTGRES_HOST_PORT`** in **`.env`** and use the same port in **`DATABASE_URL`** when running migrations.
 - **Ports 80 / 443 — important:** Only **one** reverse proxy can listen on **80** and **443** on the host. If another stack already owns **Traefik/nginx/Caddy** on those ports, you **cannot** start Stockix’s Traefik on the same ports until you either:

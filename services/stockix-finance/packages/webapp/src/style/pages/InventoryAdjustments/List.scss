@@ -1,0 +1,15 @@
+
+// Blueprint framework.
+// @import '@blueprintjs/core/src/blueprint.scss';
+
+.dashboard__insider--inventory_adjustments {
+  .stockix-datatable {
+    .table {
+      .tbody {
+        .tr{
+          min-height: 46px;
+        }
+      }
+    }
+  }
+}
