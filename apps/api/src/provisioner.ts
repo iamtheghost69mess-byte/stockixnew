@@ -20,6 +20,8 @@ import {
   createProvisionTracer,
   type ProvisionTracer,
 } from "./provision-trace.js";
+import { getProvisionConfig } from "./provision-config.js";
+import type { ProvisionRuntimeConfig } from "./provision-config.js";
 
 /** Plaintext today; replace with envelope/KMS encryption before production traffic. */
 function persistSecret(plaintext: string): string {
@@ -114,57 +116,219 @@ function buildEnvFile(params: {
   return `${lines.join("\n")}\n`;
 }
 
+function formatExecaFailure(
+  e: unknown,
+  context: string,
+): string {
+  if (e && typeof e === "object") {
+    const x = e as Record<string, unknown>;
+    const exit = x.exitCode;
+    const lines: string[] = [context];
+    if (exit != null) lines.push(`exit code: ${String(exit)}`);
+    if (typeof x.shortMessage === "string" && x.shortMessage)
+      lines.push(x.shortMessage);
+    else if (typeof x.message === "string" && x.message) lines.push(x.message);
+    if (typeof x.stderr === "string" && x.stderr.trim())
+      lines.push(`--- stderr ---\n${x.stderr.trim()}`);
+    if (typeof x.stdout === "string" && x.stdout.trim())
+      lines.push(`--- stdout ---\n${x.stdout.trim()}`);
+    if (lines.length > 1) return lines.join("\n\n").slice(0, 12_000);
+  }
+  return `${context}\n\n${String(e)}`.slice(0, 12_000);
+}
+
+/**
+ * Node/undici reports network failures as `TypeError: fetch failed` with the
+ * real reason in `error.cause` (e.g. ECONNREFUSED). Surface the full chain for traces.
+ */
+function unwrapFetchError(e: unknown): { chain: string; errnoCode?: string } {
+  const segments: string[] = [];
+  let errnoCode: string | undefined;
+  let cur: unknown = e;
+  for (let depth = 0; cur != null && depth < 10; depth++) {
+    if (cur instanceof Error) {
+      const ne = cur as NodeJS.ErrnoException;
+      if (typeof ne.code === "string") errnoCode = ne.code;
+      const piece =
+        ne.code != null && !ne.message.includes(String(ne.code))
+          ? `${ne.message} [${ne.code}]`
+          : ne.message;
+      if (piece) segments.push(piece);
+      cur = ne.cause;
+    } else {
+      segments.push(String(cur));
+      break;
+    }
+  }
+  const chain = segments.filter(Boolean).join(" → ") || String(e);
+  return { chain, errnoCode };
+}
+
+function hintForPingFailure(
+  errnoCode: string | undefined,
+  pingUrl: string,
+  lastDetail: string,
+): string {
+  let port: string | undefined;
+  try {
+    port = new URL(pingUrl).port || undefined;
+  } catch {
+    /* ignore */
+  }
+  const lower = lastDetail.toLowerCase();
+
+  /* Undici: peer closed socket before a full HTTP response — common while nginx/app starts or reloads. */
+  if (
+    errnoCode === "UND_ERR_SOCKET" ||
+    lower.includes("other side closed") ||
+    lower.includes("und_err_socket")
+  ) {
+    return `Transient during startup: the host accepted TCP then closed before HTTP finished (${errnoCode ?? "socket"}). Normal while nginx/server bind or reload. If this never turns into ECONNREFUSED→healthy within a few minutes, check docker compose logs (nginx, server).`;
+  }
+
+  if (
+    errnoCode === "ECONNRESET" ||
+    lower.includes("econnreset") ||
+    lower.includes("connection reset")
+  ) {
+    return `Connection reset — common briefly while containers settle. Same as above if it persists indefinitely.`;
+  }
+
+  if (errnoCode === "ECONNREFUSED") {
+    return port
+      ? `ECONNREFUSED: nothing is listening on host port ${port} yet (nginx/containers still starting) or the publish mapping failed. Verify with: docker compose ps for this project; curl -v ${pingUrl}`
+      : `ECONNREFUSED: target not accepting connections yet. Verify containers are up and ports published: docker compose ps; curl -v ${pingUrl}`;
+  }
+  if (errnoCode === "ETIMEDOUT" || errnoCode === "UND_ERR_CONNECT_TIMEOUT") {
+    return `Connection timed out reaching ${pingUrl} — firewall, Docker networking, or service overloaded.`;
+  }
+  if (errnoCode === "ENOTFOUND" || errnoCode === "EAI_AGAIN") {
+    return `DNS/hostname resolution failed for ${pingUrl}.`;
+  }
+  return `Ping failed — full chain is in the trace; check Docker logs for nginx/server and host port mapping.`;
+}
+
 async function dockerCompose(
   composeFile: string,
   project: string,
   envFile: string,
   composeEnv: Record<string, string>,
   composeArgs: string[],
+  timeoutMs: number,
 ): Promise<void> {
   const env = { ...process.env, ...composeEnv };
-  await execa(
-    "docker",
-    [
-      "compose",
-      "-f",
-      composeFile,
-      "-p",
-      project,
-      "--env-file",
-      envFile,
-      ...composeArgs,
-    ],
-    { env, stdio: "pipe" },
+  const label = `docker compose -p ${project} ${composeArgs.join(" ")}`;
+  try {
+    await execa(
+      "docker",
+      [
+        "compose",
+        "-f",
+        composeFile,
+        "-p",
+        project,
+        "--env-file",
+        envFile,
+        ...composeArgs,
+      ],
+      { env, stdio: "pipe", timeout: timeoutMs },
+    );
+  } catch (e) {
+    throw new Error(formatExecaFailure(e, label));
+  }
+}
+
+async function timedPhase(
+  trace: ProvisionTracer,
+  phaseKey: string,
+  humanLabel: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  const t0 = Date.now();
+  await fn();
+  const durationMs = Date.now() - t0;
+  await trace.event(
+    "timing",
+    `${humanLabel} completed in ${durationMs}ms`,
+    { meta: { phase: phaseKey, durationMs } },
   );
+}
+
+function healthPollIntervalMs(
+  attempt: number,
+  cfg: ProvisionRuntimeConfig,
+): number {
+  return attempt <= cfg.healthFastPollAttempts
+    ? cfg.healthPollMinMs
+    : cfg.healthPollMaxMs;
 }
 
 async function waitForBigCapitalReady(
   internalBaseUrl: string,
-  timeoutMs: number,
+  cfg: ProvisionRuntimeConfig,
   log: (m: string) => void,
   trace?: ProvisionTracer,
 ): Promise<void> {
+  const timeoutMs = cfg.healthTimeoutMs;
   const url = `${internalBaseUrl}/api/ping/`;
   const deadline = Date.now() + timeoutMs;
+  const waitStarted = Date.now();
   let attempt = 0;
+  let lastDetail = "";
+  let lastErrno: string | undefined;
   while (Date.now() < deadline) {
     attempt += 1;
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(cfg.healthFetchTimeoutMs),
+      });
       if (res.ok) {
         log(`bigcapital healthy at ${url} (attempt ${attempt})`);
         await trace?.event("health", "BigCapital /api/ping is healthy", {
-          meta: { attempt, url },
+          meta: {
+            attempt,
+            url,
+            waitDurationMs: Date.now() - waitStarted,
+            pollMinMs: cfg.healthPollMinMs,
+            pollMaxMs: cfg.healthPollMaxMs,
+            fastAttempts: cfg.healthFastPollAttempts,
+          },
         });
         return;
       }
+      lastDetail = `HTTP ${res.status}`;
+      lastErrno = undefined;
       log(`ping not ok: ${res.status} (attempt ${attempt})`);
     } catch (e) {
-      log(`ping error attempt ${attempt}: ${String(e)}`);
+      const { chain, errnoCode } = unwrapFetchError(e);
+      lastDetail = chain;
+      lastErrno = errnoCode;
+      log(`ping error attempt ${attempt}: ${chain}`);
     }
-    await new Promise((r) => setTimeout(r, 2_000));
+    if (attempt === 1 || attempt % 10 === 0) {
+      const remainingMs = Math.max(0, deadline - Date.now());
+      const hint = hintForPingFailure(lastErrno, url, lastDetail);
+      await trace?.event(
+        "health",
+        `Still waiting for /api/ping (attempt ${attempt}, ~${Math.round(remainingMs / 1000)}s left) — last: ${lastDetail.slice(0, 280)}`,
+        {
+          meta: {
+            attempt,
+            url,
+            errnoCode: lastErrno,
+            lastDetail: lastDetail.slice(0, 2000),
+            hint,
+            nextPollInMs: healthPollIntervalMs(attempt + 1, cfg),
+          },
+        },
+      );
+    }
+    const sleepMs = healthPollIntervalMs(attempt, cfg);
+    await new Promise((r) => setTimeout(r, sleepMs));
   }
-  throw new Error(`BigCapital did not become ready within ${timeoutMs}ms`);
+  throw new Error(
+    `BigCapital did not become ready within ${timeoutMs}ms (last: ${lastDetail || "no detail"})${lastErrno ? ` [${lastErrno}]` : ""}`,
+  );
 }
 
 async function registerAdmin(params: {
@@ -175,6 +339,7 @@ async function registerAdmin(params: {
   password: string;
   log: (m: string) => void;
   trace?: ProvisionTracer;
+  fetchTimeoutMs: number;
 }): Promise<void> {
   const url = `${params.internalBaseUrl}/api/auth/register`;
   const res = await fetch(url, {
@@ -186,6 +351,7 @@ async function registerAdmin(params: {
       email: params.email,
       password: params.password,
     }),
+    signal: AbortSignal.timeout(params.fetchTimeoutMs),
   });
   const text = await res.text();
   if (res.ok) {
@@ -271,8 +437,24 @@ export async function provisionTenant(
   let oneTimeAdminPassword: string | undefined;
 
   try {
+    const cfg = getProvisionConfig();
+    const provisionStartedAt = Date.now();
+
     await trace.event("run", "Provisioner started", {
-      meta: { project, baseUrl, bigcapitalRoot },
+      meta: {
+        project,
+        baseUrl,
+        bigcapitalRoot,
+        tuning: {
+          healthTimeoutMs: cfg.healthTimeoutMs,
+          healthPollMinMs: cfg.healthPollMinMs,
+          healthPollMaxMs: cfg.healthPollMaxMs,
+          healthFastPollAttempts: cfg.healthFastPollAttempts,
+          dockerComposeTimeoutMs: cfg.dockerComposeTimeoutMs,
+          migrationMaxAttempts: cfg.migrationMaxAttempts,
+          registerFetchTimeoutMs: cfg.registerFetchTimeoutMs,
+        },
+      },
     });
 
     const existing = await db
@@ -290,13 +472,19 @@ export async function provisionTenant(
       };
     }
 
-    await trace.event("prepare", "Ensuring BigCapital host directories exist");
-    await mkdir(join(bigcapitalRoot, "data/logs/nginx"), {
-      recursive: true,
-    });
-    await mkdir(join(bigcapitalRoot, "docker/certbot/certs"), {
-      recursive: true,
-    });
+    await timedPhase(
+      trace,
+      "prepare_dirs",
+      "Prepare BigCapital host directories",
+      async () => {
+        await mkdir(join(bigcapitalRoot, "data/logs/nginx"), {
+          recursive: true,
+        });
+        await mkdir(join(bigcapitalRoot, "docker/certbot/certs"), {
+          recursive: true,
+        });
+      },
+    );
 
     oneTimeAdminPassword = bootstrapPassword();
     const jwtSecret = persistSecret(randomSecret(32));
@@ -306,6 +494,7 @@ export async function provisionTenant(
     const agendashUser = "agendash";
     const agendashPassword = persistSecret(randomSecret(12));
 
+    const tDb = Date.now();
     await trace.event("database", "Allocating port and inserting tenant + deployment rows");
 
     await db.transaction(async (tx) => {
@@ -359,7 +548,13 @@ export async function provisionTenant(
       "database",
       "Stockix rows committed (tenant, deployment, port)",
       {
-        meta: { tenantId, deploymentId, port, project },
+        meta: {
+          tenantId,
+          deploymentId,
+          port,
+          project,
+          durationMs: Date.now() - tDb,
+        },
       },
     );
 
@@ -384,67 +579,127 @@ export async function provisionTenant(
     });
 
     const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
+    const dTimeout = cfg.dockerComposeTimeoutMs;
 
-    await trace.event(
-      "docker",
-      "Compose: starting data services (mysql, mongo, redis)",
+    await timedPhase(
+      trace,
+      "compose_data_services",
+      "Compose data services (mysql, mongo, redis)",
+      async () => {
+        await dockerCompose(
+          composeFile,
+          project,
+          envPath,
+          composeEnv,
+          ["up", "-d", "mysql", "mongo", "redis"],
+          dTimeout,
+        );
+      },
     );
-    await dockerCompose(composeFile, project, envPath, composeEnv, [
-      "up",
-      "-d",
-      "mysql",
-      "mongo",
-      "redis",
-    ]);
 
     let migrated = false;
-    for (let i = 0; i < 8; i++) {
+    let lastMigrationError = "";
+    const tMigrate = Date.now();
+    const maxMig = cfg.migrationMaxAttempts;
+    for (let i = 0; i < maxMig; i++) {
       try {
         log(`database_migration attempt ${i + 1}`);
         await trace.event("migrate", `Running database_migration (attempt ${i + 1})`);
-        await dockerCompose(composeFile, project, envPath, composeEnv, [
-          "run",
-          "--rm",
-          "database_migration",
-        ]);
+        await dockerCompose(
+          composeFile,
+          project,
+          envPath,
+          composeEnv,
+          ["run", "--rm", "database_migration"],
+          dTimeout,
+        );
         migrated = true;
         await trace.event("migrate", "database_migration finished successfully", {
-          meta: { attempt: i + 1 },
+          meta: {
+            attempt: i + 1,
+            totalMigrationPhaseMs: Date.now() - tMigrate,
+          },
         });
         break;
       } catch (e) {
-        log(`migration failed (retry): ${String(e)}`);
+        lastMigrationError = String(e);
+        log(`migration failed (retry): ${lastMigrationError}`);
         await trace.event(
           "migrate",
-          `database_migration failed, will retry: ${String(e).slice(0, 500)}`,
-          { level: "warn", meta: { attempt: i + 1 } },
+          `database_migration failed, will retry: ${lastMigrationError.slice(0, 800)}`,
+          {
+            level: "warn",
+            meta: { attempt: i + 1, fullError: lastMigrationError.slice(0, 4000) },
+          },
         );
-        await new Promise((r) => setTimeout(r, 3_000));
+        await new Promise((r) => setTimeout(r, cfg.migrationRetryDelayMs));
       }
     }
-    if (!migrated) throw new Error("database_migration did not succeed");
+    if (!migrated) {
+      await trace.event(
+        "failed",
+        `database_migration did not succeed after ${maxMig} attempts. Last error: ${lastMigrationError.slice(0, 1200)}`,
+        {
+          level: "error",
+          meta: {
+            lastMigrationError: lastMigrationError.slice(0, 8000),
+            totalMigrationPhaseMs: Date.now() - tMigrate,
+          },
+        },
+      );
+      throw new Error(
+        `database_migration did not succeed. Last: ${lastMigrationError.slice(0, 2000)}`,
+      );
+    }
 
-    await trace.event("docker", "Compose: starting full application stack");
-    await dockerCompose(composeFile, project, envPath, composeEnv, [
-      "up",
-      "-d",
-    ]);
+    await timedPhase(
+      trace,
+      "compose_full_stack",
+      "Compose full application stack",
+      async () => {
+        await dockerCompose(
+          composeFile,
+          project,
+          envPath,
+          composeEnv,
+          ["up", "-d"],
+          dTimeout,
+        );
+      },
+    );
 
     const internalUrl = `http://127.0.0.1:${port}`;
     await trace.event("health", "Waiting for BigCapital HTTP health (/api/ping)", {
-      meta: { internalUrl, timeoutMs: 180_000 },
+      meta: {
+        internalUrl,
+        timeoutMs: cfg.healthTimeoutMs,
+        fetchTimeoutMs: cfg.healthFetchTimeoutMs,
+        pollMinMs: cfg.healthPollMinMs,
+        pollMaxMs: cfg.healthPollMaxMs,
+        fastPollAttempts: cfg.healthFastPollAttempts,
+      },
     });
-    await waitForBigCapitalReady(internalUrl, 180_000, log, trace);
+    await waitForBigCapitalReady(internalUrl, cfg, log, trace);
 
-    await registerAdmin({
-      internalBaseUrl: internalUrl,
-      firstName: input.adminFirstName,
-      lastName: input.adminLastName,
-      email: input.adminEmail,
-      password: oneTimeAdminPassword,
-      log,
+    const adminBootstrapPassword = oneTimeAdminPassword;
+
+    await timedPhase(
       trace,
-    });
+      "auth_register",
+      "BigCapital admin registration",
+      async () => {
+        await registerAdmin({
+          internalBaseUrl: internalUrl,
+          firstName: input.adminFirstName,
+          lastName: input.adminLastName,
+          email: input.adminEmail,
+          password: adminBootstrapPassword,
+          log,
+          trace,
+          fetchTimeoutMs: cfg.registerFetchTimeoutMs,
+        });
+      },
+    );
 
     await db
       .update(tenantDeployments)
@@ -457,7 +712,12 @@ export async function provisionTenant(
       .where(eq(tenantDeployments.id, deploymentId));
 
     await trace.event("complete", "Provisioning finished — deployment active", {
-      meta: { baseUrl, internalPort: port, composeProject: project },
+      meta: {
+        baseUrl,
+        internalPort: port,
+        composeProject: project,
+        totalProvisionMs: Date.now() - provisionStartedAt,
+      },
     });
 
     return {
@@ -488,15 +748,33 @@ export async function provisionTenant(
     try {
       const envPathGuess = join(tenantEnvRoot, input.slug, ".env");
       const composeEnv = { BIGCAPITAL_ROOT: bigcapitalRoot };
-      await dockerCompose(composeFile, project, envPathGuess, composeEnv, [
-        "down",
-      ]).catch(() => undefined);
-      log(`docker compose down for ${project} (best effort)`);
-      await trace
-        .event("rollback", `docker compose down for ${project} (best effort)`, {
-          level: "warn",
-        })
-        .catch(() => undefined);
+      const rollbackTimeout = getProvisionConfig().dockerComposeTimeoutMs;
+      try {
+        await dockerCompose(
+          composeFile,
+          project,
+          envPathGuess,
+          composeEnv,
+          ["down"],
+          rollbackTimeout,
+        );
+        log(`docker compose down for ${project} (best effort)`);
+        await trace
+          .event("rollback", `docker compose down completed for ${project}`, {
+            level: "warn",
+          })
+          .catch(() => undefined);
+      } catch (rollbackErr) {
+        const rb = String(rollbackErr);
+        log(`docker compose down failed for ${project}: ${rb}`);
+        await trace
+          .event(
+            "rollback",
+            `docker compose down failed (stack may still be running): ${rb.slice(0, 2000)}`,
+            { level: "error" },
+          )
+          .catch(() => undefined);
+      }
     } catch {
       /* ignore rollback errors */
     }
@@ -592,6 +870,7 @@ export async function deprovisionTenant(
     const downArgs = options.removeVolumes
       ? (["down", "--volumes"] as const)
       : (["down"] as const);
+    const downTimeout = getProvisionConfig().dockerComposeTimeoutMs;
     try {
       await dockerCompose(
         composeFile,
@@ -599,6 +878,7 @@ export async function deprovisionTenant(
         envPath,
         composeEnv,
         [...downArgs],
+        downTimeout,
       );
       dockerStatus = "stopped";
       log(`docker compose ${downArgs.join(" ")} completed for ${project}`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AlertCircle,
@@ -100,6 +100,134 @@ function mergeProvisionEvents(
   );
 }
 
+function metaSummary(meta: Record<string, unknown> | null): string | null {
+  if (!meta || typeof meta !== "object") return null;
+  try {
+    return JSON.stringify(meta, null, 2);
+  } catch {
+    return String(meta);
+  }
+}
+
+function ProvisionTracePanel({
+  events,
+  title,
+  correlationId,
+  copyKey,
+  onCopy,
+  copiedKey,
+  streamNote,
+  pollNote,
+  compact,
+}: {
+  events: ProvisionEventRow[];
+  title: string;
+  correlationId: string | null;
+  copyKey: string;
+  onCopy: (key: string, text: string) => void;
+  copiedKey: string | null;
+  streamNote?: string | null;
+  pollNote?: string | null;
+  compact?: boolean;
+}) {
+  const fullText = JSON.stringify(
+    { correlationId, events },
+    null,
+    2,
+  );
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium text-foreground">{title}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {correlationId ? (
+            <span className="rounded-md border border-border bg-muted/50 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+              correlationId: {correlationId}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-[10px]"
+            disabled={events.length === 0}
+            onClick={() => onCopy(copyKey, fullText)}
+          >
+            <Copy className="mr-1 h-3 w-3" />
+            {copiedKey === copyKey ? "Copied" : "Copy full trace (JSON)"}
+          </Button>
+        </div>
+      </div>
+      {streamNote ? (
+        <p className="text-[11px] text-amber-800 dark:text-amber-200">{streamNote}</p>
+      ) : null}
+      {pollNote ? (
+        <p className="text-[11px] text-muted-foreground">{pollNote}</p>
+      ) : null}
+      <div
+        className={
+          compact
+            ? "max-h-56 overflow-y-auto rounded-md border border-border bg-muted/30 px-2 py-2 font-mono text-[11px] leading-snug"
+            : "max-h-[min(70vh,36rem)] overflow-y-auto rounded-md border border-amber-500/30 bg-background/90 px-2 py-2 font-mono text-[11px] leading-snug text-foreground shadow-inner"
+        }
+      >
+        {events.length === 0 ? (
+          <p className="text-muted-foreground">
+            No trace rows yet — waiting for API events (poll + SSE).
+          </p>
+        ) : (
+          events.map((e) => {
+            const metaStr = metaSummary(e.meta);
+            return (
+              <div
+                key={e.id}
+                className={`border-b border-border/40 py-2 last:border-b-0 ${
+                  e.level === "error"
+                    ? "text-destructive"
+                    : e.level === "warn"
+                      ? "text-amber-800 dark:text-amber-200"
+                      : ""
+                }`}
+              >
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span className="text-muted-foreground">
+                    {e.createdAt.slice(11, 19)}
+                  </span>
+                  <span
+                    className={`rounded px-1 font-semibold ${
+                      e.level === "error"
+                        ? "bg-destructive/15 text-destructive"
+                        : e.level === "warn"
+                          ? "bg-amber-500/15 text-amber-900 dark:text-amber-100"
+                          : "bg-muted text-foreground"
+                    }`}
+                  >
+                    {e.level}
+                  </span>
+                  <span className="font-medium text-foreground/90">
+                    [{e.phase}]
+                  </span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap wrap-break-word">{e.message}</p>
+                {metaStr ? (
+                  <details className="mt-1 text-[10px] text-muted-foreground">
+                    <summary className="cursor-pointer select-none hover:text-foreground">
+                      Details (meta)
+                    </summary>
+                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-border/60 bg-muted/40 p-2 text-[10px]">
+                      {metaStr}
+                    </pre>
+                  </details>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return {};
@@ -108,6 +236,39 @@ async function readJson(res: Response): Promise<unknown> {
   } catch {
     return { raw: text };
   }
+}
+
+function describeTenantProvisionError(data: {
+  error?: string;
+  message?: string;
+  hint?: string;
+  detail?: unknown;
+  correlationId?: string;
+}): string {
+  const parts: string[] = [];
+  if (data.message) {
+    parts.push(data.message);
+  } else if (data.error === "invalid_body" && data.detail && typeof data.detail === "object") {
+    const d = data.detail as {
+      fieldErrors?: Record<string, string[] | undefined>;
+      formErrors?: string[];
+    };
+    const fe = d.fieldErrors;
+    if (fe) {
+      for (const [k, v] of Object.entries(fe)) {
+        if (v?.length) parts.push(`${k}: ${v.join(" ")}`);
+      }
+    }
+    if (d.formErrors?.length) parts.push(...d.formErrors);
+  }
+  if (data.hint) parts.push(data.hint);
+  if (!parts.length && data.error) parts.push(data.error);
+  return [
+    parts.join(" — "),
+    data.correlationId ? `id:${data.correlationId}` : "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
 }
 
 export default function TenantsPage() {
@@ -127,6 +288,11 @@ export default function TenantsPage() {
   const [streamCorrelationId, setStreamCorrelationId] = useState<string | null>(
     null,
   );
+  /** Shown in UI for copy/debug until the next provision starts. */
+  const [runCorrelationId, setRunCorrelationId] = useState<string | null>(null);
+  const [sseStreamError, setSseStreamError] = useState<string | null>(null);
+  const [pollHeartbeat, setPollHeartbeat] = useState<string | null>(null);
+  const streamClosingRef = useRef(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -240,6 +406,8 @@ export default function TenantsPage() {
 
   useEffect(() => {
     if (!streamCorrelationId) return;
+    streamClosingRef.current = false;
+    setSseStreamError(null);
     const url = `${apiBase}/tenants/provision-stream/${streamCorrelationId}`;
     const es = new EventSource(url);
     const onProvision = (ev: MessageEvent) => {
@@ -248,15 +416,30 @@ export default function TenantsPage() {
         if (row?.id) {
           setProvisionLog((prev) => mergeProvisionEvents(prev, [row]));
         }
-      } catch {
-        /* ignore malformed chunks */
+      } catch (parseErr) {
+        const synthetic: ProvisionEventRow = {
+          id: `client-parse-${Date.now()}`,
+          phase: "client",
+          level: "error",
+          message: `SSE message could not be parsed as JSON: ${String(parseErr)}`,
+          meta: { rawPreview: String(ev.data).slice(0, 800) },
+          createdAt: new Date().toISOString(),
+        };
+        setProvisionLog((prev) => mergeProvisionEvents(prev, [synthetic]));
       }
     };
     es.addEventListener("provision", onProvision);
+    es.onopen = () => {
+      setSseStreamError(null);
+    };
     es.onerror = () => {
-      es.close();
+      if (streamClosingRef.current) return;
+      setSseStreamError(
+        "Live SSE stream hit an error or timed out (the browser may reconnect). The API still records every step in Postgres — polling below merges the full trace.",
+      );
     };
     return () => {
+      streamClosingRef.current = true;
       es.removeEventListener("provision", onProvision);
       es.close();
     };
@@ -281,14 +464,28 @@ export default function TenantsPage() {
         const msg =
           (sj as { message?: string }).message ??
           "Provision status not found (API may have restarted). Check API logs and tenant list.";
-        throw new Error(msg);
+        throw new Error(`${msg} (correlationId=${correlationId})`);
       }
 
       if (!sr.ok) {
+        const detail =
+          sj && typeof sj === "object"
+            ? JSON.stringify(sj).slice(0, 1200)
+            : "";
         throw new Error(
-          (sj as { error?: string }).error ?? `status HTTP ${sr.status}`,
+          [(sj as { error?: string }).error ?? `status HTTP ${sr.status}`, detail]
+            .filter(Boolean)
+            .join(" — "),
         );
       }
+
+      const evs = (sj as { events?: ProvisionEventRow[] }).events;
+      const evLen = Array.isArray(evs) ? evs.length : 0;
+      const jobStatus =
+        "status" in sj ? String((sj as { status: string }).status) : "?";
+      setPollHeartbeat(
+        `GET provision-status · ${new Date().toLocaleTimeString()} · job=${jobStatus} · persisted_events=${evLen}`,
+      );
 
       if ("events" in sj && Array.isArray((sj as { events?: unknown }).events)) {
         setProvisionLog((prev) =>
@@ -302,7 +499,14 @@ export default function TenantsPage() {
       if ("status" in sj && sj.status === "failed") {
         const f = sj as ProvisionPollFailed;
         throw new Error(
-          [f.error, f.cause].filter(Boolean).join(" — "),
+          [
+            f.error,
+            f.cause ? `cause: ${f.cause}` : "",
+            `correlationId=${correlationId}`,
+            "See provision trace above/below for persisted steps.",
+          ]
+            .filter(Boolean)
+            .join(" — "),
         );
       }
 
@@ -319,17 +523,35 @@ export default function TenantsPage() {
       }
     }
     throw new Error(
-      `Still provisioning after ${MAX_WAIT_MS / 60000} minutes — check Docker and the API terminal, then refresh this page.`,
+      `Still provisioning after ${MAX_WAIT_MS / 60000} minutes (correlationId=${correlationId}). Check Docker and the API terminal; trace rows may still be in Postgres — refresh and inspect tenant lastError.`,
     );
   };
 
   const provision = async () => {
     const adminEmailForLogin = adminEmail.trim();
+    const adminFn = adminFirstName.trim();
+    const adminLn = adminLastName.trim();
+    if (
+      !ownerId ||
+      !slug.trim() ||
+      !name.trim() ||
+      !adminEmailForLogin ||
+      !adminFn ||
+      !adminLn
+    ) {
+      setError(
+        "Fill every field: Stockix owner, slug, display name, tenant admin email, and admin first/last name.",
+      );
+      return;
+    }
     setError(null);
     setOneTimePassword(null);
     setProvisionHint(null);
     setTenantAccess(null);
     setProvisionLog([]);
+    setRunCorrelationId(null);
+    setPollHeartbeat(null);
+    setSseStreamError(null);
     setStreamCorrelationId(null);
     setLoading(true);
     try {
@@ -337,12 +559,12 @@ export default function TenantsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slug,
-          name,
+          slug: slug.trim(),
+          name: name.trim(),
           owner_id: ownerId,
-          admin_email: adminEmail,
-          admin_first_name: adminFirstName,
-          admin_last_name: adminLastName,
+          admin_email: adminEmailForLogin,
+          admin_first_name: adminFn,
+          admin_last_name: adminLn,
         }),
       });
 
@@ -350,11 +572,28 @@ export default function TenantsPage() {
         error?: string;
         correlationId?: string;
         message?: string;
+        hint?: string;
         accepted?: boolean;
         detail?: unknown;
+        maxConcurrent?: number;
       };
 
+      if (res.status === 429) {
+        setError(
+          [
+            data.message ?? "Provisioning capacity reached.",
+            data.maxConcurrent != null
+              ? `(limit: ${data.maxConcurrent} concurrent run(s))`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+        return;
+      }
+
       if (res.status === 202 && data.accepted && data.correlationId) {
+        setRunCorrelationId(data.correlationId);
         setStreamCorrelationId(data.correlationId);
         const ok = await pollUntilDone(data.correlationId);
         const localUrl =
@@ -375,15 +614,7 @@ export default function TenantsPage() {
       }
 
       if (!res.ok) {
-        const detail =
-          data.detail && typeof data.detail === "object"
-            ? JSON.stringify(data.detail)
-            : "";
-        setError(
-          [data.error, detail, data.correlationId ? `id:${data.correlationId}` : ""]
-            .filter(Boolean)
-            .join(" — "),
-        );
+        setError(describeTenantProvisionError(data));
         return;
       }
 
@@ -392,6 +623,7 @@ export default function TenantsPage() {
       setError(String(e));
     } finally {
       setStreamCorrelationId(null);
+      setPollHeartbeat(null);
       setLoading(false);
     }
   };
@@ -412,45 +644,63 @@ export default function TenantsPage() {
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-sm text-amber-950 dark:text-amber-100">
           <p className="font-medium">Provisioning in progress</p>
           <p className="mt-1 text-xs opacity-90">
-            Elapsed {elapsedSec}s · First run can take many minutes (image pulls,
-            MySQL, migrations). Live steps below (SSE + persisted trace); status
-            also polled for completion.
+            Elapsed {elapsedSec}s · Every server step is written to{" "}
+            <span className="font-mono">tenant_provision_events</span> and merged
+            here via SSE + poll. Docker stderr is attached on compose failures.
           </p>
-          {streamCorrelationId ? (
-            <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-amber-500/30 bg-background/80 px-2 py-2 font-mono text-[11px] leading-snug text-foreground">
-              {provisionLog.length === 0 ? (
-                <p className="text-muted-foreground">Waiting for trace events…</p>
-              ) : (
-                provisionLog.map((e) => (
-                  <div
-                    key={e.id}
-                    className={`border-b border-border/40 py-1 last:border-b-0 ${
-                      e.level === "error"
-                        ? "text-destructive"
-                        : e.level === "warn"
-                          ? "text-amber-700 dark:text-amber-200"
-                          : ""
-                    }`}
-                  >
-                    <span className="text-muted-foreground">
-                      {e.createdAt.slice(11, 19)}
-                    </span>{" "}
-                    <span className="font-medium text-foreground/90">
-                      [{e.phase}]
-                    </span>{" "}
-                    {e.message}
-                  </div>
-                ))
-              )}
+          {runCorrelationId ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="rounded border border-amber-600/30 bg-background/80 px-2 py-1 font-mono text-[10px] text-foreground">
+                correlationId: {runCorrelationId}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px]"
+                onClick={() =>
+                  copyText("cid", runCorrelationId)
+                }
+              >
+                <Copy className="mr-1 h-3 w-3" />
+                {copiedKey === "cid" ? "Copied" : "Copy id"}
+              </Button>
             </div>
           ) : null}
+          <div className="mt-4">
+            <ProvisionTracePanel
+              title="Live provision trace (same rows after finish)"
+              correlationId={runCorrelationId}
+              events={provisionLog}
+              copyKey="live-trace"
+              onCopy={copyText}
+              copiedKey={copiedKey}
+              streamNote={sseStreamError}
+              pollNote={pollHeartbeat}
+              compact={false}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && provisionLog.length > 0 ? (
+        <div className="rounded-lg border border-border bg-card px-3 py-3 text-sm">
+          <ProvisionTracePanel
+            title="Last provision trace (persisted on the API)"
+            correlationId={runCorrelationId}
+            events={provisionLog}
+            copyKey="last-trace"
+            onCopy={copyText}
+            copiedKey={copiedKey}
+            compact
+          />
         </div>
       ) : null}
 
       {error ? (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <pre className="whitespace-pre-wrap wrap-break-word rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 font-sans text-sm text-destructive">
           {error}
-        </p>
+        </pre>
       ) : null}
 
       {oneTimePassword || tenantAccess ? (
@@ -540,10 +790,15 @@ export default function TenantsPage() {
             <span className="text-muted-foreground">Slug (DNS label)</span>
             <Input
               value={slug}
-              onChange={(e) => setSlug(e.target.value)}
+              onChange={(e) => setSlug(e.target.value.toLowerCase())}
               placeholder="acme-corp"
               autoComplete="off"
             />
+            <span className="block text-[11px] leading-snug text-muted-foreground">
+              Lowercase only: letters, digits, and hyphens (e.g.{" "}
+              <span className="font-mono">my-company</span>). No spaces or underscores — must match
+              the API / tenant stack hostname segment.
+            </span>
           </label>
           <label className="space-y-1 text-xs sm:col-span-2">
             <span className="text-muted-foreground">Display name</span>
@@ -579,7 +834,15 @@ export default function TenantsPage() {
         </div>
         <Button
           type="button"
-          disabled={loading || !ownerId || !slug || !name}
+          disabled={
+            loading ||
+            !ownerId ||
+            !slug.trim() ||
+            !name.trim() ||
+            !adminEmail.trim() ||
+            !adminFirstName.trim() ||
+            !adminLastName.trim()
+          }
           onClick={() => void provision()}
         >
           {loading ? `Provisioning… ${elapsedSec}s` : "Provision tenant"}

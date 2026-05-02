@@ -27,6 +27,11 @@ import {
   createProvisionTracer,
   type ProvisionEventPayload,
 } from "./provision-trace.js";
+import { getProvisionConfig } from "./provision-config.js";
+import {
+  tryBeginProvision,
+  endProvision,
+} from "./provision-concurrency.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const db = databaseUrl ? createDb(databaseUrl) : null;
@@ -157,7 +162,10 @@ app.delete("/tenants/:tenantId", async (c) => {
 const provisionBody = z.object({
   slug: z
     .string()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be lowercase DNS-like"),
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "Slug must be a lowercase DNS label: letters, digits, and single hyphens between segments (e.g. acme-corp, shop2). No spaces, underscores, or uppercase.",
+    ),
   name: z.string().min(1),
   owner_id: z.string().uuid(),
   admin_email: z.string().email(),
@@ -174,10 +182,29 @@ app.post("/tenants", async (c) => {
   try {
     body = provisionBody.parse(await c.req.json());
   } catch (e) {
-    return c.json(
-      { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
-      400,
-    );
+    if (e instanceof z.ZodError) {
+      const flat = e.flatten();
+      const fieldParts: string[] = [];
+      for (const [key, msgs] of Object.entries(flat.fieldErrors)) {
+        if (msgs?.length) fieldParts.push(`${key}: ${msgs.join(" ")}`);
+      }
+      const message =
+        fieldParts.join(" · ") ||
+        (flat.formErrors.length ? flat.formErrors.join(" · ") : "Request validation failed");
+      return c.json(
+        {
+          error: "invalid_body",
+          message,
+          detail: flat,
+          hint:
+            flat.fieldErrors.slug?.length ?
+              "Tenant slug examples that work: acme-corp, my-shop, tenant01"
+            : undefined,
+        },
+        400,
+      );
+    }
+    return c.json({ error: "invalid_body", message: String(e), detail: String(e) }, 400);
   }
 
   const ownerOk = await db
@@ -201,6 +228,18 @@ app.post("/tenants", async (c) => {
     );
   }
 
+  const provCfg = getProvisionConfig();
+  if (!tryBeginProvision(provCfg.maxConcurrentProvisions)) {
+    return c.json(
+      {
+        error: "provision_capacity",
+        message: `At most ${provCfg.maxConcurrentProvisions} tenant provision(s) can run at once. Wait for an in-flight run to finish, or raise PROVISION_MAX_CONCURRENT after sizing Docker/CPU/RAM.`,
+        maxConcurrent: provCfg.maxConcurrentProvisions,
+      },
+      429,
+    );
+  }
+
   const correlationId = randomUUID();
   const log = (m: string) => {
     console.log(JSON.stringify({ level: "info", correlationId, message: m }));
@@ -212,69 +251,84 @@ app.post("/tenants", async (c) => {
     () => ({ slug: body.slug }),
     log,
   );
-  await acceptTrace.event(
-    "api",
-    "HTTP 202 — provisioning accepted; background worker will start",
-  );
 
-  setProvisionJob(correlationId, { status: "queued" });
+  try {
+    await acceptTrace.event(
+      "api",
+      "HTTP 202 — provisioning accepted; background worker will start",
+    );
 
-  void (async () => {
-    setProvisionJob(correlationId, { status: "running" });
-    try {
-      const result = await provisionTenant(
-        db,
-        {
-          slug: body.slug,
-          name: body.name,
-          ownerId: body.owner_id,
-          adminEmail: body.admin_email,
-          adminFirstName: body.admin_first_name,
-          adminLastName: body.admin_last_name,
-        },
-        log,
-        correlationId,
-      );
+    setProvisionJob(correlationId, { status: "queued" });
 
-      if (!result.ok) {
+    void (async () => {
+      try {
+        setProvisionJob(correlationId, { status: "running" });
+        const result = await provisionTenant(
+          db,
+          {
+            slug: body.slug,
+            name: body.name,
+            ownerId: body.owner_id,
+            adminEmail: body.admin_email,
+            adminFirstName: body.admin_first_name,
+            adminLastName: body.admin_last_name,
+          },
+          log,
+          correlationId,
+        );
+
+        if (!result.ok) {
+          setProvisionJob(correlationId, {
+            status: "failed",
+            message: result.message,
+            cause: result.cause,
+            correlationId,
+          });
+          return;
+        }
+
+        setProvisionJob(correlationId, { status: "succeeded", result });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : String(err);
         setProvisionJob(correlationId, {
           status: "failed",
-          message: result.message,
-          cause: result.cause,
+          message,
+          cause: String(err),
           correlationId,
         });
-        return;
+      } finally {
+        endProvision();
       }
+    })().catch((e) => {
+      console.error(
+        JSON.stringify({ level: "error", correlationId, message: String(e) }),
+      );
+      endProvision();
+    });
 
-      setProvisionJob(correlationId, { status: "succeeded", result });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err);
-      setProvisionJob(correlationId, {
-        status: "failed",
-        message,
-        cause: String(err),
+    return c.json(
+      {
+        accepted: true,
         correlationId,
-      });
-    }
-  })().catch((e) => {
-    console.error(JSON.stringify({ level: "error", correlationId, message: String(e) }));
-  });
-
-  return c.json(
-    {
-      accepted: true,
-      correlationId,
-      admin_email: body.admin_email,
-      poll: `/tenants/provision-status/${correlationId}`,
-      stream: `/tenants/provision-stream/${correlationId}`,
-      message:
-        "Provisioning started in the background. First Docker run can take many minutes (image pulls, MySQL, migrations). Poll provision-status until status is complete or failed.",
-      note:
-        "Save oneTimeAdminPassword from the status response when complete — it is not stored in Stockix.",
-    },
-    202,
-  );
+        admin_email: body.admin_email,
+        poll: `/tenants/provision-status/${correlationId}`,
+        stream: `/tenants/provision-stream/${correlationId}`,
+        message:
+          "Provisioning started in the background. First Docker run can take many minutes (image pulls, MySQL, migrations). Poll provision-status until status is complete or failed.",
+        note:
+          "Save oneTimeAdminPassword from the status response when complete — it is not stored in Stockix.",
+      },
+      202,
+    );
+  } catch (e) {
+    endProvision();
+    const message = e instanceof Error ? e.message : String(e);
+    return c.json(
+      { error: "provision_accept_failed", message },
+      500,
+    );
+  }
 });
 
 app.get("/tenants/provision-status/:correlationId", async (c) => {
@@ -409,8 +463,26 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
       await forward(rowToProvisionPayload(row));
     }
 
+    const heartbeatMs = Math.min(
+      Math.max(
+        Number(process.env.PROVISION_SSE_HEARTBEAT_MS ?? "15000") || 15000,
+        5000,
+      ),
+      120000,
+    );
+
     await new Promise<void>((resolve) => {
+      const heartbeat = setInterval(() => {
+        void stream
+          .writeSSE({
+            event: "ping",
+            data: JSON.stringify({ t: Date.now() }),
+          })
+          .catch(() => undefined);
+      }, heartbeatMs);
+
       stream.onAbort(() => {
+        clearInterval(heartbeat);
         unsub();
         resolve();
       });

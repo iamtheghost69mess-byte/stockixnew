@@ -13,6 +13,7 @@
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
+    "provision:prepull": "node scripts/prepull-tenant-stack-images.mjs",
     "db:reset:local": "docker compose -f infra/dev/docker-compose.yml down -v && pnpm setup:local",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
