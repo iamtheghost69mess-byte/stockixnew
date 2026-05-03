@@ -40,9 +40,11 @@ exports.getCommonWebpackOptions = ({
       ],
     },
     plugins: [
-      // Ignore knex dynamic required dialects that we don't use
+      // Ignore knex dynamic required dialects that we don't use.
+      // IMPORTANT: Do NOT include mysql or mysql2 — those are the actual drivers
+      // this app uses for MariaDB/MySQL.
       new NormalModuleReplacementPlugin(
-        /m[sy]sql2?|oracle(db)?|sqlite3|pg(-native|-query-stream|-pool)?$|tedious/,
+        /mssql|oracle(db)?|sqlite3|pg(-native|-query-stream|-pool)?$|tedious/,
         'noop2'
       ),
       new ProgressBarPlugin(),
