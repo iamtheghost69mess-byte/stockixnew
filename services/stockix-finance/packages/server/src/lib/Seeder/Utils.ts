@@ -1,6 +1,7 @@
-import fs from 'fs';
+// @ts-nocheck
+import * as fs from 'fs';
 import { promisify } from 'util';
-import url from 'url';
+import * as url from 'url';
 
 const readFile = promisify(fs.readFile);
 
