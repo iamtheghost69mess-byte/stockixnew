@@ -10,6 +10,7 @@ services:
         - SERVER_PROXY_PORT=3000
         - WEB_SSL=false
         - SELF_SIGNED=false
+    restart: unless-stopped
     volumes:
       - ${STOCKIX_TENANT_APP_ROOT}/data/logs/nginx:/var/log/nginx
       - ${STOCKIX_TENANT_APP_ROOT}/docker/certbot/certs:/var/certs
@@ -24,6 +25,7 @@ services:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
+    restart: unless-stopped
 
   server:
     build:
@@ -82,6 +84,7 @@ services:
   mysql:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/mariadb
+    restart: unless-stopped
     environment:
       - MYSQL_DATABASE=${SYSTEM_DB_NAME}
       - MYSQL_USER=${DB_USER}
@@ -105,6 +108,7 @@ services:
   mongo:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/mongo
+    restart: unless-stopped
     expose:
       - "27017"
     volumes:
@@ -113,6 +117,7 @@ services:
   redis:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/redis
+    restart: unless-stopped
     expose:
       - "6379"
     volumes:
