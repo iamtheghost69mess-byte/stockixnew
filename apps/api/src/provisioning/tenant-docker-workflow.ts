@@ -43,7 +43,7 @@ export async function composeRunMigrationWithRetries(
         ctx.project,
         ctx.envPath,
         ctx.composeEnv,
-        ["run", "--rm", "database_migration"],
+        ["run", "--build", "--rm", "database_migration"],
       );
       await trace.event("migrate", "database_migration finished successfully", {
         meta: { attempt: i + 1 },

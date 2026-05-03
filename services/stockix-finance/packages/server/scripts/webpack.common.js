@@ -49,7 +49,17 @@ exports.getCommonWebpackOptions = ({
       ),
       new ProgressBarPlugin(),
     ],
-    externals: [nodeExternals(), 'aws-sdk', 'prettier'],
+    externals: [
+      nodeExternals({
+        modulesDir: path.resolve(__dirname, '../../../node_modules'),
+      }),
+      nodeExternals({
+        modulesDir: path.resolve(__dirname, '../../../../../node_modules'),
+      }),
+      nodeExternals(),
+      'aws-sdk',
+      'prettier',
+    ],
     module: {
       rules: [
         {
