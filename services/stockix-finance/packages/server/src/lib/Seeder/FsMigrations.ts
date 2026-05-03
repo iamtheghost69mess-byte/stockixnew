@@ -3,7 +3,7 @@ import { sortBy } from 'lodash';
 import fs from 'fs';
 import { promisify } from 'util';
 import { MigrateItem } from './interfaces';
-import { importWebpackSeedModule } from './Utils';
+import { importWebpackSeedModule, getCoreSeederFileNames } from './Utils';
 import { DEFAULT_LOAD_EXTENSIONS } from './constants';
 import { filterMigrations } from './MigrateUtils';
 
@@ -39,14 +39,18 @@ class FsMigrations {
    * @returns Promise<MigrateItem[]>
    */
   public getMigrations(loadExtensions = null): Promise<MigrateItem[]> {
-    // Get a list of files in all specified migration directories
+    // Get a list of files in all specified migration directories.
+    // If the directory doesn't exist (e.g. webpack-bundled production deploy),
+    // fall back to the statically-registered CoreSeeds file list.
     const readMigrationsPromises = this.migrationsPaths.map((configDir) => {
       const absoluteDir = path.resolve(process.cwd(), configDir);
-      return readdir(absoluteDir).then((files) => ({
-        files,
-        configDir,
-        absoluteDir,
-      }));
+      return readdir(absoluteDir)
+        .then((files) => ({ files, configDir, absoluteDir }))
+        .catch(() => ({
+          files: getCoreSeederFileNames(),
+          configDir,
+          absoluteDir,
+        }));
     });
 
     return Promise.all(readMigrationsPromises).then((allMigrations) => {
@@ -92,7 +96,7 @@ class FsMigrations {
    * @param {MigrateItem} migration
    * @returns {string}
    */
-  public getMigration(migration: MigrateItem): string {
+  public getMigration(migration: MigrateItem): Promise<any> {
     return importWebpackSeedModule(migration.file);
   }
 }

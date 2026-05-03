@@ -22,12 +22,15 @@ export class JobTransformer extends Transformer {
   };
 
   /**
-   * Detarmines the completed state.
+   * Detarmines the completed state. Only true for successful (non-failed) jobs.
    * @param job
    * @returns
    */
   protected completed = (job): boolean => {
-    return !!job.lastFinishedAt;
+    if (!job.lastFinishedAt) return false;
+    const jobFailed =
+      job.failedAt && moment(job.failedAt).isSame(job.lastFinishedAt);
+    return !jobFailed;
   };
 
   /**

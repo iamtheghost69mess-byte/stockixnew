@@ -2,6 +2,7 @@
 import * as fs from 'fs';
 import { promisify } from 'util';
 import * as url from 'url';
+import { CoreSeeds } from '../../database/seeds/core';
 
 const readFile = promisify(fs.readFile);
 
@@ -35,16 +36,26 @@ export async function importFile(filepath: string): Promise<any> {
 }
 
 /**
- * Imports the seed module using a webpack-friendly dynamic path.
+ * Imports the seed module using a webpack-friendly static map.
  * @param {string} moduleName
  * @returns {Promise<any>}
  */
 export async function importWebpackSeedModule(moduleName: string): Promise<any> {
-  // Use relative path to help webpack create a context for the seeds directory.
-  // We strip the .ts extension so Webpack's resolver can find the matching module.
   const name = moduleName.replace(/\.ts$/, '');
-  
-  // NOTE: This MUST be a relative path that Webpack can resolve at build time.
-  // src/lib/Seeder/Utils.ts -> src/database/seeds/core
+
+  if (CoreSeeds[name]) {
+    return CoreSeeds[name];
+  }
+
   return import(`../../database/seeds/core/${name}`);
+}
+
+/**
+ * Returns the list of core seed filenames derived from the static registry.
+ * Used as a fallback when the seeds directory is not present on disk
+ * (e.g. in a webpack-bundled production deployment).
+ * @returns {string[]}
+ */
+export function getCoreSeederFileNames(): string[] {
+  return Object.keys(CoreSeeds).map((name) => `${name}.ts`);
 }

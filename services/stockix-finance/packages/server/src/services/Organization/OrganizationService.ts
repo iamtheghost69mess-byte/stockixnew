@@ -59,6 +59,14 @@ export default class OrganizationService {
     // Drop the database if is already exists.
     await this.tenantsManager.dropDatabaseIfExists(tenant);
 
+    // A previous build may have set initializedAt/seededAt before failing.
+    // Reset them so migrateTenant/seedTenant can run cleanly on retry.
+    if (tenant.initializedAt || tenant.seededAt) {
+      await Tenant.query()
+        .patch({ initializedAt: null, seededAt: null })
+        .where({ id: tenant.id });
+    }
+
     // Creates a new database.
     await this.tenantsManager.createDatabase(tenant);
 

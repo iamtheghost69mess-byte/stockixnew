@@ -7,8 +7,10 @@
     ],
     "typeRoots": [
       "./node_modules/@types",
+      "../../node_modules/@types",
       "./src/types"
     ],
+    "types": ["node", "lodash"],
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
