@@ -39,5 +39,5 @@ function SidebarFooterVersion() {
   if (!MONOREPO_VERSION) {
     return null;
   }
-  return <div class="sidebar__version">v{MONOREPO_VERSION}</div>;
+  return <div class="sidebar__version">{MONOREPO_VERSION}</div>;
 }
