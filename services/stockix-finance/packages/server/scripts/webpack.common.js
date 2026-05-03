@@ -42,7 +42,7 @@ exports.getCommonWebpackOptions = ({
     plugins: [
       // Ignore knex dynamic required dialects that we don't use
       new NormalModuleReplacementPlugin(
-        /m[sy]sql2?|oracle(db)?|sqlite3|pg-(native|query)/,
+        /m[sy]sql2?|oracle(db)?|sqlite3|pg(-native|-query-stream|-pool)?$|tedious/,
         'noop2'
       ),
       new ProgressBarPlugin(),
