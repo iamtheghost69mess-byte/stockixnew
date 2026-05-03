@@ -41,7 +41,10 @@ export async function importFile(filepath: string): Promise<any> {
  */
 export async function importWebpackSeedModule(moduleName: string): Promise<any> {
   // Use relative path to help webpack create a context for the seeds directory.
-  // Strip the .ts extension to allow webpack's resolver to handle it based on extensions list.
+  // We strip the .ts extension so Webpack's resolver can find the matching module.
   const name = moduleName.replace(/\.ts$/, '');
+  
+  // NOTE: This MUST be a relative path that Webpack can resolve at build time.
+  // src/lib/Seeder/Utils.ts -> src/database/seeds/core
   return import(`../../database/seeds/core/${name}`);
 }

@@ -53,10 +53,6 @@ exports.getCommonWebpackOptions = ({
       nodeExternals({
         modulesDir: path.resolve(__dirname, '../../../node_modules'),
       }),
-      nodeExternals({
-        modulesDir: path.resolve(__dirname, '../../../../../node_modules'),
-      }),
-      nodeExternals(),
       'aws-sdk',
       'prettier',
     ],
