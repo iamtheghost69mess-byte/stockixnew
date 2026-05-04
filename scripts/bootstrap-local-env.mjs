@@ -16,6 +16,7 @@ const copies = [
   ["packages/db/.env.example", "packages/db/.env"],
   ["apps/api/.env.example", "apps/api/.env"],
   ["apps/dashboard/.env.example", "apps/dashboard/.env.local"],
+  ["services/stockix-finance/.env.example", "services/stockix-finance/.env"],
 ];
 
 let created = 0;
