@@ -34,6 +34,7 @@ function ExchangeRateForm({
     isNewMode,
     dialogName,
     exchangeRate,
+    currencyCode,
   } = useExchangeRateFromContext();
 
   // Form validation schema in create and edit mode.
@@ -43,6 +44,7 @@ function ExchangeRateForm({
   const initialValues = useMemo(
     () => ({
       ...defaultInitialValues,
+      ...(currencyCode ? { currency_code: currencyCode } : {}),
       ...transformToForm(exchangeRate, defaultInitialValues),
     }),
     [],

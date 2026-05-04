@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { useMemo } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
@@ -62,7 +63,7 @@ export function useDeleteCurrency(props) {
 /**
  * Retrieve the currencies list.
  */
-export function useCurrencies(props) {
+export function useCurrencies(props?) {
   return useRequestQuery(
     [t.CURRENCIES],
     { method: 'get', url: 'currencies' },
@@ -72,4 +73,17 @@ export function useCurrencies(props) {
       ...props
     },
   );
+}
+
+/**
+ * Returns the latest exchange rate for the given currency code,
+ * sourced from the already-loaded currencies list (no extra request).
+ */
+export function useLatestExchangeRateForCurrency(currencyCode: string | null | undefined): number | null {
+  const { data: currencies } = useCurrencies();
+  return useMemo(() => {
+    if (!currencyCode || !currencies?.length) return null;
+    const match = currencies.find((c) => c.currency_code === currencyCode);
+    return match?.latest_exchange_rate ?? null;
+  }, [currencies, currencyCode]);
 }

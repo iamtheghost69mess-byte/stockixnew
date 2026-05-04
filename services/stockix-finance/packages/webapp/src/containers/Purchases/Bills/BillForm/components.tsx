@@ -1,32 +1,50 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import { Button } from '@blueprintjs/core';
+import { Button, Callout } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
 import { ExchangeRateInputGroup } from '@/components';
 import { useCurrentOrganization } from '@/hooks/state';
 import { useBillIsForeignCustomer } from './utils';
+import { useUpdateEffect } from '@/hooks';
+import { useLatestExchangeRateForCurrency } from '@/hooks/query/currencies';
 
 /**
- * bill exchange rate input field.
+ * Bill exchange rate input field.
+ * Auto-fills the exchange rate from the latest known rate when currency changes.
  * @returns {JSX.Element}
  */
 export function BillExchangeRateInputField({ ...props }) {
   const currentOrganization = useCurrentOrganization();
-  const { values } = useFormikContext();
+  const { values, setFieldValue } = useFormikContext();
 
   const isForeignCustomer = useBillIsForeignCustomer();
+  const latestRate = useLatestExchangeRateForCurrency(values.currency_code);
 
-  // Can't continue if the customer is not foreign.
+  // Auto-fill exchange_rate when currency changes and we have a known rate.
+  useUpdateEffect(() => {
+    if (latestRate != null) {
+      setFieldValue('exchange_rate', latestRate);
+    }
+  }, [values.currency_code]);
+
+  // Can't continue if the vendor is not foreign.
   if (!isForeignCustomer) {
     return null;
   }
   return (
-    <ExchangeRateInputGroup
-      fromCurrency={values.currency_code}
-      toCurrency={currentOrganization.base_currency}
-      {...props}
-    />
+    <>
+      {latestRate === null && values.currency_code && (
+        <Callout intent="warning" style={{ marginBottom: 8, fontSize: 12 }}>
+          {intl.get('exchange_rate_not_set_warning', { currency: values.currency_code })}
+        </Callout>
+      )}
+      <ExchangeRateInputGroup
+        fromCurrency={values.currency_code}
+        toCurrency={currentOrganization.base_currency}
+        {...props}
+      />
+    </>
   );
 }
 

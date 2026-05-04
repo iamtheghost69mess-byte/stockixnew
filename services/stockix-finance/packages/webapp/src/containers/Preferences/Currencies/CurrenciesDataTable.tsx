@@ -1,53 +1,42 @@
 // @ts-nocheck
 import React, { useCallback } from 'react';
 import { compose } from '@/utils';
-
 import { DataTable, TableSkeletonRows } from '@/components';
-
 import { useCurrenciesContext } from './CurrenciesProvider';
-
 import { ActionMenuList, useCurrenciesTableColumns } from './components';
-
 import withDialogActions from '@/containers/Dialog/withDialogActions';
 import withAlertActions from '@/containers/Alert/withAlertActions';
 import styled from 'styled-components';
 
-/**
- * Currencies table.
- */
 function CurrenciesDataTable({
-  // #ownProps
   tableProps,
-
-  // #withDialog.
   openDialog,
-
-  // #withAlertActions
   openAlert,
 }) {
   const { currencies, isCurrenciesLoading } = useCurrenciesContext();
-
-  // Table columns.
   const columns = useCurrenciesTableColumns();
 
-  // Handle Edit Currency.
   const handleEditCurrency = useCallback(
     (currency) => {
-      openDialog('currency-form', {
-        action: 'edit',
-        currency: currency,
-      });
+      openDialog('currency-form', { action: 'edit', currency });
     },
     [openDialog],
   );
 
-  // Handle delete currency.
   const handleDeleteCurrency = ({ currency_code }) => {
-    openAlert('currency-delete', { currency_code: currency_code });
+    openAlert('currency-delete', { currency_code });
   };
 
+  // Opens the exchange rate dialog with the currency pre-filled and locked.
+  const handleSetRate = useCallback(
+    (currency) => {
+      openDialog('exchangeRate-form', { currencyCode: currency.currency_code });
+    },
+    [openDialog],
+  );
+
   return (
-    <CurrencieDataTable
+    <CurrenciesTable
       columns={columns}
       data={currencies}
       loading={isCurrenciesLoading}
@@ -58,6 +47,7 @@ function CurrenciesDataTable({
       payload={{
         onDeleteCurrency: handleDeleteCurrency,
         onEditCurrency: handleEditCurrency,
+        onSetRate: handleSetRate,
       }}
       rowContextMenu={ActionMenuList}
       {...tableProps}
@@ -70,10 +60,13 @@ export default compose(
   withAlertActions,
 )(CurrenciesDataTable);
 
-const CurrencieDataTable = styled(DataTable)`
+const CurrenciesTable = styled(DataTable)`
   .table .th,
   .table .td {
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+  .table .td.current-rate {
+    font-variant-numeric: tabular-nums;
   }
 `;
