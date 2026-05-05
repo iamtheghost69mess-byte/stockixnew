@@ -122,6 +122,7 @@
     "faker": "^4.1.0",
     "getopts": "^2.2.5",
     "gulp-postcss": "^9.0.0",
+    "postcss": "^8.4.31",
     "gulp-rename": "^2.0.0",
     "knex-factory": "0.0.6",
     "merge-stream": "^2.0.0",

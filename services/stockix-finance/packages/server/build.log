@@ -1,0 +1,8 @@
+failed to fetch metadata: fork/exec /home/montaser/.docker/cli-plugins/docker-buildx: no such file or directory
+
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+unknown flag: --progress
+See 'docker build --help'.

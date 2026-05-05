@@ -1,21 +1,24 @@
-FROM node:14.15.0 as build
-
-USER root
+FROM node:14.21.3 as build
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
+# Copy lerna.json for the version injection in craco.config.js
 COPY lerna.json ./
 
-COPY ./packages/webapp/package*.json /app/packages/webapp/
+WORKDIR /app/packages/webapp
 
-RUN npm install
-RUN npm run bootstrap
+# Copy ONLY webapp package.json
+COPY ./packages/webapp/package*.json ./
 
-# Build webapp package
-COPY ./packages/webapp /app/packages/webapp
-RUN npm run build:webapp
+# Install ONLY webapp dependencies to avoid hoisting conflicts with server's Webpack 5
+RUN npm install --legacy-peer-deps
+
+# Copy webapp source
+COPY ./packages/webapp ./
+
+# Build the webapp isolated from the monorepo
+ENV SKIP_PREFLIGHT_CHECK=true
+RUN npm run build
 
 FROM nginx
 
