@@ -10,7 +10,10 @@ const ROLE_RANK = {
   super_admin: 3,
 } as const;
 
-function requiredRole(pathname: string): keyof typeof ROLE_RANK | null {
+function requiredRole(
+  pathname: string,
+  method: string,
+): keyof typeof ROLE_RANK | null {
   if (
     pathname === "/login" ||
     pathname === "/accept-invite" ||
@@ -20,6 +23,17 @@ function requiredRole(pathname: string): keyof typeof ROLE_RANK | null {
     pathname.startsWith("/api/invite/")
   ) {
     return null;
+  }
+  if (pathname.startsWith("/api/owners")) {
+    if (method === "GET") return "read_only";
+    return "super_admin";
+  }
+  if (pathname.startsWith("/api/tenants")) {
+    if (pathname.includes("/provision")) {
+      return "support_agent";
+    }
+    if (method === "GET") return "read_only";
+    return "super_admin";
   }
   if (
     pathname === "/" ||
@@ -43,6 +57,7 @@ function requiredRole(pathname: string): keyof typeof ROLE_RANK | null {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const method = request.method.toUpperCase();
   const token = request.cookies.get(SESSION_COOKIE)?.value ?? "";
   const session = token ? await verifySession(token) : null;
 
@@ -51,7 +66,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const minRole = requiredRole(pathname);
+  const minRole = requiredRole(pathname, method);
   if (!session && minRole !== null) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -62,6 +77,14 @@ export async function proxy(request: NextRequest) {
   }
 
   if (session && minRole !== null) {
+    if (!(session.role in ROLE_RANK)) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+      }
+      const url = new URL("/", request.url);
+      url.searchParams.set("forbidden", "1");
+      return NextResponse.redirect(url);
+    }
     const rank = ROLE_RANK[session.role];
     if (rank < ROLE_RANK[minRole]) {
       if (pathname.startsWith("/api/")) {

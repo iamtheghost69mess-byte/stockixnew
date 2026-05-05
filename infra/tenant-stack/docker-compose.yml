@@ -4,6 +4,7 @@
 
 services:
   nginx:
+    image: stockix-nginx:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/nginx
       args:
@@ -22,12 +23,14 @@ services:
       - webapp
 
   webapp:
+    image: stockix-webapp:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
     restart: unless-stopped
 
   server:
+    image: stockix-server:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
@@ -67,6 +70,7 @@ services:
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
 
   database_migration:
+    image: stockix-database-migration:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile

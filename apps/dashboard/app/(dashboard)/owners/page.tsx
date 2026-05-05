@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2, Users } from "lucide-react";
+import { Copy, Loader2, Plus, Trash2, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,8 @@ export default function OwnersPage() {
   const [deleteErr, setDeleteErr] = useState("");
   const [inviteRole, setInviteRole] = useState<Owner["role"]>("read_only");
   const [inviteUrl, setInviteUrl] = useState("");
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,11 +71,38 @@ export default function OwnersPage() {
       setEmail("");
       setName("");
       setInviteUrl(data.inviteUrl ?? "");
+      setCopiedInvite(false);
+      setInviteOpen(false);
       await load();
     } catch (e) {
       setAddErr(e instanceof Error ? e.message : String(e));
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function copyInviteUrl() {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopiedInvite(true);
+      window.setTimeout(() => setCopiedInvite(false), 2000);
+    } catch {
+      setAddErr("Could not copy invite link.");
+    }
+  }
+
+  function roleBadgeClass(role: Owner["role"]) {
+    switch (role) {
+      case "super_admin":
+        return "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-200";
+      case "support_agent":
+        return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-200";
+      case "billing_manager":
+        return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200";
+      case "read_only":
+      default:
+        return "border-muted-foreground/30 bg-muted text-muted-foreground";
     }
   }
 
@@ -112,11 +141,59 @@ export default function OwnersPage() {
         </p>
       </div>
 
-      {/* Add owner form */}
-      <form
-        onSubmit={handleAdd}
-        className="flex flex-wrap items-end gap-3 rounded-lg border p-4"
-      >
+      <div className="rounded-lg border p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Invite platform admins with role-based access.
+          </p>
+          <Button type="button" className="gap-2" onClick={() => setInviteOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Invite Admin
+          </Button>
+        </div>
+        {addErr && <p className="text-sm text-destructive">{addErr}</p>}
+        {inviteUrl && (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground break-all">
+              Invite link: {inviteUrl}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => void copyInviteUrl()}
+            >
+              <Copy className="mr-1 h-3 w-3" />
+              {copiedInvite ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {inviteOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-xl rounded-lg border bg-background p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-semibold">Invite Admin</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Create an invite link for a new platform owner.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setInviteOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+            <form
+              onSubmit={handleAdd}
+              className="flex flex-wrap items-end gap-3"
+            >
         <div className="flex-1 min-w-[180px] space-y-1">
           <label className="text-xs font-medium text-muted-foreground">
             Email
@@ -160,17 +237,12 @@ export default function OwnersPage() {
           ) : (
             <Plus className="h-4 w-4" />
           )}
-          Add owner
+          Send Invite
         </Button>
-        {addErr && (
-          <p className="w-full text-sm text-destructive">{addErr}</p>
-        )}
-        {inviteUrl && (
-          <p className="w-full text-xs text-muted-foreground break-all">
-            Invite link: {inviteUrl}
-          </p>
-        )}
-      </form>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {/* Owner list */}
       {loading ? (
@@ -229,10 +301,24 @@ export default function OwnersPage() {
                     {o.id.slice(0, 8)}…
                   </td>
                   <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                    {o.role}
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${roleBadgeClass(
+                        o.role,
+                      )}`}
+                    >
+                      {o.role}
+                    </span>
                   </td>
                   <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                    {o.passwordHash ? "activated" : "pending"}
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                        o.passwordHash
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+                          : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                      }`}
+                    >
+                      {o.passwordHash ? "activated" : "pending"}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

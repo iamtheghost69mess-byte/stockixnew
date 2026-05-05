@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { createDb } from "@repo/db";
 import { owners } from "@repo/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
@@ -12,6 +13,13 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
 
 export async function POST(req: Request) {
   const databaseUrl = process.env.DATABASE_URL;
@@ -49,7 +57,12 @@ export async function POST(req: Request) {
   if (hasActivated.length === 0) {
     const adminEmail = process.env.PLATFORM_ADMIN_EMAIL;
     const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
-    if (adminEmail === input.email && adminPassword === input.password) {
+    if (
+      typeof adminEmail === "string" &&
+      typeof adminPassword === "string" &&
+      timingSafeEqual(adminEmail, input.email) &&
+      timingSafeEqual(adminPassword, input.password)
+    ) {
       console.warn("[auth] fallback env-var login used");
       let fallbackOwner = owner ?? undefined;
       if (!fallbackOwner) {
@@ -113,10 +126,7 @@ export async function POST(req: Request) {
   }
 
   if (!owner.passwordHash) {
-    return NextResponse.json(
-      { error: "Account not activated. Check your invitation email." },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
   const ok = await bcrypt.compare(input.password, owner.passwordHash);

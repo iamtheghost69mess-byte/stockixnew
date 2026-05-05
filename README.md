@@ -89,6 +89,8 @@ pnpm --filter @repo/db db:generate   # generate migration file
 pnpm --filter @repo/db db:migrate    # apply to local DB
 ```
 
+Migration SQL files are stored in `packages/db/drizzle/` (not `packages/db/migrations/`).
+
 ## Build
 
 ```sh

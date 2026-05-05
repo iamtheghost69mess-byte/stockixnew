@@ -19,8 +19,14 @@ const publicScheme =
   process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME ?? "http";
 const publicRootDomain =
   process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
+const localTenantHost =
+  process.env.NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST ?? "127.0.0.1";
 
-function tenantPublicBaseUrl(slug: string) {
+function tenantPublicBaseUrl(slug: string, port: number | null) {
+  // In local dev, each tenant nginx is exposed on a dynamic host port.
+  if (publicRootDomain === "localhost" && port != null) {
+    return `${publicScheme}://${localTenantHost}:${port}`;
+  }
   return `${publicScheme}://${slug}.${publicRootDomain}`;
 }
 
@@ -336,7 +342,10 @@ export default function TenantsPage() {
         setStreamCorrelationId(data.correlationId);
         const ok = await pollUntilDone(data.correlationId);
         setTenantAccess({
-          publicUrl: ok.baseUrl ?? null,
+          publicUrl:
+            tenantPublicBaseUrl(slug, ok.internalPort ?? null) ??
+            ok.baseUrl ??
+            null,
           adminEmail: adminEmailForLogin,
         });
         setSlug("");
@@ -578,7 +587,7 @@ export default function TenantsPage() {
                       : "border-border bg-muted/50 text-muted-foreground";
               const port = t.internalPort;
               const canOpen = status === "active";
-              const publicOrigin = tenantPublicBaseUrl(t.slug);
+              const publicOrigin = tenantPublicBaseUrl(t.slug, port);
               const loginHref = `${publicOrigin}/auth/login`;
               return (
                 <div

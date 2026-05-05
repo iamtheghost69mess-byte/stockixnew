@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  adminAuditLog,
   tenantDeployments,
   tenantProvisionEvents,
   tenants,
@@ -129,6 +130,10 @@ export async function deprovisionTenant(
   await db
     .delete(tenantProvisionEvents)
     .where(eq(tenantProvisionEvents.tenantId, tenantId));
+
+  await db
+    .delete(adminAuditLog)
+    .where(eq(adminAuditLog.targetTenantId, tenantId));
 
   await db.delete(tenants).where(eq(tenants.id, tenantId));
 

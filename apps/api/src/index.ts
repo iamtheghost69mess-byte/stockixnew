@@ -14,6 +14,7 @@ loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 import {
+  adminAuditLog,
   owners,
   tenantDeployments,
   tenants,
@@ -246,6 +247,10 @@ app.delete("/owners/:ownerId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
   if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
   try {
+    await db
+      .delete(adminAuditLog)
+      .where(eq(adminAuditLog.targetOwnerId, parsed.data));
+
     const [deleted] = await db
       .delete(owners)
       .where(eq(owners.id, parsed.data))
@@ -254,9 +259,9 @@ app.delete("/owners/:ownerId", async (c) => {
     await logAudit(db, {
       actorId: c.req.header("X-Actor-Id") ?? "",
       action: "owner.delete",
-      targetOwnerId: deleted.id,
       ipAddress: c.req.header("x-forwarded-for") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
+      metadata: { deletedOwnerId: deleted.id, email: deleted.email },
     });
     return c.json({ deleted: true, id: deleted.id, email: deleted.email });
   } catch (e: unknown) {
@@ -311,9 +316,9 @@ app.delete("/tenants/:tenantId", async (c) => {
   await logAudit(db, {
     actorId: c.req.header("X-Actor-Id") ?? "",
     action: "tenant.delete",
-    targetTenantId: parsed.data,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
+    metadata: { deletedTenantId: parsed.data, slug: result.slug },
   });
   return c.json({
     deleted: true,

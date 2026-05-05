@@ -46,7 +46,11 @@ export async function POST(req: Request) {
   }
 
   const verifyResult = await verify({ token: input.code, secret: owner.mfaSecret });
-  if (!verifyResult.valid) {
+  const isValidCode =
+    typeof verifyResult === "boolean"
+      ? verifyResult
+      : Boolean((verifyResult as { valid?: boolean }).valid);
+  if (!isValidCode) {
     return NextResponse.json({ error: "Invalid MFA code" }, { status: 401 });
   }
 
