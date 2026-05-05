@@ -1,4 +1,6 @@
 import {
+  AnyPgColumn,
+  boolean,
   index,
   integer,
   jsonb,
@@ -16,6 +18,16 @@ export const owners = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
     name: text("name").notNull(),
+    passwordHash: text("password_hash"),
+    role: text("role").notNull().default("super_admin"),
+    mfaSecret: text("mfa_secret"),
+    mfaEnabled: boolean("mfa_enabled").notNull().default(false),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    inviteToken: text("invite_token"),
+    inviteTokenExpiresAt: timestamp("invite_token_expires_at", {
+      withTimezone: true,
+    }),
+    invitedById: uuid("invited_by_id").references((): AnyPgColumn => owners.id),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -125,4 +137,28 @@ export const tenantProvisionEvents = pgTable(
       .defaultNow(),
   },
   (t) => [index("tpe_correlation_created_idx").on(t.correlationId, t.createdAt)],
+);
+
+export const adminAuditLog = pgTable(
+  "admin_audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => owners.id),
+    action: text("action").notNull(),
+    targetTenantId: uuid("target_tenant_id").references(() => tenants.id),
+    targetOwnerId: uuid("target_owner_id").references(() => owners.id),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("admin_audit_log_actor_created_idx").on(t.actorId, t.createdAt),
+    index("admin_audit_log_tenant_created_idx").on(t.targetTenantId, t.createdAt),
+    index("admin_audit_log_owner_created_idx").on(t.targetOwnerId, t.createdAt),
+  ],
 );

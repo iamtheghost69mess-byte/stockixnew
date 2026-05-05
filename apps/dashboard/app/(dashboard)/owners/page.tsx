@@ -6,13 +6,12 @@ import { Loader2, Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const apiBase =
-  process.env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://localhost:4000";
-
 type Owner = {
   id: string;
   email: string;
   name: string;
+  role: "super_admin" | "support_agent" | "billing_manager" | "read_only";
+  passwordHash?: string | null;
   createdAt: string;
 };
 
@@ -28,12 +27,14 @@ export default function OwnersPage() {
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteErr, setDeleteErr] = useState("");
+  const [inviteRole, setInviteRole] = useState<Owner["role"]>("read_only");
+  const [inviteUrl, setInviteUrl] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadErr("");
     try {
-      const res = await fetch(`${apiBase}/owners`);
+      const res = await fetch("/api/owners");
       const data = (await res.json()) as { owners?: Owner[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setOwners(data.owners ?? []);
@@ -51,12 +52,12 @@ export default function OwnersPage() {
     setAddErr("");
     setAdding(true);
     try {
-      const res = await fetch(`${apiBase}/owners`, {
+      const res = await fetch("/api/owners/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name }),
+        body: JSON.stringify({ email, name, role: inviteRole }),
       });
-      const data = (await res.json()) as { owner?: Owner; error?: string };
+      const data = (await res.json()) as { owner?: Owner; inviteUrl?: string; error?: string };
       if (!res.ok) {
         setAddErr(
           data.error === "email_already_exists"
@@ -67,6 +68,7 @@ export default function OwnersPage() {
       }
       setEmail("");
       setName("");
+      setInviteUrl(data.inviteUrl ?? "");
       await load();
     } catch (e) {
       setAddErr(e instanceof Error ? e.message : String(e));
@@ -85,7 +87,7 @@ export default function OwnersPage() {
     setDeleteErr("");
     setDeletingId(owner.id);
     try {
-      const res = await fetch(`${apiBase}/owners/${owner.id}`, {
+      const res = await fetch(`/api/owners/${owner.id}`, {
         method: "DELETE",
       });
       const data = (await res.json()) as { error?: string; detail?: string };
@@ -127,6 +129,19 @@ export default function OwnersPage() {
             required
           />
         </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Role</label>
+          <select
+            className="flex h-9 rounded-lg border border-input bg-background px-2 text-sm"
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value as Owner["role"])}
+          >
+            <option value="super_admin">super_admin</option>
+            <option value="support_agent">support_agent</option>
+            <option value="billing_manager">billing_manager</option>
+            <option value="read_only">read_only</option>
+          </select>
+        </div>
         <div className="flex-1 min-w-[180px] space-y-1">
           <label className="text-xs font-medium text-muted-foreground">
             Name
@@ -149,6 +164,11 @@ export default function OwnersPage() {
         </Button>
         {addErr && (
           <p className="w-full text-sm text-destructive">{addErr}</p>
+        )}
+        {inviteUrl && (
+          <p className="w-full text-xs text-muted-foreground break-all">
+            Invite link: {inviteUrl}
+          </p>
         )}
       </form>
 
@@ -187,7 +207,10 @@ export default function OwnersPage() {
                   ID
                 </th>
                 <th className="hidden px-4 py-2 text-left font-medium text-muted-foreground md:table-cell">
-                  Added
+                  Role
+                </th>
+                <th className="hidden px-4 py-2 text-left font-medium text-muted-foreground md:table-cell">
+                  Status
                 </th>
                 <th className="px-4 py-2" />
               </tr>
@@ -206,7 +229,10 @@ export default function OwnersPage() {
                     {o.id.slice(0, 8)}…
                   </td>
                   <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                    {new Date(o.createdAt).toLocaleDateString()}
+                    {o.role}
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                    {o.passwordHash ? "activated" : "pending"}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

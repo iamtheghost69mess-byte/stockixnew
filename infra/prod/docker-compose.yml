@@ -96,6 +96,8 @@ services:
       PUBLIC_BASE_URL_SCHEME: https
       TENANT_INTERNAL_HOST: host.docker.internal
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+      DASHBOARD_URL: ${DASHBOARD_URL}
     volumes:
       - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
       - /var/run/docker.sock:/var/run/docker.sock
@@ -128,6 +130,8 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
+      PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       NODE_ENV: production
     networks:
       - stockix_public

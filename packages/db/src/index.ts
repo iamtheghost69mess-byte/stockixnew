@@ -1,9 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import * as schema from "./schema.js";
+import * as schema from "./schema";
 
-export { allocateTenantPort, TenantPortExhaustedError } from "./allocate-tenant-port.js";
+export { allocateTenantPort, TenantPortExhaustedError } from "./allocate-tenant-port";
 export { schema };
 export type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 
 import { config as loadEnv } from "dotenv";
 import { serve } from "@hono/node-server";
@@ -12,13 +13,18 @@ const monorepoRoot = path.join(apiDir, "..", "..");
 loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
-import { owners, tenantDeployments, tenants, tenantProvisionEvents } from "@repo/db/schema";
+import {
+  owners,
+  tenantDeployments,
+  tenants,
+  tenantProvisionEvents,
+} from "@repo/db/schema";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { logAudit } from "./audit.js";
 
 import {
   getProvisionJob,
@@ -80,6 +86,7 @@ async function loadProvisionEventsJson(correlationId: string) {
 }
 
 const app = new Hono();
+const platformApiSecret = process.env.PLATFORM_API_SECRET;
 
 app.onError((err, c) => {
   console.error("[api]", err);
@@ -102,9 +109,24 @@ app.use(
   cors({
     origin: corsOrigins,
     allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Actor-Id"],
   }),
 );
+
+app.use("/*", async (c, next) => {
+  if (c.req.path === "/health") {
+    await next();
+    return;
+  }
+  if (!platformApiSecret) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  const auth = c.req.header("Authorization") ?? "";
+  if (auth !== `Bearer ${platformApiSecret}`) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  await next();
+});
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
@@ -117,6 +139,8 @@ app.get("/owners", async (c) => {
       id: owners.id,
       email: owners.email,
       name: owners.name,
+      role: owners.role,
+      passwordHash: owners.passwordHash,
       createdAt: owners.createdAt,
     })
     .from(owners);
@@ -127,6 +151,12 @@ const ownerBody = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
 });
+const ownerRoleSchema = z.enum([
+  "super_admin",
+  "support_agent",
+  "billing_manager",
+  "read_only",
+]);
 
 app.post("/owners", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -142,7 +172,73 @@ app.post("/owners", async (c) => {
     .onConflictDoNothing()
     .returning({ id: owners.id, email: owners.email, name: owners.name, createdAt: owners.createdAt });
   if (!row) return c.json({ error: "email_already_exists" }, 409);
+  await logAudit(db, {
+    actorId: c.req.header("X-Actor-Id") ?? "",
+    action: "owner.invite",
+    targetOwnerId: row.id,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+  });
   return c.json({ owner: row }, 201);
+});
+
+const inviteBody = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(120),
+  role: ownerRoleSchema,
+});
+
+app.post("/owners/invite", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  let body: z.infer<typeof inviteBody>;
+  try {
+    body = inviteBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      {
+        error: "invalid_body",
+        detail: e instanceof z.ZodError ? e.flatten() : String(e),
+      },
+      400,
+    );
+  }
+  const existing = await db
+    .select({ id: owners.id })
+    .from(owners)
+    .where(eq(owners.email, body.email))
+    .limit(1);
+  if (existing.length > 0) return c.json({ error: "email_already_exists" }, 409);
+
+  const inviteToken = randomUUID();
+  const inviteTokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const [owner] = await db
+    .insert(owners)
+    .values({
+      email: body.email,
+      name: body.name,
+      role: body.role,
+      inviteToken,
+      inviteTokenExpiresAt,
+      invitedById: c.req.header("X-Actor-Id") ?? null,
+    })
+    .returning({
+      id: owners.id,
+      email: owners.email,
+      name: owners.name,
+      role: owners.role,
+    });
+  if (!owner) return c.json({ error: "failed_to_create_invite" }, 500);
+  const dashboardUrl = process.env.DASHBOARD_URL?.replace(/\/+$/, "");
+  const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+  await logAudit(db, {
+    actorId: c.req.header("X-Actor-Id") ?? "",
+    action: "owner.invite",
+    targetOwnerId: owner.id,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { role: owner.role, email: owner.email },
+  });
+  return c.json({ inviteToken, inviteUrl, owner }, 201);
 });
 
 app.delete("/owners/:ownerId", async (c) => {
@@ -155,6 +251,13 @@ app.delete("/owners/:ownerId", async (c) => {
       .where(eq(owners.id, parsed.data))
       .returning({ id: owners.id, email: owners.email });
     if (!deleted) return c.json({ error: "not_found" }, 404);
+    await logAudit(db, {
+      actorId: c.req.header("X-Actor-Id") ?? "",
+      action: "owner.delete",
+      targetOwnerId: deleted.id,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+    });
     return c.json({ deleted: true, id: deleted.id, email: deleted.email });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -205,6 +308,13 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!result.ok) {
     return c.json({ error: result.message }, 404);
   }
+  await logAudit(db, {
+    actorId: c.req.header("X-Actor-Id") ?? "",
+    action: "tenant.delete",
+    targetTenantId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+  });
   return c.json({
     deleted: true,
     slug: result.slug,
@@ -306,6 +416,13 @@ app.post("/tenants", async (c) => {
       }
 
       setProvisionJob(correlationId, { status: "succeeded", result });
+      await logAudit(db, {
+        actorId: c.req.header("X-Actor-Id") ?? "",
+        action: "tenant.create",
+        targetTenantId: result.tenantId,
+        ipAddress: c.req.header("x-forwarded-for") ?? null,
+        userAgent: c.req.header("user-agent") ?? null,
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : String(err);

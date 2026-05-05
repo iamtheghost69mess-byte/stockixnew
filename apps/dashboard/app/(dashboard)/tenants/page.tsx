@@ -15,9 +15,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-const apiBase =
-  process.env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://localhost:4000";
-
 const publicScheme =
   process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME ?? "http";
 const publicRootDomain =
@@ -138,8 +135,8 @@ export default function TenantsPage() {
 
   const load = useCallback(async () => {
     const [oRes, tRes] = await Promise.all([
-      fetch(`${apiBase}/owners`),
-      fetch(`${apiBase}/tenants`),
+      fetch("/api/owners"),
+      fetch("/api/tenants"),
     ]);
     const o = (await readJson(oRes)) as { owners?: Owner[]; error?: string };
     const t = (await readJson(tRes)) as { tenants?: TenantRow[]; error?: string };
@@ -169,7 +166,7 @@ export default function TenantsPage() {
       setError(null);
       try {
         const q = wipeVolumes ? "?volumes=true" : "";
-        const res = await fetch(`${apiBase}/tenants/${tenantId}${q}`, {
+        const res = await fetch(`/api/tenants/${tenantId}${q}`, {
           method: "DELETE",
         });
         const data = (await readJson(res)) as { error?: string };
@@ -185,7 +182,7 @@ export default function TenantsPage() {
         setDeletingId(null);
       }
     },
-    [apiBase, load],
+    [load],
   );
 
   useEffect(() => {
@@ -227,7 +224,7 @@ export default function TenantsPage() {
 
   useEffect(() => {
     if (!streamCorrelationId) return;
-    const url = `${apiBase}/tenants/provision-stream/${streamCorrelationId}`;
+    const url = `/api/tenants/provision-stream/${streamCorrelationId}`;
     const es = new EventSource(url);
     const onProvision = (ev: MessageEvent) => {
       try {
@@ -256,7 +253,7 @@ export default function TenantsPage() {
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_MS));
       const sr = await fetch(
-        `${apiBase}/tenants/provision-status/${correlationId}`,
+        `/api/tenants/provision-status/${correlationId}`,
       );
       const sj = (await readJson(sr)) as
         | ProvisionPollRunning
@@ -314,7 +311,7 @@ export default function TenantsPage() {
     setStreamCorrelationId(null);
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/tenants`, {
+      const res = await fetch("/api/tenants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
