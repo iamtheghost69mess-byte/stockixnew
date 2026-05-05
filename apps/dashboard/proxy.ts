@@ -12,6 +12,9 @@ import {
   verifySession,
 } from "@/lib/session";
 
+const proxyDatabaseUrl = process.env.DATABASE_URL;
+const proxyDb = proxyDatabaseUrl ? createDb(proxyDatabaseUrl) : null;
+
 function withSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set(
     "Content-Security-Policy",
@@ -115,14 +118,12 @@ export async function proxy(request: NextRequest) {
       return withSecurityHeaders(NextResponse.redirect(url));
     }
 
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
+    if (!proxyDb) {
       return withSecurityHeaders(
         NextResponse.json({ error: "Auth database not configured" }, { status: 503 }),
       );
     }
-    const db = createDb(databaseUrl);
-    const rows = await db
+    const rows = await proxyDb
       .select({
         id: owners.id,
         role: owners.role,
@@ -152,15 +153,6 @@ export async function proxy(request: NextRequest) {
       url.searchParams.set("stale", "1");
       return withSecurityHeaders(NextResponse.redirect(url));
     }
-    if (minRole === ROLE.SUPER_ADMIN && !owner.mfaEnabled) {
-      if (pathname.startsWith("/api/")) {
-        return withSecurityHeaders(NextResponse.json({ error: "mfa_required" }, { status: 403 }));
-      }
-      const url = new URL("/", request.url);
-      url.searchParams.set("mfa", "required");
-      return withSecurityHeaders(NextResponse.redirect(url));
-    }
-
     const ownersWrite =
       pathname.startsWith("/api/owners") &&
       ["POST", "PATCH", "DELETE"].includes(method);

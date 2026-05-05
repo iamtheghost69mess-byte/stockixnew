@@ -136,13 +136,13 @@ app.use("/*", async (c, next) => {
 
 const IDEMPOTENCY_TTL_HOURS = 24;
 app.use("/*", async (c, next) => {
-  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const method = c.req.method.toUpperCase();
   const path = c.req.path;
   const isPrivilegedWrite =
     ["POST", "PATCH", "DELETE"].includes(method) &&
     (path.startsWith("/owners") || path.startsWith("/tenants"));
   if (!isPrivilegedWrite) return next();
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
   const actorId = c.req.header("X-Actor-Id") ?? "";
   if (!actorId) {
@@ -317,6 +317,18 @@ async function countSuperAdmins() {
   return Number(rows[0]?.count ?? 0);
 }
 
+function isActivatedSuperAdmin(owner: {
+  role: string;
+  status?: string | null;
+  hasPassword?: boolean;
+}): boolean {
+  return (
+    owner.role === "super_admin" &&
+    owner.status === "active" &&
+    Boolean(owner.hasPassword)
+  );
+}
+
 app.post("/owners", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   let body: z.infer<typeof ownerBody>;
@@ -406,13 +418,18 @@ app.delete("/owners/:ownerId", async (c) => {
   if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
   try {
     const target = await db
-      .select({ id: owners.id, role: owners.role })
+      .select({
+        id: owners.id,
+        role: owners.role,
+        status: owners.status,
+        hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
+      })
       .from(owners)
       .where(eq(owners.id, parsed.data))
       .limit(1);
     const targetOwner = target[0];
     if (!targetOwner) return c.json({ error: "not_found" }, 404);
-    if (targetOwner.role === "super_admin") {
+    if (isActivatedSuperAdmin(targetOwner)) {
       const superAdminCount = await countSuperAdmins();
       if (superAdminCount <= 1) {
         return c.json(
@@ -469,6 +486,7 @@ app.patch("/owners/:ownerId", async (c) => {
       id: owners.id,
       role: owners.role,
       status: owners.status,
+      hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
       sessionVersion: owners.sessionVersion,
       name: owners.name,
       email: owners.email,
@@ -506,15 +524,22 @@ app.patch("/owners/:ownerId", async (c) => {
   }
 
   if (body.role && existing.role === "super_admin" && body.role !== "super_admin") {
-    const superAdminCount = await countSuperAdmins();
-    if (superAdminCount <= 1) {
-      return c.json(
-        {
-          error: "last_super_admin",
-          message: "Cannot demote the last Super Admin account.",
-        },
-        409,
-      );
+    const existingIsActivatedSuperAdmin = isActivatedSuperAdmin({
+      role: existing.role,
+      status: existing.status,
+      hasPassword: existing.hasPassword,
+    });
+    if (existingIsActivatedSuperAdmin) {
+      const superAdminCount = await countSuperAdmins();
+      if (superAdminCount <= 1) {
+        return c.json(
+          {
+            error: "last_super_admin",
+            message: "Cannot demote the last Super Admin account.",
+          },
+          409,
+        );
+      }
     }
   }
 

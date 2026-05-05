@@ -387,12 +387,16 @@ export default function TenantsPage() {
       }
 
       if (!res.ok) {
+        const normalizedError =
+          data.error === "mfa_required"
+            ? "MFA is required for Super Admin privileged actions. Enable MFA in your owner account, then retry provisioning."
+            : data.error;
         const detail =
           data.detail && typeof data.detail === "object"
             ? JSON.stringify(data.detail)
             : "";
         setError(
-          [data.error, detail, data.correlationId ? `id:${data.correlationId}` : ""]
+          [normalizedError, detail, data.correlationId ? `id:${data.correlationId}` : ""]
             .filter(Boolean)
             .join(" — "),
         );

@@ -21,13 +21,15 @@ export async function logAudit(
   if (!db) return;
   const actorParsed = actorIdSchema.safeParse(input.actorId);
   if (!actorParsed.success) return;
+  const fallbackIp = process.env.HOSTNAME?.trim() || "server";
+  const normalizedIp = input.ipAddress?.trim() || fallbackIp;
   try {
     await db.insert(adminAuditLog).values({
       actorId: actorParsed.data,
       action: input.action,
       targetTenantId: input.targetTenantId ?? null,
       targetOwnerId: input.targetOwnerId ?? null,
-      ipAddress: input.ipAddress ?? null,
+      ipAddress: normalizedIp,
       userAgent: input.userAgent ?? null,
       metadata: input.metadata ?? null,
     });
