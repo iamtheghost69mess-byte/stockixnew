@@ -6,6 +6,7 @@ export interface IJournalEntry {
   credit: number;
   debit: number;
   account: number;
+  accountId?: number;
   referenceType: string;
   referenceId: number;
 
@@ -21,6 +22,11 @@ export interface IJournalEntry {
   contactType?: string;
   contactId?: number;
   branchId: number;
+  createdAt?: Date;
+
+  // Multi-currency fields — populated from accounts_transactions via knexSnakeCaseMappers
+  currencyCode?: string;
+  exchangeRate?: number;
 }
 
 export interface IJournalPoster {

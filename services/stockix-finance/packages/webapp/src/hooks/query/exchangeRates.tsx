@@ -4,22 +4,30 @@ import { defaultTo } from 'lodash';
 import { useQueryTenant } from '../useQueryRequest';
 import { transformPagination } from '@/utils';
 import useApiRequest from '../useRequest';
+import t from './types';
 
 const defaultPagination = {
   pageSize: 20,
   page: 0,
   pagesCount: 0,
 };
+
+function invalidateRateQueries(queryClient) {
+  queryClient.invalidateQueries('EXCHANGES_RATES');
+  // Currencies list now includes latestExchangeRate — keep it in sync.
+  queryClient.invalidateQueries(t.CURRENCIES);
+}
+
 /**
  * Creates a new exchange rate.
  */
-export function useCreateExchangeRate(props) {
+export function useCreateExchangeRate(props?) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
   return useMutation((values) => apiRequest.post('exchange_rates', values), {
     onSuccess: () => {
-      queryClient.invalidateQueries('EXCHANGES_RATES');
+      invalidateRateQueries(queryClient);
     },
     ...props,
   });
@@ -28,7 +36,7 @@ export function useCreateExchangeRate(props) {
 /**
  * Edits the exchange rate.
  */
-export function useEdiExchangeRate(props) {
+export function useEditExchangeRate(props?) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
@@ -36,32 +44,35 @@ export function useEdiExchangeRate(props) {
     ([id, values]) => apiRequest.post(`exchange_rates/${id}`, values),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('EXCHANGES_RATES');
+        invalidateRateQueries(queryClient);
       },
       ...props,
     },
   );
 }
 
+/** @deprecated use useEditExchangeRate */
+export const useEdiExchangeRate = useEditExchangeRate;
+
 /**
  * Deletes the exchange rate.
  */
-export function useDeleteExchangeRate(props) {
+export function useDeleteExchangeRate(props?) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
   return useMutation((id) => apiRequest.delete(`exchange_rates/${id}`), {
     onSuccess: () => {
-      queryClient.invalidateQueries('EXCHANGES_RATES');
+      invalidateRateQueries(queryClient);
     },
     ...props,
   });
 }
 
 /**
- * Retrieve the exchange rate list.
+ * Retrieve the exchange rate list (paginated).
  */
-export function useExchangeRates(query, props) {
+export function useExchangeRates(query?, props?) {
   const apiRequest = useApiRequest();
 
   const states = useQueryTenant(
@@ -96,7 +107,7 @@ export function useRefreshExchangeRate() {
 
   return {
     refresh: () => {
-      queryClient.invalidateQueries('EXCHANGES_RATES');
+      invalidateRateQueries(queryClient);
     },
   };
 }

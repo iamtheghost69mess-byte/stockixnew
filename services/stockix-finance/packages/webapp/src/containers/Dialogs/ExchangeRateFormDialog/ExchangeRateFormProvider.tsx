@@ -17,6 +17,7 @@ function ExchangeRateFormProvider({
   exchangeRate,
   action,
   dialogName,
+  currencyCode,
   ...props
 }) {
   // Create and edit  exchange rate mutations.
@@ -39,6 +40,7 @@ function ExchangeRateFormProvider({
     currencies,
     isExchangeRatesLoading,
     isNewMode,
+    currencyCode,
   };
 
   return (

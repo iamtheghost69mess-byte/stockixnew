@@ -61,11 +61,39 @@ export const useJournalTableColumns = () => {
         Header: intl.get('credit'),
         accessor: 'formatted_credit',
         align: Align.Right,
+        width: 110,
       },
       {
         Header: intl.get('debit'),
         accessor: 'formatted_debit',
         align: Align.Right,
+        width: 110,
+      },
+      {
+        id: 'foreign_currency_code',
+        Header: intl.get('currency'),
+        accessor: (row) =>
+          row.foreign_currency_code !== row.currency_code
+            ? row.foreign_currency_code
+            : null,
+        width: 70,
+        className: 'foreign-currency-code',
+      },
+      {
+        id: 'formatted_foreign_credit',
+        Header: intl.get('credit_fcy'),
+        accessor: (row) => row.formatted_foreign_credit ?? '—',
+        align: Align.Right,
+        width: 110,
+        className: 'foreign-amount',
+      },
+      {
+        id: 'formatted_foreign_debit',
+        Header: intl.get('debit_fcy'),
+        accessor: (row) => row.formatted_foreign_debit ?? '—',
+        align: Align.Right,
+        width: 110,
+        className: 'foreign-amount',
       },
     ],
     [],

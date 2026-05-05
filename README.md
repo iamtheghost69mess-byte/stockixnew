@@ -16,7 +16,7 @@ Stockix is the **control plane** for a multi-tenant SaaS: owner dashboard, APIs,
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20.9+ (recommended: use [nvm](https://github.com/nvm-sh/nvm) — a `.nvmrc` is included, so `nvm use` picks the right version automatically)
 - [pnpm](https://pnpm.io/) 9+ (`corepack enable` recommended)
 - Docker (for local databases)
 

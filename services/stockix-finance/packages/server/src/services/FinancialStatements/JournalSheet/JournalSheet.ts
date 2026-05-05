@@ -2,11 +2,13 @@ import { sumBy, chain, get, head } from 'lodash';
 import {
   IJournalEntry,
   IJournalPoster,
+  IJournalReportEntry,
   IJournalReportEntriesGroup,
   IJournalReportQuery,
   IJournalReport,
   IContact,
 } from '@/interfaces';
+import { INumberFormatQuery } from '@/interfaces/FinancialStatements';
 import FinancialSheet from '../FinancialSheet';
 
 export default class JournalSheet extends FinancialSheet {
@@ -16,10 +18,15 @@ export default class JournalSheet extends FinancialSheet {
   readonly baseCurrency: string;
   readonly contactsById: Map<number | string, IContact>;
 
+  // Shadow the base class readonly so the constructor can assign from query.
+  declare numberFormat: INumberFormatQuery;
+
+  // Populated in constructor — not declared in the base class.
+  accountsGraph: any;
+  i18n: any;
+
   /**
    * Constructor method.
-   * @param {number} tenantId
-   * @param {IJournalPoster} journal
    */
   constructor(
     tenantId: number,
@@ -28,14 +35,14 @@ export default class JournalSheet extends FinancialSheet {
     accountsGraph: any,
     contactsById: Map<number | string, IContact>,
     baseCurrency: string,
-    i18n
+    i18n: any,
   ) {
     super();
 
     this.tenantId = tenantId;
     this.journal = journal;
     this.query = query;
-    this.numberFormat = this.query.numberFormat;
+    this.numberFormat = this.query.numberFormat as any;
     this.accountsGraph = accountsGraph;
     this.contactsById = contactsById;
     this.baseCurrency = baseCurrency;
@@ -44,11 +51,18 @@ export default class JournalSheet extends FinancialSheet {
 
   /**
    * Entry mapper.
-   * @param {IJournalEntry} entry 
    */
-  entryMapper(entry: IJournalEntry) {
-    const account = this.accountsGraph.getNodeData(entry.accountId);
+  entryMapper(entry: IJournalEntry): IJournalReportEntry {
+    const accountId = entry.accountId ?? entry.account;
+    const account = this.accountsGraph.getNodeData(accountId);
     const contact = this.contactsById.get(entry.contactId);
+
+    const foreignCurrencyCode = entry.currencyCode ?? this.baseCurrency;
+    const exchangeRate = entry.exchangeRate ?? 1;
+    const isForeign = foreignCurrencyCode !== this.baseCurrency && exchangeRate !== 1;
+
+    const foreignCredit = isForeign ? entry.credit / exchangeRate : null;
+    const foreignDebit  = isForeign ? entry.debit  / exchangeRate : null;
 
     return {
       entryId: entry.id,
@@ -65,31 +79,33 @@ export default class JournalSheet extends FinancialSheet {
       currencyCode: this.baseCurrency,
       formattedCredit: this.formatNumber(entry.credit),
       formattedDebit: this.formatNumber(entry.debit),
-
       credit: entry.credit,
       debit: entry.debit,
+
+      foreignCurrencyCode,
+      exchangeRate,
+      foreignCredit,
+      foreignDebit,
+      formattedForeignCredit: foreignCredit !== null ? this.formatNumber(foreignCredit) : null,
+      formattedForeignDebit:  foreignDebit  !== null ? this.formatNumber(foreignDebit)  : null,
 
       createdAt: entry.createdAt,
     };
   }
 
   /**
-   * Mappes the journal entries.
-   * @param {IJournalEntry[]} entries -
+   * Maps the journal entries.
    */
-  entriesMapper(entries: IJournalEntry[]) {
+  entriesMapper(entries: IJournalEntry[]): IJournalReportEntry[] {
     return entries.map(this.entryMapper.bind(this));
   }
 
   /**
    * Mapping journal entries groups.
-   * @param {IJournalEntry[]} entriesGroup -
-   * @param {string} key -
-   * @return {IJournalReportEntriesGroup}
    */
   entriesGroupsMapper(
     entriesGroup: IJournalEntry[],
-    groupEntry: IJournalEntry
+    groupEntry: IJournalEntry,
   ): IJournalReportEntriesGroup {
     const totalCredit = sumBy(entriesGroup, 'credit');
     const totalDebit = sumBy(entriesGroup, 'debit');
@@ -109,29 +125,26 @@ export default class JournalSheet extends FinancialSheet {
 
       formattedCredit: this.formatTotalNumber(totalCredit),
       formattedDebit: this.formatTotalNumber(totalDebit),
-    };
+    } as IJournalReportEntriesGroup;
   }
 
   /**
    * Mapping the journal entries to entries groups.
-   * @param {IJournalEntry[]} entries
-   * @return {IJournalReportEntriesGroup[]}
    */
   entriesWalker(entries: IJournalEntry[]): IJournalReportEntriesGroup[] {
     return chain(entries)
       .groupBy((entry) => `${entry.referenceId}-${entry.referenceType}`)
-      .map((entriesGroup: IJournalEntry[], key: string) => {
+      .map((entriesGroup: IJournalEntry[]) => {
         const headEntry = head(entriesGroup);
         return this.entriesGroupsMapper(entriesGroup, headEntry);
       })
-      .value();
+      .value() as IJournalReportEntriesGroup[];
   }
 
   /**
    * Retrieve journal report.
-   * @return {IJournalReport}
    */
   reportData(): IJournalReport {
-    return this.entriesWalker(this.journal.entries);
+    return { entries: this.entriesWalker(this.journal.entries) };
   }
 }
