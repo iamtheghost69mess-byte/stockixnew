@@ -14,8 +14,6 @@ import type { ProvisionEventRow, TenantRow } from "@/types/tenant";
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
 
-type Owner = { id: string; email: string; name: string };
-
 type ProvisionPollRunning = {
   status: "queued" | "running";
   correlationId: string;
@@ -65,8 +63,8 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 export default function TenantsPage() {
-  const [owners, setOwners] = useState<Owner[]>([]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oneTimePassword, setOneTimePassword] = useState<string | null>(null);
@@ -85,25 +83,16 @@ export default function TenantsPage() {
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
 
   const load = useCallback(async () => {
-    const [oRes, tRes] = await Promise.all([
-      fetch("/api/owners"),
-      fetch("/api/tenants"),
-    ]);
-    const o = (await readJson(oRes)) as { owners?: Owner[]; error?: string };
+    const tRes = await fetch("/api/tenants");
     const t = (await readJson(tRes)) as { tenants?: TenantRow[]; error?: string };
-    if (!oRes.ok) {
-      throw new Error(o.error ?? `owners: HTTP ${oRes.status}`);
-    }
     if (!tRes.ok) {
       throw new Error(t.error ?? `tenants: HTTP ${tRes.status}`);
     }
-    setOwners(o.owners ?? []);
     setTenants(t.tenants ?? []);
   }, []);
 
@@ -226,10 +215,13 @@ export default function TenantsPage() {
   }, [loading]);
 
   useEffect(() => {
-    if (!ownerId && owners.length > 0) {
-      setOwnerId(owners[0]!.id);
-    }
-  }, [owners, ownerId]);
+    fetch("/api/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.id) setCurrentUserId(String(data.id));
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!streamCorrelationId) return;
@@ -321,7 +313,7 @@ export default function TenantsPage() {
   }) => {
     const nextSlug = payload?.slug ?? slug;
     const nextName = payload?.name ?? name;
-    const nextOwnerId = payload?.ownerId ?? ownerId;
+    const nextOwnerId = payload?.ownerId ?? "";
     const nextAdminEmail = payload?.adminEmail ?? adminEmail;
     const nextAdminFirstName = payload?.adminFirstName ?? adminFirstName;
     const nextAdminLastName = payload?.adminLastName ?? adminLastName;
@@ -501,20 +493,22 @@ export default function TenantsPage() {
       ) : null}
 
       <TenantCreateWizard
-        owners={owners}
         loading={loading}
         provisionLog={provisionLog}
         elapsedSec={elapsedSec}
         oneTimePassword={oneTimePassword}
         tenantAccess={tenantAccess}
         onProvision={async (data) => {
+          if (!currentUserId) {
+            setError("Unable to resolve current user. Please refresh and try again.");
+            return;
+          }
           setSlug(data.slug);
           setName(data.name);
-          setOwnerId(data.ownerId);
           setAdminEmail(data.adminEmail);
           setAdminFirstName(data.adminFirstName);
           setAdminLastName(data.adminLastName);
-          await provision(data);
+          await provision({ ...data, ownerId: currentUserId });
         }}
         onReset={() => {
           setOneTimePassword(null);

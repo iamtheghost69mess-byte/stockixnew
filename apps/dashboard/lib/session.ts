@@ -1,13 +1,11 @@
+import type { Role } from "@/lib/roles";
+
 export const SESSION_COOKIE = "stockix-session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const MFA_COOKIE = "stockix-mfa";
 const MFA_TTL_MS = 5 * 60 * 1000;
 
-export type SessionRole =
-  | "super_admin"
-  | "support_agent"
-  | "billing_manager"
-  | "read_only";
+export type SessionRole = Role;
 
 export type SessionPayload = {
   sub: string;
@@ -33,13 +31,13 @@ async function hmacKey(): Promise<CryptoKey> {
 
 export async function signSession(owner: {
   id: string;
-  role: string;
+  role: Role;
   email: string;
   name: string;
 }): Promise<string> {
   const payloadObj: SessionPayload = {
     sub: owner.id,
-    role: owner.role as SessionRole,
+    role: owner.role,
     email: owner.email,
     name: owner.name,
     iat: Date.now(),

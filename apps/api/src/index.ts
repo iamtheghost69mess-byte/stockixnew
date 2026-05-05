@@ -6,6 +6,7 @@ import { execa } from "execa";
 import { config as loadEnv } from "dotenv";
 import { serve } from "@hono/node-server";
 import { createDb } from "@repo/db";
+import { ROLES } from "@repo/shared/roles";
 
 const apiDir = path.join(fileURLToPath(new URL("..", import.meta.url)));
 const monorepoRoot = path.join(apiDir, "..", "..");
@@ -22,7 +23,7 @@ import {
   tenants,
   tenantProvisionEvents,
 } from "@repo/db/schema";
-import { asc, eq, and } from "drizzle-orm";
+import { asc, eq, and, isNotNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
@@ -154,12 +155,16 @@ const ownerBody = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
 });
-const ownerRoleSchema = z.enum([
-  "super_admin",
-  "support_agent",
-  "billing_manager",
-  "read_only",
-]);
+const ownerRoleSchema = z.enum(ROLES);
+
+async function countSuperAdmins() {
+  if (!db) return 0;
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(owners)
+    .where(and(eq(owners.role, "super_admin"), isNotNull(owners.passwordHash)));
+  return Number(rows[0]?.count ?? 0);
+}
 
 app.post("/owners", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -249,6 +254,26 @@ app.delete("/owners/:ownerId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
   if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
   try {
+    const target = await db
+      .select({ id: owners.id, role: owners.role })
+      .from(owners)
+      .where(eq(owners.id, parsed.data))
+      .limit(1);
+    const targetOwner = target[0];
+    if (!targetOwner) return c.json({ error: "not_found" }, 404);
+    if (targetOwner.role === "super_admin") {
+      const superAdminCount = await countSuperAdmins();
+      if (superAdminCount <= 1) {
+        return c.json(
+          {
+            error: "last_super_admin",
+            message: "Cannot delete the last Super Admin account.",
+          },
+          409,
+        );
+      }
+    }
+
     await db
       .delete(adminAuditLog)
       .where(eq(adminAuditLog.targetOwnerId, parsed.data));
@@ -273,6 +298,102 @@ app.delete("/owners/:ownerId", async (c) => {
     }
     throw e;
   }
+});
+
+const ownerPatchBody = z
+  .object({
+    role: ownerRoleSchema.optional(),
+    name: z.string().min(1).max(120).optional(),
+  })
+  .strip();
+
+app.patch("/owners/:ownerId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
+  if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
+
+  const existingRows = await db
+    .select({
+      id: owners.id,
+      role: owners.role,
+      name: owners.name,
+      email: owners.email,
+      passwordHash: owners.passwordHash,
+      createdAt: owners.createdAt,
+    })
+    .from(owners)
+    .where(eq(owners.id, parsed.data))
+    .limit(1);
+  const existing = existingRows[0];
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  let body: z.infer<typeof ownerPatchBody>;
+  try {
+    body = ownerPatchBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      {
+        error: "invalid_body",
+        detail: e instanceof z.ZodError ? e.flatten() : String(e),
+      },
+      400,
+    );
+  }
+
+  if (Object.keys(body).length === 0) {
+    return c.json({ error: "no_fields_to_update" }, 400);
+  }
+
+  const actorId = c.req.header("X-Actor-Id") ?? "";
+  if (body.role && actorId === parsed.data) {
+    return c.json({ error: "cannot_change_own_role" }, 403);
+  }
+
+  if (body.role && existing.role === "super_admin" && body.role !== "super_admin") {
+    const superAdminCount = await countSuperAdmins();
+    if (superAdminCount <= 1) {
+      return c.json(
+        {
+          error: "last_super_admin",
+          message: "Cannot demote the last Super Admin account.",
+        },
+        409,
+      );
+    }
+  }
+
+  const updateData: { role?: (typeof ROLES)[number]; name?: string } = {};
+  if (body.role) updateData.role = body.role;
+  if (body.name) updateData.name = body.name;
+
+  const [updated] = await db
+    .update(owners)
+    .set(updateData)
+    .where(eq(owners.id, parsed.data))
+    .returning({
+      id: owners.id,
+      email: owners.email,
+      name: owners.name,
+      role: owners.role,
+      passwordHash: owners.passwordHash,
+      createdAt: owners.createdAt,
+    });
+
+  if (!updated) return c.json({ error: "not_found" }, 404);
+
+  await logAudit(db, {
+    actorId,
+    action: "owner.role_changed",
+    targetOwnerId: updated.id,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: {
+      from: existing.role,
+      to: body.role ?? existing.role,
+    },
+  });
+
+  return c.json({ updated: true, owner: updated });
 });
 
 app.get("/tenants", async (c) => {

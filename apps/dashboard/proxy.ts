@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { ROLE, ROLE_RANK } from "@/lib/roles";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
-
-const ROLE_RANK = {
-  read_only: 0,
-  billing_manager: 1,
-  support_agent: 2,
-  super_admin: 3,
-} as const;
 
 function requiredRole(
   pathname: string,
@@ -25,15 +19,15 @@ function requiredRole(
     return null;
   }
   if (pathname.startsWith("/api/owners")) {
-    if (method === "GET") return "read_only";
-    return "super_admin";
+    if (method === "GET") return ROLE.READ_ONLY;
+    return ROLE.SUPER_ADMIN;
   }
   if (pathname.startsWith("/api/tenants")) {
     if (pathname.includes("/provision")) {
-      return "support_agent";
+      return ROLE.SUPPORT_AGENT;
     }
-    if (method === "GET") return "read_only";
-    return "super_admin";
+    if (method === "GET") return ROLE.READ_ONLY;
+    return ROLE.SUPER_ADMIN;
   }
   if (
     pathname === "/" ||
@@ -41,18 +35,18 @@ function requiredRole(
     pathname.startsWith("/tenants/") ||
     pathname === "/owners"
   ) {
-    return "read_only";
+    return ROLE.READ_ONLY;
   }
   if (pathname.includes("/provision") || pathname.includes("/sync")) {
-    return "support_agent";
+    return ROLE.SUPPORT_AGENT;
   }
   if (pathname.startsWith("/owners/") && pathname.endsWith("/delete")) {
-    return "super_admin";
+    return ROLE.SUPER_ADMIN;
   }
   if (pathname === "/settings" || pathname.startsWith("/settings/")) {
-    return "super_admin";
+    return ROLE.SUPER_ADMIN;
   }
-  return "read_only";
+  return ROLE.READ_ONLY;
 }
 
 export async function proxy(request: NextRequest) {

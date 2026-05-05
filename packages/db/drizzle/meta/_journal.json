@@ -43,6 +43,13 @@
       "when": 1777702000000,
       "tag": "0005_auth_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777704000000,
+      "tag": "0006_owners_role_check",
+      "breakpoints": true
     }
   ]
 }

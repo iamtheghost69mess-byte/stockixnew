@@ -5,11 +5,16 @@ import { verify } from "otplib";
 import { createDb } from "@repo/db";
 import { owners } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
+import { ROLES, type Role } from "@/lib/roles";
 import { MFA_COOKIE, SESSION_COOKIE, signSession, verifyMfaToken } from "@/lib/session";
 
 const schema = z.object({
   code: z.string().min(6).max(8),
 });
+
+function asRole(value: string): Role | null {
+  return (ROLES as readonly string[]).includes(value) ? (value as Role) : null;
+}
 
 export async function POST(req: Request) {
   const databaseUrl = process.env.DATABASE_URL;
@@ -56,7 +61,7 @@ export async function POST(req: Request) {
 
   const session = await signSession({
     id: owner.id,
-    role: owner.role,
+    role: asRole(owner.role) ?? "read_only",
     email: owner.email,
     name: owner.name,
   });

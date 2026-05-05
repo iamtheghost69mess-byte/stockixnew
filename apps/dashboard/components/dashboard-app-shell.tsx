@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { useMe } from "@/hooks/use-me";
+import { ROLE, ROLE_LABELS, type Role } from "@/lib/roles";
+import { Badge } from "@/components/ui/badge";
 
 import {
   Sidebar,
@@ -54,6 +57,24 @@ export function DashboardAppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const me = useMe();
+  const canSeeSettings = me?.role === ROLE.SUPER_ADMIN;
+  const visibleNavItems = navItems.filter((item) =>
+    item.href === "/settings" ? canSeeSettings : true,
+  );
+
+  function roleBadgeClass(role: Role) {
+    const badgeClasses: Record<Role, string> = {
+      [ROLE.SUPER_ADMIN]:
+        "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-200",
+      [ROLE.SUPPORT_AGENT]:
+        "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-200",
+      [ROLE.BILLING_MANAGER]:
+        "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200",
+      [ROLE.READ_ONLY]: "border-muted-foreground/30 bg-muted text-muted-foreground",
+    };
+    return badgeClasses[role];
+  }
 
   return (
     <SidebarProvider>
@@ -69,7 +90,7 @@ export function DashboardAppShell({
             <SidebarGroupLabel>Navigation</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {navItems.map((item) => {
+                {visibleNavItems.map((item) => {
                   const isActive =
                     item.href === "/"
                       ? pathname === "/"
@@ -92,6 +113,18 @@ export function DashboardAppShell({
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-2">
+          {me ? (
+            <div className="mb-2 space-y-1 rounded-md border border-sidebar-border px-3 py-2">
+              <p className="text-sm font-medium">{me.name}</p>
+              <p className="text-xs text-muted-foreground">{me.email}</p>
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${roleBadgeClass(me.role as Role)}`}
+              >
+                {ROLE_LABELS[me.role as Role]}
+              </Badge>
+            </div>
+          ) : null}
           <LogoutButton />
         </SidebarFooter>
       </Sidebar>

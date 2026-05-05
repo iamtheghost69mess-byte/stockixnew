@@ -1,20 +1,15 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ProvisionEventRow } from "@/types/tenant";
 
-type Owner = { id: string; email: string; name: string };
-
 type Props = {
-  owners: Owner[];
   loading: boolean;
   provisionLog: ProvisionEventRow[];
   elapsedSec: number;
@@ -23,7 +18,6 @@ type Props = {
   onProvision: (data: {
     slug: string;
     name: string;
-    ownerId: string;
     adminEmail: string;
     adminFirstName: string;
     adminLastName: string;
@@ -33,7 +27,6 @@ type Props = {
 
 export default function TenantCreateWizard(props: Props) {
   const {
-    owners,
     loading,
     provisionLog,
     elapsedSec,
@@ -50,7 +43,6 @@ export default function TenantCreateWizard(props: Props) {
   const [adminLastName, setAdminLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [slug, setSlug] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const rootDomain = process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
 
@@ -62,12 +54,6 @@ export default function TenantCreateWizard(props: Props) {
     adminLastName.trim().length > 0 &&
     emailOk;
   const step2Valid = slugOk;
-  const step3Valid = ownerId.length > 0;
-
-  const ownerName = useMemo(
-    () => owners.find((o) => o.id === ownerId)?.name ?? "Unknown",
-    [ownerId, owners],
-  );
 
   const submit = async () => {
     setFormError(null);
@@ -75,7 +61,6 @@ export default function TenantCreateWizard(props: Props) {
       await onProvision({
         slug: slug.trim(),
         name: name.trim(),
-        ownerId,
         adminEmail: adminEmail.trim(),
         adminFirstName: adminFirstName.trim(),
         adminLastName: adminLastName.trim(),
@@ -90,7 +75,7 @@ export default function TenantCreateWizard(props: Props) {
       <CardHeader>
         <CardTitle>New tenant</CardTitle>
         <div className="flex gap-2">
-          {[1, 2, 3, 4].map((n) => (
+          {[1, 2, 3].map((n) => (
             <span
               key={n}
               className={`h-2.5 w-2.5 rounded-full ${step >= n ? "bg-primary" : "bg-muted"}`}
@@ -101,7 +86,7 @@ export default function TenantCreateWizard(props: Props) {
       <CardContent className="space-y-4">
         {step === 1 ? (
           <div className="space-y-3">
-            <p className="text-sm font-medium">Step 1 of 4 — Business details</p>
+            <p className="text-sm font-medium">Step 1 of 3 — Business details</p>
             <Input
               placeholder="Business / display name"
               value={name}
@@ -133,7 +118,7 @@ export default function TenantCreateWizard(props: Props) {
 
         {step === 2 ? (
           <div className="space-y-3">
-            <p className="text-sm font-medium">Step 2 of 4 — Subdomain</p>
+            <p className="text-sm font-medium">Step 2 of 3 — Subdomain</p>
             <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="acme-corp" />
             <p className="text-xs text-muted-foreground">
               Your tenant will be available at:{" "}
@@ -152,45 +137,7 @@ export default function TenantCreateWizard(props: Props) {
 
         {step === 3 ? (
           <div className="space-y-3">
-            <p className="text-sm font-medium">Step 3 of 4 — Assign owner</p>
-            {owners.length === 0 ? (
-              <Alert>
-                <AlertDescription>
-                  No admin owners found. Create one first in{" "}
-                  <Link href="/owners" className="underline">
-                    Owners
-                  </Link>
-                  .
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <Select value={ownerId} onValueChange={(value) => setOwnerId(value ?? "")}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select owner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {owners.map((owner) => (
-                    <SelectItem key={owner.id} value={owner.id}>
-                      {owner.name} ({owner.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => setStep(2)}>
-                Back
-              </Button>
-              <Button disabled={!step3Valid} onClick={() => setStep(4)}>
-                Next
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {step === 4 ? (
-          <div className="space-y-3">
-            <p className="text-sm font-medium">Step 4 of 4 — Review</p>
+            <p className="text-sm font-medium">Step 3 of 3 — Review</p>
             <div className="space-y-1 text-sm">
               <p>Business: {name}</p>
               <p>Subdomain: {slug}.{rootDomain}</p>
@@ -198,7 +145,6 @@ export default function TenantCreateWizard(props: Props) {
               <p>
                 Admin name: {adminFirstName} {adminLastName}
               </p>
-              <p>Owner: {ownerName}</p>
             </div>
             {formError ? (
               <Alert variant="destructive">
@@ -206,7 +152,7 @@ export default function TenantCreateWizard(props: Props) {
               </Alert>
             ) : null}
             <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => setStep(3)}>
+              <Button variant="ghost" onClick={() => setStep(2)}>
                 Back
               </Button>
               <Button disabled={loading} onClick={() => void submit()}>
@@ -235,7 +181,6 @@ export default function TenantCreateWizard(props: Props) {
               setAdminLastName("");
               setAdminEmail("");
               setSlug("");
-              setOwnerId("");
             }}
           >
             Start another tenant

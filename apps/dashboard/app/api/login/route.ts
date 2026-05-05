@@ -7,6 +7,7 @@ import { createDb } from "@repo/db";
 import { owners } from "@repo/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
 
+import { ROLES, type Role } from "@/lib/roles";
 import { MFA_COOKIE, SESSION_COOKIE, signMfaToken, signSession } from "@/lib/session";
 
 const loginSchema = z.object({
@@ -19,6 +20,10 @@ function timingSafeEqual(a: string, b: string): boolean {
   const bBuf = Buffer.from(b);
   if (aBuf.length !== bBuf.length) return false;
   return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function asRole(value: string): Role | null {
+  return (ROLES as readonly string[]).includes(value) ? (value as Role) : null;
 }
 
 export async function POST(req: Request) {
@@ -105,7 +110,7 @@ export async function POST(req: Request) {
       }
       const token = await signSession({
         id: fallbackOwner.id,
-        role: fallbackOwner.role,
+        role: asRole(fallbackOwner.role) ?? "read_only",
         email: fallbackOwner.email,
         name: fallbackOwner.name,
       });
@@ -149,7 +154,7 @@ export async function POST(req: Request) {
 
   const token = await signSession({
     id: owner.id,
-    role: owner.role,
+    role: asRole(owner.role) ?? "read_only",
     email: owner.email,
     name: owner.name,
   });
