@@ -20,6 +20,11 @@ export const owners = pgTable(
     name: text("name").notNull(),
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("super_admin"),
+    status: text("status").notNull().default("active"),
+    sessionVersion: integer("session_version").notNull().default(1),
+    failedLoginCount: integer("failed_login_count").notNull().default(0),
+    lastFailedAt: timestamp("last_failed_at", { withTimezone: true }),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
     mfaSecret: text("mfa_secret"),
     mfaEnabled: boolean("mfa_enabled").notNull().default(false),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
@@ -160,5 +165,30 @@ export const adminAuditLog = pgTable(
     index("admin_audit_log_actor_created_idx").on(t.actorId, t.createdAt),
     index("admin_audit_log_tenant_created_idx").on(t.targetTenantId, t.createdAt),
     index("admin_audit_log_owner_created_idx").on(t.targetOwnerId, t.createdAt),
+  ],
+);
+
+export const apiIdempotencyKeys = pgTable(
+  "api_idempotency_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: text("key").notNull(),
+    actorId: uuid("actor_id").notNull().references(() => owners.id, {
+      onDelete: "cascade",
+    }),
+    method: text("method").notNull(),
+    path: text("path").notNull(),
+    requestHash: text("request_hash").notNull(),
+    statusCode: integer("status_code").notNull(),
+    responseBody: jsonb("response_body").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("api_idempotency_keys_actor_key_unique").on(t.actorId, t.key),
+    index("api_idempotency_keys_actor_created_idx").on(t.actorId, t.createdAt),
+    index("api_idempotency_keys_expires_idx").on(t.expiresAt),
   ],
 );

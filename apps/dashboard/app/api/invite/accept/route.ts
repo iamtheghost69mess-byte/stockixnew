@@ -7,7 +7,13 @@ import { and, eq, gt } from "drizzle-orm";
 
 const schema = z.object({
   token: z.string().uuid(),
-  password: z.string().min(8),
+  password: z
+    .string()
+    .min(12)
+    .regex(/[A-Z]/, "Must include at least one uppercase letter")
+    .regex(/[a-z]/, "Must include at least one lowercase letter")
+    .regex(/[0-9]/, "Must include at least one number")
+    .regex(/[^A-Za-z0-9]/, "Must include at least one special character"),
 });
 
 export async function POST(req: Request) {
@@ -19,7 +25,13 @@ export async function POST(req: Request) {
   try {
     input = schema.parse(await req.json());
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          "Password must be at least 12 characters and include uppercase, lowercase, number, and special character.",
+      },
+      { status: 400 },
+    );
   }
 
   const db = createDb(databaseUrl);

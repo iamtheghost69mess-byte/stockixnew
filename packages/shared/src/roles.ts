@@ -6,3 +6,10 @@ export const ROLES = [
 ] as const;
 
 export type Role = (typeof ROLES)[number];
+
+export const ROLE_RANK: Record<Role, number> = {
+  read_only: 0,
+  billing_manager: 1,
+  support_agent: 2,
+  super_admin: 3,
+};

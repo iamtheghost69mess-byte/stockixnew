@@ -70,7 +70,7 @@ export default function AcceptInvitePage() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          minLength={8}
+          minLength={12}
           required
         />
         <Input
@@ -78,7 +78,7 @@ export default function AcceptInvitePage() {
           placeholder="Confirm password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          minLength={8}
+          minLength={12}
           required
         />
         <Button className="w-full" disabled={loading || !token}>

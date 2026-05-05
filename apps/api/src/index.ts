@@ -1,12 +1,13 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execa } from "execa";
 
 import { config as loadEnv } from "dotenv";
 import { serve } from "@hono/node-server";
 import { createDb } from "@repo/db";
 import { ROLES } from "@repo/shared/roles";
+import { ROLE_RANK, type Role } from "@repo/shared/roles";
 
 const apiDir = path.join(fileURLToPath(new URL("..", import.meta.url)));
 const monorepoRoot = path.join(apiDir, "..", "..");
@@ -17,6 +18,7 @@ loadEnv({ path: path.join(apiDir, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 import {
   adminAuditLog,
+  apiIdempotencyKeys,
   owners,
   tenantConfig,
   tenantDeployments,
@@ -112,8 +114,8 @@ app.use(
   "/*",
   cors({
     origin: corsOrigins,
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Actor-Id"],
+    allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Actor-Id", "Idempotency-Key"],
   }),
 );
 
@@ -132,6 +134,148 @@ app.use("/*", async (c, next) => {
   await next();
 });
 
+const IDEMPOTENCY_TTL_HOURS = 24;
+app.use("/*", async (c, next) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const method = c.req.method.toUpperCase();
+  const path = c.req.path;
+  const isPrivilegedWrite =
+    ["POST", "PATCH", "DELETE"].includes(method) &&
+    (path.startsWith("/owners") || path.startsWith("/tenants"));
+  if (!isPrivilegedWrite) return next();
+
+  const actorId = c.req.header("X-Actor-Id") ?? "";
+  if (!actorId) {
+    return c.json({ error: "unauthorized_actor" }, 401);
+  }
+  const idempotencyKey = c.req.header("Idempotency-Key")?.trim() ?? "";
+  if (!idempotencyKey) {
+    return c.json(
+      { error: "idempotency_key_required", message: "Missing Idempotency-Key header" },
+      400,
+    );
+  }
+
+  const requestBody = await c.req.raw.clone().text();
+  const requestHash = createHash("sha256")
+    .update(`${method}:${path}:${requestBody}`)
+    .digest("hex");
+
+  await db
+    .delete(apiIdempotencyKeys)
+    .where(sql`${apiIdempotencyKeys.expiresAt} < now()`)
+    .catch(() => undefined);
+
+  const existingRows = await db
+    .select({
+      id: apiIdempotencyKeys.id,
+      requestHash: apiIdempotencyKeys.requestHash,
+      statusCode: apiIdempotencyKeys.statusCode,
+      responseBody: apiIdempotencyKeys.responseBody,
+    })
+    .from(apiIdempotencyKeys)
+    .where(and(eq(apiIdempotencyKeys.actorId, actorId), eq(apiIdempotencyKeys.key, idempotencyKey)))
+    .limit(1);
+  const existing = existingRows[0];
+  if (existing) {
+    if (existing.requestHash !== requestHash) {
+      return c.json(
+        {
+          error: "idempotency_key_conflict",
+          message: "Idempotency-Key was already used with a different request payload",
+        },
+        409,
+      );
+    }
+    const body =
+      existing.responseBody && typeof existing.responseBody === "object"
+        ? existing.responseBody
+        : { ok: true };
+    return c.body(JSON.stringify(body), existing.statusCode as never, {
+      "content-type": "application/json",
+    });
+  }
+
+  await next();
+
+  let responseText = "";
+  try {
+    responseText = await c.res.clone().text();
+  } catch {
+    responseText = "";
+  }
+  let parsedResponse: Record<string, unknown> = {};
+  try {
+    parsedResponse = responseText
+      ? (JSON.parse(responseText) as Record<string, unknown>)
+      : {};
+  } catch {
+    parsedResponse = { raw: responseText };
+  }
+
+  await db
+    .insert(apiIdempotencyKeys)
+    .values({
+      key: idempotencyKey,
+      actorId,
+      method,
+      path,
+      requestHash,
+      statusCode: c.res.status,
+      responseBody: parsedResponse,
+      expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
+    })
+    .catch(() => undefined);
+});
+
+function requiredApiRole(pathname: string, method: string): Role | null {
+  if (pathname === "/health") return null;
+  if (pathname.startsWith("/owners")) {
+    if (method === "GET") return "read_only";
+    return "super_admin";
+  }
+  if (pathname.startsWith("/tenants")) {
+    if (pathname.includes("/provision")) return "support_agent";
+    if (method === "GET") return "read_only";
+    return "super_admin";
+  }
+  return "read_only";
+}
+
+app.use("/*", async (c, next) => {
+  const method = c.req.method.toUpperCase();
+  const path = c.req.path;
+  const minRole = requiredApiRole(path, method);
+  if (!minRole) return next();
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+  const actorId = c.req.header("X-Actor-Id") ?? "";
+  if (!actorId) return c.json({ error: "unauthorized_actor" }, 401);
+
+  const rows = await db
+    .select({
+      id: owners.id,
+      role: owners.role,
+      status: owners.status,
+      sessionVersion: owners.sessionVersion,
+    })
+    .from(owners)
+    .where(eq(owners.id, actorId))
+    .limit(1);
+  const actor = rows[0];
+  if (!actor || actor.status !== "active") {
+    return c.json({ error: "forbidden_actor" }, 403);
+  }
+  if (!(actor.role in ROLE_RANK)) {
+    return c.json({ error: "forbidden_role" }, 403);
+  }
+  const actorRank = ROLE_RANK[actor.role as Role];
+  if (actorRank < ROLE_RANK[minRole]) {
+    return c.json({ error: "forbidden_role" }, 403);
+  }
+  await next();
+});
+
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.get("/owners", async (c) => {
@@ -144,7 +288,8 @@ app.get("/owners", async (c) => {
       email: owners.email,
       name: owners.name,
       role: owners.role,
-      passwordHash: owners.passwordHash,
+      status: owners.status,
+      hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
       createdAt: owners.createdAt,
     })
     .from(owners);
@@ -162,7 +307,13 @@ async function countSuperAdmins() {
   const rows = await db
     .select({ count: sql<number>`count(*)` })
     .from(owners)
-    .where(and(eq(owners.role, "super_admin"), isNotNull(owners.passwordHash)));
+    .where(
+      and(
+        eq(owners.role, "super_admin"),
+        eq(owners.status, "active"),
+        isNotNull(owners.passwordHash),
+      ),
+    );
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -304,6 +455,7 @@ const ownerPatchBody = z
   .object({
     role: ownerRoleSchema.optional(),
     name: z.string().min(1).max(120).optional(),
+    status: z.enum(["active", "suspended"]).optional(),
   })
   .strip();
 
@@ -316,9 +468,10 @@ app.patch("/owners/:ownerId", async (c) => {
     .select({
       id: owners.id,
       role: owners.role,
+      status: owners.status,
+      sessionVersion: owners.sessionVersion,
       name: owners.name,
       email: owners.email,
-      passwordHash: owners.passwordHash,
       createdAt: owners.createdAt,
     })
     .from(owners)
@@ -348,6 +501,9 @@ app.patch("/owners/:ownerId", async (c) => {
   if (body.role && actorId === parsed.data) {
     return c.json({ error: "cannot_change_own_role" }, 403);
   }
+  if (body.status && body.status !== "active" && actorId === parsed.data) {
+    return c.json({ error: "cannot_suspend_self" }, 403);
+  }
 
   if (body.role && existing.role === "super_admin" && body.role !== "super_admin") {
     const superAdminCount = await countSuperAdmins();
@@ -362,9 +518,18 @@ app.patch("/owners/:ownerId", async (c) => {
     }
   }
 
-  const updateData: { role?: (typeof ROLES)[number]; name?: string } = {};
+  const updateData: {
+    role?: (typeof ROLES)[number];
+    name?: string;
+    status?: "active" | "suspended";
+    sessionVersion?: number;
+  } = {};
   if (body.role) updateData.role = body.role;
   if (body.name) updateData.name = body.name;
+  if (body.status) updateData.status = body.status;
+  if (body.role || body.status) {
+    updateData.sessionVersion = (existing.sessionVersion ?? 1) + 1;
+  }
 
   const [updated] = await db
     .update(owners)
@@ -375,23 +540,45 @@ app.patch("/owners/:ownerId", async (c) => {
       email: owners.email,
       name: owners.name,
       role: owners.role,
-      passwordHash: owners.passwordHash,
+      status: owners.status,
+      hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
       createdAt: owners.createdAt,
     });
 
   if (!updated) return c.json({ error: "not_found" }, 404);
 
-  await logAudit(db, {
-    actorId,
-    action: "owner.role_changed",
-    targetOwnerId: updated.id,
-    ipAddress: c.req.header("x-forwarded-for") ?? null,
-    userAgent: c.req.header("user-agent") ?? null,
-    metadata: {
-      from: existing.role,
-      to: body.role ?? existing.role,
-    },
-  });
+  const auditIp = c.req.header("x-forwarded-for") ?? null;
+  const auditUa = c.req.header("user-agent") ?? null;
+  if (body.role && body.role !== existing.role) {
+    await logAudit(db, {
+      actorId,
+      action: "owner.role_changed",
+      targetOwnerId: updated.id,
+      ipAddress: auditIp,
+      userAgent: auditUa,
+      metadata: { from: existing.role, to: body.role },
+    });
+  }
+  if (body.status && body.status !== existing.status) {
+    await logAudit(db, {
+      actorId,
+      action: "owner.status_changed",
+      targetOwnerId: updated.id,
+      ipAddress: auditIp,
+      userAgent: auditUa,
+      metadata: { from: existing.status, to: body.status },
+    });
+  }
+  if (body.name && body.name !== existing.name) {
+    await logAudit(db, {
+      actorId,
+      action: "owner.profile_updated",
+      targetOwnerId: updated.id,
+      ipAddress: auditIp,
+      userAgent: auditUa,
+      metadata: { field: "name" },
+    });
+  }
 
   return c.json({ updated: true, owner: updated });
 });

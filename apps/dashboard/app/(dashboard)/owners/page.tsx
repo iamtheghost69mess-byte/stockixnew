@@ -34,7 +34,7 @@ type Owner = {
   email: string;
   name: string;
   role: Role;
-  passwordHash?: string | null;
+  hasPassword?: boolean;
   createdAt: string;
 };
 
@@ -66,6 +66,22 @@ export default function OwnersPage() {
   const [roleErr, setRoleErr] = useState("");
   const [roleSuccess, setRoleSuccess] = useState("");
 
+  async function confirmPrivilegedAccess() {
+    const password = window.prompt("Re-enter your password to continue:");
+    if (!password) return false;
+    const res = await fetch("/api/auth/reconfirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      setRoleErr(data.error ?? "Re-authentication failed");
+      return false;
+    }
+    return true;
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadErr("");
@@ -90,6 +106,8 @@ export default function OwnersPage() {
     setAddErr("");
     setAdding(true);
     try {
+      const okPrivileged = await confirmPrivilegedAccess();
+      if (!okPrivileged) return;
       const res = await fetch("/api/owners/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,6 +169,8 @@ export default function OwnersPage() {
     setRoleErr("");
     setRoleSuccess("");
     try {
+      const okPrivileged = await confirmPrivilegedAccess();
+      if (!okPrivileged) return;
       const res = await fetch(`/api/owners/${roleChangeTarget.owner.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -195,6 +215,8 @@ export default function OwnersPage() {
     setDeleteErr("");
     setDeletingId(owner.id);
     try {
+      const okPrivileged = await confirmPrivilegedAccess();
+      if (!okPrivileged) return;
       const res = await fetch(`/api/owners/${owner.id}`, {
         method: "DELETE",
       });
@@ -442,12 +464,12 @@ export default function OwnersPage() {
                   <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
                     <span
                       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                        o.passwordHash
+                        o.hasPassword
                           ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
                           : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200"
                       }`}
                     >
-                      {o.passwordHash ? "activated" : "pending"}
+                      {o.hasPassword ? "activated" : "pending"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

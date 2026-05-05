@@ -1,8 +1,28 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createDb } from "@repo/db";
+import { owners } from "@repo/db/schema";
+import { eq } from "drizzle-orm";
 
 import { ROLE, ROLE_RANK } from "@/lib/roles";
-import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import {
+  RECENT_AUTH_COOKIE,
+  SESSION_COOKIE,
+  verifyRecentAuthToken,
+  verifySession,
+} from "@/lib/session";
+
+function withSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:4000 ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  );
+  response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  return response;
+}
 
 function requiredRole(
   pathname: string,
@@ -51,46 +71,116 @@ function requiredRole(
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const staleLogin = request.nextUrl.searchParams.get("stale") === "1";
+  const forbiddenLogin = request.nextUrl.searchParams.get("forbidden") === "1";
   const method = request.method.toUpperCase();
   const token = request.cookies.get(SESSION_COOKIE)?.value ?? "";
   const session = token ? await verifySession(token) : null;
+  const recentAuthToken = request.cookies.get(RECENT_AUTH_COOKIE)?.value ?? "";
 
   if (pathname.startsWith("/login")) {
-    if (session) return NextResponse.redirect(new URL("/", request.url));
-    return NextResponse.next();
+    // Allow rendering the login page for stale/forbidden sessions to avoid redirect loops.
+    if (session && !staleLogin && !forbiddenLogin) {
+      return withSecurityHeaders(NextResponse.redirect(new URL("/", request.url)));
+    }
+    return withSecurityHeaders(NextResponse.next());
   }
 
   const minRole = requiredRole(pathname, method);
   if (!session && minRole !== null) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return withSecurityHeaders(NextResponse.json({ error: "unauthorized" }, { status: 401 }));
     }
     const url = new URL("/login", request.url);
     url.searchParams.set("from", pathname);
-    return NextResponse.redirect(url);
+    return withSecurityHeaders(NextResponse.redirect(url));
   }
 
   if (session && minRole !== null) {
     if (!(session.role in ROLE_RANK)) {
       if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+        return withSecurityHeaders(NextResponse.json({ error: "forbidden" }, { status: 403 }));
       }
       const url = new URL("/", request.url);
       url.searchParams.set("forbidden", "1");
-      return NextResponse.redirect(url);
+      return withSecurityHeaders(NextResponse.redirect(url));
     }
     const rank = ROLE_RANK[session.role];
     if (rank < ROLE_RANK[minRole]) {
       if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "forbidden" }, { status: 403 });
+        return withSecurityHeaders(NextResponse.json({ error: "forbidden" }, { status: 403 }));
       }
       const url = new URL("/", request.url);
       url.searchParams.set("forbidden", "1");
-      return NextResponse.redirect(url);
+      return withSecurityHeaders(NextResponse.redirect(url));
+    }
+
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      return withSecurityHeaders(
+        NextResponse.json({ error: "Auth database not configured" }, { status: 503 }),
+      );
+    }
+    const db = createDb(databaseUrl);
+    const rows = await db
+      .select({
+        id: owners.id,
+        role: owners.role,
+        status: owners.status,
+        sessionVersion: owners.sessionVersion,
+        mfaEnabled: owners.mfaEnabled,
+      })
+      .from(owners)
+      .where(eq(owners.id, session.sub))
+      .limit(1);
+    const owner = rows[0];
+    if (!owner || owner.status !== "active") {
+      if (pathname.startsWith("/api/")) {
+        return withSecurityHeaders(NextResponse.json({ error: "forbidden" }, { status: 403 }));
+      }
+      const url = new URL("/login", request.url);
+      url.searchParams.set("forbidden", "1");
+      return withSecurityHeaders(NextResponse.redirect(url));
+    }
+    if (owner.role !== session.role || owner.sessionVersion !== session.sessionVersion) {
+      if (pathname.startsWith("/api/")) {
+        return withSecurityHeaders(
+          NextResponse.json({ error: "session_stale" }, { status: 401 }),
+        );
+      }
+      const url = new URL("/login", request.url);
+      url.searchParams.set("stale", "1");
+      return withSecurityHeaders(NextResponse.redirect(url));
+    }
+    if (minRole === ROLE.SUPER_ADMIN && !owner.mfaEnabled) {
+      if (pathname.startsWith("/api/")) {
+        return withSecurityHeaders(NextResponse.json({ error: "mfa_required" }, { status: 403 }));
+      }
+      const url = new URL("/", request.url);
+      url.searchParams.set("mfa", "required");
+      return withSecurityHeaders(NextResponse.redirect(url));
+    }
+
+    const ownersWrite =
+      pathname.startsWith("/api/owners") &&
+      ["POST", "PATCH", "DELETE"].includes(method);
+    const tenantDangerous =
+      /^\/api\/tenants\/[^/]+(?:\/(?:suspend|reactivate))?$/.test(pathname) &&
+      ["POST", "PATCH", "DELETE"].includes(method);
+    const requiresRecentAuth = ownersWrite || tenantDangerous;
+    if (requiresRecentAuth) {
+      const recentOwnerId = recentAuthToken
+        ? await verifyRecentAuthToken(recentAuthToken)
+        : null;
+      if (recentOwnerId !== session.sub) {
+        return withSecurityHeaders(
+          NextResponse.json({ error: "reauth_required" }, { status: 401 }),
+        );
+      }
     }
   }
 
-  return NextResponse.next();
+  return withSecurityHeaders(NextResponse.next());
 }
 
 export const config = {

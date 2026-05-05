@@ -50,6 +50,27 @@
       "when": 1777704000000,
       "tag": "0006_owners_role_check",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777712000000,
+      "tag": "0007_auth_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777715000000,
+      "tag": "0008_api_idempotency_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777719000000,
+      "tag": "0009_idempotency_actor_scope",
+      "breakpoints": true
     }
   ]
 }

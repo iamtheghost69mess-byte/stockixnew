@@ -12,6 +12,8 @@ export type SessionPayload = {
   role: SessionRole;
   email: string;
   name: string;
+  sessionVersion: number;
+  authTime: number;
   iat: number;
 };
 
@@ -34,12 +36,15 @@ export async function signSession(owner: {
   role: Role;
   email: string;
   name: string;
+  sessionVersion: number;
 }): Promise<string> {
   const payloadObj: SessionPayload = {
     sub: owner.id,
     role: owner.role,
     email: owner.email,
     name: owner.name,
+    sessionVersion: owner.sessionVersion,
+    authTime: Date.now(),
     iat: Date.now(),
   };
   const payload = JSON.stringify(payloadObj);
@@ -52,6 +57,56 @@ export async function signSession(owner: {
   );
   const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return `${payloadB64}.${sigB64}`;
+}
+
+const RECENT_AUTH_TTL_MS = 10 * 60 * 1000;
+export const RECENT_AUTH_COOKIE = "stockix-recent-auth";
+
+export async function signRecentAuthToken(ownerId: string): Promise<string> {
+  const payload = JSON.stringify({ ownerId, iat: Date.now() });
+  const payloadB64 = btoa(payload);
+  const key = await hmacKey();
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payload),
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return `${payloadB64}.${sigB64}`;
+}
+
+export async function verifyRecentAuthToken(
+  token: string,
+): Promise<string | null> {
+  const dot = token.lastIndexOf(".");
+  if (dot < 1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sigB64 = token.slice(dot + 1);
+  let payload: string;
+  let sig: Uint8Array<ArrayBuffer>;
+  try {
+    payload = atob(payloadB64);
+    const raw = atob(sigB64);
+    sig = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) sig[i] = raw.charCodeAt(i);
+  } catch {
+    return null;
+  }
+  const key = await hmacKey();
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    sig,
+    new TextEncoder().encode(payload),
+  );
+  if (!valid) return null;
+  try {
+    const parsed = JSON.parse(payload) as { ownerId: string; iat: number };
+    if (Date.now() - parsed.iat > RECENT_AUTH_TTL_MS) return null;
+    return parsed.ownerId;
+  } catch {
+    return null;
+  }
 }
 
 export async function verifySession(

@@ -87,6 +87,22 @@ export default function TenantsPage() {
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
 
+  const confirmPrivilegedAccess = useCallback(async () => {
+    const password = window.prompt("Re-enter your password to continue:");
+    if (!password) return false;
+    const res = await fetch("/api/auth/reconfirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const data = (await readJson(res)) as { error?: string };
+      setError(data.error ?? "Re-authentication failed");
+      return false;
+    }
+    return true;
+  }, []);
+
   const load = useCallback(async () => {
     const tRes = await fetch("/api/tenants");
     const t = (await readJson(tRes)) as { tenants?: TenantRow[]; error?: string };
@@ -111,6 +127,8 @@ export default function TenantsPage() {
       setDeletingId(tenantId);
       setError(null);
       try {
+        const okPrivileged = await confirmPrivilegedAccess();
+        if (!okPrivileged) return;
         const q = wipeVolumes ? "?volumes=true" : "";
         const res = await fetch(`/api/tenants/${tenantId}${q}`, {
           method: "DELETE",
@@ -128,7 +146,7 @@ export default function TenantsPage() {
         setDeletingId(null);
       }
     },
-    [load],
+    [confirmPrivilegedAccess, load],
   );
 
   const handleSuspend = useCallback(
@@ -136,6 +154,8 @@ export default function TenantsPage() {
       setSuspendingId(tenantId);
       setError(null);
       try {
+        const okPrivileged = await confirmPrivilegedAccess();
+        if (!okPrivileged) return;
         const res = await fetch(`/api/tenants/${tenantId}/suspend`, {
           method: "POST",
         });
@@ -154,7 +174,7 @@ export default function TenantsPage() {
         setSuspendingId(null);
       }
     },
-    [],
+    [confirmPrivilegedAccess],
   );
 
   const handleReactivate = useCallback(
@@ -162,6 +182,8 @@ export default function TenantsPage() {
       setReactivatingId(tenantId);
       setError(null);
       try {
+        const okPrivileged = await confirmPrivilegedAccess();
+        if (!okPrivileged) return;
         const res = await fetch(`/api/tenants/${tenantId}/reactivate`, {
           method: "POST",
         });
@@ -180,7 +202,7 @@ export default function TenantsPage() {
         setReactivatingId(null);
       }
     },
-    [],
+    [confirmPrivilegedAccess],
   );
 
   useEffect(() => {

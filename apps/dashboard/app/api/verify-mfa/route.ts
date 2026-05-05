@@ -3,10 +3,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verify } from "otplib";
 import { createDb } from "@repo/db";
-import { owners } from "@repo/db/schema";
+import { adminAuditLog, owners } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { ROLES, type Role } from "@/lib/roles";
 import { MFA_COOKIE, SESSION_COOKIE, signSession, verifyMfaToken } from "@/lib/session";
+import { checkRateLimit, resetRateLimit } from "@/lib/auth-security";
 
 const schema = z.object({
   code: z.string().min(6).max(8),
@@ -26,6 +27,16 @@ export async function POST(req: Request) {
   if (!pendingToken) return NextResponse.json({ error: "MFA token missing" }, { status: 401 });
   const ownerId = await verifyMfaToken(pendingToken);
   if (!ownerId) return NextResponse.json({ error: "MFA token expired" }, { status: 401 });
+  const forwardedFor = req.headers.get("x-forwarded-for") ?? "";
+  const ipAddress = forwardedFor.split(",")[0]?.trim() || "unknown";
+  const rateKey = `mfa:${ipAddress}:${ownerId}`;
+  const limiter = checkRateLimit(rateKey);
+  if (limiter.limited) {
+    return NextResponse.json(
+      { error: "Too many MFA attempts. Please try again later." },
+      { status: 429, headers: { "retry-after": String(limiter.retryAfterSec) } },
+    );
+  }
 
   let input: z.infer<typeof schema>;
   try {
@@ -41,13 +52,26 @@ export async function POST(req: Request) {
       email: owners.email,
       name: owners.name,
       role: owners.role,
+      status: owners.status,
       mfaSecret: owners.mfaSecret,
+      sessionVersion: owners.sessionVersion,
+      failedLoginCount: owners.failedLoginCount,
+      lockedUntil: owners.lockedUntil,
     })
     .from(owners)
     .where(eq(owners.id, ownerId))
     .limit(1);
   if (!owner || !owner.mfaSecret) {
     return NextResponse.json({ error: "MFA not configured" }, { status: 401 });
+  }
+  if (owner.status !== "active") {
+    return NextResponse.json({ error: "Account disabled" }, { status: 403 });
+  }
+  if (owner.lockedUntil && owner.lockedUntil.getTime() > Date.now()) {
+    return NextResponse.json(
+      { error: "Account temporarily locked. Try again later." },
+      { status: 423 },
+    );
   }
 
   const verifyResult = await verify({ token: input.code, secret: owner.mfaSecret });
@@ -56,6 +80,23 @@ export async function POST(req: Request) {
       ? verifyResult
       : Boolean((verifyResult as { valid?: boolean }).valid);
   if (!isValidCode) {
+    const nextFailed = (owner.failedLoginCount ?? 0) + 1;
+    await db
+      .update(owners)
+      .set({
+        failedLoginCount: nextFailed,
+        lastFailedAt: new Date(),
+        lockedUntil: nextFailed >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
+      })
+      .where(eq(owners.id, owner.id));
+    await db.insert(adminAuditLog).values({
+      actorId: owner.id,
+      action: "auth.mfa_failed",
+      targetOwnerId: owner.id,
+      ipAddress: forwardedFor || null,
+      userAgent: req.headers.get("user-agent"),
+      metadata: { failedCount: nextFailed },
+    });
     return NextResponse.json({ error: "Invalid MFA code" }, { status: 401 });
   }
 
@@ -64,6 +105,7 @@ export async function POST(req: Request) {
     role: asRole(owner.role) ?? "read_only",
     email: owner.email,
     name: owner.name,
+    sessionVersion: owner.sessionVersion ?? 1,
   });
   jar.set(SESSION_COOKIE, session, {
     httpOnly: true,
@@ -73,6 +115,23 @@ export async function POST(req: Request) {
     path: "/",
   });
   jar.delete(MFA_COOKIE);
-  await db.update(owners).set({ lastLoginAt: new Date() }).where(eq(owners.id, owner.id));
+  await db
+    .update(owners)
+    .set({
+      lastLoginAt: new Date(),
+      failedLoginCount: 0,
+      lastFailedAt: null,
+      lockedUntil: null,
+    })
+    .where(eq(owners.id, owner.id));
+  await db.insert(adminAuditLog).values({
+    actorId: owner.id,
+    action: "auth.login_success",
+    targetOwnerId: owner.id,
+    ipAddress: forwardedFor || null,
+    userAgent: req.headers.get("user-agent"),
+    metadata: { mfa: true },
+  });
+  resetRateLimit(rateKey);
   return NextResponse.json({ ok: true });
 }

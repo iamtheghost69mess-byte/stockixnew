@@ -4,11 +4,12 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { createDb } from "@repo/db";
-import { owners } from "@repo/db/schema";
+import { adminAuditLog, owners } from "@repo/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
 
 import { ROLES, type Role } from "@/lib/roles";
 import { MFA_COOKIE, SESSION_COOKIE, signMfaToken, signSession } from "@/lib/session";
+import { checkRateLimit, resetRateLimit } from "@/lib/auth-security";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -40,6 +41,17 @@ export async function POST(req: Request) {
   }
 
   const db = createDb(databaseUrl);
+  const forwardedFor = req.headers.get("x-forwarded-for") ?? "";
+  const ipAddress = forwardedFor.split(",")[0]?.trim() || "unknown";
+  const rateKey = `${ipAddress}:${input.email.toLowerCase()}`;
+  const limiter = checkRateLimit(rateKey);
+  if (limiter.limited) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Please try again later." },
+      { status: 429, headers: { "retry-after": String(limiter.retryAfterSec) } },
+    );
+  }
+
   const hasActivated = await db
     .select({ id: owners.id })
     .from(owners)
@@ -52,8 +64,12 @@ export async function POST(req: Request) {
       email: owners.email,
       name: owners.name,
       role: owners.role,
+      status: owners.status,
       passwordHash: owners.passwordHash,
       mfaEnabled: owners.mfaEnabled,
+      sessionVersion: owners.sessionVersion,
+      failedLoginCount: owners.failedLoginCount,
+      lockedUntil: owners.lockedUntil,
     })
     .from(owners)
     .where(eq(owners.email, input.email))
@@ -85,8 +101,12 @@ export async function POST(req: Request) {
             email: owners.email,
             name: owners.name,
             role: owners.role,
+            status: owners.status,
             passwordHash: owners.passwordHash,
             mfaEnabled: owners.mfaEnabled,
+            sessionVersion: owners.sessionVersion,
+            failedLoginCount: owners.failedLoginCount,
+            lockedUntil: owners.lockedUntil,
           });
         fallbackOwner = created ?? owner ?? undefined;
       }
@@ -97,8 +117,12 @@ export async function POST(req: Request) {
             email: owners.email,
             name: owners.name,
             role: owners.role,
+            status: owners.status,
             passwordHash: owners.passwordHash,
             mfaEnabled: owners.mfaEnabled,
+            sessionVersion: owners.sessionVersion,
+            failedLoginCount: owners.failedLoginCount,
+            lockedUntil: owners.lockedUntil,
           })
           .from(owners)
           .where(eq(owners.email, input.email))
@@ -113,6 +137,7 @@ export async function POST(req: Request) {
         role: asRole(fallbackOwner.role) ?? "read_only",
         email: fallbackOwner.email,
         name: fallbackOwner.name,
+        sessionVersion: fallbackOwner.sessionVersion ?? 1,
       });
       const jar = await cookies();
       jar.set(SESSION_COOKIE, token, {
@@ -122,6 +147,7 @@ export async function POST(req: Request) {
         maxAge: 30 * 24 * 60 * 60,
         path: "/",
       });
+      resetRateLimit(rateKey);
       return NextResponse.json({ ok: true });
     }
   }
@@ -129,13 +155,48 @@ export async function POST(req: Request) {
   if (!owner) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
+  if (owner.status !== "active") {
+    return NextResponse.json({ error: "Account disabled" }, { status: 403 });
+  }
+
+  if (owner.lockedUntil && owner.lockedUntil.getTime() > Date.now()) {
+    return NextResponse.json(
+      { error: "Account temporarily locked. Try again later." },
+      { status: 423 },
+    );
+  }
 
   if (!owner.passwordHash) {
+    await db
+      .update(owners)
+      .set({
+        failedLoginCount: (owner.failedLoginCount ?? 0) + 1,
+        lastFailedAt: new Date(),
+      })
+      .where(eq(owners.id, owner.id));
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
   const ok = await bcrypt.compare(input.password, owner.passwordHash);
   if (!ok) {
+    const nextFailed = (owner.failedLoginCount ?? 0) + 1;
+    const lockForMs = 15 * 60 * 1000;
+    await db
+      .update(owners)
+      .set({
+        failedLoginCount: nextFailed,
+        lastFailedAt: new Date(),
+        lockedUntil: nextFailed >= 5 ? new Date(Date.now() + lockForMs) : null,
+      })
+      .where(eq(owners.id, owner.id));
+    await db.insert(adminAuditLog).values({
+      actorId: owner.id,
+      action: "auth.login_failed",
+      targetOwnerId: owner.id,
+      ipAddress: forwardedFor || null,
+      userAgent: req.headers.get("user-agent"),
+      metadata: { reason: "invalid_password", failedCount: nextFailed },
+    });
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
@@ -157,6 +218,7 @@ export async function POST(req: Request) {
     role: asRole(owner.role) ?? "read_only",
     email: owner.email,
     name: owner.name,
+    sessionVersion: owner.sessionVersion ?? 1,
   });
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -168,8 +230,22 @@ export async function POST(req: Request) {
   jar.delete(MFA_COOKIE);
   await db
     .update(owners)
-    .set({ lastLoginAt: new Date() })
+    .set({
+      lastLoginAt: new Date(),
+      failedLoginCount: 0,
+      lastFailedAt: null,
+      lockedUntil: null,
+    })
     .where(eq(owners.id, owner.id));
+  await db.insert(adminAuditLog).values({
+    actorId: owner.id,
+    action: "auth.login_success",
+    targetOwnerId: owner.id,
+    ipAddress: forwardedFor || null,
+    userAgent: req.headers.get("user-agent"),
+    metadata: { mfa: false },
+  });
+  resetRateLimit(rateKey);
 
   return NextResponse.json({ ok: true });
 }
