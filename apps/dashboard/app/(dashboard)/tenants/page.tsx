@@ -2,59 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-  Loader2,
-  Trash2,
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
+import TenantCreateWizard from "@/components/tenant-create-wizard";
+import TenantList from "@/components/tenant-list";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
-const publicScheme =
-  process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME ?? "http";
-const publicRootDomain =
-  process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
-const localTenantHost =
-  process.env.NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST ?? "127.0.0.1";
-
-function tenantPublicBaseUrl(slug: string, port: number | null) {
-  // In local dev, each tenant nginx is exposed on a dynamic host port.
-  if (publicRootDomain === "localhost" && port != null) {
-    return `${publicScheme}://${localTenantHost}:${port}`;
-  }
-  return `${publicScheme}://${slug}.${publicRootDomain}`;
-}
+import { tenantPublicBaseUrl } from "@/lib/tenant-url";
+import type { ProvisionEventRow, TenantRow } from "@/types/tenant";
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
 
 type Owner = { id: string; email: string; name: string };
-
-type TenantRow = {
-  tenantId: string;
-  slug: string;
-  name: string;
-  adminEmail: string;
-  deploymentStatus: string | null;
-  internalPort: number | null;
-  composeProject: string | null;
-  lastError: string | null;
-  registrationCompletedAt: string | null;
-};
-
-type ProvisionEventRow = {
-  id: string;
-  phase: string;
-  level: string;
-  message: string;
-  meta: Record<string, unknown> | null;
-  createdAt: string;
-};
 
 type ProvisionPollRunning = {
   status: "queued" | "running";
@@ -119,8 +79,9 @@ export default function TenantsPage() {
     null,
   );
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [suspendingId, setSuspendingId] = useState<string | null>(null);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -128,16 +89,6 @@ export default function TenantsPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
-
-  const copyText = useCallback(async (key: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey(null), 2000);
-    } catch {
-      setError("Could not copy to clipboard");
-    }
-  }, []);
 
   const load = useCallback(async () => {
     const [oRes, tRes] = await Promise.all([
@@ -189,6 +140,58 @@ export default function TenantsPage() {
       }
     },
     [load],
+  );
+
+  const handleSuspend = useCallback(
+    async (tenantId: string, slug: string) => {
+      setSuspendingId(tenantId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/tenants/${tenantId}/suspend`, {
+          method: "POST",
+        });
+        const data = (await readJson(res)) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.tenantId === tenantId
+              ? { ...t, deploymentStatus: "suspended", lastError: null }
+              : t,
+          ),
+        );
+      } catch (e) {
+        setError(`Failed to suspend ${slug}: ${String(e)}`);
+      } finally {
+        setSuspendingId(null);
+      }
+    },
+    [],
+  );
+
+  const handleReactivate = useCallback(
+    async (tenantId: string, slug: string) => {
+      setReactivatingId(tenantId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/tenants/${tenantId}/reactivate`, {
+          method: "POST",
+        });
+        const data = (await readJson(res)) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.tenantId === tenantId
+              ? { ...t, deploymentStatus: "active", lastError: null }
+              : t,
+          ),
+        );
+      } catch (e) {
+        setError(`Failed to reactivate ${slug}: ${String(e)}`);
+      } finally {
+        setReactivatingId(null);
+      }
+    },
+    [],
   );
 
   useEffect(() => {
@@ -308,8 +311,21 @@ export default function TenantsPage() {
     );
   };
 
-  const provision = async () => {
-    const adminEmailForLogin = adminEmail.trim();
+  const provision = async (payload?: {
+    slug: string;
+    name: string;
+    ownerId: string;
+    adminEmail: string;
+    adminFirstName: string;
+    adminLastName: string;
+  }) => {
+    const nextSlug = payload?.slug ?? slug;
+    const nextName = payload?.name ?? name;
+    const nextOwnerId = payload?.ownerId ?? ownerId;
+    const nextAdminEmail = payload?.adminEmail ?? adminEmail;
+    const nextAdminFirstName = payload?.adminFirstName ?? adminFirstName;
+    const nextAdminLastName = payload?.adminLastName ?? adminLastName;
+    const adminEmailForLogin = nextAdminEmail.trim();
     setError(null);
     setOneTimePassword(null);
     setTenantAccess(null);
@@ -321,12 +337,12 @@ export default function TenantsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slug,
-          name,
-          owner_id: ownerId,
-          admin_email: adminEmail,
-          admin_first_name: adminFirstName,
-          admin_last_name: adminLastName,
+          slug: nextSlug,
+          name: nextName,
+          owner_id: nextOwnerId,
+          admin_email: nextAdminEmail,
+          admin_first_name: nextAdminFirstName,
+          admin_last_name: nextAdminLastName,
         }),
       });
 
@@ -343,7 +359,7 @@ export default function TenantsPage() {
         const ok = await pollUntilDone(data.correlationId);
         setTenantAccess({
           publicUrl:
-            tenantPublicBaseUrl(slug, ok.internalPort ?? null) ??
+            tenantPublicBaseUrl(nextSlug, ok.internalPort ?? null) ??
             ok.baseUrl ??
             null,
           adminEmail: adminEmailForLogin,
@@ -484,75 +500,28 @@ export default function TenantsPage() {
         </div>
       ) : null}
 
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-medium">New tenant</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Stockix owner</span>
-            <select
-              className="flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
-              value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-            >
-              {owners.length === 0 ? (
-                <option value="">No owners — insert one in Postgres</option>
-              ) : null}
-              {owners.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name} ({o.email})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Slug (DNS label)</span>
-            <Input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="acme-corp"
-              autoComplete="off"
-            />
-          </label>
-          <label className="space-y-1 text-xs sm:col-span-2">
-            <span className="text-muted-foreground">Display name</span>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Acme Corp"
-            />
-          </label>
-          <label className="space-y-1 text-xs sm:col-span-2">
-            <span className="text-muted-foreground">Tenant admin email</span>
-            <Input
-              type="email"
-              value={adminEmail}
-              onChange={(e) => setAdminEmail(e.target.value)}
-              placeholder="admin@acme.com"
-            />
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Admin first name</span>
-            <Input
-              value={adminFirstName}
-              onChange={(e) => setAdminFirstName(e.target.value)}
-            />
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Admin last name</span>
-            <Input
-              value={adminLastName}
-              onChange={(e) => setAdminLastName(e.target.value)}
-            />
-          </label>
-        </div>
-        <Button
-          type="button"
-          disabled={loading || !ownerId || !slug || !name}
-          onClick={() => void provision()}
-        >
-          {loading ? `Provisioning… ${elapsedSec}s` : "Provision tenant"}
-        </Button>
-      </div>
+      <TenantCreateWizard
+        owners={owners}
+        loading={loading}
+        provisionLog={provisionLog}
+        elapsedSec={elapsedSec}
+        oneTimePassword={oneTimePassword}
+        tenantAccess={tenantAccess}
+        onProvision={async (data) => {
+          setSlug(data.slug);
+          setName(data.name);
+          setOwnerId(data.ownerId);
+          setAdminEmail(data.adminEmail);
+          setAdminFirstName(data.adminFirstName);
+          setAdminLastName(data.adminLastName);
+          await provision(data);
+        }}
+        onReset={() => {
+          setOneTimePassword(null);
+          setTenantAccess(null);
+          setProvisionLog([]);
+        }}
+      />
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -567,163 +536,15 @@ export default function TenantsPage() {
             Refresh list
           </Button>
         </div>
-        <div className="grid gap-3">
-          {tenants.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-              No tenants yet. Provision one above — when it finishes, it appears
-              here with an <strong>Open login</strong> action (local URL uses the
-              allocated host port).
-            </div>
-          ) : (
-            tenants.map((t) => {
-              const status = t.deploymentStatus ?? "unknown";
-              const statusChip =
-                status === "active"
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
-                  : status === "failed"
-                    ? "border-destructive/40 bg-destructive/10 text-destructive"
-                    : status === "provisioning" || status === "pending"
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
-                      : "border-border bg-muted/50 text-muted-foreground";
-              const port = t.internalPort;
-              const canOpen = status === "active";
-              const publicOrigin = tenantPublicBaseUrl(t.slug, port);
-              const loginHref = `${publicOrigin}/auth/login`;
-              return (
-                <div
-                  key={t.tenantId}
-                  className="rounded-xl border border-border bg-card p-4 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-foreground">
-                          {t.name}
-                        </span>
-                        <span className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                          {t.slug}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize",
-                            statusChip,
-                          )}
-                        >
-                          {status === "active" ? (
-                            <CheckCircle2 className="h-3 w-3" />
-                          ) : status === "failed" ? (
-                            <AlertCircle className="h-3 w-3" />
-                          ) : status === "provisioning" ||
-                            status === "pending" ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <AlertCircle className="h-3 w-3 opacity-60" />
-                          )}
-                          {status.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Admin:{" "}
-                        <span className="font-mono text-foreground/90">
-                          {t.adminEmail}
-                        </span>
-                        {port != null ? (
-                          <>
-                            {" "}
-                            · Host port{" "}
-                            <span className="font-mono">{port}</span>
-                          </>
-                        ) : null}
-                      </p>
-                      {t.registrationCompletedAt ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          Registered{" "}
-                          {new Date(
-                            t.registrationCompletedAt,
-                          ).toLocaleString()}
-                        </p>
-                      ) : null}
-                      {t.lastError ? (
-                        <p className="text-xs text-destructive">
-                          {t.lastError.slice(0, 280)}
-                          {t.lastError.length > 280 ? "…" : ""}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                      {canOpen ? (
-                        <a
-                          href={loginHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            buttonVariants({ variant: "default", size: "sm" }),
-                            "justify-center gap-1.5",
-                          )}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          Open login
-                        </a>
-                      ) : (
-                        <Button size="sm" variant="secondary" disabled>
-                          Open login{status !== "active" ? ` (${status})` : ""}
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs"
-                        onClick={() =>
-                          void copyText(`origin-${t.tenantId}`, publicOrigin)
-                        }
-                        disabled={deletingId !== null}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        {copiedKey === `origin-${t.tenantId}`
-                          ? "Copied"
-                          : "Copy URL"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="gap-1.5"
-                        disabled={loading || deletingId !== null}
-                        onClick={() => void removeTenant(t.tenantId, t.slug)}
-                      >
-                        {deletingId === t.tenantId ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Deleting…
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 className="h-4 w-4" />
-                            Delete tenant
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
-                    <span className="font-mono text-foreground/80">
-                      {publicOrigin}
-                    </span>
-                    {port != null ? (
-                      <span>host port <span className="font-mono">{port}</span></span>
-                    ) : null}
-                    {t.composeProject ? (
-                      <span className="font-mono">
-                        compose: {t.composeProject}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <TenantList
+          tenants={tenants}
+          onDelete={removeTenant}
+          onSuspend={handleSuspend}
+          onReactivate={handleReactivate}
+          deletingId={deletingId}
+          suspendingId={suspendingId}
+          reactivatingId={reactivatingId}
+        />
       </div>
     </div>
   );

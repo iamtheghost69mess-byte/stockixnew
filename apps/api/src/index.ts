@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { execa } from "execa";
 
 import { config as loadEnv } from "dotenv";
 import { serve } from "@hono/node-server";
@@ -16,11 +17,12 @@ loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 import {
   adminAuditLog,
   owners,
+  tenantConfig,
   tenantDeployments,
   tenants,
   tenantProvisionEvents,
 } from "@repo/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, and } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
@@ -596,6 +598,316 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
         resolve();
       });
     });
+  });
+});
+
+app.get("/tenants/:tenantId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const rows = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      name: tenants.name,
+      status: tenants.status,
+      adminEmail: tenants.adminEmail,
+      adminFirstName: tenants.adminFirstName,
+      adminLastName: tenants.adminLastName,
+      ownerId: tenants.ownerId,
+      createdAt: tenants.createdAt,
+      deploymentStatus: tenantDeployments.status,
+      composeProjectName: tenantDeployments.composeProjectName,
+      internalPort: tenantDeployments.internalPort,
+      deploymentLastError: tenantDeployments.lastError,
+      registrationCompletedAt: tenantDeployments.registrationCompletedAt,
+      deploymentCreatedAt: tenantDeployments.createdAt,
+      deploymentUpdatedAt: tenantDeployments.updatedAt,
+      appName: tenantConfig.appName,
+      logoUrl: tenantConfig.logoUrl,
+      primaryColor: tenantConfig.primaryColor,
+      branding: tenantConfig.branding,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .leftJoin(tenantConfig, eq(tenantConfig.tenantId, tenants.id))
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
+
+  return c.json({
+    tenant: {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      status: row.status,
+      adminEmail: row.adminEmail,
+      adminFirstName: row.adminFirstName,
+      adminLastName: row.adminLastName,
+      ownerId: row.ownerId,
+      createdAt: row.createdAt.toISOString(),
+      deployment:
+        row.deploymentStatus === null
+          ? null
+          : {
+              status: row.deploymentStatus,
+              composeProjectName: row.composeProjectName,
+              internalPort: row.internalPort,
+              lastError: row.deploymentLastError,
+              registrationCompletedAt: row.registrationCompletedAt
+                ? row.registrationCompletedAt.toISOString()
+                : null,
+              createdAt: row.deploymentCreatedAt?.toISOString(),
+              updatedAt: row.deploymentUpdatedAt?.toISOString(),
+            },
+      config:
+        row.appName === null &&
+        row.logoUrl === null &&
+        row.primaryColor === null &&
+        row.branding === null
+          ? null
+          : {
+              appName: row.appName,
+              logoUrl: row.logoUrl,
+              primaryColor: row.primaryColor,
+              branding: row.branding ?? null,
+            },
+    },
+  });
+});
+
+const tenantPatchBody = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    adminEmail: z.string().email().optional(),
+    adminFirstName: z.string().min(1).max(100).optional(),
+    adminLastName: z.string().min(1).max(100).optional(),
+  })
+  .strip();
+
+app.patch("/tenants/:tenantId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  let body: z.infer<typeof tenantPatchBody>;
+  try {
+    body = tenantPatchBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      {
+        error: "invalid_body",
+        detail: e instanceof z.ZodError ? e.flatten() : String(e),
+      },
+      400,
+    );
+  }
+
+  if (Object.keys(body).length === 0) {
+    return c.json({ error: "no_fields_to_update" }, 400);
+  }
+
+  const [updated] = await db
+    .update(tenants)
+    .set(body)
+    .where(eq(tenants.id, parsed.data))
+    .returning();
+
+  if (!updated) return c.json({ error: "tenant_not_found" }, 404);
+
+  await logAudit(db, {
+    actorId: c.req.header("X-Actor-Id") ?? "",
+    action: "tenant.update",
+    targetTenantId: updated.id,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+  });
+
+  const deployment = await db
+    .select({
+      status: tenantDeployments.status,
+      composeProjectName: tenantDeployments.composeProjectName,
+      internalPort: tenantDeployments.internalPort,
+      lastError: tenantDeployments.lastError,
+      registrationCompletedAt: tenantDeployments.registrationCompletedAt,
+      createdAt: tenantDeployments.createdAt,
+      updatedAt: tenantDeployments.updatedAt,
+    })
+    .from(tenantDeployments)
+    .where(eq(tenantDeployments.tenantId, updated.id))
+    .limit(1);
+
+  const config = await db
+    .select({
+      appName: tenantConfig.appName,
+      logoUrl: tenantConfig.logoUrl,
+      primaryColor: tenantConfig.primaryColor,
+      branding: tenantConfig.branding,
+    })
+    .from(tenantConfig)
+    .where(eq(tenantConfig.tenantId, updated.id))
+    .limit(1);
+
+  return c.json({
+    tenant: {
+      id: updated.id,
+      slug: updated.slug,
+      name: updated.name,
+      status: updated.status,
+      adminEmail: updated.adminEmail,
+      adminFirstName: updated.adminFirstName,
+      adminLastName: updated.adminLastName,
+      ownerId: updated.ownerId,
+      createdAt: updated.createdAt.toISOString(),
+      deployment: deployment[0]
+        ? {
+            ...deployment[0],
+            registrationCompletedAt: deployment[0].registrationCompletedAt
+              ? deployment[0].registrationCompletedAt.toISOString()
+              : null,
+            createdAt: deployment[0].createdAt.toISOString(),
+            updatedAt: deployment[0].updatedAt.toISOString(),
+          }
+        : null,
+      config: config[0] ? { ...config[0], branding: config[0].branding ?? null } : null,
+    },
+  });
+});
+
+async function loadTenantForLifecycle(tenantId: string) {
+  if (!db) return null;
+  const rows = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      tenantStatus: tenants.status,
+      deploymentStatus: tenantDeployments.status,
+      composeProjectName: tenantDeployments.composeProjectName,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+app.post("/tenants/:tenantId/suspend", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const row = await loadTenantForLifecycle(parsed.data);
+  if (!row || !row.composeProjectName) return c.json({ error: "tenant_not_found" }, 404);
+  if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
+
+  try {
+    await execa("docker", ["compose", "-p", row.composeProjectName, "stop"], {
+      timeout: 60_000,
+    });
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? String((error as Error & { stderr?: string }).message ?? "") +
+          String((error as Error & { stderr?: string }).stderr ?? "")
+        : String(error);
+    return c.json({ error: "docker_stop_failed", detail }, 500);
+  }
+
+  await db.update(tenants).set({ status: "suspended" }).where(eq(tenants.id, parsed.data));
+  await db
+    .update(tenantDeployments)
+    .set({ status: "suspended", updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, parsed.data));
+
+  await logAudit(db, {
+    actorId: c.req.header("X-Actor-Id") ?? "",
+    action: "tenant.suspend",
+    targetTenantId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+  });
+
+  return c.json({ suspended: true, slug: row.slug, composeProject: row.composeProjectName });
+});
+
+app.post("/tenants/:tenantId/reactivate", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const row = await loadTenantForLifecycle(parsed.data);
+  if (!row || !row.composeProjectName) return c.json({ error: "tenant_not_found" }, 404);
+  if (row.tenantStatus !== "suspended") {
+    return c.json({ error: "tenant_not_suspended" }, 409);
+  }
+
+  try {
+    await execa("docker", ["compose", "-p", row.composeProjectName, "start"], {
+      timeout: 60_000,
+    });
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? String((error as Error & { stderr?: string }).message ?? "") +
+          String((error as Error & { stderr?: string }).stderr ?? "")
+        : String(error);
+    return c.json({ error: "docker_start_failed", detail }, 500);
+  }
+
+  await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, parsed.data));
+  await db
+    .update(tenantDeployments)
+    .set({ status: "active", updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, parsed.data));
+
+  await logAudit(db, {
+    actorId: c.req.header("X-Actor-Id") ?? "",
+    action: "tenant.reactivate",
+    targetTenantId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+  });
+
+  return c.json({
+    reactivated: true,
+    slug: row.slug,
+    composeProject: row.composeProjectName,
+  });
+});
+
+app.get("/tenants/:tenantId/events", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  const correlationId = c.req.query("correlationId");
+  const whereClause = correlationId
+    ? and(
+        eq(tenantProvisionEvents.tenantId, parsed.data),
+        eq(tenantProvisionEvents.correlationId, correlationId),
+      )
+    : eq(tenantProvisionEvents.tenantId, parsed.data);
+  const rows = await db
+    .select({
+      id: tenantProvisionEvents.id,
+      phase: tenantProvisionEvents.phase,
+      level: tenantProvisionEvents.level,
+      message: tenantProvisionEvents.message,
+      meta: tenantProvisionEvents.meta,
+      createdAt: tenantProvisionEvents.createdAt,
+    })
+    .from(tenantProvisionEvents)
+    .where(whereClause)
+    .orderBy(asc(tenantProvisionEvents.createdAt), asc(tenantProvisionEvents.id));
+
+  return c.json({
+    events: rows.map((row) => ({
+      ...row,
+      meta: row.meta ?? null,
+      createdAt: row.createdAt.toISOString(),
+    })),
   });
 });
 
