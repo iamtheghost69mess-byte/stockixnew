@@ -151,6 +151,7 @@ export class TenantProvisionService {
             adminEmail: input.adminEmail,
             adminFirstName: input.adminFirstName,
             adminLastName: input.adminLastName,
+            status: "provisioning",
           })
           .returning({ id: tenants.id });
 
@@ -272,6 +273,10 @@ export class TenantProvisionService {
           updatedAt: new Date(),
         })
         .where(eq(tenantDeployments.id, deploymentId));
+      await db
+        .update(tenants)
+        .set({ status: "active" })
+        .where(eq(tenants.id, tenantId));
 
       try {
         await edge.publish(input.slug, port, rootDomain);
@@ -310,6 +315,7 @@ export class TenantProvisionService {
         composeFile,
         project,
         deploymentId,
+        tenantId,
         db,
       });
     }
@@ -325,6 +331,7 @@ export class TenantProvisionService {
     composeFile: string;
     project: string;
     deploymentId: string | undefined;
+    tenantId: string | undefined;
     db: PostgresJsDatabase<typeof dbSchema>;
   }): Promise<ProvisionResult> {
     const {
@@ -337,6 +344,7 @@ export class TenantProvisionService {
       composeFile,
       project,
       deploymentId,
+      tenantId,
       db,
     } = params;
 
@@ -387,6 +395,9 @@ export class TenantProvisionService {
             updatedAt: new Date(),
           })
           .where(eq(tenantDeployments.id, deploymentId));
+        if (tenantId) {
+          await db.update(tenants).set({ status: "failed" }).where(eq(tenants.id, tenantId));
+        }
       }
     } catch {
       /* ignore */

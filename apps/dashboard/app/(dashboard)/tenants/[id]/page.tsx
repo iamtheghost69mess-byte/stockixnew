@@ -83,6 +83,19 @@ export default function TenantDetailPage() {
     void loadEvents();
   }, [id]);
 
+  const deploymentStatus = (tenant?.deployment?.status ?? tenant?.status ?? "").toLowerCase();
+  const isProvisioning =
+    deploymentStatus === "provisioning" || deploymentStatus === "pending";
+
+  useEffect(() => {
+    if (!tenant || !isProvisioning) return;
+    const intervalId = window.setInterval(() => {
+      void loadTenant();
+      void loadEvents();
+    }, 2500);
+    return () => window.clearInterval(intervalId);
+  }, [tenant, isProvisioning]);
+
   const baseUrl = useMemo(() => {
     if (!tenant) return null;
     return tenantPublicBaseUrl(tenant.slug, tenant.deployment?.internalPort ?? null);
@@ -162,7 +175,7 @@ export default function TenantDetailPage() {
                   <Badge variant="outline" className="font-mono">
                     {tenant.slug}
                   </Badge>
-                  <TenantStatusBadge status={tenant.status} />
+                  <TenantStatusBadge status={tenant.deployment?.status ?? tenant.status} />
                 </div>
                 <div className="grid gap-2 text-sm md:grid-cols-2">
                   <p>Admin email: {tenant.adminEmail}</p>
@@ -232,7 +245,7 @@ export default function TenantDetailPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Provisioning History</CardTitle>
           <Button variant="ghost" size="sm" onClick={() => void loadEvents()}>
-            Refresh
+            {isProvisioning ? "Live (auto-refreshing)" : "Refresh"}
           </Button>
         </CardHeader>
         <CardContent>
