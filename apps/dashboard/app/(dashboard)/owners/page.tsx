@@ -40,7 +40,7 @@ type Owner = {
 
 export default function OwnersPage() {
   const me = useMe();
-  const isSuperAdmin = me?.role === ROLE.SUPER_ADMIN;
+  const canManageOwners = Boolean(me?.capabilities.canManageOwners);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [loadErr, setLoadErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -66,22 +66,6 @@ export default function OwnersPage() {
   const [roleErr, setRoleErr] = useState("");
   const [roleSuccess, setRoleSuccess] = useState("");
 
-  async function confirmPrivilegedAccess() {
-    const password = window.prompt("Re-enter your password to continue:");
-    if (!password) return false;
-    const res = await fetch("/api/auth/reconfirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      setRoleErr(data.error ?? "Re-authentication failed");
-      return false;
-    }
-    return true;
-  }
-
   const load = useCallback(async () => {
     setLoading(true);
     setLoadErr("");
@@ -106,8 +90,6 @@ export default function OwnersPage() {
     setAddErr("");
     setAdding(true);
     try {
-      const okPrivileged = await confirmPrivilegedAccess();
-      if (!okPrivileged) return;
       const res = await fetch("/api/owners/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,8 +151,6 @@ export default function OwnersPage() {
     setRoleErr("");
     setRoleSuccess("");
     try {
-      const okPrivileged = await confirmPrivilegedAccess();
-      if (!okPrivileged) return;
       const res = await fetch(`/api/owners/${roleChangeTarget.owner.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -215,8 +195,6 @@ export default function OwnersPage() {
     setDeleteErr("");
     setDeletingId(owner.id);
     try {
-      const okPrivileged = await confirmPrivilegedAccess();
-      if (!okPrivileged) return;
       const res = await fetch(`/api/owners/${owner.id}`, {
         method: "DELETE",
       });
@@ -251,7 +229,7 @@ export default function OwnersPage() {
             type="button"
             className="gap-2"
             onClick={() => setInviteOpen(true)}
-            disabled={!isSuperAdmin}
+            disabled={!canManageOwners}
           >
             <Plus className="h-4 w-4" />
             Invite Admin
@@ -432,7 +410,7 @@ export default function OwnersPage() {
                     <p className="mt-1 text-[10px] text-muted-foreground">
                       Role changes take effect on next login
                     </p>
-                    {isSuperAdmin ? (
+                    {canManageOwners ? (
                       <div className="mt-2 space-y-1">
                         <Select
                           value={o.role}

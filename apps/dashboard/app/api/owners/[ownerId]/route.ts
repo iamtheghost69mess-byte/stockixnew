@@ -10,7 +10,7 @@ export async function PATCH(req: Request, { params }: Params) {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body,
-  });
+  }, req);
   const responseBody = await res.text();
   return new NextResponse(responseBody, {
     status: res.status,
@@ -21,7 +21,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
   const { ownerId } = await params;
   const query = new URL(req.url).search;
-  const res = await apiFetch(`/owners/${ownerId}${query}`, { method: "DELETE" });
+  const res = await apiFetch(`/owners/${ownerId}${query}`, { method: "DELETE" }, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

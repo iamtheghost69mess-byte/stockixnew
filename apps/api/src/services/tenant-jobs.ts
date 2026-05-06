@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { tenantLifecycleJobs } from "./schema.js";
-import * as schema from "./schema.js";
+import { tenantLifecycleJobs } from "@repo/db/schema";
+import * as schema from "@repo/db/schema";
 
 export type TenantLifecycleJobType =
   | "tenant.provision"
@@ -35,18 +35,6 @@ export async function insertTenantJob(
   return row ?? null;
 }
 
-export async function getTenantJobById(
-  db: PostgresJsDatabase<typeof schema>,
-  jobId: string,
-) {
-  const [row] = await db
-    .select()
-    .from(tenantLifecycleJobs)
-    .where(eq(tenantLifecycleJobs.id, jobId))
-    .limit(1);
-  return row ?? null;
-}
-
 export async function listTenantJobs(
   db: PostgresJsDatabase<typeof schema>,
   correlationId: string,
@@ -56,26 +44,4 @@ export async function listTenantJobs(
     .from(tenantLifecycleJobs)
     .where(eq(tenantLifecycleJobs.correlationId, correlationId))
     .orderBy(asc(tenantLifecycleJobs.createdAt));
-}
-
-export async function updateTenantJob(
-  db: PostgresJsDatabase<typeof schema>,
-  jobId: string,
-  params: {
-    status: "pending" | "running" | "failed" | "completed" | "dead";
-    lastError?: string | null;
-    completedAt?: Date | null;
-  },
-) {
-  const [row] = await db
-    .update(tenantLifecycleJobs)
-    .set({
-      status: params.status,
-      lastError: params.lastError ?? null,
-      completedAt: params.completedAt ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(tenantLifecycleJobs.id, jobId))
-    .returning();
-  return row ?? null;
 }

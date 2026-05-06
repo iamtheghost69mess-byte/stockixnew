@@ -37,7 +37,7 @@ export default function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/mfa/status");
+      const res = await fetch("/api/security/mfa/status");
       const data = (await readJson(res)) as { enabled?: boolean; setupPending?: boolean; error?: string };
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setStatus({
@@ -55,35 +55,13 @@ export default function SettingsPage() {
     void loadStatus();
   }, []);
 
-  const confirmPrivilegedAccess = async () => {
-    const password = window.prompt(
-      "Re-enter your CURRENT login password to continue (this is not a new password):",
-    );
-    if (!password) return false;
-    const res = await fetch("/api/auth/reconfirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) {
-      const data = (await readJson(res)) as { error?: string };
-      const normalizedError =
-        data.error === "Invalid password"
-          ? "Incorrect current password. Enter the same password you use to sign in."
-          : data.error ?? "Re-authentication failed";
-      setError(normalizedError);
-      return false;
-    }
-    return true;
-  };
-
   const beginSetup = async () => {
     setError(null);
-    const okPrivileged = await confirmPrivilegedAccess();
-    if (!okPrivileged) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/mfa/begin", { method: "POST" });
+      const res = await fetch("/api/security/mfa/begin", {
+        method: "POST",
+      });
       const data = (await readJson(res)) as {
         secret?: string;
         otpauthUri?: string;
@@ -115,7 +93,7 @@ export default function SettingsPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/mfa/enable", {
+      const res = await fetch("/api/security/mfa/enable", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: setupCode }),
@@ -136,11 +114,9 @@ export default function SettingsPage() {
 
   const disableMfa = async () => {
     setError(null);
-    const okPrivileged = await confirmPrivilegedAccess();
-    if (!okPrivileged) return;
     setDisableSubmitting(true);
     try {
-      const res = await fetch("/api/mfa/disable", {
+      const res = await fetch("/api/security/mfa/disable", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: disableCode }),
@@ -172,7 +148,7 @@ export default function SettingsPage() {
             MFA is required for Super Admin privileged actions in production.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Starting setup requires a re-auth check using your current login password.
+            Manage MFA for your account through API-backed actions below.
           </p>
         </div>
 

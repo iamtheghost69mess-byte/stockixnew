@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 
-type Me = { id: string; role: string; email: string; name: string };
+type Me = {
+  id: string;
+  role: string;
+  email: string;
+  name: string;
+  capabilities: {
+    canAccessSettings: boolean;
+    canManageOwners: boolean;
+    canManageTenants: boolean;
+  };
+};
 
 let cachedMe: Me | null = null;
 let inFlight: Promise<Me | null> | null = null;
@@ -15,9 +25,9 @@ async function fetchMe(): Promise<Me | null> {
         cachedMe = null;
         return null;
       }
-      const data = (await r.json()) as Partial<Me>;
-      if (data?.id && data?.role && data?.email && data?.name) {
-        cachedMe = data as Me;
+      const payload = (await r.json()) as { me?: Me };
+      if (payload.me?.id && payload.me.role && payload.me.email && payload.me.name) {
+        cachedMe = payload.me;
         return cachedMe;
       }
       cachedMe = null;

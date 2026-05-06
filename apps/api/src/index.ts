@@ -1,31 +1,19 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
-
-import { config as loadEnv } from "dotenv";
 import { serve } from "@hono/node-server";
 import { apiConfig } from "@repo/config";
 import {
   createDb,
-  insertTenantJob,
-  listTenantJobs,
 } from "@repo/db";
 import { ROLES } from "@repo/shared/roles";
 import { ROLE_RANK, type Role } from "@repo/shared/roles";
 
-const apiDir = path.join(fileURLToPath(new URL("..", import.meta.url)));
-const monorepoRoot = path.join(apiDir, "..", "..");
-// Use override so values from .env win over empty or stale DATABASE_URL in the shell
-// (dotenv does not override existing env vars by default).
-loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
-loadEnv({ path: path.join(apiDir, ".env"), override: true });
-loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 import {
   adminAuditLog,
   apiIdempotencyKeys,
   owners,
   tenantConfig,
   tenantDeployments,
+  tenantLifecycleJobs,
   tenants,
   tenantProvisionEvents,
 } from "@repo/db/schema";
@@ -41,6 +29,9 @@ import {
   type ProvisionEventPayload,
 } from "./provision-trace.js";
 import { buildAuthRoutes } from "./routes/auth/index.js";
+import { insertTenantJob, listTenantJobs } from "./services/tenant-jobs.js";
+import { validateOwnerSession } from "./services/auth/session-validation.js";
+import { verifySessionToken } from "./services/auth/tokens.js";
 
 const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
@@ -90,8 +81,23 @@ async function loadProvisionEventsJson(correlationId: string) {
   }));
 }
 
-const app = new Hono();
+type ApiEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+  };
+};
+
+const app = new Hono<ApiEnv>();
 const platformApiSecret = apiConfig.platformApiSecret;
+
+function readCookie(req: Request, name: string): string {
+  const cookieHeader = req.headers.get("cookie") ?? "";
+  const segments = cookieHeader.split(";").map((segment) => segment.trim());
+  const pair = segments.find((segment) => segment.startsWith(`${name}=`));
+  if (!pair) return "";
+  return decodeURIComponent(pair.slice(name.length + 1));
+}
 
 if (db) {
   app.route("/auth", buildAuthRoutes(db));
@@ -118,7 +124,7 @@ app.use(
   cors({
     origin: corsOrigins,
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Actor-Id", "Idempotency-Key"],
+    allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
   }),
 );
 
@@ -137,6 +143,35 @@ app.use("/*", async (c, next) => {
   await next();
 });
 
+app.use("/*", async (c, next) => {
+  const method = c.req.method.toUpperCase();
+  const path = c.req.path;
+  if (path === "/health" || path.startsWith("/auth")) {
+    await next();
+    return;
+  }
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+  const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const cookieToken = readCookie(c.req.raw, "stockix-session");
+  const token = headerToken || cookieToken;
+  if (!token) return c.json({ error: "unauthorized_actor" }, 401);
+
+  const session = await verifySessionToken(token);
+  if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+  const sessionCheck = await validateOwnerSession(db, {
+    ownerId: session.sub,
+    role: session.role,
+    sessionVersion: session.sessionVersion,
+  });
+  if (!sessionCheck.success) {
+    return c.json({ error: "forbidden_actor" }, 403);
+  }
+  c.set("actorId", session.sub);
+  c.set("actorRole", session.role);
+  await next();
+});
+
 const IDEMPOTENCY_TTL_HOURS = 24;
 app.use("/*", async (c, next) => {
   const method = c.req.method.toUpperCase();
@@ -147,7 +182,7 @@ app.use("/*", async (c, next) => {
   if (!isPrivilegedWrite) return next();
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
-  const actorId = c.req.header("X-Actor-Id") ?? "";
+  const actorId = c.get("actorId") as string | undefined;
   if (!actorId) {
     return c.json({ error: "unauthorized_actor" }, 401);
   }
@@ -253,7 +288,7 @@ app.use("/*", async (c, next) => {
   if (!minRole) return next();
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
-  const actorId = c.req.header("X-Actor-Id") ?? "";
+  const actorId = c.get("actorId") as string | undefined;
   if (!actorId) return c.json({ error: "unauthorized_actor" }, 401);
 
   const rows = await db
@@ -281,6 +316,86 @@ app.use("/*", async (c, next) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+app.post("/internal/jobs/claim", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const claimed = await db.transaction(async (tx) => {
+    const [pending] = await tx
+      .select({
+        id: tenantLifecycleJobs.id,
+      })
+      .from(tenantLifecycleJobs)
+      .where(eq(tenantLifecycleJobs.status, "pending"))
+      .orderBy(asc(tenantLifecycleJobs.createdAt))
+      .limit(1);
+    if (!pending) return null;
+    const [updated] = await tx
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "running",
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantLifecycleJobs.id, pending.id))
+      .returning();
+    return updated ?? null;
+  });
+  return c.json({ job: claimed });
+});
+
+app.post("/internal/jobs/:jobId/complete", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const jobId = c.req.param("jobId");
+  const [currentJob] = await db
+    .select({
+      id: tenantLifecycleJobs.id,
+      type: tenantLifecycleJobs.type,
+      tenantId: tenantLifecycleJobs.tenantId,
+      payload: tenantLifecycleJobs.payload,
+    })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.id, jobId))
+    .limit(1);
+  const [updated] = await db
+    .update(tenantLifecycleJobs)
+    .set({
+      status: "completed",
+      completedAt: new Date(),
+      lastError: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(tenantLifecycleJobs.id, jobId))
+    .returning();
+  if (
+    currentJob?.type === "tenant.lifecycle"
+    && currentJob.tenantId
+    && typeof (currentJob.payload as { status?: unknown }).status === "string"
+  ) {
+    const nextStatus = (currentJob.payload as { status: string }).status;
+    await db.update(tenants).set({ status: nextStatus }).where(eq(tenants.id, currentJob.tenantId));
+    await db
+      .update(tenantDeployments)
+      .set({ status: nextStatus, updatedAt: new Date() })
+      .where(eq(tenantDeployments.tenantId, currentJob.tenantId));
+  }
+  return c.json({ ok: true, job: updated ?? null });
+});
+
+app.post("/internal/jobs/:jobId/fail", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const jobId = c.req.param("jobId");
+  const body = await c.req.json().catch(() => ({}));
+  const errorMessage = String((body as { error?: unknown }).error ?? "job_failed").slice(0, 4000);
+  const [updated] = await db
+    .update(tenantLifecycleJobs)
+    .set({
+      status: "failed",
+      lastError: errorMessage,
+      updatedAt: new Date(),
+    })
+    .where(eq(tenantLifecycleJobs.id, jobId))
+    .returning();
+  return c.json({ ok: true, job: updated ?? null });
+});
 
 app.get("/owners", async (c) => {
   if (!db) {
@@ -348,7 +463,7 @@ app.post("/owners", async (c) => {
     .returning({ id: owners.id, email: owners.email, name: owners.name, createdAt: owners.createdAt });
   if (!row) return c.json({ error: "email_already_exists" }, 409);
   await logAudit(db, {
-    actorId: c.req.header("X-Actor-Id") ?? "",
+    actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "owner.invite",
     targetOwnerId: row.id,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
@@ -394,7 +509,7 @@ app.post("/owners/invite", async (c) => {
       role: body.role,
       inviteToken,
       inviteTokenExpiresAt,
-      invitedById: c.req.header("X-Actor-Id") ?? null,
+      invitedById: (c.get("actorId") as string | undefined) ?? null,
     })
     .returning({
       id: owners.id,
@@ -406,7 +521,7 @@ app.post("/owners/invite", async (c) => {
   const dashboardUrl = apiConfig.dashboardUrl?.replace(/\/+$/, "");
   const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
   await logAudit(db, {
-    actorId: c.req.header("X-Actor-Id") ?? "",
+    actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "owner.invite",
     targetOwnerId: owner.id,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
@@ -456,7 +571,7 @@ app.delete("/owners/:ownerId", async (c) => {
       .returning({ id: owners.id, email: owners.email });
     if (!deleted) return c.json({ error: "not_found" }, 404);
     await logAudit(db, {
-      actorId: c.req.header("X-Actor-Id") ?? "",
+      actorId: (c.get("actorId") as string | undefined) ?? "",
       action: "owner.delete",
       ipAddress: c.req.header("x-forwarded-for") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
@@ -519,7 +634,7 @@ app.patch("/owners/:ownerId", async (c) => {
     return c.json({ error: "no_fields_to_update" }, 400);
   }
 
-  const actorId = c.req.header("X-Actor-Id") ?? "";
+  const actorId = (c.get("actorId") as string | undefined) ?? "";
   if (body.role && actorId === parsed.data) {
     return c.json({ error: "cannot_change_own_role" }, 403);
   }
@@ -657,7 +772,7 @@ app.delete("/tenants/:tenantId", async (c) => {
     payload: { tenantId: parsed.data, removeVolumes },
   });
   await logAudit(db, {
-    actorId: c.req.header("X-Actor-Id") ?? "",
+    actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.delete",
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
@@ -1027,7 +1142,7 @@ app.patch("/tenants/:tenantId", async (c) => {
   if (!updated) return c.json({ error: "tenant_not_found" }, 404);
 
   await logAudit(db, {
-    actorId: c.req.header("X-Actor-Id") ?? "",
+    actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.update",
     targetTenantId: updated.id,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
@@ -1117,7 +1232,7 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
   });
 
   await logAudit(db, {
-    actorId: c.req.header("X-Actor-Id") ?? "",
+    actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.suspend",
     targetTenantId: parsed.data,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
@@ -1150,7 +1265,7 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
   });
 
   await logAudit(db, {
-    actorId: c.req.header("X-Actor-Id") ?? "",
+    actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.reactivate",
     targetTenantId: parsed.data,
     ipAddress: c.req.header("x-forwarded-for") ?? null,

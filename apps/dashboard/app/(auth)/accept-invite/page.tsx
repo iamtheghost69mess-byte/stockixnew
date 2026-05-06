@@ -18,9 +18,8 @@ export default function AcceptInvitePage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
     void (async () => {
-      const res = await fetch(`/api/invite/${token}`);
+      const res = await fetch(`/api/auth/invite/${token}`);
       const data = (await res.json()) as InviteInfo & { error?: string };
       if (!res.ok) {
         setError(data.error ?? "Invite not found");
@@ -33,13 +32,9 @@ export default function AcceptInvitePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
     setLoading(true);
     try {
-      const res = await fetch("/api/invite/accept", {
+      const res = await fetch("/api/auth/invite/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),
@@ -81,7 +76,7 @@ export default function AcceptInvitePage() {
           minLength={12}
           required
         />
-        <Button className="w-full" disabled={loading || !token}>
+        <Button className="w-full" disabled={loading}>
           {loading ? "Activating..." : "Activate account"}
         </Button>
       </form>

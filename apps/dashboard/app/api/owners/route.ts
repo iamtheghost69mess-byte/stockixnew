@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
 
-export async function GET() {
-  const res = await apiFetch("/owners");
+export async function GET(req: Request) {
+  const res = await apiFetch("/owners", {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

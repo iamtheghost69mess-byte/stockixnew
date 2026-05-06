@@ -2,9 +2,9 @@ import { apiFetch } from "@/lib/api-client";
 
 type Params = { params: Promise<{ correlationId: string }> };
 
-export async function GET(_: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   const { correlationId } = await params;
-  const res = await apiFetch(`/tenants/provision-stream/${correlationId}`);
+  const res = await apiFetch(`/tenants/provision-stream/${correlationId}`, {}, req);
   return new Response(res.body, {
     status: res.status,
     headers: {

@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
-  });
+  }, req);
   const responseBody = await res.text();
   return new NextResponse(responseBody, {
     status: res.status,

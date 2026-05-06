@@ -26,3 +26,6 @@ jobs:
 
       - name: Enforce architecture boundaries
         run: pnpm lint:boundaries
+
+      - name: Enforce architecture phases
+        run: pnpm architecture:validate

@@ -3,16 +3,11 @@ import { execa } from "execa";
 import { apiConfig } from "@repo/config";
 import {
   createDb,
-  getTenantJobById,
-  updateTenantJob,
 } from "@repo/db";
 import {
   adminAuditLog,
-  tenantLifecycleJobs,
-  tenantDeployments,
-  tenants,
 } from "@repo/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   deprovisionTenant,
   provisionTenant,
@@ -20,6 +15,48 @@ import {
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
+const apiBaseUrl = `http://localhost:${apiConfig.port}`;
+
+type ClaimedJob = {
+  id: string;
+  type: string;
+  tenantId: string | null;
+  correlationId: string | null;
+  payload: Record<string, unknown>;
+};
+
+async function claimNextJob(): Promise<ClaimedJob | null> {
+  const secret = apiConfig.platformApiSecret;
+  const res = await fetch(`${apiBaseUrl}/internal/jobs/claim`, {
+    method: "POST",
+    headers: secret ? { Authorization: `Bearer ${secret}` } : undefined,
+  });
+  if (!res.ok) throw new Error(`claim_failed:${res.status}`);
+  const body = (await res.json()) as { job?: ClaimedJob | null };
+  return body.job ?? null;
+}
+
+async function markJobComplete(jobId: string): Promise<void> {
+  const secret = apiConfig.platformApiSecret;
+  const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
+    method: "POST",
+    headers: secret ? { Authorization: `Bearer ${secret}` } : undefined,
+  });
+  if (!res.ok) throw new Error(`complete_failed:${res.status}`);
+}
+
+async function markJobFailure(jobId: string, message: string): Promise<void> {
+  const secret = apiConfig.platformApiSecret;
+  const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/fail`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+    },
+    body: JSON.stringify({ error: message }),
+  });
+  if (!res.ok) throw new Error(`fail_failed:${res.status}`);
+}
 
 async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
@@ -71,7 +108,6 @@ async function runTenantLifecycleCommand(
   db: ReturnType<typeof createDb>,
   job: { tenantId: string | null; id: string },
   command: string,
-  status: string,
 ) {
   if (!job.tenantId) throw new Error("tenantId is required");
   const rows = await db
@@ -91,11 +127,6 @@ async function runTenantLifecycleCommand(
   await execa("docker", ["compose", "-p", row.composeProjectName, command], {
     timeout: 60_000,
   });
-  await db.update(tenants).set({ status }).where(eq(tenants.id, row.tenantId));
-  await db
-    .update(tenantDeployments)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(tenantDeployments.tenantId, row.tenantId));
 }
 
 const handlers = {
@@ -108,24 +139,8 @@ const handlers = {
     db,
     job,
     String(job.payload.command ?? ""),
-    String(job.payload.status ?? ""),
   ),
 } as const;
-
-async function markJobSuccess(db: ReturnType<typeof createDb>, jobId: string) {
-  await updateTenantJob(db, jobId, {
-    status: "completed",
-    completedAt: new Date(),
-    lastError: null,
-  });
-}
-
-async function markJobFailure(db: ReturnType<typeof createDb>, jobId: string, message: string) {
-  await updateTenantJob(db, jobId, {
-    status: "failed",
-    lastError: message.slice(0, 4000),
-  });
-}
 
 async function loop() {
   const databaseUrl = apiConfig.databaseUrl;
@@ -135,27 +150,22 @@ async function loop() {
   const db = createDb(databaseUrl);
   console.log(`[worker] started as ${workerId}`);
   while (true) {
-    const [pending] = await db
-      .select({ id: tenantLifecycleJobs.id })
-      .from(tenantLifecycleJobs)
-      .where(eq(tenantLifecycleJobs.status, "pending"))
-      .orderBy(asc(tenantLifecycleJobs.createdAt))
-      .limit(1);
-    if (!pending) {
+    const job = await claimNextJob().catch((error) => {
+      console.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    });
+    if (!job) {
       await new Promise((r) => setTimeout(r, pollMs));
       continue;
     }
-    await updateTenantJob(db, pending.id, { status: "running" });
-    const job = await getTenantJobById(db, pending.id);
-    if (!job) continue;
     try {
       const handler = handlers[job.type as keyof typeof handlers] as (db: ReturnType<typeof createDb>, job: typeof job) => Promise<void>;
       await handler(db, job);
-      await markJobSuccess(db, job.id);
+      await markJobComplete(job.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[worker][${job.id}] failed: ${message}`);
-      await markJobFailure(db, job.id, message);
+      await markJobFailure(job.id, message);
     }
   }
 }

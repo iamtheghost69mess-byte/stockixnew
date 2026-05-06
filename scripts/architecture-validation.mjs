@@ -42,31 +42,58 @@ function validateFile(file, content) {
   const specs = collectSpecs(content);
   const resolved = specs.map((s) => ({ spec: s, abs: resolveRelative(file, s) }));
 
-  // Phase 1: dashboard no DB access
+  // Phase 1: dashboard UI isolation (no DB and no auth orchestration in UI pages)
   if (file.startsWith("apps/dashboard/")) {
     if (/@repo\/db|createDb\(|drizzle/.test(content)) add("Phase 1", file, "dashboard DB access pattern");
+    const isDashboardUiPage = file.startsWith("apps/dashboard/app/") && file.endsWith(".tsx") && !file.startsWith("apps/dashboard/app/api/");
+    if (isDashboardUiPage) {
+      if (/\b(?:fetch|authApiFetch)\(\s*["']\/api\/auth\/(reconfirm|mfa\/(?:begin|enable|disable|status)|verify-mfa|login)/.test(content)) {
+        add("Phase 1", file, "dashboard UI auth-flow orchestration");
+      }
+      if (/window\.prompt|requiresMfa|handleVerifyMfa|password\s*!==\s*confirmPassword/.test(content)) {
+        add("Phase 1", file, "dashboard UI auth decision logic");
+      }
+    }
   }
 
   // Phase 2: auth/session logic only in API
-  if (!file.startsWith("apps/api/src/") && file.startsWith("apps/dashboard/")) {
+  if (!file.startsWith("apps/api/src/") && file.startsWith("apps/dashboard/") && !file.includes("/tests/")) {
     if (/signSession|signMfaToken|verifyMfaToken|verifySession|checkRateLimit|resetRateLimit|verifyRecentAuthToken|signRecentAuthToken/.test(content)) {
       add("Phase 2", file, "auth/session logic outside API");
     }
-    if (file === "apps/dashboard/proxy.ts" && /ROLE_RANK|requiredRole|session\.role|rank < /.test(content)) {
-      add("Phase 2", file, "role/rank auth decision logic in dashboard");
+    if (/localStorage\.setItem\([^)]*(session|mfa)|localStorage\.getItem\([^)]*(session|mfa)|localStorage\.removeItem\([^)]*(session|mfa)/i.test(content)) {
+      add("Phase 2", file, "dashboard token/session storage logic");
+    }
+    if (/from\s+["']node:crypto["']|crypto\./.test(content)) {
+      add("Phase 2", file, "dashboard cryptographic logic");
+    }
+    if (/\bgetSessionToken\b|\bsetSessionToken\b|\bgetMfaToken\b|\bsetMfaToken\b|\bclearAuthTokens\b/.test(content)) {
+      add("Phase 2", file, "dashboard auth-token lifecycle helpers");
+    }
+    if (/\b(?:fetch|authApiFetch)\(\s*["']\/auth\/(session\/validate|reconfirm|mfa\/(?:begin|enable|disable|status)|verify-mfa|login)/.test(content) && !file.startsWith("apps/dashboard/app/api/")) {
+      add("Phase 2", file, "dashboard direct auth orchestration in UI layer");
+    }
+    if (/me\?\.role\s*===|session\.role|role\s*===\s*ROLE\./.test(content)) {
+      add("Phase 2", file, "dashboard role-based authorization decisions");
     }
   }
 
   // Phase 3: DB purity
   if (file.startsWith("packages/db/src/")) {
-    if (/getNextPending|claimNext|attempts\s*\+\s*1|status:\s*"running"/.test(content)) {
+    if (/getNextPending|claimNext|insertTenantJob|updateTenantJob|listTenantJobs|getTenantJobById|attempts\s*\+\s*1|status:\s*"running"/.test(content)) {
       add("Phase 3", file, "DB queue orchestration logic");
     }
   }
   // Phase 3: worker purity
   if (file === "infra/worker-service/src/worker.ts") {
-    if (/while\s*\(true\)|getNextPending|tenant\.suspend|tenant\.reactivate/.test(content)) {
+    if (/attempts\s*\+\s*1|maxAttempts|tenant\.suspend|tenant\.reactivate|if\s*\(\s*job\.type\s*===\s*["']tenant\.(?:suspend|reactivate)["']/.test(content)) {
       add("Phase 3", file, "worker lifecycle/orchestration logic");
+    }
+    if (/tenantLifecycleJobs|getTenantJobById|updateTenantJob/.test(content)) {
+      add("Phase 3", file, "worker owns job-claim/state-transition logic");
+    }
+    if (/status:\s*["']running["']|status:\s*["']failed["']|status:\s*["']completed["']/.test(content)) {
+      add("Phase 3", file, "worker embeds job-state policy values");
     }
   }
   // Phase 3: infra domain purity

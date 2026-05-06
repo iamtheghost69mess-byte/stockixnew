@@ -12,7 +12,6 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
-  const [requiresMfa, setRequiresMfa] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,42 +20,20 @@ function LoginForm() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/login", {
+      const res = await fetch("/api/session/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, mfaCode: mfaCode.trim() || undefined }),
       });
-      const data = (await res.json()) as { error?: string; requiresMfa?: boolean };
+      const data = (await res.json()) as {
+        error?: string;
+      };
       if (!res.ok) {
-        setError(data.error ?? "Invalid credentials");
-        return;
-      }
-      if (data.requiresMfa) {
-        setRequiresMfa(true);
-        return;
-      }
-      router.push(params.get("from") ?? "/");
-      router.refresh();
-    } catch {
-      setError("Network error — please try again");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleVerifyMfa(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await fetch("/api/verify-mfa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: mfaCode }),
-      });
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Invalid MFA code");
+        setError(
+          data.error === "mfa_required"
+            ? "MFA required. Enter your authenticator code and sign in again."
+            : (data.error ?? "Invalid credentials"),
+        );
         return;
       }
       router.push(params.get("from") ?? "/");
@@ -74,7 +51,6 @@ function LoginForm() {
         <h1 className="text-2xl font-semibold tracking-tight">Stockix</h1>
         <p className="text-sm text-muted-foreground">Platform administration</p>
       </div>
-      {!requiresMfa ? (
       <form onSubmit={handleSubmit} className="space-y-3">
         <Input
           type="email"
@@ -93,6 +69,12 @@ function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+        <Input
+          type="text"
+          placeholder="MFA code (if enabled)"
+          value={mfaCode}
+          onChange={(e) => setMfaCode(e.target.value)}
+        />
         {error && (
           <p className="text-sm font-medium text-destructive">{error}</p>
         )}
@@ -100,23 +82,6 @@ function LoginForm() {
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-      ) : (
-      <form onSubmit={handleVerifyMfa} className="space-y-3">
-        <Input
-          type="text"
-          placeholder="MFA code"
-          value={mfaCode}
-          onChange={(e) => setMfaCode(e.target.value)}
-          required
-        />
-        {error && (
-          <p className="text-sm font-medium text-destructive">{error}</p>
-        )}
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Verifying…" : "Verify MFA"}
-        </Button>
-      </form>
-      )}
     </div>
   );
 }

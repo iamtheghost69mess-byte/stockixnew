@@ -35,7 +35,7 @@ function LogoutButton() {
   const router = useRouter();
 
   async function handleLogout() {
-    await fetch("/api/logout", { method: "POST" });
+    await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
     router.refresh();
   }
@@ -58,7 +58,7 @@ export function DashboardAppShell({
 }) {
   const pathname = usePathname();
   const me = useMe();
-  const canSeeSettings = me?.role === ROLE.SUPER_ADMIN;
+  const canSeeSettings = Boolean(me?.capabilities.canAccessSettings);
   const visibleNavItems = navItems.filter((item) =>
     item.href === "/settings" ? canSeeSettings : true,
   );

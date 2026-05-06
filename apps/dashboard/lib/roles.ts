@@ -14,13 +14,6 @@ export const ROLE = {
   READ_ONLY: ROLES[3],
 } as const;
 
-export const ROLE_RANK: Record<Role, number> = {
-  read_only: 0,
-  billing_manager: 1,
-  support_agent: 2,
-  super_admin: 3,
-};
-
 export const ROLE_LABELS: Record<Role, string> = {
   super_admin: "Super Admin",
   support_agent: "Support Agent",

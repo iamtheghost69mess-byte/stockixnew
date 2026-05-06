@@ -1,17 +1,8 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { config as loadEnv } from "dotenv";
 import { apiConfig } from "@repo/config";
 import { createDb } from "@repo/db";
 import { owners } from "@repo/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-
-const apiDir = path.join(fileURLToPath(new URL("../..", import.meta.url)));
-const monorepoRoot = path.join(apiDir, "..", "..");
-loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
-loadEnv({ path: path.join(apiDir, ".env"), override: true });
-loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 
 async function run() {
   const databaseUrl = apiConfig.databaseUrl;

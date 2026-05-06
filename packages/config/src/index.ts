@@ -1,4 +1,14 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
 import { z } from "zod";
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.join(configDir, "..", "..", "..");
+
+// Centralized env bootstrapping for all runtime consumers.
+loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
+loadEnv({ path: path.join(monorepoRoot, ".env.local"), override: true });
 
 const optionalStringSchema = z.string().min(1).optional();
 const stringSchema = z.string().min(1);

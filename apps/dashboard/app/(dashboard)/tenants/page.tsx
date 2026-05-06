@@ -10,6 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import type { ProvisionEventRow, TenantRow } from "@/types/tenant";
+import { useMe } from "@/hooks/use-me";
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
@@ -63,8 +64,8 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 export default function TenantsPage() {
+  const me = useMe();
   const [tenants, setTenants] = useState<TenantRow[]>([]);
-  const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oneTimePassword, setOneTimePassword] = useState<string | null>(null);
@@ -86,22 +87,6 @@ export default function TenantsPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
-
-  const confirmPrivilegedAccess = useCallback(async () => {
-    const password = window.prompt("Re-enter your password to continue:");
-    if (!password) return false;
-    const res = await fetch("/api/auth/reconfirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) {
-      const data = (await readJson(res)) as { error?: string };
-      setError(data.error ?? "Re-authentication failed");
-      return false;
-    }
-    return true;
-  }, []);
 
   const load = useCallback(async () => {
     const tRes = await fetch("/api/tenants");
@@ -127,8 +112,6 @@ export default function TenantsPage() {
       setDeletingId(tenantId);
       setError(null);
       try {
-        const okPrivileged = await confirmPrivilegedAccess();
-        if (!okPrivileged) return;
         const q = wipeVolumes ? "?volumes=true" : "";
         const res = await fetch(`/api/tenants/${tenantId}${q}`, {
           method: "DELETE",
@@ -146,7 +129,7 @@ export default function TenantsPage() {
         setDeletingId(null);
       }
     },
-    [confirmPrivilegedAccess, load],
+    [load],
   );
 
   const handleSuspend = useCallback(
@@ -154,8 +137,6 @@ export default function TenantsPage() {
       setSuspendingId(tenantId);
       setError(null);
       try {
-        const okPrivileged = await confirmPrivilegedAccess();
-        if (!okPrivileged) return;
         const res = await fetch(`/api/tenants/${tenantId}/suspend`, {
           method: "POST",
         });
@@ -174,7 +155,7 @@ export default function TenantsPage() {
         setSuspendingId(null);
       }
     },
-    [confirmPrivilegedAccess],
+    [],
   );
 
   const handleReactivate = useCallback(
@@ -182,8 +163,6 @@ export default function TenantsPage() {
       setReactivatingId(tenantId);
       setError(null);
       try {
-        const okPrivileged = await confirmPrivilegedAccess();
-        if (!okPrivileged) return;
         const res = await fetch(`/api/tenants/${tenantId}/reactivate`, {
           method: "POST",
         });
@@ -202,7 +181,7 @@ export default function TenantsPage() {
         setReactivatingId(null);
       }
     },
-    [confirmPrivilegedAccess],
+    [],
   );
 
   useEffect(() => {
@@ -235,15 +214,6 @@ export default function TenantsPage() {
     }, 500);
     return () => window.clearInterval(id);
   }, [loading]);
-
-  useEffect(() => {
-    fetch("/api/me")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.id) setCurrentUserId(String(data.id));
-      })
-      .catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     if (!streamCorrelationId) return;
@@ -525,7 +495,7 @@ export default function TenantsPage() {
         oneTimePassword={oneTimePassword}
         tenantAccess={tenantAccess}
         onProvision={async (data) => {
-          if (!currentUserId) {
+          if (!me?.id) {
             setError("Unable to resolve current user. Please refresh and try again.");
             return;
           }
@@ -534,7 +504,7 @@ export default function TenantsPage() {
           setAdminEmail(data.adminEmail);
           setAdminFirstName(data.adminFirstName);
           setAdminLastName(data.adminLastName);
-          await provision({ ...data, ownerId: currentUserId });
+          await provision({ ...data, ownerId: me.id });
         }}
         onReset={() => {
           setOneTimePassword(null);
