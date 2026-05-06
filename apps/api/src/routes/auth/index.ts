@@ -100,9 +100,10 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   }
 
   async function resolveSessionFromRequest(c: { req: { header: (name: string) => string | undefined; raw: Request } }) {
-    const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
     const cookieToken = readCookie(c.req.raw, "stockix-session");
-    const token = headerToken || cookieToken;
+    // Platform API key is also sent via Authorization; session identity must come from auth cookie first.
+    const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    const token = cookieToken || headerToken;
     if (!token) return null;
     return verifySessionToken(token);
   }

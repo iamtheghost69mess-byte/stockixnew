@@ -26,7 +26,13 @@ export async function POST(req: Request) {
     status: res.status,
     headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
   });
-  const setCookie = res.headers.get("set-cookie");
-  if (setCookie) out.headers.set("set-cookie", setCookie);
+  const getSetCookie = (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  const setCookies = typeof getSetCookie === "function" ? getSetCookie.call(res.headers) : [];
+  if (setCookies.length > 0) {
+    for (const cookie of setCookies) out.headers.append("set-cookie", cookie);
+  } else {
+    const setCookie = res.headers.get("set-cookie");
+    if (setCookie) out.headers.set("set-cookie", setCookie);
+  }
   return out;
 }
