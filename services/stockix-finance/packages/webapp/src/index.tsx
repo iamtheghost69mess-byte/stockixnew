@@ -9,8 +9,9 @@ import '@/services/yup';
 import App from '@/components/App';
 import * as serviceWorker from '@/serviceWorker';
 import { store, persistor } from '@/store/createStore';
+import { publicConfig } from '@repo/config/public';
 
-if (process.env.NODE_ENV === 'development') {
+if (publicConfig.nodeEnv === 'development') {
   const whyDidYouRender = require('@welldone-software/why-did-you-render');
   whyDidYouRender(React, { trackAllPureComponents: false });
 }

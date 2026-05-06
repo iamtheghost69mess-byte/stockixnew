@@ -1,12 +1,13 @@
 // @ts-nocheck
 import { DependencyList, EffectCallback } from 'react';
 import isDeepEqualReact from 'fast-deep-equal/react';
+import { publicConfig } from '@repo/config/public';
 import { useCustomCompareEffect } from './useCustomCompareEffect';
 
 const isPrimitive = (val: any) => val !== Object(val);
 
 const useDeepCompareEffect = (effect: EffectCallback, deps: DependencyList) => {
-  if (process.env.NODE_ENV !== 'production') {
+  if (publicConfig.nodeEnv !== 'production') {
     if (!(deps instanceof Array) || !deps.length) {
       console.warn(
         '`useDeepCompareEffect` should not be used with no dependencies. Use React.useEffect instead.',

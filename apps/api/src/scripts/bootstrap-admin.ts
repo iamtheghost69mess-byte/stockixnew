@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
+import { apiConfig } from "@repo/config";
 import { createDb } from "@repo/db";
 import { owners } from "@repo/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
@@ -13,9 +14,9 @@ loadEnv({ path: path.join(apiDir, ".env"), override: true });
 loadEnv({ path: path.join(apiDir, ".env.local"), override: true });
 
 async function run() {
-  const databaseUrl = process.env.DATABASE_URL;
-  const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
-  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  const databaseUrl = apiConfig.databaseUrl;
+  const email = apiConfig.bootstrapAdminEmail;
+  const password = apiConfig.bootstrapAdminPassword;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   if (!email || !password) {
     throw new Error("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required");

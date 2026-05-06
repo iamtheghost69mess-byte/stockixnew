@@ -1,11 +1,15 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
-import { execa } from "execa";
 
 import { config as loadEnv } from "dotenv";
 import { serve } from "@hono/node-server";
-import { createDb } from "@repo/db";
+import { apiConfig } from "@repo/config";
+import {
+  createDb,
+  insertTenantJob,
+  listTenantJobs,
+} from "@repo/db";
 import { ROLES } from "@repo/shared/roles";
 import { ROLE_RANK, type Role } from "@repo/shared/roles";
 
@@ -33,17 +37,12 @@ import { z } from "zod";
 import { logAudit } from "./audit.js";
 
 import {
-  getProvisionJob,
-  setProvisionJob,
-} from "./provision-jobs.js";
-import { subscribeProvision } from "./provision-bus.js";
-import { deprovisionTenant, provisionTenant } from "./provisioner.js";
-import {
   createProvisionTracer,
   type ProvisionEventPayload,
 } from "./provision-trace.js";
+import { buildAuthRoutes } from "./routes/auth/index.js";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
 
 function rowToProvisionPayload(
@@ -92,7 +91,11 @@ async function loadProvisionEventsJson(correlationId: string) {
 }
 
 const app = new Hono();
-const platformApiSecret = process.env.PLATFORM_API_SECRET;
+const platformApiSecret = apiConfig.platformApiSecret;
+
+if (db) {
+  app.route("/auth", buildAuthRoutes(db));
+}
 
 app.onError((err, c) => {
   console.error("[api]", err);
@@ -100,14 +103,14 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error", message }, 500);
 });
 
-const rootDomain = process.env.ROOT_DOMAIN?.trim();
+const rootDomain = apiConfig.rootDomain;
 const corsOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   ...(rootDomain
     ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
     : []),
-  ...(process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+  ...apiConfig.corsOrigins,
 ];
 
 app.use(
@@ -230,6 +233,7 @@ app.use("/*", async (c, next) => {
 
 function requiredApiRole(pathname: string, method: string): Role | null {
   if (pathname === "/health") return null;
+  if (pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/owners")) {
     if (method === "GET") return "read_only";
     return "super_admin";
@@ -399,7 +403,7 @@ app.post("/owners/invite", async (c) => {
       role: owners.role,
     });
   if (!owner) return c.json({ error: "failed_to_create_invite" }, 500);
-  const dashboardUrl = process.env.DASHBOARD_URL?.replace(/\/+$/, "");
+  const dashboardUrl = apiConfig.dashboardUrl?.replace(/\/+$/, "");
   const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
   await logAudit(db, {
     actorId: c.req.header("X-Actor-Id") ?? "",
@@ -639,28 +643,33 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
   }
-  const removeVolumes =
-    c.req.query("volumes") === "1" || c.req.query("volumes") === "true";
-  const result = await deprovisionTenant(db, parsed.data, {
-    removeVolumes,
-    log: (m) => console.log(`[deprovision] ${m}`),
+  const removeVolumes = c.req.query("volumes") === "1" || c.req.query("volumes") === "true";
+  const existing = await db
+    .select({ id: tenants.id, slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+  const target = existing[0];
+  if (!target) return c.json({ error: "tenant_not_found" }, 404);
+  const job = await insertTenantJob(db, {
+    type: "tenant.deprovision",
+    tenantId: parsed.data,
+    payload: { tenantId: parsed.data, removeVolumes },
   });
-  if (!result.ok) {
-    return c.json({ error: result.message }, 404);
-  }
   await logAudit(db, {
     actorId: c.req.header("X-Actor-Id") ?? "",
     action: "tenant.delete",
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
-    metadata: { deletedTenantId: parsed.data, slug: result.slug },
+    metadata: { deletedTenantId: parsed.data, slug: target.slug, mode: "queued" },
   });
   return c.json({
+    accepted: true,
     deleted: true,
-    slug: result.slug,
-    composeProject: result.composeProject,
-    docker: result.docker,
-  });
+    slug: target.slug,
+    jobId: job?.id ?? null,
+    message: "Tenant deprovision queued for infra worker execution.",
+  }, 202);
 });
 
 const provisionBody = z.object({
@@ -726,66 +735,29 @@ app.post("/tenants", async (c) => {
     "HTTP 202 — provisioning accepted; background worker will start",
   );
 
-  setProvisionJob(correlationId, { status: "queued" });
-
-  void (async () => {
-    setProvisionJob(correlationId, { status: "running" });
-    try {
-      const result = await provisionTenant(
-        db,
-        {
-          slug: body.slug,
-          name: body.name,
-          ownerId: body.owner_id,
-          adminEmail: body.admin_email,
-          adminFirstName: body.admin_first_name,
-          adminLastName: body.admin_last_name,
-        },
-        log,
-        correlationId,
-      );
-
-      if (!result.ok) {
-        setProvisionJob(correlationId, {
-          status: "failed",
-          message: result.message,
-          cause: result.cause,
-          correlationId,
-        });
-        return;
-      }
-
-      setProvisionJob(correlationId, { status: "succeeded", result });
-      await logAudit(db, {
-        actorId: c.req.header("X-Actor-Id") ?? "",
-        action: "tenant.create",
-        targetTenantId: result.tenantId,
-        ipAddress: c.req.header("x-forwarded-for") ?? null,
-        userAgent: c.req.header("user-agent") ?? null,
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err);
-      setProvisionJob(correlationId, {
-        status: "failed",
-        message,
-        cause: String(err),
-        correlationId,
-      });
-    }
-  })().catch((e) => {
-    console.error(JSON.stringify({ level: "error", correlationId, message: String(e) }));
+  const job = await insertTenantJob(db, {
+    type: "tenant.provision",
+    correlationId,
+    payload: {
+      slug: body.slug,
+      name: body.name,
+      ownerId: body.owner_id,
+      adminEmail: body.admin_email,
+      adminFirstName: body.admin_first_name,
+      adminLastName: body.admin_last_name,
+    },
   });
 
   return c.json(
     {
       accepted: true,
+      jobId: job?.id ?? null,
       correlationId,
       admin_email: body.admin_email,
       poll: `/tenants/provision-status/${correlationId}`,
       stream: `/tenants/provision-stream/${correlationId}`,
       message:
-        "Provisioning started in the background. First Docker run can take many minutes (image pulls, MySQL, migrations). Poll provision-status until status is complete or failed.",
+        "Provisioning queued for infra worker execution. Poll provision-status until status is complete or failed.",
       note:
         "Save oneTimeAdminPassword from the status response when complete — it is not stored in Stockix.",
     },
@@ -798,10 +770,11 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
   const correlationId = c.req.param("correlationId");
-  const job = getProvisionJob(correlationId);
+  const jobs = await listTenantJobs(db, correlationId);
+  const lastJob = jobs[jobs.length - 1] ?? null;
   const events = await loadProvisionEventsJson(correlationId);
 
-  if (!job) {
+  if (!lastJob) {
     if (events.length === 0) {
       return c.json(
         {
@@ -839,26 +812,33 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       status: "running",
       correlationId,
       message:
-        "In-memory job missing (API restart?) — live updates may be stale; see `events` for the persisted trace.",
+        "No lifecycle job record found; see `events` for persisted trace state.",
       events,
     });
   }
 
-  if (job.status === "queued" || job.status === "running") {
-    return c.json({ status: job.status, correlationId, events });
+  if (lastJob.status === "pending" || lastJob.status === "running" || lastJob.status === "failed") {
+    return c.json({ status: lastJob.status === "pending" ? "queued" : lastJob.status, correlationId, jobId: lastJob.id, events });
   }
 
-  if (job.status === "succeeded") {
-    const r = job.result;
+  if (lastJob.status === "completed") {
+    const completeEvent = [...events].reverse().find((event) => event.phase === "complete");
+    const eventMeta =
+      completeEvent?.meta && typeof completeEvent.meta === "object"
+        ? (completeEvent.meta as Record<string, unknown>)
+        : {};
     return c.json({
       status: "complete",
       correlationId,
-      tenantId: r.tenantId,
-      deploymentId: r.deploymentId,
-      composeProjectName: r.composeProjectName,
-      internalPort: r.internalPort,
-      baseUrl: r.baseUrl,
-      oneTimeAdminPassword: r.oneTimeAdminPassword,
+      jobId: lastJob.id,
+      tenantId: typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null,
+      deploymentId: typeof eventMeta.deploymentId === "string" ? eventMeta.deploymentId : null,
+      composeProjectName:
+        typeof eventMeta.composeProjectName === "string" ? eventMeta.composeProjectName : null,
+      internalPort: typeof eventMeta.internalPort === "number" ? eventMeta.internalPort : null,
+      baseUrl: typeof eventMeta.baseUrl === "string" ? eventMeta.baseUrl : null,
+      oneTimeAdminPassword:
+        typeof eventMeta.oneTimeAdminPassword === "string" ? eventMeta.oneTimeAdminPassword : null,
       events,
       note:
         "Stockix login API field is `crediential` (typo) if you call /api/auth/login.",
@@ -866,10 +846,11 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
   }
 
   return c.json({
-    status: "failed",
+    status: lastJob.status === "dead" ? "failed" : lastJob.status,
     correlationId,
-    error: job.message,
-    cause: job.cause,
+    jobId: lastJob.id,
+    error: lastJob.lastError,
+    cause: lastJob.lastError,
     events,
   });
 });
@@ -879,14 +860,14 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
   const correlationId = c.req.param("correlationId");
-  const job = getProvisionJob(correlationId);
+  const jobs = await listTenantJobs(db, correlationId);
   const anyRow = await db
     .select({ id: tenantProvisionEvents.id })
     .from(tenantProvisionEvents)
     .where(eq(tenantProvisionEvents.correlationId, correlationId))
     .limit(1);
 
-  if (!job && anyRow.length === 0) {
+  if (jobs.length === 0 && anyRow.length === 0) {
     return c.json(
       {
         error: "unknown_or_expired_job",
@@ -907,30 +888,24 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
         data: JSON.stringify(payload),
       });
     };
-
-    const unsub = subscribeProvision(correlationId, (p) => {
-      void forward(p);
+    let closed = false;
+    stream.onAbort(() => {
+      closed = true;
     });
 
-    const rows = await db
-      .select()
-      .from(tenantProvisionEvents)
-      .where(eq(tenantProvisionEvents.correlationId, correlationId))
-      .orderBy(
-        asc(tenantProvisionEvents.createdAt),
-        asc(tenantProvisionEvents.id),
-      );
+    while (!closed) {
+      const rows = await db
+        .select()
+        .from(tenantProvisionEvents)
+        .where(eq(tenantProvisionEvents.correlationId, correlationId))
+        .orderBy(asc(tenantProvisionEvents.createdAt), asc(tenantProvisionEvents.id));
 
-    for (const row of rows) {
-      await forward(rowToProvisionPayload(row));
+      for (const row of rows) {
+        await forward(rowToProvisionPayload(row));
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-
-    await new Promise<void>((resolve) => {
-      stream.onAbort(() => {
-        unsub();
-        resolve();
-      });
-    });
   });
 });
 
@@ -1133,27 +1108,13 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
   const row = await loadTenantForLifecycle(parsed.data);
-  if (!row || !row.composeProjectName) return c.json({ error: "tenant_not_found" }, 404);
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
   if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
-
-  try {
-    await execa("docker", ["compose", "-p", row.composeProjectName, "stop"], {
-      timeout: 60_000,
-    });
-  } catch (error) {
-    const detail =
-      error instanceof Error
-        ? String((error as Error & { stderr?: string }).message ?? "") +
-          String((error as Error & { stderr?: string }).stderr ?? "")
-        : String(error);
-    return c.json({ error: "docker_stop_failed", detail }, 500);
-  }
-
-  await db.update(tenants).set({ status: "suspended" }).where(eq(tenants.id, parsed.data));
-  await db
-    .update(tenantDeployments)
-    .set({ status: "suspended", updatedAt: new Date() })
-    .where(eq(tenantDeployments.tenantId, parsed.data));
+  const job = await insertTenantJob(db, {
+    type: "tenant.lifecycle",
+    tenantId: parsed.data,
+    payload: { tenantId: parsed.data, slug: row.slug, command: "stop", status: "suspended" },
+  });
 
   await logAudit(db, {
     actorId: c.req.header("X-Actor-Id") ?? "",
@@ -1163,7 +1124,13 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
     userAgent: c.req.header("user-agent") ?? null,
   });
 
-  return c.json({ suspended: true, slug: row.slug, composeProject: row.composeProjectName });
+  return c.json({
+    accepted: true,
+    suspended: true,
+    slug: row.slug,
+    composeProject: row.composeProjectName,
+    jobId: job?.id ?? null,
+  }, 202);
 });
 
 app.post("/tenants/:tenantId/reactivate", async (c) => {
@@ -1172,29 +1139,15 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
   const row = await loadTenantForLifecycle(parsed.data);
-  if (!row || !row.composeProjectName) return c.json({ error: "tenant_not_found" }, 404);
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
   if (row.tenantStatus !== "suspended") {
     return c.json({ error: "tenant_not_suspended" }, 409);
   }
-
-  try {
-    await execa("docker", ["compose", "-p", row.composeProjectName, "start"], {
-      timeout: 60_000,
-    });
-  } catch (error) {
-    const detail =
-      error instanceof Error
-        ? String((error as Error & { stderr?: string }).message ?? "") +
-          String((error as Error & { stderr?: string }).stderr ?? "")
-        : String(error);
-    return c.json({ error: "docker_start_failed", detail }, 500);
-  }
-
-  await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, parsed.data));
-  await db
-    .update(tenantDeployments)
-    .set({ status: "active", updatedAt: new Date() })
-    .where(eq(tenantDeployments.tenantId, parsed.data));
+  const job = await insertTenantJob(db, {
+    type: "tenant.lifecycle",
+    tenantId: parsed.data,
+    payload: { tenantId: parsed.data, slug: row.slug, command: "start", status: "active" },
+  });
 
   await logAudit(db, {
     actorId: c.req.header("X-Actor-Id") ?? "",
@@ -1205,10 +1158,12 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
   });
 
   return c.json({
+    accepted: true,
     reactivated: true,
     slug: row.slug,
     composeProject: row.composeProjectName,
-  });
+    jobId: job?.id ?? null,
+  }, 202);
 });
 
 app.get("/tenants/:tenantId/events", async (c) => {
@@ -1244,7 +1199,7 @@ app.get("/tenants/:tenantId/events", async (c) => {
   });
 });
 
-const port = Number(process.env.PORT) || 4000;
+const port = apiConfig.port;
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`);

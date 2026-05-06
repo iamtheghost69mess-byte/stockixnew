@@ -192,3 +192,30 @@ export const apiIdempotencyKeys = pgTable(
     index("api_idempotency_keys_expires_idx").on(t.expiresAt),
   ],
 );
+
+export const tenantLifecycleJobs = pgTable(
+  "tenant_lifecycle_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(),
+    status: text("status").notNull().default("pending"),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    correlationId: text("correlation_id"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    priority: integer("priority").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedBy: text("claimed_by"),
+    lastError: text("last_error"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tenant_lifecycle_jobs_status_run_at_idx").on(t.status, t.runAt, t.priority),
+    index("tenant_lifecycle_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
+    index("tenant_lifecycle_jobs_correlation_created_idx").on(t.correlationId, t.createdAt),
+  ],
+);

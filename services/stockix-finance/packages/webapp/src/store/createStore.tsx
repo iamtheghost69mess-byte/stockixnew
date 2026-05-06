@@ -9,6 +9,7 @@ import { persistStore } from 'redux-persist';
 import monitorReducerEnhancer from '@/store/enhancers/monitorReducer';
 import loggerMiddleware from '@/store/logger.middleware';
 import rootReducer from '@/store/reducers';
+import { publicConfig } from '@repo/config/public';
 import ResetMiddleware from './ResetMiddleware';
 
 
@@ -28,7 +29,7 @@ const createStoreFactory = (initialState = {}) => {
   const enhancers = [monitorReducerEnhancer, ResetMiddleware];
   let composeEnhancers = compose;
 
-  if (process.env.NODE_ENV === 'development') {
+  if (publicConfig.nodeEnv === 'development') {
     if (typeof window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ === 'function') {
       composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__;
     }

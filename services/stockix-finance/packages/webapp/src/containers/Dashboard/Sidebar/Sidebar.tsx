@@ -6,6 +6,7 @@ import { SidebarHead } from './SidebarHead';
 import { SidebarMenu } from './SidebarMenu';
 import { useMainSidebarMenu } from './hooks';
 import { SidebarOverlayBinded } from '../SidebarOverlay';
+import { publicConfig } from '@repo/config/public';
 
 import '@/style/containers/Dashboard/Sidebar.scss';
 
@@ -34,10 +35,10 @@ export function Sidebar() {
  * @returns {React.JSX}
  */
 function SidebarFooterVersion() {
-  const { MONOREPO_VERSION } = process.env;
+  const monorepoVersion = publicConfig.monorepoVersion;
 
-  if (!MONOREPO_VERSION) {
+  if (!monorepoVersion) {
     return null;
   }
-  return <div class="sidebar__version">{MONOREPO_VERSION}</div>;
+  return <div class="sidebar__version">{monorepoVersion}</div>;
 }

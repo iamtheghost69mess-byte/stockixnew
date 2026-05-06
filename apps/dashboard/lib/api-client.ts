@@ -1,14 +1,15 @@
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
-import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { dashboardConfig } from "@repo/config";
+import { SESSION_COOKIE } from "@/lib/session";
 
-const apiBase = process.env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://localhost:4000";
+const apiBase = dashboardConfig.nextPublicApiUrl;
 
 export async function apiFetch(
   input: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const secret = process.env.PLATFORM_API_SECRET;
+  const secret = dashboardConfig.platformApiSecret;
   if (!secret) throw new Error("PLATFORM_API_SECRET is not configured");
 
   const headers = new Headers(init.headers);
@@ -20,10 +21,7 @@ export async function apiFetch(
 
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) {
-    const session = await verifySession(token);
-    if (session?.sub) headers.set("X-Actor-Id", session.sub);
-  }
+  if (token) headers.set("X-Session-Token", token);
 
   return fetch(`${apiBase}${input}`, {
     ...init,

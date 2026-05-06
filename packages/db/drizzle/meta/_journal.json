@@ -71,6 +71,13 @@
       "when": 1777719000000,
       "tag": "0009_idempotency_actor_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778065944992,
+      "tag": "0010_abnormal_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

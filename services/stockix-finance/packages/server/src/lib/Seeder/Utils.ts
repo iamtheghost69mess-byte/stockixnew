@@ -2,6 +2,7 @@
 import * as fs from 'fs';
 import { promisify } from 'util';
 import * as url from 'url';
+import { env } from '@repo/config';
 import { CoreSeeds } from '../../database/seeds/core';
 
 const readFile = promisify(fs.readFile);
@@ -12,16 +13,16 @@ const readFile = promisify(fs.readFile);
  * @returns {Promise<boolean>}
  */
 async function isModuleType(filepath: string): Promise<boolean> {
-  if (process.env.npm_package_json) {
+  if (env.npm_package_json) {
     // npm >= 7.0.0
     const packageJson = JSON.parse(
-      await readFile(process.env.npm_package_json, 'utf-8')
+      await readFile(env.npm_package_json, 'utf-8')
     );
     if (packageJson.type === 'module') {
       return true;
     }
   }
-  return process.env.npm_package_type === 'module' || filepath.endsWith('.mjs');
+  return env.npm_package_type === 'module' || filepath.endsWith('.mjs');
 }
 
 /**

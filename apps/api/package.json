@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
+    "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",
     "bcryptjs": "^3.0.3",
@@ -24,6 +25,7 @@
     "drizzle-orm": "^0.45.1",
     "execa": "^9.5.2",
     "hono": "^4.11.4",
+    "otplib": "^13.4.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

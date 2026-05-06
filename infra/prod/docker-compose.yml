@@ -88,23 +88,10 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
-      REPO_ROOT: /opt/stockix/stockixnew
-      STOCKIX_TENANT_APP_ROOT: /opt/stockix/stockixnew/services/stockix-finance
-      TENANT_ENV_ROOT: /opt/stockix/tenants
-      TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
       ROOT_DOMAIN: ${ROOT_DOMAIN}
-      PUBLIC_BASE_URL_SCHEME: https
-      TENANT_INTERNAL_HOST: host.docker.internal
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
       DASHBOARD_URL: ${DASHBOARD_URL}
-    volumes:
-      - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
-      - /var/run/docker.sock:/var/run/docker.sock
-      - traefik_dynamic:/opt/stockix/traefik-dynamic
-      - stockix_tenants:/opt/stockix/tenants
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     networks:
       - stockix_public
     labels:
@@ -114,6 +101,33 @@ services:
       - traefik.http.routers.stockix-api.entrypoints=websecure
       - traefik.http.routers.stockix-api.tls.certresolver=cloudflare
       - traefik.http.services.stockix-api.loadbalancer.server.port=4000
+
+  infra-worker:
+    build:
+      context: ../..
+      dockerfile: infra/worker-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+      REPO_ROOT: /opt/stockix/stockixnew
+      STOCKIX_TENANT_APP_ROOT: /opt/stockix/stockixnew/services/stockix-finance
+      TENANT_ENV_ROOT: /opt/stockix/tenants
+      TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
+      ROOT_DOMAIN: ${ROOT_DOMAIN}
+      PUBLIC_BASE_URL_SCHEME: https
+      TENANT_INTERNAL_HOST: host.docker.internal
+    volumes:
+      - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefik_dynamic:/opt/stockix/traefik-dynamic
+      - stockix_tenants:/opt/stockix/tenants
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - stockix_public
 
   dashboard:
     build:

@@ -1,4 +1,5 @@
 import { adminAuditLog } from "@repo/db/schema";
+import { apiConfig } from "@repo/config";
 import type { schema, PostgresJsDatabase } from "@repo/db";
 import { z } from "zod";
 
@@ -21,7 +22,7 @@ export async function logAudit(
   if (!db) return;
   const actorParsed = actorIdSchema.safeParse(input.actorId);
   if (!actorParsed.success) return;
-  const fallbackIp = process.env.HOSTNAME?.trim() || "server";
+  const fallbackIp = apiConfig.hostname;
   const normalizedIp = input.ipAddress?.trim() || fallbackIp;
   try {
     await db.insert(adminAuditLog).values({

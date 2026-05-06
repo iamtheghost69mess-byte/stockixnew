@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { publicConfig } from "@repo/config/public";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ export default function TenantCreateWizard(props: Props) {
   const [adminEmail, setAdminEmail] = useState("");
   const [slug, setSlug] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const rootDomain = process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
+  const rootDomain = publicConfig.stockixRootDomain;
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail);
   const slugOk = /^[a-z0-9][a-z0-9-]{1,}[a-z0-9]$/.test(slug);

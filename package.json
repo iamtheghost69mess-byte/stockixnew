@@ -10,16 +10,20 @@
     "db:wait": "pnpm --filter @repo/db db:wait",
     "db:migrate": "pnpm --filter @repo/db db:migrate",
     "db:seed:local": "pnpm --filter @repo/db db:seed:local",
+    "infra:worker:dev": "pnpm exec tsx infra/worker-service/src/worker.ts",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
     "db:reset:local": "docker compose -f infra/dev/docker-compose.yml down -v && pnpm setup:local",
     "lint": "turbo run lint",
+    "lint:boundaries": "node scripts/lint-boundaries.mjs",
+    "architecture:validate": "node scripts/architecture-validation.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
+    "tsx": "^4.20.6",
     "turbo": "^2.9.7",
     "typescript": "5.9.2"
   },

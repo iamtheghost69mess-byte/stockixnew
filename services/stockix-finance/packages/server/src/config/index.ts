@@ -1,25 +1,23 @@
-import dotenv from 'dotenv';
 import path from 'path';
+import { env } from '@repo/config';
 import { castCommaListEnvVarToArray, parseBoolean } from '@/utils';
-
-dotenv.config();
 
 module.exports = {
   /**
    * Your favorite port
    */
-  port: parseInt(process.env.PORT, 10),
+  port: Number(env.PORT),
 
   /**
    * System database configuration.
    */
   system: {
-    db_client: process.env.SYSTEM_DB_CLIENT || process.env.DB_CLIENT || 'mysql',
-    db_host: process.env.SYSTEM_DB_HOST || process.env.DB_HOST,
-    db_user: process.env.SYSTEM_DB_USER || process.env.DB_USER,
-    db_password: process.env.SYSTEM_DB_PASSWORD || process.env.DB_PASSWORD,
-    db_name: process.env.SYSTEM_DB_NAME,
-    charset: process.env.SYSTEM_DB_CHARSET || process.env.DB_CHARSET,
+    db_client: env.SYSTEM_DB_CLIENT || env.DB_CLIENT || 'mysql',
+    db_host: env.SYSTEM_DB_HOST || env.DB_HOST,
+    db_user: env.SYSTEM_DB_USER || env.DB_USER,
+    db_password: env.SYSTEM_DB_PASSWORD || env.DB_PASSWORD,
+    db_name: env.SYSTEM_DB_NAME,
+    charset: env.SYSTEM_DB_CHARSET || env.DB_CHARSET,
     migrations_dir: path.join(global.__root_dir, './src/system/migrations'),
     seeds_dir: path.join(global.__root_dir, './src/system/seeds'),
   },
@@ -28,12 +26,12 @@ module.exports = {
    * Tenant database configuration.
    */
   tenant: {
-    db_client: process.env.TENANT_DB_CLIENT || process.env.DB_CLIENT || 'mysql',
-    db_name_prefix: process.env.TENANT_DB_NAME_PERFIX,
-    db_host: process.env.TENANT_DB_HOST || process.env.DB_HOST,
-    db_user: process.env.TENANT_DB_USER || process.env.DB_USER,
-    db_password: process.env.TENANT_DB_PASSWORD || process.env.DB_PASSWORD,
-    charset: process.env.TENANT_DB_CHARSET || process.env.DB_CHARSET,
+    db_client: env.TENANT_DB_CLIENT || env.DB_CLIENT || 'mysql',
+    db_name_prefix: env.TENANT_DB_NAME_PERFIX,
+    db_host: env.TENANT_DB_HOST || env.DB_HOST,
+    db_user: env.TENANT_DB_USER || env.DB_USER,
+    db_password: env.TENANT_DB_PASSWORD || env.DB_PASSWORD,
+    charset: env.TENANT_DB_CHARSET || env.DB_CHARSET,
     migrations_dir: path.join(global.__root_dir, './src/database/migrations'),
     seeds_dir: path.join(global.__root_dir, './src/database/seeds/core'),
   },
@@ -42,19 +40,19 @@ module.exports = {
    * Databases manager config.
    */
   manager: {
-    superUser: process.env.SYSTEM_DB_USER || process.env.DB_USER,
-    superPassword: process.env.SYSTEM_DB_PASSWORD || process.env.DB_PASSWORD,
+    superUser: env.SYSTEM_DB_USER || env.DB_USER,
+    superPassword: env.SYSTEM_DB_PASSWORD || env.DB_PASSWORD,
   },
 
   /**
    * Mail.
    */
   mail: {
-    host: process.env.MAIL_HOST,
-    port: process.env.MAIL_PORT,
-    secure: !!parseInt(process.env.MAIL_SECURE, 10),
-    username: process.env.MAIL_USERNAME,
-    password: process.env.MAIL_PASSWORD,
+    host: env.MAIL_HOST,
+    port: env.MAIL_PORT,
+    secure: env.MAIL_SECURE === '1' || env.MAIL_SECURE === 'true',
+    username: env.MAIL_USERNAME,
+    password: env.MAIL_PASSWORD,
   },
 
   /**
@@ -64,37 +62,37 @@ module.exports = {
     /**
      * That long string from mlab
      */
-    databaseURL: process.env.MONGODB_DATABASE_URL,
+    databaseURL: env.MONGODB_DATABASE_URL,
   },
 
   /**
    * Agenda
    */
   agenda: {
-    dbCollection: process.env.AGENDA_DB_COLLECTION,
-    pooltime: process.env.AGENDA_POOL_TIME,
-    concurrency: parseInt(process.env.AGENDA_CONCURRENCY, 10),
+    dbCollection: env.AGENDA_DB_COLLECTION,
+    pooltime: env.AGENDA_POOL_TIME,
+    concurrency: Number(env.AGENDA_CONCURRENCY),
   },
 
   /**
    * Agendash.
    */
   agendash: {
-    user: process.env.AGENDASH_AUTH_USER,
-    password: process.env.AGENDASH_AUTH_PASSWORD,
+    user: env.AGENDASH_AUTH_USER,
+    password: env.AGENDASH_AUTH_PASSWORD,
   },
 
   /**
    * Easy SMS gateway.
    */
   easySMSGateway: {
-    api_key: process.env.EASY_SMS_TOKEN,
+    api_key: env.EASY_SMS_TOKEN,
   },
 
   /**
    * JWT secret.
    */
-  jwtSecret: process.env.JWT_SECRET,
+  jwtSecret: env.JWT_SECRET,
 
   /**
    * 
@@ -104,7 +102,7 @@ module.exports = {
   /**
    * Application base URL.
    */
-  baseURL: process.env.BASE_URL,
+  baseURL: env.BASE_URL,
 
   /**
    * General API prefix.
@@ -140,12 +138,12 @@ module.exports = {
    * Sign-up restrictions
    */
   signupRestrictions: {
-    disabled: parseBoolean<boolean>(process.env.SIGNUP_DISABLED, false),
+    disabled: parseBoolean<boolean>(env.SIGNUP_DISABLED, false),
     allowedDomains: castCommaListEnvVarToArray(
-      process.env.SIGNUP_ALLOWED_DOMAINS
+      env.SIGNUP_ALLOWED_DOMAINS
     ),
     allowedEmails: castCommaListEnvVarToArray(
-      process.env.SIGNUP_ALLOWED_EMAILS
+      env.SIGNUP_ALLOWED_EMAILS
     ),
   },
 
@@ -153,7 +151,7 @@ module.exports = {
    * Puppeteer remote browserless connection.
    */
   puppeteer: {
-    browserWSEndpoint: process.env.BROWSER_WS_ENDPOINT,
+    browserWSEndpoint: env.BROWSER_WS_ENDPOINT,
   },
 
   scheduleComputeItemCost: 'in 5 seconds',

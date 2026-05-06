@@ -2,6 +2,7 @@ import fs from 'fs';
 import Mustache from 'mustache';
 import { Container } from 'typedi';
 import path from 'path';
+import { env } from '@repo/config';
 import { IMailable } from '@/interfaces';
 
 interface IMailAttachment {
@@ -14,7 +15,7 @@ export default class Mail {
   view: string;
   subject: string;
   to: string;
-  from: string = `${process.env.MAIL_FROM_NAME} ${process.env.MAIL_FROM_ADDRESS}`;
+  from: string = `${env.MAIL_FROM_NAME ?? ''} ${env.MAIL_FROM_ADDRESS ?? ''}`.trim();
   data: { [key: string]: string | number };
   attachments: IMailAttachment[];
 
