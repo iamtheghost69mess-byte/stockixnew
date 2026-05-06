@@ -2,7 +2,7 @@
   "name": "stockix-monorepo",
   "private": true,
   "scripts": {
-    "bootstrap": "lerna exec npm install",
+    "bootstrap": "pnpm install",
     "dev": "lerna run dev",
     "build": "lerna run build",
     "dev:webapp": "lerna run dev --scope \"@stockix/webapp\"",
@@ -18,13 +18,13 @@
     "shared/*"
   ],
   "devDependencies": {
-    "postcss": "^8.4.31",
-    "@commitlint/config-conventional": "^17.4.2",
-    "@commitlint/config-lerna-scopes": "^17.4.2",
-    "husky": "^8.0.3",
-    "lerna": "^6.4.1",
-    "@commitlint/cli": "^17.4.2",
-    "@playwright/test": "^1.32.3"
+    "postcss": "8.4.31",
+    "@commitlint/config-conventional": "17.4.2",
+    "@commitlint/config-lerna-scopes": "17.4.2",
+    "husky": "8.0.3",
+    "lerna": "6.4.1",
+    "@commitlint/cli": "17.4.2",
+    "@playwright/test": "1.32.3"
   },
   "engines": {
     "node": "14.x"

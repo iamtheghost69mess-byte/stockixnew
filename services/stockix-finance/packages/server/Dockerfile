@@ -1,4 +1,4 @@
-FROM node:18-alpine as deps
+FROM node:14.21.3 as deps
 
 USER root
 
@@ -80,7 +80,7 @@ ENV MAIL_HOST=$MAIL_HOST \
 
 WORKDIR /app
 
-RUN chown node:node /
+RUN npm install -g pnpm@7 && chown node:node /
 
 # Migration / API images do not run Puppeteer in these containers; skipping Chromium
 # saves hundreds of MB and avoids install timeouts or Alpine glibc mismatches during `npm install`.
@@ -88,13 +88,13 @@ ENV PUPPETEER_SKIP_DOWNLOAD=1
 
 COPY ./package*.json ./
 COPY ./packages/server/package*.json ./packages/server/
+COPY ./packages/webapp/package*.json ./packages/webapp/
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY ./.npmrc ./.npmrc
 
 COPY ./lerna.json ./lerna.json
 
-# .npmrc sets legacy-peer-deps; flag kept for older npm that ignores the file in edge cases.
-RUN npm install --legacy-peer-deps
-RUN npm run bootstrap
+RUN pnpm install --frozen-lockfile
 
 # -----------------------------------------------------------------------------
 # Migration image: only the CLI webpack bundle (`commands.js`). Skips Gulp/Sass
@@ -106,7 +106,7 @@ RUN cd packages/server && npm run build:commands
 
 FROM build-migration AS migration
 USER root
-RUN apk add --no-cache bash git \
+RUN apt-get update && apt-get install -y git \
   && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
 WORKDIR /app/packages/server
 CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./build/commands.js", "system:migrate:latest"]
@@ -116,7 +116,7 @@ CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
-RUN npm run build:server --skip-nx-cache
+RUN pnpm run build:server --skip-nx-cache
 
 FROM build-app AS app
 CMD [ "node", "./packages/server/build/index.js" ]

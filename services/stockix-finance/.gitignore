@@ -1,4 +1,6 @@
 node_modules/
+.pnpm-store/
+.pnpm-debug.log
 # Runtime / host data at repo root only — do not ignore packages/server/src/data (required for builds).
 /data
 .env
