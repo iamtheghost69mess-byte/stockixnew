@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { apiConfig } from "@repo/config";
 
 import { validateOwnerSession } from "../../services/auth/session-validation.js";
 import { loginOwner, reconfirmOwnerPassword } from "../../services/auth/login.js";
@@ -25,14 +26,78 @@ function readCookie(req: Request, name: string): string {
 
 export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   const auth = new Hono();
+  const rateLimits = new Map<string, { count: number; resetAt: number }>();
+  const RATE_LIMITS = {
+    "/login": { windowMs: 60_000, max: 10 },
+    "/verify-mfa": { windowMs: 60_000, max: 8 },
+    "/invite/accept": { windowMs: 60_000, max: 6 },
+  } as const;
+  const secureCookie = apiConfig.nodeEnv === "production" || apiConfig.publicBaseUrlScheme === "https";
+  const cookieBase = `Path=/; HttpOnly; SameSite=Lax${secureCookie ? "; Secure" : ""}`;
+  const dashboardOrigin = (() => {
+    try {
+      return new URL(apiConfig.dashboardUrl).origin;
+    } catch {
+      return "";
+    }
+  })();
   const sessionCookie = (token: string) =>
-    `stockix-session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`;
+    `stockix-session=${encodeURIComponent(token)}; ${cookieBase}; Max-Age=${30 * 24 * 60 * 60}`;
   const mfaCookie = (token: string) =>
-    `stockix-mfa=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${5 * 60}`;
+    `stockix-mfa=${encodeURIComponent(token)}; ${cookieBase}; Max-Age=${5 * 60}`;
   const expiredSessionCookie = () =>
-    "stockix-session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+    `stockix-session=; ${cookieBase}; Max-Age=0`;
   const expiredMfaCookie = () =>
-    "stockix-mfa=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+    `stockix-mfa=; ${cookieBase}; Max-Age=0`;
+
+  function csrfViolation(c: { req: { header: (name: string) => string | undefined } }) {
+    const authHeader = c.req.header("authorization");
+    if (authHeader) return false;
+    const origin = c.req.header("origin");
+    if (!origin) return true;
+    if (!dashboardOrigin) return true;
+    return origin !== dashboardOrigin;
+  }
+
+  function resolveClientIp(c: { req: { header: (name: string) => string | undefined } }) {
+    const fwd = c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "";
+    return fwd.split(",")[0]?.trim() || "unknown";
+  }
+
+  function enforceRateLimit(
+    c: { req: { path: string; method: string; header: (name: string) => string | undefined }; header: (name: string, value: string) => void; json: (body: unknown, status?: number) => Response },
+    routeKey: keyof typeof RATE_LIMITS,
+    accountHint?: string,
+  ) {
+    if (c.req.method.toUpperCase() !== "POST") return null;
+    if (c.req.path !== routeKey) return null;
+    const now = Date.now();
+    const ip = resolveClientIp(c);
+    const cfg = RATE_LIMITS[routeKey];
+    const key = `${routeKey}:${ip}:${accountHint ?? "anon"}`;
+    const current = rateLimits.get(key);
+    if (!current || current.resetAt <= now) {
+      rateLimits.set(key, { count: 1, resetAt: now + cfg.windowMs });
+      return null;
+    }
+    if (current.count >= cfg.max) {
+      const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      c.header("Retry-After", String(retryAfter));
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          type: "auth_rate_limit",
+          route: routeKey,
+          ip,
+          accountHint: accountHint ?? null,
+          retryAfter,
+        }),
+      );
+      return c.json({ success: false, error: "rate_limited", retryAfter }, 429);
+    }
+    current.count += 1;
+    return null;
+  }
 
   async function resolveSessionFromRequest(c: { req: { header: (name: string) => string | undefined; raw: Request } }) {
     const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
@@ -55,6 +120,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/login", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
       .object({
@@ -66,6 +132,8 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       })
       .safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
+    const limited = enforceRateLimit(c, "/login", parsed.data.email.toLowerCase());
+    if (limited) return limited;
     const result = await loginOwner(db, parsed.data);
     if (!result.success) return c.json(result, { status: (result.status ?? 401) as 401 });
     if (result.data.requiresMfa) {
@@ -110,6 +178,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/mfa/begin", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
     const session = await resolveSessionFromRequest(c);
     if (!session) return c.json({ success: false, error: "unauthorized" }, 401);
     const result = await beginMfaSetup(db, session.sub);
@@ -118,6 +187,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/mfa/enable", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
     const body = await c.req.json().catch(() => ({}));
     const parsed = z.object({ code: z.string().min(6).max(8) }).safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
@@ -134,6 +204,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/mfa/disable", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
     const body = await c.req.json().catch(() => ({}));
     const parsed = z.object({ code: z.string().min(6).max(8) }).safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
@@ -158,6 +229,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/reconfirm", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
     const body = await c.req.json().catch(() => ({}));
     const parsed = z.object({ password: z.string().min(1) }).safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
@@ -172,6 +244,9 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/verify-mfa", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
+    const limited = enforceRateLimit(c, "/verify-mfa");
+    if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
       .object({ code: z.string().min(6).max(8) })
@@ -226,6 +301,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/logout", (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
     const response = c.json({ success: true, ok: true });
     response.headers.append("Set-Cookie", expiredSessionCookie());
     response.headers.append("Set-Cookie", expiredMfaCookie());
@@ -242,6 +318,9 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   });
 
   auth.post("/invite/accept", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
+    const limited = enforceRateLimit(c, "/invite/accept");
+    if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
       .object({

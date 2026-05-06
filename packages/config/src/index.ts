@@ -1,14 +1,18 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { z } from "zod";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.join(configDir, "..", "..", "..");
 
 // Centralized env bootstrapping for all runtime consumers.
-loadEnv({ path: path.join(monorepoRoot, ".env"), override: true });
-loadEnv({ path: path.join(monorepoRoot, ".env.local"), override: true });
+const preferredEnvPath = existsSync(path.join(monorepoRoot, ".env.local"))
+  ? path.join(monorepoRoot, ".env.local")
+  : path.join(monorepoRoot, ".env");
+loadEnv({ path: preferredEnvPath, override: false });
 
 const optionalStringSchema = z.string().min(1).optional();
 const stringSchema = z.string().min(1);
@@ -58,6 +62,38 @@ function readBooleanLike(name: string): "true" | "false" | "1" | "0" | undefined
   return parseValue(booleanStringSchema, normalized.length > 0 ? normalized : undefined, name);
 }
 
+function parseOrigins(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => {
+      try {
+        return new URL(origin).origin;
+      } catch {
+        throw new Error(`[config] invalid CORS origin: ${origin}`);
+      }
+    });
+}
+
+function validateRequiredEnvForProfile(profile: string) {
+  const requiredByProfile: Record<string, string[]> = {
+    development: [],
+    test: [],
+    staging: ["DATABASE_URL", "PLATFORM_API_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
+    production: ["DATABASE_URL", "PLATFORM_API_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
+  };
+  const required = requiredByProfile[profile] ?? requiredByProfile.production ?? [];
+  const missing = required.filter((name) => {
+    const value = process.env[name];
+    return !value || value.trim().length === 0;
+  });
+  if (missing.length > 0) {
+    throw new Error(`[config] missing required env for ${profile}: ${missing.join(", ")}`);
+  }
+}
+
 export const env = {
   DATABASE_URL: readOptionalString("DATABASE_URL"),
   DB_WAIT_TIMEOUT_MS: readNumber("DB_WAIT_TIMEOUT_MS", 90_000),
@@ -77,12 +113,22 @@ export const env = {
   TENANT_INTERNAL_HOST: readString("TENANT_INTERNAL_HOST", "127.0.0.1"),
   CORS_ORIGINS: readOptionalString("CORS_ORIGINS"),
   SESSION_SECRET: readOptionalString("SESSION_SECRET"),
+  AUTH_TOKEN_SECRET: readOptionalString("AUTH_TOKEN_SECRET"),
+  ALLOW_BOOTSTRAP_LOGIN: readBooleanLike("ALLOW_BOOTSTRAP_LOGIN"),
   PLATFORM_ADMIN_EMAIL: readOptionalString("PLATFORM_ADMIN_EMAIL"),
   PLATFORM_ADMIN_PASSWORD: readOptionalString("PLATFORM_ADMIN_PASSWORD"),
   NEXT_PUBLIC_STOCKIX_API_URL: readString("NEXT_PUBLIC_STOCKIX_API_URL", "http://localhost:4000"),
   NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: readString("NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME", "http"),
   NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: readString("NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN", "localhost"),
   NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST: readString("NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST", "127.0.0.1"),
+  SECURITY_HSTS: readString("SECURITY_HSTS", "max-age=31536000; includeSubDomains"),
+  SECURITY_X_FRAME_OPTIONS: readString("SECURITY_X_FRAME_OPTIONS", "DENY"),
+  SECURITY_REFERRER_POLICY: readString("SECURITY_REFERRER_POLICY", "strict-origin-when-cross-origin"),
+  SECURITY_X_CONTENT_TYPE_OPTIONS: readString("SECURITY_X_CONTENT_TYPE_OPTIONS", "nosniff"),
+  SECURITY_CSP_BASE: readString(
+    "SECURITY_CSP_BASE",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  ),
   STOCKIX_API_URL: readString("STOCKIX_API_URL", "http://localhost:4000"),
   PROVISION_POLL_MS: readNumber("PROVISION_POLL_MS", 2000),
   PROVISION_MAX_MS: readNumber("PROVISION_MAX_MS", 45 * 60 * 1000),
@@ -103,6 +149,8 @@ export const env = {
   SIGNUP_ALLOWED_DOMAINS: readOptionalString("SIGNUP_ALLOWED_DOMAINS"),
   SIGNUP_ALLOWED_EMAILS: readOptionalString("SIGNUP_ALLOWED_EMAILS"),
   BROWSER_WS_ENDPOINT: readOptionalString("BROWSER_WS_ENDPOINT"),
+  METRICS_ENDPOINT: readOptionalString("METRICS_ENDPOINT"),
+  METRICS_AUTH_TOKEN: readOptionalString("METRICS_AUTH_TOKEN"),
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
@@ -118,6 +166,7 @@ export const env = {
   SYSTEM_DB_NAME: readOptionalString("SYSTEM_DB_NAME"),
   SYSTEM_DB_CHARSET: readOptionalString("SYSTEM_DB_CHARSET"),
   TENANT_DB_CLIENT: readOptionalString("TENANT_DB_CLIENT"),
+  TENANT_DB_NAME_PREFIX: readOptionalString("TENANT_DB_NAME_PREFIX"),
   TENANT_DB_NAME_PERFIX: readOptionalString("TENANT_DB_NAME_PERFIX"),
   TENANT_DB_HOST: readOptionalString("TENANT_DB_HOST"),
   TENANT_DB_USER: readOptionalString("TENANT_DB_USER"),
@@ -128,6 +177,7 @@ export const env = {
   MAIL_SECURE: readBooleanLike("MAIL_SECURE"),
   MAIL_USERNAME: readOptionalString("MAIL_USERNAME"),
   MAIL_PASSWORD: readOptionalString("MAIL_PASSWORD"),
+  DEPLOYMENT_SECRET_KEY: readOptionalString("DEPLOYMENT_SECRET_KEY"),
   MAIL_FROM_NAME: readOptionalString("MAIL_FROM_NAME"),
   MAIL_FROM_ADDRESS: readOptionalString("MAIL_FROM_ADDRESS"),
   MONGODB_DATABASE_URL: readOptionalString("MONGODB_DATABASE_URL"),
@@ -157,8 +207,7 @@ export const apiConfig = {
     return env.ROOT_DOMAIN;
   },
   get corsOrigins() {
-    const raw = env.CORS_ORIGINS;
-    return raw ? raw.split(",").map((o) => o.trim()).filter(Boolean) : [];
+    return parseOrigins(env.CORS_ORIGINS);
   },
   get port() {
     return env.PORT;
@@ -196,11 +245,39 @@ export const apiConfig = {
   get nodeEnv() {
     return env.NODE_ENV;
   },
+  get sessionSecret() {
+    return env.SESSION_SECRET ?? readRequiredString("SESSION_SECRET");
+  },
+  get authTokenSecret() {
+    return env.AUTH_TOKEN_SECRET ?? env.SESSION_SECRET ?? readRequiredString("AUTH_TOKEN_SECRET");
+  },
+  get allowBootstrapLogin() {
+    return env.ALLOW_BOOTSTRAP_LOGIN === "true" || env.ALLOW_BOOTSTRAP_LOGIN === "1";
+  },
   get hostname() {
     return env.HOSTNAME;
   },
   get workerJobId() {
     return env.WORKER_JOB_ID;
+  },
+  get metricsEndpoint() {
+    return env.METRICS_ENDPOINT;
+  },
+  get metricsAuthToken() {
+    return env.METRICS_AUTH_TOKEN;
+  },
+  get deploymentSecretKey() {
+    const raw = env.DEPLOYMENT_SECRET_KEY ?? readRequiredString("DEPLOYMENT_SECRET_KEY");
+    if (raw.length < 32) {
+      throw new Error("[config] DEPLOYMENT_SECRET_KEY must be at least 32 characters");
+    }
+    return createHash("sha256").update(raw).digest("hex");
+  },
+  get tenantDbNamePrefix() {
+    return env.TENANT_DB_NAME_PREFIX ?? env.TENANT_DB_NAME_PERFIX;
+  },
+  validateRequiredEnv() {
+    validateRequiredEnvForProfile(env.NODE_ENV);
   },
 } as const;
 
@@ -234,6 +311,21 @@ export const dashboardConfig = {
   },
   get nextPublicLocalTenantHost() {
     return env.NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST;
+  },
+  get securityHsts() {
+    return env.SECURITY_HSTS;
+  },
+  get securityXFrameOptions() {
+    return env.SECURITY_X_FRAME_OPTIONS;
+  },
+  get securityReferrerPolicy() {
+    return env.SECURITY_REFERRER_POLICY;
+  },
+  get securityXContentTypeOptions() {
+    return env.SECURITY_X_CONTENT_TYPE_OPTIONS;
+  },
+  get securityCspBase() {
+    return env.SECURITY_CSP_BASE;
   },
 } as const;
 

@@ -81,7 +81,7 @@ pnpm bootstrap:env --force  # overwrite from examples (reset local config)
 | `services/stockix-finance/.env.example` | `services/stockix-finance/.env` | Stockix Finance server |
 
 Runtime precedence notes:
-- API (`apps/api`) loads dotenv files in this order with override enabled: `root/.env` -> `apps/api/.env` -> `apps/api/.env.local` (last wins).
+- API (`apps/api`) loads dotenv files in this order: `root/.env` then `root/.env.local` (local overrides are not forced over already-present process env values).
 - Dashboard (`apps/dashboard`): `NEXT_PUBLIC_*` values are build-time values; server-only secrets (e.g. `DATABASE_URL`, `SESSION_SECRET`, `PLATFORM_API_SECRET`) are runtime values.
 
 ## Schema changes

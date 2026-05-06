@@ -18,9 +18,9 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MFA_TTL_MS = 5 * 60 * 1000;
 
 function secretOrThrow() {
-  const secret = apiConfig.platformApiSecret;
+  const secret = apiConfig.authTokenSecret;
   if (!secret || secret.length < 16) {
-    throw new Error("PLATFORM_API_SECRET must be set for auth token operations");
+    throw new Error("AUTH_TOKEN_SECRET (or SESSION_SECRET fallback) must be set for auth token operations");
   }
   return secret;
 }

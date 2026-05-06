@@ -17,6 +17,15 @@ export declare const apiConfig: {
   readonly bootstrapAdminPassword: string | undefined;
   readonly nodeEnv: string;
   readonly hostname: string;
+  readonly sessionSecret: string;
+  readonly authTokenSecret: string;
+  readonly allowBootstrapLogin: boolean;
+  readonly tenantDbNamePrefix: string | undefined;
+  readonly validateRequiredEnv: () => void;
+  readonly workerJobId: string | undefined;
+  readonly metricsEndpoint: string | undefined;
+  readonly metricsAuthToken: string | undefined;
+  readonly deploymentSecretKey: string;
 };
 
 export declare const dashboardConfig: {
@@ -30,6 +39,11 @@ export declare const dashboardConfig: {
   readonly nextPublicScheme: string;
   readonly nextPublicRootDomain: string;
   readonly nextPublicLocalTenantHost: string;
+  readonly securityHsts: string;
+  readonly securityXFrameOptions: string;
+  readonly securityReferrerPolicy: string;
+  readonly securityXContentTypeOptions: string;
+  readonly securityCspBase: string;
 };
 
 export declare const dbConfig: {

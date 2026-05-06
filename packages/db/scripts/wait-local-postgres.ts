@@ -2,15 +2,8 @@
  * Wait until Stockix dev Postgres accepts connections (avoids migrate failing
  * immediately after `docker compose up -d`).
  */
-import { config } from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { dbConfig } from "@repo/config";
 import postgres from "postgres";
-
-const pkgDir = path.join(fileURLToPath(new URL(".", import.meta.url)), "..");
-config({ path: path.join(pkgDir, ".env"), override: true });
-config({ path: path.join(pkgDir, ".env.local"), override: true });
 
 const url = dbConfig.databaseUrl ?? "postgresql://postgres:postgres@127.0.0.1:54330/stockix_platform";
 const timeoutMs = dbConfig.waitTimeoutMs;

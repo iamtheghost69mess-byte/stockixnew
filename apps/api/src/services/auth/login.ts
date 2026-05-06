@@ -44,7 +44,7 @@ export async function loginOwner(
     .where(eq(owners.email, input.email))
     .limit(1);
 
-  if (hasActivated.length === 0) {
+  if (hasActivated.length === 0 && apiConfig.allowBootstrapLogin && apiConfig.nodeEnv !== "production") {
     const adminEmail = apiConfig.bootstrapAdminEmail;
     const adminPassword = apiConfig.bootstrapAdminPassword;
     if (

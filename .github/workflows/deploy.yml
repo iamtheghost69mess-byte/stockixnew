@@ -33,8 +33,18 @@ jobs:
           if [ -d /opt/stockix/stockixnew/.git ]; then cd /opt/stockix/stockixnew
           elif [ -d /opt/stockix/app/.git ]; then cd /opt/stockix/app
           else echo "Clone repo to /opt/stockix/stockixnew or /opt/stockix/app"; exit 1; fi
+          PREV_COMMIT="$(git rev-parse HEAD)"
+          rollback() {
+            echo "Deploy failed. Rolling back to ${PREV_COMMIT}"
+            git reset --hard "${PREV_COMMIT}"
+            cd infra/prod
+            docker compose --env-file .env logs --tail=300 || true
+            docker compose --env-file .env up -d --build || true
+          }
+          trap rollback ERR
           git fetch --prune
-          git reset --hard origin/main
+          git checkout main
+          git pull --ff-only origin main
           set -a
           # shellcheck disable=SC1091
           source infra/prod/.env
@@ -44,5 +54,12 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --filter @repo/db db:migrate
           cd infra/prod
-          docker compose --env-file .env up -d --build
+          docker compose --env-file .env up -d --build --wait
+          curl --fail --silent --show-error "http://127.0.0.1:4000/health" >/dev/null
+          if ! docker compose --env-file .env ps --status running | grep -q "api"; then
+            echo "API service is not running after deploy"
+            docker compose --env-file .env logs --tail=200
+            exit 1
+          fi
+          trap - ERR
           REMOTE

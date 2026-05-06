@@ -2,6 +2,7 @@ import path from 'path';
 import { PlaywrightTestConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 
+// ENV-EXEMPT: test runner config
 dotenv.config();
 
 // Reference: https://playwright.dev/docs/test-configuration

@@ -1,10 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { createCipheriv, randomBytes } from "node:crypto";
 
 import { apiConfig } from "@repo/config";
 import { allocateTenantPort } from "@repo/db";
 import { tenantDeployments, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { eq } from "drizzle-orm";
 import * as dbSchema from "@repo/db/schema";
 
 import { defaultTenantEnvRoot } from "../domain/env-paths.js";
@@ -15,11 +17,21 @@ import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/consta
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
 import { buildTenantComposeEnvBody, writeTenantEnvFileAtomic } from "../domain/provisioning/tenant-env.js";
 import {
+  composeDownBestEffort,
   executeAppStep,
   executeDataStep,
   executeMigrationStep,
 } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
+
+function encryptDeploymentSecret(plaintext: string): string {
+  const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
 
 export async function executeProvisionRuntime(
   deps: TenantProvisionServiceDeps,
@@ -45,6 +57,10 @@ export async function executeProvisionRuntime(
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
   let port: number | undefined;
   let oneTimeAdminPassword: string | undefined;
+  let composeCtx:
+    | { composeFile: string; project: string; envPath: string; composeEnv: Record<string, string> }
+    | null = null;
+  let sideEffectsStarted = false;
 
   try {
     await mkdir(join(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
@@ -76,9 +92,9 @@ export async function executeProvisionRuntime(
         status: "provisioning",
         composeProjectName: project,
         internalPort: allocated,
-        mysqlPassword: dbPassword,
-        mysqlRootPassword: dbRootPassword,
-        jwtSecret,
+        mysqlPassword: encryptDeploymentSecret(dbPassword),
+        mysqlRootPassword: encryptDeploymentSecret(dbRootPassword),
+        jwtSecret: encryptDeploymentSecret(jwtSecret),
         mongoUrl: mongoUrlPersisted,
       }).returning({ id: tenantDeployments.id });
       deploymentId = dRow!.id;
@@ -96,8 +112,9 @@ export async function executeProvisionRuntime(
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
     const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
-    const composeCtx = { composeFile, project, envPath, composeEnv };
+    composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
+    sideEffectsStarted = true;
     await executeDataStep(docker, composeCtx);
     await executeMigrationStep(docker, composeCtx, log);
     await executeAppStep(docker, composeCtx);
@@ -125,6 +142,43 @@ export async function executeProvisionRuntime(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (tenantId && deploymentId) {
+      await db
+        .update(tenants)
+        .set({ status: "failed" })
+        .where(eq(tenants.id, tenantId))
+        .catch(() => undefined);
+      await db
+        .update(tenantDeployments)
+        .set({ status: "failed", lastError: message, updatedAt: new Date() })
+        .where(eq(tenantDeployments.id, deploymentId))
+        .catch(() => undefined);
+    }
+    if (sideEffectsStarted && composeCtx) {
+      await trace
+        .event("cleanup", "Attempting best-effort compose rollback", {
+          level: "warn",
+          meta: { composeProjectName: composeCtx.project },
+        })
+        .catch(() => undefined);
+      const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
+      if (rolledBack && tenantId) {
+        await db.delete(tenants).where(eq(tenants.id, tenantId)).catch(() => undefined);
+        await trace
+          .event("cleanup", "Compose rollback completed and tenant records removed", {
+            level: "info",
+            meta: { composeProjectName: composeCtx.project, tenantId },
+          })
+          .catch(() => undefined);
+      } else if (!rolledBack) {
+        await trace
+          .event("cleanup", "Compose rollback failed; tenant marked failed for operator recovery", {
+            level: "error",
+            meta: { composeProjectName: composeCtx.project, tenantId, deploymentId },
+          })
+          .catch(() => undefined);
+      }
+    }
     await trace
       .event("failed", message, { level: "error", meta: { cause: String(err) } })
       .catch(() => undefined);

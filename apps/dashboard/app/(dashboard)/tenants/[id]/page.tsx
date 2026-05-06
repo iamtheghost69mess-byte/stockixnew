@@ -296,7 +296,12 @@ export default function TenantDetailPage() {
               <Button
                 variant="outline"
                 onClick={async () => {
-                  await fetch(`/api/tenants/${tenant.id}/suspend`, { method: "POST" });
+                  const res = await fetch(`/api/tenants/${tenant.id}/suspend`, { method: "POST" });
+                  if (!res.ok) {
+                    const data = (await res.json().catch(() => ({}))) as { error?: string };
+                    setError(data.error ?? `Suspend failed (${res.status})`);
+                    return;
+                  }
                   router.push("/tenants");
                 }}
               >
@@ -307,7 +312,12 @@ export default function TenantDetailPage() {
             {tenant.status === "suspended" ? (
               <Button
                 onClick={async () => {
-                  await fetch(`/api/tenants/${tenant.id}/reactivate`, { method: "POST" });
+                  const res = await fetch(`/api/tenants/${tenant.id}/reactivate`, { method: "POST" });
+                  if (!res.ok) {
+                    const data = (await res.json().catch(() => ({}))) as { error?: string };
+                    setError(data.error ?? `Reactivate failed (${res.status})`);
+                    return;
+                  }
                   await loadTenant();
                 }}
               >
@@ -359,7 +369,12 @@ export default function TenantDetailPage() {
             <Button
               variant="outline"
               onClick={async () => {
-                await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
+                const res = await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
+                if (!res.ok) {
+                  const data = (await res.json().catch(() => ({}))) as { error?: string };
+                  setError(data.error ?? `Delete failed (${res.status})`);
+                  return;
+                }
                 router.push("/tenants");
               }}
             >
@@ -368,7 +383,12 @@ export default function TenantDetailPage() {
             <Button
               variant="destructive"
               onClick={async () => {
-                await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
+                const res = await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
+                if (!res.ok) {
+                  const data = (await res.json().catch(() => ({}))) as { error?: string };
+                  setError(data.error ?? `Delete failed (${res.status})`);
+                  return;
+                }
                 router.push("/tenants");
               }}
             >

@@ -1,9 +1,24 @@
 import { DashboardAppShell } from "@/components/dashboard-app-shell";
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { dashboardConfig } from "@repo/config";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const headerStore = await headers();
+  const cookie = headerStore.get("cookie") ?? "";
+  const meRes = await fetch(`${dashboardConfig.nextPublicApiUrl}/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${dashboardConfig.platformApiSecret}`,
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    cache: "no-store",
+  }).catch(() => null);
+  if (!meRes?.ok) {
+    redirect("/login");
+  }
   return <DashboardAppShell>{children}</DashboardAppShell>;
 }

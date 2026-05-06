@@ -35,6 +35,14 @@ export async function logAudit(
       metadata: input.metadata ?? null,
     });
   } catch (error) {
-    console.error("[audit] failed", error);
+    console.error(
+      JSON.stringify({
+        level: "error",
+        type: "audit_insert_failed",
+        action: input.action,
+        actorId: actorParsed.data,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }

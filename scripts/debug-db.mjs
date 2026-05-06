@@ -1,6 +1,16 @@
 import postgres from "postgres";
 
-const sql = postgres("postgresql://postgres:postgres@127.0.0.1:54330/stockix_platform");
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  console.error("DATABASE_URL is required");
+  process.exit(1);
+}
+if (!/127\.0\.0\.1|localhost/.test(databaseUrl)) {
+  console.error("Refusing to run: DATABASE_URL must target localhost for safety.");
+  process.exit(1);
+}
+
+const sql = postgres(databaseUrl);
 
 try {
   const cols = await sql.unsafe(

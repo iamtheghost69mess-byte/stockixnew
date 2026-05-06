@@ -2,6 +2,7 @@ const path = require('path');
 const webpack = require('webpack');
 const dotenv = require('dotenv-webpack');
 
+// ENV-EXEMPT: build tooling
 module.exports = {
   webpack: {
     plugins: [

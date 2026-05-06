@@ -94,11 +94,11 @@ export const tenantDeployments = pgTable(
     composeProjectName: text("compose_project_name").notNull(),
     /** Internal port the tenant stack exposes to Traefik (host networking / overlay TBD). */
     internalPort: integer("internal_port").notNull(),
-    /** TODO: encrypt at rest before production — store ciphertext only */
+    /** Encrypted ciphertext at rest (`enc:v1:*`) */
     mysqlPassword: text("mysql_password").notNull(),
-    /** TODO: encrypt at rest before production — store ciphertext only */
+    /** Encrypted ciphertext at rest (`enc:v1:*`) */
     mysqlRootPassword: text("mysql_root_password").notNull(),
-    /** TODO: encrypt at rest before production — store ciphertext only */
+    /** Encrypted ciphertext at rest (`enc:v1:*`) */
     jwtSecret: text("jwt_secret").notNull(),
     /** MongoDB URL scoped to the tenant stack (e.g. mongodb://mongo/stockix). */
     mongoUrl: text("mongo_url").notNull(),

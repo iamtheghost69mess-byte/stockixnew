@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dashboard Service Runbook
 
-## Getting Started
+## Purpose
+`apps/dashboard` is the owner-facing control plane UI. It serves:
+- auth pages (`/login`, `/accept-invite`)
+- protected dashboard areas (`/owners`, `/tenants`, `/settings`)
+- server-side API relay routes under `app/api/*` to the control-plane API.
 
-First, run the development server:
+## Required Runtime Environment
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `PLATFORM_API_SECRET`
+- `PLATFORM_ADMIN_EMAIL`
+- `PLATFORM_ADMIN_PASSWORD`
+- `NODE_ENV`
 
+Build-time/public:
+- `NEXT_PUBLIC_STOCKIX_API_URL`
+- `NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME`
+- `NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN`
+- `NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST`
+
+## Security Controls
+- Protected dashboard routes are server-gated in `app/(dashboard)/layout.tsx`.
+- Relay calls include `Authorization` with `PLATFORM_API_SECRET`.
+- Mutating relay requests include `Idempotency-Key`.
+- Correlation IDs are forwarded as `x-request-id`/`x-correlation-id`.
+- Proxy middleware sets security headers and CSP in `proxy.ts`.
+
+## Production Deployment Checklist
+1. Set all required env vars in deployment manifests.
+2. Confirm `NEXT_PUBLIC_STOCKIX_API_URL` points to the production API origin.
+3. Ensure `PLATFORM_API_SECRET` matches API runtime value.
+4. Verify CSP `connect-src` resolves to expected API host.
+5. Verify login, `/api/me`, owner mutation, and tenant mutation flows.
+6. Verify dashboard health by loading `/` and protected routes after deploy.
+
+## Local Development
+From repo root:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+pnpm bootstrap:env
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dashboard is available at `http://localhost:3000`.

@@ -1,3 +1,35 @@
+## Phase 5 — Production Hardening Controls
+
+This section extends architecture scope with explicit production-operability controls.
+
+### Reliability and Compensation
+- Provision/deprovision flows must include compensating actions for post-commit side effects.
+- Compensation progress must be traceable and resumable from persisted state/events.
+- Failure outcomes must be idempotent under retries and worker restarts.
+
+### Container Least-Privilege Baseline
+- Production compose services should enforce `no-new-privileges`.
+- App-facing services should prefer `read_only` root filesystems with explicit writable paths.
+- Exceptions (database/stateful or docker-builder paths) must be documented in compose comments.
+
+### Dead-Letter and Replay Operations
+- Dead-letter (`dead`) jobs must be queryable by operators.
+- Replay/requeue workflow must be explicit and audited via internal job endpoints.
+- Retry policy and terminal-state semantics must be deterministic.
+
+### Observability Backend Requirements
+- Structured logs are required but not sufficient.
+- API and worker must emit metrics suitable for external aggregation:
+  - API latency and status distribution
+  - worker success/failure counts
+  - retry/dead-letter counts
+- Correlation/request IDs must propagate dashboard -> API -> worker -> callbacks.
+
+### Env Template Security Policy
+- Root and prod env templates must mark security-critical values as `__MUST_OVERRIDE__`.
+- Local convenience defaults are allowed only for non-sensitive values.
+- Startup validation must fail fast when required production secrets are missing.
+
 PLAN.md — GOLD STANDARD SAAS ARCHITECTURE (PHASED SYSTEM)
 🎯 Purpose
 

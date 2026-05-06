@@ -5,6 +5,7 @@ const { RunScriptWebpackPlugin } = require('run-script-webpack-plugin');
 const nodeExternals = require('webpack-node-externals');
 const ProgressBarPlugin = require('progress-bar-webpack-plugin');
 
+// ENV-EXEMPT: build tooling
 const isDev = process.env.NODE_ENV === 'development';
 
 exports.getCommonWebpackOptions = ({

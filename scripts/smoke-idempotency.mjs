@@ -1,11 +1,8 @@
-import { config as loadEnv } from "dotenv";
+import { env } from "@repo/config";
 
-loadEnv({ path: ".env", override: true });
-loadEnv({ path: "apps/api/.env", override: true });
-
-const platformSecret = process.env.PLATFORM_API_SECRET;
-const apiBase = process.env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://127.0.0.1:4000";
-const ownerId = process.env.SMOKE_OWNER_ID ?? "08f86b22-e474-4eae-8aa9-89cb76b77650";
+const platformSecret = env.PLATFORM_API_SECRET;
+const apiBase = env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://127.0.0.1:4000";
+const ownerId = env.SMOKE_OWNER_ID ?? "08f86b22-e474-4eae-8aa9-89cb76b77650";
 
 if (!platformSecret) throw new Error("PLATFORM_API_SECRET is not set");
 const key = `idem-smoke-${Date.now()}`;

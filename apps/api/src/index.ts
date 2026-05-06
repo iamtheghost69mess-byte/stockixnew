@@ -85,11 +85,33 @@ type ApiEnv = {
   Variables: {
     actorId: string;
     actorRole: string;
+    requestId: string;
+    requestStartMs: number;
   };
 };
 
 const app = new Hono<ApiEnv>();
 const platformApiSecret = apiConfig.platformApiSecret;
+apiConfig.validateRequiredEnv();
+
+async function emitMetric(name: string, value: number, tags: Record<string, string | number>) {
+  const endpoint = apiConfig.metricsEndpoint;
+  if (!endpoint) return;
+  await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(apiConfig.metricsAuthToken ? { Authorization: `Bearer ${apiConfig.metricsAuthToken}` } : {}),
+    },
+    body: JSON.stringify({
+      source: "api",
+      name,
+      value,
+      tags,
+      ts: new Date().toISOString(),
+    }),
+  }).catch(() => undefined);
+}
 
 function readCookie(req: Request, name: string): string {
   const cookieHeader = req.headers.get("cookie") ?? "";
@@ -103,10 +125,27 @@ if (db) {
   app.route("/auth", buildAuthRoutes(db));
 }
 
+function isTransientDbError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  const lowered = message.toLowerCase();
+  return (
+    lowered.includes("too many clients") ||
+    lowered.includes("connection terminated") ||
+    lowered.includes("timeout") ||
+    lowered.includes("econnreset") ||
+    lowered.includes("remaining connection slots are reserved")
+  );
+}
+
 app.onError((err, c) => {
   console.error("[api]", err);
-  const message = err instanceof Error ? err.message : String(err);
-  return c.json({ error: "internal_error", message }, 500);
+  if (isTransientDbError(err)) {
+    return c.json(
+      { error: "service_unavailable", message: "Database temporarily unavailable. Retry shortly." },
+      503,
+    );
+  }
+  return c.json({ error: "internal_error", message: "An unexpected error occurred." }, 500);
 });
 
 const rootDomain = apiConfig.rootDomain;
@@ -127,6 +166,34 @@ app.use(
     allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
   }),
 );
+
+app.use("/*", async (c, next) => {
+  const requestId = c.req.header("x-request-id")
+    ?? c.req.header("x-correlation-id")
+    ?? randomUUID();
+  c.set("requestId", requestId);
+  c.set("requestStartMs", Date.now());
+  c.header("x-request-id", requestId);
+  const startedAt = Date.now();
+  await next();
+  const latencyMs = Date.now() - startedAt;
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "http_request",
+      requestId,
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      latencyMs,
+    }),
+  );
+  await emitMetric("api.request.latency_ms", latencyMs, {
+    method: c.req.method,
+    path: c.req.path,
+    status: c.res.status,
+  });
+});
 
 app.use("/*", async (c, next) => {
   if (c.req.path === "/health") {
@@ -319,23 +386,54 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.post("/internal/jobs/claim", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const body = await c.req.json().catch(() => ({}));
+  const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
+  if (!workerId) {
+    return c.json({ error: "worker_id_required" }, 400);
+  }
+  const staleLeaseMs = 5 * 60 * 1000;
+  const staleBefore = new Date(Date.now() - staleLeaseMs);
   const claimed = await db.transaction(async (tx) => {
-    const [pending] = await tx
-      .select({
-        id: tenantLifecycleJobs.id,
+    await tx
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "pending",
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
       })
+      .where(
+        and(
+          eq(tenantLifecycleJobs.status, "running"),
+          sql`${tenantLifecycleJobs.attempts} < ${tenantLifecycleJobs.maxAttempts}`,
+          sql`${tenantLifecycleJobs.claimedAt} IS NOT NULL`,
+          sql`${tenantLifecycleJobs.claimedAt} < ${staleBefore}`,
+        ),
+      );
+
+    const [pending] = await tx
+      .select({ id: tenantLifecycleJobs.id })
       .from(tenantLifecycleJobs)
-      .where(eq(tenantLifecycleJobs.status, "pending"))
-      .orderBy(asc(tenantLifecycleJobs.createdAt))
+      .where(
+        and(
+          eq(tenantLifecycleJobs.status, "pending"),
+          sql`${tenantLifecycleJobs.attempts} < ${tenantLifecycleJobs.maxAttempts}`,
+          sql`${tenantLifecycleJobs.runAt} <= now()`,
+        ),
+      )
+      .orderBy(sql`${tenantLifecycleJobs.priority} DESC`, asc(tenantLifecycleJobs.createdAt))
       .limit(1);
-    if (!pending) return null;
+    if (!pending?.id) return null;
+
     const [updated] = await tx
       .update(tenantLifecycleJobs)
       .set({
         status: "running",
+        claimedAt: new Date(),
+        claimedBy: workerId,
         updatedAt: new Date(),
       })
-      .where(eq(tenantLifecycleJobs.id, pending.id))
+      .where(and(eq(tenantLifecycleJobs.id, pending.id), eq(tenantLifecycleJobs.status, "pending")))
       .returning();
     return updated ?? null;
   });
@@ -345,26 +443,36 @@ app.post("/internal/jobs/claim", async (c) => {
 app.post("/internal/jobs/:jobId/complete", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const jobId = c.req.param("jobId");
+  const body = await c.req.json().catch(() => ({}));
+  const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
   const [currentJob] = await db
     .select({
       id: tenantLifecycleJobs.id,
       type: tenantLifecycleJobs.type,
       tenantId: tenantLifecycleJobs.tenantId,
       payload: tenantLifecycleJobs.payload,
+      claimedBy: tenantLifecycleJobs.claimedBy,
     })
     .from(tenantLifecycleJobs)
     .where(eq(tenantLifecycleJobs.id, jobId))
     .limit(1);
+  if (!currentJob) return c.json({ error: "job_not_found" }, 404);
+  if (workerId && currentJob.claimedBy && currentJob.claimedBy !== workerId) {
+    return c.json({ error: "job_claim_mismatch" }, 409);
+  }
   const [updated] = await db
     .update(tenantLifecycleJobs)
     .set({
       status: "completed",
       completedAt: new Date(),
       lastError: null,
+      claimedAt: null,
+      claimedBy: null,
       updatedAt: new Date(),
     })
-    .where(eq(tenantLifecycleJobs.id, jobId))
+    .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "running")))
     .returning();
+  if (!updated) return c.json({ error: "job_not_running" }, 409);
   if (
     currentJob?.type === "tenant.lifecycle"
     && currentJob.tenantId
@@ -384,17 +492,74 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const jobId = c.req.param("jobId");
   const body = await c.req.json().catch(() => ({}));
+  const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
   const errorMessage = String((body as { error?: unknown }).error ?? "job_failed").slice(0, 4000);
+  const [updated] = await db.transaction(async (tx) => {
+    const [job] = await tx
+      .select({
+        id: tenantLifecycleJobs.id,
+        status: tenantLifecycleJobs.status,
+        attempts: tenantLifecycleJobs.attempts,
+        maxAttempts: tenantLifecycleJobs.maxAttempts,
+        claimedBy: tenantLifecycleJobs.claimedBy,
+      })
+      .from(tenantLifecycleJobs)
+      .where(eq(tenantLifecycleJobs.id, jobId))
+      .limit(1);
+    if (!job) return [];
+    if (workerId && job.claimedBy && job.claimedBy !== workerId) {
+      return [];
+    }
+    const nextAttempts = (job.attempts ?? 0) + 1;
+    const maxAttempts = job.maxAttempts ?? 5;
+    const exhausted = nextAttempts >= maxAttempts;
+    const retryDelayMs = Math.min(60_000, 2 ** Math.max(0, nextAttempts - 1) * 1000);
+    const [next] = await tx
+      .update(tenantLifecycleJobs)
+      .set({
+        status: exhausted ? "dead" : "pending",
+        attempts: nextAttempts,
+        lastError: errorMessage,
+        runAt: exhausted ? new Date() : new Date(Date.now() + retryDelayMs),
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "running")))
+      .returning();
+    return next ? [next] : [];
+  });
+  return c.json({ ok: true, job: updated ?? null });
+});
+
+app.get("/internal/jobs/dead", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const rows = await db
+    .select()
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.status, "dead"))
+    .orderBy(asc(tenantLifecycleJobs.updatedAt))
+    .limit(100);
+  return c.json({ jobs: rows });
+});
+
+app.post("/internal/jobs/:jobId/requeue", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const jobId = c.req.param("jobId");
   const [updated] = await db
     .update(tenantLifecycleJobs)
     .set({
-      status: "failed",
-      lastError: errorMessage,
+      status: "pending",
+      lastError: null,
+      runAt: new Date(),
+      claimedAt: null,
+      claimedBy: null,
       updatedAt: new Date(),
     })
-    .where(eq(tenantLifecycleJobs.id, jobId))
+    .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "dead")))
     .returning();
-  return c.json({ ok: true, job: updated ?? null });
+  if (!updated) return c.json({ error: "dead_job_not_found" }, 404);
+  return c.json({ ok: true, job: updated });
 });
 
 app.get("/owners", async (c) => {

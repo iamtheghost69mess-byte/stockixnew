@@ -32,6 +32,10 @@ export default function AcceptInvitePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/invite/accept", {

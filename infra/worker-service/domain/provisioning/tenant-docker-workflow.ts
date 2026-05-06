@@ -44,8 +44,10 @@ export async function executeAppStep(
 export async function composeDownBestEffort(
   runner: IDockerComposeRunner,
   ctx: ComposeCtx,
-): Promise<void> {
-  await runner
+): Promise<boolean> {
+  const result = await runner
     .run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, ["down"])
-    .catch(() => undefined);
+    .then(() => true)
+    .catch(() => false);
+  return result;
 }

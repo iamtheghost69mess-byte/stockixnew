@@ -2,12 +2,8 @@
  * Ensures a Stockix platform owner exists for local dashboard / POST /tenants.
  * Run from `packages/db` after migrations: `pnpm db:seed:local`
  */
-import { config } from "dotenv";
 import { dbConfig } from "@repo/config";
 import postgres from "postgres";
-
-config({ path: ".env", override: true });
-config({ path: ".env.local", override: true });
 
 const url = dbConfig.databaseUrl;
 if (!url) {
