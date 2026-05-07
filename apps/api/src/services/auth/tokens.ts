@@ -1,4 +1,5 @@
 import { apiConfig } from "@repo/config";
+import { z } from "zod";
 
 type SessionTokenPayload = {
   sub: string;
@@ -13,6 +14,20 @@ type MfaTokenPayload = {
   ownerId: string;
   iat: number;
 };
+
+const sessionTokenPayloadSchema = z.object({
+  sub: z.string().uuid(),
+  role: z.string(),
+  email: z.string().email(),
+  name: z.string(),
+  sessionVersion: z.number().int().nonnegative(),
+  iat: z.number().int(),
+});
+
+const mfaTokenPayloadSchema = z.object({
+  ownerId: z.string(),
+  iat: z.number().int(),
+});
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MFA_TTL_MS = 5 * 60 * 1000;
@@ -76,7 +91,9 @@ export async function verifySessionToken(token: string): Promise<SessionTokenPay
   const body = fromB64(encoded);
   const valid = await verifyPayload(body, sig);
   if (!valid) return null;
-  const parsed = JSON.parse(body) as SessionTokenPayload;
+  const parseResult = sessionTokenPayloadSchema.safeParse(JSON.parse(body));
+  if (!parseResult.success) return null;
+  const parsed = parseResult.data;
   if (Date.now() - parsed.iat > SESSION_TTL_MS) return null;
   return parsed;
 }
@@ -96,7 +113,9 @@ export async function verifyMfaToken(token: string): Promise<string | null> {
   const body = fromB64(encoded);
   const valid = await verifyPayload(body, sig);
   if (!valid) return null;
-  const parsed = JSON.parse(body) as MfaTokenPayload;
+  const parseResult = mfaTokenPayloadSchema.safeParse(JSON.parse(body));
+  if (!parseResult.success) return null;
+  const parsed = parseResult.data;
   if (Date.now() - parsed.iat > MFA_TTL_MS) return null;
   return parsed.ownerId;
 }

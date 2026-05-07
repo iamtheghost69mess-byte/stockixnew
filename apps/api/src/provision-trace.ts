@@ -43,7 +43,13 @@ export function createProvisionTracer(
   return {
     async event(phase, message, opts) {
       const level = opts?.level ?? "info";
-      const meta = opts?.meta ?? null;
+      // Scrub oneTimeAdminPassword from meta before persisting to the DB (CRIT-02).
+      const rawMeta = opts?.meta ?? null;
+      let meta: Record<string, unknown> | null = rawMeta;
+      if (meta && "oneTimeAdminPassword" in meta) {
+        const { oneTimeAdminPassword: _scrubbed, ...rest } = meta;
+        meta = rest;
+      }
       const ctx = getContext();
       log(`[${phase}] ${message}`);
       const [row] = await db

@@ -111,6 +111,7 @@ services:
       ROOT_DOMAIN: ${ROOT_DOMAIN}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+      WORKER_SECRET: ${WORKER_SECRET}
       DASHBOARD_URL: ${DASHBOARD_URL}
     networks:
       - stockix_public
@@ -156,6 +157,7 @@ services:
       PUBLIC_BASE_URL_SCHEME: https
       TENANT_INTERNAL_HOST: host.docker.internal
       DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
+      WORKER_SECRET: ${WORKER_SECRET}
       DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew

@@ -82,7 +82,7 @@ function validateRequiredEnvForProfile(profile: string) {
     development: [],
     test: [],
     staging: ["DATABASE_URL", "PLATFORM_API_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
-    production: ["DATABASE_URL", "PLATFORM_API_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
+    production: ["DATABASE_URL", "PLATFORM_API_SECRET", "WORKER_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
   };
   const required = requiredByProfile[profile] ?? requiredByProfile.production ?? [];
   const missing = required.filter((name) => {
@@ -153,6 +153,7 @@ export const env = {
   METRICS_AUTH_TOKEN: readOptionalString("METRICS_AUTH_TOKEN"),
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
+  WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
   DB_CLIENT: readOptionalString("DB_CLIENT"),
   DB_HOST: readOptionalString("DB_HOST"),
@@ -199,6 +200,9 @@ export const apiConfig = {
   },
   get platformApiSecret() {
     return env.PLATFORM_API_SECRET ?? readRequiredString("PLATFORM_API_SECRET");
+  },
+  get workerSecret() {
+    return env.WORKER_SECRET;
   },
   get dashboardUrl() {
     return env.DASHBOARD_URL ?? readRequiredString("DASHBOARD_URL");

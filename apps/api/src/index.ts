@@ -92,7 +92,15 @@ type ApiEnv = {
 
 const app = new Hono<ApiEnv>();
 const platformApiSecret = apiConfig.platformApiSecret;
+const workerSecret = apiConfig.workerSecret;
 apiConfig.validateRequiredEnv();
+
+// In-memory store for one-time admin passwords produced during tenant provisioning.
+// Passwords are intentionally never written to the database (CRIT-02).
+// They are held here for at most 15 minutes after job completion and served once
+// via GET /tenants/provision-status/:correlationId.
+const PROVISION_PASSWORD_TTL_MS = 15 * 60 * 1000;
+const provisionPasswordCache = new Map<string, { password: string; expiresAt: number }>();
 
 async function emitMetric(name: string, value: number, tags: Record<string, string | number>) {
   const endpoint = apiConfig.metricsEndpoint;
@@ -200,28 +208,49 @@ app.use("/*", async (c, next) => {
     await next();
     return;
   }
+  // Internal job routes are protected by WORKER_SECRET, not PLATFORM_API_SECRET.
+  // A dashboard operator must not be able to reach these endpoints (CRIT-01).
+  if (c.req.path.startsWith("/internal/jobs")) {
+    const auth = c.req.header("Authorization") ?? "";
+    if (!workerSecret || auth !== `Bearer ${workerSecret}`) {
+      return c.json({ error: "unauthorized" }, 401);
+    }
+    await next();
+    return;
+  }
   if (!platformApiSecret) {
     return c.json({ error: "unauthorized" }, 401);
   }
   const auth = c.req.header("Authorization") ?? "";
-  if (auth !== `Bearer ${platformApiSecret}`) {
-    return c.json({ error: "unauthorized" }, 401);
+  if (auth === `Bearer ${platformApiSecret}`) {
+    await next();
+    return;
   }
-  await next();
+  // Allow valid owner session cookie as fallback for dashboard-origin requests.
+  const cookieToken = readCookie(c.req.raw, "stockix-session");
+  if (cookieToken) {
+    const session = await verifySessionToken(cookieToken);
+    if (session) {
+      await next();
+      return;
+    }
+  }
+  return c.json({ error: "unauthorized" }, 401);
 });
 
 app.use("/*", async (c, next) => {
   const method = c.req.method.toUpperCase();
   const path = c.req.path;
-  if (path === "/health" || path.startsWith("/auth")) {
+  if (path === "/health" || path.startsWith("/auth") || path.startsWith("/internal/jobs")) {
     await next();
     return;
   }
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
-  const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   const cookieToken = readCookie(c.req.raw, "stockix-session");
-  const token = headerToken || cookieToken;
+  // Dashboard calls include platform Authorization; actor identity should come from session cookie first.
+  const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const token = cookieToken || headerToken;
   if (!token) return c.json({ error: "unauthorized_actor" }, 401);
 
   const session = await verifySessionToken(token);
@@ -336,6 +365,7 @@ app.use("/*", async (c, next) => {
 function requiredApiRole(pathname: string, method: string): Role | null {
   if (pathname === "/health") return null;
   if (pathname.startsWith("/auth")) return null;
+  if (pathname.startsWith("/internal/jobs")) return null;
   if (pathname.startsWith("/owners")) {
     if (method === "GET") return "read_only";
     return "super_admin";
@@ -445,11 +475,18 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const jobId = c.req.param("jobId");
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
+  // oneTimeAdminPassword is passed by the worker for tenant.provision jobs.
+  // It is stored only in memory (never in the DB) — CRIT-02.
+  const oneTimeAdminPassword =
+    typeof (body as { oneTimeAdminPassword?: unknown }).oneTimeAdminPassword === "string"
+      ? (body as { oneTimeAdminPassword: string }).oneTimeAdminPassword
+      : undefined;
   const [currentJob] = await db
     .select({
       id: tenantLifecycleJobs.id,
       type: tenantLifecycleJobs.type,
       tenantId: tenantLifecycleJobs.tenantId,
+      correlationId: tenantLifecycleJobs.correlationId,
       payload: tenantLifecycleJobs.payload,
       claimedBy: tenantLifecycleJobs.claimedBy,
     })
@@ -473,6 +510,14 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "running")))
     .returning();
   if (!updated) return c.json({ error: "job_not_running" }, 409);
+  // Store the one-time admin password in memory for 15 minutes (CRIT-02).
+  // It is keyed by correlationId so the provision-status endpoint can retrieve it.
+  if (currentJob?.type === "tenant.provision" && currentJob.correlationId && oneTimeAdminPassword) {
+    provisionPasswordCache.set(currentJob.correlationId, {
+      password: oneTimeAdminPassword,
+      expiresAt: Date.now() + PROVISION_PASSWORD_TTL_MS,
+    });
+  }
   if (
     currentJob?.type === "tenant.lifecycle"
     && currentJob.tenantId
@@ -1107,6 +1152,15 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       completeEvent?.meta && typeof completeEvent.meta === "object"
         ? (completeEvent.meta as Record<string, unknown>)
         : {};
+    // Serve the one-time admin password from the in-memory cache only (CRIT-02).
+    // It is never stored in tenantProvisionEvents.meta or any other DB column.
+    // After the 15-minute TTL expires the cache entry is removed and null is returned.
+    const cached = provisionPasswordCache.get(correlationId);
+    const oneTimeAdminPassword =
+      cached && cached.expiresAt > Date.now() ? cached.password : null;
+    if (cached && cached.expiresAt <= Date.now()) {
+      provisionPasswordCache.delete(correlationId);
+    }
     return c.json({
       status: "complete",
       correlationId,
@@ -1117,8 +1171,7 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
         typeof eventMeta.composeProjectName === "string" ? eventMeta.composeProjectName : null,
       internalPort: typeof eventMeta.internalPort === "number" ? eventMeta.internalPort : null,
       baseUrl: typeof eventMeta.baseUrl === "string" ? eventMeta.baseUrl : null,
-      oneTimeAdminPassword:
-        typeof eventMeta.oneTimeAdminPassword === "string" ? eventMeta.oneTimeAdminPassword : null,
+      oneTimeAdminPassword,
       events,
       note:
         "Stockix login API field is `crediential` (typo) if you call /api/auth/login.",

@@ -56,7 +56,8 @@ type ClaimedJob = {
 };
 
 async function claimNextJob(): Promise<ClaimedJob | null> {
-  const secret = apiConfig.platformApiSecret;
+  // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
+  const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
   const res = await fetch(`${apiBaseUrl}/internal/jobs/claim`, {
     method: "POST",
@@ -74,9 +75,15 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
   return body.job ?? null;
 }
 
-async function markJobComplete(jobId: string): Promise<void> {
-  const secret = apiConfig.platformApiSecret;
+async function markJobComplete(jobId: string, oneTimeAdminPassword?: string): Promise<void> {
+  // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
+  const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
+  const completionBody: Record<string, unknown> = { workerId };
+  // Pass the one-time admin password so the API holds it in memory only — never persisted to DB (CRIT-02).
+  if (oneTimeAdminPassword !== undefined) {
+    completionBody.oneTimeAdminPassword = oneTimeAdminPassword;
+  }
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
     method: "POST",
     headers: {
@@ -85,14 +92,15 @@ async function markJobComplete(jobId: string): Promise<void> {
       "x-correlation-id": requestId,
       ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
     },
-    body: JSON.stringify({ workerId }),
+    body: JSON.stringify(completionBody),
     signal: timeoutSignal(requestTimeoutMs),
   });
   if (!res.ok) throw new Error(`complete_failed:${res.status}`);
 }
 
 async function markJobFailure(jobId: string, message: string): Promise<void> {
-  const secret = apiConfig.platformApiSecret;
+  // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
+  const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/fail`, {
     method: "POST",
@@ -108,6 +116,9 @@ async function markJobFailure(jobId: string, message: string): Promise<void> {
   if (!res.ok) throw new Error(`fail_failed:${res.status}`);
 }
 
+const ALLOWED_LIFECYCLE_COMMANDS = ["start", "stop"] as const;
+type LifecycleCommand = typeof ALLOWED_LIFECYCLE_COMMANDS[number];
+
 const provisionPayloadSchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
@@ -121,7 +132,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
   correlationId: string | null;
   payload: Record<string, unknown>;
-}) {
+}): Promise<string | undefined> {
   const payload = provisionPayloadSchema.parse(job.payload);
   const result = await provisionTenant(
     db,
@@ -147,6 +158,9 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     userAgent: "infra-worker",
     metadata: { mode: "job_worker", jobId: job.id },
   }).catch(() => undefined);
+  // Return the one-time password so the loop can pass it to markJobComplete
+  // without persisting it to any database (CRIT-02).
+  return result.oneTimeAdminPassword;
 }
 
 async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
@@ -194,11 +208,14 @@ const handlers = {
   "tenant.lifecycle": (
     db: ReturnType<typeof createDb>,
     job: { tenantId: string | null; id: string; payload: Record<string, unknown> },
-  ) => runTenantLifecycleCommand(
-    db,
-    job,
-    String(job.payload.command ?? ""),
-  ),
+  ) => {
+    const rawCommand = String(job.payload.command ?? "");
+    if (!(ALLOWED_LIFECYCLE_COMMANDS as readonly string[]).includes(rawCommand)) {
+      throw new Error(`Invalid lifecycle command: "${rawCommand}". Allowed: ${ALLOWED_LIFECYCLE_COMMANDS.join(", ")}`);
+    }
+    const command = rawCommand as LifecycleCommand;
+    return runTenantLifecycleCommand(db, job, command);
+  },
 } as const;
 
 type JobHandler = (db: ReturnType<typeof createDb>, job: ClaimedJob) => Promise<void>;
@@ -224,8 +241,15 @@ async function loop() {
       if (!handler) {
         throw new Error(`unsupported_job_type:${job.type}`);
       }
-      await handler(db, job);
-      await markJobComplete(job.id);
+      // For tenant.provision jobs, capture the one-time admin password so it can be
+      // forwarded to the API in-memory store without being written to the DB (CRIT-02).
+      let oneTimeAdminPassword: string | undefined;
+      if (job.type === "tenant.provision") {
+        oneTimeAdminPassword = await runProvisionJob(db, job);
+      } else {
+        await handler(db, job);
+      }
+      await markJobComplete(job.id, oneTimeAdminPassword);
       await emitWorkerMetric("worker.job.success", 1, { jobType: job.type });
       console.log(
         JSON.stringify({
