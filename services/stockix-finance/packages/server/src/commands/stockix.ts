@@ -8,12 +8,17 @@ import '../before';
 import config from '../config';
 
 function initSystemKnex() {
+  const runtimeDbPassword =
+    config.system.db_password ||
+    process.env.SYSTEM_DB_PASSWORD ||
+    process.env.DB_PASSWORD ||
+    process.env.MYSQL_PASSWORD;
   return Knex({
     client: config.system.db_client,
     connection: {
       host: config.system.db_host,
       user: config.system.db_user,
-      password: config.system.db_password,
+      password: runtimeDbPassword,
       database: config.system.db_name,
       charset: 'utf8',
     },
@@ -29,12 +34,17 @@ function initSystemKnex() {
 }
 
 function initTenantKnex(organizationId) {
+  const runtimeTenantPassword =
+    config.tenant.db_password ||
+    process.env.TENANT_DB_PASSWORD ||
+    process.env.DB_PASSWORD ||
+    process.env.MYSQL_PASSWORD;
   return Knex({
     client: config.tenant.db_client,
     connection: {
       host: config.tenant.db_host,
       user: config.tenant.db_user,
-      password: config.tenant.db_password,
+      password: runtimeTenantPassword,
       database: `${config.tenant.db_name_prefix}${organizationId}`,
       charset: config.tenant.charset,
     },

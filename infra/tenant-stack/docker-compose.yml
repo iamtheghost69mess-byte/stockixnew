@@ -77,6 +77,8 @@ services:
       - SIGNUP_DISABLED=${SIGNUP_DISABLED}
       - SIGNUP_ALLOWED_DOMAINS=${SIGNUP_ALLOWED_DOMAINS:-}
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
+    ports:
+      - "${PUBLIC_PROXY_PORT}:3000"
 
   database_migration:
     image: stockix-database-migration:local
@@ -85,14 +87,33 @@ services:
       dockerfile: packages/server/Dockerfile
       target: migration
     environment:
+      - DB_CLIENT=mysql
       - DB_HOST=mysql
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET}
+      - SYSTEM_DB_CLIENT=${SYSTEM_DB_CLIENT:-mysql}
+      - SYSTEM_DB_HOST=${SYSTEM_DB_HOST:-mysql}
+      - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
+      - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
     depends_on:
       mysql:
         condition: service_healthy
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        export DB_CLIENT="$${DB_CLIENT:-mysql}"
+        export DB_HOST="$${DB_HOST:-mysql}"
+        export DB_USER="$${SYSTEM_DB_USER:-$${DB_USER}}"
+        export DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
+        export SYSTEM_DB_CLIENT="$${SYSTEM_DB_CLIENT:-mysql}"
+        export SYSTEM_DB_HOST="$${SYSTEM_DB_HOST:-mysql}"
+        export SYSTEM_DB_USER="$${SYSTEM_DB_USER:-$${DB_USER}}"
+        export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
+        echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
+        /wait-for-it/wait-for-it.sh mysql:3306 -- node ./build/commands.js system:migrate:latest
     security_opt:
       - no-new-privileges:true
 

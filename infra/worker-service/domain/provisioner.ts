@@ -30,8 +30,9 @@ export async function provisionTenant(
   input: ProvisionInput,
   log: (m: string) => void,
   correlationId: string,
+  assertNotCancelled?: () => Promise<void>,
 ): Promise<ProvisionResult> {
-  return tenantProvisionService.provision(db, input, log, correlationId);
+  return tenantProvisionService.provision(db, input, log, correlationId, assertNotCancelled);
 }
 
 export async function deprovisionTenant(

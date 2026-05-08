@@ -98,7 +98,7 @@ async function markJobComplete(jobId: string, oneTimeAdminPassword?: string): Pr
   if (!res.ok) throw new Error(`complete_failed:${res.status}`);
 }
 
-async function markJobFailure(jobId: string, message: string): Promise<void> {
+async function markJobFailure(jobId: string, message: string, noRetry = false): Promise<void> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
@@ -110,10 +110,33 @@ async function markJobFailure(jobId: string, message: string): Promise<void> {
       "x-correlation-id": requestId,
       ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
     },
-    body: JSON.stringify({ error: message, workerId }),
+    body: JSON.stringify({ error: message, workerId, noRetry }),
     signal: timeoutSignal(requestTimeoutMs),
   });
   if (!res.ok) throw new Error(`fail_failed:${res.status}`);
+}
+
+async function assertProvisionNotCancelled(
+  jobId: string,
+): Promise<void> {
+  const secret = apiConfig.workerSecret;
+  const requestId = randomUUID();
+  const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
+    method: "GET",
+    headers: {
+      "x-request-id": requestId,
+      "x-correlation-id": requestId,
+      ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+    },
+    signal: timeoutSignal(requestTimeoutMs),
+  });
+  if (!res.ok) {
+    throw new Error(`cancel_check_failed:${res.status}`);
+  }
+  const body = (await res.json()) as { cancelled?: boolean; reason?: string };
+  if (body.cancelled) {
+    throw new Error(`cancelled_by_user: ${body.reason ?? "cancelled"}`);
+  }
 }
 
 const ALLOWED_LIFECYCLE_COMMANDS = ["start", "stop"] as const;
@@ -133,6 +156,10 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   correlationId: string | null;
   payload: Record<string, unknown>;
 }): Promise<string | undefined> {
+  const guard = async () => {
+    await assertProvisionNotCancelled(job.id);
+  };
+  await guard();
   const payload = provisionPayloadSchema.parse(job.payload);
   const result = await provisionTenant(
     db,
@@ -146,6 +173,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
+    guard,
   );
   if (!result.ok) {
     throw new Error(result.message);
@@ -220,6 +248,15 @@ const handlers = {
 
 type JobHandler = (db: ReturnType<typeof createDb>, job: ClaimedJob) => Promise<void>;
 
+function isPermanentProvisionError(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return (
+    message.startsWith("tenant_slug_exists:") ||
+    lowered.includes("tenants_slug_unique") ||
+    lowered.includes("duplicate key value violates unique constraint")
+  );
+}
+
 async function loop() {
   const databaseUrl = apiConfig.databaseUrl;
   if (!databaseUrl) {
@@ -258,14 +295,16 @@ async function loop() {
           workerId,
           jobId: job.id,
           jobType: job.type,
-          status: "success",
+          outcome: "success",
         }),
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[worker][${job.id}] failed: ${message}`);
       try {
-        await markJobFailure(job.id, message);
+        const cancelledByUser = message.startsWith("cancelled_by_user:");
+        const noRetry = cancelledByUser || (job.type === "tenant.provision" && isPermanentProvisionError(message));
+        await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         console.log(
           JSON.stringify({
@@ -274,7 +313,7 @@ async function loop() {
             workerId,
             jobId: job.id,
             jobType: job.type,
-            status: "failed",
+            outcome: "failed",
             error: message,
           }),
         );

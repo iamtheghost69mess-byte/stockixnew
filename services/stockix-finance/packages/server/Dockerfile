@@ -92,9 +92,9 @@ COPY ./.npmrc ./.npmrc
 
 COPY ./lerna.json ./lerna.json
 
-# .npmrc sets legacy-peer-deps; flag kept for older npm that ignores the file in edge cases.
-RUN npm install --legacy-peer-deps
-RUN npm run bootstrap
+# Install only server package dependencies to avoid workspace resolution in container builds.
+# The migration/app images only need packages/server to compile and run.
+RUN npm --prefix ./packages/server install --legacy-peer-deps --package-lock=false
 
 # -----------------------------------------------------------------------------
 # Migration image: only the CLI webpack bundle (`commands.js`). Skips Gulp/Sass
@@ -116,7 +116,7 @@ CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
-RUN npm run build:server --skip-nx-cache
+RUN npm --prefix ./packages/server run build
 
 FROM build-app AS app
 CMD [ "node", "./packages/server/build/index.js" ]

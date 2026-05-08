@@ -18,6 +18,11 @@ services:
       - "${PUBLIC_PROXY_PORT:-80}:80"
       - "${PUBLIC_PROXY_SSL_PORT:-443}:443"
     tty: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     depends_on:
       - server
       - webapp
@@ -25,6 +30,11 @@ services:
   webapp:
     container_name: stockix-webapp
     image: ghcr.io/stockixhq/webapp:latest
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
 
   server:
     container_name: stockix-server
@@ -37,6 +47,11 @@ services:
       - mysql
       - mongo
       - redis
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     environment:
       # Mail
       - MAIL_HOST=${MAIL_HOST}
@@ -91,6 +106,10 @@ services:
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
     depends_on:
       - mysql
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
 
   mysql:
     container_name: stockix-mysql
@@ -103,6 +122,9 @@ services:
       - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
     volumes:
       - mysql:/var/lib/mysql
+    # Stateful database service requires writable data volume.
+    security_opt:
+      - no-new-privileges:true
     expose:
       - '3306'
 
@@ -113,6 +135,9 @@ services:
       - '27017'
     volumes:
       - mongo:/var/lib/mongodb
+    # Stateful database service requires writable data volume.
+    security_opt:
+      - no-new-privileges:true
 
   redis:
     container_name: stockix-redis
@@ -122,6 +147,9 @@ services:
       - "6379"
     volumes:
       - redis:/data
+    # Stateful cache service requires writable data volume.
+    security_opt:
+      - no-new-privileges:true
 
 # Volumes
 volumes:

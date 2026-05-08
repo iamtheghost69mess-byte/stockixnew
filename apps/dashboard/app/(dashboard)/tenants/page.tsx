@@ -77,6 +77,7 @@ export default function TenantsPage() {
   const [streamCorrelationId, setStreamCorrelationId] = useState<string | null>(
     null,
   );
+  const [stoppingProvision, setStoppingProvision] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
@@ -295,6 +296,47 @@ export default function TenantsPage() {
     );
   };
 
+  const stopProvision = useCallback(async () => {
+    if (!streamCorrelationId) return;
+    setStoppingProvision(true);
+    try {
+      const res = await fetch(`/api/tenants/provision-stop/${streamCorrelationId}`, {
+        method: "POST",
+      });
+      const data = (await readJson(res)) as { error?: string; status?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      setProvisionLog((prev) =>
+        mergeProvisionEvents(prev, [
+          {
+            id: `local-stop-${Date.now()}`,
+            phase: "cancel",
+            level: "warn",
+            message:
+              data.status === "cancellation_requested"
+                ? "Stop requested. Worker is stopping and rolling back."
+                : "Provisioning stopped.",
+            meta: null,
+            createdAt: new Date().toISOString(),
+          },
+        ]),
+      );
+      setError(
+        data.status === "cancellation_requested"
+          ? "Stop requested. Provisioning is aborting in background."
+          : "Provisioning stopped.",
+      );
+      setLoading(false);
+      setStreamCorrelationId(null);
+      await load();
+    } catch (e) {
+      setError(`Failed to stop provisioning: ${String(e)}`);
+    } finally {
+      setStoppingProvision(false);
+    }
+  }, [load, streamCorrelationId]);
+
   const provision = async (payload?: {
     slug: string;
     name: string;
@@ -428,6 +470,19 @@ export default function TenantsPage() {
                   </div>
                 ))
               )}
+            </div>
+          ) : null}
+          {streamCorrelationId ? (
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => void stopProvision()}
+                disabled={stoppingProvision}
+              >
+                {stoppingProvision ? "Stopping..." : "Stop provisioning"}
+              </Button>
             </div>
           ) : null}
         </div>

@@ -20,7 +20,6 @@
     "stockix": "./bin/stockix.js"
   },
   "dependencies": {
-    "@repo/config": "workspace:*",
     "@casl/ability": "^5.4.3",
     "@hapi/boom": "^7.4.3",
     "@types/i18n": "^0.8.7",

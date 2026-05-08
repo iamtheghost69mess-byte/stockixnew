@@ -2,8 +2,9 @@ import fs from 'fs';
 import Mustache from 'mustache';
 import { Container } from 'typedi';
 import path from 'path';
-import { env } from '@repo/config';
 import { IMailable } from '@/interfaces';
+
+const env = process.env as Record<string, string | undefined>;
 
 interface IMailAttachment {
   filename: string;

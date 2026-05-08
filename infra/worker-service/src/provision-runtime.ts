@@ -1,12 +1,13 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createCipheriv, randomBytes } from "node:crypto";
+import { execa } from "execa";
 
 import { apiConfig } from "@repo/config";
 import { allocateTenantPort } from "@repo/db";
-import { tenantDeployments, tenants } from "@repo/db/schema";
+import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import * as dbSchema from "@repo/db/schema";
 
 import { defaultTenantEnvRoot } from "../domain/env-paths.js";
@@ -33,12 +34,73 @@ function encryptDeploymentSecret(plaintext: string): string {
   return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
 }
 
+async function loadProvisionJournal(
+  db: PostgresJsDatabase<typeof dbSchema>,
+  correlationId: string,
+): Promise<Set<string>> {
+  const rows = await db
+    .select({
+      phase: tenantProvisionEvents.phase,
+      meta: tenantProvisionEvents.meta,
+    })
+    .from(tenantProvisionEvents)
+    .where(eq(tenantProvisionEvents.correlationId, correlationId))
+    .orderBy(asc(tenantProvisionEvents.createdAt))
+    .limit(2000);
+  const journal = new Set<string>();
+  for (const row of rows) {
+    if (row.phase !== "journal") continue;
+    const key = row.meta && typeof row.meta === "object" ? (row.meta.operationKey as string | undefined) : undefined;
+    if (key && key.length > 0) {
+      journal.add(key);
+    }
+  }
+  return journal;
+}
+
+async function resolveServerInternalUrl(params: {
+  composeFile: string;
+  project: string;
+  envPath: string;
+  composeEnv: Record<string, string>;
+  fallbackHost: string;
+  fallbackPort: number;
+}): Promise<string> {
+  try {
+    const { stdout } = await execa(
+      "docker",
+      [
+        "compose",
+        "-f",
+        params.composeFile,
+        "-p",
+        params.project,
+        "--env-file",
+        params.envPath,
+        "port",
+        "server",
+        "3000",
+      ],
+      { env: params.composeEnv, extendEnv: true, stdio: "pipe" },
+    );
+    const trimmed = stdout.trim();
+    const match = trimmed.match(/:(\d+)\s*$/);
+    if (match?.[1]) {
+      return `http://${params.fallbackHost}:${match[1]}`;
+    }
+  } catch {
+    // Fallback keeps backward compatibility if port lookup is unavailable.
+  }
+  return `http://${params.fallbackHost}:${params.fallbackPort}`;
+}
+
 export async function executeProvisionRuntime(
   deps: TenantProvisionServiceDeps,
   db: PostgresJsDatabase<typeof dbSchema>,
   input: ProvisionInput,
   log: (m: string) => void,
   correlationId: string,
+  assertNotCancelled?: () => Promise<void>,
 ): Promise<ProvisionResult> {
   let tenantId: string | undefined;
   let deploymentId: string | undefined;
@@ -55,14 +117,31 @@ export async function executeProvisionRuntime(
   const tenantEnvRoot = defaultTenantEnvRoot();
   const project = composeProjectName(input.slug);
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
+  const requestId = correlationId;
   let port: number | undefined;
   let oneTimeAdminPassword: string | undefined;
   let composeCtx:
     | { composeFile: string; project: string; envPath: string; composeEnv: Record<string, string> }
     | null = null;
   let sideEffectsStarted = false;
+  const completedOps = await loadProvisionJournal(db, correlationId);
+  const checkNotCancelled = async () => {
+    if (!assertNotCancelled) return;
+    await assertNotCancelled();
+  };
+  const hasOp = (key: string) => completedOps.has(key);
+  const markOp = async (operationKey: string, message: string, meta?: Record<string, unknown>) => {
+    completedOps.add(operationKey);
+    await trace.event("journal", message, {
+      meta: {
+        operationKey,
+        ...meta,
+      },
+    });
+  };
 
   try {
+    await checkNotCancelled();
     await mkdir(join(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
     await mkdir(join(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
 
@@ -74,6 +153,14 @@ export async function executeProvisionRuntime(
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
+    const existingSlug = await db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(eq(tenants.slug, input.slug))
+      .limit(1);
+    if (existingSlug.length > 0) {
+      throw new Error(`tenant_slug_exists:${input.slug}`);
+    }
     await db.transaction(async (tx) => {
       const allocated = await allocateTenantPort(tx, maxPort);
       port = allocated;
@@ -99,6 +186,7 @@ export async function executeProvisionRuntime(
       }).returning({ id: tenantDeployments.id });
       deploymentId = dRow!.id;
     });
+    await checkNotCancelled();
     const envBody = buildTenantComposeEnvBody({
       stockixFinanceRoot,
       baseUrl,
@@ -111,26 +199,134 @@ export async function executeProvisionRuntime(
       agendashPassword,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
-    const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
+    const composeEnv = {
+      STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot,
+      BASE_URL: baseUrl,
+      DB_CLIENT: "mysql",
+      DB_HOST: "mysql",
+      DB_USER: "stockix_tenant",
+      DB_PASSWORD: dbPassword,
+      DB_ROOT_PASSWORD: dbRootPassword,
+      DB_CHARSET: "utf8",
+      SYSTEM_DB_CLIENT: "mysql",
+      SYSTEM_DB_HOST: "mysql",
+      SYSTEM_DB_USER: "stockix_tenant",
+      SYSTEM_DB_PASSWORD: dbPassword,
+      SYSTEM_DB_NAME: "stockix_system",
+      TENANT_DB_CLIENT: "mysql",
+      TENANT_DB_HOST: "mysql",
+      TENANT_DB_USER: "stockix_tenant",
+      TENANT_DB_PASSWORD: dbPassword,
+      TENANT_DB_NAME_PERFIX: "stockix_tenant_",
+      JWT_SECRET: jwtSecret,
+      PUBLIC_PROXY_PORT: String(port),
+      PUBLIC_PROXY_SSL_PORT: "443",
+      SIGNUP_DISABLED: "true",
+      SIGNUP_ALLOWED_DOMAINS: "",
+      SIGNUP_ALLOWED_EMAILS: input.adminEmail,
+      MAIL_HOST: "",
+      MAIL_USERNAME: "",
+      MAIL_PASSWORD: "",
+      MAIL_PORT: "",
+      MAIL_SECURE: "",
+      MAIL_FROM_NAME: "",
+      MAIL_FROM_ADDRESS: "",
+      AGENDASH_AUTH_USER: agendashUser,
+      AGENDASH_AUTH_PASSWORD: agendashPassword,
+    };
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
     sideEffectsStarted = true;
-    await executeDataStep(docker, composeCtx);
-    await executeMigrationStep(docker, composeCtx, log);
-    await executeAppStep(docker, composeCtx);
+    await checkNotCancelled();
+    if (!hasOp("docker.data_step")) {
+      await executeDataStep(docker, composeCtx);
+      await markOp("docker.data_step", "Data services compose step completed", {
+        composeProjectName: project,
+      });
+    } else {
+      await trace.event("resume", "Skipping data step (already journaled)", {
+        meta: { operationKey: "docker.data_step", composeProjectName: project },
+      });
+    }
+    await checkNotCancelled();
+    if (!hasOp("docker.migration_step")) {
+      await executeMigrationStep(docker, composeCtx, log);
+      await markOp("docker.migration_step", "Migration compose step completed", {
+        composeProjectName: project,
+      });
+    } else {
+      await trace.event("resume", "Skipping migration step (already journaled)", {
+        meta: { operationKey: "docker.migration_step", composeProjectName: project },
+      });
+    }
+    await checkNotCancelled();
+    if (!hasOp("docker.app_step")) {
+      await executeAppStep(docker, composeCtx);
+      await markOp("docker.app_step", "Application compose step completed", {
+        composeProjectName: project,
+      });
+    } else {
+      await trace.event("resume", "Skipping app step (already journaled)", {
+        meta: { operationKey: "docker.app_step", composeProjectName: project },
+      });
+    }
+    await checkNotCancelled();
 
-    const internalUrl = `http://${apiConfig.tenantInternalHost}:${port}`;
-    await finance.waitUntilReady(internalUrl, STOCKIX_FINANCE_HEALTH_TIMEOUT_MS, log, trace);
-    await finance.registerBootstrapAdmin({
-      internalBaseUrl: internalUrl,
-      firstName: input.adminFirstName,
-      lastName: input.adminLastName,
-      email: input.adminEmail,
-      password: oneTimeAdminPassword,
-      log,
-      trace,
+    const internalUrl = await resolveServerInternalUrl({
+      composeFile,
+      project,
+      envPath: composeCtx.envPath,
+      composeEnv: composeCtx.composeEnv,
+      fallbackHost: apiConfig.tenantInternalHost,
+      fallbackPort: port,
     });
-    await edge.publish(input.slug, port, rootDomain).catch(() => undefined);
+    if (!hasOp("tenant.health_check")) {
+      await finance.waitUntilReady(
+        internalUrl,
+        STOCKIX_FINANCE_HEALTH_TIMEOUT_MS,
+        log,
+        requestId,
+        trace,
+      );
+      await markOp("tenant.health_check", "Tenant health check completed", { internalUrl });
+    } else {
+      await trace.event("resume", "Skipping health check (already journaled)", {
+        meta: { operationKey: "tenant.health_check", internalUrl },
+      });
+    }
+    await checkNotCancelled();
+    if (!hasOp("tenant.bootstrap_admin")) {
+      await finance.registerBootstrapAdmin({
+        internalBaseUrl: internalUrl,
+        firstName: input.adminFirstName,
+        lastName: input.adminLastName,
+        email: input.adminEmail,
+        password: oneTimeAdminPassword,
+        log,
+        requestId,
+        trace,
+      });
+      await markOp("tenant.bootstrap_admin", "Tenant bootstrap admin registered", {
+        internalBaseUrl: internalUrl,
+        adminEmail: input.adminEmail,
+      });
+    } else {
+      await trace.event("resume", "Skipping bootstrap admin registration (already journaled)", {
+        meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail },
+      });
+    }
+    await checkNotCancelled();
+    if (!hasOp("edge.publish")) {
+      await edge.publish(input.slug, port, rootDomain).catch(() => undefined);
+      await markOp("edge.publish", "Traefik edge publish completed", {
+        slug: input.slug,
+        internalPort: port,
+      });
+    } else {
+      await trace.event("resume", "Skipping edge publish (already journaled)", {
+        meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
+      });
+    }
     return {
       ok: true,
       tenantId: tenantId!,

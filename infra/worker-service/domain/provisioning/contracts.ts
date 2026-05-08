@@ -26,6 +26,7 @@ export interface IStockixFinanceBootstrap {
     internalBaseUrl: string,
     timeoutMs: number,
     log: (m: string) => void,
+    requestId?: string,
     trace?: ProvisionTracer,
   ): Promise<void>;
 
@@ -36,6 +37,7 @@ export interface IStockixFinanceBootstrap {
     email: string;
     password: string;
     log: (m: string) => void;
+    requestId?: string;
     trace?: ProvisionTracer;
   }): Promise<void>;
 }

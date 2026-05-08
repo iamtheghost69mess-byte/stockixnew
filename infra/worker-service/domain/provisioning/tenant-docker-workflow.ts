@@ -28,7 +28,6 @@ export async function executeMigrationStep(
   log("database_migration");
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "run",
-    "--build",
     "--rm",
     "database_migration",
   ]);
@@ -38,7 +37,11 @@ export async function executeAppStep(
   runner: IDockerComposeRunner,
   ctx: ComposeCtx,
 ): Promise<void> {
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, ["up", "-d"]);
+  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
+    "up",
+    "-d",
+    "server",
+  ]);
 }
 
 export async function composeDownBestEffort(
@@ -46,7 +49,9 @@ export async function composeDownBestEffort(
   ctx: ComposeCtx,
 ): Promise<boolean> {
   const result = await runner
-    .run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, ["down"])
+    // Provision rollback should remove anonymous/named volumes to avoid stale
+    // MySQL credentials across retries (new secret vs old initialized volume).
+    .run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, ["down", "--volumes"])
     .then(() => true)
     .catch(() => false);
   return result;

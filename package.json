@@ -10,7 +10,7 @@
     "db:wait": "pnpm --filter @repo/db db:wait",
     "db:migrate": "pnpm --filter @repo/db db:migrate",
     "db:seed:local": "pnpm --filter @repo/db db:seed:local",
-    "infra:worker:dev": "pnpm exec tsx infra/worker-service/src/worker.ts",
+    "infra:worker:dev": "pnpm exec tsx --tsconfig infra/worker-service/tsconfig.json infra/worker-service/src/worker.ts",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "prettier": "^3.7.4",
-    "tsx": "^4.20.6",
+    "tsx": "4.20.6",
     "turbo": "^2.9.7",
     "typescript": "5.9.2"
   },

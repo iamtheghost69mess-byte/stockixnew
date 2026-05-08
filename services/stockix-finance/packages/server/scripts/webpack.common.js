@@ -52,7 +52,9 @@ exports.getCommonWebpackOptions = ({
     ],
     externals: [
       nodeExternals({
-        modulesDir: path.resolve(__dirname, '../../../node_modules'),
+        // Use package-local node_modules so knex/mysql2 stay externalized.
+        // This preserves knex runtime migration file loading from filesystem.
+        modulesDir: path.resolve(__dirname, '../node_modules'),
       }),
       'aws-sdk',
       'prettier',

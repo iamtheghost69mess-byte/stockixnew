@@ -13,7 +13,6 @@ export default function AcceptInvitePage() {
   const token = params.get("token") ?? "";
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -32,10 +31,6 @@ export default function AcceptInvitePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/invite/accept", {
@@ -72,15 +67,7 @@ export default function AcceptInvitePage() {
           minLength={12}
           required
         />
-        <Input
-          type="password"
-          placeholder="Confirm password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          minLength={12}
-          required
-        />
-        <Button className="w-full" disabled={loading}>
+        <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Activating..." : "Activate account"}
         </Button>
       </form>

@@ -370,8 +370,8 @@ export default function TenantDetailPage() {
               variant="outline"
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
-                if (!res.ok) {
-                  const data = (await res.json().catch(() => ({}))) as { error?: string };
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                if (!res.ok && res.status !== 404) {
                   setError(data.error ?? `Delete failed (${res.status})`);
                   return;
                 }
@@ -384,8 +384,8 @@ export default function TenantDetailPage() {
               variant="destructive"
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
-                if (!res.ok) {
-                  const data = (await res.json().catch(() => ({}))) as { error?: string };
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                if (!res.ok && res.status !== 404) {
                   setError(data.error ?? `Delete failed (${res.status})`);
                   return;
                 }

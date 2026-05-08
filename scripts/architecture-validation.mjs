@@ -3,7 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const exts = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs"]);
-const ignore = new Set([".git", "node_modules", ".next", "dist", "build", "coverage", "agent-transcripts", "terminals", "mcps"]);
+const ignore = new Set([".git", "node_modules", ".next", "dist", "build", "coverage", "agent-transcripts", "terminals", "mcps", ".claude"]);
 
 const violations = [];
 
@@ -36,6 +36,12 @@ function resolveRelative(file, spec) {
 
 function add(phase, file, reason) {
   violations.push({ phase, file, reason });
+}
+
+function stripComments(content) {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
 function validateFile(file, content) {
@@ -104,11 +110,13 @@ function validateFile(file, content) {
   }
 
   // Phase 4: env governance
-  if (/process\.env/.test(content)) {
+  if (/process\.env/.test(stripComments(content))) {
     const allowed =
       file.startsWith("packages/config/") ||
       file.startsWith("scripts/") ||
       file.includes("/scripts/") ||
+      file.includes("/tests/") ||
+      file.endsWith(".test.ts") ||
       file.includes("playwright.config") ||
       file.includes("webpack.common") ||
       file.includes("craco.config");

@@ -2,8 +2,9 @@
 import * as fs from 'fs';
 import { promisify } from 'util';
 import * as url from 'url';
-import { env } from '@repo/config';
 import { CoreSeeds } from '../../database/seeds/core';
+
+const env = process.env as Record<string, string | undefined>;
 
 const readFile = promisify(fs.readFile);
 

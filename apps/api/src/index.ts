@@ -17,7 +17,7 @@ import {
   tenants,
   tenantProvisionEvents,
 } from "@repo/db/schema";
-import { asc, eq, and, isNotNull, sql } from "drizzle-orm";
+import { asc, desc, eq, and, isNotNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
@@ -119,6 +119,20 @@ async function emitMetric(name: string, value: number, tags: Record<string, stri
       ts: new Date().toISOString(),
     }),
   }).catch(() => undefined);
+}
+
+function emitInternalJobAudit(c: { get: (key: "requestId") => string }, action: string, details: Record<string, unknown>) {
+  const requestId = c.get("requestId");
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "internal_job_audit",
+      action,
+      requestId,
+      ...details,
+      ts: new Date().toISOString(),
+    }),
+  );
 }
 
 function readCookie(req: Request, name: string): string {
@@ -423,6 +437,7 @@ app.post("/internal/jobs/claim", async (c) => {
   }
   const staleLeaseMs = 5 * 60 * 1000;
   const staleBefore = new Date(Date.now() - staleLeaseMs);
+  const staleBeforeIso = staleBefore.toISOString();
   const claimed = await db.transaction(async (tx) => {
     await tx
       .update(tenantLifecycleJobs)
@@ -437,7 +452,7 @@ app.post("/internal/jobs/claim", async (c) => {
           eq(tenantLifecycleJobs.status, "running"),
           sql`${tenantLifecycleJobs.attempts} < ${tenantLifecycleJobs.maxAttempts}`,
           sql`${tenantLifecycleJobs.claimedAt} IS NOT NULL`,
-          sql`${tenantLifecycleJobs.claimedAt} < ${staleBefore}`,
+          sql`${tenantLifecycleJobs.claimedAt} < ${staleBeforeIso}::timestamptz`,
         ),
       );
 
@@ -468,6 +483,30 @@ app.post("/internal/jobs/claim", async (c) => {
     return updated ?? null;
   });
   return c.json({ job: claimed });
+});
+
+app.get("/internal/jobs/:jobId/cancel-check", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const jobId = c.req.param("jobId");
+  const [job] = await db
+    .select({
+      id: tenantLifecycleJobs.id,
+      status: tenantLifecycleJobs.status,
+      lastError: tenantLifecycleJobs.lastError,
+    })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.id, jobId))
+    .limit(1);
+  if (!job) {
+    return c.json({ cancelled: true, reason: "job_not_found" });
+  }
+  if (job.status !== "running") {
+    return c.json({ cancelled: true, reason: `status=${job.status}` });
+  }
+  if (job.lastError === "cancel_requested_by_user") {
+    return c.json({ cancelled: true, reason: "cancel_requested_by_user" });
+  }
+  return c.json({ cancelled: false });
 });
 
 app.post("/internal/jobs/:jobId/complete", async (c) => {
@@ -539,6 +578,8 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
   const errorMessage = String((body as { error?: unknown }).error ?? "job_failed").slice(0, 4000);
+  const noRetry = (body as { noRetry?: unknown }).noRetry === true;
+  const requestId = c.get("requestId");
   const [updated] = await db.transaction(async (tx) => {
     const [job] = await tx
       .select({
@@ -557,7 +598,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
     }
     const nextAttempts = (job.attempts ?? 0) + 1;
     const maxAttempts = job.maxAttempts ?? 5;
-    const exhausted = nextAttempts >= maxAttempts;
+    const exhausted = noRetry || nextAttempts >= maxAttempts;
     const retryDelayMs = Math.min(60_000, 2 ** Math.max(0, nextAttempts - 1) * 1000);
     const [next] = await tx
       .update(tenantLifecycleJobs)
@@ -574,6 +615,27 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       .returning();
     return next ? [next] : [];
   });
+  if (updated) {
+    const attempts = Number(updated.attempts ?? 0);
+    const maxAttempts = Number(updated.maxAttempts ?? 0);
+    const exhausted = updated.status === "dead";
+    await emitMetric(exhausted ? "worker.job.dead" : "worker.job.retry", 1, {
+      requestId,
+      jobId: updated.id,
+      jobType: updated.type,
+      attempts,
+      maxAttempts,
+      noRetry: noRetry ? 1 : 0,
+    });
+    emitInternalJobAudit(c, exhausted ? "job.dead" : "job.retry_scheduled", {
+      jobId: updated.id,
+      status: updated.status,
+      attempts,
+      maxAttempts,
+      noRetry,
+      workerId: workerId || null,
+    });
+  }
   return c.json({ ok: true, job: updated ?? null });
 });
 
@@ -585,6 +647,7 @@ app.get("/internal/jobs/dead", async (c) => {
     .where(eq(tenantLifecycleJobs.status, "dead"))
     .orderBy(asc(tenantLifecycleJobs.updatedAt))
     .limit(100);
+  emitInternalJobAudit(c, "job.dead_list_viewed", { count: rows.length });
   return c.json({ jobs: rows });
 });
 
@@ -604,6 +667,17 @@ app.post("/internal/jobs/:jobId/requeue", async (c) => {
     .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "dead")))
     .returning();
   if (!updated) return c.json({ error: "dead_job_not_found" }, 404);
+  await emitMetric("worker.job.requeue", 1, {
+    requestId: c.get("requestId"),
+    jobId: updated.id,
+    jobType: updated.type,
+  });
+  emitInternalJobAudit(c, "job.requeue", {
+    jobId: updated.id,
+    jobType: updated.type,
+    previousStatus: "dead",
+    nextStatus: "pending",
+  });
   return c.json({ ok: true, job: updated });
 });
 
@@ -970,12 +1044,63 @@ app.delete("/tenants/:tenantId", async (c) => {
   }
   const removeVolumes = c.req.query("volumes") === "1" || c.req.query("volumes") === "true";
   const existing = await db
-    .select({ id: tenants.id, slug: tenants.slug })
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      tenantStatus: tenants.status,
+      deploymentStatus: tenantDeployments.status,
+    })
     .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
     .where(eq(tenants.id, parsed.data))
     .limit(1);
   const target = existing[0];
-  if (!target) return c.json({ error: "tenant_not_found" }, 404);
+  if (!target) {
+    return c.json({
+      accepted: true,
+      deleted: true,
+      alreadyDeleted: true,
+      tenantId: parsed.data,
+      message: "Tenant already deleted.",
+    }, 200);
+  }
+  const failedTenant =
+    target.tenantStatus === "failed" || target.deploymentStatus === "failed";
+  if (failedTenant) {
+    await db
+      .delete(tenantProvisionEvents)
+      .where(
+        sql`${tenantProvisionEvents.tenantId} = ${parsed.data}::uuid OR ${tenantProvisionEvents.slug} = ${target.slug}`,
+      );
+    await db
+      .delete(tenantLifecycleJobs)
+      .where(
+        sql`${tenantLifecycleJobs.tenantId} = ${parsed.data}::uuid OR ${tenantLifecycleJobs.payload}->>'slug' = ${target.slug}`,
+      );
+    await db.delete(tenantConfig).where(eq(tenantConfig.tenantId, parsed.data));
+    await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, parsed.data));
+    await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, parsed.data));
+    await db.delete(tenants).where(eq(tenants.id, parsed.data));
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "tenant.delete",
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: {
+        deletedTenantId: parsed.data,
+        slug: target.slug,
+        mode: "immediate_failed_cleanup",
+        removeVolumes,
+      },
+    });
+    return c.json({
+      accepted: true,
+      deleted: true,
+      immediate: true,
+      slug: target.slug,
+      message: "Failed tenant deleted immediately from control plane records.",
+    }, 200);
+  }
   const job = await insertTenantJob(db, {
     type: "tenant.deprovision",
     tenantId: parsed.data,
@@ -1088,6 +1213,82 @@ app.post("/tenants", async (c) => {
     },
     202,
   );
+});
+
+app.post("/tenants/provision-stop/:correlationId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const correlationId = c.req.param("correlationId");
+  const [job] = await db
+    .select({
+      id: tenantLifecycleJobs.id,
+      type: tenantLifecycleJobs.type,
+      status: tenantLifecycleJobs.status,
+      attempts: tenantLifecycleJobs.attempts,
+      maxAttempts: tenantLifecycleJobs.maxAttempts,
+    })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.correlationId, correlationId))
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+
+  if (!job || job.type !== "tenant.provision") {
+    return c.json({ error: "provision_job_not_found" }, 404);
+  }
+
+  const trace = createProvisionTracer(
+    db,
+    correlationId,
+    () => ({ slug: "unknown" }),
+    (m) => console.log(JSON.stringify({ level: "info", correlationId, message: m })),
+  );
+
+  if (job.status === "completed") {
+    return c.json({ error: "job_already_completed" }, 409);
+  }
+
+  if (job.status === "dead") {
+    await trace.event("cancel", "Provision stop requested after terminal state", {
+      level: "warn",
+      meta: { status: "dead" },
+    }).catch(() => undefined);
+    return c.json({ ok: true, status: "already_stopped", correlationId });
+  }
+
+  if (job.status === "pending") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        lastError: "cancelled_by_user",
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "pending")));
+    await trace.event("cancel", "Provision stopped before worker execution", {
+      level: "warn",
+      meta: { status: "pending" },
+    }).catch(() => undefined);
+    return c.json({ ok: true, status: "cancelled", correlationId });
+  }
+
+  if (job.status === "running") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        lastError: "cancel_requested_by_user",
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "running")));
+    await trace.event("cancel", "Provision stop requested; worker will abort at next checkpoint", {
+      level: "warn",
+      meta: { status: "running" },
+    }).catch(() => undefined);
+    return c.json({ ok: true, status: "cancellation_requested", correlationId });
+  }
+
+  return c.json({ ok: true, status: job.status, correlationId });
 });
 
 app.get("/tenants/provision-status/:correlationId", async (c) => {
