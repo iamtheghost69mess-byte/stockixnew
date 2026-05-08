@@ -6,7 +6,7 @@ import { SidebarHead } from './SidebarHead';
 import { SidebarMenu } from './SidebarMenu';
 import { useMainSidebarMenu } from './hooks';
 import { SidebarOverlayBinded } from '../SidebarOverlay';
-import { publicConfig } from '@repo/config/public';
+import { publicConfig } from '@/lib/public-config';
 
 import '@/style/containers/Dashboard/Sidebar.scss';
 

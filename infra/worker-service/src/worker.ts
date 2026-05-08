@@ -6,6 +6,7 @@ import {
 } from "@repo/db";
 import {
   adminAuditLog,
+  tenantProvisionEvents,
   tenantDeployments,
   tenants,
 } from "@repo/db/schema";
@@ -44,7 +45,11 @@ async function emitWorkerMetric(name: string, value: number, tags: Record<string
       ts: new Date().toISOString(),
     }),
     signal: timeoutSignal(requestTimeoutMs),
-  }).catch(() => undefined);
+  }).catch((error) => {
+    console.error(
+      `[worker] metric emit failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
 }
 
 type ClaimedJob = {
@@ -185,7 +190,28 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     ipAddress: workerId,
     userAgent: "infra-worker",
     metadata: { mode: "job_worker", jobId: job.id },
-  }).catch(() => undefined);
+  }).catch(async (error) => {
+    if (job.correlationId) {
+      await db.insert(tenantProvisionEvents).values({
+        correlationId: job.correlationId,
+        phase: "audit",
+        level: "error",
+        message: "Failed to write admin audit log after successful provision",
+        tenantId: result.tenantId,
+        meta: {
+          step: "admin_audit_log",
+          error: error instanceof Error ? error.message : String(error),
+          jobId: job.id,
+        },
+      }).catch((nestedError) => {
+        console.error(
+          `[worker][${job.id}] failed to persist audit failure event: ${
+            nestedError instanceof Error ? nestedError.message : String(nestedError)
+          }`,
+        );
+      });
+    }
+  });
   // Return the one-time password so the loop can pass it to markJobComplete
   // without persisting it to any database (CRIT-02).
   return result.oneTimeAdminPassword;

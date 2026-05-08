@@ -3,7 +3,6 @@
   "version": "0.9.6",
   "private": true,
   "dependencies": {
-    "@repo/config": "workspace:*",
     "@blueprintjs-formik/core": "^0.3.3",
     "@blueprintjs-formik/datetime": "^0.3.4",
     "@blueprintjs-formik/select": "^0.2.4",

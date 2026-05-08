@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createDecipheriv, createHash, createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { apiConfig } from "@repo/config";
 import {
@@ -32,6 +32,10 @@ import { buildAuthRoutes } from "./routes/auth/index.js";
 import { insertTenantJob, listTenantJobs } from "./services/tenant-jobs.js";
 import { validateOwnerSession } from "./services/auth/session-validation.js";
 import { verifySessionToken } from "./services/auth/tokens.js";
+import {
+  getTenantReadiness,
+  invalidateTenantReadinessCache,
+} from "./provisioning/readiness-engine.js";
 
 const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
@@ -101,6 +105,56 @@ apiConfig.validateRequiredEnv();
 // via GET /tenants/provision-status/:correlationId.
 const PROVISION_PASSWORD_TTL_MS = 15 * 60 * 1000;
 const provisionPasswordCache = new Map<string, { password: string; expiresAt: number }>();
+const PROVISION_STUCK_AFTER_MS = 10 * 60 * 1000;
+const RECONCILE_INTERVAL_MS = 30 * 1000;
+
+function encryptProvisionSecret(plaintext: string): string {
+  const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+function decryptProvisionSecret(ciphertext: string): string | null {
+  try {
+    const parts = ciphertext.split(":");
+    if (parts.length !== 5 || parts[0] !== "enc" || parts[1] !== "v1") return null;
+    const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
+    const iv = Buffer.from(parts[2]!, "base64url");
+    const tag = Buffer.from(parts[3]!, "base64url");
+    const data = Buffer.from(parts[4]!, "base64url");
+    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    return decrypted.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function appendProvisionEventSafe(args: {
+  correlationId: string;
+  phase: string;
+  level?: "info" | "warn" | "error";
+  message: string;
+  slug?: string | null;
+  tenantId?: string | null;
+  meta?: Record<string, unknown>;
+}) {
+  if (!db) return;
+  await db.insert(tenantProvisionEvents).values({
+    correlationId: args.correlationId,
+    phase: args.phase,
+    level: args.level ?? "info",
+    message: args.message,
+    slug: args.slug ?? null,
+    tenantId: args.tenantId ?? null,
+    meta: args.meta ?? null,
+  });
+  invalidateTenantReadinessCache(args.correlationId);
+}
 
 async function emitMetric(name: string, value: number, tags: Record<string, string | number>) {
   const endpoint = apiConfig.metricsEndpoint;
@@ -118,7 +172,9 @@ async function emitMetric(name: string, value: number, tags: Record<string, stri
       tags,
       ts: new Date().toISOString(),
     }),
-  }).catch(() => undefined);
+  }).catch((error) => {
+    console.error("[metrics] failed to emit API metric", error instanceof Error ? error.message : String(error));
+  });
 }
 
 function emitInternalJobAudit(c: { get: (key: "requestId") => string }, action: string, details: Record<string, unknown>) {
@@ -312,7 +368,9 @@ app.use("/*", async (c, next) => {
   await db
     .delete(apiIdempotencyKeys)
     .where(sql`${apiIdempotencyKeys.expiresAt} < now()`)
-    .catch(() => undefined);
+    .catch((error) => {
+      console.error("[idempotency] prune failed", error instanceof Error ? error.message : String(error));
+    });
 
   const existingRows = await db
     .select({
@@ -373,7 +431,9 @@ app.use("/*", async (c, next) => {
       responseBody: parsedResponse,
       expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
     })
-    .catch(() => undefined);
+    .catch((error) => {
+      console.error("[idempotency] persist response failed", error instanceof Error ? error.message : String(error));
+    });
 });
 
 function requiredApiRole(pathname: string, method: string): Role | null {
@@ -503,7 +563,16 @@ app.get("/internal/jobs/:jobId/cancel-check", async (c) => {
   if (job.status !== "running") {
     return c.json({ cancelled: true, reason: `status=${job.status}` });
   }
-  if (job.lastError === "cancel_requested_by_user") {
+  const lastErrorMessage =
+    typeof job.lastError === "string"
+      ? job.lastError
+      : (job.lastError &&
+          typeof job.lastError === "object" &&
+          "message" in job.lastError &&
+          typeof (job.lastError as { message?: unknown }).message === "string")
+        ? String((job.lastError as { message: string }).message)
+        : "";
+  if (lastErrorMessage === "cancel_requested_by_user") {
     return c.json({ cancelled: true, reason: "cancel_requested_by_user" });
   }
   return c.json({ cancelled: false });
@@ -549,12 +618,32 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "running")))
     .returning();
   if (!updated) return c.json({ error: "job_not_running" }, 409);
-  // Store the one-time admin password in memory for 15 minutes (CRIT-02).
-  // It is keyed by correlationId so the provision-status endpoint can retrieve it.
+  // Store the one-time admin password in memory as a fast path.
   if (currentJob?.type === "tenant.provision" && currentJob.correlationId && oneTimeAdminPassword) {
     provisionPasswordCache.set(currentJob.correlationId, {
       password: oneTimeAdminPassword,
       expiresAt: Date.now() + PROVISION_PASSWORD_TTL_MS,
+    });
+    await appendProvisionEventSafe({
+      correlationId: currentJob.correlationId,
+      phase: "secret",
+      level: "info",
+      message: "Bootstrap admin OTP persisted",
+      tenantId: currentJob.tenantId,
+      meta: {
+        type: "bootstrap_admin_otp",
+        cipher: encryptProvisionSecret(oneTimeAdminPassword),
+      },
+    });
+  }
+  if (currentJob?.type === "tenant.provision" && currentJob.correlationId) {
+    await appendProvisionEventSafe({
+      correlationId: currentJob.correlationId,
+      phase: "provisioning.completed",
+      level: "info",
+      message: "Provisioning worker marked lifecycle job completed",
+      tenantId: currentJob.tenantId,
+      meta: { jobId: currentJob.id },
     });
   }
   if (
@@ -605,7 +694,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       .set({
         status: exhausted ? "dead" : "pending",
         attempts: nextAttempts,
-        lastError: errorMessage,
+        lastError: sql`${errorMessage}`,
         runAt: exhausted ? new Date() : new Date(Date.now() + retryDelayMs),
         claimedAt: null,
         claimedBy: null,
@@ -1250,7 +1339,9 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     await trace.event("cancel", "Provision stop requested after terminal state", {
       level: "warn",
       meta: { status: "dead" },
-    }).catch(() => undefined);
+    }).catch((error) => {
+      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+    });
     return c.json({ ok: true, status: "already_stopped", correlationId });
   }
 
@@ -1260,7 +1351,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       .set({
         status: "dead",
         attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
-        lastError: "cancelled_by_user",
+        lastError: sql`'cancelled_by_user'`,
         claimedAt: null,
         claimedBy: null,
         updatedAt: new Date(),
@@ -1269,7 +1360,9 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     await trace.event("cancel", "Provision stopped before worker execution", {
       level: "warn",
       meta: { status: "pending" },
-    }).catch(() => undefined);
+    }).catch((error) => {
+      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+    });
     return c.json({ ok: true, status: "cancelled", correlationId });
   }
 
@@ -1277,14 +1370,16 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     await db
       .update(tenantLifecycleJobs)
       .set({
-        lastError: "cancel_requested_by_user",
+        lastError: sql`'cancel_requested_by_user'`,
         updatedAt: new Date(),
       })
       .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "running")));
     await trace.event("cancel", "Provision stop requested; worker will abort at next checkpoint", {
       level: "warn",
       meta: { status: "running" },
-    }).catch(() => undefined);
+    }).catch((error) => {
+      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+    });
     return c.json({ ok: true, status: "cancellation_requested", correlationId });
   }
 
@@ -1299,6 +1394,8 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
   const jobs = await listTenantJobs(db, correlationId);
   const lastJob = jobs[jobs.length - 1] ?? null;
   const events = await loadProvisionEventsJson(correlationId);
+  const readiness = await getTenantReadiness(db, correlationId);
+  const ready = readiness.status === "READY";
 
   if (!lastJob) {
     if (events.length === 0) {
@@ -1315,6 +1412,8 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     if (last.phase === "complete") {
       return c.json({
         status: "complete",
+        ready,
+        readiness,
         correlationId,
         events,
         oneTimeAdminPassword: null,
@@ -1325,6 +1424,8 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     if (last.phase === "failed") {
       return c.json({
         status: "failed",
+        ready,
+        readiness,
         correlationId,
         error: last.message,
         cause:
@@ -1336,6 +1437,8 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     }
     return c.json({
       status: "running",
+      ready,
+      readiness,
       correlationId,
       message:
         "No lifecycle job record found; see `events` for persisted trace state.",
@@ -1344,7 +1447,14 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
   }
 
   if (lastJob.status === "pending" || lastJob.status === "running" || lastJob.status === "failed") {
-    return c.json({ status: lastJob.status === "pending" ? "queued" : lastJob.status, correlationId, jobId: lastJob.id, events });
+    return c.json({
+      status: lastJob.status === "pending" ? "queued" : lastJob.status,
+      ready,
+      readiness,
+      correlationId,
+      jobId: lastJob.id,
+      events,
+    });
   }
 
   if (lastJob.status === "completed") {
@@ -1357,13 +1467,37 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     // It is never stored in tenantProvisionEvents.meta or any other DB column.
     // After the 15-minute TTL expires the cache entry is removed and null is returned.
     const cached = provisionPasswordCache.get(correlationId);
-    const oneTimeAdminPassword =
-      cached && cached.expiresAt > Date.now() ? cached.password : null;
+    let oneTimeAdminPassword = cached && cached.expiresAt > Date.now() ? cached.password : null;
     if (cached && cached.expiresAt <= Date.now()) {
       provisionPasswordCache.delete(correlationId);
     }
+    if (!oneTimeAdminPassword) {
+      const secretEvents = await db
+        .select({ meta: tenantProvisionEvents.meta })
+        .from(tenantProvisionEvents)
+        .where(
+          and(
+            eq(tenantProvisionEvents.correlationId, correlationId),
+            eq(tenantProvisionEvents.phase, "secret"),
+          ),
+        )
+        .orderBy(desc(tenantProvisionEvents.createdAt))
+        .limit(5);
+      for (const secretEvent of secretEvents) {
+        const meta = secretEvent.meta ?? null;
+        const cipher = meta && typeof meta === "object" ? (meta.cipher as string | undefined) : undefined;
+        if (typeof cipher !== "string") continue;
+        const decrypted = decryptProvisionSecret(cipher);
+        if (decrypted) {
+          oneTimeAdminPassword = decrypted;
+          break;
+        }
+      }
+    }
     return c.json({
       status: "complete",
+      ready,
+      readiness,
       correlationId,
       jobId: lastJob.id,
       tenantId: typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null,
@@ -1381,6 +1515,8 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
 
   return c.json({
     status: lastJob.status === "dead" ? "failed" : lastJob.status,
+    ready,
+    readiness,
     correlationId,
     jobId: lastJob.id,
     error: lastJob.lastError,
@@ -1733,7 +1869,97 @@ app.get("/tenants/:tenantId/events", async (c) => {
   });
 });
 
+function startReadinessReconciler() {
+  if (!db) return;
+  let running = false;
+  const lastObservedAt = new Map<string, number>();
+  const lastSignature = new Map<string, string>();
+  const READINESS_OBSERVE_COOLDOWN_MS = 45_000;
+  const tick = async () => {
+    if (!db || running) return;
+    running = true;
+    try {
+      const rows = await db
+        .select({
+          id: tenantLifecycleJobs.id,
+          correlationId: tenantLifecycleJobs.correlationId,
+          completedAt: tenantLifecycleJobs.completedAt,
+          payload: tenantLifecycleJobs.payload,
+        })
+        .from(tenantLifecycleJobs)
+        .where(
+          and(
+            eq(tenantLifecycleJobs.type, "tenant.provision"),
+            eq(tenantLifecycleJobs.status, "completed"),
+          ),
+        )
+        .orderBy(desc(tenantLifecycleJobs.completedAt))
+        .limit(100);
+
+      for (const row of rows) {
+        const correlationId = row.correlationId;
+        if (!correlationId) continue;
+        const now = Date.now();
+        const previous = lastObservedAt.get(correlationId) ?? 0;
+        if (now - previous < READINESS_OBSERVE_COOLDOWN_MS) continue;
+        lastObservedAt.set(correlationId, now);
+        invalidateTenantReadinessCache(correlationId);
+        const readiness = await getTenantReadiness(db, correlationId);
+        const slug =
+          row.payload && typeof row.payload.slug === "string" ? String(row.payload.slug) : null;
+        const signature = `${readiness.status}:${readiness.reasons.join("|")}`;
+        if (lastSignature.get(correlationId) === signature) {
+          continue;
+        }
+        lastSignature.set(correlationId, signature);
+        if (readiness.status === "READY") {
+          await appendProvisionEventSafe({
+            correlationId,
+            slug,
+            phase: "readiness.observed",
+            level: "info",
+            message: "Readiness observed as READY",
+            meta: { checks: readiness.checks, status: readiness.status },
+          });
+        } else {
+          await appendProvisionEventSafe({
+            correlationId,
+            slug,
+            phase: "readiness.observed",
+            level: readiness.status === "DEGRADED" ? "warn" : "error",
+            message: "Readiness observed as non-ready",
+            meta: { checks: readiness.checks, status: readiness.status, reasons: readiness.reasons },
+          });
+          const completedAtMs = row.completedAt ? row.completedAt.getTime() : null;
+          if (completedAtMs && Date.now() - completedAtMs >= PROVISION_STUCK_AFTER_MS) {
+            await appendProvisionEventSafe({
+              correlationId,
+              slug,
+              phase: readiness.status === "DEGRADED" ? "readiness.degraded_detected" : "readiness.inconsistent",
+              level: "error",
+              message: "Completed provisioning is still not converged to ready",
+              meta: { ageMs: Date.now() - completedAtMs, readiness },
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        "[reconciler] readiness tick failed:",
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      running = false;
+    }
+  };
+  setInterval(() => {
+    void tick();
+  }, RECONCILE_INTERVAL_MS);
+  void tick();
+}
+
 const port = apiConfig.port;
+startReadinessReconciler();
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`);

@@ -24,12 +24,17 @@ type ProvisionPollRunning = {
 
 type ProvisionPollComplete = {
   status: "complete";
+  ready?: boolean;
   correlationId: string;
   oneTimeAdminPassword?: string | null;
   internalPort?: number;
   baseUrl?: string;
   events?: ProvisionEventRow[];
   note?: string;
+  readiness?: {
+    status: "NOT_READY" | "READY" | "DEGRADED";
+    reasons: string[];
+  };
 };
 
 type ProvisionPollFailed = {
@@ -287,8 +292,16 @@ export default function TenantsPage() {
       if ("status" in sj && sj.status === "complete") {
         const ok = sj as ProvisionPollComplete;
         setOneTimePassword((prev) => ok.oneTimeAdminPassword ?? prev ?? null);
-        await load();
-        return ok;
+        if (ok.ready === true) {
+          await load();
+          return ok;
+        }
+        const reasons = ok.readiness?.reasons?.length
+          ? ok.readiness.reasons.join(", ")
+          : "readiness checks still converging";
+        setError(
+          `Provisioning completed but tenant is not ready yet (${reasons}). Waiting for readiness...`,
+        );
       }
     }
     throw new Error(

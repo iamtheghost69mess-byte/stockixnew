@@ -139,6 +139,18 @@ export async function executeProvisionRuntime(
       },
     });
   };
+  const recordCleanupError = async (step: string, error: unknown) => {
+    const msg = error instanceof Error ? error.message : String(error);
+    try {
+      await trace.event("cleanup", `non-fatal error in ${step}: ${msg}`, {
+        level: "error",
+        meta: { step, error: msg },
+      });
+    } catch {
+      // last-resort logging only
+      console.error(`[provision][${correlationId}] cleanup log failure step=${step}: ${msg}`);
+    }
+  };
 
   try {
     await checkNotCancelled();
@@ -317,7 +329,19 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
     if (!hasOp("edge.publish")) {
-      await edge.publish(input.slug, port, rootDomain).catch(() => undefined);
+      try {
+        await edge.publish(input.slug, port, rootDomain);
+      } catch (error) {
+        await trace.event("edge", "Traefik edge publish failed", {
+          level: "error",
+          meta: {
+            slug: input.slug,
+            internalPort: port,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        throw error;
+      }
       await markOp("edge.publish", "Traefik edge publish completed", {
         slug: input.slug,
         internalPort: port,
@@ -343,12 +367,12 @@ export async function executeProvisionRuntime(
         .update(tenants)
         .set({ status: "failed" })
         .where(eq(tenants.id, tenantId))
-        .catch(() => undefined);
+        .catch((error) => recordCleanupError("tenant_status_failed_update", error));
       await db
         .update(tenantDeployments)
         .set({ status: "failed", lastError: message, updatedAt: new Date() })
         .where(eq(tenantDeployments.id, deploymentId))
-        .catch(() => undefined);
+        .catch((error) => recordCleanupError("deployment_status_failed_update", error));
     }
     if (sideEffectsStarted && composeCtx) {
       await trace
@@ -356,28 +380,31 @@ export async function executeProvisionRuntime(
           level: "warn",
           meta: { composeProjectName: composeCtx.project },
         })
-        .catch(() => undefined);
+        .catch((error) => recordCleanupError("cleanup_event_before_rollback", error));
       const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
       if (rolledBack && tenantId) {
-        await db.delete(tenants).where(eq(tenants.id, tenantId)).catch(() => undefined);
+        await db
+          .delete(tenants)
+          .where(eq(tenants.id, tenantId))
+          .catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
         await trace
           .event("cleanup", "Compose rollback completed and tenant records removed", {
             level: "info",
             meta: { composeProjectName: composeCtx.project, tenantId },
           })
-          .catch(() => undefined);
+          .catch((error) => recordCleanupError("cleanup_event_after_rollback", error));
       } else if (!rolledBack) {
         await trace
           .event("cleanup", "Compose rollback failed; tenant marked failed for operator recovery", {
             level: "error",
             meta: { composeProjectName: composeCtx.project, tenantId, deploymentId },
           })
-          .catch(() => undefined);
+          .catch((error) => recordCleanupError("cleanup_event_rollback_failed", error));
       }
     }
     await trace
       .event("failed", message, { level: "error", meta: { cause: String(err) } })
-      .catch(() => undefined);
+      .catch((error) => recordCleanupError("final_failed_event", error));
     return { ok: false, message, cause: String(err) };
   }
 }

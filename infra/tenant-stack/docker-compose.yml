@@ -78,7 +78,8 @@ services:
       - SIGNUP_ALLOWED_DOMAINS=${SIGNUP_ALLOWED_DOMAINS:-}
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
     ports:
-      - "${PUBLIC_PROXY_PORT}:3000"
+      # Expose API on a random localhost-only port for worker health/bootstrap checks.
+      - "127.0.0.1::3000"
 
   database_migration:
     image: stockix-database-migration:local

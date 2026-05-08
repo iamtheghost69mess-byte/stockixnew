@@ -172,6 +172,25 @@ async function dockerServerHostPort(project) {
   }
 }
 
+async function dockerNginxHostPort(project) {
+  try {
+    const { stdout } = await execa("docker", [
+      "compose",
+      "-p",
+      project,
+      "port",
+      "nginx",
+      "80",
+    ]);
+    const trimmed = stdout.trim();
+    const match = trimmed.match(/:(\d+)\s*$/);
+    if (!match?.[1]) return null;
+    return Number(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 async function verifyProvisionedEndpoint(project) {
   const hostPort = await dockerServerHostPort(project);
   if (!hostPort) {
@@ -198,6 +217,36 @@ async function verifyProvisionedEndpoint(project) {
   fail("Provision completed but endpoint is not reachable", {
     composeProject: project,
     pingUrl,
+    lastError,
+  });
+}
+
+async function verifyProvisionedWebapp(project) {
+  const hostPort = await dockerNginxHostPort(project);
+  if (!hostPort) {
+    fail("Provision completed but nginx host port is not resolvable", { composeProject: project });
+  }
+  const uiUrl = `http://127.0.0.1:${hostPort}/`;
+  out(`Verifying tenant web endpoint: ${uiUrl}`);
+  let lastError = "unknown";
+  const maxAttempts = 30;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const res = await fetch(uiUrl, { signal: AbortSignal.timeout(5_000) });
+      const text = await res.text();
+      if (res.ok && /<(html|!doctype html)/i.test(text)) {
+        out(`Web endpoint reachable (HTTP ${res.status})`);
+        return { uiUrl, status: res.status, bodyPreview: text.slice(0, 300) };
+      }
+      lastError = `HTTP ${res.status} ${text.slice(0, 200)}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  fail("Provision completed but web endpoint is not reachable", {
+    composeProject: project,
+    uiUrl,
     lastError,
   });
 }
@@ -303,6 +352,8 @@ async function main() {
       if (composeProject) {
         const endpoint = await verifyProvisionedEndpoint(composeProject);
         out("Endpoint verification passed", endpoint);
+        const webapp = await verifyProvisionedWebapp(composeProject);
+        out("Web verification passed", webapp);
       } else {
         fail("Provision completed but compose project is unknown for endpoint verification");
       }

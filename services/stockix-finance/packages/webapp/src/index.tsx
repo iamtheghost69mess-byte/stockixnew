@@ -9,7 +9,7 @@ import '@/services/yup';
 import App from '@/components/App';
 import * as serviceWorker from '@/serviceWorker';
 import { store, persistor } from '@/store/createStore';
-import { publicConfig } from '@repo/config/public';
+import { publicConfig } from '@/lib/public-config';
 
 if (publicConfig.nodeEnv === 'development') {
   const whyDidYouRender = require('@welldone-software/why-did-you-render');

@@ -38,7 +38,10 @@ export async function writeTenantTraefikConfig(
 export async function removeTenantTraefikConfig(slug: string): Promise<void> {
   try {
     await unlink(join(traefikDir(), `tenant-${slug}.yml`));
-  } catch {
-    // ignore if already gone
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes("no such file")) {
+      throw error;
+    }
   }
 }

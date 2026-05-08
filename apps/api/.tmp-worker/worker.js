@@ -2781,6 +2781,8 @@ async function executeAppStep(runner, ctx) {
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
     "-d",
+    "webapp",
+    "nginx",
     "server"
   ]);
 }

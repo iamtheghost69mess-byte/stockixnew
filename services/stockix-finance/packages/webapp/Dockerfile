@@ -1,21 +1,16 @@
-FROM node:14.15.0 as build
+FROM node:20-alpine AS build
 
 USER root
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
-COPY lerna.json ./
-
+# Install package-local dependencies (avoid monorepo workspace:* resolution in image builds).
 COPY ./packages/webapp/package*.json /app/packages/webapp/
-
-RUN npm install
-RUN npm run bootstrap
+RUN npm --prefix ./packages/webapp install --legacy-peer-deps --package-lock=false
 
 # Build webapp package
 COPY ./packages/webapp /app/packages/webapp
-RUN npm run build:webapp
+RUN npm --prefix ./packages/webapp run build
 
 FROM nginx
 

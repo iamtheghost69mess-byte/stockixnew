@@ -9,7 +9,7 @@ import { persistStore } from 'redux-persist';
 import monitorReducerEnhancer from '@/store/enhancers/monitorReducer';
 import loggerMiddleware from '@/store/logger.middleware';
 import rootReducer from '@/store/reducers';
-import { publicConfig } from '@repo/config/public';
+import { publicConfig } from '@/lib/public-config';
 import ResetMiddleware from './ResetMiddleware';
 
 

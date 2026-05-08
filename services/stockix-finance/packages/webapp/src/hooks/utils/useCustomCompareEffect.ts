@@ -1,5 +1,5 @@
 import { DependencyList, EffectCallback, useEffect, useRef } from 'react';
-import { publicConfig } from '@repo/config/public';
+import { publicConfig } from '@/lib/public-config';
 
 const isPrimitive = (val: any) => val !== Object(val);
 

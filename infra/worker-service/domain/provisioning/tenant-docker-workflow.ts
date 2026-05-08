@@ -40,6 +40,8 @@ export async function executeAppStep(
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
     "-d",
+    "webapp",
+    "nginx",
     "server",
   ]);
 }
