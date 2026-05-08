@@ -53,7 +53,12 @@ export function createIdempotencyMiddleware(db: Db | null): MiddlewareHandler<Id
     await db
       .delete(apiIdempotencyKeys)
       .where(sql`${apiIdempotencyKeys.expiresAt} < now()`)
-      .catch(() => undefined);
+      .catch((error) => {
+        console.error(
+          "[idempotency-middleware] prune failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
 
     const existingRows = await db
       .select({
@@ -114,6 +119,11 @@ export function createIdempotencyMiddleware(db: Db | null): MiddlewareHandler<Id
         responseBody: parsedResponse,
         expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        console.error(
+          "[idempotency-middleware] persist response failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
   };
 }

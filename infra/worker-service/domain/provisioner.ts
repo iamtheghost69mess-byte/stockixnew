@@ -64,7 +64,10 @@ export async function deprovisionTenant(
     dockerStatus = "skipped";
   }
 
-  await edgePublisher.unpublish(row.slug).catch(() => undefined);
+  await edgePublisher.unpublish(row.slug).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`edge unpublish failed for ${row.slug}: ${message}`);
+  });
   await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
   await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
   await db.delete(tenants).where(eq(tenants.id, tenantId));
