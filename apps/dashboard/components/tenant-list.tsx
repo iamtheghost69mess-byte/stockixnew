@@ -9,6 +9,7 @@ import {
   Loader2,
   PauseCircle,
   PlayCircle,
+  Square,
   Search,
   Trash2,
 } from "lucide-react";
@@ -38,9 +39,11 @@ type Props = {
   onDelete: (tenantId: string, slug: string) => Promise<void>;
   onSuspend: (tenantId: string, slug: string) => Promise<void>;
   onReactivate: (tenantId: string, slug: string) => Promise<void>;
+  onStopProvision: (tenantId: string, slug: string) => Promise<void>;
   deletingId: string | null;
   suspendingId: string | null;
   reactivatingId: string | null;
+  stoppingId: string | null;
 };
 
 export default function TenantList(props: Props) {
@@ -49,9 +52,11 @@ export default function TenantList(props: Props) {
     onDelete,
     onSuspend,
     onReactivate,
+    onStopProvision,
     deletingId,
     suspendingId,
     reactivatingId,
+    stoppingId,
   } = props;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -281,6 +286,21 @@ export default function TenantList(props: Props) {
                           <PlayCircle className="mr-1 h-4 w-4" />
                         )}
                         Reactivate
+                      </Button>
+                    ) : null}
+                    {(status === "provisioning" || status === "pending") ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void onStopProvision(t.tenantId, t.slug)}
+                        disabled={Boolean(stoppingId)}
+                      >
+                        {stoppingId === t.tenantId ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Square className="mr-1 h-4 w-4" />
+                        )}
+                        Stop provisioning
                       </Button>
                     ) : null}
                     <Button

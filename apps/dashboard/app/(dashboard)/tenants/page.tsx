@@ -87,6 +87,7 @@ export default function TenantsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -188,6 +189,35 @@ export default function TenantsPage() {
       }
     },
     [],
+  );
+
+  const handleStopProvision = useCallback(
+    async (tenantId: string, slug: string) => {
+      if (
+        !globalThis.confirm(
+          `Stop provisioning for "${slug}"?\n\nThis cancels the active provisioning lifecycle job.`,
+        )
+      ) {
+        return;
+      }
+      setStoppingId(tenantId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/tenants/${tenantId}/provision-stop`, {
+          method: "POST",
+        });
+        const data = (await readJson(res)) as { error?: string; status?: string };
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        const statusLabel = data.status ?? "ok";
+        setError(`Provision stop requested for ${slug} (${statusLabel}).`);
+        await load();
+      } catch (e) {
+        setError(`Failed to stop provisioning for ${slug}: ${String(e)}`);
+      } finally {
+        setStoppingId(null);
+      }
+    },
+    [load],
   );
 
   useEffect(() => {
@@ -303,6 +333,17 @@ export default function TenantsPage() {
           `Provisioning completed but tenant is not ready yet (${reasons}). Waiting for readiness...`,
         );
       }
+    }
+    const finalRes = await fetch(`/api/tenants/provision-status/${correlationId}`);
+    const finalJson = (await readJson(finalRes)) as
+      | ProvisionPollFailed
+      | { error?: string; cause?: string; message?: string; status?: string };
+    if ("status" in finalJson && finalJson.status === "failed") {
+      const fail = finalJson as ProvisionPollFailed;
+      throw new Error([fail.error, fail.cause].filter(Boolean).join(" — "));
+    }
+    if ("error" in finalJson && typeof finalJson.error === "string" && finalJson.error.length > 0) {
+      throw new Error(finalJson.error);
     }
     throw new Error(
       `Still provisioning after ${MAX_WAIT_MS / 60000} minutes — check Docker and the API terminal, then refresh this page.`,
@@ -599,9 +640,11 @@ export default function TenantsPage() {
           onDelete={removeTenant}
           onSuspend={handleSuspend}
           onReactivate={handleReactivate}
+          onStopProvision={handleStopProvision}
           deletingId={deletingId}
           suspendingId={suspendingId}
           reactivatingId={reactivatingId}
+          stoppingId={stoppingId}
         />
       </div>
     </div>

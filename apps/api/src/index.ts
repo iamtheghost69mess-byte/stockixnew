@@ -1,4 +1,5 @@
 import { createDecipheriv, createHash, createCipheriv, randomBytes, randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { apiConfig } from "@repo/config";
 import {
@@ -17,10 +18,11 @@ import {
   tenants,
   tenantProvisionEvents,
 } from "@repo/db/schema";
-import { asc, desc, eq, and, isNotNull, sql } from "drizzle-orm";
+import { asc, desc, eq, and, or, isNotNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
+import { execa } from "execa";
 import { z } from "zod";
 import { logAudit } from "./audit.js";
 
@@ -131,6 +133,70 @@ function decryptProvisionSecret(ciphertext: string): string | null {
     return decrypted.toString("utf8");
   } catch {
     return null;
+  }
+}
+
+function composeProjectFromSlug(slug: string): string {
+  return `stockix-${slug}`;
+}
+
+async function bestEffortDockerProjectCleanup(project: string): Promise<void> {
+  try {
+    await execa("docker", ["compose", "-p", project, "down", "--volumes", "--remove-orphans"], {
+      stdio: "pipe",
+    });
+  } catch {
+    // Best-effort cleanup only.
+  }
+
+  try {
+    const { stdout } = await execa("docker", ["ps", "-a", "--format", "{{.ID}}\t{{.Names}}"]);
+    const ids = stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.split("\t"))
+      .filter((parts) => parts.length === 2 && parts[1]?.startsWith(`${project}-`))
+      .map((parts) => parts[0]!)
+      .filter(Boolean);
+    if (ids.length > 0) {
+      await execa("docker", ["rm", "-f", ...ids], { stdio: "pipe" });
+    }
+  } catch {
+    // Best-effort cleanup only.
+  }
+
+  try {
+    const { stdout } = await execa("docker", ["volume", "ls", "--format", "{{.Name}}"]);
+    const volumes = stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((name) => name.startsWith(`${project}_`));
+    if (volumes.length > 0) {
+      await execa("docker", ["volume", "rm", "-f", ...volumes], { stdio: "pipe" });
+    }
+  } catch {
+    // Best-effort cleanup only.
+  }
+
+  try {
+    await execa("docker", ["network", "rm", `${project}_default`], { stdio: "pipe" });
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
+async function scrubTenantRuntimeArtifacts(slug: string): Promise<void> {
+  const project = composeProjectFromSlug(slug);
+  await bestEffortDockerProjectCleanup(project);
+  await rm(`${apiConfig.tenantEnvRoot}/${slug}`, { recursive: true, force: true }).catch(() => undefined);
+  await rm(`${apiConfig.traefikDynamicDir}/tenant-${slug}.yml`, { force: true }).catch(() => undefined);
+}
+
+function purgeProvisionCaches(correlationIds: string[]): void {
+  for (const correlationId of correlationIds) {
+    provisionPasswordCache.delete(correlationId);
+    invalidateTenantReadinessCache(correlationId);
   }
 }
 
@@ -255,17 +321,20 @@ app.use("/*", async (c, next) => {
   const startedAt = Date.now();
   await next();
   const latencyMs = Date.now() - startedAt;
-  console.log(
-    JSON.stringify({
-      level: "info",
-      type: "http_request",
-      requestId,
-      method: c.req.method,
-      path: c.req.path,
-      status: c.res.status,
-      latencyMs,
-    }),
-  );
+  const isClaimPoll = c.req.method === "POST" && c.req.path === "/internal/jobs/claim";
+  if (!isClaimPoll) {
+    console.log(
+      JSON.stringify({
+        level: "info",
+        type: "http_request",
+        requestId,
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        latencyMs,
+      }),
+    );
+  }
   await emitMetric("api.request.latency_ms", latencyMs, {
     method: c.req.method,
     path: c.req.path,
@@ -646,6 +715,36 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       meta: { jobId: currentJob.id },
     });
   }
+  if (currentJob?.type === "tenant.provision") {
+    const payloadSlug =
+      currentJob.payload &&
+      typeof currentJob.payload === "object" &&
+      "slug" in currentJob.payload &&
+      typeof (currentJob.payload as { slug?: unknown }).slug === "string"
+        ? String((currentJob.payload as { slug: string }).slug)
+        : null;
+    let targetTenantId = currentJob.tenantId;
+    if (!targetTenantId && payloadSlug) {
+      const [row] = await db
+        .select({ id: tenants.id })
+        .from(tenants)
+        .where(eq(tenants.slug, payloadSlug))
+        .limit(1);
+      targetTenantId = row?.id ?? null;
+    }
+    if (targetTenantId) {
+      await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, targetTenantId));
+      await db
+        .update(tenantDeployments)
+        .set({
+          status: "active",
+          lastError: null,
+          registrationCompletedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantDeployments.tenantId, targetTenantId));
+    }
+  }
   if (
     currentJob?.type === "tenant.lifecycle"
     && currentJob.tenantId
@@ -657,6 +756,18 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       .update(tenantDeployments)
       .set({ status: nextStatus, updatedAt: new Date() })
       .where(eq(tenantDeployments.tenantId, currentJob.tenantId));
+  }
+  if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
+    const correlations = await db
+      .select({ correlationId: tenantLifecycleJobs.correlationId })
+      .from(tenantLifecycleJobs)
+      .where(eq(tenantLifecycleJobs.tenantId, currentJob.tenantId));
+    purgeProvisionCaches(
+      correlations
+        .map((row) => row.correlationId)
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
+    );
+    await db.delete(tenantLifecycleJobs).where(eq(tenantLifecycleJobs.tenantId, currentJob.tenantId));
   }
   return c.json({ ok: true, job: updated ?? null });
 });
@@ -1131,7 +1242,7 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
   }
-  const removeVolumes = c.req.query("volumes") === "1" || c.req.query("volumes") === "true";
+  const removeVolumes = true;
   const existing = await db
     .select({
       id: tenants.id,
@@ -1153,23 +1264,41 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Tenant already deleted.",
     }, 200);
   }
-  const failedTenant =
+  const isFailedTenant =
     target.tenantStatus === "failed" || target.deploymentStatus === "failed";
-  if (failedTenant) {
-    await db
-      .delete(tenantProvisionEvents)
-      .where(
-        sql`${tenantProvisionEvents.tenantId} = ${parsed.data}::uuid OR ${tenantProvisionEvents.slug} = ${target.slug}`,
-      );
-    await db
-      .delete(tenantLifecycleJobs)
-      .where(
-        sql`${tenantLifecycleJobs.tenantId} = ${parsed.data}::uuid OR ${tenantLifecycleJobs.payload}->>'slug' = ${target.slug}`,
-      );
-    await db.delete(tenantConfig).where(eq(tenantConfig.tenantId, parsed.data));
-    await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, parsed.data));
-    await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, parsed.data));
-    await db.delete(tenants).where(eq(tenants.id, parsed.data));
+  const requiresForceStop =
+    target.tenantStatus === "provisioning"
+    || target.tenantStatus === "active"
+    || target.deploymentStatus === "provisioning"
+    || target.deploymentStatus === "active";
+  if (requiresForceStop) {
+    return c.json(
+      {
+        error: "tenant_busy",
+        message: "Tenant is provisioning or running. Stop/suspend it before deletion.",
+      },
+      409,
+    );
+  }
+  const jobRows = await db
+    .select({ correlationId: tenantLifecycleJobs.correlationId })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.tenantId, parsed.data));
+  const tenantCorrelationIds = jobRows
+    .map((row) => row.correlationId)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  if (isFailedTenant) {
+    await scrubTenantRuntimeArtifacts(target.slug);
+    await db.transaction(async (tx) => {
+      await tx.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, parsed.data));
+      await tx.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, parsed.data));
+      await tx.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, parsed.data));
+      await tx.delete(tenants).where(eq(tenants.id, parsed.data));
+      await tx
+        .delete(tenantLifecycleJobs)
+        .where(eq(tenantLifecycleJobs.tenantId, parsed.data));
+    });
+    purgeProvisionCaches(tenantCorrelationIds);
     await logAudit(db, {
       actorId: (c.get("actorId") as string | undefined) ?? "",
       action: "tenant.delete",
@@ -1178,29 +1307,62 @@ app.delete("/tenants/:tenantId", async (c) => {
       metadata: {
         deletedTenantId: parsed.data,
         slug: target.slug,
-        mode: "immediate_failed_cleanup",
-        removeVolumes,
+        mode: "hard_delete_failed_tenant",
+        previousTenantStatus: target.tenantStatus,
+        previousDeploymentStatus: target.deploymentStatus,
       },
     });
     return c.json({
       accepted: true,
       deleted: true,
-      immediate: true,
       slug: target.slug,
-      message: "Failed tenant deleted immediately from control plane records.",
+      hardDeleted: true,
+      message: "Failed tenant fully deleted from database.",
     }, 200);
   }
+  // Always cancel in-flight tenant.provision jobs first so the worker can abort
+  // any long-running compose pull/build and proceed to deprovision cleanup.
+  await db
+    .update(tenantLifecycleJobs)
+    .set({
+      status: "dead",
+      lastError: sql`'cancelled_by_user'`,
+      claimedAt: null,
+      claimedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, parsed.data),
+        eq(tenantLifecycleJobs.type, "tenant.provision"),
+        or(
+          eq(tenantLifecycleJobs.status, "pending"),
+          eq(tenantLifecycleJobs.status, "running"),
+        ),
+      ),
+    );
   const job = await insertTenantJob(db, {
     type: "tenant.deprovision",
     tenantId: parsed.data,
-    payload: { tenantId: parsed.data, removeVolumes },
+    payload: {
+      tenantId: parsed.data,
+      removeVolumes,
+      removeImages: removeVolumes,
+    },
   });
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.delete",
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
-    metadata: { deletedTenantId: parsed.data, slug: target.slug, mode: "queued" },
+    metadata: {
+      deletedTenantId: parsed.data,
+      slug: target.slug,
+      mode: "queued",
+      removeVolumes,
+      previousTenantStatus: target.tenantStatus,
+      previousDeploymentStatus: target.deploymentStatus,
+    },
   });
   return c.json({
     accepted: true,
@@ -1246,12 +1408,58 @@ app.post("/tenants", async (c) => {
     return c.json({ error: "owner_id does not exist" }, 400);
   }
 
-  const slugTaken = await db
+  const slugRecord = await db
+    .select({
+      id: tenants.id,
+      tenantStatus: tenants.status,
+      deploymentStatus: tenantDeployments.status,
+      slug: tenants.slug,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(eq(tenants.slug, body.slug))
+    .limit(1);
+
+  const existing = slugRecord[0];
+  if (existing) {
+    const canRecoverSlug =
+      existing.tenantStatus === "failed"
+      || existing.tenantStatus === "provisioning"
+      || existing.deploymentStatus === "failed"
+      || existing.deploymentStatus === "provisioning";
+    if (canRecoverSlug) {
+      await scrubTenantRuntimeArtifacts(body.slug);
+      const rows = await db
+        .select({ correlationId: tenantLifecycleJobs.correlationId })
+        .from(tenantLifecycleJobs)
+        .where(eq(tenantLifecycleJobs.tenantId, existing.id));
+      const correlationIds = rows
+        .map((row) => row.correlationId)
+        .filter((value): value is string => typeof value === "string" && value.length > 0);
+      await db.transaction(async (tx) => {
+        await tx.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, existing.id));
+        await tx.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, existing.id));
+        await tx.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, existing.id));
+        await tx.delete(tenantLifecycleJobs).where(eq(tenantLifecycleJobs.tenantId, existing.id));
+        await tx.delete(tenants).where(eq(tenants.id, existing.id));
+      });
+      purgeProvisionCaches(correlationIds);
+    } else {
+      return c.json(
+        { error: "slug_taken", message: `Tenant slug already exists: ${body.slug}` },
+        409,
+      );
+    }
+  } else {
+    // Clean orphan runtime artifacts if DB has no tenant row for this slug.
+    await scrubTenantRuntimeArtifacts(body.slug);
+  }
+  const stillTaken = await db
     .select({ id: tenants.id })
     .from(tenants)
     .where(eq(tenants.slug, body.slug))
     .limit(1);
-  if (slugTaken.length > 0) {
+  if (stillTaken.length > 0) {
     return c.json(
       { error: `Tenant slug already exists: ${body.slug}` },
       409,
@@ -1314,6 +1522,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       status: tenantLifecycleJobs.status,
       attempts: tenantLifecycleJobs.attempts,
       maxAttempts: tenantLifecycleJobs.maxAttempts,
+      tenantId: tenantLifecycleJobs.tenantId,
     })
     .from(tenantLifecycleJobs)
     .where(eq(tenantLifecycleJobs.correlationId, correlationId))
@@ -1370,7 +1579,11 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     await db
       .update(tenantLifecycleJobs)
       .set({
-        lastError: sql`'cancel_requested_by_user'`,
+        status: "dead",
+        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        lastError: sql`'cancelled_by_user'`,
+        claimedAt: null,
+        claimedBy: null,
         updatedAt: new Date(),
       })
       .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "running")));
@@ -1380,7 +1593,188 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     }).catch((error) => {
       console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
     });
-    return c.json({ ok: true, status: "cancellation_requested", correlationId });
+    if (job.tenantId) {
+      await db
+        .update(tenantDeployments)
+        .set({
+          status: "failed",
+          lastError: sql`'cancelled_by_user'`,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantDeployments.tenantId, job.tenantId));
+      await insertTenantJob(db, {
+        type: "tenant.deprovision",
+        tenantId: job.tenantId,
+        payload: { tenantId: job.tenantId, removeVolumes: true, removeImages: true },
+        priority: 10,
+      });
+    }
+    purgeProvisionCaches([correlationId]);
+    return c.json({ ok: true, status: "cancelled", correlationId });
+  }
+
+  return c.json({ ok: true, status: job.status, correlationId });
+});
+
+app.post("/tenants/:tenantId/provision-stop", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const [job] = await db
+    .select({
+      id: tenantLifecycleJobs.id,
+      type: tenantLifecycleJobs.type,
+      status: tenantLifecycleJobs.status,
+      attempts: tenantLifecycleJobs.attempts,
+      maxAttempts: tenantLifecycleJobs.maxAttempts,
+      correlationId: tenantLifecycleJobs.correlationId,
+    })
+    .from(tenantLifecycleJobs)
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, parsed.data),
+        eq(tenantLifecycleJobs.type, "tenant.provision"),
+      ),
+    )
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+
+  if (!job) {
+    await db
+      .update(tenantDeployments)
+      .set({
+        status: "failed",
+        lastError: sql`'cancelled_by_user'`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tenantDeployments.tenantId, parsed.data),
+          or(
+            eq(tenantDeployments.status, "provisioning"),
+            eq(tenantDeployments.status, "pending"),
+          ),
+        ),
+      );
+    return c.json({
+      ok: true,
+      status: "no_active_provision_job",
+      message: "No active tenant.provision job found for this tenant.",
+    });
+  }
+  const correlationId = job.correlationId;
+  if (!correlationId) {
+    return c.json({ error: "provision_correlation_missing" }, 409);
+  }
+
+  const trace = createProvisionTracer(
+    db,
+    correlationId,
+    () => ({ slug: "unknown" }),
+    (m) => console.log(JSON.stringify({ level: "info", correlationId, message: m })),
+  );
+
+  if (job.status === "completed") {
+    return c.json({ error: "job_already_completed", correlationId }, 409);
+  }
+
+  if (job.status === "dead") {
+    await db
+      .update(tenantDeployments)
+      .set({
+        status: "failed",
+        lastError: sql`'cancelled_by_user'`,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantDeployments.tenantId, parsed.data));
+    await trace
+      .event("cancel", "Provision stop requested after terminal state", {
+        level: "warn",
+        meta: { status: "dead", tenantId: parsed.data },
+      })
+      .catch((error) => {
+        console.error(
+          "[tenant-provision-stop] trace write failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    return c.json({ ok: true, status: "already_stopped", correlationId });
+  }
+
+  if (job.status === "pending") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        lastError: sql`'cancelled_by_user'`,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "pending")));
+    await trace
+      .event("cancel", "Provision stopped before worker execution", {
+        level: "warn",
+        meta: { status: "pending", tenantId: parsed.data },
+      })
+      .catch((error) => {
+        console.error(
+          "[tenant-provision-stop] trace write failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    await db
+      .update(tenantDeployments)
+      .set({
+        status: "failed",
+        lastError: sql`'cancelled_by_user'`,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantDeployments.tenantId, parsed.data));
+    return c.json({ ok: true, status: "cancelled", correlationId });
+  }
+
+  if (job.status === "running") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        lastError: sql`'cancelled_by_user'`,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "running")));
+    await trace
+      .event("cancel", "Provision stop requested; worker will abort at next checkpoint", {
+        level: "warn",
+        meta: { status: "running", tenantId: parsed.data },
+      })
+      .catch((error) => {
+        console.error(
+          "[tenant-provision-stop] trace write failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    await db
+      .update(tenantDeployments)
+      .set({
+        status: "failed",
+        lastError: sql`'cancelled_by_user'`,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantDeployments.tenantId, parsed.data));
+    await insertTenantJob(db, {
+      type: "tenant.deprovision",
+      tenantId: parsed.data,
+      payload: { tenantId: parsed.data, removeVolumes: true, removeImages: true },
+      priority: 10,
+    });
+    purgeProvisionCaches([correlationId]);
+    return c.json({ ok: true, status: "cancelled", correlationId });
   }
 
   return c.json({ ok: true, status: job.status, correlationId });
@@ -1447,6 +1841,18 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
   }
 
   if (lastJob.status === "pending" || lastJob.status === "running" || lastJob.status === "failed") {
+    if (lastJob.status === "failed") {
+      return c.json({
+        status: "failed",
+        ready,
+        readiness,
+        correlationId,
+        jobId: lastJob.id,
+        error: lastJob.lastError ?? "job_failed",
+        cause: lastJob.lastError ?? undefined,
+        events,
+      });
+    }
     return c.json({
       status: lastJob.status === "pending" ? "queued" : lastJob.status,
       ready,
@@ -1472,6 +1878,18 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       provisionPasswordCache.delete(correlationId);
     }
     if (!oneTimeAdminPassword) {
+      const consumedRows = await db
+        .select({ id: tenantProvisionEvents.id })
+        .from(tenantProvisionEvents)
+        .where(
+          and(
+            eq(tenantProvisionEvents.correlationId, correlationId),
+            eq(tenantProvisionEvents.phase, "secret_consumed"),
+          ),
+        )
+        .limit(1);
+      const alreadyConsumed = consumedRows.length > 0;
+      if (!alreadyConsumed) {
       const secretEvents = await db
         .select({ meta: tenantProvisionEvents.meta })
         .from(tenantProvisionEvents)
@@ -1493,6 +1911,17 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
           break;
         }
       }
+      }
+    }
+    if (oneTimeAdminPassword) {
+      provisionPasswordCache.delete(correlationId);
+      await appendProvisionEventSafe({
+        correlationId,
+        phase: "secret_consumed",
+        level: "info",
+        message: "Bootstrap admin OTP consumed from status endpoint",
+        meta: { consumedAt: new Date().toISOString() },
+      });
     }
     return c.json({
       status: "complete",
@@ -1797,6 +2226,37 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
   return c.json({
     accepted: true,
     suspended: true,
+    slug: row.slug,
+    composeProject: row.composeProjectName,
+    jobId: job?.id ?? null,
+  }, 202);
+});
+
+app.post("/tenants/:tenantId/stop", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const row = await loadTenantForLifecycle(parsed.data);
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
+  if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
+  const job = await insertTenantJob(db, {
+    type: "tenant.lifecycle",
+    tenantId: parsed.data,
+    payload: { tenantId: parsed.data, slug: row.slug, command: "stop", status: "stopped" },
+  });
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "tenant.stop",
+    targetTenantId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+  });
+
+  return c.json({
+    accepted: true,
+    stopped: true,
     slug: row.slug,
     composeProject: row.composeProjectName,
     jobId: job?.id ?? null,

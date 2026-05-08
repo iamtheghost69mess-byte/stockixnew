@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, PauseCircle, PlayCircle, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, PauseCircle, PlayCircle, Square, Trash2 } from "lucide-react";
 
 import TenantStatusBadge from "@/components/tenant-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,6 +25,16 @@ import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import type { ProvisionEventRow, TenantDetail } from "@/types/tenant";
 import { buttonVariants } from "@/components/ui/button";
 
+async function readJson(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { raw: text };
+  }
+}
+
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -35,6 +45,7 @@ export default function TenantDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [stoppingProvision, setStoppingProvision] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [volumesOpen, setVolumesOpen] = useState(false);
@@ -51,7 +62,7 @@ export default function TenantDetailPage() {
     setError(null);
     try {
       const res = await fetch(`/api/tenants/${id}`);
-      const data = (await res.json()) as { error?: string; tenant?: TenantDetail };
+      const data = (await readJson(res)) as { error?: string; tenant?: TenantDetail };
       if (!res.ok || !data.tenant) throw new Error(data.error ?? `HTTP ${res.status}`);
       setTenant(data.tenant);
       setForm({
@@ -71,8 +82,16 @@ export default function TenantDetailPage() {
     setEventsLoading(true);
     try {
       const res = await fetch(`/api/tenants/${id}/events`);
-      const data = (await res.json()) as { events?: ProvisionEventRow[] };
+      const data = (await readJson(res)) as { events?: ProvisionEventRow[]; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? `Failed to load events (HTTP ${res.status})`);
+        setEvents([]);
+        return;
+      }
       setEvents(data.events ?? []);
+    } catch (e) {
+      setError(`Failed to load events: ${String(e)}`);
+      setEvents([]);
     } finally {
       setEventsLoading(false);
     }
@@ -128,7 +147,7 @@ export default function TenantDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = (await res.json()) as { tenant?: TenantDetail; error?: string };
+      const data = (await readJson(res)) as { tenant?: TenantDetail; error?: string };
       if (!res.ok || !data.tenant) throw new Error(data.error ?? `HTTP ${res.status}`);
       setTenant(data.tenant);
       setEditing(false);
@@ -323,6 +342,48 @@ export default function TenantDetailPage() {
               >
                 <PlayCircle className="mr-1 h-4 w-4" />
                 Reactivate tenant
+              </Button>
+            ) : null}
+            {isProvisioning ? (
+              <Button
+                variant="outline"
+                disabled={stoppingProvision}
+                onClick={async () => {
+                  if (
+                    !globalThis.confirm(
+                      `Stop provisioning for "${tenant.slug}"?\n\nThis cancels the active provisioning lifecycle job.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  setStoppingProvision(true);
+                  setError(null);
+                  try {
+                    const res = await fetch(`/api/tenants/${tenant.id}/provision-stop`, {
+                      method: "POST",
+                    });
+                    const data = (await res.json().catch(() => ({}))) as {
+                      error?: string;
+                      status?: string;
+                    };
+                    if (!res.ok) {
+                      setError(data.error ?? `Stop provisioning failed (${res.status})`);
+                      return;
+                    }
+                    await loadTenant();
+                    await loadEvents();
+                    setError(`Provision stop requested (${data.status ?? "ok"}).`);
+                  } finally {
+                    setStoppingProvision(false);
+                  }
+                }}
+              >
+                {stoppingProvision ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Square className="mr-1 h-4 w-4" />
+                )}
+                Stop provisioning
               </Button>
             ) : null}
             <Button variant="destructive" onClick={() => setConfirmOpen(true)}>

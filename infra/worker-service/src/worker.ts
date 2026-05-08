@@ -21,10 +21,23 @@ const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
 const apiBaseUrl = `http://localhost:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
+const jobExecutionTimeoutMs = 10 * 60 * 1000;
 let shuttingDown = false;
 
 function timeoutSignal(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
+}
+
+async function withExecutionTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`execution_timeout:${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function emitWorkerMetric(name: string, value: number, tags: Record<string, string | number>) {
@@ -224,8 +237,10 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
 }) {
   if (!job.tenantId) throw new Error("tenantId is required");
   const removeVolumes = job.payload.removeVolumes === true;
+  const removeImages = job.payload.removeImages === true;
   const result = await deprovisionTenant(db, job.tenantId, {
     removeVolumes,
+    removeImages,
     log: (m) => console.log(`[worker][${job.id}] ${m}`),
   });
   if (!result.ok) throw new Error(result.message);
@@ -308,9 +323,9 @@ async function loop() {
       // forwarded to the API in-memory store without being written to the DB (CRIT-02).
       let oneTimeAdminPassword: string | undefined;
       if (job.type === "tenant.provision") {
-        oneTimeAdminPassword = await runProvisionJob(db, job);
+        oneTimeAdminPassword = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
       } else {
-        await handler(db, job);
+        await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
       await markJobComplete(job.id, oneTimeAdminPassword);
       await emitWorkerMetric("worker.job.success", 1, { jobType: job.type });
@@ -329,7 +344,8 @@ async function loop() {
       console.error(`[worker][${job.id}] failed: ${message}`);
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
-        const noRetry = cancelledByUser || (job.type === "tenant.provision" && isPermanentProvisionError(message));
+        // Provisioning should fail fast and never retry automatically.
+        const noRetry = cancelledByUser || job.type === "tenant.provision" || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         console.log(

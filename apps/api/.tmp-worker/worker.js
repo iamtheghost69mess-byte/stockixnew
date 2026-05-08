@@ -2619,7 +2619,7 @@ import { eq as eq3 } from "drizzle-orm";
 import { z as z2 } from "zod";
 
 // ../../infra/worker-service/domain/provisioner.ts
-import { stat } from "fs/promises";
+import { rm, stat } from "fs/promises";
 import { join as join7 } from "path";
 import { eq as eq2 } from "drizzle-orm";
 
@@ -2760,32 +2760,6 @@ async function writeTenantEnvFileAtomic(tenantEnvDir, contents) {
 }
 
 // ../../infra/worker-service/domain/provisioning/tenant-docker-workflow.ts
-async function executeDataStep(runner, ctx) {
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
-    "up",
-    "-d",
-    "mysql",
-    "mongo",
-    "redis"
-  ]);
-}
-async function executeMigrationStep(runner, ctx, log) {
-  log("database_migration");
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
-    "run",
-    "--rm",
-    "database_migration"
-  ]);
-}
-async function executeAppStep(runner, ctx) {
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
-    "up",
-    "-d",
-    "webapp",
-    "nginx",
-    "server"
-  ]);
-}
 async function composeDownBestEffort(runner, ctx) {
   const result = await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, ["down", "--volumes"]).then(() => true).catch(() => false);
   return result;
@@ -2868,6 +2842,47 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     if (!assertNotCancelled) return;
     await assertNotCancelled();
   };
+  const runComposeWithCancellation = async (args) => {
+    log(`[compose] starting: docker compose ${args.join(" ")}`);
+    const controller = new AbortController();
+    const intervalId = setInterval(() => {
+      checkNotCancelled().catch((error) => {
+        if (!controller.signal.aborted) {
+          log(
+            `[compose] cancellation requested during ${args.join(" ")}: ${error instanceof Error ? error.message : String(error)}`
+          );
+          controller.abort(error);
+        }
+      });
+    }, 1e3);
+    try {
+      const timeoutMs = args[0] === "run" ? 6e5 : 3e5;
+      await deps.docker.run(
+        composeCtx.composeFile,
+        composeCtx.project,
+        composeCtx.envPath,
+        composeCtx.composeEnv,
+        args,
+        { cancelSignal: controller.signal, timeoutMs }
+      );
+      log(`[compose] completed: docker compose ${args.join(" ")}`);
+      await checkNotCancelled();
+    } catch (error) {
+      log(
+        `[compose] failed: docker compose ${args.join(" ")} :: ${error instanceof Error ? error.message : String(error)}`
+      );
+      if (controller.signal.aborted) {
+        const reason = controller.signal.reason;
+        if (reason instanceof Error) {
+          throw reason;
+        }
+        throw new Error(typeof reason === "string" ? reason : "cancelled_by_user");
+      }
+      throw error;
+    } finally {
+      clearInterval(intervalId);
+    }
+  };
   const hasOp = (key) => completedOps.has(key);
   const markOp = async (operationKey, message, meta) => {
     completedOps.add(operationKey);
@@ -2878,7 +2893,19 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       }
     });
   };
+  const recordCleanupError = async (step, error) => {
+    const msg = error instanceof Error ? error.message : String(error);
+    try {
+      await trace.event("cleanup", `non-fatal error in ${step}: ${msg}`, {
+        level: "error",
+        meta: { step, error: msg }
+      });
+    } catch {
+      console.error(`[provision][${correlationId}] cleanup log failure step=${step}: ${msg}`);
+    }
+  };
   try {
+    log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
     await checkNotCancelled();
     await mkdir2(join5(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
     await mkdir2(join5(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
@@ -2969,13 +2996,26 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     };
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
+    await docker.run(
+      composeCtx.composeFile,
+      composeCtx.project,
+      composeCtx.envPath,
+      composeCtx.composeEnv,
+      ["down", "--remove-orphans", "-v", "--timeout", "10"],
+      { timeoutMs: 12e4 }
+    ).catch(() => void 0);
+    await trace.event("preflight.cleanup", "completed", {
+      meta: { composeProjectName: project }
+    });
     sideEffectsStarted = true;
     await checkNotCancelled();
     if (!hasOp("docker.data_step")) {
-      await executeDataStep(docker, composeCtx);
+      log("[provision] step start: docker.data_step");
+      await runComposeWithCancellation(["up", "-d", "--no-deps", "--remove-orphans", "mysql", "mongo", "redis"]);
       await markOp("docker.data_step", "Data services compose step completed", {
         composeProjectName: project
       });
+      log("[provision] step done: docker.data_step");
     } else {
       await trace.event("resume", "Skipping data step (already journaled)", {
         meta: { operationKey: "docker.data_step", composeProjectName: project }
@@ -2983,10 +3023,13 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     }
     await checkNotCancelled();
     if (!hasOp("docker.migration_step")) {
-      await executeMigrationStep(docker, composeCtx, log);
+      log("[provision] step start: docker.migration_step");
+      log("database_migration");
+      await runComposeWithCancellation(["run", "--rm", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project
       });
+      log("[provision] step done: docker.migration_step");
     } else {
       await trace.event("resume", "Skipping migration step (already journaled)", {
         meta: { operationKey: "docker.migration_step", composeProjectName: project }
@@ -2994,10 +3037,12 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     }
     await checkNotCancelled();
     if (!hasOp("docker.app_step")) {
-      await executeAppStep(docker, composeCtx);
+      log("[provision] step start: docker.app_step");
+      await runComposeWithCancellation(["up", "-d", "--remove-orphans", "webapp", "nginx", "server"]);
       await markOp("docker.app_step", "Application compose step completed", {
         composeProjectName: project
       });
+      log("[provision] step done: docker.app_step");
     } else {
       await trace.event("resume", "Skipping app step (already journaled)", {
         meta: { operationKey: "docker.app_step", composeProjectName: project }
@@ -3013,6 +3058,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       fallbackPort: port
     });
     if (!hasOp("tenant.health_check")) {
+      log("[provision] step start: tenant.health_check");
       await finance.waitUntilReady(
         internalUrl,
         STOCKIX_FINANCE_HEALTH_TIMEOUT_MS,
@@ -3021,6 +3067,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         trace
       );
       await markOp("tenant.health_check", "Tenant health check completed", { internalUrl });
+      log("[provision] step done: tenant.health_check");
     } else {
       await trace.event("resume", "Skipping health check (already journaled)", {
         meta: { operationKey: "tenant.health_check", internalUrl }
@@ -3028,6 +3075,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     }
     await checkNotCancelled();
     if (!hasOp("tenant.bootstrap_admin")) {
+      log("[provision] step start: tenant.bootstrap_admin");
       await finance.registerBootstrapAdmin({
         internalBaseUrl: internalUrl,
         firstName: input.adminFirstName,
@@ -3042,6 +3090,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         internalBaseUrl: internalUrl,
         adminEmail: input.adminEmail
       });
+      log("[provision] step done: tenant.bootstrap_admin");
     } else {
       await trace.event("resume", "Skipping bootstrap admin registration (already journaled)", {
         meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail }
@@ -3049,16 +3098,31 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     }
     await checkNotCancelled();
     if (!hasOp("edge.publish")) {
-      await edge.publish(input.slug, port, rootDomain).catch(() => void 0);
+      log("[provision] step start: edge.publish");
+      try {
+        await edge.publish(input.slug, port, rootDomain);
+      } catch (error) {
+        await trace.event("edge", "Traefik edge publish failed", {
+          level: "error",
+          meta: {
+            slug: input.slug,
+            internalPort: port,
+            error: error instanceof Error ? error.message : String(error)
+          }
+        });
+        throw error;
+      }
       await markOp("edge.publish", "Traefik edge publish completed", {
         slug: input.slug,
         internalPort: port
       });
+      log("[provision] step done: edge.publish");
     } else {
       await trace.event("resume", "Skipping edge publish (already journaled)", {
         meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port }
       });
     }
+    log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
     return {
       ok: true,
       tenantId,
@@ -3071,29 +3135,30 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (tenantId && deploymentId) {
-      await db.update(tenants).set({ status: "failed" }).where(eq(tenants.id, tenantId)).catch(() => void 0);
-      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq(tenantDeployments.id, deploymentId)).catch(() => void 0);
+      await db.update(tenants).set({ status: "failed" }).where(eq(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
+      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
     }
     if (sideEffectsStarted && composeCtx) {
       await trace.event("cleanup", "Attempting best-effort compose rollback", {
         level: "warn",
         meta: { composeProjectName: composeCtx.project }
-      }).catch(() => void 0);
+      }).catch((error) => recordCleanupError("cleanup_event_before_rollback", error));
       const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
       if (rolledBack && tenantId) {
-        await db.delete(tenants).where(eq(tenants.id, tenantId)).catch(() => void 0);
+        await db.delete(tenants).where(eq(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
         await trace.event("cleanup", "Compose rollback completed and tenant records removed", {
           level: "info",
           meta: { composeProjectName: composeCtx.project, tenantId }
-        }).catch(() => void 0);
+        }).catch((error) => recordCleanupError("cleanup_event_after_rollback", error));
       } else if (!rolledBack) {
         await trace.event("cleanup", "Compose rollback failed; tenant marked failed for operator recovery", {
           level: "error",
           meta: { composeProjectName: composeCtx.project, tenantId, deploymentId }
-        }).catch(() => void 0);
+        }).catch((error) => recordCleanupError("cleanup_event_rollback_failed", error));
       }
     }
-    await trace.event("failed", message, { level: "error", meta: { cause: String(err) } }).catch(() => void 0);
+    await trace.event("failed", message, { level: "error", meta: { cause: String(err) } }).catch((error) => recordCleanupError("final_failed_event", error));
+    log(`[provision] failed slug=${input.slug} correlationId=${correlationId}: ${message}`);
     return { ok: false, message, cause: String(err) };
   }
 }
@@ -3127,12 +3192,41 @@ var CryptoTenantSecretGenerator = class {
 // ../../infra/worker-service/domain/provisioning/adapters/execa-docker-compose-runner.ts
 import { execa as execa2 } from "execa";
 var ExecaDockerComposeRunner = class {
-  async run(composeFile, project, envFile, composeEnv, args) {
-    await execa2(
+  async run(composeFile, project, envFile, composeEnv, args, options) {
+    const execaOptions = {
+      env: composeEnv,
+      stdio: "pipe",
+      extendEnv: true,
+      forceKillAfterDelay: 500
+    };
+    const subprocess = execa2(
       "docker",
       ["compose", "-f", composeFile, "-p", project, "--env-file", envFile, ...args],
-      { env: composeEnv, stdio: "pipe", extendEnv: true }
+      execaOptions
     );
+    let abortHandler;
+    const cancelSignal = options?.cancelSignal;
+    if (cancelSignal) {
+      abortHandler = () => {
+        if (process.platform === "win32" && typeof subprocess.pid === "number") {
+          void execa2("taskkill", ["/PID", String(subprocess.pid), "/T", "/F"]).catch(() => void 0);
+          return;
+        }
+        subprocess.kill("SIGKILL");
+      };
+      if (cancelSignal.aborted) {
+        abortHandler();
+      } else {
+        cancelSignal.addEventListener("abort", abortHandler, { once: true });
+      }
+    }
+    try {
+      await subprocess;
+    } finally {
+      if (cancelSignal && abortHandler) {
+        cancelSignal.removeEventListener("abort", abortHandler);
+      }
+    }
   }
 };
 
@@ -3231,7 +3325,11 @@ async function writeTenantTraefikConfig(slug, port, domain) {
 async function removeTenantTraefikConfig(slug) {
   try {
     await unlink(join6(traefikDir(), `tenant-${slug}.yml`));
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes("no such file")) {
+      throw error;
+    }
   }
 }
 
@@ -3269,16 +3367,27 @@ async function deprovisionTenant(db, tenantId, options = {}) {
   let dockerStatus = "skipped";
   try {
     await stat(envPath);
-    const downArgs = options.removeVolumes ? ["down", "--volumes"] : ["down"];
+    const downArgs = ["down"];
+    if (options.removeVolumes) {
+      downArgs.push("--volumes");
+    }
+    if (options.removeImages) {
+      downArgs.push("--rmi", "local");
+    }
     await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs);
     dockerStatus = "stopped";
   } catch {
     dockerStatus = "skipped";
   }
-  await edgePublisher.unpublish(row.slug).catch(() => void 0);
+  await edgePublisher.unpublish(row.slug).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`edge unpublish failed for ${row.slug}: ${message}`);
+  });
   await db.delete(tenantProvisionEvents).where(eq2(tenantProvisionEvents.tenantId, tenantId));
   await db.delete(adminAuditLog).where(eq2(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq2(tenantDeployments.tenantId, tenantId));
   await db.delete(tenants).where(eq2(tenants.id, tenantId));
+  await rm(join7(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => void 0);
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }
@@ -3310,7 +3419,11 @@ async function emitWorkerMetric(name, value, tags) {
       ts: (/* @__PURE__ */ new Date()).toISOString()
     }),
     signal: timeoutSignal(requestTimeoutMs)
-  }).catch(() => void 0);
+  }).catch((error) => {
+    console.error(
+      `[worker] metric emit failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
 }
 async function claimNextJob() {
   const secret = apiConfig.workerSecret;
@@ -3425,14 +3538,35 @@ async function runProvisionJob(db, job) {
     ipAddress: workerId,
     userAgent: "infra-worker",
     metadata: { mode: "job_worker", jobId: job.id }
-  }).catch(() => void 0);
+  }).catch(async (error) => {
+    if (job.correlationId) {
+      await db.insert(tenantProvisionEvents).values({
+        correlationId: job.correlationId,
+        phase: "audit",
+        level: "error",
+        message: "Failed to write admin audit log after successful provision",
+        tenantId: result.tenantId,
+        meta: {
+          step: "admin_audit_log",
+          error: error instanceof Error ? error.message : String(error),
+          jobId: job.id
+        }
+      }).catch((nestedError) => {
+        console.error(
+          `[worker][${job.id}] failed to persist audit failure event: ${nestedError instanceof Error ? nestedError.message : String(nestedError)}`
+        );
+      });
+    }
+  });
   return result.oneTimeAdminPassword;
 }
 async function runDeprovisionJob(db, job) {
   if (!job.tenantId) throw new Error("tenantId is required");
   const removeVolumes = job.payload.removeVolumes === true;
+  const removeImages = job.payload.removeImages === true;
   const result = await deprovisionTenant(db, job.tenantId, {
     removeVolumes,
+    removeImages,
     log: (m) => console.log(`[worker][${job.id}] ${m}`)
   });
   if (!result.ok) throw new Error(result.message);
@@ -3512,7 +3646,7 @@ async function loop() {
       console.error(`[worker][${job.id}] failed: ${message}`);
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
-        const noRetry = cancelledByUser || job.type === "tenant.provision" && isPermanentProvisionError(message);
+        const noRetry = cancelledByUser || job.type === "tenant.provision" || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         console.log(

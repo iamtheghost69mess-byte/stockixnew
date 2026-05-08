@@ -7,9 +7,14 @@ type ComposeCtx = {
   composeEnv: Record<string, string>;
 };
 
+type ComposeRunOptions = {
+  cancelSignal?: AbortSignal;
+};
+
 export async function executeDataStep(
   runner: IDockerComposeRunner,
   ctx: ComposeCtx,
+  options?: ComposeRunOptions,
 ): Promise<void> {
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
@@ -17,25 +22,27 @@ export async function executeDataStep(
     "mysql",
     "mongo",
     "redis",
-  ]);
+  ], options);
 }
 
 export async function executeMigrationStep(
   runner: IDockerComposeRunner,
   ctx: ComposeCtx,
   log: (m: string) => void,
+  options?: ComposeRunOptions,
 ): Promise<void> {
   log("database_migration");
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "run",
     "--rm",
     "database_migration",
-  ]);
+  ], options);
 }
 
 export async function executeAppStep(
   runner: IDockerComposeRunner,
   ctx: ComposeCtx,
+  options?: ComposeRunOptions,
 ): Promise<void> {
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
@@ -43,7 +50,7 @@ export async function executeAppStep(
     "webapp",
     "nginx",
     "server",
-  ]);
+  ], options);
 }
 
 export async function composeDownBestEffort(
@@ -53,7 +60,14 @@ export async function composeDownBestEffort(
   const result = await runner
     // Provision rollback should remove anonymous/named volumes to avoid stale
     // MySQL credentials across retries (new secret vs old initialized volume).
-    .run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, ["down", "--volumes"])
+    .run(
+      ctx.composeFile,
+      ctx.project,
+      ctx.envPath,
+      ctx.composeEnv,
+      ["down", "--remove-orphans", "-v", "--timeout", "30"],
+      { timeoutMs: 2 * 60 * 1000 },
+    )
     .then(() => true)
     .catch(() => false);
   return result;

@@ -7,6 +7,10 @@ export interface IDockerComposeRunner {
     envFile: string,
     composeEnv: Record<string, string>,
     args: string[],
+    options?: {
+      cancelSignal?: AbortSignal;
+      timeoutMs?: number;
+    },
   ): Promise<void>;
 }
 

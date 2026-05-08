@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { adminAuditLog, tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
@@ -57,8 +57,14 @@ export async function deprovisionTenant(
   let dockerStatus: "stopped" | "skipped" | "failed" = "skipped";
   try {
     await stat(envPath);
-    const downArgs = options.removeVolumes ? ["down", "--volumes"] : ["down"];
-    await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs);
+    const downArgs = ["down", "--remove-orphans", "--timeout", "30"];
+    if (options.removeVolumes) {
+      downArgs.push("-v");
+    }
+    if (options.removeImages) {
+      downArgs.push("--rmi", "local");
+    }
+    await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, { timeoutMs: 2 * 60 * 1000 });
     dockerStatus = "stopped";
   } catch {
     dockerStatus = "skipped";
@@ -70,7 +76,9 @@ export async function deprovisionTenant(
   });
   await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
   await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, tenantId));
   await db.delete(tenants).where(eq(tenants.id, tenantId));
+  await rm(join(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => undefined);
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }

@@ -21,6 +21,7 @@ export type ProvisionResult =
 
 export type DeprovisionOptions = {
   removeVolumes?: boolean;
+  removeImages?: boolean;
   log?: (message: string) => void;
 };
 
