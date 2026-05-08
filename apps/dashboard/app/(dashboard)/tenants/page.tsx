@@ -120,18 +120,71 @@ export default function TenantsPage() {
       setError(null);
       try {
         const q = wipeVolumes ? "?volumes=true" : "";
-        const res = await fetch(`/api/tenants/${tenantId}${q}`, {
-          method: "DELETE",
-        });
-        const data = (await readJson(res)) as { error?: string };
-        if (!res.ok) {
-          throw new Error(data.error ?? `HTTP ${res.status}`);
+        const deleteOnce = async () => {
+          const res = await fetch(`/api/tenants/${tenantId}${q}`, {
+            method: "DELETE",
+          });
+          const data = (await readJson(res)) as {
+            error?: string;
+            message?: string;
+            tenantStatus?: string | null;
+            deploymentStatus?: string | null;
+          };
+          return { res, data };
+        };
+
+        let { res, data } = await deleteOnce();
+        if (!res.ok && res.status === 409 && data.error === "tenant_busy") {
+          // UX hardening: for active/provisioning tenants, try to transition them out
+          // of busy state automatically, then retry delete.
+          const provisioningBusy =
+            data.tenantStatus === "provisioning" ||
+            data.deploymentStatus === "provisioning";
+          const transitionPath = provisioningBusy
+            ? `/api/tenants/${tenantId}/provision-stop`
+            : `/api/tenants/${tenantId}/suspend`;
+          const transitionRes = await fetch(transitionPath, { method: "POST" });
+          const transitionData = (await readJson(transitionRes)) as {
+            error?: string;
+            message?: string;
+          };
+          if (!transitionRes.ok) {
+            throw new Error(
+              transitionData.message ??
+              transitionData.error ??
+              "Tenant is busy and automatic stop/suspend failed.",
+            );
+          }
+
+          for (let i = 0; i < 6; i += 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            const attempt = await deleteOnce();
+            res = attempt.res;
+            data = attempt.data;
+            if (res.ok) break;
+            if (!(res.status === 409 && data.error === "tenant_busy")) break;
+          }
         }
+
+        if (!res.ok) {
+          throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`);
+        }
+        // Delete is async (queued to worker). Remove row optimistically so users
+        // cannot interact with a tenant that is already scheduled for deletion.
+        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         setTenantAccess(null);
         setOneTimePassword(null);
-        await load();
+        // Refresh in background to reconcile final backend state once worker completes.
+        void load().catch(() => {});
       } catch (e) {
-        setError(String(e));
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setError(`Tenant "${slug}" was already removed.`);
+          void load().catch(() => {});
+          return;
+        }
+        setError(message);
       } finally {
         setDeletingId(null);
       }
@@ -157,12 +210,19 @@ export default function TenantsPage() {
           ),
         );
       } catch (e) {
-        setError(`Failed to suspend ${slug}: ${String(e)}`);
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setError(`Tenant "${slug}" no longer exists.`);
+          void load().catch(() => {});
+          return;
+        }
+        setError(`Failed to suspend ${slug}: ${message}`);
       } finally {
         setSuspendingId(null);
       }
     },
-    [],
+    [load],
   );
 
   const handleReactivate = useCallback(
@@ -183,12 +243,19 @@ export default function TenantsPage() {
           ),
         );
       } catch (e) {
-        setError(`Failed to reactivate ${slug}: ${String(e)}`);
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setError(`Tenant "${slug}" no longer exists.`);
+          void load().catch(() => {});
+          return;
+        }
+        setError(`Failed to reactivate ${slug}: ${message}`);
       } finally {
         setReactivatingId(null);
       }
     },
-    [],
+    [load],
   );
 
   const handleStopProvision = useCallback(
@@ -437,11 +504,15 @@ export default function TenantsPage() {
       if (res.status === 202 && data.accepted && data.correlationId) {
         setStreamCorrelationId(data.correlationId);
         const ok = await pollUntilDone(data.correlationId);
+        const generatedPublicUrl = tenantPublicBaseUrl(nextSlug, ok.internalPort ?? null);
+        const reportedPublicUrl =
+          typeof ok.baseUrl === "string" &&
+          ok.baseUrl.includes("://") &&
+          !ok.baseUrl.match(/^https?:\/\/[^/]+\.localhost(\/|$)/i)
+            ? ok.baseUrl
+            : null;
         setTenantAccess({
-          publicUrl:
-            tenantPublicBaseUrl(nextSlug, ok.internalPort ?? null) ??
-            ok.baseUrl ??
-            null,
+          publicUrl: generatedPublicUrl ?? reportedPublicUrl ?? null,
           adminEmail: adminEmailForLogin,
         });
         setSlug("");

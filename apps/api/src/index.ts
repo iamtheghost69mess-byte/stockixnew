@@ -1349,7 +1349,9 @@ app.delete("/tenants/:tenantId", async (c) => {
     return c.json(
       {
         error: "tenant_busy",
-        message: "Tenant is provisioning or running. Stop/suspend it before deletion.",
+        message: `Tenant is currently busy (tenant=${target.tenantStatus ?? "unknown"}, deployment=${target.deploymentStatus ?? "unknown"}). Stop or suspend it before deletion.`,
+        tenantStatus: target.tenantStatus ?? null,
+        deploymentStatus: target.deploymentStatus ?? null,
       },
       409,
     );

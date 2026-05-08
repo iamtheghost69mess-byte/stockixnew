@@ -198,9 +198,9 @@ export default function TenantList(props: Props) {
       <div className="grid gap-3">
         {filtered.map((t) => {
           const status = t.deploymentStatus ?? "unknown";
-          const canOpen = status === "active";
           const publicOrigin = tenantPublicBaseUrl(t.slug, t.internalPort);
-          const loginHref = `${publicOrigin}/auth/login`;
+          const canOpen = status === "active" && Boolean(publicOrigin);
+          const loginHref = publicOrigin ? `${publicOrigin}/auth/login` : null;
 
           return (
             <Card key={t.tenantId}>
@@ -239,7 +239,7 @@ export default function TenantList(props: Props) {
                     >
                       View details
                     </Link>
-                    {canOpen ? (
+                    {canOpen && loginHref ? (
                       <a
                         href={loginHref}
                         target="_blank"
@@ -253,7 +253,11 @@ export default function TenantList(props: Props) {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void copyText(`origin-${t.tenantId}`, publicOrigin)}
+                      onClick={() => {
+                        if (!publicOrigin) return;
+                        void copyText(`origin-${t.tenantId}`, publicOrigin);
+                      }}
+                      disabled={!publicOrigin}
                     >
                       <Copy className="mr-1 h-4 w-4" />
                       {copiedKey === `origin-${t.tenantId}` ? "Copied" : "Copy URL"}
@@ -322,7 +326,7 @@ export default function TenantList(props: Props) {
               <CardContent className="pt-0">
                 <Separator className="mb-3" />
                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span className="font-mono">{publicOrigin}</span>
+                  <span className="font-mono">{publicOrigin ?? "URL pending (port not assigned yet)"}</span>
                   {t.internalPort != null ? (
                     <span>
                       Host port <span className="font-mono">{t.internalPort}</span>
