@@ -568,22 +568,68 @@ app.post("/internal/jobs/claim", async (c) => {
   const staleBefore = new Date(Date.now() - staleLeaseMs);
   const staleBeforeIso = staleBefore.toISOString();
   const claimed = await db.transaction(async (tx) => {
-    await tx
-      .update(tenantLifecycleJobs)
-      .set({
-        status: "pending",
-        claimedAt: null,
-        claimedBy: null,
-        updatedAt: new Date(),
+    const staleRunning = await tx
+      .select({
+        id: tenantLifecycleJobs.id,
+        tenantId: tenantLifecycleJobs.tenantId,
+        type: tenantLifecycleJobs.type,
+        attempts: tenantLifecycleJobs.attempts,
+        maxAttempts: tenantLifecycleJobs.maxAttempts,
       })
+      .from(tenantLifecycleJobs)
       .where(
         and(
           eq(tenantLifecycleJobs.status, "running"),
-          sql`${tenantLifecycleJobs.attempts} < ${tenantLifecycleJobs.maxAttempts}`,
           sql`${tenantLifecycleJobs.claimedAt} IS NOT NULL`,
           sql`${tenantLifecycleJobs.claimedAt} < ${staleBeforeIso}::timestamptz`,
         ),
       );
+    for (const staleJob of staleRunning) {
+      const nextAttempts = staleJob.attempts + 1;
+      const exhausted = nextAttempts >= staleJob.maxAttempts;
+      const nextStatus = exhausted ? "dead" : "pending";
+      await tx
+        .update(tenantLifecycleJobs)
+        .set(
+          exhausted
+            ? {
+                status: nextStatus,
+                attempts: nextAttempts,
+                lastError: sql`'worker_stale_lease_reclaimed'`,
+                claimedAt: null,
+                claimedBy: null,
+                completedAt: new Date(),
+                updatedAt: new Date(),
+              }
+            : {
+                status: nextStatus,
+                attempts: nextAttempts,
+                lastError: sql`'worker_stale_lease_reclaimed'`,
+                claimedAt: null,
+                claimedBy: null,
+                runAt: new Date(),
+                completedAt: null,
+                updatedAt: new Date(),
+              },
+        )
+        .where(eq(tenantLifecycleJobs.id, staleJob.id));
+      if (staleJob.type === "tenant.provision" && staleJob.tenantId) {
+        await tx
+          .update(tenants)
+          .set({
+            status: "failed",
+          })
+          .where(eq(tenants.id, staleJob.tenantId));
+        await tx
+          .update(tenantDeployments)
+          .set({
+            status: "failed",
+            lastError: "worker_stale_lease_reclaimed",
+            updatedAt: new Date(),
+          })
+          .where(eq(tenantDeployments.tenantId, staleJob.tenantId));
+      }
+    }
 
     const [pending] = await tx
       .select({ id: tenantLifecycleJobs.id })
@@ -612,6 +658,34 @@ app.post("/internal/jobs/claim", async (c) => {
     return updated ?? null;
   });
   return c.json({ job: claimed });
+});
+
+app.post("/internal/jobs/:jobId/heartbeat", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const jobId = c.req.param("jobId");
+  const body = await c.req.json().catch(() => ({}));
+  const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
+  if (!workerId) {
+    return c.json({ error: "worker_id_required" }, 400);
+  }
+  const [updated] = await db
+    .update(tenantLifecycleJobs)
+    .set({
+      claimedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(tenantLifecycleJobs.id, jobId),
+        eq(tenantLifecycleJobs.status, "running"),
+        eq(tenantLifecycleJobs.claimedBy, workerId),
+      ),
+    )
+    .returning({ id: tenantLifecycleJobs.id });
+  if (!updated) {
+    return c.json({ ok: false, error: "heartbeat_rejected" }, 409);
+  }
+  return c.json({ ok: true });
 });
 
 app.get("/internal/jobs/:jobId/cancel-check", async (c) => {

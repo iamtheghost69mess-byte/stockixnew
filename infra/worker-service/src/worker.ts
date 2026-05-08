@@ -6,11 +6,12 @@ import {
 } from "@repo/db";
 import {
   adminAuditLog,
+  tenantLifecycleJobs,
   tenantProvisionEvents,
   tenantDeployments,
   tenants,
 } from "@repo/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   deprovisionTenant,
@@ -22,7 +23,14 @@ const pollMs = 1500;
 const apiBaseUrl = `http://localhost:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
 const jobExecutionTimeoutMs = 10 * 60 * 1000;
+const heartbeatIntervalMs = 15_000;
 let shuttingDown = false;
+const runtimeFingerprint = {
+  workerId,
+  startedAt: new Date().toISOString(),
+  entrypoint: import.meta.url,
+  nodeVersion: process.version,
+};
 
 function timeoutSignal(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
@@ -116,6 +124,23 @@ async function markJobComplete(jobId: string, oneTimeAdminPassword?: string): Pr
   if (!res.ok) throw new Error(`complete_failed:${res.status}`);
 }
 
+async function markJobHeartbeat(jobId: string): Promise<void> {
+  const secret = apiConfig.workerSecret;
+  const requestId = randomUUID();
+  const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/heartbeat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-request-id": requestId,
+      "x-correlation-id": requestId,
+      ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+    },
+    body: JSON.stringify({ workerId }),
+    signal: timeoutSignal(requestTimeoutMs),
+  });
+  if (!res.ok) throw new Error(`heartbeat_failed:${res.status}`);
+}
+
 async function markJobFailure(jobId: string, message: string, noRetry = false): Promise<void> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
   const secret = apiConfig.workerSecret;
@@ -132,6 +157,17 @@ async function markJobFailure(jobId: string, message: string, noRetry = false): 
     signal: timeoutSignal(requestTimeoutMs),
   });
   if (!res.ok) throw new Error(`fail_failed:${res.status}`);
+}
+
+function startJobHeartbeatLoop(jobId: string): () => void {
+  const timer = setInterval(() => {
+    void markJobHeartbeat(jobId).catch((error) => {
+      console.error(
+        `[worker][${jobId}] heartbeat failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }, heartbeatIntervalMs);
+  return () => clearInterval(timer);
 }
 
 async function assertProvisionNotCancelled(
@@ -304,7 +340,7 @@ async function loop() {
     throw new Error("DATABASE_URL is required for infra worker");
   }
   const db = createDb(databaseUrl);
-  console.log(JSON.stringify({ level: "info", type: "worker_start", workerId }));
+  console.log(JSON.stringify({ level: "info", type: "worker_start", ...runtimeFingerprint }));
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {
       console.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
@@ -314,6 +350,7 @@ async function loop() {
       await new Promise((r) => setTimeout(r, pollMs));
       continue;
     }
+    const stopHeartbeat = startJobHeartbeatLoop(job.id);
     try {
       const handler = handlers[job.type as keyof typeof handlers] as JobHandler | undefined;
       if (!handler) {
@@ -363,7 +400,48 @@ async function loop() {
         console.error(
           `[worker][${job.id}] failed to report failure: ${reportError instanceof Error ? reportError.message : String(reportError)}`,
         );
+        const fallbackNoRetry = job.type === "tenant.provision" || isPermanentProvisionError(message);
+        const status = fallbackNoRetry ? "dead" : "pending";
+        const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 30_000);
+        await db.transaction(async (tx) => {
+          await tx
+            .update(tenantLifecycleJobs)
+            .set({
+              status,
+              lastError: `worker_fallback_failure_persist:${message}`,
+              claimedAt: null,
+              claimedBy: null,
+              runAt: nextRunAt ?? sql`${tenantLifecycleJobs.runAt}`,
+              updatedAt: new Date(),
+              completedAt: fallbackNoRetry ? new Date() : null,
+              attempts: sql`${tenantLifecycleJobs.attempts} + 1`,
+            })
+            .where(eq(tenantLifecycleJobs.id, job.id));
+
+          if (job.type === "tenant.provision" && job.tenantId) {
+            await tx
+              .update(tenants)
+              .set({ status: "failed" })
+              .where(eq(tenants.id, job.tenantId));
+            await tx
+              .update(tenantDeployments)
+              .set({
+                status: "failed",
+                lastError: `worker_fallback_failure_persist:${message}`,
+                updatedAt: new Date(),
+              })
+              .where(eq(tenantDeployments.tenantId, job.tenantId));
+          }
+        }).catch((fallbackError) => {
+          console.error(
+            `[worker][${job.id}] fallback failure persistence failed: ${
+              fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            }`,
+          );
+        });
       }
+    } finally {
+      stopHeartbeat();
     }
   }
 }

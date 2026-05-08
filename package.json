@@ -10,7 +10,9 @@
     "db:wait": "pnpm --filter @repo/db db:wait",
     "db:migrate": "pnpm --filter @repo/db db:migrate",
     "db:seed:local": "pnpm --filter @repo/db db:seed:local",
-    "infra:worker:dev": "pnpm exec tsx --tsconfig infra/worker-service/tsconfig.json infra/worker-service/src/worker.ts",
+    "infra:worker:build": "pnpm --filter api exec tsup --config tsup.worker.config.ts",
+    "infra:worker:run": "node infra/worker-service/.runtime/worker.js",
+    "infra:worker:dev": "pnpm infra:worker:build && pnpm infra:worker:run",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
@@ -33,6 +35,11 @@
   },
   "packageManager": "pnpm@9.15.9",
   "dependencies": {
-    "execa": "^9.5.2"
+    "@repo/config": "workspace:*",
+    "@repo/db": "workspace:*",
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.45.1",
+    "execa": "^9.5.2",
+    "zod": "^3.24.1"
   }
 }

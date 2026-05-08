@@ -54,32 +54,74 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
     trace?: ProvisionTracer;
   }): Promise<void> {
     const url = `${params.internalBaseUrl}/api/auth/register`;
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(params.requestId
-            ? {
-                "x-request-id": params.requestId,
-                "x-correlation-id": params.requestId,
-              }
-            : {}),
+    const maxAttempts = 3;
+    const requestTimeoutMs = 10_000;
+    let lastFailure = "unknown";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const attemptStartedAt = Date.now();
+      await params.trace?.event("bootstrap", "Bootstrap registration attempt", {
+        meta: {
+          url,
+          attempt,
+          maxAttempts,
         },
-        body: JSON.stringify({
-          first_name: params.firstName,
-          last_name: params.lastName,
-          email: params.email,
-          password: params.password,
-        }),
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`register failed: fetch error (${message}) url=${url}`);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(params.requestId
+              ? {
+                  "x-request-id": params.requestId,
+                  "x-correlation-id": params.requestId,
+                }
+              : {}),
+          },
+          body: JSON.stringify({
+            first_name: params.firstName,
+            last_name: params.lastName,
+            email: params.email,
+            password: params.password,
+          }),
+          signal: AbortSignal.timeout(requestTimeoutMs),
+        });
+
+        if (res.ok) {
+          await params.trace?.event("bootstrap", "Bootstrap registration succeeded", {
+            meta: {
+              url,
+              attempt,
+              elapsedMs: Date.now() - attemptStartedAt,
+            },
+          });
+          return;
+        }
+
+        const text = await res.text();
+        lastFailure = `HTTP ${res.status} ${text.slice(0, 500)}`;
+      } catch (error) {
+        lastFailure = error instanceof Error ? error.message : String(error);
+      }
+
+      await params.trace?.event("bootstrap", "Bootstrap registration attempt failed", {
+        level: "warn",
+        meta: {
+          url,
+          attempt,
+          maxAttempts,
+          elapsedMs: Date.now() - attemptStartedAt,
+          error: lastFailure,
+        },
+      });
+
+      if (attempt < maxAttempts) {
+        const backoffMs = Math.min(5_000, attempt * 1_500);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
     }
-    if (res.ok) return;
-    const text = await res.text();
-    throw new Error(`register failed: HTTP ${res.status} ${text.slice(0, 500)}`);
+
+    throw new Error(`register failed: ${lastFailure} url=${url}`);
   }
 }

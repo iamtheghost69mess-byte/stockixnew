@@ -102,6 +102,7 @@ export async function executeProvisionRuntime(
   correlationId: string,
   assertNotCancelled?: () => Promise<void>,
 ): Promise<ProvisionResult> {
+  const runtimeStartedAt = Date.now();
   let tenantId: string | undefined;
   let deploymentId: string | undefined;
   const trace = createProvisionTracer(
@@ -182,6 +183,7 @@ export async function executeProvisionRuntime(
     }
   };
   const hasOp = (key: string) => completedOps.has(key);
+  const elapsedMs = () => Date.now() - runtimeStartedAt;
   const markOp = async (operationKey: string, message: string, meta?: Record<string, unknown>) => {
     completedOps.add(operationKey);
     await trace.event("journal", message, {
@@ -353,6 +355,10 @@ export async function executeProvisionRuntime(
       await runComposeWithCancellation(["run", "--rm", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project,
+        elapsedMs: elapsedMs(),
+      });
+      await trace.event("progress", "Post-migration checkpoint reached", {
+        meta: { operationKey: "docker.migration_step", elapsedMs: elapsedMs() },
       });
       log("[provision] step done: docker.migration_step");
     } else {
@@ -363,9 +369,13 @@ export async function executeProvisionRuntime(
     await checkNotCancelled();
     if (!hasOp("docker.app_step")) {
       log("[provision] step start: docker.app_step");
+      await trace.event("progress", "Starting app compose step", {
+        meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() },
+      });
       await runComposeWithCancellation(["up", "-d", "--remove-orphans", "webapp", "nginx", "server"]);
       await markOp("docker.app_step", "Application compose step completed", {
         composeProjectName: project,
+        elapsedMs: elapsedMs(),
       });
       log("[provision] step done: docker.app_step");
     } else {
@@ -385,6 +395,9 @@ export async function executeProvisionRuntime(
     });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");
+      await trace.event("progress", "Waiting for tenant health endpoint", {
+        meta: { operationKey: "tenant.health_check", elapsedMs: elapsedMs(), internalUrl },
+      });
       await finance.waitUntilReady(
         internalUrl,
         STOCKIX_FINANCE_HEALTH_TIMEOUT_MS,
@@ -392,7 +405,7 @@ export async function executeProvisionRuntime(
         requestId,
         trace,
       );
-      await markOp("tenant.health_check", "Tenant health check completed", { internalUrl });
+      await markOp("tenant.health_check", "Tenant health check completed", { internalUrl, elapsedMs: elapsedMs() });
       log("[provision] step done: tenant.health_check");
     } else {
       await trace.event("resume", "Skipping health check (already journaled)", {
@@ -402,6 +415,9 @@ export async function executeProvisionRuntime(
     await checkNotCancelled();
     if (!hasOp("tenant.bootstrap_admin")) {
       log("[provision] step start: tenant.bootstrap_admin");
+      await trace.event("progress", "Starting bootstrap admin registration", {
+        meta: { operationKey: "tenant.bootstrap_admin", elapsedMs: elapsedMs(), adminEmail: input.adminEmail },
+      });
       await finance.registerBootstrapAdmin({
         internalBaseUrl: internalUrl,
         firstName: input.adminFirstName,
@@ -415,6 +431,7 @@ export async function executeProvisionRuntime(
       await markOp("tenant.bootstrap_admin", "Tenant bootstrap admin registered", {
         internalBaseUrl: internalUrl,
         adminEmail: input.adminEmail,
+        elapsedMs: elapsedMs(),
       });
       log("[provision] step done: tenant.bootstrap_admin");
     } else {

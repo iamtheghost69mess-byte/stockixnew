@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:14-bullseye AS build
 
 USER root
 
@@ -9,6 +9,7 @@ COPY ./packages/webapp/package*.json /app/packages/webapp/
 RUN npm --prefix ./packages/webapp install --legacy-peer-deps --package-lock=false
 
 # Build webapp package
+COPY ./lerna.json /app/lerna.json
 COPY ./packages/webapp /app/packages/webapp
 RUN npm --prefix ./packages/webapp run build
 
