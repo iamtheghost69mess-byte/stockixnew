@@ -27,6 +27,7 @@ export type TenantDetail = {
   adminFirstName: string;
   adminLastName: string;
   ownerId: string;
+  planSlug: string;
   createdAt: string;
   deployment: {
     status: string;

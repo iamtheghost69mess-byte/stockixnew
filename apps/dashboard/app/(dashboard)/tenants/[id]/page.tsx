@@ -1,9 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, PauseCircle, PlayCircle, Square, Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { Copy, ExternalLink, Loader2, PauseCircle, PlayCircle, Square, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
+import LicenseGenerateDialog from "@/components/license-generate-dialog";
+import LicenseStatusBadge from "@/components/license-status-badge";
 import TenantStatusBadge from "@/components/tenant-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -15,16 +20,17 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMe } from "@/hooks/use-me";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
+import { cn } from "@/lib/utils";
+import type { LicenseRow, LicenseStatus } from "@/types/license";
 import type { ProvisionEventRow, TenantDetail } from "@/types/tenant";
-import { buttonVariants } from "@/components/ui/button";
-
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return {};
@@ -38,7 +44,14 @@ async function readJson(res: Response): Promise<unknown> {
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const me = useMe();
+  const isSuper = me?.role === "super_admin";
   const [tenant, setTenant] = useState<TenantDetail | null>(null);
+  const [tenantLicense, setTenantLicense] = useState<LicenseRow | null>(null);
+  const [licenseLoading, setLicenseLoading] = useState(true);
+  const [genLicenseOpen, setGenLicenseOpen] = useState(false);
+  const [revokeLicenseOpen, setRevokeLicenseOpen] = useState(false);
+  const [revokeLicenseReason, setRevokeLicenseReason] = useState("");
   const [events, setEvents] = useState<ProvisionEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -78,6 +91,18 @@ export default function TenantDetailPage() {
     }
   };
 
+  const loadLicense = async () => {
+    setLicenseLoading(true);
+    try {
+      const res = await fetch(`/api/licenses?tenantId=${encodeURIComponent(id)}&pageSize=1`);
+      const data = (await readJson(res)) as { licenses?: LicenseRow[] };
+      if (res.ok && data.licenses?.[0]) setTenantLicense(data.licenses[0]!);
+      else setTenantLicense(null);
+    } finally {
+      setLicenseLoading(false);
+    }
+  };
+
   const loadEvents = async () => {
     setEventsLoading(true);
     try {
@@ -100,6 +125,7 @@ export default function TenantDetailPage() {
   useEffect(() => {
     void loadTenant();
     void loadEvents();
+    void loadLicense();
   }, [id]);
 
   const deploymentStatus = (tenant?.deployment?.status ?? tenant?.status ?? "").toLowerCase();
@@ -201,6 +227,7 @@ export default function TenantDetailPage() {
                   <p>Admin first name: {tenant.adminFirstName}</p>
                   <p>Admin last name: {tenant.adminLastName}</p>
                   <p>Owner ID: <span className="font-mono">{tenant.ownerId}</span></p>
+                  <p>Plan: <span className="capitalize">{tenant.planSlug}</span></p>
                   <p>Created: {new Date(tenant.createdAt).toLocaleString()}</p>
                 </div>
               </>
@@ -259,6 +286,145 @@ export default function TenantDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>License</CardTitle>
+          <CardDescription>Software license assigned to this tenant</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {licenseLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : tenantLicense ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm">{tenantLicense.licenseKey}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(tenantLicense.licenseKey);
+                        toast.success("Copied");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <LicenseStatusBadge status={tenantLicense.status as LicenseStatus} />
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {tenantLicense.product === "pos_desktop"
+                        ? "POS Desktop"
+                        : tenantLicense.product === "bundle"
+                          ? "Bundle"
+                          : "Platform"}
+                    </Badge>
+                    <Badge variant="secondary" className="capitalize">
+                      {tenantLicense.planSlug}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p>
+                    Expires:{" "}
+                    {tenantLicense.isPerpetual ? (
+                      <Badge variant="secondary">Perpetual</Badge>
+                    ) : tenantLicense.expiresAt ? (
+                      format(new Date(tenantLicense.expiresAt), "PP")
+                    ) : (
+                      "—"
+                    )}
+                  </p>
+                  <p>
+                    Activations:{" "}
+                    {tenantLicense.product === "platform"
+                      ? "—"
+                      : `${tenantLicense.activationCount} / ${tenantLicense.maxActivations}`}
+                  </p>
+                  <p>Grace period: {tenantLicense.gracePeriodDays} days</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+                <Link
+                  href={`/licenses/${tenantLicense.id}`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "inline-flex",
+                  )}
+                >
+                  View full license details
+                </Link>
+                {isSuper && tenantLicense.status === "active" ? (
+                  <Button variant="outline" size="sm" onClick={() => setRevokeLicenseOpen(true)}>
+                    Revoke
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <Alert className="border-amber-500/40 bg-amber-500/10">
+              <AlertTitle>No license assigned</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>This tenant does not have an active license.</p>
+                <Button variant="outline" size="sm" onClick={() => setGenLicenseOpen(true)}>
+                  Generate &amp; assign license
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <LicenseGenerateDialog
+        open={genLicenseOpen}
+        onOpenChange={setGenLicenseOpen}
+        defaultTenantId={tenant.id}
+        onSuccess={() => void loadLicense()}
+      />
+
+      <Dialog open={revokeLicenseOpen} onOpenChange={setRevokeLicenseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Revoke license</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Reason (optional)"
+            value={revokeLicenseReason}
+            onChange={(e) => setRevokeLicenseReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRevokeLicenseOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!tenantLicense}
+              onClick={async () => {
+                if (!tenantLicense) return;
+                const res = await fetch(`/api/licenses/${tenantLicense.id}/revoke`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ reason: revokeLicenseReason || undefined }),
+                });
+                if (!res.ok) {
+                  toast.error("Revoke failed");
+                  return;
+                }
+                toast.success("License revoked");
+                setRevokeLicenseOpen(false);
+                setRevokeLicenseReason("");
+                void loadLicense();
+              }}
+            >
+              Revoke
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

@@ -9,10 +9,21 @@ const configDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.join(configDir, "..", "..", "..");
 
 // Centralized env bootstrapping for all runtime consumers.
-const preferredEnvPath = existsSync(path.join(monorepoRoot, ".env.local"))
-  ? path.join(monorepoRoot, ".env.local")
-  : path.join(monorepoRoot, ".env");
-loadEnv({ path: preferredEnvPath, override: false });
+// Standard pattern: `.env` (shared defaults) then `.env.local` (machine-specific overrides).
+// Skip automatic loading under Vitest so unit tests control `process.env` (no leak from a developer's `.env`).
+// Set STOCKIX_LOAD_ROOT_ENV=1 to force-load anyway (e.g. debugging integration-style tests).
+const rootEnv = path.join(monorepoRoot, ".env");
+const rootEnvLocal = path.join(monorepoRoot, ".env.local");
+const shouldLoadRootDotenv =
+  process.env.STOCKIX_LOAD_ROOT_ENV === "1" || process.env.VITEST !== "true";
+if (shouldLoadRootDotenv) {
+  if (existsSync(rootEnv)) {
+    loadEnv({ path: rootEnv, override: false });
+  }
+  if (existsSync(rootEnvLocal)) {
+    loadEnv({ path: rootEnvLocal, override: true });
+  }
+}
 
 const optionalStringSchema = z.string().min(1).optional();
 const stringSchema = z.string().min(1);
@@ -81,8 +92,26 @@ function validateRequiredEnvForProfile(profile: string) {
   const requiredByProfile: Record<string, string[]> = {
     development: [],
     test: [],
-    staging: ["DATABASE_URL", "PLATFORM_API_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
-    production: ["DATABASE_URL", "PLATFORM_API_SECRET", "WORKER_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
+    staging: [
+      "DATABASE_URL",
+      "PLATFORM_API_SECRET",
+      "WORKER_SECRET",
+      "SESSION_SECRET",
+      "DASHBOARD_URL",
+      "AUTH_TOKEN_SECRET",
+      "DEPLOYMENT_SECRET_KEY",
+      "LICENSE_SIGNING_SECRET",
+    ],
+    production: [
+      "DATABASE_URL",
+      "PLATFORM_API_SECRET",
+      "WORKER_SECRET",
+      "SESSION_SECRET",
+      "DASHBOARD_URL",
+      "AUTH_TOKEN_SECRET",
+      "DEPLOYMENT_SECRET_KEY",
+      "LICENSE_SIGNING_SECRET",
+    ],
   };
   const required = requiredByProfile[profile] ?? requiredByProfile.production ?? [];
   const missing = required.filter((name) => {
@@ -113,6 +142,8 @@ export const env = {
   TENANT_INTERNAL_HOST: readString("TENANT_INTERNAL_HOST", "127.0.0.1"),
   CORS_ORIGINS: readOptionalString("CORS_ORIGINS"),
   SESSION_SECRET: readOptionalString("SESSION_SECRET"),
+  /** HS256 secret for POS offline license JWTs; min 32 chars in staging/production. */
+  LICENSE_SIGNING_SECRET: readOptionalString("LICENSE_SIGNING_SECRET"),
   AUTH_TOKEN_SECRET: readOptionalString("AUTH_TOKEN_SECRET"),
   ALLOW_BOOTSTRAP_LOGIN: readBooleanLike("ALLOW_BOOTSTRAP_LOGIN"),
   PLATFORM_ADMIN_EMAIL: readOptionalString("PLATFORM_ADMIN_EMAIL"),
@@ -251,6 +282,20 @@ export const apiConfig = {
   },
   get sessionSecret() {
     return env.SESSION_SECRET ?? readRequiredString("SESSION_SECRET");
+  },
+  /**
+   * Secret used to sign/verify offline license JWTs (POS). Production/staging must set
+   * LICENSE_SIGNING_SECRET (≥32 chars). Development/test fall back to a fixed local value.
+   */
+  get licenseSigningSecret() {
+    const raw = env.LICENSE_SIGNING_SECRET?.trim();
+    if (raw && raw.length >= 32) return raw;
+    if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
+      return "local-dev-license-signing-secret-min-32!";
+    }
+    throw new Error(
+      "[config] LICENSE_SIGNING_SECRET is required (min 32 characters) outside development/test",
+    );
   },
   get authTokenSecret() {
     return env.AUTH_TOKEN_SECRET ?? env.SESSION_SECRET ?? readRequiredString("AUTH_TOKEN_SECRET");

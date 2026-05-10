@@ -1,4 +1,7 @@
 import postgres from "postgres";
+import { loadRootEnv } from "./load-root-env.mjs";
+
+loadRootEnv(import.meta.url);
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {

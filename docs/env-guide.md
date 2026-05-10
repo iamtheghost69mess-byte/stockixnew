@@ -1,22 +1,27 @@
 # Environment Variable Guide
 
-## Single Source of Truth
-`/.env.example` is the canonical schema. It documents every variable
-used across all services. It is the ONLY .env.example in the repo.
+## Single source of truth (local)
 
-## For Local Development
-Copy `/.env.example` to `/.env.local` and fill in real values.
-Never commit `.env.local`.
+- **Schema:** `/.env.example` (full control-plane + dashboard variables).
+- **Prod compose template:** `infra/prod/.env.example`.
+- **Loaded files:** repo root `.env` then `.env.local` (overrides), via `packages/config` (`dotenv`).
 
-## How Config Works
-`packages/config` is the ONLY code that reads `process.env`.
-All apps and services import config from `@repo/config`.
+Run `pnpm bootstrap:env` to create `.env` from the root example. Prefer putting secrets in `.env.local` so `.env` can stay closer to defaults.
 
-## Exempt Files (build/test tooling only)
-The following files use dotenv directly and are formally exempt:
+**Do not** use `apps/api/.env` or `apps/dashboard/.env` — the API and Next app load from the repo root only.
+
+## How config works
+
+`packages/config` loads root env and exposes typed getters (`apiConfig`, `dashboardConfig`, `env`). Application code should import `@repo/config` instead of reading `process.env` directly (exceptions below).
+
+**Vitest:** when `VITEST=true`, automatic loading of `.env` / `.env.local` is **skipped** so tests control `process.env`. To load real root env inside a test run (rare), set `STOCKIX_LOAD_ROOT_ENV=1`.
+
+## Exempt files (build/test tooling only)
+The following use `dotenv` directly and are formally exempt:
+- `scripts/load-root-env.mjs` (shared helper; same load order as `packages/config`)
+- `packages/db/scripts/phase3-db-audit.mjs` (imports `loadEnvFilesAtRoot` from `scripts/load-root-env.mjs`)
 - `services/stockix-finance/playwright.config.ts`
 - `services/stockix-finance/packages/webapp/craco.config.js`
-These are test/build configs, not runtime application code.
 
 ## Adding a New Variable
 1. Add it to `/.env.example` with a comment

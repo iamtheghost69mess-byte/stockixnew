@@ -16,6 +16,7 @@
     "infra:worker:dev": "pnpm infra:worker:build && pnpm infra:worker:run",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
+    "debug:db": "node scripts/debug-db.mjs",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
     "db:reset:local": "docker compose -f infra/dev/docker-compose.yml down -v && pnpm setup:local",
     "lint": "turbo run lint",
@@ -40,6 +41,7 @@
     "@repo/db": "workspace:*",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.45.1",
+    "postgres": "^3.4.7",
     "execa": "^9.5.2",
     "zod": "^3.24.1"
   }

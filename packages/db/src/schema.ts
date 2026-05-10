@@ -59,6 +59,7 @@ export const tenants = pgTable(
     adminFirstName: text("admin_first_name").notNull(),
     adminLastName: text("admin_last_name").notNull(),
     status: text("status").notNull().default("active"),
+    planSlug: text("plan_slug").notNull().default("starter"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -222,4 +223,119 @@ export const tenantLifecycleJobs = pgTable(
     index("tenant_lifecycle_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
     index("tenant_lifecycle_jobs_correlation_created_idx").on(t.correlationId, t.createdAt),
   ],
+);
+
+export const plans = pgTable(
+  "plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("plans_slug_unique").on(t.slug)],
+);
+
+export const licenses = pgTable(
+  "licenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    licenseKey: text("license_key").notNull(),
+    product: text("product").notNull().default("platform"),
+    planSlug: text("plan_slug").notNull().default("starter"),
+    tenantId: uuid("tenant_id").references(() => tenants.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("unassigned"),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    isPerpetual: boolean("is_perpetual").notNull().default(false),
+    maxActivations: integer("max_activations").notNull().default(1),
+    activationCount: integer("activation_count").notNull().default(0),
+    gracePeriodDays: integer("grace_period_days").notNull().default(7),
+    notes: text("notes"),
+    createdById: uuid("created_by_id").references(() => owners.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedById: uuid("revoked_by_id").references(() => owners.id, {
+      onDelete: "set null",
+    }),
+    revokeReason: text("revoke_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("licenses_key_unique").on(t.licenseKey),
+    index("licenses_tenant_id_idx").on(t.tenantId),
+    index("licenses_status_idx").on(t.status),
+    index("licenses_product_idx").on(t.product),
+    index("licenses_expires_at_idx").on(t.expiresAt),
+  ],
+);
+
+export const licenseActivations = pgTable(
+  "license_activations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    licenseId: uuid("license_id")
+      .notNull()
+      .references(() => licenses.id, {
+        onDelete: "cascade",
+      }),
+    hardwareFingerprint: text("hardware_fingerprint").notNull(),
+    machineName: text("machine_name"),
+    ipAddress: text("ip_address"),
+    activationStatus: text("activation_status").notNull().default("active"),
+    offlineToken: text("offline_token"),
+    offlineTokenExpiresAt: timestamp("offline_token_expires_at", {
+      withTimezone: true,
+    }),
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    deactivatedById: uuid("deactivated_by_id").references(() => owners.id, {
+      onDelete: "set null",
+    }),
+    activatedAt: timestamp("activated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("lic_act_license_id_idx").on(t.licenseId),
+    index("lic_act_fingerprint_idx").on(t.hardwareFingerprint),
+    uniqueIndex("lic_act_license_fingerprint_unique").on(
+      t.licenseId,
+      t.hardwareFingerprint,
+    ),
+  ],
+);
+
+export const blacklistedFingerprints = pgTable(
+  "blacklisted_fingerprints",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    hardwareFingerprint: text("hardware_fingerprint").notNull(),
+    reason: text("reason"),
+    blacklistedById: uuid("blacklisted_by_id").references(() => owners.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("blacklisted_fp_unique").on(t.hardwareFingerprint)],
 );

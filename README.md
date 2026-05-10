@@ -74,15 +74,23 @@ pnpm bootstrap:env --force  # overwrite from examples (reset local config)
 
 | Example | Copied to | Purpose |
 |---------|-----------|---------|
-| `.env.example` | `.env` | Root convenience copy |
-| `packages/db/.env.example` | `packages/db/.env` | Drizzle ORM |
-| `apps/api/.env.example` | `apps/api/.env` | Control-plane API |
-| `apps/dashboard/.env.example` | `apps/dashboard/.env.local` | Dashboard (Next.js) |
+| `.env.example` | `.env` | **Canonical local config** for API, dashboard (`next.config` imports `@repo/config`), and workers |
+| `packages/db/.env.example` | `packages/db/.env` | Drizzle CLI (optional; can mirror `DATABASE_URL` from root) |
 | `services/stockix-finance/.env.example` | `services/stockix-finance/.env` | Stockix Finance server |
 
-Runtime precedence notes:
-- API (`apps/api`) loads dotenv files in this order: `root/.env` then `root/.env.local` (local overrides are not forced over already-present process env values).
-- Dashboard (`apps/dashboard`): `NEXT_PUBLIC_*` values are build-time values; server-only secrets (e.g. `DATABASE_URL`, `SESSION_SECRET`, `PLATFORM_API_SECRET`) are runtime values.
+**Do not use** `apps/api/.env` or `apps/dashboard/.env` — they are not loaded by the control-plane API and are easy to get out of sync. Use repo root `.env` and optional `.env.local` only.
+
+Runtime precedence (`@repo/config`):
+1. `root/.env` (gitignored — create via `pnpm bootstrap:env` from this example)
+2. `root/.env.local` (optional overrides; gitignored — preferred place for secrets if you split base vs local)
+
+Production: use `infra/prod/.env` with Docker Compose (see `infra/prod/.env.example`), not root files on the server image.
+
+Dashboard: `NEXT_PUBLIC_*` are inlined at **build** time in Docker; locally they come from the same root env files when you run `next dev`.
+
+Root `scripts/*.mjs` that read `process.env` should call `loadRootEnv(import.meta.url)` from `scripts/load-root-env.mjs` (same order as `@repo/config`). Example: `pnpm debug:db` runs `scripts/debug-db.mjs` against local Postgres using root `.env` / `.env.local`.
+
+Turbo invalidates caches when repo-root `.env` or `.env.local` changes (`globalDependencies` in `turbo.json`).
 
 ## Schema changes
 

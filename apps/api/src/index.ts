@@ -11,20 +11,40 @@ import { ROLE_RANK, type Role } from "@repo/shared/roles";
 import {
   adminAuditLog,
   apiIdempotencyKeys,
+  blacklistedFingerprints,
+  licenseActivations,
+  licenses,
   owners,
+  plans,
   tenantConfig,
   tenantDeployments,
   tenantLifecycleJobs,
   tenants,
   tenantProvisionEvents,
 } from "@repo/db/schema";
-import { asc, desc, eq, and, or, isNotNull, sql } from "drizzle-orm";
+import {
+  asc,
+  desc,
+  eq,
+  and,
+  or,
+  isNotNull,
+  sql,
+  count,
+  gte,
+  lte,
+  ilike,
+  inArray,
+  isNull,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { execa } from "execa";
 import { z } from "zod";
 import { logAudit } from "./audit.js";
+import { generateLicenseKey } from "./license-utils.js";
+import { registerLicenseApi } from "./license-http.js";
 
 import {
   createProvisionTracer,
@@ -343,7 +363,20 @@ app.use("/*", async (c, next) => {
 });
 
 app.use("/*", async (c, next) => {
-  if (c.req.path === "/health") {
+  const pubPath = c.req.path;
+  const pubMethod = c.req.method.toUpperCase();
+  if (pubPath === "/health") {
+    await next();
+    return;
+  }
+  if (pubMethod === "GET" && pubPath === "/plans") {
+    await next();
+    return;
+  }
+  if (
+    pubMethod === "POST"
+    && (pubPath === "/licenses/activate" || pubPath === "/licenses/verify-offline")
+  ) {
     await next();
     return;
   }
@@ -381,6 +414,14 @@ app.use("/*", async (c, next) => {
   const method = c.req.method.toUpperCase();
   const path = c.req.path;
   if (path === "/health" || path.startsWith("/auth") || path.startsWith("/internal/jobs")) {
+    await next();
+    return;
+  }
+  if (method === "GET" && path === "/plans") {
+    await next();
+    return;
+  }
+  if (method === "POST" && (path === "/licenses/activate" || path === "/licenses/verify-offline")) {
     await next();
     return;
   }
@@ -509,6 +550,15 @@ function requiredApiRole(pathname: string, method: string): Role | null {
   if (pathname === "/health") return null;
   if (pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/internal/jobs")) return null;
+  if (method === "POST" && pathname === "/licenses/activate") return null;
+  if (method === "POST" && pathname === "/licenses/verify-offline") return null;
+  if (method === "GET" && pathname === "/plans") return null;
+  if (pathname.startsWith("/licenses")) {
+    if (method === "GET") return "read_only";
+    if (pathname.endsWith("/deactivate")) return "support_agent";
+    return "super_admin";
+  }
+  if (pathname.startsWith("/fingerprints")) return "super_admin";
   if (pathname.startsWith("/owners")) {
     if (method === "GET") return "read_only";
     return "super_admin";
@@ -817,6 +867,82 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           updatedAt: new Date(),
         })
         .where(eq(tenantDeployments.tenantId, targetTenantId));
+
+      try {
+        const payload = currentJob.payload && typeof currentJob.payload === "object"
+          ? (currentJob.payload as Record<string, unknown>)
+          : {};
+        const planSlug =
+          typeof payload.planSlug === "string" && payload.planSlug.length > 0
+            ? payload.planSlug
+            : "starter";
+        const assignExistingLicenseId =
+          typeof payload.assignExistingLicenseId === "string" ? payload.assignExistingLicenseId : null;
+        const provisionRequestedById =
+          typeof payload.provisionRequestedById === "string" ? payload.provisionRequestedById : null;
+
+        if (assignExistingLicenseId) {
+          const [lic] = await db
+            .select()
+            .from(licenses)
+            .where(eq(licenses.id, assignExistingLicenseId))
+            .limit(1);
+          if (lic?.status === "unassigned") {
+            await db
+              .update(licenses)
+              .set({
+                tenantId: targetTenantId,
+                status: "active",
+                activatedAt: new Date(),
+                updatedAt: new Date(),
+                planSlug,
+              })
+              .where(eq(licenses.id, lic.id));
+            await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
+          }
+        } else {
+          let licenseKey = generateLicenseKey();
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const clash = await db
+              .select({ id: licenses.id })
+              .from(licenses)
+              .where(eq(licenses.licenseKey, licenseKey))
+              .limit(1);
+            if (clash.length === 0) break;
+            licenseKey = generateLicenseKey();
+          }
+          await db.insert(licenses).values({
+            licenseKey,
+            product: "platform",
+            planSlug,
+            tenantId: targetTenantId,
+            status: "active",
+            activatedAt: new Date(),
+            isPerpetual: true,
+            maxActivations: 1,
+            activationCount: 0,
+            gracePeriodDays: 7,
+            createdById: provisionRequestedById ?? null,
+          });
+          await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
+        }
+
+        if (provisionRequestedById && z.string().uuid().safeParse(provisionRequestedById).success) {
+          await logAudit(db, {
+            actorId: provisionRequestedById,
+            action: "license.auto_assigned_on_provision",
+            targetTenantId: targetTenantId,
+            ipAddress: apiConfig.hostname,
+            userAgent: "worker/tenant.provision.complete",
+            metadata: { assignExistingLicenseId, planSlug },
+          });
+        }
+      } catch (licenseErr) {
+        console.error(
+          "[provision] license assignment failed (non-fatal)",
+          licenseErr instanceof Error ? licenseErr.message : String(licenseErr),
+        );
+      }
     }
   }
   if (
@@ -1295,6 +1421,7 @@ app.get("/tenants", async (c) => {
       slug: tenants.slug,
       name: tenants.name,
       adminEmail: tenants.adminEmail,
+      planSlug: tenants.planSlug,
       deploymentStatus: tenantDeployments.status,
       internalPort: tenantDeployments.internalPort,
       composeProject: tenantDeployments.composeProjectName,
@@ -1458,6 +1585,8 @@ const provisionBody = z.object({
   admin_email: z.string().email(),
   admin_first_name: z.string().min(1),
   admin_last_name: z.string().min(1),
+  plan_slug: z.string().default("starter"),
+  assign_existing_license_id: z.string().uuid().optional(),
 });
 
 app.post("/tenants", async (c) => {
@@ -1482,6 +1611,32 @@ app.post("/tenants", async (c) => {
     .limit(1);
   if (ownerOk.length === 0) {
     return c.json({ error: "owner_id does not exist" }, 400);
+  }
+
+  const [planOk] = await db
+    .select({ id: plans.id })
+    .from(plans)
+    .where(and(eq(plans.slug, body.plan_slug), eq(plans.isActive, true)))
+    .limit(1);
+  if (!planOk) {
+    return c.json({ error: "invalid_plan", message: `Unknown or inactive plan: ${body.plan_slug}` }, 400);
+  }
+
+  if (body.assign_existing_license_id) {
+    const [existingLic] = await db
+      .select({ id: licenses.id, status: licenses.status })
+      .from(licenses)
+      .where(eq(licenses.id, body.assign_existing_license_id))
+      .limit(1);
+    if (!existingLic) {
+      return c.json({ error: "license_not_found", message: "assign_existing_license_id does not exist" }, 400);
+    }
+    if (existingLic.status !== "unassigned") {
+      return c.json(
+        { error: "license_not_unassigned", message: "License must be unassigned to attach at provision time." },
+        409,
+      );
+    }
   }
 
   const slugRecord = await db
@@ -1568,6 +1723,9 @@ app.post("/tenants", async (c) => {
       adminEmail: body.admin_email,
       adminFirstName: body.admin_first_name,
       adminLastName: body.admin_last_name,
+      planSlug: body.plan_slug,
+      assignExistingLicenseId: body.assign_existing_license_id ?? null,
+      provisionRequestedById: c.get("actorId") as string,
     },
   });
 
@@ -2099,6 +2257,7 @@ app.get("/tenants/:tenantId", async (c) => {
       adminFirstName: tenants.adminFirstName,
       adminLastName: tenants.adminLastName,
       ownerId: tenants.ownerId,
+      planSlug: tenants.planSlug,
       createdAt: tenants.createdAt,
       deploymentStatus: tenantDeployments.status,
       composeProjectName: tenantDeployments.composeProjectName,
@@ -2131,6 +2290,7 @@ app.get("/tenants/:tenantId", async (c) => {
       adminFirstName: row.adminFirstName,
       adminLastName: row.adminLastName,
       ownerId: row.ownerId,
+      planSlug: row.planSlug,
       createdAt: row.createdAt.toISOString(),
       deployment:
         row.deploymentStatus === null
@@ -2244,6 +2404,7 @@ app.patch("/tenants/:tenantId", async (c) => {
       adminFirstName: updated.adminFirstName,
       adminLastName: updated.adminLastName,
       ownerId: updated.ownerId,
+      planSlug: updated.planSlug,
       createdAt: updated.createdAt.toISOString(),
       deployment: deployment[0]
         ? {
@@ -2493,6 +2654,8 @@ function startReadinessReconciler() {
   }, RECONCILE_INTERVAL_MS);
   void tick();
 }
+
+registerLicenseApi(app, db);
 
 const port = apiConfig.port;
 startReadinessReconciler();

@@ -85,6 +85,13 @@
       "when": 1778398121339,
       "tag": "0011_owner_password_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778400688076,
+      "tag": "0012_phase3_licensing",
+      "breakpoints": true
     }
   ]
 }

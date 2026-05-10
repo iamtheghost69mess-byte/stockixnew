@@ -466,6 +466,8 @@ export default function TenantsPage() {
     adminEmail: string;
     adminFirstName: string;
     adminLastName: string;
+    planSlug: string;
+    assignExistingLicenseId: string | null;
   }) => {
     const nextSlug = payload?.slug ?? slug;
     const nextName = payload?.name ?? name;
@@ -491,6 +493,8 @@ export default function TenantsPage() {
           admin_email: nextAdminEmail,
           admin_first_name: nextAdminFirstName,
           admin_last_name: nextAdminLastName,
+          plan_slug: payload?.planSlug ?? "starter",
+          assign_existing_license_id: payload?.assignExistingLicenseId ?? undefined,
         }),
       });
 

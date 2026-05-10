@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { createDb } from "@repo/db";
 import { owners, tenantDeployments, tenantLifecycleJobs, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import { asc, desc, eq } from "drizzle-orm";
+import { loadRootEnv } from "./load-root-env.mjs";
+
+loadRootEnv(import.meta.url);
 
 const apiUrl = (process.env.STOCKIX_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
 const databaseUrl = process.env.DATABASE_URL;

@@ -7,6 +7,7 @@ import {
   BookOpenIcon,
   Building2Icon,
   CircleHelpIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   Settings2Icon,
   UsersIcon,
@@ -43,6 +44,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         title: "Tenants",
         url: "/tenants",
         icon: <Building2Icon />,
+      },
+      {
+        title: "Licenses",
+        url: "/licenses",
+        icon: <KeyRoundIcon />,
       },
       {
         title: "Team & access",
