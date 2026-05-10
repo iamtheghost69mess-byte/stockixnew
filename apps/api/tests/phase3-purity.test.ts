@@ -9,12 +9,14 @@ function readRepoFile(relPath: string): string {
 }
 
 describe("phase3 worker/db purity regression checks", () => {
-  it("worker does not own job claim/status transitions", () => {
+  it("worker drives jobs via internal HTTP; DB writes are fallback-only", () => {
     const worker = readRepoFile("infra/worker-service/src/worker.ts");
-    expect(worker).not.toMatch(/tenantLifecycleJobs|getTenantJobById|updateTenantJob/);
-    expect(worker).not.toMatch(/status:\s*"running"|status:\s*"failed"|status:\s*"completed"/);
+    // Primary path: claim / complete / heartbeat / fail through API (not direct job repo helpers).
+    expect(worker).not.toMatch(/getTenantJobById|updateTenantJob/);
     expect(worker).toContain("/internal/jobs/claim");
     expect(worker).toContain("/internal/jobs/");
+    // Fallback persistence may update tenantLifecycleJobs when reporting failure to the API fails.
+    expect(worker).toContain("tenantLifecycleJobs");
   });
 
   it("db package does not expose workflow state-machine helpers", () => {

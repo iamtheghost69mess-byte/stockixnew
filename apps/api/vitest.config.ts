@@ -7,5 +7,9 @@ export default defineConfig({
     globals: true,
     clearMocks: true,
     restoreMocks: true,
+    // CSRF checks in auth routes compare Origin to apiConfig.dashboardUrl; dotenv is skipped under Vitest.
+    env: {
+      DASHBOARD_URL: "http://localhost:3000",
+    },
   },
 });

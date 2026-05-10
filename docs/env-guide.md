@@ -2,6 +2,7 @@
 
 ## Single source of truth (local)
 
+- **What each variable means (local vs prod):** [`docs/envexplanation.md`](envexplanation.md).
 - **Schema:** `/.env.example` (full control-plane + dashboard variables).
 - **Prod compose template:** `infra/prod/.env.example`.
 - **Loaded files:** repo root `.env` then `.env.local` (overrides), via `packages/config` (`dotenv`).

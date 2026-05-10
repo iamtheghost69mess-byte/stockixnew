@@ -46,7 +46,10 @@ describe("auth API contract errors", () => {
     const res = await app.request("http://local/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "not-an-email" }),
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        Origin: "http://localhost:3000",
+      },
     });
     const body = await res.json();
     expect(res.status).toBe(400);

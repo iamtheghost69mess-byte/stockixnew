@@ -377,17 +377,19 @@ export default function LicensesPage() {
                           {row.licenseKey}
                         </button>
                         <Tooltip>
-                          <TooltipTrigger>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 shrink-0 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100"
-                              onClick={() => void copyKey(row.licenseKey)}
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100"
+                                onClick={() => void copyKey(row.licenseKey)}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
                           <TooltipContent>{copied === row.licenseKey ? "Copied!" : "Copy"}</TooltipContent>
                         </Tooltip>
                       </div>
