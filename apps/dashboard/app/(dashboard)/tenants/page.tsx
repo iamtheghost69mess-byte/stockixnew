@@ -88,6 +88,7 @@ export default function TenantsPage() {
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [addTenantOpen, setAddTenantOpen] = useState(false);
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -550,7 +551,7 @@ export default function TenantsPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-8">
+    <div className="w-full space-y-8">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Tenants</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -669,6 +670,7 @@ export default function TenantsPage() {
       ) : null}
 
       <TenantCreateWizard
+        dialog={{ open: addTenantOpen, onOpenChange: setAddTenantOpen }}
         loading={loading}
         provisionLog={provisionLog}
         elapsedSec={elapsedSec}
@@ -693,18 +695,28 @@ export default function TenantsPage() {
         }}
       />
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-sm font-medium">Existing tenants</h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => load().catch((e) => setError(String(e)))}
-          >
-            Refresh list
-          </Button>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Existing tenants</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Filter, sort, and manage customer organizations from one directory.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => load().catch((e) => setError(String(e)))}
+            >
+              Refresh
+            </Button>
+            <Button type="button" size="sm" className="h-9" onClick={() => setAddTenantOpen(true)}>
+              Add tenant
+            </Button>
+          </div>
         </div>
         <TenantList
           tenants={tenants}
@@ -716,6 +728,7 @@ export default function TenantsPage() {
           suspendingId={suspendingId}
           reactivatingId={reactivatingId}
           stoppingId={stoppingId}
+          onAddTenant={() => setAddTenantOpen(true)}
         />
       </div>
     </div>

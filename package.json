@@ -4,6 +4,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --filter=dashboard --filter=api",
+    "dev:all": "pnpm db:up && pnpm db:wait && pnpm dev",
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
     "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/dev/docker-compose.yml down",

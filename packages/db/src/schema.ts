@@ -33,6 +33,10 @@ export const owners = pgTable(
       withTimezone: true,
     }),
     invitedById: uuid("invited_by_id").references((): AnyPgColumn => owners.id),
+    passwordResetTokenHash: text("password_reset_token_hash"),
+    passwordResetExpiresAt: timestamp("password_reset_expires_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

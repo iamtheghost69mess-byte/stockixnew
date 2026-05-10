@@ -1,6 +1,14 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@repo/config", () => ({
+  apiConfig: {
+    nodeEnv: "test",
+    publicBaseUrlScheme: "http",
+    dashboardUrl: "http://local",
+  },
+}));
+
 const loginOwnerMock = vi.fn();
 const reconfirmOwnerPasswordMock = vi.fn();
 const validateOwnerSessionMock = vi.fn();
@@ -65,7 +73,7 @@ describe("auth route contracts", () => {
     const res = await app.request("http://local/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "admin@x.com", password: "pass" }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: "http://local" },
     });
     const body = await res.json();
 
@@ -94,7 +102,7 @@ describe("auth route contracts", () => {
     const res = await app.request("http://local/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "admin@x.com", password: "pass", code: "123456" }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: "http://local" },
     });
     const body = await res.json();
 
@@ -134,7 +142,10 @@ describe("auth route contracts", () => {
   });
 
   it("returns logout success and expires cookies", async () => {
-    const res = await app.request("http://local/auth/logout", { method: "POST" });
+    const res = await app.request("http://local/auth/logout", {
+      method: "POST",
+      headers: { origin: "http://local" },
+    });
     const body = await res.json();
 
     expect(res.status).toBe(200);

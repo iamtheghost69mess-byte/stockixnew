@@ -6,6 +6,10 @@ import { apiConfig } from "@repo/config";
 
 import { validateOwnerSession } from "../../services/auth/session-validation.js";
 import { loginOwner, reconfirmOwnerPassword } from "../../services/auth/login.js";
+import {
+  completeOwnerPasswordReset,
+  requestOwnerPasswordReset,
+} from "../../services/auth/password-reset.js";
 import { signMfaToken, signSessionToken, verifyMfaToken, verifySessionToken } from "../../services/auth/tokens.js";
 import {
   beginMfaSetup,
@@ -28,9 +32,11 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   const auth = new Hono();
   const rateLimits = new Map<string, { count: number; resetAt: number }>();
   const RATE_LIMITS = {
-    "/login": { windowMs: 60_000, max: 10 },
-    "/verify-mfa": { windowMs: 60_000, max: 8 },
-    "/invite/accept": { windowMs: 60_000, max: 6 },
+    "/auth/login": { windowMs: 60_000, max: 10 },
+    "/auth/verify-mfa": { windowMs: 60_000, max: 8 },
+    "/auth/invite/accept": { windowMs: 60_000, max: 6 },
+    "/auth/password/forgot": { windowMs: 60_000, max: 5 },
+    "/auth/password/reset": { windowMs: 60_000, max: 5 },
   } as const;
   const secureCookie = apiConfig.nodeEnv === "production" || apiConfig.publicBaseUrlScheme === "https";
   const cookieBase = `Path=/; HttpOnly; SameSite=Lax${secureCookie ? "; Secure" : ""}`;
@@ -133,7 +139,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       })
       .safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
-    const limited = enforceRateLimit(c, "/login", parsed.data.email.toLowerCase());
+    const limited = enforceRateLimit(c, "/auth/login", parsed.data.email.toLowerCase());
     if (limited) return limited;
     const result = await loginOwner(db, parsed.data);
     if (!result.success) return c.json(result, { status: (result.status ?? 401) as 401 });
@@ -246,7 +252,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
 
   auth.post("/verify-mfa", async (c) => {
     if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
-    const limited = enforceRateLimit(c, "/verify-mfa");
+    const limited = enforceRateLimit(c, "/auth/verify-mfa");
     if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
@@ -320,7 +326,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
 
   auth.post("/invite/accept", async (c) => {
     if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
-    const limited = enforceRateLimit(c, "/invite/accept");
+    const limited = enforceRateLimit(c, "/auth/invite/accept");
     if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
@@ -346,6 +352,59 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       );
     }
     const result = await acceptInvite(db, parsed.data);
+    if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    return c.json({ success: true, ok: true });
+  });
+
+  auth.post("/password/forgot", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = z.object({ email: z.string().email() }).safeParse(body);
+    if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
+    const limited = enforceRateLimit(c, "/auth/password/forgot", parsed.data.email.toLowerCase());
+    if (limited) return limited;
+    const result = await requestOwnerPasswordReset(db, {
+      email: parsed.data.email,
+      ipAddress: c.req.header("x-forwarded-for"),
+      userAgent: c.req.header("user-agent"),
+    });
+    if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    return c.json({ success: true, ok: true });
+  });
+
+  auth.post("/password/reset", async (c) => {
+    if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
+    const limited = enforceRateLimit(c, "/auth/password/reset");
+    if (limited) return limited;
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = z
+      .object({
+        token: z.string().min(1),
+        password: z
+          .string()
+          .min(12)
+          .regex(/[A-Z]/)
+          .regex(/[a-z]/)
+          .regex(/[0-9]/)
+          .regex(/[^A-Za-z0-9]/),
+      })
+      .safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          success: false,
+          error:
+            "Password must be at least 12 characters and include uppercase, lowercase, number, and special character.",
+        },
+        400,
+      );
+    }
+    const result = await completeOwnerPasswordReset(db, {
+      token: parsed.data.token,
+      password: parsed.data.password,
+      ipAddress: c.req.header("x-forwarded-for"),
+      userAgent: c.req.header("user-agent"),
+    });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
     return c.json({ success: true, ok: true });
   });
