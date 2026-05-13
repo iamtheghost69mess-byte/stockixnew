@@ -79,6 +79,8 @@ export default function TenantDetailPage() {
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [suspendConfirmSlug, setSuspendConfirmSlug] = useState("");
   const [suspendingTenant, setSuspendingTenant] = useState(false);
+  const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
+  const [reactivatingTenant, setReactivatingTenant] = useState(false);
   const [stopProvisionOpen, setStopProvisionOpen] = useState(false);
   const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
   const [retryingProvision, setRetryingProvision] = useState(false);
@@ -815,18 +817,7 @@ export default function TenantDetailPage() {
               </Button>
             ) : null}
             {tenant.status === "suspended" ? (
-              <Button
-                onClick={async () => {
-                  const res = await fetch(`/api/tenants/${tenant.id}/reactivate`, { method: "POST" });
-                  if (!res.ok) {
-                    const body = await readJson(res);
-                    const data = body as { error?: string };
-                    setError(formatApiError(body, data.error ?? `Reactivate failed (${res.status})`));
-                    return;
-                  }
-                  await loadTenant();
-                }}
-              >
+              <Button onClick={() => setReactivateDialogOpen(true)}>
                 <PlayCircle className="mr-1 h-4 w-4" />
                 Reactivate tenant
               </Button>
@@ -855,6 +846,49 @@ export default function TenantDetailPage() {
           </CardContent>
         ) : null}
       </Card>
+
+      <Dialog
+        open={reactivateDialogOpen}
+        onOpenChange={setReactivateDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reactivate tenant?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will restart the Docker stack for {tenant.name} and make it accessible again.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReactivateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={reactivatingTenant}
+              onClick={async () => {
+                setReactivatingTenant(true);
+                setError(null);
+                try {
+                  const res = await fetch(`/api/tenants/${tenant.id}/reactivate`, { method: "POST" });
+                  if (!res.ok) {
+                    const body = await readJson(res);
+                    const data = body as { error?: string };
+                    setError(formatApiError(body, data.error ?? `Reactivate failed (${res.status})`));
+                    return;
+                  }
+                  toast.success("Tenant reactivated");
+                  setReactivateDialogOpen(false);
+                  await loadTenant();
+                } finally {
+                  setReactivatingTenant(false);
+                }
+              }}
+            >
+              {reactivatingTenant ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Reactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={suspendOpen}

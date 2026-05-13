@@ -3,6 +3,16 @@
 import { useEffect, useState } from "react";
 import { Copy, Loader2 } from "lucide-react";
 import QRCode from "qrcode";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatApiError } from "@/lib/api-errors";
@@ -33,6 +43,8 @@ export default function SettingsPage() {
 
   const [disableCode, setDisableCode] = useState("");
   const [disableSubmitting, setDisableSubmitting] = useState(false);
+  const [disableMfaAlertOpen, setDisableMfaAlertOpen] = useState(false);
+  const [disableMfaCodeVisible, setDisableMfaCodeVisible] = useState(false);
 
   const loadStatus = async () => {
     setLoading(true);
@@ -108,6 +120,8 @@ export default function SettingsPage() {
       setOtpauthUri("");
       setQrDataUrl("");
       setSetupCode("");
+      setDisableMfaCodeVisible(false);
+      setDisableMfaAlertOpen(false);
       await loadStatus();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -129,6 +143,7 @@ export default function SettingsPage() {
       if (!res.ok)
         throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
       setDisableCode("");
+      setDisableMfaCodeVisible(false);
       await loadStatus();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -242,29 +257,73 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              To disable MFA, provide your current authenticator code.
-            </p>
-            <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Authenticator code</label>
-                <Input
-                  value={disableCode}
-                  onChange={(e) => setDisableCode(e.target.value)}
-                  placeholder="123456"
-                  className="w-32"
-                  maxLength={8}
-                />
-              </div>
-              <Button
-                variant="destructive"
-                onClick={() => void disableMfa()}
-                disabled={!disableCode || disableSubmitting}
-              >
-                {disableSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <AlertDialog open={disableMfaAlertOpen} onOpenChange={setDisableMfaAlertOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Disable two-factor authentication?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Removing MFA reduces the security of your account. You will need your authenticator code to
+                    confirm.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setDisableMfaAlertOpen(false);
+                      setDisableMfaCodeVisible(true);
+                    }}
+                  >
+                    Continue to disable
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {!disableMfaCodeVisible ? (
+              <Button variant="destructive" onClick={() => setDisableMfaAlertOpen(true)}>
                 Disable MFA
               </Button>
-            </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Enter your current authenticator code to confirm disabling MFA.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground" htmlFor="mfa-disable-code">
+                      Authenticator code
+                    </label>
+                    <Input
+                      id="mfa-disable-code"
+                      value={disableCode}
+                      onChange={(e) => setDisableCode(e.target.value)}
+                      placeholder="123456"
+                      className="w-32"
+                      maxLength={8}
+                    />
+                  </div>
+                  <Button
+                    variant="destructive"
+                    onClick={() => void disableMfa()}
+                    disabled={!disableCode || disableSubmitting}
+                  >
+                    {disableSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Disable MFA
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setDisableMfaCodeVisible(false);
+                      setDisableCode("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

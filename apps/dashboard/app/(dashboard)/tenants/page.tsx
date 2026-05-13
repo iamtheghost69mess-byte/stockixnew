@@ -240,7 +240,7 @@ export default function TenantsPage() {
   );
 
   const handleReactivate = useCallback(
-    async (tenantId: string, slug: string) => {
+    async (tenantId: string, slug: string): Promise<boolean> => {
       setReactivatingId(tenantId);
       setError(null);
       try {
@@ -256,15 +256,17 @@ export default function TenantsPage() {
               : t,
           ),
         );
+        return true;
       } catch (e) {
         const message = String(e);
         if (message.includes("tenant_not_found")) {
           setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
           setError(`Tenant "${slug}" no longer exists.`);
           void load().catch(() => {});
-          return;
+          return false;
         }
         setError(`Failed to reactivate ${slug}: ${message}`);
+        return false;
       } finally {
         setReactivatingId(null);
       }

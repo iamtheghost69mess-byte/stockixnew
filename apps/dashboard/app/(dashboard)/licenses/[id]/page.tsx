@@ -25,6 +25,16 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -496,7 +506,12 @@ export default function LicenseDetailPage() {
                             ) : null}
                             {(a.activationStatus === "active" || a.activationStatus === "deactivated") &&
                             isSuper ? (
-                              <DropdownMenuItem onClick={() => setBlacklistAct(a)}>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setBlacklistReason("");
+                                  setBlacklistAct(a);
+                                }}
+                              >
                                 Blacklist device
                               </DropdownMenuItem>
                             ) : null}
@@ -648,19 +663,19 @@ export default function LicenseDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(deactivateAct)} onOpenChange={(o) => !o && setDeactivateAct(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Deactivate terminal</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This device will no longer count as an active activation.
-          </p>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeactivateAct(null)}>
-              Cancel
-            </Button>
-            <Button
+      <AlertDialog open={Boolean(deactivateAct)} onOpenChange={(open) => !open && setDeactivateAct(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate this terminal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The POS terminal will lose its activation immediately. The machine will need to re-activate to use the
+              software.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
                 if (!deactivateAct) return;
                 const res = await fetch(
@@ -678,41 +693,51 @@ export default function LicenseDetailPage() {
               }}
             >
               Deactivate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      <Dialog open={Boolean(blacklistAct)} onOpenChange={(o) => !o && setBlacklistAct(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Blacklist this hardware fingerprint?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This permanently blocks this device from activating any license on this platform.
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="bl-reason">Reason (optional)</Label>
-            <Input
+      <AlertDialog
+        open={Boolean(blacklistAct)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBlacklistAct(null);
+            setBlacklistReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Blacklist this hardware fingerprint?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This device will be permanently blocked from activating any license on this platform. This cannot be
+              undone without contacting support.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="bl-reason">Reason (required, min. 10 characters)</Label>
+            <Textarea
               id="bl-reason"
               value={blacklistReason}
               onChange={(e) => setBlacklistReason(e.target.value)}
+              rows={4}
+              placeholder="Document why this device is being blacklisted"
             />
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setBlacklistAct(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={blacklistReason.trim().length < 10}
               onClick={async () => {
-                if (!blacklistAct) return;
+                if (!blacklistAct || blacklistReason.trim().length < 10) return;
                 const res = await fetch("/api/fingerprints/blacklist", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     hardwareFingerprint: blacklistAct.hardwareFingerprint,
-                    reason: blacklistReason || undefined,
+                    reason: blacklistReason.trim(),
                   }),
                 });
                 if (!res.ok) {
@@ -726,11 +751,11 @@ export default function LicenseDetailPage() {
                 void load();
               }}
             >
-              Blacklist
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              Blacklist device
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

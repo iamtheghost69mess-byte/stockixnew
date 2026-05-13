@@ -55,7 +55,7 @@ type Props = {
   tenants: TenantRow[];
   onRequestDelete: (tenantId: string, slug: string) => void;
   onSuspend: (tenantId: string, slug: string) => Promise<boolean>;
-  onReactivate: (tenantId: string, slug: string) => Promise<void>;
+  onReactivate: (tenantId: string, slug: string) => Promise<boolean>;
   onStopProvision: (tenantId: string, slug: string) => Promise<boolean>;
   deletingId: string | null;
   suspendingId: string | null;
@@ -85,6 +85,9 @@ export default function TenantList(props: Props) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<{ tenantId: string; slug: string } | null>(null);
   const [suspendSlugInput, setSuspendSlugInput] = useState("");
+  const [reactivateTarget, setReactivateTarget] = useState<{ tenantId: string; slug: string; name: string } | null>(
+    null,
+  );
   const [stopProvisionTarget, setStopProvisionTarget] = useState<{ tenantId: string; slug: string } | null>(
     null,
   );
@@ -210,6 +213,44 @@ export default function TenantList(props: Props) {
                     <Loader2 className="mr-1 size-4 animate-spin" />
                   ) : null}
                   Suspend
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={reactivateTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setReactivateTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reactivateTarget ? `Reactivate ${reactivateTarget.name}?` : "Reactivate tenant?"}
+            </DialogTitle>
+          </DialogHeader>
+          {reactivateTarget ? (
+            <>
+              <p className="text-sm text-muted-foreground">The tenant&apos;s stack will be restarted.</p>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setReactivateTarget(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={reactivatingId === reactivateTarget.tenantId}
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await onReactivate(reactivateTarget.tenantId, reactivateTarget.slug);
+                      if (ok) setReactivateTarget(null);
+                    })();
+                  }}
+                >
+                  {reactivatingId === reactivateTarget.tenantId ? (
+                    <Loader2 className="mr-1 size-4 animate-spin" />
+                  ) : null}
+                  Reactivate
                 </Button>
               </DialogFooter>
             </>
@@ -463,7 +504,11 @@ export default function TenantList(props: Props) {
                             </DropdownMenuItem>
                           ) : null}
                           {status === "suspended" ? (
-                            <DropdownMenuItem onClick={() => void onReactivate(t.tenantId, t.slug)}>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setReactivateTarget({ tenantId: t.tenantId, slug: t.slug, name: t.name });
+                              }}
+                            >
                               {reactivatingId === t.tenantId ? (
                                 <Loader2 className="size-4 animate-spin" />
                               ) : (
