@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type PlanOpt = { slug: string; name: string };
 type TenantOpt = { id: string; name: string; slug: string };
@@ -209,30 +209,32 @@ export default function LicenseGenerateDialog({
           </div>
           <div className="space-y-2">
             <Label>License type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className={cn(
-                  "rounded-lg border p-3 text-left text-sm transition-all",
-                  term === "perpetual" ? "ring-2 ring-primary" : "hover:bg-muted/50",
-                )}
-                onClick={() => setTerm("perpetual")}
+            <ToggleGroup
+              multiple={false}
+              value={[term]}
+              onValueChange={(value) => {
+                const next = value[0];
+                if (next === "fixed" || next === "perpetual") setTerm(next);
+              }}
+              variant="outline"
+              spacing={2}
+              className="grid w-full grid-cols-2 gap-2"
+            >
+              <ToggleGroupItem
+                value="perpetual"
+                className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
               >
-                <p className="font-medium">Perpetual</p>
-                <p className="text-xs text-muted-foreground">No expiry date</p>
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "rounded-lg border p-3 text-left text-sm transition-all",
-                  term === "fixed" ? "ring-2 ring-primary" : "hover:bg-muted/50",
-                )}
-                onClick={() => setTerm("fixed")}
+                <span className="text-sm font-medium">Perpetual</span>
+                <span className="text-xs font-normal text-muted-foreground">No expiry date</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="fixed"
+                className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
               >
-                <p className="font-medium">Fixed term</p>
-                <p className="text-xs text-muted-foreground">Set an expiry date</p>
-              </button>
-            </div>
+                <span className="text-sm font-medium">Fixed term</span>
+                <span className="text-xs font-normal text-muted-foreground">Set an expiry date</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
             {term === "fixed" ? (
               <Popover>
                 <PopoverTrigger>

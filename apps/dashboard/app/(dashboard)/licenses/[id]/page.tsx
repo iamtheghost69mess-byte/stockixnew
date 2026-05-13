@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -460,9 +461,11 @@ export default function LicenseDetailPage() {
                   <TableRow key={a.id}>
                     <TableCell>{a.machineName ?? "Unknown device"}</TableCell>
                     <TableCell>
-                      <button
+                      <Button
                         type="button"
-                        className="font-mono text-xs text-primary hover:underline"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 font-mono text-xs text-primary hover:bg-transparent hover:underline"
                         title="Copy full fingerprint"
                         onClick={() => {
                           void navigator.clipboard.writeText(a.hardwareFingerprint);
@@ -472,7 +475,7 @@ export default function LicenseDetailPage() {
                         {a.hardwareFingerprint.length > 16
                           ? `${a.hardwareFingerprint.slice(0, 16)}…`
                           : a.hardwareFingerprint}
-                      </button>
+                      </Button>
                     </TableCell>
                     <TableCell>{a.ipAddress ?? "—"}</TableCell>
                     <TableCell>
@@ -548,14 +551,14 @@ export default function LicenseDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="extend-perp"
-                className="size-4 rounded border"
                 checked={extendPerpetual}
-                onChange={(e) => setExtendPerpetual(e.target.checked)}
+                onCheckedChange={(checked) => setExtendPerpetual(checked === true)}
               />
-              <Label htmlFor="extend-perp">Perpetual (no expiry)</Label>
+              <Label htmlFor="extend-perp" className="text-sm font-normal">
+                Perpetual (no expiry)
+              </Label>
             </div>
             {!extendPerpetual ? (
               <div className="space-y-2">

@@ -407,14 +407,16 @@ function LicensesPageContent() {
                   <TableRow key={row.id} className="group">
                     <TableCell>
                       <div className="flex items-center gap-1 font-mono text-xs">
-                        <button
+                        <Button
                           type="button"
-                          className="truncate max-w-[140px] sm:max-w-[180px] text-left hover:underline"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto max-w-[140px] truncate p-0 text-left font-mono text-xs hover:bg-transparent hover:underline sm:max-w-[180px]"
                           title="Click to copy"
                           onClick={() => void copyKey(row.licenseKey)}
                         >
                           {row.licenseKey}
-                        </button>
+                        </Button>
                         <Tooltip>
                           <TooltipTrigger
                             render={

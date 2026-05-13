@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { LicenseRow } from "@/types/license";
 import type { ProvisionEventRow } from "@/types/tenant";
 
@@ -250,63 +250,73 @@ export default function TenantCreateWizard(props: Props) {
             <p className="text-sm font-medium">Step 3 of 4 — Plan &amp; license</p>
             <div>
               <p className="mb-2 text-xs font-medium text-muted-foreground">Plan</p>
-              <div className="grid grid-cols-2 gap-2">
+              <ToggleGroup
+                multiple={false}
+                value={planSlug ? [planSlug] : []}
+                onValueChange={(value) => {
+                  const next = value[0];
+                  if (next) setPlanSlug(next);
+                }}
+                variant="outline"
+                spacing={2}
+                className="grid w-full grid-cols-2 gap-2"
+              >
                 {plans.map((p) => (
-                  <button
+                  <ToggleGroupItem
                     key={p.slug}
-                    type="button"
-                    className={cn(
-                      "rounded-lg border p-3 text-left text-sm transition-all",
-                      planSlug === p.slug ? "ring-2 ring-primary" : "hover:bg-muted/50",
-                    )}
-                    onClick={() => setPlanSlug(p.slug)}
+                    value={p.slug}
+                    className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
                   >
-                    <p className="font-semibold">{p.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{p.description ?? " "}</p>
-                  </button>
+                    <span className="text-sm font-semibold">{p.name}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {p.description ?? " "}
+                    </span>
+                  </ToggleGroupItem>
                 ))}
-              </div>
+              </ToggleGroup>
             </div>
             <div className="space-y-2">
               <Label>License</Label>
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  className={cn(
-                    "w-full rounded-lg border p-3 text-left text-sm",
-                    licenseMode === "auto" ? "ring-2 ring-primary" : "hover:bg-muted/50",
-                  )}
-                  onClick={() => {
+              <ToggleGroup
+                multiple={false}
+                value={[licenseMode]}
+                onValueChange={(value) => {
+                  const next = value[0];
+                  if (next === "auto") {
                     setLicenseMode("auto");
                     setExistingLicenseId("");
-                  }}
-                >
-                  <p className="font-medium">Auto-generate new license</p>
-                  <p className="text-xs text-muted-foreground">
-                    A platform license will be created and assigned automatically
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  disabled={unassignedLicenses.length === 0}
-                  className={cn(
-                    "w-full rounded-lg border p-3 text-left text-sm",
-                    licenseMode === "existing" ? "ring-2 ring-primary" : "hover:bg-muted/50",
-                    unassignedLicenses.length === 0 ? "opacity-50" : "",
-                  )}
-                  onClick={() => {
+                  } else if (next === "existing") {
                     setLicenseMode("existing");
                     setExistingLicenseId((prev) => prev || unassignedLicenses[0]?.id || "");
-                  }}
+                  }
+                }}
+                variant="outline"
+                spacing={2}
+                orientation="vertical"
+                className="grid w-full gap-2"
+              >
+                <ToggleGroupItem
+                  value="auto"
+                  className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
                 >
-                  <p className="font-medium">Use existing unassigned license</p>
-                  <p className="text-xs text-muted-foreground">
+                  <span className="text-sm font-medium">Auto-generate new license</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    A platform license will be created and assigned automatically
+                  </span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="existing"
+                  disabled={unassignedLicenses.length === 0}
+                  className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
+                >
+                  <span className="text-sm font-medium">Use existing unassigned license</span>
+                  <span className="text-xs font-normal text-muted-foreground">
                     {unassignedLicenses.length === 0
                       ? "No unassigned licenses available"
                       : "Pick a platform license from the pool"}
-                  </p>
-                </button>
-              </div>
+                  </span>
+                </ToggleGroupItem>
+              </ToggleGroup>
               {licenseMode === "existing" && unassignedLicenses.length > 0 ? (
                 <Select
                   value={existingLicenseId}
