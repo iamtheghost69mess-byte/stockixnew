@@ -2454,6 +2454,7 @@ __export(schema_exports, {
   licenseActivations: () => licenseActivations,
   licenses: () => licenses,
   organizations: () => organizations,
+  ownerOrganizationAccess: () => ownerOrganizationAccess,
   owners: () => owners,
   plans: () => plans,
   tenantConfig: () => tenantConfig,
@@ -2532,6 +2533,21 @@ var organizations = pgTable("organizations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
+var ownerOrganizationAccess = pgTable(
+  "owner_organization_access",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull().references(() => owners.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    uniqueIndex("owner_org_access_owner_org_unique").on(t.ownerId, t.organizationId),
+    index("owner_org_access_owner_idx").on(t.ownerId),
+    index("owner_org_access_tenant_idx").on(t.tenantId)
+  ]
+);
 var tenantConfig = pgTable("tenant_config", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().unique().references(() => tenants.id, { onDelete: "cascade" }),
@@ -2682,6 +2698,7 @@ var licenses = pgTable(
     }),
     status: text("status").notNull().default("unassigned"),
     activatedAt: timestamp("activated_at", { withTimezone: true }),
+    validFrom: timestamp("valid_from", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),
@@ -2783,7 +2800,7 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { eq as eq3, sql as sql2 } from "drizzle-orm";
+import { and, eq as eq3, sql as sql2, isNotNull, lte } from "drizzle-orm";
 import { z as z2 } from "zod";
 
 // ../../infra/worker-service/domain/provisioner.ts
@@ -2874,6 +2891,114 @@ function createProvisionTracer(db, correlationId, getContext, log) {
 // ../../infra/worker-service/domain/provisioning/constants.ts
 var STOCKIX_FINANCE_HEALTH_TIMEOUT_MS = 18e4;
 var STOCKIX_FINANCE_HEALTH_POLL_MS = 2e3;
+
+// ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-org-settings.ts
+var MENA_DEFAULTS = {
+  name: "",
+  baseCurrency: "USD",
+  timezone: "Asia/Beirut",
+  location: "LB",
+  fiscalYear: "January",
+  language: "en-US",
+  dateFormat: "MM/DD/YYYY"
+};
+function financeApiBase(internalBaseUrl) {
+  return internalBaseUrl.replace(/\/+$/, "");
+}
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readString2(v) {
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function parseSigninToken(body) {
+  if (!isRecord(body)) return null;
+  const accessToken = readString2(body.accessToken) ?? readString2(body.access_token) ?? readString2(body.token);
+  const organizationId = readString2(body.organizationId) ?? readString2(body.organization_id);
+  if (!accessToken || !organizationId) return null;
+  return { accessToken, organizationId };
+}
+function parseCurrentOrg(body) {
+  if (!isRecord(body)) return null;
+  const builtAt = body.builtAt ?? body.built_at;
+  const hasBuiltAt = builtAt !== null && builtAt !== void 0 && builtAt !== "";
+  if (!hasBuiltAt) return null;
+  const metaRaw = body.metadata;
+  const meta = Array.isArray(metaRaw) ? metaRaw[0] : metaRaw;
+  if (!isRecord(meta)) return null;
+  const baseCurrency = readString2(meta.baseCurrency) ?? readString2(meta.base_currency);
+  const timezone = readString2(meta.timezone);
+  const location = readString2(meta.location);
+  const fiscalYear = readString2(meta.fiscalYear) ?? readString2(meta.fiscal_year);
+  const language = readString2(meta.language);
+  const dateFormat = readString2(meta.dateFormat) ?? readString2(meta.date_format);
+  const name = readString2(meta.name) ?? "";
+  if (!baseCurrency || !timezone || !location || !fiscalYear || !language) {
+    return null;
+  }
+  return {
+    name,
+    baseCurrency,
+    timezone,
+    location,
+    fiscalYear,
+    language,
+    dateFormat
+  };
+}
+async function fetchOrgSettingsFromMainInstance(params) {
+  const base = financeApiBase(params.mainInternalBaseUrl);
+  const headersBase = {
+    "Content-Type": "application/json",
+    "x-request-id": params.correlationId,
+    "x-correlation-id": params.correlationId
+  };
+  let signinRes;
+  try {
+    signinRes = await fetch(`${base}/api/auth/signin`, {
+      method: "POST",
+      headers: headersBase,
+      body: JSON.stringify({
+        email: params.adminEmail,
+        password: params.adminPassword
+      }),
+      signal: AbortSignal.timeout(1e4)
+    });
+  } catch {
+    return null;
+  }
+  let signinJson;
+  try {
+    signinJson = await signinRes.json();
+  } catch {
+    return null;
+  }
+  if (!signinRes.ok) return null;
+  const creds = parseSigninToken(signinJson);
+  if (!creds) return null;
+  let currentRes;
+  try {
+    currentRes = await fetch(`${base}/api/organization/current`, {
+      method: "GET",
+      headers: {
+        ...headersBase,
+        Authorization: `Bearer ${creds.accessToken}`,
+        "organization-id": creds.organizationId
+      },
+      signal: AbortSignal.timeout(1e4)
+    });
+  } catch {
+    return null;
+  }
+  let currentJson;
+  try {
+    currentJson = await currentRes.json();
+  } catch {
+    return null;
+  }
+  if (!currentRes.ok) return null;
+  return parseCurrentOrg(currentJson);
+}
 
 // ../../infra/worker-service/domain/provisioning/tenant-env.ts
 import { mkdir, rename, writeFile } from "fs/promises";
@@ -3105,7 +3230,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     await mkdir2(join5(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
     await mkdir2(join5(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
     const { secrets } = deps;
-    oneTimeAdminPassword = secrets.bootstrapAdminPassword();
+    const bootstrapPasswordKey = (input.parentTenantSlug?.trim() || input.slug).trim();
+    oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
     const jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     const dbPassword = secrets.persistSecret(secrets.randomHex(16));
     const dbRootPassword = secrets.persistSecret(secrets.randomHex(16));
@@ -3364,6 +3490,113 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       });
     }
     await checkNotCancelled();
+    let inheritedSettings = {
+      ...MENA_DEFAULTS,
+      name: input.name
+    };
+    if (input.parentTenantSlug?.trim()) {
+      const mainBase = input.mainTenantInternalBaseUrl?.trim();
+      if (!mainBase) {
+        if (!hasOp("tenant.fetch_org_settings")) {
+          log("[provision] step start: tenant.fetch_org_settings");
+          log("[provision] No main tenant internal base URL; skipping settings fetch");
+          await markOp("tenant.fetch_org_settings", "Skipped settings fetch (no main base URL)", {
+            parentTenantSlug: input.parentTenantSlug
+          });
+          log("[provision] step done: tenant.fetch_org_settings");
+        }
+      } else if (!hasOp("tenant.build_organization")) {
+        log("[provision] step start: tenant.fetch_org_settings");
+        try {
+          const mainPassword = secrets.bootstrapAdminPassword(input.parentTenantSlug.trim());
+          const fetched = await finance.fetchOrgSettings({
+            mainInternalBaseUrl: mainBase,
+            adminEmail: input.adminEmail,
+            adminPassword: mainPassword,
+            correlationId
+          });
+          if (fetched) {
+            inheritedSettings = { ...fetched, name: input.name };
+            log("[provision] Using inherited settings from main org");
+          } else {
+            log("[provision] Main org not reachable or not built; using MENA defaults");
+          }
+          if (!hasOp("tenant.fetch_org_settings")) {
+            await markOp("tenant.fetch_org_settings", "Org settings fetch completed", {
+              inherited: Boolean(fetched)
+            });
+          } else {
+            await trace.event("resume", "Refreshed org settings from main before build retry", {
+              meta: { operationKey: "tenant.fetch_org_settings", inherited: Boolean(fetched) }
+            });
+          }
+        } catch (err) {
+          log(
+            `[provision] Settings fetch failed, using defaults: ${err instanceof Error ? err.message : String(err)}`
+          );
+          if (!hasOp("tenant.fetch_org_settings")) {
+            await markOp("tenant.fetch_org_settings", "Org settings fetch failed; using defaults", {
+              error: err instanceof Error ? err.message : String(err)
+            });
+          }
+        }
+        log("[provision] step done: tenant.fetch_org_settings");
+      } else if (hasOp("tenant.fetch_org_settings")) {
+        await trace.event("resume", "Skipping org settings fetch (organization build already journaled)", {
+          meta: { operationKey: "tenant.fetch_org_settings" }
+        });
+      }
+    }
+    await checkNotCancelled();
+    if (!hasOp("tenant.build_organization")) {
+      log("[provision] step start: tenant.build_organization");
+      await trace.event("progress", "Building organization database and seeding defaults", {
+        meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() }
+      });
+      try {
+        const result = await finance.buildOrganization(
+          {
+            internalBaseUrl: internalUrl,
+            adminEmail: input.adminEmail,
+            adminPassword: secrets.bootstrapAdminPassword(bootstrapPasswordKey),
+            settings: inheritedSettings,
+            correlationId
+          },
+          log
+        );
+        if (!result.ok) {
+          throw new Error(result.error ?? "Organization build failed");
+        }
+        await markOp("tenant.build_organization", "Organization build completed", {
+          alreadyBuilt: result.alreadyBuilt === true,
+          elapsedMs: elapsedMs()
+        });
+        await trace.event(
+          "progress",
+          result.alreadyBuilt ? "Organization was already built (skipped)" : "Organization built and seeded successfully",
+          {
+            meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() }
+          }
+        );
+        log("[provision] step done: tenant.build_organization");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await trace.event(
+          "progress",
+          `Organization build failed: ${msg}`,
+          {
+            level: "error",
+            meta: { operationKey: "tenant.build_organization", error: msg }
+          }
+        );
+        throw err;
+      }
+    } else {
+      await trace.event("resume", "Skipping organization build (already journaled)", {
+        meta: { operationKey: "tenant.build_organization" }
+      });
+    }
+    await checkNotCancelled();
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
       try {
@@ -3444,7 +3677,7 @@ var TenantProvisionService = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/crypto-tenant-secret-generator.ts
-import { randomBytes as randomBytes2 } from "crypto";
+import { createHmac, randomBytes as randomBytes2 } from "crypto";
 var CryptoTenantSecretGenerator = class {
   persistSecret(plaintext) {
     return plaintext;
@@ -3452,9 +3685,14 @@ var CryptoTenantSecretGenerator = class {
   randomHex(bytes = 32) {
     return randomBytes2(bytes).toString("hex");
   }
-  bootstrapAdminPassword() {
-    const s = randomBytes2(18).toString("base64url");
-    return s.length >= 12 ? s.slice(0, 24) : `${s}Aa1!extra`;
+  bootstrapAdminPassword(tenantKey) {
+    const key = tenantKey.trim();
+    if (key.length === 0) {
+      throw new Error("bootstrapAdminPassword requires non-empty tenantKey");
+    }
+    const secretHex = apiConfig.deploymentSecretKey;
+    const hmacKey = Buffer.from(secretHex, "hex");
+    return createHmac("sha256", hmacKey).update(`bootstrap:${key}`, "utf8").digest("base64url");
   }
 };
 
@@ -3500,13 +3738,197 @@ var ExecaDockerComposeRunner = class {
   }
 };
 
+// ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-build-org.ts
+var POLL_MS = 3e3;
+var TIMEOUT_MS = 12e4;
+function financeApiBase2(internalBaseUrl) {
+  return internalBaseUrl.replace(/\/+$/, "");
+}
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readString3(v) {
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function parseSigninToken2(body) {
+  if (!isRecord2(body)) return null;
+  const accessToken = readString3(body.accessToken) ?? readString3(body.access_token) ?? readString3(body.token);
+  const organizationId = readString3(body.organizationId) ?? readString3(body.organization_id);
+  if (!accessToken || !organizationId) return null;
+  return { accessToken, organizationId };
+}
+function isTenantAlreadyBuilt(rawText, json) {
+  if (rawText.includes("TENANT_ALREADY_BUILT")) return true;
+  if (!isRecord2(json)) return false;
+  const errors = json.errors;
+  if (!Array.isArray(errors)) return false;
+  const first = errors[0];
+  if (!isRecord2(first)) return false;
+  return first.type === "TENANT_ALREADY_BUILT";
+}
+function parseBuildJobId(json) {
+  if (!isRecord2(json)) return null;
+  const data = json.data;
+  if (!isRecord2(data)) return null;
+  const id = data.jobId ?? data.job_id;
+  if (typeof id === "string") return id;
+  if (typeof id === "number") return String(id);
+  return null;
+}
+function jobFinished(body) {
+  if (!isRecord2(body)) return "running";
+  if (body.isFailed === true || body.is_failed === true) return "failed";
+  if (body.isCompleted === true || body.is_completed === true) return "completed";
+  const state = readString3(body.state);
+  if (state === "failed") return "failed";
+  if (state === "completed") return "completed";
+  return "running";
+}
+async function sleep(ms) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+async function signin(base, email, password, correlationId) {
+  const res = await fetch(`${base}/api/auth/signin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-request-id": correlationId,
+      "x-correlation-id": correlationId
+    },
+    body: JSON.stringify({ email, password }),
+    signal: AbortSignal.timeout(1e4)
+  });
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  return parseSigninToken2(json);
+}
+async function currentHasBuiltAt(base, accessToken, organizationId, correlationId) {
+  const res = await fetch(`${base}/api/organization/current`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "organization-id": organizationId,
+      "x-request-id": correlationId,
+      "x-correlation-id": correlationId
+    },
+    signal: AbortSignal.timeout(1e4)
+  });
+  if (!res.ok) return false;
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    return false;
+  }
+  if (!isRecord2(json)) return false;
+  const builtAt = json.builtAt ?? json.built_at;
+  return builtAt !== null && builtAt !== void 0 && builtAt !== "";
+}
+async function fetchBuildOrganization(input, log) {
+  const base = financeApiBase2(input.internalBaseUrl);
+  const creds = await signin(base, input.adminEmail, input.adminPassword, input.correlationId);
+  if (!creds) {
+    return { ok: false, error: "signin_failed" };
+  }
+  const authHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${creds.accessToken}`,
+    "organization-id": creds.organizationId,
+    "x-request-id": input.correlationId,
+    "x-correlation-id": input.correlationId
+  };
+  if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
+    log("Organization already built, skipping");
+    return { ok: true, alreadyBuilt: true };
+  }
+  const buildBody = {
+    name: input.settings.name,
+    location: input.settings.location,
+    baseCurrency: input.settings.baseCurrency,
+    timezone: input.settings.timezone,
+    fiscalYear: input.settings.fiscalYear,
+    language: input.settings.language,
+    ...input.settings.dateFormat ? { dateFormat: input.settings.dateFormat } : {}
+  };
+  const buildRes = await fetch(`${base}/api/organization/build`, {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify(buildBody),
+    signal: AbortSignal.timeout(1e4)
+  });
+  const buildText = await buildRes.text();
+  let buildJson;
+  try {
+    buildJson = buildText ? JSON.parse(buildText) : {};
+  } catch {
+    buildJson = { raw: buildText };
+  }
+  if (!buildRes.ok) {
+    if (isTenantAlreadyBuilt(buildText, buildJson)) {
+      log("Organization already built (TENANT_ALREADY_BUILT), treating as success");
+      return { ok: true, alreadyBuilt: true };
+    }
+    return {
+      ok: false,
+      error: `organization_build_http_${buildRes.status}: ${buildText.slice(0, 500)}`
+    };
+  }
+  const jobId = parseBuildJobId(buildJson);
+  const deadline = Date.now() + TIMEOUT_MS;
+  if (jobId) {
+    log(`[build] polling organization build job id=${jobId}`);
+    while (Date.now() < deadline) {
+      const jobRes = await fetch(`${base}/api/organization/build/${encodeURIComponent(jobId)}`, {
+        method: "GET",
+        headers: authHeaders,
+        signal: AbortSignal.timeout(1e4)
+      });
+      let jobJson;
+      try {
+        jobJson = await jobRes.json();
+      } catch {
+        jobJson = {};
+      }
+      if (!jobRes.ok) {
+        return { ok: false, error: `build_job_poll_http_${jobRes.status}` };
+      }
+      const done = jobFinished(jobJson);
+      if (done === "failed") {
+        return { ok: false, error: "organization_build_job_failed" };
+      }
+      if (done === "completed") {
+        break;
+      }
+      await sleep(POLL_MS);
+    }
+  } else {
+    log("[build] no job id in response; polling /organization/current for builtAt");
+    while (Date.now() < deadline) {
+      if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
+        break;
+      }
+      await sleep(POLL_MS);
+    }
+  }
+  if (!await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
+    throw new Error("organization_build_timeout: builtAt not set within 120s");
+  }
+  return { ok: true };
+}
+
 // ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-bootstrap.ts
-function financeApiBase(internalBaseUrl) {
+function financeApiBase3(internalBaseUrl) {
   return internalBaseUrl.replace(/\/+$/, "");
 }
 var FetchStockixFinanceBootstrap = class {
   async waitUntilReady(internalBaseUrl, timeoutMs, log, requestId, trace) {
-    const url = `${financeApiBase(internalBaseUrl)}/api/ping`;
+    const url = `${financeApiBase3(internalBaseUrl)}/api/ping`;
     const started = Date.now();
     const deadline = started + timeoutMs;
     let lastError = "";
@@ -3537,7 +3959,7 @@ var FetchStockixFinanceBootstrap = class {
     );
   }
   async registerBootstrapAdmin(params) {
-    const url = `${financeApiBase(params.internalBaseUrl)}/api/auth/register`;
+    const url = `${financeApiBase3(params.internalBaseUrl)}/api/auth/register`;
     const maxAttempts = 3;
     const requestTimeoutMs2 = 1e4;
     let lastFailure = "unknown";
@@ -3599,6 +4021,12 @@ var FetchStockixFinanceBootstrap = class {
       }
     }
     throw new Error(`register failed: ${lastFailure} url=${url}`);
+  }
+  fetchOrgSettings(params) {
+    return fetchOrgSettingsFromMainInstance(params);
+  }
+  buildOrganization(input, log) {
+    return fetchBuildOrganization(input, log);
   }
 };
 
@@ -3704,6 +4132,19 @@ async function deprovisionTenant(db, tenantId, options = {}) {
 // ../../infra/worker-service/src/worker.ts
 var workerId = `infra-worker-${randomUUID()}`;
 var pollMs = 1500;
+var LICENSE_EXPIRE_SCAN_INTERVAL_MS = 5 * 60 * 1e3;
+var lastLicenseExpireScanMs = 0;
+async function expireDueLicenses(db) {
+  const now = /* @__PURE__ */ new Date();
+  await db.update(licenses).set({ status: "expired", updatedAt: now }).where(
+    and(
+      eq3(licenses.status, "active"),
+      eq3(licenses.isPerpetual, false),
+      isNotNull(licenses.expiresAt),
+      lte(licenses.expiresAt, now)
+    )
+  );
+}
 var apiBaseUrl = `http://localhost:${apiConfig.port}`;
 var requestTimeoutMs = 1e4;
 var jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
@@ -3863,7 +4304,9 @@ var provisionPayloadSchema = z2.object({
   adminLastName: z2.string().min(1),
   organizationId: z2.string().uuid().optional(),
   stockixTenantId: z2.string().uuid().optional(),
-  stockixApiUrl: z2.string().optional()
+  stockixApiUrl: z2.string().optional(),
+  parentTenantSlug: z2.string().optional(),
+  mainTenantInternalBaseUrl: z2.string().optional()
 });
 async function runProvisionJob(db, job) {
   const guard = async () => {
@@ -3881,7 +4324,9 @@ async function runProvisionJob(db, job) {
       adminFirstName: payload.adminFirstName,
       adminLastName: payload.adminLastName,
       stockixTenantId: payload.stockixTenantId,
-      stockixApiUrl: payload.stockixApiUrl
+      stockixApiUrl: payload.stockixApiUrl,
+      parentTenantSlug: payload.parentTenantSlug,
+      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
@@ -3981,6 +4426,15 @@ async function loop() {
       return null;
     });
     if (!job) {
+      const nowMs = Date.now();
+      if (nowMs - lastLicenseExpireScanMs >= LICENSE_EXPIRE_SCAN_INTERVAL_MS) {
+        lastLicenseExpireScanMs = nowMs;
+        await expireDueLicenses(db).catch((error) => {
+          console.error(
+            `[worker] license expire scan failed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+      }
       await new Promise((r) => setTimeout(r, pollMs));
       continue;
     }
