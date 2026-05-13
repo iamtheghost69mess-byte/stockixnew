@@ -203,6 +203,11 @@ const provisionPayloadSchema = z.object({
   adminEmail: z.string().email(),
   adminFirstName: z.string().min(1),
   adminLastName: z.string().min(1),
+  organizationId: z.string().uuid().optional(),
+  stockixTenantId: z.string().uuid().optional(),
+  stockixApiUrl: z.string().optional(),
+  parentTenantSlug: z.string().optional(),
+  mainTenantInternalBaseUrl: z.string().optional(),
 });
 
 async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
@@ -224,6 +229,10 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
       adminEmail: payload.adminEmail,
       adminFirstName: payload.adminFirstName,
       adminLastName: payload.adminLastName,
+      stockixTenantId: payload.stockixTenantId,
+      stockixApiUrl: payload.stockixApiUrl,
+      parentTenantSlug: payload.parentTenantSlug,
+      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),

@@ -1,3 +1,5 @@
+import type { OrgBuildSettings } from "./adapters/fetch-stockix-finance-org-settings.js";
+import type { BuildOrgInput, BuildOrgResult } from "./adapters/fetch-stockix-finance-build-org.js";
 import type { ProvisionTracer } from "../provision-trace.js";
 
 export interface IDockerComposeRunner {
@@ -15,7 +17,8 @@ export interface IDockerComposeRunner {
 }
 
 export interface ITenantSecretGenerator {
-  bootstrapAdminPassword(): string;
+  /** Deterministic per-tenant bootstrap password (HMAC over tenant slug / parent slug). */
+  bootstrapAdminPassword(tenantKey: string): string;
   randomHex(bytes: number): string;
   persistSecret(plaintext: string): string;
 }
@@ -44,4 +47,13 @@ export interface IStockixFinanceBootstrap {
     requestId?: string;
     trace?: ProvisionTracer;
   }): Promise<void>;
+
+  fetchOrgSettings(params: {
+    mainInternalBaseUrl: string;
+    adminEmail: string;
+    adminPassword: string;
+    correlationId: string;
+  }): Promise<OrgBuildSettings | null>;
+
+  buildOrganization(input: BuildOrgInput, log: (m: string) => void): Promise<BuildOrgResult>;
 }

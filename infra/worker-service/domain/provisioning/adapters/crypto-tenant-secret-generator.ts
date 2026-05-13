@@ -1,4 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
+
+import { apiConfig } from "@repo/config";
+
 import type { ITenantSecretGenerator } from "../contracts.js";
 
 export class CryptoTenantSecretGenerator implements ITenantSecretGenerator {
@@ -16,8 +19,13 @@ export class CryptoTenantSecretGenerator implements ITenantSecretGenerator {
   randomHex(bytes = 32): string {
     return randomBytes(bytes).toString("hex");
   }
-  bootstrapAdminPassword(): string {
-    const s = randomBytes(18).toString("base64url");
-    return s.length >= 12 ? s.slice(0, 24) : `${s}Aa1!extra`;
+  bootstrapAdminPassword(tenantKey: string): string {
+    const key = tenantKey.trim();
+    if (key.length === 0) {
+      throw new Error("bootstrapAdminPassword requires non-empty tenantKey");
+    }
+    const secretHex = apiConfig.deploymentSecretKey;
+    const hmacKey = Buffer.from(secretHex, "hex");
+    return createHmac("sha256", hmacKey).update(`bootstrap:${key}`, "utf8").digest("base64url");
   }
 }

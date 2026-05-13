@@ -14,6 +14,7 @@ import {
   blacklistedFingerprints,
   licenseActivations,
   licenses,
+  organizations,
   owners,
   plans,
   tenantConfig,
@@ -51,6 +52,8 @@ import {
   type ProvisionEventPayload,
 } from "./provision-trace.js";
 import { buildAuthRoutes } from "./routes/auth/index.js";
+import { enqueueOrgProvisioning } from "./org-provision.js";
+import { canCreateOrganization } from "./plan-limits.js";
 import { insertTenantJob, listTenantJobs } from "./services/tenant-jobs.js";
 import { validateOwnerSession } from "./services/auth/session-validation.js";
 import { verifySessionToken } from "./services/auth/tokens.js";
@@ -61,6 +64,112 @@ import {
 
 const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
+
+type DbClient = NonNullable<typeof db>;
+
+const organizationCreateBody = z.object({
+  name: z.string().min(1).max(100),
+});
+
+const organizationPatchBody = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+  })
+  .strip();
+
+function rootDomainForOrganizationSubdomain(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN;
+  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
+    return fromEnv.trim();
+  }
+  const fromApi = apiConfig.rootDomain;
+  if (typeof fromApi === "string" && fromApi.trim().length > 0) {
+    return fromApi.trim();
+  }
+  return "localhost";
+}
+
+function orgRandomSuffix4(): string {
+  const charset = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = randomBytes(4);
+  let s = "";
+  for (const b of bytes) {
+    s += charset[b % charset.length]!;
+  }
+  return s;
+}
+
+function slugifyOrganizationName(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 70);
+  return base.length > 0 ? base : "org";
+}
+
+async function pickUniqueOrganizationSlug(dbClient: DbClient, name: string): Promise<string> {
+  const base = slugifyOrganizationName(name);
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const candidate = `${base}-${orgRandomSuffix4()}`.slice(0, 100);
+    const clash = await dbClient
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, candidate))
+      .limit(1);
+    if (clash.length === 0) return candidate;
+  }
+  throw new Error("organization_slug_exhausted");
+}
+
+/** Matches `composeProjectName` in infra/worker-service (Docker project per org stack). */
+function dockerComposeProjectForOrgSlug(slug: string): string {
+  return `stockix-${slug.replace(/[^a-z0-9_-]/gi, "-").toLowerCase()}`;
+}
+
+async function internalPortsByComposeProject(
+  db: DbClient,
+  composeNames: readonly string[],
+): Promise<Map<string, number>> {
+  if (composeNames.length === 0) return new Map();
+  const unique = [...new Set(composeNames.filter((n) => n.length > 0))];
+  if (unique.length === 0) return new Map();
+  const depRows = await db
+    .select({
+      name: tenantDeployments.composeProjectName,
+      port: tenantDeployments.internalPort,
+    })
+    .from(tenantDeployments)
+    .where(inArray(tenantDeployments.composeProjectName, unique));
+  return new Map(depRows.map((r) => [r.name, r.port]));
+}
+
+function serializeOrganizationRow(
+  row: typeof organizations.$inferSelect,
+  stackPublicPort?: number | null,
+) {
+  const root = rootDomainForOrganizationSubdomain();
+  const scheme = (apiConfig.publicBaseUrlScheme ?? "http").replace(/:+$/, "");
+  const publicUrl =
+    root === "localhost" &&
+    stackPublicPort != null &&
+    Number.isFinite(stackPublicPort)
+      ? `${scheme}://${row.subdomain}:${stackPublicPort}`
+      : null;
+
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    name: row.name,
+    slug: row.slug,
+    subdomain: row.subdomain,
+    status: row.status,
+    provisioningError: row.provisioningError,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    publicUrl,
+  };
+}
 
 function rowToProvisionPayload(
   row: typeof tenantProvisionEvents.$inferSelect,
@@ -313,19 +422,28 @@ app.onError((err, c) => {
 });
 
 const rootDomain = apiConfig.rootDomain;
-const corsOrigins = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  ...(rootDomain
-    ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
-    : []),
-  ...apiConfig.corsOrigins,
-];
 
 app.use(
   "/*",
   cors({
-    origin: corsOrigins,
+    origin: (origin) => {
+      if (!origin) return origin;
+      const allowed = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        ...(rootDomain
+          ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
+          : []),
+        ...(apiConfig.corsOrigins ?? []),
+      ];
+      if (allowed.includes(origin)) return origin;
+      if (!rootDomain) return null;
+      const isSubdomain =
+        origin.endsWith(`.${rootDomain}`) ||
+        origin === `https://${rootDomain}` ||
+        origin === `http://${rootDomain}`;
+      return isSubdomain ? origin : null;
+    },
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
   }),
@@ -370,6 +488,10 @@ app.use("/*", async (c, next) => {
     return;
   }
   if (pubMethod === "GET" && pubPath === "/plans") {
+    await next();
+    return;
+  }
+  if (pubMethod === "GET" && pubPath.startsWith("/public/tenant-orgs/")) {
     await next();
     return;
   }
@@ -418,6 +540,10 @@ app.use("/*", async (c, next) => {
     return;
   }
   if (method === "GET" && path === "/plans") {
+    await next();
+    return;
+  }
+  if (method === "GET" && path.startsWith("/public/tenant-orgs/")) {
     await next();
     return;
   }
@@ -553,6 +679,7 @@ function requiredApiRole(pathname: string, method: string): Role | null {
   if (method === "POST" && pathname === "/licenses/activate") return null;
   if (method === "POST" && pathname === "/licenses/verify-offline") return null;
   if (method === "GET" && pathname === "/plans") return null;
+  if (method === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
   if (pathname.startsWith("/licenses")) {
     if (method === "GET") return "read_only";
     if (pathname.endsWith("/deactivate")) return "support_agent";
@@ -606,6 +733,41 @@ app.use("/*", async (c, next) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+app.get("/public/tenant-orgs/:tenantId", async (c) => {
+  const tenantIdParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantIdParsed.success) {
+    return c.json({ error: "INVALID_TENANT_ID" }, 400);
+  }
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantId = tenantIdParsed.data;
+  const rows = await db
+    .select()
+    .from(organizations)
+    .where(
+      and(eq(organizations.tenantId, tenantId), eq(organizations.status, "active")),
+    )
+    .orderBy(asc(organizations.createdAt));
+  const composeNames = rows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
+  const portMap = await internalPortsByComposeProject(db, composeNames);
+  return c.json({
+    organizations: rows.map((row) => {
+      const full = serializeOrganizationRow(
+        row,
+        portMap.get(dockerComposeProjectForOrgSlug(row.slug)) ?? null,
+      );
+      return {
+        id: full.id,
+        name: full.name,
+        slug: full.slug,
+        subdomain: full.subdomain,
+        status: full.status,
+        createdAt: full.createdAt,
+        publicUrl: full.publicUrl,
+      };
+    }),
+  });
+});
 
 app.post("/internal/jobs/claim", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -944,6 +1106,22 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         );
       }
     }
+
+    const provisionJobPayload =
+      currentJob.payload && typeof currentJob.payload === "object"
+        ? (currentJob.payload as Record<string, unknown>)
+        : {};
+    const organizationIdRaw = provisionJobPayload.organizationId;
+    const organizationIdForRow =
+      typeof organizationIdRaw === "string" && z.string().uuid().safeParse(organizationIdRaw).success
+        ? organizationIdRaw
+        : null;
+    if (organizationIdForRow) {
+      await db
+        .update(organizations)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(eq(organizations.id, organizationIdForRow));
+    }
   }
   if (
     currentJob?.type === "tenant.lifecycle"
@@ -1035,6 +1213,29 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       noRetry,
       workerId: workerId || null,
     });
+
+    if (
+      updated.status === "dead"
+      && updated.type === "tenant.provision"
+      && updated.payload
+      && typeof updated.payload === "object"
+    ) {
+      const p = updated.payload as Record<string, unknown>;
+      const organizationIdForFail =
+        typeof p.organizationId === "string" && z.string().uuid().safeParse(p.organizationId).success
+          ? p.organizationId
+          : null;
+      if (organizationIdForFail) {
+        await db
+          .update(organizations)
+          .set({
+            status: "failed",
+            provisioningError: errorMessage,
+            updatedAt: new Date(),
+          })
+          .where(eq(organizations.id, organizationIdForFail));
+      }
+    }
   }
   return c.json({ ok: true, job: updated ?? null });
 });
@@ -2240,6 +2441,212 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
   });
+});
+
+app.get("/tenants/:tenantId/organizations", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  const rows = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.tenantId, parsed.data))
+    .orderBy(asc(organizations.createdAt));
+
+  const composeNames = rows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
+  const portMap = await internalPortsByComposeProject(db, composeNames);
+
+  return c.json({
+    organizations: rows.map((row) =>
+      serializeOrganizationRow(row, portMap.get(dockerComposeProjectForOrgSlug(row.slug)) ?? null),
+    ),
+  });
+});
+
+app.post("/tenants/:tenantId/organizations", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  let body: z.infer<typeof organizationCreateBody>;
+  try {
+    body = organizationCreateBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
+      400,
+    );
+  }
+
+  const allowed = await canCreateOrganization(db, parsed.data);
+  if (!allowed) {
+    return c.json(
+      {
+        error: "PLAN_LIMIT_REACHED",
+        message: "Upgrade your plan to add more organizations",
+      },
+      402,
+    );
+  }
+
+  const slug = await pickUniqueOrganizationSlug(db, body.name);
+  const root = rootDomainForOrganizationSubdomain();
+  const subdomain = `${slug}.${root}`.slice(0, 255);
+
+  const [inserted] = await db
+    .insert(organizations)
+    .values({
+      tenantId: parsed.data,
+      name: body.name,
+      slug,
+      subdomain,
+      status: "provisioning",
+    })
+    .returning();
+
+  if (!inserted) {
+    return c.json({ error: "organization_create_failed" }, 500);
+  }
+
+  void enqueueOrgProvisioning(db, inserted.id, parsed.data).catch((err) => {
+    console.error(
+      "[organizations] enqueueOrgProvisioning failed",
+      err instanceof Error ? err.message : String(err),
+    );
+  });
+
+  return c.json(serializeOrganizationRow(inserted), 201);
+});
+
+app.get("/tenants/:tenantId/organizations/:orgId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  const orgParsed = z.string().uuid().safeParse(c.req.param("orgId"));
+  if (!orgParsed.success) return c.json({ error: "orgId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantParsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  const [row] = await db
+    .select()
+    .from(organizations)
+    .where(and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)))
+    .limit(1);
+  if (!row) return c.json({ error: "organization_not_found" }, 404);
+
+  const portMap = await internalPortsByComposeProject(db, [dockerComposeProjectForOrgSlug(row.slug)]);
+  return c.json({
+    organization: serializeOrganizationRow(
+      row,
+      portMap.get(dockerComposeProjectForOrgSlug(row.slug)) ?? null,
+    ),
+  });
+});
+
+app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  const orgParsed = z.string().uuid().safeParse(c.req.param("orgId"));
+  if (!orgParsed.success) return c.json({ error: "orgId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantParsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  let body: z.infer<typeof organizationPatchBody>;
+  try {
+    body = organizationPatchBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
+      400,
+    );
+  }
+
+  if (body.name === undefined) {
+    return c.json({ error: "no_fields_to_update" }, 400);
+  }
+
+  const [updated] = await db
+    .update(organizations)
+    .set({ name: body.name, updatedAt: new Date() })
+    .where(and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)))
+    .returning();
+
+  if (!updated) return c.json({ error: "organization_not_found" }, 404);
+
+  const portMap = await internalPortsByComposeProject(db, [dockerComposeProjectForOrgSlug(updated.slug)]);
+  return c.json({
+    organization: serializeOrganizationRow(
+      updated,
+      portMap.get(dockerComposeProjectForOrgSlug(updated.slug)) ?? null,
+    ),
+  });
+});
+
+app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  const orgParsed = z.string().uuid().safeParse(c.req.param("orgId"));
+  if (!orgParsed.success) return c.json({ error: "orgId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantParsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  const ordered = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.tenantId, tenantParsed.data))
+    .orderBy(asc(organizations.createdAt));
+
+  if (ordered.length > 0 && ordered[0]!.id === orgParsed.data) {
+    return c.json(
+      {
+        error: "CANNOT_SUSPEND_PRIMARY",
+        message: "Cannot suspend the primary organization",
+      },
+      400,
+    );
+  }
+
+  const [updated] = await db
+    .update(organizations)
+    .set({ status: "suspended", updatedAt: new Date() })
+    .where(and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)))
+    .returning({ id: organizations.id });
+
+  if (!updated) return c.json({ error: "organization_not_found" }, 404);
+
+  return c.json({ ok: true });
 });
 
 app.get("/tenants/:tenantId", async (c) => {

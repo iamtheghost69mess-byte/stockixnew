@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import LicenseGenerateDialog from "@/components/license-generate-dialog";
 import LicenseStatusBadge from "@/components/license-status-badge";
+import { OrgSwitcher } from "@/components/org-switcher";
 import TenantStatusBadge from "@/components/tenant-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -285,6 +286,14 @@ export default function TenantDetailPage() {
             ) : null}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mt-6">
+        <h2 className="text-lg font-semibold mb-4">Organizations</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Each organization runs its own Bigcapital stack. Use the links below for local dev (host port is required).
+        </p>
+        <OrgSwitcher tenantId={tenant.id} />
       </div>
 
       <Card>

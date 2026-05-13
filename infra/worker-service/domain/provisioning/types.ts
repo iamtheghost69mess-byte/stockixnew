@@ -5,6 +5,14 @@ export type ProvisionInput = {
   adminEmail: string;
   adminFirstName: string;
   adminLastName: string;
+  /** Parent Stockix tenant slug (same password key for all org stacks under this tenant). */
+  parentTenantSlug?: string;
+  /** Internal base URL of the parent tenant's primary deployment (org provisioning only). */
+  mainTenantInternalBaseUrl?: string;
+  /** Parent Stockix tenant UUID for org-scoped Bigcapital instances (optional). */
+  stockixTenantId?: string;
+  /** Public Stockix API base URL for webapp org switcher (optional). */
+  stockixApiUrl?: string;
 };
 
 export type ProvisionResult =

@@ -1,5 +1,9 @@
 import type { ProvisionTracer } from "../../provision-trace.js";
 import { STOCKIX_FINANCE_HEALTH_POLL_MS } from "../constants.js";
+import type { BuildOrgInput, BuildOrgResult } from "./fetch-stockix-finance-build-org.js";
+import { fetchBuildOrganization } from "./fetch-stockix-finance-build-org.js";
+import type { OrgBuildSettings } from "./fetch-stockix-finance-org-settings.js";
+import { fetchOrgSettingsFromMainInstance } from "./fetch-stockix-finance-org-settings.js";
 import type { IStockixFinanceBootstrap } from "../contracts.js";
 
 function financeApiBase(internalBaseUrl: string): string {
@@ -127,5 +131,18 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
     }
 
     throw new Error(`register failed: ${lastFailure} url=${url}`);
+  }
+
+  fetchOrgSettings(params: {
+    mainInternalBaseUrl: string;
+    adminEmail: string;
+    adminPassword: string;
+    correlationId: string;
+  }): Promise<OrgBuildSettings | null> {
+    return fetchOrgSettingsFromMainInstance(params);
+  }
+
+  buildOrganization(input: BuildOrgInput, log: (m: string) => void): Promise<BuildOrgResult> {
+    return fetchBuildOrganization(input, log);
   }
 }

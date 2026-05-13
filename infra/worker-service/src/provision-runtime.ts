@@ -15,6 +15,7 @@ import { getTenantStackPaths } from "../domain/provision-paths.js";
 import { createProvisionTracer } from "../domain/provision-trace.js";
 import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
 import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/constants.js";
+import { MENA_DEFAULTS, type OrgBuildSettings } from "../domain/provisioning/adapters/fetch-stockix-finance-org-settings.js";
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
 import { buildTenantComposeEnvBody, writeTenantEnvFileAtomic } from "../domain/provisioning/tenant-env.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
@@ -219,7 +220,8 @@ export async function executeProvisionRuntime(
     await mkdir(join(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
 
     const { secrets } = deps;
-    oneTimeAdminPassword = secrets.bootstrapAdminPassword();
+    const bootstrapPasswordKey = (input.parentTenantSlug?.trim() || input.slug).trim();
+    oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
     const jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     const dbPassword = secrets.persistSecret(secrets.randomHex(16));
     const dbRootPassword = secrets.persistSecret(secrets.randomHex(16));
@@ -272,6 +274,9 @@ export async function executeProvisionRuntime(
       }).returning({ id: tenantDeployments.id });
       deploymentId = dRow!.id;
     });
+    if (port === undefined) {
+      throw new Error("provision_internal: expected allocated port after transaction");
+    }
     await checkNotCancelled();
     const envBody = buildTenantComposeEnvBody({
       stockixFinanceRoot,
@@ -288,6 +293,8 @@ export async function executeProvisionRuntime(
       s3SecretAccessKey,
       s3Endpoint,
       s3Bucket,
+      stockixTenantId: input.stockixTenantId,
+      stockixApiUrl: input.stockixApiUrl,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
@@ -486,6 +493,121 @@ export async function executeProvisionRuntime(
       });
     }
     await checkNotCancelled();
+
+    let inheritedSettings: OrgBuildSettings = {
+      ...MENA_DEFAULTS,
+      name: input.name,
+    };
+
+    if (input.parentTenantSlug?.trim()) {
+      const mainBase = input.mainTenantInternalBaseUrl?.trim();
+      if (!mainBase) {
+        if (!hasOp("tenant.fetch_org_settings")) {
+          log("[provision] step start: tenant.fetch_org_settings");
+          log("[provision] No main tenant internal base URL; skipping settings fetch");
+          await markOp("tenant.fetch_org_settings", "Skipped settings fetch (no main base URL)", {
+            parentTenantSlug: input.parentTenantSlug,
+          });
+          log("[provision] step done: tenant.fetch_org_settings");
+        }
+      } else if (!hasOp("tenant.build_organization")) {
+        log("[provision] step start: tenant.fetch_org_settings");
+        try {
+          const mainPassword = secrets.bootstrapAdminPassword(input.parentTenantSlug.trim());
+          const fetched = await finance.fetchOrgSettings({
+            mainInternalBaseUrl: mainBase,
+            adminEmail: input.adminEmail,
+            adminPassword: mainPassword,
+            correlationId,
+          });
+          if (fetched) {
+            inheritedSettings = { ...fetched, name: input.name };
+            log("[provision] Using inherited settings from main org");
+          } else {
+            log("[provision] Main org not reachable or not built; using MENA defaults");
+          }
+          if (!hasOp("tenant.fetch_org_settings")) {
+            await markOp("tenant.fetch_org_settings", "Org settings fetch completed", {
+              inherited: Boolean(fetched),
+            });
+          } else {
+            await trace.event("resume", "Refreshed org settings from main before build retry", {
+              meta: { operationKey: "tenant.fetch_org_settings", inherited: Boolean(fetched) },
+            });
+          }
+        } catch (err) {
+          log(
+            `[provision] Settings fetch failed, using defaults: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          if (!hasOp("tenant.fetch_org_settings")) {
+            await markOp("tenant.fetch_org_settings", "Org settings fetch failed; using defaults", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        log("[provision] step done: tenant.fetch_org_settings");
+      } else if (hasOp("tenant.fetch_org_settings")) {
+        await trace.event("resume", "Skipping org settings fetch (organization build already journaled)", {
+          meta: { operationKey: "tenant.fetch_org_settings" },
+        });
+      }
+    }
+
+    await checkNotCancelled();
+    if (!hasOp("tenant.build_organization")) {
+      log("[provision] step start: tenant.build_organization");
+      await trace.event("progress", "Building organization database and seeding defaults", {
+        meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() },
+      });
+      try {
+        const result = await finance.buildOrganization(
+          {
+            internalBaseUrl: internalUrl,
+            adminEmail: input.adminEmail,
+            adminPassword: secrets.bootstrapAdminPassword(bootstrapPasswordKey),
+            settings: inheritedSettings,
+            correlationId,
+          },
+          log,
+        );
+        if (!result.ok) {
+          throw new Error(result.error ?? "Organization build failed");
+        }
+        await markOp("tenant.build_organization", "Organization build completed", {
+          alreadyBuilt: result.alreadyBuilt === true,
+          elapsedMs: elapsedMs(),
+        });
+        await trace.event(
+          "progress",
+          result.alreadyBuilt
+            ? "Organization was already built (skipped)"
+            : "Organization built and seeded successfully",
+          {
+            meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() },
+          },
+        );
+        log("[provision] step done: tenant.build_organization");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await trace.event(
+          "progress",
+          `Organization build failed: ${msg}`,
+          {
+            level: "error",
+            meta: { operationKey: "tenant.build_organization", error: msg },
+          },
+        );
+        throw err;
+      }
+    } else {
+      await trace.event("resume", "Skipping organization build (already journaled)", {
+        meta: { operationKey: "tenant.build_organization" },
+      });
+    }
+
+    await checkNotCancelled();
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
       try {
@@ -517,7 +639,7 @@ export async function executeProvisionRuntime(
       tenantId: tenantId!,
       deploymentId: deploymentId!,
       composeProjectName: project,
-      internalPort: port!,
+      internalPort: port,
       baseUrl,
       oneTimeAdminPassword: oneTimeAdminPassword!,
     };

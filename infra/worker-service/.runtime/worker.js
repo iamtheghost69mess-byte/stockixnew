@@ -2453,6 +2453,7 @@ __export(schema_exports, {
   blacklistedFingerprints: () => blacklistedFingerprints,
   licenseActivations: () => licenseActivations,
   licenses: () => licenses,
+  organizations: () => organizations,
   owners: () => owners,
   plans: () => plans,
   tenantConfig: () => tenantConfig,
@@ -2470,7 +2471,8 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
+  varchar
 } from "drizzle-orm/pg-core";
 var owners = pgTable(
   "owners",
@@ -2518,6 +2520,18 @@ var tenants = pgTable(
   },
   (t) => [uniqueIndex("tenants_slug_unique").on(t.slug)]
 );
+var organizations = pgTable("organizations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  subdomain: varchar("subdomain", { length: 255 }).notNull().unique(),
+  status: varchar("status", { length: 50 }).notNull().default("provisioning"),
+  // provisioning | active | suspended | failed
+  provisioningError: text("provisioning_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
 var tenantConfig = pgTable("tenant_config", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().unique().references(() => tenants.id, { onDelete: "cascade" }),
@@ -2671,6 +2685,8 @@ var licenses = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),
+    maxOrganizations: integer("max_organizations").notNull().default(1),
+    // -1 = unlimited
     activationCount: integer("activation_count").notNull().default(0),
     gracePeriodDays: integer("grace_period_days").notNull().default(7),
     notes: text("notes"),
@@ -2902,7 +2918,11 @@ function buildTenantComposeEnvBody(params) {
     `S3_ENDPOINT=${params.s3Endpoint}`,
     `S3_BUCKET=${params.s3Bucket}`,
     `AGENDASH_AUTH_USER=${params.agendashUser}`,
-    `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`
+    `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`,
+    "",
+    "# Stockix platform integration",
+    `REACT_APP_STOCKIX_API_URL=${params.stockixApiUrl ?? ""}`,
+    `REACT_APP_STOCKIX_TENANT_ID=${params.stockixTenantId ?? ""}`
   ];
   return `${lines.join("\n")}
 `;
@@ -3133,6 +3153,9 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       }).returning({ id: tenantDeployments.id });
       deploymentId = dRow.id;
     });
+    if (port === void 0) {
+      throw new Error("provision_internal: expected allocated port after transaction");
+    }
     await checkNotCancelled();
     const envBody = buildTenantComposeEnvBody({
       stockixFinanceRoot,
@@ -3148,7 +3171,9 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       s3AccessKeyId,
       s3SecretAccessKey,
       s3Endpoint,
-      s3Bucket
+      s3Bucket,
+      stockixTenantId: input.stockixTenantId,
+      stockixApiUrl: input.stockixApiUrl
     });
     const envPath = await writeTenantEnvFileAtomic(join5(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
@@ -3835,7 +3860,10 @@ var provisionPayloadSchema = z2.object({
   ownerId: z2.string().uuid(),
   adminEmail: z2.string().email(),
   adminFirstName: z2.string().min(1),
-  adminLastName: z2.string().min(1)
+  adminLastName: z2.string().min(1),
+  organizationId: z2.string().uuid().optional(),
+  stockixTenantId: z2.string().uuid().optional(),
+  stockixApiUrl: z2.string().optional()
 });
 async function runProvisionJob(db, job) {
   const guard = async () => {
@@ -3851,7 +3879,9 @@ async function runProvisionJob(db, job) {
       ownerId: payload.ownerId,
       adminEmail: payload.adminEmail,
       adminFirstName: payload.adminFirstName,
-      adminLastName: payload.adminLastName
+      adminLastName: payload.adminLastName,
+      stockixTenantId: payload.stockixTenantId,
+      stockixApiUrl: payload.stockixApiUrl
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),

@@ -9,6 +9,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 /** SaaS platform operators (Stockix owners). Auth fields come in a later phase. */
@@ -66,6 +67,25 @@ export const tenants = pgTable(
   },
   (t) => [uniqueIndex("tenants_slug_unique").on(t.slug)],
 );
+
+export const organizations = pgTable("organizations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  subdomain: varchar("subdomain", { length: 255 }).notNull().unique(),
+  status: varchar("status", { length: 50 }).notNull().default("provisioning"),
+  // provisioning | active | suspended | failed
+  provisioningError: text("provisioning_error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 /** White-label and display config; one row per tenant (cascade on tenant delete). */
 export const tenantConfig = pgTable("tenant_config", {
@@ -259,6 +279,8 @@ export const licenses = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),
+    maxOrganizations: integer("max_organizations").notNull().default(1),
+    // -1 = unlimited
     activationCount: integer("activation_count").notNull().default(0),
     gracePeriodDays: integer("grace_period_days").notNull().default(7),
     notes: text("notes"),
