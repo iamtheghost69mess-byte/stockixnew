@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useMe } from "@/hooks/use-me";
+import { formatApiError } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
 import type {
   LicenseActivation,
@@ -107,7 +108,7 @@ export default function LicenseDetailPage() {
           return;
         }
         if (!res.ok || !json.license) {
-          setError(json.error ?? `HTTP ${res.status}`);
+          setError(formatApiError(jsonUnknown, json.error ?? `HTTP ${res.status}`));
           setData(null);
           return;
         }
@@ -133,7 +134,8 @@ export default function LicenseDetailPage() {
         body: JSON.stringify({ notes: notesDraft }),
       });
       if (!res.ok) {
-        toast.error("Failed to save notes");
+        const body = (await res.json().catch(() => ({}))) as unknown;
+        toast.error(formatApiError(body, "Failed to save notes"));
         return;
       }
       toast.success("Notes saved");
@@ -571,8 +573,8 @@ export default function LicenseDetailPage() {
                     body: JSON.stringify(body),
                   });
                   if (!res.ok) {
-                    const j = (await res.json().catch(() => ({}))) as { error?: string };
-                    toast.error(j.error ?? "Extend failed");
+                    const j = (await res.json().catch(() => ({}))) as unknown;
+                    toast.error(formatApiError(j, "Extend failed"));
                     return;
                   }
                   toast.success("License updated");
@@ -622,7 +624,8 @@ export default function LicenseDetailPage() {
                   body: JSON.stringify({ reason: revokeReason || undefined }),
                 });
                 if (!res.ok) {
-                  toast.error("Revoke failed");
+                  const body = (await res.json().catch(() => ({}))) as unknown;
+                  toast.error(formatApiError(body, "Revoke failed"));
                   return;
                 }
                 toast.success("License revoked");
@@ -656,7 +659,8 @@ export default function LicenseDetailPage() {
                   { method: "POST" },
                 );
                 if (!res.ok) {
-                  toast.error("Deactivate failed");
+                  const body = (await res.json().catch(() => ({}))) as unknown;
+                  toast.error(formatApiError(body, "Deactivate failed"));
                   return;
                 }
                 toast.success("Deactivated");
@@ -703,7 +707,8 @@ export default function LicenseDetailPage() {
                   }),
                 });
                 if (!res.ok) {
-                  toast.error("Blacklist failed");
+                  const body = (await res.json().catch(() => ({}))) as unknown;
+                  toast.error(formatApiError(body, "Blacklist failed"));
                   return;
                 }
                 toast.success("Device blacklisted");

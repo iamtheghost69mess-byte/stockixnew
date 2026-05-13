@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
+import { formatDateTime } from "@/lib/date-format";
 import type { TenantRow } from "@/types/tenant";
 
 type StatusFilter = "all" | "active" | "suspended" | "provisioning" | "failed";
@@ -52,7 +53,7 @@ type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 type Props = {
   tenants: TenantRow[];
-  onDelete: (tenantId: string, slug: string) => Promise<void>;
+  onRequestDelete: (tenantId: string, slug: string) => void;
   onSuspend: (tenantId: string, slug: string) => Promise<boolean>;
   onReactivate: (tenantId: string, slug: string) => Promise<void>;
   onStopProvision: (tenantId: string, slug: string) => Promise<boolean>;
@@ -66,7 +67,7 @@ type Props = {
 export default function TenantList(props: Props) {
   const {
     tenants,
-    onDelete,
+    onRequestDelete,
     onSuspend,
     onReactivate,
     onStopProvision,
@@ -397,9 +398,7 @@ export default function TenantList(props: Props) {
                       <TenantStatusBadge status={status} />
                     </TableCell>
                     <TableCell className="hidden align-top text-muted-foreground md:table-cell">
-                      {t.registrationCompletedAt
-                        ? new Date(t.registrationCompletedAt).toLocaleString()
-                        : "—"}
+                      {t.registrationCompletedAt ? formatDateTime(t.registrationCompletedAt) : "—"}
                     </TableCell>
                     <TableCell className="hidden max-w-[200px] align-top lg:table-cell">
                       <span className="break-all font-mono text-xs text-muted-foreground">
@@ -491,7 +490,7 @@ export default function TenantList(props: Props) {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
-                            onClick={() => void onDelete(t.tenantId, t.slug)}
+                            onClick={() => onRequestDelete(t.tenantId, t.slug)}
                           >
                             {deletingId === t.tenantId ? (
                               <Loader2 className="size-4 animate-spin" />

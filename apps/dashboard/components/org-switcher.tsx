@@ -21,7 +21,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -36,6 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useOrganizations, type Organization } from "@/hooks/use-organizations";
 import { cn } from "@/lib/utils";
+import { validateOrganizationDisplayName } from "@/lib/validate-org-name";
 
 interface OrgSwitcherProps {
   tenantId: string;
@@ -58,17 +61,58 @@ function resolveOrgOpenUrl(org: Organization): string {
   return `${isLocal ? "http" : "https"}://${org.subdomain}`;
 }
 
-function OrgMenuRow({ org }: { org: Organization }) {
+function OrgMenuRow({
+  org,
+  primaryId,
+  closeMenu,
+  onRenameRequest,
+  onSuspendRequest,
+}: {
+  org: Organization;
+  primaryId: string | undefined;
+  closeMenu: () => void;
+  onRenameRequest: (org: Organization) => void;
+  onSuspendRequest: (org: Organization) => void;
+}) {
   const href = resolveOrgOpenUrl(org);
+  const isPrimary = org.id === primaryId;
+
   if (org.status === "active") {
     return (
-      <DropdownMenuItem
-        onClick={() => {
-          window.open(href, "_blank", "noopener,noreferrer");
-        }}
-      >
-        {org.name}
-      </DropdownMenuItem>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel className="max-w-[220px] truncate font-medium text-foreground">{org.name}</DropdownMenuLabel>
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            closeMenu();
+            window.open(href, "_blank", "noopener,noreferrer");
+          }}
+        >
+          Open in new tab
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            closeMenu();
+            onRenameRequest(org);
+          }}
+        >
+          <Pencil className="mr-2 size-4 opacity-70" />
+          Rename
+        </DropdownMenuItem>
+        {!isPrimary ? (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              closeMenu();
+              onSuspendRequest(org);
+            }}
+          >
+            <PauseCircle className="mr-2 size-4 opacity-70" />
+            Suspend
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuGroup>
     );
   }
 
@@ -152,19 +196,12 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
   };
 
   const submitCreate = async () => {
+    const nameErr = validateOrganizationDisplayName(nameInput);
+    if (nameErr) {
+      toast.error(nameErr);
+      return;
+    }
     const name = nameInput.trim();
-    if (!name) {
-      toast.error("Enter an organization name.");
-      return;
-    }
-    if (name.length < 2) {
-      toast.error("Organization name must be at least 2 characters.");
-      return;
-    }
-    if (name.length > 100) {
-      toast.error("Organization name cannot exceed 100 characters.");
-      return;
-    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/organizations`, {
@@ -193,15 +230,12 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
 
   const saveRename = async () => {
     if (!renameOrg) return;
+    const nameErr = validateOrganizationDisplayName(renameValue);
+    if (nameErr) {
+      toast.error(nameErr);
+      return;
+    }
     const name = renameValue.trim();
-    if (!name) {
-      toast.error("Enter a name.");
-      return;
-    }
-    if (name.length < 2) {
-      toast.error("Name must be at least 2 characters.");
-      return;
-    }
     setRenameSaving(true);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/organizations/${renameOrg.id}`, {
@@ -261,9 +295,26 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
               <ChevronDown className="size-4 shrink-0 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[220px]">
-              {organizations.map((org) => (
-                <OrgMenuRow key={org.id} org={org} />
-              ))}
+              {organizations.flatMap((org, i) => {
+                const row = (
+                  <OrgMenuRow
+                    key={org.id}
+                    org={org}
+                    primaryId={primaryId}
+                    closeMenu={() => setMenuOpen(false)}
+                    onRenameRequest={(o) => {
+                      setRenameValue(o.name);
+                      setRenameOrg(o);
+                    }}
+                    onSuspendRequest={(o) => setSuspendOrg(o)}
+                  />
+                );
+                const sep =
+                  i < organizations.length - 1 ? (
+                    <DropdownMenuSeparator key={`__sep-${org.id}`} />
+                  ) : null;
+                return sep ? [row, sep] : [row];
+              })}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => {
@@ -393,7 +444,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
             <Button
               type="button"
               onClick={() => void submitCreate()}
-              disabled={submitting || nameInput.trim().length < 2}
+              disabled={submitting || validateOrganizationDisplayName(nameInput) !== null}
             >
               {submitting ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               Create
@@ -417,7 +468,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
               Cancel
             </Button>
             <Button
-              disabled={renameSaving || renameValue.trim().length < 2}
+              disabled={renameSaving || validateOrganizationDisplayName(renameValue) !== null}
               onClick={() => void saveRename()}
             >
               {renameSaving ? <Loader2 className="size-4 animate-spin" /> : "Save"}

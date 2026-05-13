@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useOrganizations, type Organization } from "@/hooks/use-organizations";
 import { formatApiError } from "@/lib/api-errors";
 import { formatDateTime } from "@/lib/date-format";
+import { validateOrganizationDisplayName } from "@/lib/validate-org-name";
 
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -76,15 +77,12 @@ export default function OrgDetailPage() {
   const isPrimary = primaryId === orgId;
 
   const saveRename = async () => {
+    const nameErr = validateOrganizationDisplayName(renameValue);
+    if (nameErr) {
+      toast.error(nameErr);
+      return;
+    }
     const name = renameValue.trim();
-    if (!name) {
-      toast.error("Enter a name.");
-      return;
-    }
-    if (name.length < 2) {
-      toast.error("Name must be at least 2 characters.");
-      return;
-    }
     setSaving(true);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/organizations/${orgId}`, {
@@ -225,7 +223,7 @@ export default function OrgDetailPage() {
               Cancel
             </Button>
             <Button
-              disabled={saving || renameValue.trim().length < 2}
+              disabled={saving || validateOrganizationDisplayName(renameValue) !== null}
               onClick={() => void saveRename()}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}

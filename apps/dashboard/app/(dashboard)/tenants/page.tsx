@@ -7,6 +7,14 @@ import { ExternalLink } from "lucide-react";
 import TenantCreateWizard from "@/components/tenant-create-wizard";
 import TenantList from "@/components/tenant-list";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import type { ProvisionEventRow, TenantRow } from "@/types/tenant";
@@ -89,6 +97,10 @@ export default function TenantsPage() {
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [addTenantOpen, setAddTenantOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ tenantId: string; slug: string } | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteVolumesOpen, setDeleteVolumesOpen] = useState(false);
+  const [deleteSlugInput, setDeleteSlugInput] = useState("");
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -105,18 +117,14 @@ export default function TenantsPage() {
     setTenants(t.tenants ?? []);
   }, []);
 
-  const removeTenant = useCallback(
-    async (tenantId: string, slug: string) => {
-      if (
-        !globalThis.confirm(
-          `Delete tenant "${slug}"?\n\nThis runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be undone.`,
-        )
-      ) {
-        return;
-      }
-      const wipeVolumes = globalThis.confirm(
-        "Also remove Docker volumes?\n\nOK = delete MySQL / Mongo / Redis data for this stack.\nCancel = keep data volumes (containers are still removed).",
-      );
+  const requestTenantDelete = useCallback((tenantId: string, slug: string) => {
+    setDeleteTarget({ tenantId, slug });
+    setDeleteSlugInput("");
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const executeTenantDelete = useCallback(
+    async (tenantId: string, slug: string, wipeVolumes: boolean) => {
       setDeletingId(tenantId);
       setError(null);
       try {
@@ -136,8 +144,6 @@ export default function TenantsPage() {
 
         let { res, data } = await deleteOnce();
         if (!res.ok && res.status === 409 && data.error === "tenant_busy") {
-          // UX hardening: for active/provisioning tenants, try to transition them out
-          // of busy state automatically, then retry delete.
           const provisioningBusy =
             data.tenantStatus === "provisioning" ||
             data.deploymentStatus === "provisioning";
@@ -152,8 +158,8 @@ export default function TenantsPage() {
           if (!transitionRes.ok) {
             throw new Error(
               transitionData.message ??
-              transitionData.error ??
-              "Tenant is busy and automatic stop/suspend failed.",
+                transitionData.error ??
+                "Tenant is busy and automatic stop/suspend failed.",
             );
           }
 
@@ -170,12 +176,9 @@ export default function TenantsPage() {
         if (!res.ok) {
           throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`);
         }
-        // Delete is async (queued to worker). Remove row optimistically so users
-        // cannot interact with a tenant that is already scheduled for deletion.
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         setTenantAccess(null);
         setOneTimePassword(null);
-        // Refresh in background to reconcile final backend state once worker completes.
         void load().catch(() => {});
       } catch (e) {
         const message = String(e);
@@ -188,6 +191,10 @@ export default function TenantsPage() {
         setError(message);
       } finally {
         setDeletingId(null);
+        setDeleteConfirmOpen(false);
+        setDeleteVolumesOpen(false);
+        setDeleteTarget(null);
+        setDeleteSlugInput("");
       }
     },
     [load],
@@ -721,7 +728,7 @@ export default function TenantsPage() {
         </div>
         <TenantList
           tenants={tenants}
-          onDelete={removeTenant}
+          onRequestDelete={requestTenantDelete}
           onSuspend={handleSuspend}
           onReactivate={handleReactivate}
           onStopProvision={handleStopProvision}
@@ -732,6 +739,103 @@ export default function TenantsPage() {
           onAddTenant={() => setAddTenantOpen(true)}
         />
       </div>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          setDeleteConfirmOpen(open);
+          if (!open) {
+            setDeleteSlugInput("");
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete tenant</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be
+            undone. Type the tenant slug{" "}
+            {deleteTarget ? (
+              <span className="font-mono font-medium text-foreground">{deleteTarget.slug}</span>
+            ) : null}{" "}
+            to continue.
+          </p>
+          <Input
+            placeholder="Tenant slug"
+            value={deleteSlugInput}
+            onChange={(e) => setDeleteSlugInput(e.target.value)}
+            autoComplete="off"
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setDeleteSlugInput("");
+                setDeleteTarget(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!deleteTarget || deleteSlugInput !== deleteTarget.slug}
+              onClick={() => {
+                if (!deleteTarget || deleteSlugInput !== deleteTarget.slug) return;
+                setDeleteConfirmOpen(false);
+                setDeleteVolumesOpen(true);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteVolumesOpen}
+        onOpenChange={(open) => {
+          setDeleteVolumesOpen(open);
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteSlugInput("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Also delete Docker volumes?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Delete volumes removes MySQL / Mongo / Redis data for this stack. Keep volumes if you may need the data
+            later (containers are still removed).
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              disabled={!deleteTarget || deletingId === deleteTarget.tenantId}
+              onClick={() => {
+                if (!deleteTarget) return;
+                void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, false);
+              }}
+            >
+              Keep volumes
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!deleteTarget || deletingId === deleteTarget.tenantId}
+              onClick={() => {
+                if (!deleteTarget) return;
+                void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, true);
+              }}
+            >
+              {deletingId === deleteTarget?.tenantId ? "Deleting…" : "Delete volumes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

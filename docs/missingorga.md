@@ -52,13 +52,13 @@ The **Summary Table** below was **re-verified against the repo** (same date as t
 | 19 | Org action: suspend (UI) | ✅ Done (org detail + `OrgSwitcher` card actions) | — |
 | 20 | Org action: rename (UI) | ✅ Done | — |
 | 21 | Org empty state | ✅ Done (`OrgSwitcher` dashed card) | — |
-| 22 | OrgSwitcher: name validation before submit | ⚠️ Partial (min length 2 + trim; no regex / reserved names) | Low |
+| 22 | OrgSwitcher: name validation before submit | ✅ Done (`lib/validate-org-name.ts`; create/rename in `OrgSwitcher` + org detail rename) | — |
 | 23 | OrgSwitcher: loading state on Create | ✅ Done | — |
 | 24 | OrgSwitcher: provisioning non-clickable + spinner | ✅ Done | — |
 | 25 | OrgSwitcher: failed orgs show error on hover | ✅ Done | — |
 | 26 | OrgSwitcher: suspended distinct + non-clickable | ✅ Done | — |
-| 27 | OrgSwitcher: suspend from dropdown | ⚠️ Partial (suspend on **org cards** below menu; dropdown rows are open-only / status) | Med |
-| 28 | OrgSwitcher: rename from dropdown | ⚠️ Same as 27 (rename on cards, not inside dropdown row) | Med |
+| 27 | OrgSwitcher: suspend from dropdown | ✅ Done (`DropdownMenuGroup` per active org: Open / Rename / Suspend) | — |
+| 28 | OrgSwitcher: rename from dropdown | ✅ Done (same) | — |
 | 29 | OrgSwitcher: polling stops correctly | ✅ Done | — |
 | 30 | Dedicated org detail page | ✅ Done (`tenants/[id]/organizations/[orgId]`) | — |
 | 31 | Suspend Tenant button + confirmation | ✅ Done (tenant detail slug-confirm dialog) | — |
@@ -81,13 +81,13 @@ The **Summary Table** below was **re-verified against the repo** (same date as t
 | 48 | Empty state: license list | ✅ Done | — |
 | 49 | Empty state: provisioning events | ✅ Done (dashed empty card + helper copy) | — |
 | 50 | Global error boundary (`app/error.tsx`) | ✅ Done + `global-error.tsx`, `not-found.tsx` | — |
-| 51 | Friendly API error messages in UI | ⚠️ Mostly done (`formatApiError`); some flows still use generic toasts | Med |
+| 51 | Friendly API error messages in UI | ✅ Done (`formatApiError` on license detail failures + existing org/tenant usage) | — |
 | 52 | Skeleton loaders consistent | ✅ Done | — |
 | 53 | Buttons disabled during async ops | ✅ Done | — |
 | 54 | Initial-load loading state on tenant detail | ✅ Done | — |
 | 55 | Status badge consistency (tenant list / detail / org switcher) | ✅ Done for orgs (`OrgStatusBadge`); tenant paths use `TenantStatusBadge` | — |
-| 56 | Date format consistency across pages | ⚠️ Partial (`lib/date-format` used widely; e.g. `tenant-list` still uses `toLocaleString` in one cell) | Low |
-| 57 | Confirm dialog on every destructive action | ⚠️ Partial — tenant **detail** suspend/stop use dialogs; **tenant list** suspend/delete still use `confirm()` in places | High |
+| 56 | Date format consistency across pages | ✅ Done (`formatDateTime` for tenant list registration column; shared `lib/date-format` elsewhere) | — |
+| 57 | Confirm dialog on every destructive action | ✅ Done (tenant **list** delete: two-step `Dialog` + typed slug + volumes choice; list suspend/stop already used dialogs) | — |
 
 ---
 
