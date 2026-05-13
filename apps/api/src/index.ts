@@ -1305,6 +1305,7 @@ app.get("/owners", async (c) => {
       role: owners.role,
       status: owners.status,
       hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
+      mfaEnabled: owners.mfaEnabled,
       createdAt: owners.createdAt,
     })
     .from(owners);

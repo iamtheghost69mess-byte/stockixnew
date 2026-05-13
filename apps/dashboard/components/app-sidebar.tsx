@@ -2,16 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  ActivityIcon,
-  BookOpenIcon,
-  Building2Icon,
-  CircleHelpIcon,
-  KeyRoundIcon,
-  LayoutDashboardIcon,
-  Settings2Icon,
-  UsersIcon,
-} from "lucide-react";
+import { BookOpenIcon, Building2Icon, KeyRoundIcon, LayoutDashboardIcon, Settings2Icon, UsersIcon } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { NavDocuments, type NavDocumentItem } from "@/components/nav-documents";
@@ -67,31 +58,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, [me?.capabilities.canAccessSettings]);
 
   const documents = React.useMemo((): NavDocumentItem[] => {
-    const out: NavDocumentItem[] = [
+    return [
       {
-        name: "Operator guide",
-        url: "#",
+        name: "Documentation",
+        url: "https://docs.stockix.com",
         icon: <BookOpenIcon />,
-      },
-      {
-        name: "Platform status",
-        url: "#",
-        icon: <ActivityIcon />,
+        external: true,
       },
     ];
-    return out;
   }, []);
 
-  const secondary = React.useMemo((): NavSecondaryItem[] => {
-    const out: NavSecondaryItem[] = [
-      {
-        title: "Help & support",
-        url: "#",
-        icon: <CircleHelpIcon />,
-      },
-    ];
-    return out;
-  }, []);
+  const secondary = React.useMemo((): NavSecondaryItem[] => [], []);
 
   const userAccount: NavUserAccount | null = me
     ? {

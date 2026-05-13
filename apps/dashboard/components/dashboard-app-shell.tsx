@@ -7,19 +7,34 @@ import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 
-function headerTitle(pathname: string): string {
-  if (pathname === "/" || pathname === "") return "Overview";
-  if (pathname.startsWith("/tenants/")) return "Tenant detail";
-  if (pathname === "/tenants") return "Tenants";
-  if (pathname.startsWith("/licenses")) return "Licenses";
-  if (pathname === "/owners") return "Team & access";
-  if (pathname === "/settings") return "Security & settings";
-  return "Stockix";
+const ROUTE_TITLES: Record<string, string> = {
+  "/": "Overview",
+  "/tenants": "Tenants",
+  "/licenses": "Licenses",
+  "/owners": "Team & access",
+  "/settings": "Security & settings",
+};
+
+function getPageTitle(pathname: string): string {
+  const path = pathname.split("?")[0] ?? pathname;
+  if (ROUTE_TITLES[path]) return ROUTE_TITLES[path]!;
+
+  if (/^\/tenants\/[^/]+\/organizations\/[^/]+/.test(path)) {
+    return "Organization detail";
+  }
+  if (/^\/tenants\/[^/]+/.test(path)) {
+    return "Tenant detail";
+  }
+  if (/^\/licenses\/[^/]+/.test(path)) {
+    return "License detail";
+  }
+
+  return "Dashboard";
 }
 
 export function DashboardAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const title = headerTitle(pathname);
+  const title = getPageTitle(pathname);
 
   return (
     <SidebarProvider

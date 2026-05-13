@@ -1,12 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import OrgStatusBadge from "@/components/org-status-badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +54,7 @@ export default function OrgDetailPage() {
   const orgId = params.orgId;
   const { organizations, refetch } = useOrganizations(tenantId);
   const [org, setOrg] = useState<Organization | null>(null);
+  const [tenantName, setTenantName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -56,9 +64,14 @@ export default function OrgDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/tenants/${tenantId}/organizations/${orgId}`);
-      const data = (await readJson(res)) as OrgDetailResponse;
-      if (!res.ok || !data.organization) {
+      const [orgRes, tenantRes] = await Promise.all([
+        fetch(`/api/tenants/${tenantId}/organizations/${orgId}`),
+        fetch(`/api/tenants/${tenantId}`),
+      ]);
+      const tenantJson = (await readJson(tenantRes)) as { tenant?: { name: string } };
+      setTenantName(tenantRes.ok && tenantJson.tenant?.name ? tenantJson.tenant.name : null);
+      const data = (await readJson(orgRes)) as OrgDetailResponse;
+      if (!orgRes.ok || !data.organization) {
         setOrg(null);
         return;
       }
@@ -137,30 +150,71 @@ export default function OrgDetailPage() {
 
   if (!org) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Organization not found.
-          <div className="mt-4">
-            <Button variant="outline" onClick={() => router.push(`/tenants/${tenantId}`)}>
-              Back to tenant
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/tenants">Tenants</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbLink href={`/tenants/${tenantId}`}>
+                {tenantName ?? tenantId}
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <span className="text-muted-foreground">Organizations</span>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{orgId}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            Organization not found.
+            <div className="mt-4">
+              <Button variant="outline" onClick={() => router.push(`/tenants/${tenantId}`)}>
+                Back to tenant
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href={`/tenants/${tenantId}`}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Back to tenant
-        </Link>
-      </div>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/tenants">Tenants</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink href={`/tenants/${tenantId}`}>{tenantName ?? tenantId}</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <span className="text-muted-foreground">Organizations</span>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{org.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       <Card>
         <CardHeader>

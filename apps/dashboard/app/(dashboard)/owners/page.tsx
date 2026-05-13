@@ -1,10 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Loader2, Plus, Trash2, Users } from "lucide-react";
+import {
+  Copy,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
+import { formatDate } from "@/lib/date-format";
 import {
   ROLE,
   ROLE_DESCRIPTIONS,
@@ -13,6 +24,15 @@ import {
   type Role,
 } from "@/lib/roles";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +42,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -30,6 +57,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type Owner = {
   id: string;
@@ -37,8 +78,22 @@ type Owner = {
   name: string;
   role: Role;
   hasPassword?: boolean;
+  mfaEnabled: boolean;
   createdAt: string;
 };
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) {
+    const w = parts[0] ?? "";
+    return w.slice(0, 2).toUpperCase() || "?";
+  }
+  const first = parts[0]?.[0] ?? "";
+  const last = parts[parts.length - 1]?.[0] ?? "";
+  const pair = `${first}${last}`.toUpperCase();
+  return pair || "?";
+}
 
 export default function OwnersPage() {
   const me = useMe();
@@ -77,9 +132,21 @@ export default function OwnersPage() {
     try {
       const res = await fetch("/api/owners");
       const dataUnknown = await res.json().catch(() => ({}));
-      const data = dataUnknown as { owners?: Owner[]; error?: string };
+      const data = dataUnknown as {
+        owners?: Array<Partial<Owner> & { id: string; email: string; name: string; role: Role; createdAt: string }>;
+        error?: string;
+      };
       if (!res.ok) throw new Error(formatApiError(dataUnknown, data.error ?? `HTTP ${res.status}`));
-      setOwners(data.owners ?? []);
+      const parsed: Owner[] = (data.owners ?? []).map((o) => ({
+        id: o.id,
+        email: o.email,
+        name: o.name,
+        role: o.role,
+        hasPassword: o.hasPassword,
+        mfaEnabled: o.mfaEnabled ?? false,
+        createdAt: o.createdAt,
+      }));
+      setOwners(parsed);
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -131,6 +198,15 @@ export default function OwnersPage() {
       window.setTimeout(() => setCopiedInvite(false), 2000);
     } catch {
       setAddErr("Could not copy invite link.");
+    }
+  }
+
+  async function copyOwnerId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id);
+      toast.success("Copied owner ID");
+    } catch {
+      toast.error("Could not copy");
     }
   }
 
@@ -217,6 +293,18 @@ export default function OwnersPage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Team & access</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div>
         <h1 className="text-xl font-semibold">Owners</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -236,7 +324,7 @@ export default function OwnersPage() {
             disabled={!canManageOwners}
           >
             <Plus className="h-4 w-4" />
-            Invite Admin
+            Invite owner
           </Button>
         </div>
         {addErr && <p className="text-sm text-destructive">{addErr}</p>}
@@ -269,82 +357,70 @@ export default function OwnersPage() {
         )}
       </div>
 
-      {inviteOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-xl rounded-lg border bg-background p-5 shadow-xl">
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-semibold">Invite Admin</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Create an invite link for a new platform owner.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setInviteOpen(false)}
-              >
-                Close
-              </Button>
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite team member</DialogTitle>
+            <DialogDescription>
+              Send an invitation to a new owner. They will receive an email to set up their account.
+            </DialogDescription>
+          </DialogHeader>
+          <form id="owners-invite-form" onSubmit={handleAdd} className="grid gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="invite-email">
+                Email
+              </label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="owner@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
-            <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3">
-              <div className="flex-1 min-w-[180px] space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Email
-                </label>
-                <Input
-                  type="email"
-                  placeholder="owner@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Role
-                </label>
-                <Select
-                  value={inviteRole}
-                  onValueChange={(value) => setInviteRole(value as Role)}
-                >
-                  <SelectTrigger className="h-9 w-[170px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {ROLE_LABELS[role]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1 min-w-[180px] space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Name
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" disabled={adding} className="gap-2">
-                {adding ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Send Invite
-              </Button>
-            </form>
-          </div>
-        </div>
-      ) : null}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="invite-role">
+                Role
+              </label>
+              <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as Role)}>
+                <SelectTrigger id="invite-role" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {ROLE_LABELS[role]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="invite-name">
+                Name
+              </label>
+              <Input
+                id="invite-name"
+                type="text"
+                placeholder="Full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+          </form>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="owners-invite-form" disabled={adding} className="gap-2">
+              {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Send invite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -353,130 +429,155 @@ export default function OwnersPage() {
         </div>
       ) : loadErr ? (
         <p className="text-sm text-destructive">{loadErr}</p>
-      ) : owners.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-          <Users className="h-8 w-8 text-muted-foreground/50" />
-          <p className="text-sm text-muted-foreground">
-            No owners yet. Add one above.
-          </p>
-        </div>
       ) : (
         <div className="rounded-lg border">
-          {deleteErr && (
-            <p className="border-b px-4 py-2 text-sm text-destructive">
-              {deleteErr}
-            </p>
-          )}
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40">
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                  Name
-                </th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                  Email
-                </th>
-                <th className="hidden px-4 py-2 text-left font-medium text-muted-foreground sm:table-cell">
-                  ID
-                </th>
-                <th className="hidden px-4 py-2 text-left font-medium text-muted-foreground md:table-cell">
-                  Role
-                </th>
-                <th className="hidden px-4 py-2 text-left font-medium text-muted-foreground md:table-cell">
-                  Status
-                </th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {owners.map((o, i) => (
-                <tr key={o.id} className={i < owners.length - 1 ? "border-b" : ""}>
-                  <td className="px-4 py-3 font-medium">
-                    {o.name}{" "}
-                    {me?.id === o.id ? (
-                      <span className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        You
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{o.email}</td>
-                  <td className="hidden px-4 py-3 font-mono text-xs text-muted-foreground sm:table-cell">
-                    {o.id.slice(0, 8)}…
-                  </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${roleBadgeClass(
-                        o.role,
-                      )}`}
-                    >
-                      {ROLE_LABELS[o.role]}
-                    </span>
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      Role changes take effect on next login
-                    </p>
-                    {canManageOwners ? (
-                      <div className="mt-2 space-y-1">
-                        <Select
-                          value={o.role}
-                          onValueChange={(value) => {
-                            const nextRole = value as Role;
-                            if (nextRole === o.role) return;
-                            setRoleChangeTarget({ owner: o, nextRole });
-                            setRoleDialogOpen(true);
-                          }}
-                          disabled={me?.id === o.id}
-                        >
-                          <SelectTrigger className="h-8 w-[170px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLES.map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {ROLE_LABELS[role]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-[10px] text-muted-foreground">
-                          {ROLE_DESCRIPTIONS[o.role]}
-                        </p>
+          {deleteErr ? (
+            <p className="border-b px-4 py-2 text-sm text-destructive">{deleteErr}</p>
+          ) : null}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Owner</TableHead>
+                <TableHead className="min-w-[200px]">Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Member since</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {owners.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <Users className="h-8 w-8 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground">No team members found.</p>
+                      <p className="text-xs text-muted-foreground">Invite an admin using the button above.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                owners.map((o) => (
+                  <TableRow key={o.id}>
+                    <TableCell className="whitespace-normal">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                          {initialsFromName(o.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            {o.name}
+                            {me?.id === o.id ? (
+                              <span className="ml-2 rounded border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                                You
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{o.email}</p>
+                        </div>
                       </div>
-                    ) : null}
-                  </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                        o.hasPassword
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-                          : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200"
-                      }`}
-                    >
-                      {o.hasPassword ? "activated" : "pending"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDeleteTarget(o);
-                        setDeleteConfirmEmail("");
-                        setDeleteErr("");
-                      }}
-                      disabled={deletingId === o.id}
-                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                    >
-                      {deletingId === o.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3 w-3" />
-                      )}
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </TableCell>
+                    <TableCell className="whitespace-normal align-top">
+                      <span
+                        className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${roleBadgeClass(
+                          o.role,
+                        )}`}
+                      >
+                        {ROLE_LABELS[o.role]}
+                      </span>
+                      <p className="mb-2 text-[10px] text-muted-foreground">Role changes take effect on next login</p>
+                      {canManageOwners ? (
+                        <div className="space-y-1">
+                          <Select
+                            value={o.role}
+                            onValueChange={(value) => {
+                              const nextRole = value as Role;
+                              if (nextRole === o.role) return;
+                              setRoleChangeTarget({ owner: o, nextRole });
+                              setRoleDialogOpen(true);
+                            }}
+                            disabled={me?.id === o.id}
+                          >
+                            <SelectTrigger className="h-8 w-full max-w-[220px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROLES.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {ROLE_LABELS[role]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10px] text-muted-foreground">{ROLE_DESCRIPTIONS[o.role]}</p>
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={o.hasPassword ? "default" : "secondary"}>
+                          {o.hasPassword ? "Active" : "Pending invite"}
+                        </Badge>
+                        <TooltipProvider delay={200}>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <span
+                                  aria-label={o.mfaEnabled ? "MFA enabled" : "MFA not enabled"}
+                                  className="inline-flex"
+                                />
+                              }
+                            >
+                              {o.mfaEnabled ? (
+                                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                              ) : (
+                                <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {o.mfaEnabled ? "MFA enabled" : "MFA not enabled"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(o.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Owner actions" />
+                          }
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => void copyOwnerId(o.id)}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy ID
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            disabled={me?.id === o.id || deletingId === o.id}
+                            onClick={() => {
+                              setDeleteTarget(o);
+                              setDeleteConfirmEmail("");
+                              setDeleteErr("");
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove owner
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 

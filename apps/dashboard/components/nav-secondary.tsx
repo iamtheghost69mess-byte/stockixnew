@@ -24,6 +24,8 @@ export function NavSecondary({
 }: {
   items: NavSecondaryItem[];
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
+  if (items.length === 0) return null;
+
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
