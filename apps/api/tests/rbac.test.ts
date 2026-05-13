@@ -164,6 +164,14 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/licenses/analytics", "GET")).toBe("read_only");
   });
 
+  it("POST /licenses/:id/extend requires billing_manager", () => {
+    expect(requiredApiRole("/licenses/abc-123/extend", "POST")).toBe("billing_manager");
+  });
+
+  it("PATCH /licenses/:id requires billing_manager", () => {
+    expect(requiredApiRole("/licenses/abc-123", "PATCH")).toBe("billing_manager");
+  });
+
   it("POST /licenses/generate requires super_admin", () => {
     expect(requiredApiRole("/licenses/generate", "POST")).toBe("super_admin");
   });
@@ -189,6 +197,18 @@ describe("role rank enforcement logic", () => {
 
   it("read_only can access GET /tenants (requires read_only)", () => {
     expect(isAllowed("read_only", requiredApiRole("/tenants", "GET")!)).toBe(true);
+  });
+
+  it("read_only cannot POST /licenses/:id/extend (requires billing_manager)", () => {
+    expect(isAllowed("read_only", requiredApiRole("/licenses/x/extend", "POST")!)).toBe(false);
+  });
+
+  it("billing_manager can POST /licenses/:id/extend", () => {
+    expect(isAllowed("billing_manager", requiredApiRole("/licenses/x/extend", "POST")!)).toBe(true);
+  });
+
+  it("billing_manager cannot POST /licenses/generate (requires super_admin)", () => {
+    expect(isAllowed("billing_manager", requiredApiRole("/licenses/generate", "POST")!)).toBe(false);
   });
 
   it("read_only cannot access POST /tenants (requires super_admin)", () => {
@@ -282,6 +302,7 @@ describe("session-layer role checks via /auth/me", () => {
     expect(body.me.capabilities.canManageTenants).toBe(false);
     expect(body.me.capabilities.canAccessSettings).toBe(false);
     expect(body.me.capabilities.canManageOwners).toBe(false);
+    expect(body.me.capabilities.canExtendLicenses).toBe(false);
   });
 
   it("super_admin session: /auth/me returns all capabilities true", async () => {
@@ -306,6 +327,7 @@ describe("session-layer role checks via /auth/me", () => {
     expect(body.me.capabilities.canAccessSettings).toBe(true);
     expect(body.me.capabilities.canManageOwners).toBe(true);
     expect(body.me.capabilities.canManageTenants).toBe(true);
+    expect(body.me.capabilities.canExtendLicenses).toBe(true);
   });
 
   it("support_agent session: /auth/me returns canManageTenants=true, canAccessSettings=false", async () => {
@@ -329,6 +351,32 @@ describe("session-layer role checks via /auth/me", () => {
     expect(res.status).toBe(200);
     expect(body.me.capabilities.canManageTenants).toBe(true);
     expect(body.me.capabilities.canAccessSettings).toBe(false);
+    expect(body.me.capabilities.canManageOwners).toBe(false);
+    expect(body.me.capabilities.canExtendLicenses).toBe(true);
+  });
+
+  it("billing_manager session: /auth/me returns tenant ops false, license extend true", async () => {
+    verifySessionTokenMock.mockResolvedValue({
+      sub: "owner-bm",
+      role: "billing_manager",
+      email: "billing@example.com",
+      name: "Billing",
+      sessionVersion: 1,
+    });
+    validateOwnerSessionMock.mockResolvedValue({
+      success: true,
+      data: { id: "owner-bm" },
+    });
+
+    const res = await app.request("http://local/auth/me", {
+      headers: { cookie: "stockix-session=some-token" },
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.me.role).toBe("billing_manager");
+    expect(body.me.capabilities.canManageTenants).toBe(false);
+    expect(body.me.capabilities.canExtendLicenses).toBe(true);
     expect(body.me.capabilities.canManageOwners).toBe(false);
   });
 

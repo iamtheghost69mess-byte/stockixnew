@@ -22,6 +22,7 @@ const CODE_MESSAGES: Record<string, string> = {
   organization_access_not_found: "That access grant was not found.",
   owner_must_be_support_agent: "Only support agent accounts can receive organization-scoped access.",
   owner_not_found: "That team member was not found.",
+  email_already_exists: "An owner with that email already exists.",
 };
 
 function errorCode(body: unknown): string | null {

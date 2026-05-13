@@ -103,8 +103,11 @@ export default function TenantDetailPage() {
     setError(null);
     try {
       const res = await fetch(`/api/tenants/${id}`);
-      const data = (await readJson(res)) as { error?: string; tenant?: TenantDetail };
-      if (!res.ok || !data.tenant) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const body = await readJson(res);
+      const data = body as { error?: string; tenant?: TenantDetail };
+      if (!res.ok || !data.tenant) {
+        throw new Error(formatApiError(body, data.error ?? `HTTP ${res.status}`));
+      }
       setTenant(data.tenant);
       setForm({
         name: data.tenant.name,
@@ -147,9 +150,10 @@ export default function TenantDetailPage() {
     setEventsLoading(true);
     try {
       const res = await fetch(`/api/tenants/${id}/events`);
-      const data = (await readJson(res)) as { events?: ProvisionEventRow[]; error?: string };
+      const body = await readJson(res);
+      const data = body as { events?: ProvisionEventRow[]; error?: string };
       if (!res.ok) {
-        setError(data.error ?? `Failed to load events (HTTP ${res.status})`);
+        setError(formatApiError(body, data.error ?? `Failed to load events (HTTP ${res.status})`));
         setEvents([]);
         return;
       }
@@ -240,8 +244,11 @@ export default function TenantDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = (await readJson(res)) as { tenant?: TenantDetail; error?: string };
-      if (!res.ok || !data.tenant) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const body = await readJson(res);
+      const data = body as { tenant?: TenantDetail; error?: string };
+      if (!res.ok || !data.tenant) {
+        throw new Error(formatApiError(body, data.error ?? `HTTP ${res.status}`));
+      }
       setTenant(data.tenant);
       setEditing(false);
     } catch (e) {
@@ -812,8 +819,9 @@ export default function TenantDetailPage() {
                 onClick={async () => {
                   const res = await fetch(`/api/tenants/${tenant.id}/reactivate`, { method: "POST" });
                   if (!res.ok) {
-                    const data = (await res.json().catch(() => ({}))) as { error?: string };
-                    setError(data.error ?? `Reactivate failed (${res.status})`);
+                    const body = await readJson(res);
+                    const data = body as { error?: string };
+                    setError(formatApiError(body, data.error ?? `Reactivate failed (${res.status})`));
                     return;
                   }
                   await loadTenant();
@@ -883,8 +891,9 @@ export default function TenantDetailPage() {
                 try {
                   const res = await fetch(`/api/tenants/${tenant.id}/suspend`, { method: "POST" });
                   if (!res.ok) {
-                    const data = (await res.json().catch(() => ({}))) as { error?: string };
-                    setError(data.error ?? `Suspend failed (${res.status})`);
+                    const body = await readJson(res);
+                    const data = body as { error?: string };
+                    setError(formatApiError(body, data.error ?? `Suspend failed (${res.status})`));
                     return;
                   }
                   toast.success("Suspend requested");
@@ -940,9 +949,10 @@ export default function TenantDetailPage() {
               variant="outline"
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
-                const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+                const body = await readJson(res);
+                const data = body as { error?: string; message?: string };
                 if (!res.ok && res.status !== 404) {
-                  setError(data.message ?? data.error ?? `Delete failed (${res.status})`);
+                  setError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
                   return;
                 }
                 router.push("/tenants");
@@ -954,9 +964,10 @@ export default function TenantDetailPage() {
               variant="destructive"
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
-                const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+                const body = await readJson(res);
+                const data = body as { error?: string; message?: string };
                 if (!res.ok && res.status !== 404) {
-                  setError(data.message ?? data.error ?? `Delete failed (${res.status})`);
+                  setError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
                   return;
                 }
                 router.push("/tenants");

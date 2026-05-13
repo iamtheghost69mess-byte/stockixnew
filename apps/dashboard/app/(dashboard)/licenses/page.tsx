@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { LicenseAnalytics, LicenseRow, LicenseStatus } from "@/types/license";
 import { format } from "date-fns";
+import { useMe } from "@/hooks/use-me";
 
 function productLabel(p: string): string {
   if (p === "pos_desktop") return "POS Desktop";
@@ -61,6 +62,8 @@ function productLabel(p: string): string {
 
 export default function LicensesPage() {
   const router = useRouter();
+  const me = useMe();
+  const canGenerateLicenses = me?.role === "super_admin";
   const [analytics, setAnalytics] = useState<LicenseAnalytics | null>(null);
   const [licenses, setLicenses] = useState<LicenseRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -168,10 +171,12 @@ export default function LicensesPage() {
               Manage software licenses for tenants and POS terminals
             </p>
           </div>
-          <Button onClick={() => setGenOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Generate license
-          </Button>
+          {canGenerateLicenses ? (
+            <Button onClick={() => setGenOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Generate license
+            </Button>
+          ) : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -357,8 +362,12 @@ export default function LicensesPage() {
                         <Button variant="outline" onClick={clearFilters}>
                           Clear filters
                         </Button>
-                      ) : (
+                      ) : canGenerateLicenses ? (
                         <Button onClick={() => setGenOpen(true)}>Generate your first license</Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Ask a super admin to generate the first license.
+                        </p>
                       )}
                     </div>
                   </TableCell>
@@ -443,12 +452,12 @@ export default function LicensesPage() {
                             View details
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          {row.status === "unassigned" ? (
+                          {canGenerateLicenses && row.status === "unassigned" ? (
                             <DropdownMenuItem onClick={() => setAssignLicense(row)}>
                               Assign to tenant
                             </DropdownMenuItem>
                           ) : null}
-                          {row.status === "active" ? (
+                          {canGenerateLicenses && row.status === "active" ? (
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => router.push(`/licenses/${row.id}`)}
@@ -493,14 +502,16 @@ export default function LicensesPage() {
         </div>
       </div>
 
-      <LicenseGenerateDialog
-        open={genOpen}
-        onOpenChange={setGenOpen}
-        onSuccess={() => {
-          void loadAnalytics();
-          void loadList();
-        }}
-      />
+      {canGenerateLicenses ? (
+        <LicenseGenerateDialog
+          open={genOpen}
+          onOpenChange={setGenOpen}
+          onSuccess={() => {
+            void loadAnalytics();
+            void loadList();
+          }}
+        />
+      ) : null}
       {assignLicense ? (
         <LicenseAssignDialog
           open

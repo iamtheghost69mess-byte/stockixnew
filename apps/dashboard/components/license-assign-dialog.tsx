@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import TenantStatusBadge from "@/components/tenant-status-badge";
+import { formatApiError } from "@/lib/api-errors";
 import type { LicenseRow } from "@/types/license";
 
 type TenantOpt = { id: string; name: string; slug: string; status: string };
@@ -89,11 +90,11 @@ export default function LicenseAssignDialog({
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
       if (res.status === 409) {
-        setError(data.message ?? "This license is already assigned.");
+        setError(formatApiError(data, data.message ?? "This license is already assigned."));
         return;
       }
       if (!res.ok) {
-        setError(data.error ?? `Request failed (${res.status})`);
+        setError(formatApiError(data, data.error ?? `Request failed (${res.status})`));
         return;
       }
       toast.success("License assigned to tenant.");

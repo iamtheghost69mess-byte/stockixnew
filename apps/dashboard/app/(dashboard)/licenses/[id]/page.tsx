@@ -74,6 +74,8 @@ export default function LicenseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const me = useMe();
   const isSuper = me?.role === "super_admin";
+  const canExtendOrEditNotes = Boolean(me?.capabilities.canExtendLicenses);
+  const canSupportLicenseOps = me?.role === "support_agent" || me?.role === "super_admin";
   const [data, setData] = useState<LicenseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +127,7 @@ export default function LicenseDetailPage() {
   }, [load]);
 
   const saveNotes = async () => {
-    if (!data || !isSuper) return;
+    if (!data || !canExtendOrEditNotes) return;
     setNotesSaving(true);
     try {
       const res = await fetch(`/api/licenses/${data.id}`, {
@@ -333,14 +335,14 @@ export default function LicenseDetailPage() {
               <div className="sm:col-span-2 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-muted-foreground">Notes</p>
-                  {isSuper && !notesEdit ? (
+                  {canExtendOrEditNotes && !notesEdit ? (
                     <Button type="button" variant="ghost" size="sm" onClick={() => setNotesEdit(true)}>
                       <Pencil className="mr-1 h-3.5 w-3.5" />
                       Edit
                     </Button>
                   ) : null}
                 </div>
-                {notesEdit && isSuper ? (
+                {notesEdit && canExtendOrEditNotes ? (
                   <div className="space-y-2">
                     <Textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={3} />
                     <div className="flex gap-2">
@@ -373,12 +375,12 @@ export default function LicenseDetailPage() {
             <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {L.status === "unassigned" ? (
+            {L.status === "unassigned" && isSuper ? (
               <Button className="w-full" onClick={() => setAssignOpen(true)}>
                 Assign to tenant
               </Button>
             ) : null}
-            {isSuper && (L.status === "active" || L.status === "expired") ? (
+            {canExtendOrEditNotes && (L.status === "active" || L.status === "expired") ? (
               <Button
                 variant="outline"
                 className="w-full"
@@ -479,23 +481,30 @@ export default function LicenseDetailPage() {
                     </TableCell>
                     <TableCell>{format(new Date(a.activatedAt), "PPp")}</TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {a.activationStatus === "active" ? (
-                            <DropdownMenuItem onClick={() => setDeactivateAct(a)}>Deactivate</DropdownMenuItem>
-                          ) : null}
-                          {a.activationStatus !== "blacklisted" ? (
-                            <DropdownMenuItem onClick={() => setBlacklistAct(a)}>
-                              Blacklist device
-                            </DropdownMenuItem>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {(a.activationStatus === "active" && canSupportLicenseOps) ||
+                      ((a.activationStatus === "active" || a.activationStatus === "deactivated") &&
+                        isSuper) ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {a.activationStatus === "active" && canSupportLicenseOps ? (
+                              <DropdownMenuItem onClick={() => setDeactivateAct(a)}>Deactivate</DropdownMenuItem>
+                            ) : null}
+                            {(a.activationStatus === "active" || a.activationStatus === "deactivated") &&
+                            isSuper ? (
+                              <DropdownMenuItem onClick={() => setBlacklistAct(a)}>
+                                Blacklist device
+                              </DropdownMenuItem>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

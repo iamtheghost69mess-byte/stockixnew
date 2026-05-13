@@ -301,7 +301,12 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
         capabilities: {
           canAccessSettings: session.role === "super_admin",
           canManageOwners: session.role === "super_admin",
-          canManageTenants: session.role !== "read_only",
+          canManageTenants:
+            session.role === "support_agent" || session.role === "super_admin",
+          canExtendLicenses:
+            session.role === "billing_manager" ||
+            session.role === "support_agent" ||
+            session.role === "super_admin",
         },
       },
     });

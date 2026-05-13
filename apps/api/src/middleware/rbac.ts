@@ -34,6 +34,8 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
 
   if (pathname.startsWith("/licenses")) {
     if (m === "GET") return "read_only";
+    if (m === "POST" && pathname.endsWith("/extend")) return "billing_manager";
+    if (m === "PATCH") return "billing_manager";
     if (pathname.endsWith("/deactivate")) return "support_agent";
     return "super_admin";
   }

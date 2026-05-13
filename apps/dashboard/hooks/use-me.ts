@@ -11,6 +11,8 @@ type Me = {
     canAccessSettings: boolean;
     canManageOwners: boolean;
     canManageTenants: boolean;
+    /** License extend / notes PATCH (billing_manager and above). */
+    canExtendLicenses?: boolean;
   };
 };
 

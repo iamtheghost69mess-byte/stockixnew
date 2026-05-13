@@ -136,6 +136,7 @@ describe("auth route contracts", () => {
           canAccessSettings: true,
           canManageOwners: true,
           canManageTenants: true,
+          canExtendLicenses: true,
         },
       },
     });

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Copy, Loader2, Plus, Trash2, Users } from "lucide-react";
 
 import { useMe } from "@/hooks/use-me";
+import { formatApiError } from "@/lib/api-errors";
 import {
   ROLE,
   ROLE_DESCRIPTIONS,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -66,13 +68,17 @@ export default function OwnersPage() {
   const [roleErr, setRoleErr] = useState("");
   const [roleSuccess, setRoleSuccess] = useState("");
 
+  const [deleteTarget, setDeleteTarget] = useState<Owner | null>(null);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadErr("");
     try {
       const res = await fetch("/api/owners");
-      const data = (await res.json()) as { owners?: Owner[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const dataUnknown = await res.json().catch(() => ({}));
+      const data = dataUnknown as { owners?: Owner[]; error?: string };
+      if (!res.ok) throw new Error(formatApiError(dataUnknown, data.error ?? `HTTP ${res.status}`));
       setOwners(data.owners ?? []);
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : String(e));
@@ -101,11 +107,7 @@ export default function OwnersPage() {
         error?: string;
       };
       if (!res.ok) {
-        setAddErr(
-          data.error === "email_already_exists"
-            ? "An owner with that email already exists."
-            : (data.error ?? `HTTP ${res.status}`),
-        );
+        setAddErr(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         return;
       }
       setEmail("");
@@ -162,7 +164,7 @@ export default function OwnersPage() {
         owner?: Owner;
       };
       if (!res.ok) {
-        setRoleErr(data.message ?? data.error ?? `HTTP ${res.status}`);
+        setRoleErr(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
         return;
       }
       if (data.owner) {
@@ -184,25 +186,27 @@ export default function OwnersPage() {
     }
   }
 
-  async function handleDelete(owner: Owner) {
-    if (
-      !confirm(
-        `Delete owner "${owner.name}" (${owner.email})?\n\nThis will fail if they still have tenants assigned.`,
-      )
-    ) {
+  async function executeDelete() {
+    if (!deleteTarget) return;
+    if (deleteConfirmEmail.trim().toLowerCase() !== deleteTarget.email.toLowerCase()) {
       return;
     }
     setDeleteErr("");
-    setDeletingId(owner.id);
+    setDeletingId(deleteTarget.id);
     try {
-      const res = await fetch(`/api/owners/${owner.id}`, {
+      const res = await fetch(`/api/owners/${deleteTarget.id}`, {
         method: "DELETE",
       });
-      const data = (await res.json()) as { error?: string; detail?: string };
+      const dataUnknown = await res.json().catch(() => ({}));
+      const data = dataUnknown as { error?: string; detail?: string };
       if (!res.ok) {
-        setDeleteErr(data.detail ?? data.error ?? `HTTP ${res.status}`);
+        setDeleteErr(
+          formatApiError(dataUnknown, data.detail ?? data.error ?? `HTTP ${res.status}`),
+        );
         return;
       }
+      setDeleteTarget(null);
+      setDeleteConfirmEmail("");
       await load();
     } catch (e) {
       setDeleteErr(e instanceof Error ? e.message : String(e));
@@ -452,7 +456,12 @@ export default function OwnersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => handleDelete(o)}
+                      type="button"
+                      onClick={() => {
+                        setDeleteTarget(o);
+                        setDeleteConfirmEmail("");
+                        setDeleteErr("");
+                      }}
                       disabled={deletingId === o.id}
                       className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                     >
@@ -508,6 +517,65 @@ export default function OwnersPage() {
             <Button onClick={() => void applyRoleChange()} disabled={roleSaving}>
               {roleSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteConfirmEmail("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete owner</DialogTitle>
+            <DialogDescription>
+              Remove <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email}). This fails if they
+              still have tenants assigned. Type their email below to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="delete-owner-email">
+              Confirm email
+            </label>
+            <Input
+              id="delete-owner-email"
+              autoComplete="off"
+              placeholder={deleteTarget?.email ?? ""}
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+            />
+            {deleteErr ? <p className="text-sm text-destructive">{deleteErr}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteConfirmEmail("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                !deleteTarget ||
+                deletingId === deleteTarget.id ||
+                deleteConfirmEmail.trim().toLowerCase() !== deleteTarget.email.toLowerCase()
+              }
+              onClick={() => void executeDelete()}
+            >
+              {deletingId === deleteTarget?.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Delete owner"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
