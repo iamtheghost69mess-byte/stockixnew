@@ -62,6 +62,8 @@ type Props = {
   reactivatingId: string | null;
   stoppingId: string | null;
   onAddTenant?: () => void;
+  /** Initial status filter (e.g. from `?status=` on /tenants). */
+  initialStatusFilter?: StatusFilter;
 };
 
 export default function TenantList(props: Props) {
@@ -76,11 +78,12 @@ export default function TenantList(props: Props) {
     reactivatingId,
     stoppingId,
     onAddTenant,
+    initialStatusFilter,
   } = props;
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter ?? "all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<{ tenantId: string; slug: string } | null>(null);
@@ -116,7 +119,11 @@ export default function TenantList(props: Props) {
     });
 
     if (statusFilter !== "all") {
-      rows = rows.filter((t) => (t.deploymentStatus ?? "unknown") === statusFilter);
+      rows = rows.filter((t) => {
+        const d = (t.deploymentStatus ?? "unknown").toLowerCase();
+        if (statusFilter === "provisioning") return d === "provisioning" || d === "pending";
+        return d === statusFilter;
+      });
     }
 
     const out = [...rows];

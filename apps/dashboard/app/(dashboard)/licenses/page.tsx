@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -61,7 +61,20 @@ function productLabel(p: string): string {
 }
 
 export default function LicensesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 p-6 text-sm text-muted-foreground">Loading licenses…</div>
+      }
+    >
+      <LicensesPageContent />
+    </Suspense>
+  );
+}
+
+function LicensesPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const me = useMe();
   const canGenerateLicenses = me?.role === "super_admin";
   const [analytics, setAnalytics] = useState<LicenseAnalytics | null>(null);
@@ -80,6 +93,23 @@ export default function LicensesPage() {
   const [genOpen, setGenOpen] = useState(false);
   const [assignLicense, setAssignLicense] = useState<LicenseRow | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("expiring") === "true") {
+      setExpiring30(true);
+    }
+    const st = searchParams.get("status");
+    if (st === "active" || st === "unassigned" || st === "revoked" || st === "expired") {
+      setStatusFilter(st);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("generate") !== "1") return;
+    if (me?.role !== "super_admin") return;
+    setGenOpen(true);
+    router.replace("/licenses", { scroll: false });
+  }, [searchParams, router, me?.role]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearch(searchInput), 300);

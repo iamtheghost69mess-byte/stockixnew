@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { ExternalLink } from "lucide-react";
 
@@ -77,8 +78,15 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-export default function TenantsPage() {
+function TenantsPageContent() {
   const me = useMe();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialListStatus = useMemo((): "all" | "active" | "suspended" | "provisioning" | "failed" => {
+    const s = searchParams.get("status");
+    if (s === "active" || s === "suspended" || s === "provisioning" || s === "failed") return s;
+    return "all";
+  }, [searchParams]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -301,6 +309,12 @@ export default function TenantsPage() {
   useEffect(() => {
     load().catch((e) => setError(String(e)));
   }, [load]);
+
+  useEffect(() => {
+    if (searchParams.get("provision") !== "1") return;
+    setAddTenantOpen(true);
+    router.replace("/tenants", { scroll: false });
+  }, [searchParams, router]);
 
   // Refetch when coming back from other routes or tabs (list + access links stay current).
   useEffect(() => {
@@ -748,6 +762,7 @@ export default function TenantsPage() {
           reactivatingId={reactivatingId}
           stoppingId={stoppingId}
           onAddTenant={() => setAddTenantOpen(true)}
+          initialStatusFilter={initialListStatus}
         />
       </div>
 
@@ -848,5 +863,17 @@ export default function TenantsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function TenantsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full space-y-8 p-6 text-sm text-muted-foreground">Loading tenants…</div>
+      }
+    >
+      <TenantsPageContent />
+    </Suspense>
   );
 }
