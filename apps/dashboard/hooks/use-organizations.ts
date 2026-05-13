@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { formatApiError } from "@/lib/api-errors";
+
 const ORG_STATUSES = ["provisioning", "active", "suspended", "failed"] as const;
 
 export type Organization = {
@@ -74,10 +76,12 @@ export function useOrganizations(tenantId: string) {
         const res = await fetch(`/api/tenants/${tenantId}/organizations`);
         const data = (await res.json()) as OrganizationsResponse;
         if (!res.ok) {
-          const msg =
+          const msg = formatApiError(
+            data,
             typeof (data as { error?: unknown }).error === "string"
               ? (data as { error: string }).error
-              : `HTTP ${res.status}`;
+              : `HTTP ${res.status}`,
+          );
           throw new Error(msg);
         }
         const list = Array.isArray(data.organizations) ? data.organizations : [];

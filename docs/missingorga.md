@@ -1,36 +1,52 @@
 # Stockix — Open gaps (audit remainder)
-_Generated: 2026-05-13 · Trimmed to **missing / partial / out-of-scope** only_
+_Generated: 2026-05-13 · Last closeout pass: **2026-05-13**_
 
-> Full audit sources: `packages/db`, `apps/api`, `apps/dashboard`, `infra/worker-service`, `services/stockix-finance/.../Roles/**`. Implemented items and “Working” checklists were **removed** from this file. Cross-service epics: [stockix-epics-backlog.md](stockix-epics-backlog.md).
+> Full audit sources: `packages/db`, `apps/api`, `apps/dashboard`, `infra/worker-service`, `services/stockix-finance/.../Roles/**`. Cross-service epics: [stockix-epics-backlog.md](stockix-epics-backlog.md).
 
 ---
 
-## Summary (not ✅ Done)
+## Definition of done (how this file is maintained)
+
+| Category | When an item leaves this doc |
+|----------|-------------------------------|
+| **Shipped** | Code + tests merged; epic or section removed or shortened to a one-line “Done” pointer. |
+| **By design** | Documented as intentional API/product shape (not backlog). |
+| **Resolved (doc)** | Audit wording was superseded by implementation — remove from summary or mark **Resolved** with file pointers. |
+| **Deferred / Accepted OOS** | Product accepts no near-term build; row links to epic or runbook with **owner** and **review date**. |
+
+---
+
+## Summary — open, deferred, or superseded
 
 | # | Area | Status | Priority |
 |---|------|--------|----------|
-| 41 | RBAC: org write routes use `super_admin` | ⚠️ Superseded: org **writes** allow `support_agent` (scoped when `owner_organization_access` rows exist) | — |
-| 43 | Per-organization RBAC (scoped Stockix access) | ⚠️ **Gap:** full `tenant_team_members` / cross-org **Team** matrix **not** implemented — only `owner_organization_access` + panel | — |
-| 44 | Bigcapital role scope: per tenant vs per org | ⚠️ OOS — separate MySQL per org; no Stockix↔Bigcapital role sync | High |
-| 45 | Bigcapital: give user access to org A but not org B | ⚠️ OOS — invite per stack; no shared identity across org DBs | High |
+| 41 | RBAC: org write routes (audit row) | **Resolved** — non-GET org routes min. `support_agent`; scoped grants in [`org-access-scope.ts`](apps/api/src/org-access-scope.ts); [`rbac.ts`](apps/api/src/middleware/rbac.ts). | — |
+| 43 | Per-org **Team** matrix (end users across Bigcapital stacks) | **Deferred** — epic **C2** ([stockix-epics-backlog.md](stockix-epics-backlog.md)). Stockix `owner_organization_access` covers **operators** only. | — |
+| 44 | Bigcapital role scope (per-tenant vs per-org) | **Accepted OOS** until **C1/C2** — architecture: one MySQL per org instance. Revisit with epic owner. | High |
+| 45 | Central “org A not org B” for **end users** | **Accepted OOS** until **C2** — today: invite per stack; see epic **C2** for proposed Stockix hub. | High |
 
 ---
 
 ## 1. License System
 
-### ⚠️ Partial
-- **`PATCH /licenses/:licenseId`** (`apps/api/src/license-http.ts`) accepts **`{ notes }` only** by design. Use **`POST /licenses/:licenseId/extend`** for `expiresAt` / `isPerpetual` changes.
+### By design (not backlog)
 
-### Remaining (explicit product boundary)
-- **Bigcapital application stacks** under [`services/stockix-finance`](services/stockix-finance) do **not** consult Stockix license state for end-user auth; in-stack enforcement would be a **finance-service / integration** effort, separate from Stockix control-plane APIs and dashboard.
+- **`PATCH /licenses/:licenseId`** ([`apps/api/src/license-http.ts`](apps/api/src/license-http.ts)) accepts **`{ notes }` only**. Expiry / perpetual changes use **`POST /licenses/:licenseId/extend`** (RBAC minimum `billing_manager`).
+
+### Deferred — epic C1
+
+- **Bigcapital stacks** do not consult Stockix license for **end-user** auth. Tracked as **Epic C1** in [stockix-epics-backlog.md](stockix-epics-backlog.md) (finance integration + security review).
 
 ---
 
 ## 2. Tenant Lifecycle (Suspend / Reactivate)
 
-### ⚠️ Partial (product / ops nuance)
-- **Readiness reconciler** (`apps/api/src/index.ts`) still **observes** readiness and logs events; it does **not** auto-restart a deployment stuck in `provisioning` beyond operator actions (Stop, Retry, worker intervention).
-- **Bigcapital mid-session:** after suspension, stacks are stopped so new logins fail; there is **no separate in-app “session revoked”** layer beyond HTTP failing to reach the container.
+### Deferred — epic C3
+
+- **Readiness reconciler** observes readiness; **no auto-restart** for stuck `provisioning` without product policy.
+- **Mid-session “revoked” UX** in Bigcapital after suspend: not implemented; optional under **C3**.
+
+See [stockix-epics-backlog.md](stockix-epics-backlog.md) epic **C3**.
 
 ---
 
@@ -49,35 +65,28 @@ _Generated: 2026-05-13 · Trimmed to **missing / partial / out-of-scope** only_
 
 ### API enforcement
 
-Current rules live in [`apps/api/src/middleware/rbac.ts`](apps/api/src/middleware/rbac.ts) (`requiredApiRole`). Scoped org access: [`apps/api/src/org-access-scope.ts`](apps/api/src/org-access-scope.ts). **Scoped `support_agent`** may receive **403** when grants deny an operation (including `organization_access_create_denied` on create).
+[`apps/api/src/middleware/rbac.ts`](apps/api/src/middleware/rbac.ts) (`requiredApiRole`). Scoped org access: [`apps/api/src/org-access-scope.ts`](apps/api/src/org-access-scope.ts). Scoped `support_agent` may receive **403** (e.g. `organization_access_create_denied`).
 
-### ⚠️ Partial (remaining product gaps)
-- **`billing_manager`:** Further splits (e.g. **assign without revoke**, billing-only fingerprints) need **explicit product rules** beyond today’s extend/notes vs super-admin mutating routes.
-- **Cross-org “Team” matrix** (`tenant_team_members` / per-user org roles across Bigcapital stacks): **not** implemented beyond Stockix-side **scoped support** + grants — see below and [stockix-epics-backlog.md](stockix-epics-backlog.md) epic **C2**.
+### Product follow-up (documented; implementation pending approval)
 
-### Bigcapital internal RBAC (`services/stockix-finance/packages/server/src/modules/Roles/**`)
+- **`billing_manager`:** further route splits (assign-only, fingerprint read, etc.) — see [adr-billing-manager-license-rbac.md](adr-billing-manager-license-rbac.md). **Current shipped:** `GET /licenses*`, `POST …/extend`, `PATCH …/:id` (notes) at or above `billing_manager`; other license mutations remain `super_admin` (and POS deactivate path `support_agent`).
 
-**Critical implication**
-- Each Stockix **organization** runs its own Bigcapital Docker stack with its own MySQL (`tenant.provision` per org). `roles` / `users` / `role_permissions` are **per-org-instance, not per-tenant**.
-- No shared identity layer between two orgs of the same tenant; independent Bigcapital instances.
+### Bigcapital internal RBAC — deferred C2
 
-#### Gap: Per-org user access in Bigcapital
-- No central UI: “Give `alice@acme.com` access to org A but not org B.” Pattern today: **do not invite** into B; management is **per stack**.
-- **`systemUserId`** is cross-tenant, but role/`active` are per-org rows (two orgs ⇒ two independent `users` rows).
+**Critical implication:** one Bigcapital MySQL per org instance; roles/users are **per org**, not per tenant.
 
-**Proposed solution** (design only — see epic **C2** in [stockix-epics-backlog.md](stockix-epics-backlog.md)):
-
-| Layer | Change |
-|---|---|
-| `packages/db/src/schema.ts` | `tenant_team_members` + `tenant_team_member_org_access` (or equivalent) |
-| `apps/api/src/index.ts` | Tenant team CRUD routes |
-| Worker | e.g. `org.user.sync` → Bigcapital admin API per org |
-| Bigcapital | Internal upsert for `{ systemUserId, email, roleSlug }` per org |
-| Dashboard | “Team” tab, `members × orgs` matrix |
+**Gap (end-user access hub):** no Stockix-wide Team UI — **Epic C2** in [stockix-epics-backlog.md](stockix-epics-backlog.md).
 
 ---
 
 ## 4. UI Professionalism
 
-### ⚠️ Partial (residual polish)
-- **API error coverage:** extend `CODE_MESSAGES` in [`apps/dashboard/lib/api-errors.ts`](apps/dashboard/lib/api-errors.ts) as new API `error` codes appear; tenant list / settings pages may still use bespoke error strings for multi-step flows.
+### Polish (incremental)
+
+- [`apps/dashboard/lib/api-errors.ts`](apps/dashboard/lib/api-errors.ts) — extend `CODE_MESSAGES` when new API `error` codes appear. Tenant list, provision flows, MFA settings, and org list (`use-organizations`) use `formatApiError` for failed fetches; keep new dashboard `fetch` paths consistent.
+
+---
+
+## Related ADR
+
+- [adr-billing-manager-license-rbac.md](adr-billing-manager-license-rbac.md) — proposed expansions for `billing_manager` (optional).

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import type { ProvisionEventRow, TenantRow } from "@/types/tenant";
 import { useMe } from "@/hooks/use-me";
+import { formatApiError } from "@/lib/api-errors";
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
@@ -112,7 +113,7 @@ export default function TenantsPage() {
     const tRes = await fetch("/api/tenants");
     const t = (await readJson(tRes)) as { tenants?: TenantRow[]; error?: string };
     if (!tRes.ok) {
-      throw new Error(t.error ?? `tenants: HTTP ${tRes.status}`);
+      throw new Error(formatApiError(t, t.error ?? `tenants: HTTP ${tRes.status}`));
     }
     setTenants(t.tenants ?? []);
   }, []);
@@ -157,9 +158,12 @@ export default function TenantsPage() {
           };
           if (!transitionRes.ok) {
             throw new Error(
-              transitionData.message ??
-                transitionData.error ??
-                "Tenant is busy and automatic stop/suspend failed.",
+              formatApiError(
+                transitionData,
+                transitionData.message ??
+                  transitionData.error ??
+                  "Tenant is busy and automatic stop/suspend failed.",
+              ),
             );
           }
 
@@ -174,7 +178,7 @@ export default function TenantsPage() {
         }
 
         if (!res.ok) {
-          throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`);
+          throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
         }
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         setTenantAccess(null);
@@ -209,7 +213,7 @@ export default function TenantsPage() {
           method: "POST",
         });
         const data = (await readJson(res)) as { error?: string };
-        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        if (!res.ok) throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         setTenants((prev) =>
           prev.map((t) =>
             t.tenantId === tenantId
@@ -244,7 +248,7 @@ export default function TenantsPage() {
           method: "POST",
         });
         const data = (await readJson(res)) as { error?: string };
-        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        if (!res.ok) throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         setTenants((prev) =>
           prev.map((t) =>
             t.tenantId === tenantId
@@ -277,7 +281,7 @@ export default function TenantsPage() {
           method: "POST",
         });
         const data = (await readJson(res)) as { error?: string; status?: string };
-        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        if (!res.ok) throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         const statusLabel = data.status ?? "ok";
         setError(`Provision stop requested for ${slug} (${statusLabel}).`);
         await load();
@@ -366,12 +370,12 @@ export default function TenantsPage() {
         const msg =
           (sj as { message?: string }).message ??
           "Provision status not found (API may have restarted). Check API logs and tenant list.";
-        throw new Error(msg);
+        throw new Error(formatApiError(sj, msg));
       }
 
       if (!sr.ok) {
         throw new Error(
-          (sj as { error?: string }).error ?? `status HTTP ${sr.status}`,
+          formatApiError(sj, (sj as { error?: string }).error ?? `status HTTP ${sr.status}`),
         );
       }
 
@@ -387,7 +391,10 @@ export default function TenantsPage() {
       if ("status" in sj && sj.status === "failed") {
         const f = sj as ProvisionPollFailed;
         throw new Error(
-          [f.error, f.cause].filter(Boolean).join(" — "),
+          formatApiError(
+            f,
+            [f.error, f.cause].filter(Boolean).join(" — "),
+          ),
         );
       }
 
@@ -412,10 +419,12 @@ export default function TenantsPage() {
       | { error?: string; cause?: string; message?: string; status?: string };
     if ("status" in finalJson && finalJson.status === "failed") {
       const fail = finalJson as ProvisionPollFailed;
-      throw new Error([fail.error, fail.cause].filter(Boolean).join(" — "));
+      throw new Error(
+        formatApiError(fail, [fail.error, fail.cause].filter(Boolean).join(" — ")),
+      );
     }
     if ("error" in finalJson && typeof finalJson.error === "string" && finalJson.error.length > 0) {
-      throw new Error(finalJson.error);
+      throw new Error(formatApiError(finalJson, finalJson.error));
     }
     throw new Error(
       `Still provisioning after ${MAX_WAIT_MS / 60000} minutes — check Docker and the API terminal, then refresh this page.`,
@@ -431,7 +440,7 @@ export default function TenantsPage() {
       });
       const data = (await readJson(res)) as { error?: string; status?: string };
       if (!res.ok) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
+        throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
       }
       setProvisionLog((prev) =>
         mergeProvisionEvents(prev, [
@@ -533,16 +542,16 @@ export default function TenantsPage() {
       }
 
       if (!res.ok) {
-        const normalizedError =
-          data.error === "mfa_required"
-            ? "MFA is required for Super Admin privileged actions. Enable MFA in your owner account, then retry provisioning."
-            : data.error;
+        const base = formatApiError(
+          data,
+          data.message ?? data.error ?? `HTTP ${res.status}`,
+        );
         const detail =
           data.detail && typeof data.detail === "object"
             ? JSON.stringify(data.detail)
             : "";
         setError(
-          [normalizedError, detail, data.correlationId ? `id:${data.correlationId}` : ""]
+          [base, detail, data.correlationId ? `id:${data.correlationId}` : ""]
             .filter(Boolean)
             .join(" — "),
         );

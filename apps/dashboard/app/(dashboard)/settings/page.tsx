@@ -5,6 +5,7 @@ import { Copy, Loader2 } from "lucide-react";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatApiError } from "@/lib/api-errors";
 
 type MfaStatus = { enabled: boolean; setupPending: boolean };
 
@@ -39,7 +40,8 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/security/mfa/status");
       const data = (await readJson(res)) as { enabled?: boolean; setupPending?: boolean; error?: string };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok)
+        throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
       setStatus({
         enabled: Boolean(data.enabled),
         setupPending: Boolean(data.setupPending),
@@ -67,7 +69,8 @@ export default function SettingsPage() {
         otpauthUri?: string;
         error?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok)
+        throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
       setSetupSecret(data.secret ?? "");
       setOtpauthUri(data.otpauthUri ?? "");
       if (data.otpauthUri) {
@@ -99,7 +102,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ code: setupCode }),
       });
       const data = (await readJson(res)) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok)
+        throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
       setSetupSecret("");
       setOtpauthUri("");
       setQrDataUrl("");
@@ -122,7 +126,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ code: disableCode }),
       });
       const data = (await readJson(res)) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok)
+        throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
       setDisableCode("");
       await loadStatus();
     } catch (e) {

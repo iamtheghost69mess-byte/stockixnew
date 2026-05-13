@@ -1,5 +1,13 @@
 # Stockix — cross-cutting epics (tracked from audit)
 
+**Implementation status (2026-05-13):** not started — tracked for roadmap only. Closure in [missingorga.md](missingorga.md) uses **Deferred / Accepted OOS** until these epics ship.
+
+| Epic | Status | Next milestone |
+|------|--------|------------------|
+| **C1** — Bigcapital license for end-user sessions | Deferred | Security review + finance auth integration design |
+| **C2** — Team / org user matrix | Deferred | Schema + API design in `packages/db` / `apps/api` |
+| **C3** — Reconciler policy + session UX | Deferred | Product thresholds + worker observability spec |
+
 This file tracks **large, multi-surface** work called out in [missingorga.md](missingorga.md) (Summary rows 44–45, §1 Remaining, §3 Partial) that are **not** single PR fixes. Use it for roadmap planning; implementation status still lives in the main audit Summary Table where applicable.
 
 ## Epic C1 — Bigcapital reads Stockix license for end-user sessions
@@ -38,4 +46,4 @@ This file tracks **large, multi-surface** work called out in [missingorga.md](mi
 
 ---
 
-_Last updated: 2026-05-13 (code repair plan execution)._
+_Last updated: 2026-05-13 (status table + deferred epics)._
