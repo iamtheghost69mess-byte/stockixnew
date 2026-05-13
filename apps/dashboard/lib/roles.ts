@@ -1,17 +1,12 @@
-export const ROLES = [
-  "super_admin",
-  "support_agent",
-  "billing_manager",
-  "read_only",
-] as const;
+import type { Role } from "@repo/shared/roles";
 
-export type Role = (typeof ROLES)[number];
+export { ROLES, ROLE_RANK, type Role } from "@repo/shared/roles";
 
 export const ROLE = {
-  SUPER_ADMIN: ROLES[0],
-  SUPPORT_AGENT: ROLES[1],
-  BILLING_MANAGER: ROLES[2],
-  READ_ONLY: ROLES[3],
+  SUPER_ADMIN: "super_admin",
+  SUPPORT_AGENT: "support_agent",
+  BILLING_MANAGER: "billing_manager",
+  READ_ONLY: "read_only",
 } as const;
 
 export const ROLE_LABELS: Record<Role, string> = {

@@ -54,6 +54,7 @@ export default function LicenseGenerateDialog({
   const [graceDays, setGraceDays] = useState(7);
   const [tenantId, setTenantId] = useState<string>("");
   const [notes, setNotes] = useState("");
+  const [validFrom, setValidFrom] = useState<Date | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedKeys, setGeneratedKeys] = useState<string[]>([]);
@@ -62,6 +63,7 @@ export default function LicenseGenerateDialog({
     if (!open) {
       setGeneratedKeys([]);
       setError(null);
+      setValidFrom(undefined);
       return;
     }
     void (async () => {
@@ -105,6 +107,7 @@ export default function LicenseGenerateDialog({
         isPerpetual,
         expiresAt:
           !isPerpetual && expiresAt ? expiresAt.toISOString() : undefined,
+        validFrom: validFrom ? validFrom.toISOString() : undefined,
         maxActivations: product === "platform" ? 1 : maxActivations,
         gracePeriodDays: graceDays,
         notes: notes.trim() || undefined,
@@ -246,6 +249,27 @@ export default function LicenseGenerateDialog({
                 </PopoverContent>
               </Popover>
             ) : null}
+            <div className="transition-all">
+              <Label>Valid from (optional)</Label>
+              <p className="mb-1 text-xs text-muted-foreground">
+                When the license becomes valid. Defaults to now when assigned or generated with a tenant.
+              </p>
+              <Popover>
+                <PopoverTrigger>
+                  <Button variant="outline" className="mt-1 w-full justify-start font-normal">
+                    {validFrom ? format(validFrom, "PPP") : "Default (now / assignment time)"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={validFrom} onSelect={setValidFrom} />
+                  <div className="border-t p-2">
+                    <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => setValidFrom(undefined)}>
+                      Clear
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           {product !== "platform" ? (
             <div className="transition-all">

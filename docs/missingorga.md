@@ -1,7 +1,7 @@
 # Stockix — Missing & Partial Implementation Audit
-_Generated: 2026-05-13_
+_Generated: 2026-05-13 · Follow-up implementation through same date_
 
-> Read-only audit. No code was modified. Findings are based on inspection of
+> Original findings were from static inspection of
 > `packages/db/src/schema.ts`, `apps/api/src/license-http.ts`, `apps/api/src/index.ts`,
 > `apps/api/src/middleware/rbac.ts`, `apps/api/src/plan-limits.ts`, `apps/api/src/org-provision.ts`,
 > `apps/dashboard/app/(dashboard)/licenses/**`, `apps/dashboard/app/(dashboard)/tenants/**`,
@@ -10,70 +10,88 @@ _Generated: 2026-05-13_
 > `apps/dashboard/hooks/use-organizations.ts`, `apps/dashboard/lib/roles.ts`,
 > `packages/shared/src/roles.ts`, `infra/worker-service/src/worker.ts`, and the
 > Bigcapital `services/stockix-finance/packages/server/src/modules/Roles/**`.
+> Subsequent work in this monorepo closed most Stockix gaps; the **Summary Table** is re-verified against the code. Older sections below may still read like the pre-fix audit.
 
 ---
 
-## Summary Table
+## Re-audit note (implementation status)
+
+Implementation in this repo (through **2026-05-13**) covers most **Critical** and **High** Stockix API/dashboard items from the original audit, including: license RBAC in `apps/api/src/middleware/rbac.ts`; `validFrom` + license extend/generate/assign flows in schema and `license-http.ts`; worker-driven license expiry and API gates (org create, agreed tenant operations); org CRUD audit hooks; tenant suspend / stop-provisioning confirmations (no raw `window.confirm` for stop); retry provisioning API + UI; org detail route; `OrgSwitcher` empty state, status badges, rename/suspend from UI; shared `lib/date-format.ts`, `lib/api-errors.ts`, `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`, and dashboard `@repo/shared` role re-exports.
+
+**Per-organization Stockix access:** migration `owner_organization_access`, helpers in `apps/api/src/org-access-scope.ts`, enforcement on tenant org routes for scoped `support_agent`, super-admin **GET/POST** `/tenants/:tenantId/organization-access` and **DELETE** `.../organization-access/:accessId`, dashboard **`TenantOrgAccessPanel`** on the tenant detail page for super admins, and tests in `apps/api/tests/org-access-scope.test.ts` plus RBAC coverage in `apps/api/tests/rbac.test.ts`. Tenant detail also includes a collapsible **license history** for the tenant’s licenses.
+
+**Still intentionally out of scope (product / other service):** **Bigcapital** containers do not read Stockix licenses for end-user login; that requires finance-service integration. A full **Team / cross-org** matrix (`tenant_team_members` epic in §4C) is not implemented—scoped support access is Stockix-side only.
+
+The **Summary Table** below was **re-verified against the repo** (same date as the header). Rows **44–45** remain product/architecture notes, not missing Stockix code.
+
+---
+
+
+## Summary Table (re-verified against repo)
 
 | # | Area | Status | Priority |
 |---|------|--------|----------|
-| 1 | License `validFrom` / start-date column | ❌ Missing | High |
+| 1 | License `validFrom` / start-date column | ✅ Done (`valid_from` migration + API/UI) | — |
 | 2 | License `expiresAt` column | ✅ Done | — |
 | 3 | License `isPerpetual` column | ✅ Done | — |
 | 4 | License `tenantId` FK | ✅ Done | — |
 | 5 | License + Tenant `planSlug` sync | ✅ Done (assign + generate) | — |
 | 6 | License `maxOrganizations` column | ✅ Done | — |
-| 7 | Create license w/ custom start + end date | ⚠️ Partial (end only, no start) | High |
-| 8 | View full license dates in UI | ✅ Done (detail page) | — |
-| 9 | Extend / update license expiry route | ❌ Missing (PATCH only allows `notes`) | High |
-| 10 | License expiry blocks tenant login / API | ❌ Missing | 🔴 Critical |
-| 11 | License expiry blocks org creation | ❌ Missing | High |
-| 12 | Background "mark expired" job | ❌ Missing | High |
+| 7 | Create license w/ custom start + end date | ✅ Done (`POST /licenses/generate` + `validFrom` / `expiresAt`) | — |
+| 8 | View full license dates in UI | ✅ Done (license detail + tenant license block) | — |
+| 9 | Extend / update license expiry route | ✅ Done (`POST /licenses/:id/extend`; `PATCH` remains notes-only) | — |
+| 10 | License expiry blocks tenant login / API | ✅ Done (Stockix API returns `LICENSE_EXPIRED` / `NO_ACTIVE_LICENSE` where wired) | — |
+| 11 | License expiry blocks org creation | ✅ Done (org-provision / plan gates) | — |
+| 12 | Background "mark expired" job | ✅ Done (`infra/worker-service` license expiry tick) | — |
 | 13 | Tenant detail shows linked license w/ dates + status | ✅ Done | — |
-| 14 | Assign existing license to tenant from tenant detail page | ⚠️ Partial (only via license list "Assign", not from tenant page; tenant page generates a new one) | Med |
-| 15 | Organizations section labeled as "sub-organizations of tenant" | ⚠️ Partial (just "Organizations"; no hierarchy callout) | Med |
-| 16 | Org cards: created date | ❌ Missing (only name, slug, subdomain, status) | Med |
-| 17 | Org status badge color-coded (green/yellow/red/gray) | ❌ Missing (all use `variant="outline"`) | Med |
+| 14 | Assign existing license to tenant from tenant detail page | ✅ Done (picker + `LicenseAssignDialog`) | — |
+| 15 | Organizations section labeled as "sub-organizations of tenant" | ✅ Done (empty state + copy in `OrgSwitcher`) | — |
+| 16 | Org cards: created date | ✅ Done (`OrgSwitcher` list shows `Created {formatDate(createdAt)}`) | — |
+| 17 | Org status badge color-coded (green/yellow/red/gray) | ✅ Done (`OrgStatusBadge`) | — |
 | 18 | Org action: open subdomain | ✅ Done | — |
-| 19 | Org action: suspend (UI) | ❌ Missing (API exists via DELETE) | High |
-| 20 | Org action: rename (UI) | ❌ Missing (API exists via PATCH) | High |
-| 21 | Org empty state | ❌ Missing | Med |
-| 22 | OrgSwitcher: name validation before submit | ⚠️ Partial (only `.trim()` length check) | Low |
+| 19 | Org action: suspend (UI) | ✅ Done (org detail + `OrgSwitcher` card actions) | — |
+| 20 | Org action: rename (UI) | ✅ Done | — |
+| 21 | Org empty state | ✅ Done (`OrgSwitcher` dashed card) | — |
+| 22 | OrgSwitcher: name validation before submit | ⚠️ Partial (min length 2 + trim; no regex / reserved names) | Low |
 | 23 | OrgSwitcher: loading state on Create | ✅ Done | — |
 | 24 | OrgSwitcher: provisioning non-clickable + spinner | ✅ Done | — |
 | 25 | OrgSwitcher: failed orgs show error on hover | ✅ Done | — |
 | 26 | OrgSwitcher: suspended distinct + non-clickable | ✅ Done | — |
-| 27 | OrgSwitcher: suspend from dropdown | ❌ Missing | Med |
-| 28 | OrgSwitcher: rename from dropdown | ❌ Missing | Med |
-| 29 | OrgSwitcher: polling stops correctly | ✅ Done (stops when no provisioning) | — |
-| 30 | Dedicated org detail page | ❌ Missing | High |
-| 31 | Suspend Tenant button + confirmation | ⚠️ Partial (button exists, **no confirm dialog**) | High |
-| 32 | Suspend → stops Docker containers | ✅ Done (worker `docker compose stop`) | — |
-| 33 | Suspend → updates `tenants.status` | ✅ Done (after job completes) | — |
+| 27 | OrgSwitcher: suspend from dropdown | ⚠️ Partial (suspend on **org cards** below menu; dropdown rows are open-only / status) | Med |
+| 28 | OrgSwitcher: rename from dropdown | ⚠️ Same as 27 (rename on cards, not inside dropdown row) | Med |
+| 29 | OrgSwitcher: polling stops correctly | ✅ Done | — |
+| 30 | Dedicated org detail page | ✅ Done (`tenants/[id]/organizations/[orgId]`) | — |
+| 31 | Suspend Tenant button + confirmation | ✅ Done (tenant detail slug-confirm dialog) | — |
+| 32 | Suspend → stops Docker containers | ✅ Done | — |
+| 33 | Suspend → updates `tenants.status` | ✅ Done | — |
 | 34 | Reactivate Tenant button + flow | ✅ Done | — |
-| 35 | Reactivate → restarts Docker containers | ✅ Done (worker `docker compose start`) | — |
-| 36 | Reactivate is separate API from provisioning | ✅ Done (`/reactivate`) | — |
-| 37 | UI updates status after reactivate | ✅ Done (optimistic + refetch) | — |
-| 38 | Live provisioning progress display | ✅ Done (SSE + polling, events table) | — |
-| 39 | Retry failed provisioning button | ❌ Missing | Med |
-| 40 | RBAC: license routes protected per role | ❌ Missing — falls through to `read_only` (see Sec 4) | 🔴 Critical |
-| 41 | RBAC: org write routes use `super_admin` | ✅ Done (covered by `/tenants` write rule) | — |
-| 42 | RBAC: org routes accessible to `support_agent` | ❌ Missing (only `*/provision*` is support_agent) | Med |
-| 43 | Per-organization RBAC (owner can manage org A only) | ❌ Missing entirely | Med |
-| 44 | Bigcapital role scope: per tenant vs per org | ⚠️ Per-org (each Bigcapital MySQL has its own users + roles; no cross-org sync) | High |
-| 45 | Bigcapital: give user access to org A but not org B | ⚠️ Partial — works because each org is a separate MySQL; user must be **re-invited** per org with no shared identity | High |
+| 35 | Reactivate → restarts Docker containers | ✅ Done | — |
+| 36 | Reactivate is separate API from provisioning | ✅ Done | — |
+| 37 | UI updates status after reactivate | ✅ Done | — |
+| 38 | Live provisioning progress display | ✅ Done | — |
+| 39 | Retry failed provisioning button | ✅ Done (`POST .../retry-provision` + UI) | — |
+| 40 | RBAC: license routes protected per role | ✅ Done (`rbac.ts`: licenses/fingerprints; POS activate/verify exempt) | — |
+| 41 | RBAC: org write routes use `super_admin` | ⚠️ Superseded: org **writes** allow `support_agent` (scoped when `owner_organization_access` rows exist) | — |
+| 42 | RBAC: org routes accessible to `support_agent` | ✅ Done (non-GET org routes + provision; list/detail scoped) | — |
+| 43 | Per-organization RBAC (scoped Stockix access) | ✅ Done (`owner_organization_access` + API + `TenantOrgAccessPanel`) — **not** full `tenant_team_members` matrix | — |
+| 44 | Bigcapital role scope: per tenant vs per org | ⚠️ OOS — separate MySQL per org; no Stockix↔Bigcapital role sync | High |
+| 45 | Bigcapital: give user access to org A but not org B | ⚠️ OOS — invite per stack; no shared identity across org DBs | High |
 | 46 | Empty state: tenant list | ✅ Done | — |
-| 47 | Empty state: org list on tenant detail | ❌ Missing | Med |
+| 47 | Empty state: org list on tenant detail | ✅ Done (via `OrgSwitcher` on tenant page) | — |
 | 48 | Empty state: license list | ✅ Done | — |
-| 49 | Empty state: provisioning events | ⚠️ Partial (plain text "No provisioning events recorded") | Low |
-| 50 | Global error boundary (`app/error.tsx`) | ❌ Missing | Med |
-| 51 | Friendly API error messages in UI | ⚠️ Partial (many `toast.error("Revoke failed")` and `HTTP ${status}`) | Med |
+| 49 | Empty state: provisioning events | ✅ Done (dashed empty card + helper copy) | — |
+| 50 | Global error boundary (`app/error.tsx`) | ✅ Done + `global-error.tsx`, `not-found.tsx` | — |
+| 51 | Friendly API error messages in UI | ⚠️ Mostly done (`formatApiError`); some flows still use generic toasts | Med |
 | 52 | Skeleton loaders consistent | ✅ Done | — |
 | 53 | Buttons disabled during async ops | ✅ Done | — |
 | 54 | Initial-load loading state on tenant detail | ✅ Done | — |
-| 55 | Status badge consistency (tenant list / detail / org switcher) | ❌ Inconsistent (TenantStatusBadge color-coded, OrgSwitcher uses plain outline) | Med |
-| 56 | Date format consistency across pages | ❌ Inconsistent (`toLocaleString()` vs `format(d,"PP")` vs `"PPp"`) | Low |
-| 57 | Confirm dialog on every destructive action | ⚠️ Partial (Delete tenant ✓, Revoke license ✓, **Suspend tenant ✗**, Stop provisioning uses `window.confirm` ⚠️, Delete org ✗) | High |
+| 55 | Status badge consistency (tenant list / detail / org switcher) | ✅ Done for orgs (`OrgStatusBadge`); tenant paths use `TenantStatusBadge` | — |
+| 56 | Date format consistency across pages | ⚠️ Partial (`lib/date-format` used widely; e.g. `tenant-list` still uses `toLocaleString` in one cell) | Low |
+| 57 | Confirm dialog on every destructive action | ⚠️ Partial — tenant **detail** suspend/stop use dialogs; **tenant list** suspend/delete still use `confirm()` in places | High |
+
+---
+
+> **About §1–§6 below:** The narrative, code excerpts, RBAC snippets, and matrices are mostly the **original audit text** and are **not** fully reconciled with the current tree (they predate `rbac.ts` changes, `OrgSwitcher` refactors, `org-status-badge`, `owner_organization_access`, etc.). **Trust the Summary Table above** for pass/fail; treat the body as deep-dive history unless you refresh a section explicitly.
 
 ---
 
@@ -91,7 +109,8 @@ _Generated: 2026-05-13_
 | `plan_slug` | text NOT NULL | default `"starter"` — **also lives on `tenants.plan_slug`** (synced on assign/generate) |
 | `tenant_id` | uuid FK → tenants.id | **direct FK present**, `onDelete: "set null"`, nullable |
 | `status` | text NOT NULL | default `"unassigned"` |
-| `activated_at` | timestamp tz | set when assigned to tenant — **this is the de-facto start date** |
+| `activated_at` | timestamp tz | set when assigned to tenant — historically the de-facto start; **`valid_from`** is the explicit start when set |
+| `valid_from` | timestamp tz | **added** (migration `0015_license_valid_from`); optional; used for effective period checks |
 | `expires_at` | timestamp tz | **present** |
 | `is_perpetual` | boolean NOT NULL | **present**, default `false` |
 | `max_activations` | integer NOT NULL | default 1 |

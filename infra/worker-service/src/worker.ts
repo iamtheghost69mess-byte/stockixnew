@@ -10,8 +10,9 @@ import {
   tenantProvisionEvents,
   tenantDeployments,
   tenants,
+  licenses,
 } from "@repo/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
 import { z } from "zod";
 import {
   deprovisionTenant,
@@ -20,6 +21,24 @@ import {
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
+/** Periodically flip time-expired licenses to status `expired`. */
+const LICENSE_EXPIRE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+let lastLicenseExpireScanMs = 0;
+
+async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void> {
+  const now = new Date();
+  await db
+    .update(licenses)
+    .set({ status: "expired", updatedAt: now })
+    .where(
+      and(
+        eq(licenses.status, "active"),
+        eq(licenses.isPerpetual, false),
+        isNotNull(licenses.expiresAt),
+        lte(licenses.expiresAt, now),
+      ),
+    );
+}
 const apiBaseUrl = `http://localhost:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
 const jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
@@ -363,6 +382,15 @@ async function loop() {
       return null;
     });
     if (!job) {
+      const nowMs = Date.now();
+      if (nowMs - lastLicenseExpireScanMs >= LICENSE_EXPIRE_SCAN_INTERVAL_MS) {
+        lastLicenseExpireScanMs = nowMs;
+        await expireDueLicenses(db).catch((error) => {
+          console.error(
+            `[worker] license expire scan failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      }
       await new Promise((r) => setTimeout(r, pollMs));
       continue;
     }

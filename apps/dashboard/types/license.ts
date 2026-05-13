@@ -13,6 +13,7 @@ export type LicenseRow = {
   tenantSlug: string | null;
   isPerpetual: boolean;
   activatedAt: string | null;
+  validFrom: string | null;
   expiresAt: string | null;
   maxActivations: number;
   activationCount: number;

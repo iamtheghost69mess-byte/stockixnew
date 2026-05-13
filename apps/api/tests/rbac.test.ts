@@ -1,26 +1,14 @@
 /**
  * Security tests for RBAC: requiredApiRole + ROLE_RANK enforcement.
  *
- * The RBAC middleware and requiredApiRole function live inside apps/api/src/index.ts,
- * which cannot be imported in tests because it calls serve() at module level and
- * requires a live database. Instead we:
- *
- *  1. Test requiredApiRole() by reproducing the exact same pure function logic
- *     (copied from src/index.ts). Any drift will be caught when tests run against
- *     the real implementation if that function is ever extracted to its own module.
- *
- *  2. Test the role-rank table from @repo/shared/roles directly.
- *
- *  3. Test session-layer RBAC through buildAuthRoutes (which does not require a DB
- *     for the /auth/me route) using the same pattern as auth-routes.test.ts.
- *
- *  4. validateOwnerSession unit tests live in session-validation.test.ts (real service, no mock).
+ * `requiredApiRole` is implemented in apps/api/src/middleware/rbac.ts (pure function).
  */
 
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ROLE_RANK, ROLES } from "@repo/shared/roles";
 import type { Role } from "@repo/shared/roles";
+import { requiredApiRole } from "../src/middleware/rbac.js";
 
 // ---------------------------------------------------------------------------
 // Module mocks for the auth route (same pattern as auth-routes.test.ts)
@@ -57,27 +45,6 @@ vi.mock("../src/services/invites/invites.js", () => ({
   acceptInvite: vi.fn(),
   getInviteByToken: vi.fn(),
 }));
-
-// ---------------------------------------------------------------------------
-// Reproduce requiredApiRole() exactly as it appears in src/index.ts.
-// This is a pure function with no side-effects or imports — safe to inline.
-// ---------------------------------------------------------------------------
-
-function requiredApiRole(pathname: string, method: string): Role | null {
-  if (pathname === "/health") return null;
-  if (pathname.startsWith("/auth")) return null;
-  if (pathname.startsWith("/internal/jobs")) return null;
-  if (pathname.startsWith("/owners")) {
-    if (method === "GET") return "read_only";
-    return "super_admin";
-  }
-  if (pathname.startsWith("/tenants")) {
-    if (pathname.includes("/provision")) return "support_agent";
-    if (method === "GET") return "read_only";
-    return "super_admin";
-  }
-  return "read_only";
-}
 
 // ---------------------------------------------------------------------------
 // 1. Unit tests for ROLE_RANK values
@@ -133,6 +100,19 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/internal/jobs/claim", "POST")).toBeNull();
   });
 
+  it("returns null for POS activate and verify-offline", () => {
+    expect(requiredApiRole("/licenses/activate", "POST")).toBeNull();
+    expect(requiredApiRole("/licenses/verify-offline", "POST")).toBeNull();
+  });
+
+  it("returns null for GET /plans", () => {
+    expect(requiredApiRole("/plans", "GET")).toBeNull();
+  });
+
+  it("returns null for public tenant orgs", () => {
+    expect(requiredApiRole("/public/tenant-orgs/abc", "GET")).toBeNull();
+  });
+
   it("GET /owners requires at least read_only", () => {
     expect(requiredApiRole("/owners", "GET")).toBe("read_only");
   });
@@ -166,6 +146,32 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/tenants/provision-status/abc", "GET")).toBe("support_agent");
   });
 
+  it("tenant organization-access routes require super_admin", () => {
+    expect(requiredApiRole("/tenants/tid/organization-access", "GET")).toBe("super_admin");
+    expect(requiredApiRole("/tenants/tid/organization-access", "POST")).toBe("super_admin");
+    expect(requiredApiRole("/tenants/tid/organization-access/aid", "DELETE")).toBe("super_admin");
+  });
+
+  it("POST/PATCH/DELETE tenant organizations require support_agent", () => {
+    expect(requiredApiRole("/tenants/tid/organizations", "POST")).toBe("support_agent");
+    expect(requiredApiRole("/tenants/tid/organizations/oid", "PATCH")).toBe("support_agent");
+    expect(requiredApiRole("/tenants/tid/organizations/oid", "DELETE")).toBe("support_agent");
+    expect(requiredApiRole("/tenants/tid/organizations", "GET")).toBe("read_only");
+  });
+
+  it("GET /licenses requires read_only", () => {
+    expect(requiredApiRole("/licenses", "GET")).toBe("read_only");
+    expect(requiredApiRole("/licenses/analytics", "GET")).toBe("read_only");
+  });
+
+  it("POST /licenses/generate requires super_admin", () => {
+    expect(requiredApiRole("/licenses/generate", "POST")).toBe("super_admin");
+  });
+
+  it("POST /fingerprints/blacklist requires super_admin", () => {
+    expect(requiredApiRole("/fingerprints/blacklist", "POST")).toBe("super_admin");
+  });
+
   it("unknown paths default to read_only", () => {
     expect(requiredApiRole("/unknown-route", "GET")).toBe("read_only");
   });
@@ -173,9 +179,6 @@ describe("requiredApiRole", () => {
 
 // ---------------------------------------------------------------------------
 // 3. Role enforcement: read_only vs. super_admin access checks
-//
-// We encode the role enforcement logic in a small helper that mirrors the
-// middleware in src/index.ts: a role is allowed if its rank >= the required rank.
 // ---------------------------------------------------------------------------
 
 describe("role rank enforcement logic", () => {
@@ -196,6 +199,10 @@ describe("role rank enforcement logic", () => {
     expect(isAllowed("read_only", requiredApiRole("/owners/id", "DELETE")!)).toBe(false);
   });
 
+  it("read_only cannot POST /licenses/generate (requires super_admin)", () => {
+    expect(isAllowed("read_only", requiredApiRole("/licenses/generate", "POST")!)).toBe(false);
+  });
+
   it("support_agent can access GET /tenants (requires read_only)", () => {
     expect(isAllowed("support_agent", requiredApiRole("/tenants", "GET")!)).toBe(true);
   });
@@ -210,6 +217,12 @@ describe("role rank enforcement logic", () => {
     ).toBe(true);
   });
 
+  it("support_agent cannot manage organization-access grants (requires super_admin)", () => {
+    expect(
+      isAllowed("support_agent", requiredApiRole("/tenants/tid/organization-access", "GET")!),
+    ).toBe(false);
+  });
+
   it("billing_manager cannot POST /tenants (requires super_admin)", () => {
     expect(isAllowed("billing_manager", requiredApiRole("/tenants", "POST")!)).toBe(false);
   });
@@ -221,10 +234,12 @@ describe("role rank enforcement logic", () => {
       ["/owners", "DELETE"],
       ["/owners", "PATCH"],
       ["/tenants/id/provision", "POST"],
+      ["/tenants/tid/organization-access", "GET"],
+      ["/licenses/generate", "POST"],
     ];
     for (const [path, method] of routes) {
       const required = requiredApiRole(path, method);
-      if (required === null) continue; // no restriction
+      if (required === null) continue;
       expect(isAllowed("super_admin", required)).toBe(true);
     }
   });
@@ -232,7 +247,6 @@ describe("role rank enforcement logic", () => {
 
 // ---------------------------------------------------------------------------
 // 4. Session-layer RBAC via buildAuthRoutes — test /auth/me
-//    (uses the same Hono setup pattern as auth-routes.test.ts)
 // ---------------------------------------------------------------------------
 
 describe("session-layer role checks via /auth/me", () => {
@@ -336,7 +350,6 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Suspended",
       sessionVersion: 1,
     });
-    // Simulate what validateOwnerSession returns when owner.status !== "active"
     validateOwnerSessionMock.mockResolvedValue({
       success: false,
       error: "forbidden",
@@ -348,7 +361,6 @@ describe("session-layer role checks via /auth/me", () => {
     });
     const body = await res.json();
 
-    // The route returns 403 (status from result.status) when success=false
     expect(res.status).toBe(403);
     expect(body.success).toBe(false);
   });
@@ -361,7 +373,6 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Stale",
       sessionVersion: 1,
     });
-    // Simulate what validateOwnerSession returns when sessionVersion does not match
     validateOwnerSessionMock.mockResolvedValue({
       success: false,
       error: "session_stale",

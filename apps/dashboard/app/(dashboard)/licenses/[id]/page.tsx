@@ -43,6 +43,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -53,6 +55,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useMe } from "@/hooks/use-me";
+import { cn } from "@/lib/utils";
 import type {
   LicenseActivation,
   LicenseDetail,
@@ -82,31 +85,38 @@ export default function LicenseDetailPage() {
   const [notesEdit, setNotesEdit] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendPerpetual, setExtendPerpetual] = useState(false);
+  const [extendExpires, setExtendExpires] = useState<Date | undefined>(undefined);
+  const [extendSaving, setExtendSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/licenses/${id}`);
-      const json = (await res.json().catch(() => ({}))) as {
-        license?: LicenseDetail;
-        error?: string;
-      };
-      if (res.status === 404) {
-        setError("not_found");
-        setData(null);
-        return;
+  const load = useCallback((): Promise<void> => {
+    return (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/licenses/${id}`);
+        const jsonUnknown = await res.json().catch(() => ({}));
+        const json = jsonUnknown as {
+          license?: LicenseDetail;
+          error?: string;
+        };
+        if (res.status === 404) {
+          setError("not_found");
+          setData(null);
+          return;
+        }
+        if (!res.ok || !json.license) {
+          setError(json.error ?? `HTTP ${res.status}`);
+          setData(null);
+          return;
+        }
+        setData(json.license);
+        setNotesDraft(json.license.notes ?? "");
+      } finally {
+        setLoading(false);
       }
-      if (!res.ok || !json.license) {
-        setError(json.error ?? `HTTP ${res.status}`);
-        setData(null);
-        return;
-      }
-      setData(json.license);
-      setNotesDraft(json.license.notes ?? "");
-    } finally {
-      setLoading(false);
-    }
+    })();
   }, [id]);
 
   useEffect(() => {
@@ -179,6 +189,7 @@ export default function LicenseDetailPage() {
     tenantSlug: L.tenantSlug,
     isPerpetual: L.isPerpetual,
     activatedAt: L.activatedAt,
+    validFrom: L.validFrom ?? null,
     expiresAt: L.expiresAt,
     maxActivations: L.maxActivations,
     activationCount: L.activationCount,
@@ -267,6 +278,16 @@ export default function LicenseDetailPage() {
                 <p>{L.activatedAt ? format(new Date(L.activatedAt), "PPp") : "—"}</p>
               </div>
               <div>
+                <p className="text-muted-foreground">Valid from</p>
+                <p>
+                  {L.validFrom
+                    ? format(new Date(L.validFrom), "PPp")
+                    : L.activatedAt
+                      ? format(new Date(L.activatedAt), "PPp")
+                      : "—"}
+                </p>
+              </div>
+              <div>
                 <p className="text-muted-foreground">Expires</p>
                 <p>
                   {L.isPerpetual ? (
@@ -353,6 +374,19 @@ export default function LicenseDetailPage() {
             {L.status === "unassigned" ? (
               <Button className="w-full" onClick={() => setAssignOpen(true)}>
                 Assign to tenant
+              </Button>
+            ) : null}
+            {isSuper && (L.status === "active" || L.status === "expired") ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setExtendPerpetual(L.isPerpetual);
+                  setExtendExpires(L.expiresAt ? new Date(L.expiresAt) : undefined);
+                  setExtendOpen(true);
+                }}
+              >
+                Extend or set perpetual
               </Button>
             ) : null}
             {L.status === "active" && isSuper ? (
@@ -475,6 +509,85 @@ export default function LicenseDetailPage() {
           Back to licenses
         </Link>
       </div>
+
+      <Dialog
+        open={extendOpen}
+        onOpenChange={(open) => {
+          setExtendOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Extend license</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="extend-perp"
+                className="size-4 rounded border"
+                checked={extendPerpetual}
+                onChange={(e) => setExtendPerpetual(e.target.checked)}
+              />
+              <Label htmlFor="extend-perp">Perpetual (no expiry)</Label>
+            </div>
+            {!extendPerpetual ? (
+              <div className="space-y-2">
+                <Label>New expiry date</Label>
+                <Popover>
+                  <PopoverTrigger>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal")}>
+                      {extendExpires ? format(extendExpires, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={extendExpires} onSelect={setExtendExpires} />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setExtendOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                extendSaving || (!extendPerpetual && extendExpires === undefined)
+              }
+              onClick={async () => {
+                if (!data) return;
+                setExtendSaving(true);
+                try {
+                  const body: { isPerpetual?: boolean; expiresAt?: string } = {};
+                  if (extendPerpetual) body.isPerpetual = true;
+                  else if (extendExpires) {
+                    body.expiresAt = extendExpires.toISOString();
+                    body.isPerpetual = false;
+                  }
+                  const res = await fetch(`/api/licenses/${data.id}/extend`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                  });
+                  if (!res.ok) {
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    toast.error(j.error ?? "Extend failed");
+                    return;
+                  }
+                  toast.success("License updated");
+                  setExtendOpen(false);
+                  void load();
+                } finally {
+                  setExtendSaving(false);
+                }
+              }}
+            >
+              {extendSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <LicenseAssignDialog
         open={assignOpen}

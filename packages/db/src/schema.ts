@@ -87,6 +87,29 @@ export const organizations = pgTable("organizations", {
     .defaultNow(),
 });
 
+/** Optional per-owner access to a specific organization (future enforcement / Team matrix). */
+export const ownerOrganizationAccess = pgTable(
+  "owner_organization_access",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("owner_org_access_owner_org_unique").on(t.ownerId, t.organizationId),
+    index("owner_org_access_owner_idx").on(t.ownerId),
+    index("owner_org_access_tenant_idx").on(t.tenantId),
+  ],
+);
+
 /** White-label and display config; one row per tenant (cascade on tenant delete). */
 export const tenantConfig = pgTable("tenant_config", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -276,6 +299,7 @@ export const licenses = pgTable(
     }),
     status: text("status").notNull().default("unassigned"),
     activatedAt: timestamp("activated_at", { withTimezone: true }),
+    validFrom: timestamp("valid_from", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),

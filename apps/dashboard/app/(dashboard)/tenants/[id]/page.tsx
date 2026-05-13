@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Copy, ExternalLink, Loader2, PauseCircle, PlayCircle, Square, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import LicenseAssignDialog from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";
 import LicenseStatusBadge from "@/components/license-status-badge";
 import { OrgSwitcher } from "@/components/org-switcher";
+import TenantOrgAccessPanel from "@/components/tenant-org-access-panel";
 import TenantStatusBadge from "@/components/tenant-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -25,9 +27,19 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/hooks/use-me";
+import { formatApiError } from "@/lib/api-errors";
+import { formatDate, formatDateTime, formatTime } from "@/lib/date-format";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { cn } from "@/lib/utils";
 import type { LicenseRow, LicenseStatus } from "@/types/license";
@@ -64,6 +76,21 @@ export default function TenantDetailPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [volumesOpen, setVolumesOpen] = useState(false);
   const [confirmSlug, setConfirmSlug] = useState("");
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [suspendConfirmSlug, setSuspendConfirmSlug] = useState("");
+  const [suspendingTenant, setSuspendingTenant] = useState(false);
+  const [stopProvisionOpen, setStopProvisionOpen] = useState(false);
+  const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
+  const [retryingProvision, setRetryingProvision] = useState(false);
+  const [assignPickOpen, setAssignPickOpen] = useState(false);
+  const [unassignedPickLoading, setUnassignedPickLoading] = useState(false);
+  const [unassignedList, setUnassignedList] = useState<LicenseRow[]>([]);
+  const [selectedUnassignedId, setSelectedUnassignedId] = useState("");
+  const [licenseForAssign, setLicenseForAssign] = useState<LicenseRow | null>(null);
+  const [assignLicenseOpen, setAssignLicenseOpen] = useState(false);
+  const [licenseHistory, setLicenseHistory] = useState<LicenseRow[]>([]);
+  const [licenseHistoryLoading, setLicenseHistoryLoading] = useState(false);
+  const [licenseHistoryOpen, setLicenseHistoryOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
     adminEmail: "",
@@ -104,6 +131,18 @@ export default function TenantDetailPage() {
     }
   };
 
+  const loadLicenseHistory = useCallback(async () => {
+    setLicenseHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/licenses?tenantId=${encodeURIComponent(id)}&pageSize=50`);
+      const data = (await readJson(res)) as { licenses?: LicenseRow[] };
+      if (res.ok) setLicenseHistory(data.licenses ?? []);
+      else setLicenseHistory([]);
+    } finally {
+      setLicenseHistoryLoading(false);
+    }
+  }, [id]);
+
   const loadEvents = async () => {
     setEventsLoading(true);
     try {
@@ -129,6 +168,11 @@ export default function TenantDetailPage() {
     void loadLicense();
   }, [id]);
 
+  useEffect(() => {
+    if (!licenseHistoryOpen) return;
+    void loadLicenseHistory();
+  }, [licenseHistoryOpen, loadLicenseHistory]);
+
   const deploymentStatus = (tenant?.deployment?.status ?? tenant?.status ?? "").toLowerCase();
   const isProvisioning =
     deploymentStatus === "provisioning" || deploymentStatus === "pending";
@@ -141,6 +185,26 @@ export default function TenantDetailPage() {
     }, 2500);
     return () => window.clearInterval(intervalId);
   }, [tenant, isProvisioning]);
+
+  useEffect(() => {
+    if (!assignPickOpen || !isSuper) return;
+    setUnassignedPickLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/licenses?status=unassigned&pageSize=100");
+        const data = (await readJson(res)) as { licenses?: LicenseRow[] };
+        if (res.ok && data.licenses?.length) {
+          setUnassignedList(data.licenses);
+          setSelectedUnassignedId(data.licenses[0]!.id);
+        } else {
+          setUnassignedList([]);
+          setSelectedUnassignedId("");
+        }
+      } finally {
+        setUnassignedPickLoading(false);
+      }
+    })();
+  }, [assignPickOpen, isSuper]);
 
   const baseUrl = useMemo(() => {
     if (!tenant) return null;
@@ -165,6 +229,8 @@ export default function TenantDetailPage() {
       </Alert>
     );
   }
+
+  const provisionFailed = deploymentStatus === "failed" || tenant.status === "failed";
 
   const saveProfile = async () => {
     setSaving(true);
@@ -229,7 +295,7 @@ export default function TenantDetailPage() {
                   <p>Admin last name: {tenant.adminLastName}</p>
                   <p>Owner ID: <span className="font-mono">{tenant.ownerId}</span></p>
                   <p>Plan: <span className="capitalize">{tenant.planSlug}</span></p>
-                  <p>Created: {new Date(tenant.createdAt).toLocaleString()}</p>
+                  <p>Created: {formatDateTime(tenant.createdAt)}</p>
                 </div>
               </>
             ) : (
@@ -255,7 +321,41 @@ export default function TenantDetailPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Infrastructure</CardTitle>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {provisionFailed ? (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  disabled={retryingProvision}
+                  onClick={async () => {
+                    setRetryingProvision(true);
+                    setError(null);
+                    try {
+                      const res = await fetch(`/api/tenants/${tenant.id}/retry-provision`, {
+                        method: "POST",
+                      });
+                      const data = (await readJson(res)) as { error?: string; message?: string };
+                      if (!res.ok) {
+                        setError(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
+                        return;
+                      }
+                      toast.success("Provisioning restarted");
+                      await loadTenant();
+                      await loadEvents();
+                    } finally {
+                      setRetryingProvision(false);
+                    }
+                  }}
+                >
+                  {retryingProvision ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCw className="mr-1 h-4 w-4" />
+                  )}
+                  Retry provisioning
+                </Button>
+              ) : null}
               {tenant.deployment?.status === "active" && baseUrl ? (
                 <a
                   href={`${baseUrl}/auth/login`}
@@ -276,7 +376,7 @@ export default function TenantDetailPage() {
             <p>
               Registration completed:{" "}
               {tenant.deployment?.registrationCompletedAt
-                ? new Date(tenant.deployment.registrationCompletedAt).toLocaleString()
+                ? formatDateTime(tenant.deployment.registrationCompletedAt)
                 : "Not yet registered"}
             </p>
             {tenant.deployment?.lastError ? (
@@ -289,12 +389,19 @@ export default function TenantDetailPage() {
       </div>
 
       <div className="mt-6">
-        <h2 className="text-lg font-semibold mb-4">Organizations</h2>
+        <h2 className="text-lg font-semibold mb-1">Sub-organizations of {tenant.name}</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Each organization runs its own Bigcapital stack. Use the links below for local dev (host port is required).
+          Child organizations each run their own Bigcapital stack under this tenant. Use the links below for local
+          development (host port is required).
         </p>
         <OrgSwitcher tenantId={tenant.id} />
       </div>
+
+      {isSuper ? (
+        <div className="mt-6">
+          <TenantOrgAccessPanel tenantId={tenant.id} />
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -339,6 +446,14 @@ export default function TenantDetailPage() {
                 </div>
                 <div className="space-y-2 text-sm">
                   <p>
+                    Valid from:{" "}
+                    {tenantLicense.validFrom
+                      ? format(new Date(tenantLicense.validFrom), "PP")
+                      : tenantLicense.activatedAt
+                        ? format(new Date(tenantLicense.activatedAt), "PP")
+                        : "—"}
+                  </p>
+                  <p>
                     Expires:{" "}
                     {tenantLicense.isPerpetual ? (
                       <Badge variant="secondary">Perpetual</Badge>
@@ -373,15 +488,73 @@ export default function TenantDetailPage() {
                   </Button>
                 ) : null}
               </div>
+              <div className="border-t pt-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => setLicenseHistoryOpen((o) => !o)}
+                >
+                  <History className="mr-1 h-4 w-4" />
+                  {licenseHistoryOpen ? "Hide" : "Show"} license history
+                  {licenseHistory.length > 0 ? ` (${licenseHistory.length})` : null}
+                </Button>
+                {licenseHistoryOpen ? (
+                  licenseHistoryLoading ? (
+                    <Skeleton className="mt-3 h-24 w-full" />
+                  ) : licenseHistory.length === 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">No license rows returned for this tenant.</p>
+                  ) : (
+                    <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto text-xs">
+                      {licenseHistory.map((lic) => (
+                        <li key={lic.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/20 p-2">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono">{lic.licenseKey.slice(-12)}…</span>
+                              <LicenseStatusBadge status={lic.status as LicenseStatus} />
+                            </div>
+                            <p className="text-muted-foreground">
+                              {lic.planSlug} · created {formatDate(lic.createdAt)}
+                              {lic.id === tenantLicense.id ? " · current" : ""}
+                            </p>
+                          </div>
+                          <Link
+                            href={`/licenses/${lic.id}`}
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
+                          >
+                            Open
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                ) : null}
+              </div>
             </div>
           ) : (
             <Alert className="border-amber-500/40 bg-amber-500/10">
               <AlertTitle>No license assigned</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>This tenant does not have an active license.</p>
-                <Button variant="outline" size="sm" onClick={() => setGenLicenseOpen(true)}>
-                  Generate &amp; assign license
-                </Button>
+                {isSuper ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setGenLicenseOpen(true)}>
+                      Generate &amp; assign license
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setAssignPickOpen(true);
+                      }}
+                    >
+                      Assign existing license
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm">Ask a super admin to generate or assign a license.</p>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -394,6 +567,144 @@ export default function TenantDetailPage() {
         defaultTenantId={tenant.id}
         onSuccess={() => void loadLicense()}
       />
+
+      <Dialog
+        open={assignPickOpen}
+        onOpenChange={(open) => {
+          setAssignPickOpen(open);
+          if (!open) setSelectedUnassignedId("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign existing license</DialogTitle>
+          </DialogHeader>
+          {unassignedPickLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : unassignedList.length === 0 ? (
+            <Alert>
+              <AlertDescription>There are no unassigned licenses. Generate one first.</AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-2">
+              <Label>Unassigned license</Label>
+              <Select
+                value={selectedUnassignedId}
+                onValueChange={(v) => setSelectedUnassignedId(v ?? "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a license" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unassignedList.map((lic) => (
+                    <SelectItem key={lic.id} value={lic.id}>
+                      <span className="font-mono text-xs">{lic.licenseKey}</span>{" "}
+                      <span className="text-muted-foreground">({lic.planSlug})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAssignPickOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedUnassignedId || unassignedList.length === 0}
+              onClick={() => {
+                const lic = unassignedList.find((l) => l.id === selectedUnassignedId);
+                if (!lic) return;
+                setLicenseForAssign(lic);
+                setAssignPickOpen(false);
+                setAssignLicenseOpen(true);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {licenseForAssign ? (
+        <LicenseAssignDialog
+          open={assignLicenseOpen}
+          onOpenChange={(open) => {
+            setAssignLicenseOpen(open);
+            if (!open) setLicenseForAssign(null);
+          }}
+          license={licenseForAssign}
+          defaultTenantId={tenant.id}
+          defaultTenantLabel={`${tenant.name} (${tenant.slug})`}
+          onSuccess={() => {
+            void loadLicense();
+            setLicenseForAssign(null);
+            setAssignLicenseOpen(false);
+          }}
+        />
+      ) : null}
+
+      <Dialog
+        open={stopProvisionOpen}
+        onOpenChange={(open) => {
+          setStopProvisionOpen(open);
+          if (!open) setStopProvisionSlugInput("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Stop provisioning</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This cancels the active provisioning lifecycle job for{" "}
+            <span className="font-mono font-medium text-foreground">{tenant.slug}</span>. Type the tenant slug to
+            confirm.
+          </p>
+          <Input
+            placeholder="Tenant slug"
+            value={stopProvisionSlugInput}
+            onChange={(e) => setStopProvisionSlugInput(e.target.value)}
+            autoComplete="off"
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setStopProvisionOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={stopProvisionSlugInput !== tenant.slug || stoppingProvision}
+              onClick={async () => {
+                if (stopProvisionSlugInput !== tenant.slug) return;
+                setStoppingProvision(true);
+                setError(null);
+                try {
+                  const res = await fetch(`/api/tenants/${tenant.id}/provision-stop`, {
+                    method: "POST",
+                  });
+                  const data = (await readJson(res)) as {
+                    error?: string;
+                    status?: string;
+                  };
+                  if (!res.ok) {
+                    setError(formatApiError(data, data.error ?? `Stop provisioning failed (${res.status})`));
+                    return;
+                  }
+                  await loadTenant();
+                  await loadEvents();
+                  toast.success(`Provision stop requested (${data.status ?? "ok"}).`);
+                  setStopProvisionOpen(false);
+                  setStopProvisionSlugInput("");
+                } finally {
+                  setStoppingProvision(false);
+                }
+              }}
+            >
+              {stoppingProvision ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Stop provisioning
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={revokeLicenseOpen} onOpenChange={setRevokeLicenseOpen}>
         <DialogContent>
@@ -420,7 +731,8 @@ export default function TenantDetailPage() {
                   body: JSON.stringify({ reason: revokeLicenseReason || undefined }),
                 });
                 if (!res.ok) {
-                  toast.error("Revoke failed");
+                  const data = (await readJson(res)) as { error?: string };
+                  toast.error(formatApiError(data, "Revoke failed"));
                   return;
                 }
                 toast.success("License revoked");
@@ -446,15 +758,18 @@ export default function TenantDetailPage() {
           {eventsLoading ? (
             <Skeleton className="h-32 w-full" />
           ) : events.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No provisioning events recorded.</p>
+            <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-10 text-center">
+              <p className="text-sm font-medium text-foreground">No provisioning events yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                When this tenant is provisioned or retried, lifecycle steps will appear here.
+              </p>
+            </div>
           ) : (
             <ScrollArea className="h-[400px]">
               <div className="space-y-2 text-sm">
                 {events.map((e) => (
                   <div key={e.id} className="rounded border p-2">
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {new Date(e.createdAt).toLocaleTimeString()}
-                    </p>
+                    <p className="font-mono text-xs text-muted-foreground">{formatTime(e.createdAt)}</p>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{e.phase}</Badge>
                       <span
@@ -487,18 +802,7 @@ export default function TenantDetailPage() {
         {dangerOpen ? (
           <CardContent className="space-y-4">
             {tenant.status === "active" ? (
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  const res = await fetch(`/api/tenants/${tenant.id}/suspend`, { method: "POST" });
-                  if (!res.ok) {
-                    const data = (await res.json().catch(() => ({}))) as { error?: string };
-                    setError(data.error ?? `Suspend failed (${res.status})`);
-                    return;
-                  }
-                  router.push("/tenants");
-                }}
-              >
+              <Button variant="outline" onClick={() => setSuspendOpen(true)}>
                 <PauseCircle className="mr-1 h-4 w-4" />
                 Suspend tenant
               </Button>
@@ -523,34 +827,9 @@ export default function TenantDetailPage() {
               <Button
                 variant="outline"
                 disabled={stoppingProvision}
-                onClick={async () => {
-                  if (
-                    !globalThis.confirm(
-                      `Stop provisioning for "${tenant.slug}"?\n\nThis cancels the active provisioning lifecycle job.`,
-                    )
-                  ) {
-                    return;
-                  }
-                  setStoppingProvision(true);
-                  setError(null);
-                  try {
-                    const res = await fetch(`/api/tenants/${tenant.id}/provision-stop`, {
-                      method: "POST",
-                    });
-                    const data = (await res.json().catch(() => ({}))) as {
-                      error?: string;
-                      status?: string;
-                    };
-                    if (!res.ok) {
-                      setError(data.error ?? `Stop provisioning failed (${res.status})`);
-                      return;
-                    }
-                    await loadTenant();
-                    await loadEvents();
-                    setError(`Provision stop requested (${data.status ?? "ok"}).`);
-                  } finally {
-                    setStoppingProvision(false);
-                  }
+                onClick={() => {
+                  setStopProvisionSlugInput("");
+                  setStopProvisionOpen(true);
                 }}
               >
                 {stoppingProvision ? (
@@ -568,6 +847,61 @@ export default function TenantDetailPage() {
           </CardContent>
         ) : null}
       </Card>
+
+      <Dialog
+        open={suspendOpen}
+        onOpenChange={(open) => {
+          setSuspendOpen(open);
+          if (!open) setSuspendConfirmSlug("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend tenant</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Docker stacks for this tenant and its organizations will be stopped. Type the tenant slug{" "}
+            <span className="font-mono font-medium text-foreground">{tenant.slug}</span> to confirm.
+          </p>
+          <Input
+            placeholder="Tenant slug"
+            value={suspendConfirmSlug}
+            onChange={(e) => setSuspendConfirmSlug(e.target.value)}
+            autoComplete="off"
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSuspendOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={suspendConfirmSlug !== tenant.slug || suspendingTenant}
+              onClick={async () => {
+                if (suspendConfirmSlug !== tenant.slug) return;
+                setSuspendingTenant(true);
+                setError(null);
+                try {
+                  const res = await fetch(`/api/tenants/${tenant.id}/suspend`, { method: "POST" });
+                  if (!res.ok) {
+                    const data = (await res.json().catch(() => ({}))) as { error?: string };
+                    setError(data.error ?? `Suspend failed (${res.status})`);
+                    return;
+                  }
+                  toast.success("Suspend requested");
+                  setSuspendOpen(false);
+                  setSuspendConfirmSlug("");
+                  router.push("/tenants");
+                } finally {
+                  setSuspendingTenant(false);
+                }
+              }}
+            >
+              {suspendingTenant ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Suspend
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>

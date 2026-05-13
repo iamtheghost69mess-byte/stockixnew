@@ -194,7 +194,7 @@ export default function TenantsPage() {
   );
 
   const handleSuspend = useCallback(
-    async (tenantId: string, slug: string) => {
+    async (tenantId: string, slug: string): Promise<boolean> => {
       setSuspendingId(tenantId);
       setError(null);
       try {
@@ -210,15 +210,17 @@ export default function TenantsPage() {
               : t,
           ),
         );
+        return true;
       } catch (e) {
         const message = String(e);
         if (message.includes("tenant_not_found")) {
           setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
           setError(`Tenant "${slug}" no longer exists.`);
           void load().catch(() => {});
-          return;
+          return false;
         }
         setError(`Failed to suspend ${slug}: ${message}`);
+        return false;
       } finally {
         setSuspendingId(null);
       }
@@ -260,14 +262,7 @@ export default function TenantsPage() {
   );
 
   const handleStopProvision = useCallback(
-    async (tenantId: string, slug: string) => {
-      if (
-        !globalThis.confirm(
-          `Stop provisioning for "${slug}"?\n\nThis cancels the active provisioning lifecycle job.`,
-        )
-      ) {
-        return;
-      }
+    async (tenantId: string, slug: string): Promise<boolean> => {
       setStoppingId(tenantId);
       setError(null);
       try {
@@ -279,8 +274,10 @@ export default function TenantsPage() {
         const statusLabel = data.status ?? "ok";
         setError(`Provision stop requested for ${slug} (${statusLabel}).`);
         await load();
+        return true;
       } catch (e) {
         setError(`Failed to stop provisioning for ${slug}: ${String(e)}`);
+        return false;
       } finally {
         setStoppingId(null);
       }

@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,9 +53,9 @@ type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 type Props = {
   tenants: TenantRow[];
   onDelete: (tenantId: string, slug: string) => Promise<void>;
-  onSuspend: (tenantId: string, slug: string) => Promise<void>;
+  onSuspend: (tenantId: string, slug: string) => Promise<boolean>;
   onReactivate: (tenantId: string, slug: string) => Promise<void>;
-  onStopProvision: (tenantId: string, slug: string) => Promise<void>;
+  onStopProvision: (tenantId: string, slug: string) => Promise<boolean>;
   deletingId: string | null;
   suspendingId: string | null;
   reactivatingId: string | null;
@@ -81,6 +82,12 @@ export default function TenantList(props: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<{ tenantId: string; slug: string } | null>(null);
+  const [suspendSlugInput, setSuspendSlugInput] = useState("");
+  const [stopProvisionTarget, setStopProvisionTarget] = useState<{ tenantId: string; slug: string } | null>(
+    null,
+  );
+  const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
@@ -155,6 +162,116 @@ export default function TenantList(props: Props) {
 
   return (
     <div className="space-y-4">
+      <Dialog
+        open={suspendTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSuspendTarget(null);
+            setSuspendSlugInput("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend tenant</DialogTitle>
+          </DialogHeader>
+          {suspendTarget ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Stacks for this tenant will be stopped. Type the slug{" "}
+                <span className="font-mono font-medium text-foreground">{suspendTarget.slug}</span> to confirm.
+              </p>
+              <Input
+                placeholder="Tenant slug"
+                value={suspendSlugInput}
+                onChange={(e) => setSuspendSlugInput(e.target.value)}
+                autoComplete="off"
+              />
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setSuspendTarget(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={suspendSlugInput !== suspendTarget.slug || suspendingId === suspendTarget.tenantId}
+                  onClick={() => {
+                    void (async () => {
+                      if (suspendSlugInput !== suspendTarget.slug) return;
+                      const ok = await onSuspend(suspendTarget.tenantId, suspendTarget.slug);
+                      if (ok) {
+                        setSuspendTarget(null);
+                        setSuspendSlugInput("");
+                      }
+                    })();
+                  }}
+                >
+                  {suspendingId === suspendTarget.tenantId ? (
+                    <Loader2 className="mr-1 size-4 animate-spin" />
+                  ) : null}
+                  Suspend
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={stopProvisionTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStopProvisionTarget(null);
+            setStopProvisionSlugInput("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Stop provisioning</DialogTitle>
+          </DialogHeader>
+          {stopProvisionTarget ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                This cancels the active provisioning lifecycle job for{" "}
+                <span className="font-mono font-medium text-foreground">{stopProvisionTarget.slug}</span>. Type
+                that slug to confirm.
+              </p>
+              <Input
+                placeholder="Tenant slug"
+                value={stopProvisionSlugInput}
+                onChange={(e) => setStopProvisionSlugInput(e.target.value)}
+                autoComplete="off"
+              />
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setStopProvisionTarget(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={
+                    stopProvisionSlugInput !== stopProvisionTarget.slug ||
+                    stoppingId === stopProvisionTarget.tenantId
+                  }
+                  onClick={() => {
+                    void (async () => {
+                      if (stopProvisionSlugInput !== stopProvisionTarget.slug) return;
+                      const ok = await onStopProvision(stopProvisionTarget.tenantId, stopProvisionTarget.slug);
+                      if (ok) {
+                        setStopProvisionTarget(null);
+                        setStopProvisionSlugInput("");
+                      }
+                    })();
+                  }}
+                >
+                  {stoppingId === stopProvisionTarget.tenantId ? (
+                    <Loader2 className="mr-1 size-4 animate-spin" />
+                  ) : null}
+                  Stop provisioning
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{counts.total}</span> organizations ·{" "}
@@ -332,7 +449,12 @@ export default function TenantList(props: Props) {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {status === "active" ? (
-                            <DropdownMenuItem onClick={() => void onSuspend(t.tenantId, t.slug)}>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSuspendSlugInput("");
+                                setSuspendTarget({ tenantId: t.tenantId, slug: t.slug });
+                              }}
+                            >
                               {suspendingId === t.tenantId ? (
                                 <Loader2 className="size-4 animate-spin" />
                               ) : (
@@ -353,7 +475,10 @@ export default function TenantList(props: Props) {
                           ) : null}
                           {status === "provisioning" || status === "pending" ? (
                             <DropdownMenuItem
-                              onClick={() => void onStopProvision(t.tenantId, t.slug)}
+                              onClick={() => {
+                                setStopProvisionSlugInput("");
+                                setStopProvisionTarget({ tenantId: t.tenantId, slug: t.slug });
+                              }}
                             >
                               {stoppingId === t.tenantId ? (
                                 <Loader2 className="size-4 animate-spin" />

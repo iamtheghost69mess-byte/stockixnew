@@ -1,15 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { Building2, ChevronDown, Loader2, Pencil, PauseCircle } from "lucide-react";
+import { toast } from "sonner";
 
-import { toast } from "@/components/reusabletoast";
+import { formatApiError } from "@/lib/api-errors";
+import { formatDate } from "@/lib/date-format";
+import OrgStatusBadge from "@/components/org-status-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -31,6 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useOrganizations, type Organization } from "@/hooks/use-organizations";
+import { cn } from "@/lib/utils";
 
 interface OrgSwitcherProps {
   tenantId: string;
@@ -119,8 +124,14 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [renameOrg, setRenameOrg] = useState<Organization | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [suspendOrg, setSuspendOrg] = useState<Organization | null>(null);
+  const [suspendSaving, setSuspendSaving] = useState(false);
 
   const hasProvisioning = organizations.some((o) => o.status === "provisioning");
+  const primaryId = organizations[0]?.id;
 
   useEffect(() => {
     if (!hasProvisioning) return;
@@ -142,7 +153,18 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
 
   const submitCreate = async () => {
     const name = nameInput.trim();
-    if (!name) return;
+    if (!name) {
+      toast.error("Enter an organization name.");
+      return;
+    }
+    if (name.length < 2) {
+      toast.error("Organization name must be at least 2 characters.");
+      return;
+    }
+    if (name.length > 100) {
+      toast.error("Organization name cannot exceed 100 characters.");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/organizations`, {
@@ -154,26 +176,71 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
       if (res.status === 201) {
         closeDialog();
         await refetch(true);
-        toast.success(
-          "Organization is being provisioned. This may take a few minutes.",
-        );
+        toast.success("Organization is being provisioned. This may take a few minutes.");
         return;
       }
       if (res.status === 402) {
-        toast.error("Upgrade your plan to add more organizations.");
+        toast.error(formatApiError(json, "Upgrade your plan to add more organizations."));
         return;
       }
-      const message =
-        typeof json.message === "string"
-          ? json.message
-          : typeof json.error === "string"
-            ? json.error
-            : "Failed to create organization.";
-      toast.error(message);
+      toast.error(formatApiError(json, "Failed to create organization."));
     } catch {
       toast.error("Failed to create organization.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const saveRename = async () => {
+    if (!renameOrg) return;
+    const name = renameValue.trim();
+    if (!name) {
+      toast.error("Enter a name.");
+      return;
+    }
+    if (name.length < 2) {
+      toast.error("Name must be at least 2 characters.");
+      return;
+    }
+    setRenameSaving(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/organizations/${renameOrg.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const json = await readJsonBody(res);
+        toast.error(formatApiError(json, "Rename failed"));
+        return;
+      }
+      toast.success("Renamed");
+      setRenameOrg(null);
+      await refetch(true);
+    } finally {
+      setRenameSaving(false);
+    }
+  };
+
+  const confirmSuspend = async () => {
+    if (!suspendOrg) return;
+    setSuspendSaving(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/organizations/${suspendOrg.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "suspended" }),
+      });
+      const j = await readJsonBody(res);
+      if (!res.ok) {
+        toast.error(formatApiError(j, "Suspend failed"));
+        return;
+      }
+      toast.success("Organization suspended");
+      setSuspendOrg(null);
+      await refetch(true);
+    } finally {
+      setSuspendSaving(false);
     }
   };
 
@@ -209,28 +276,85 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
           </DropdownMenu>
         )}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {!isLoading && organizations.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center py-10 text-center">
+              <div className="mb-3 flex size-10 items-center justify-center rounded-full border bg-muted/50">
+                <Building2 className="size-5 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium">No sub-organizations yet</p>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                Each organization runs its own Bigcapital stack. Add one to get started.
+              </p>
+              <Button type="button" className="mt-4" variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+                Add organization
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
         {organizations.length > 0 && !isLoading ? (
-          <ul className="mt-2 max-w-md space-y-2 rounded-md border border-border bg-muted/30 p-3 text-sm">
-            {organizations.map((org) => (
-              <li key={org.id} className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
-                <span className="font-medium">{org.name}</span>
-                <span className="font-mono text-xs text-muted-foreground">{org.slug}</span>
-                <span className="text-xs text-muted-foreground">{org.subdomain}</span>
-                {org.publicUrl ? (
-                  <a
-                    className="text-xs font-medium text-primary underline"
-                    href={org.publicUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open app
-                  </a>
-                ) : null}
-                <Badge variant="outline" className="w-fit text-[10px]">
-                  {org.status}
-                </Badge>
-              </li>
-            ))}
+          <ul className="mt-2 max-w-md space-y-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
+            {organizations.map((org) => {
+              const isPrimary = org.id === primaryId;
+              return (
+                <li
+                  key={org.id}
+                  className="flex flex-col gap-2 rounded-md border border-border/60 bg-background/80 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2"
+                >
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{org.name}</span>
+                      <OrgStatusBadge status={org.status} />
+                      {isPrimary ? (
+                        <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-wide">
+                          Primary
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <span className="font-mono text-xs text-muted-foreground">{org.slug}</span>
+                    <span className="block text-xs text-muted-foreground">{org.subdomain}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Created {formatDate(org.createdAt)}
+                    </span>
+                    {org.publicUrl ? (
+                      <a
+                        className="text-xs font-medium text-primary underline"
+                        href={org.publicUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open app
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Link
+                      href={`/tenants/${tenantId}/organizations/${org.id}`}
+                      className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "inline-flex items-center")}
+                    >
+                      Details
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setRenameValue(org.name);
+                        setRenameOrg(org);
+                      }}
+                    >
+                      <Pencil className="mr-1 size-3.5" />
+                      Rename
+                    </Button>
+                    {!isPrimary && org.status === "active" ? (
+                      <Button variant="ghost" size="sm" onClick={() => setSuspendOrg(org)}>
+                        <PauseCircle className="mr-1 size-3.5" />
+                        Suspend
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </div>
@@ -245,9 +369,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
         <DialogContent className="sm:max-w-md" showCloseButton>
           <DialogHeader>
             <DialogTitle>Add Organization</DialogTitle>
-            <DialogDescription>
-              A new Bigcapital instance will be provisioned.
-            </DialogDescription>
+            <p className="text-sm text-muted-foreground">A new Bigcapital instance will be provisioned.</p>
           </DialogHeader>
           <div className="space-y-2 py-2">
             <Label htmlFor="org-name">Organization name</Label>
@@ -259,6 +381,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
               onChange={(e) => setNameInput(e.target.value)}
               disabled={submitting}
             />
+            <p className="text-xs text-muted-foreground">2–100 characters. Avoid leading or trailing spaces.</p>
             <p className="text-sm text-muted-foreground">
               Currency, timezone, and regional settings will be inherited from your main organization.
             </p>
@@ -267,9 +390,57 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
             <Button type="button" variant="outline" onClick={closeDialog} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="button" onClick={() => void submitCreate()} disabled={submitting || !nameInput.trim()}>
+            <Button
+              type="button"
+              onClick={() => void submitCreate()}
+              disabled={submitting || nameInput.trim().length < 2}
+            >
               {submitting ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={renameOrg !== null} onOpenChange={(o) => !o && setRenameOrg(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename organization</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} maxLength={100} />
+            <p className="text-xs text-muted-foreground">2–100 characters.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRenameOrg(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={renameSaving || renameValue.trim().length < 2}
+              onClick={() => void saveRename()}
+            >
+              {renameSaving ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={suspendOrg !== null} onOpenChange={(o) => !o && setSuspendOrg(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend organization</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Stop the stack for <span className="font-medium">{suspendOrg?.name}</span>? This cannot target the
+            primary organization.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSuspendOrg(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={suspendSaving} onClick={() => void confirmSuspend()}>
+              {suspendSaving ? <Loader2 className="size-4 animate-spin" /> : "Suspend"}
             </Button>
           </DialogFooter>
         </DialogContent>

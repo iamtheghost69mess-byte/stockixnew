@@ -16,6 +16,7 @@ import {
   licenses,
   organizations,
   owners,
+  ownerOrganizationAccess,
   plans,
   tenantConfig,
   tenantDeployments,
@@ -37,12 +38,15 @@ import {
   ilike,
   inArray,
   isNull,
+  ne,
+  notExists,
 } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { execa } from "execa";
 import { z } from "zod";
+import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { generateLicenseKey } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
@@ -53,7 +57,12 @@ import {
 } from "./provision-trace.js";
 import { buildAuthRoutes } from "./routes/auth/index.js";
 import { enqueueOrgProvisioning } from "./org-provision.js";
-import { canCreateOrganization } from "./plan-limits.js";
+import {
+  assertOrgInSupportScope,
+  filterOrganizationsForSupportAgent,
+  getSupportScopedOrgIdsForTenant,
+} from "./org-access-scope.js";
+import { canCreateOrganization, getTenantLicenseEligibility } from "./plan-limits.js";
 import { insertTenantJob, listTenantJobs } from "./services/tenant-jobs.js";
 import { validateOwnerSession } from "./services/auth/session-validation.js";
 import { verifySessionToken } from "./services/auth/tokens.js";
@@ -74,8 +83,14 @@ const organizationCreateBody = z.object({
 const organizationPatchBody = z
   .object({
     name: z.string().min(1).max(100).optional(),
+    status: z.enum(["suspended"]).optional(),
   })
   .strip();
+
+const organizationAccessPostBody = z.object({
+  ownerId: z.string().uuid(),
+  organizationId: z.string().uuid(),
+});
 
 function rootDomainForOrganizationSubdomain(): string {
   const fromEnv = process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN;
@@ -672,32 +687,6 @@ app.use("/*", async (c, next) => {
     });
 });
 
-function requiredApiRole(pathname: string, method: string): Role | null {
-  if (pathname === "/health") return null;
-  if (pathname.startsWith("/auth")) return null;
-  if (pathname.startsWith("/internal/jobs")) return null;
-  if (method === "POST" && pathname === "/licenses/activate") return null;
-  if (method === "POST" && pathname === "/licenses/verify-offline") return null;
-  if (method === "GET" && pathname === "/plans") return null;
-  if (method === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
-  if (pathname.startsWith("/licenses")) {
-    if (method === "GET") return "read_only";
-    if (pathname.endsWith("/deactivate")) return "support_agent";
-    return "super_admin";
-  }
-  if (pathname.startsWith("/fingerprints")) return "super_admin";
-  if (pathname.startsWith("/owners")) {
-    if (method === "GET") return "read_only";
-    return "super_admin";
-  }
-  if (pathname.startsWith("/tenants")) {
-    if (pathname.includes("/provision")) return "support_agent";
-    if (method === "GET") return "read_only";
-    return "super_admin";
-  }
-  return "read_only";
-}
-
 app.use("/*", async (c, next) => {
   const method = c.req.method.toUpperCase();
   const path = c.req.path;
@@ -1056,6 +1045,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
                 tenantId: targetTenantId,
                 status: "active",
                 activatedAt: new Date(),
+                validFrom: lic.validFrom ?? new Date(),
                 updatedAt: new Date(),
                 planSlug,
               })
@@ -1080,6 +1070,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             tenantId: targetTenantId,
             status: "active",
             activatedAt: new Date(),
+            validFrom: new Date(),
             isPerpetual: true,
             maxActivations: 1,
             activationCount: 0,
@@ -1134,6 +1125,26 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       .update(tenantDeployments)
       .set({ status: nextStatus, updatedAt: new Date() })
       .where(eq(tenantDeployments.tenantId, currentJob.tenantId));
+
+    const orgLifecycleStatus =
+      nextStatus === "active"
+        ? ("active" as const)
+        : nextStatus === "suspended" || nextStatus === "stopped"
+          ? ("suspended" as const)
+          : null;
+    if (orgLifecycleStatus) {
+      const [childTenantRow] = await db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, currentJob.tenantId))
+        .limit(1);
+      if (childTenantRow?.slug) {
+        await db
+          .update(organizations)
+          .set({ status: orgLifecycleStatus, updatedAt: new Date() })
+          .where(eq(organizations.slug, childTenantRow.slug));
+      }
+    }
   }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
     const correlations = await db
@@ -1630,7 +1641,17 @@ app.get("/tenants", async (c) => {
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
     })
     .from(tenants)
-    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id));
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(
+      notExists(
+        db
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(
+            and(eq(organizations.slug, tenants.slug), ne(organizations.tenantId, tenants.id)),
+          ),
+      ),
+    );
 
   return c.json({ tenants: rows });
 });
@@ -1673,7 +1694,13 @@ app.delete("/tenants/:tenantId", async (c) => {
     || target.tenantStatus === "active"
     || target.deploymentStatus === "provisioning"
     || target.deploymentStatus === "active";
-  if (requiresForceStop) {
+  const [childOrgProvisionArtifact] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(and(eq(organizations.slug, target.slug), ne(organizations.tenantId, target.id)))
+    .limit(1);
+  const isChildOrgTenant = childOrgProvisionArtifact !== undefined;
+  if (requiresForceStop && !isChildOrgTenant) {
     return c.json(
       {
         error: "tenant_busy",
@@ -2461,11 +2488,16 @@ app.get("/tenants/:tenantId/organizations", async (c) => {
     .where(eq(organizations.tenantId, parsed.data))
     .orderBy(asc(organizations.createdAt));
 
-  const composeNames = rows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const scoped = await getSupportScopedOrgIdsForTenant(db, actorId, parsed.data);
+  const visibleRows = filterOrganizationsForSupportAgent(actorRole, rows, scoped);
+
+  const composeNames = visibleRows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
   const portMap = await internalPortsByComposeProject(db, composeNames);
 
   return c.json({
-    organizations: rows.map((row) =>
+    organizations: visibleRows.map((row) =>
       serializeOrganizationRow(row, portMap.get(dockerComposeProjectForOrgSlug(row.slug)) ?? null),
     ),
   });
@@ -2483,6 +2515,22 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
     .limit(1);
   if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
 
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  if (actorRole === "support_agent") {
+    const scoped = await getSupportScopedOrgIdsForTenant(db, actorId, parsed.data);
+    if (scoped !== null) {
+      return c.json(
+        {
+          error: "organization_access_create_denied",
+          message:
+            "Your account is scoped to specific organizations on this tenant. Ask a super admin to create additional organizations or adjust your access scope.",
+        },
+        403,
+      );
+    }
+  }
+
   let body: z.infer<typeof organizationCreateBody>;
   try {
     body = organizationCreateBody.parse(await c.req.json());
@@ -2490,6 +2538,26 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
     return c.json(
       { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
       400,
+    );
+  }
+
+  const elig = await getTenantLicenseEligibility(db, parsed.data);
+  if (elig === "license_expired") {
+    return c.json(
+      {
+        error: "LICENSE_EXPIRED",
+        message: "This tenant's license has expired. Renew or assign a new license before adding organizations.",
+      },
+      402,
+    );
+  }
+  if (elig === "no_active_license") {
+    return c.json(
+      {
+        error: "NO_ACTIVE_LICENSE",
+        message: "Assign an active license to this tenant before adding organizations.",
+      },
+      402,
     );
   }
 
@@ -2530,6 +2598,15 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
     );
   });
 
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "org.created",
+    targetTenantId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { organizationId: inserted.id, slug: inserted.slug, name: inserted.name },
+  });
+
   return c.json(serializeOrganizationRow(inserted), 201);
 });
 
@@ -2553,6 +2630,19 @@ app.get("/tenants/:tenantId/organizations/:orgId", async (c) => {
     .where(and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)))
     .limit(1);
   if (!row) return c.json({ error: "organization_not_found" }, 404);
+
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const scoped = await getSupportScopedOrgIdsForTenant(db, actorId, tenantParsed.data);
+  if (!assertOrgInSupportScope(actorRole, orgParsed.data, scoped)) {
+    return c.json(
+      {
+        error: "organization_access_denied",
+        message: "You are not assigned to manage this organization for this tenant.",
+      },
+      403,
+    );
+  }
 
   const portMap = await internalPortsByComposeProject(db, [dockerComposeProjectForOrgSlug(row.slug)]);
   return c.json({
@@ -2587,17 +2677,98 @@ app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
     );
   }
 
-  if (body.name === undefined) {
+  if (body.name === undefined && body.status === undefined) {
     return c.json({ error: "no_fields_to_update" }, 400);
   }
 
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(
+      and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)),
+    )
+    .limit(1);
+  if (!org) return c.json({ error: "organization_not_found" }, 404);
+
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const scoped = await getSupportScopedOrgIdsForTenant(db, actorId, tenantParsed.data);
+  if (!assertOrgInSupportScope(actorRole, orgParsed.data, scoped)) {
+    return c.json(
+      {
+        error: "organization_access_denied",
+        message: "You are not assigned to manage this organization for this tenant.",
+      },
+      403,
+    );
+  }
+
+  if (body.status === "suspended") {
+    const [firstOrg] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.tenantId, tenantParsed.data))
+      .orderBy(asc(organizations.createdAt))
+      .limit(1);
+    if (firstOrg?.id === orgParsed.data) {
+      return c.json(
+        {
+          error: "CANNOT_SUSPEND_PRIMARY",
+          message: "Cannot suspend the primary organization.",
+        },
+        400,
+      );
+    }
+  }
+
+  const setVals: { name?: string; status?: string; updatedAt: Date } = { updatedAt: new Date() };
+  if (body.name !== undefined) setVals.name = body.name;
+  if (body.status !== undefined) setVals.status = body.status;
+
   const [updated] = await db
     .update(organizations)
-    .set({ name: body.name, updatedAt: new Date() })
+    .set(setVals)
     .where(and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)))
     .returning();
 
   if (!updated) return c.json({ error: "organization_not_found" }, 404);
+
+  if (body.status === "suspended") {
+    const [childTenant] = await db
+      .select({ id: tenants.id, slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.slug, updated.slug))
+      .limit(1);
+    if (childTenant && childTenant.id !== tenantParsed.data) {
+      await insertTenantJob(db, {
+        type: "tenant.lifecycle",
+        tenantId: childTenant.id,
+        payload: {
+          tenantId: childTenant.id,
+          slug: childTenant.slug,
+          command: "stop",
+          status: "suspended",
+        },
+      });
+    }
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "org.suspended",
+      targetTenantId: tenantParsed.data,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { organizationId: orgParsed.data, slug: updated.slug },
+    });
+  } else if (body.name !== undefined) {
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "org.renamed",
+      targetTenantId: tenantParsed.data,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { organizationId: orgParsed.data, name: updated.name, slug: updated.slug },
+    });
+  }
 
   const portMap = await internalPortsByComposeProject(db, [dockerComposeProjectForOrgSlug(updated.slug)]);
   return c.json({
@@ -2622,29 +2793,279 @@ app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
     .limit(1);
   if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
 
-  const ordered = await db
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(
+      and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)),
+    )
+    .limit(1);
+  if (!org) return c.json({ error: "organization_not_found" }, 404);
+
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const scopedDel = await getSupportScopedOrgIdsForTenant(db, actorId, tenantParsed.data);
+  if (!assertOrgInSupportScope(actorRole, orgParsed.data, scopedDel)) {
+    return c.json(
+      {
+        error: "organization_access_denied",
+        message: "You are not assigned to manage this organization for this tenant.",
+      },
+      403,
+    );
+  }
+
+  const [firstOrg] = await db
     .select({ id: organizations.id })
     .from(organizations)
     .where(eq(organizations.tenantId, tenantParsed.data))
-    .orderBy(asc(organizations.createdAt));
+    .orderBy(asc(organizations.createdAt))
+    .limit(1);
 
-  if (ordered.length > 0 && ordered[0]!.id === orgParsed.data) {
+  if (firstOrg?.id === orgParsed.data) {
     return c.json(
       {
-        error: "CANNOT_SUSPEND_PRIMARY",
-        message: "Cannot suspend the primary organization",
+        error: "CANNOT_DELETE_PRIMARY",
+        message: "Cannot delete the primary organization. Delete the tenant instead.",
       },
       400,
     );
   }
 
-  const [updated] = await db
-    .update(organizations)
-    .set({ status: "suspended", updatedAt: new Date() })
-    .where(and(eq(organizations.id, orgParsed.data), eq(organizations.tenantId, tenantParsed.data)))
-    .returning({ id: organizations.id });
+  const [childTenant] = await db
+    .select({ id: tenants.id, slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.slug, org.slug))
+    .limit(1);
 
-  if (!updated) return c.json({ error: "organization_not_found" }, 404);
+  if (childTenant) {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        lastError: sql`'cancelled_by_user'`,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tenantLifecycleJobs.tenantId, childTenant.id),
+          eq(tenantLifecycleJobs.type, "tenant.provision"),
+          or(
+            eq(tenantLifecycleJobs.status, "pending"),
+            eq(tenantLifecycleJobs.status, "running"),
+          ),
+        ),
+      );
+
+    const removeVolumes = true;
+    await insertTenantJob(db, {
+      type: "tenant.deprovision",
+      tenantId: childTenant.id,
+      payload: {
+        tenantId: childTenant.id,
+        removeVolumes,
+        removeImages: false,
+      },
+    });
+  }
+
+  await db.delete(organizations).where(eq(organizations.id, orgParsed.data));
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "org.deleted",
+    targetTenantId: tenantParsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { orgId: orgParsed.data, orgSlug: org.slug },
+  });
+
+  return c.json({ ok: true, deprovisioning: childTenant !== undefined });
+});
+
+app.get("/tenants/:tenantId/organization-access", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantParsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  const grants = await db
+    .select({
+      id: ownerOrganizationAccess.id,
+      ownerId: ownerOrganizationAccess.ownerId,
+      organizationId: ownerOrganizationAccess.organizationId,
+      createdAt: ownerOrganizationAccess.createdAt,
+      ownerEmail: owners.email,
+      ownerName: owners.name,
+      organizationName: organizations.name,
+      organizationSlug: organizations.slug,
+    })
+    .from(ownerOrganizationAccess)
+    .innerJoin(owners, eq(owners.id, ownerOrganizationAccess.ownerId))
+    .innerJoin(organizations, eq(organizations.id, ownerOrganizationAccess.organizationId))
+    .where(
+      and(
+        eq(ownerOrganizationAccess.tenantId, tenantParsed.data),
+        eq(organizations.tenantId, tenantParsed.data),
+      ),
+    );
+
+  return c.json({
+    grants: grants.map((g) => ({
+      id: g.id,
+      ownerId: g.ownerId,
+      organizationId: g.organizationId,
+      createdAt: g.createdAt.toISOString(),
+      ownerEmail: g.ownerEmail,
+      ownerName: g.ownerName,
+      organizationName: g.organizationName,
+      organizationSlug: g.organizationSlug,
+    })),
+  });
+});
+
+app.post("/tenants/:tenantId/organization-access", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const [tenantRow] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantParsed.data))
+    .limit(1);
+  if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+  let body: z.infer<typeof organizationAccessPostBody>;
+  try {
+    body = organizationAccessPostBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
+      400,
+    );
+  }
+
+  const [ownerRow] = await db
+    .select({ id: owners.id, role: owners.role })
+    .from(owners)
+    .where(eq(owners.id, body.ownerId))
+    .limit(1);
+  if (!ownerRow) return c.json({ error: "owner_not_found" }, 404);
+  if (ownerRow.role !== "support_agent") {
+    return c.json(
+      {
+        error: "owner_must_be_support_agent",
+        message: "Only support_agent accounts can be scoped to specific organizations.",
+      },
+      400,
+    );
+  }
+
+  const [orgRow] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(
+      and(eq(organizations.id, body.organizationId), eq(organizations.tenantId, tenantParsed.data)),
+    )
+    .limit(1);
+  if (!orgRow) return c.json({ error: "organization_not_found" }, 404);
+
+  const [dup] = await db
+    .select({ id: ownerOrganizationAccess.id })
+    .from(ownerOrganizationAccess)
+    .where(
+      and(
+        eq(ownerOrganizationAccess.ownerId, body.ownerId),
+        eq(ownerOrganizationAccess.organizationId, body.organizationId),
+      ),
+    )
+    .limit(1);
+  if (dup) {
+    return c.json({ error: "organization_access_exists", message: "This grant already exists." }, 409);
+  }
+
+  const [inserted] = await db
+    .insert(ownerOrganizationAccess)
+    .values({
+      ownerId: body.ownerId,
+      tenantId: tenantParsed.data,
+      organizationId: body.organizationId,
+    })
+    .returning();
+
+  if (!inserted) return c.json({ error: "organization_access_create_failed" }, 500);
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "org.access_granted",
+    targetTenantId: tenantParsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: {
+      accessId: inserted.id,
+      targetOwnerId: body.ownerId,
+      organizationId: body.organizationId,
+    },
+  });
+
+  return c.json(
+    {
+      grant: {
+        id: inserted.id,
+        ownerId: inserted.ownerId,
+        organizationId: inserted.organizationId,
+        createdAt: inserted.createdAt.toISOString(),
+      },
+    },
+    201,
+  );
+});
+
+app.delete("/tenants/:tenantId/organization-access/:accessId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  const accessParsed = z.string().uuid().safeParse(c.req.param("accessId"));
+  if (!accessParsed.success) return c.json({ error: "accessId must be a UUID" }, 400);
+
+  const [row] = await db
+    .select({ id: ownerOrganizationAccess.id })
+    .from(ownerOrganizationAccess)
+    .where(
+      and(
+        eq(ownerOrganizationAccess.id, accessParsed.data),
+        eq(ownerOrganizationAccess.tenantId, tenantParsed.data),
+      ),
+    )
+    .limit(1);
+  if (!row) return c.json({ error: "organization_access_not_found" }, 404);
+
+  await db
+    .delete(ownerOrganizationAccess)
+    .where(
+      and(
+        eq(ownerOrganizationAccess.id, accessParsed.data),
+        eq(ownerOrganizationAccess.tenantId, tenantParsed.data),
+      ),
+    );
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "org.access_revoked",
+    targetTenantId: tenantParsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { accessId: accessParsed.data },
+  });
 
   return c.json({ ok: true });
 });
@@ -2727,6 +3148,96 @@ app.get("/tenants/:tenantId", async (c) => {
             },
     },
   });
+});
+
+app.post("/tenants/:tenantId/retry-provision", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const [row] = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      name: tenants.name,
+      status: tenants.status,
+      ownerId: tenants.ownerId,
+      adminEmail: tenants.adminEmail,
+      adminFirstName: tenants.adminFirstName,
+      adminLastName: tenants.adminLastName,
+      planSlug: tenants.planSlug,
+      deploymentStatus: tenantDeployments.status,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
+  const failed =
+    row.status === "failed" || row.deploymentStatus === "failed" || row.deploymentStatus === null;
+  if (!failed) {
+    return c.json(
+      {
+        error: "tenant_not_failed",
+        message: "Retry is only available when provisioning failed or deployment is missing.",
+      },
+      409,
+    );
+  }
+
+  const correlationId = randomUUID();
+  const log = (m: string) => {
+    console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+  };
+  const acceptTrace = createProvisionTracer(db, correlationId, () => ({ slug: row.slug }), log);
+  await acceptTrace.event("api", "HTTP 202 — retry provisioning accepted");
+
+  await db
+    .update(tenants)
+    .set({ status: "provisioning" })
+    .where(eq(tenants.id, row.id));
+  await db
+    .update(tenantDeployments)
+    .set({ status: "provisioning", lastError: null, updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, row.id));
+
+  const job = await insertTenantJob(db, {
+    type: "tenant.provision",
+    tenantId: row.id,
+    correlationId,
+    payload: {
+      slug: row.slug,
+      name: row.name,
+      ownerId: row.ownerId,
+      adminEmail: row.adminEmail,
+      adminFirstName: row.adminFirstName,
+      adminLastName: row.adminLastName,
+      planSlug: row.planSlug,
+      stockixTenantId: row.id,
+      provisionRequestedById: c.get("actorId") as string,
+    },
+  });
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "tenant.retry_provision",
+    targetTenantId: row.id,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { correlationId, jobId: job?.id ?? null },
+  });
+
+  return c.json(
+    {
+      accepted: true,
+      jobId: job?.id ?? null,
+      correlationId,
+      poll: `/tenants/provision-status/${correlationId}`,
+      stream: `/tenants/provision-stream/${correlationId}`,
+    },
+    202,
+  );
 });
 
 const tenantPatchBody = z
@@ -2859,6 +3370,40 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
     payload: { tenantId: parsed.data, slug: row.slug, command: "stop", status: "suspended" },
   });
 
+  const childOrgs = await db
+    .select({
+      orgId: organizations.id,
+      orgSlug: organizations.slug,
+    })
+    .from(organizations)
+    .where(and(eq(organizations.tenantId, parsed.data), eq(organizations.status, "active")));
+
+  for (const org of childOrgs) {
+    const [childTenant] = await db
+      .select({ id: tenants.id, slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.slug, org.orgSlug))
+      .limit(1);
+
+    if (childTenant && childTenant.id !== parsed.data) {
+      await insertTenantJob(db, {
+        type: "tenant.lifecycle",
+        tenantId: childTenant.id,
+        payload: {
+          tenantId: childTenant.id,
+          slug: childTenant.slug,
+          command: "stop",
+          status: "suspended",
+        },
+      });
+    }
+
+    await db
+      .update(organizations)
+      .set({ status: "suspended", updatedAt: new Date() })
+      .where(eq(organizations.id, org.orgId));
+  }
+
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.suspend",
@@ -2922,6 +3467,40 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
     tenantId: parsed.data,
     payload: { tenantId: parsed.data, slug: row.slug, command: "start", status: "active" },
   });
+
+  const suspendedOrgs = await db
+    .select({
+      orgId: organizations.id,
+      orgSlug: organizations.slug,
+    })
+    .from(organizations)
+    .where(and(eq(organizations.tenantId, parsed.data), eq(organizations.status, "suspended")));
+
+  for (const org of suspendedOrgs) {
+    const [childTenant] = await db
+      .select({ id: tenants.id, slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.slug, org.orgSlug))
+      .limit(1);
+
+    if (childTenant && childTenant.id !== parsed.data) {
+      await insertTenantJob(db, {
+        type: "tenant.lifecycle",
+        tenantId: childTenant.id,
+        payload: {
+          tenantId: childTenant.id,
+          slug: childTenant.slug,
+          command: "start",
+          status: "active",
+        },
+      });
+    }
+
+    await db
+      .update(organizations)
+      .set({ status: "active", updatedAt: new Date() })
+      .where(eq(organizations.id, org.orgId));
+  }
 
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",

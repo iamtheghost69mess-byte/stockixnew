@@ -19,19 +19,34 @@ type RbacEnv = {
 };
 
 /**
- * Returns the minimum Role required to call a given route, or null if no role is needed.
+ * Minimum role required for a dashboard / platform API route.
+ * POS and public routes return null (no owner RBAC — other layers apply).
  */
 export function requiredApiRole(pathname: string, method: string): Role | null {
+  const m = method.toUpperCase();
   if (pathname === "/health") return null;
   if (pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/internal/jobs")) return null;
+  if (m === "POST" && pathname === "/licenses/activate") return null;
+  if (m === "POST" && pathname === "/licenses/verify-offline") return null;
+  if (m === "GET" && pathname === "/plans") return null;
+  if (m === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
+
+  if (pathname.startsWith("/licenses")) {
+    if (m === "GET") return "read_only";
+    if (pathname.endsWith("/deactivate")) return "support_agent";
+    return "super_admin";
+  }
+  if (pathname.startsWith("/fingerprints")) return "super_admin";
   if (pathname.startsWith("/owners")) {
-    if (method === "GET") return "read_only";
+    if (m === "GET") return "read_only";
     return "super_admin";
   }
   if (pathname.startsWith("/tenants")) {
+    if (pathname.includes("/organization-access")) return "super_admin";
     if (pathname.includes("/provision")) return "support_agent";
-    if (method === "GET") return "read_only";
+    if (pathname.includes("/organizations") && m !== "GET") return "support_agent";
+    if (m === "GET") return "read_only";
     return "super_admin";
   }
   return "read_only";
@@ -39,7 +54,6 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
 
 /**
  * Creates the RBAC enforcement middleware.
- * Looks up the actor in the DB, checks their role rank against the required minimum.
  */
 export function createRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> {
   return async (c, next) => {

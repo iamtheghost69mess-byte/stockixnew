@@ -30,9 +30,19 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   license: LicenseRow;
   onSuccess: () => void;
+  /** When set, tenant is fixed (e.g. assign from tenant detail page). */
+  defaultTenantId?: string;
+  defaultTenantLabel?: string;
 };
 
-export default function LicenseAssignDialog({ open, onOpenChange, license, onSuccess }: Props) {
+export default function LicenseAssignDialog({
+  open,
+  onOpenChange,
+  license,
+  onSuccess,
+  defaultTenantId,
+  defaultTenantLabel,
+}: Props) {
   const [tenants, setTenants] = useState<TenantOpt[]>([]);
   const [tenantId, setTenantId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,6 +51,10 @@ export default function LicenseAssignDialog({ open, onOpenChange, license, onSuc
   useEffect(() => {
     if (!open) return;
     setError(null);
+    if (defaultTenantId) {
+      setTenantId(defaultTenantId);
+      return;
+    }
     setTenantId("");
     void (async () => {
       const res = await fetch("/api/tenants");
@@ -61,7 +75,7 @@ export default function LicenseAssignDialog({ open, onOpenChange, license, onSuc
       }));
       setTenants(rows);
     })();
-  }, [open]);
+  }, [open, defaultTenantId]);
 
   const submit = async () => {
     if (!tenantId) return;
@@ -103,25 +117,31 @@ export default function LicenseAssignDialog({ open, onOpenChange, license, onSuc
           </div>
           <div>
             <Label>Tenant</Label>
-            <Select
-              value={tenantId}
-              onValueChange={(v) => setTenantId(v ?? "")}
-            >
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select tenant" />
-              </SelectTrigger>
-              <SelectContent>
-                {tenants.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    <span className="flex items-center gap-2">
-                      {t.name}{" "}
-                      <span className="text-muted-foreground">({t.slug})</span>{" "}
-                      <TenantStatusBadge status={t.status} />
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {defaultTenantId ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {defaultTenantLabel ?? defaultTenantId}
+              </p>
+            ) : (
+              <Select
+                value={tenantId}
+                onValueChange={(v) => setTenantId(v ?? "")}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select tenant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      <span className="flex items-center gap-2">
+                        {t.name}{" "}
+                        <span className="text-muted-foreground">({t.slug})</span>{" "}
+                        <TenantStatusBadge status={t.status} />
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           {error ? (
             <Alert variant="destructive">

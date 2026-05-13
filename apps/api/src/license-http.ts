@@ -72,6 +72,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     count: z.number().int().min(1).max(100).default(1),
     isPerpetual: z.boolean().default(true),
     expiresAt: z.string().datetime().optional(),
+    validFrom: z.string().datetime().optional(),
     maxActivations: z.number().int().min(1).max(50).default(1),
     gracePeriodDays: z.number().int().min(0).max(365).default(7),
     notes: z.string().max(500).optional(),
@@ -100,6 +101,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     }
     const actorId = c.get("actorId") as string;
     const expiresAtDate = body.expiresAt ? new Date(body.expiresAt) : null;
+    const validFromDate = body.validFrom ? new Date(body.validFrom) : null;
     const now = new Date();
 
     const created = await db.transaction(async (tx) => {
@@ -116,6 +118,8 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           licenseKey = generateLicenseKey();
         }
         const status = body.tenantId ? "active" : "unassigned";
+        const assignNow = Boolean(body.tenantId);
+        const effectiveStart = assignNow ? (validFromDate ?? now) : validFromDate;
         const [row] = await tx
           .insert(licenses)
           .values({
@@ -124,7 +128,8 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             planSlug: body.planSlug,
             tenantId: body.tenantId ?? null,
             status,
-            activatedAt: body.tenantId ? now : null,
+            activatedAt: assignNow ? effectiveStart : null,
+            validFrom: effectiveStart ?? null,
             expiresAt: body.isPerpetual ? null : expiresAtDate,
             isPerpetual: body.isPerpetual,
             maxActivations: body.maxActivations,
@@ -297,6 +302,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         tenantSlug: r.tenantSlug ?? null,
         isPerpetual: L.isPerpetual,
         activatedAt: L.activatedAt?.toISOString() ?? null,
+        validFrom: L.validFrom?.toISOString() ?? null,
         expiresAt: L.expiresAt?.toISOString() ?? null,
         maxActivations: L.maxActivations,
         activationCount: L.activationCount,
@@ -338,6 +344,10 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (!lic) return c.json({ error: "not_found" }, 404);
     if (lic.status === "revoked") return c.json({ error: "license_revoked" }, 403);
     if (lic.status === "expired") return c.json({ error: "license_expired" }, 403);
+    const effectiveStart = lic.validFrom ?? lic.activatedAt;
+    if (effectiveStart && effectiveStart > new Date()) {
+      return c.json({ error: "license_not_yet_valid" }, 403);
+    }
     if (!lic.isPerpetual && lic.expiresAt && lic.expiresAt < new Date()) {
       return c.json({ error: "license_expired" }, 403);
     }
@@ -572,6 +582,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         tenantSlug: row.tenantSlug ?? null,
         isPerpetual: L.isPerpetual,
         activatedAt: L.activatedAt?.toISOString() ?? null,
+        validFrom: L.validFrom?.toISOString() ?? null,
         expiresAt: L.expiresAt?.toISOString() ?? null,
         maxActivations: L.maxActivations,
         activationCount: L.activationCount,
@@ -619,7 +630,76 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     return c.json({ ok: true, license: { id: updated.id, notes: updated.notes } });
   });
 
-  const assignBody = z.object({ tenantId: z.string().uuid() });
+  const extendBody = z
+    .object({
+      expiresAt: z.string().datetime().optional(),
+      isPerpetual: z.boolean().optional(),
+    })
+    .strict();
+
+  app.post("/licenses/:licenseId/extend", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const idParsed = z.string().uuid().safeParse(c.req.param("licenseId"));
+    if (!idParsed.success) return c.json({ error: "invalid_license_id" }, 400);
+    let body: z.infer<typeof extendBody>;
+    try {
+      body = extendBody.parse(await c.req.json());
+    } catch (e) {
+      return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
+    }
+    if (body.expiresAt === undefined && body.isPerpetual === undefined) {
+      return c.json({ error: "no_fields_to_update" }, 400);
+    }
+    const [lic] = await db.select().from(licenses).where(eq(licenses.id, idParsed.data)).limit(1);
+    if (!lic) return c.json({ error: "not_found" }, 404);
+    if (lic.status === "revoked") {
+      return c.json({ error: "cannot_extend_revoked" }, 409);
+    }
+    const now = new Date();
+    const setVals: {
+      updatedAt: Date;
+      expiresAt?: Date | null;
+      isPerpetual?: boolean;
+      status?: string;
+    } = { updatedAt: now };
+    if (body.isPerpetual === true) {
+      setVals.isPerpetual = true;
+      setVals.expiresAt = null;
+      if (lic.status === "expired") setVals.status = "active";
+    } else if (body.expiresAt !== undefined) {
+      setVals.expiresAt = new Date(body.expiresAt);
+      setVals.isPerpetual = body.isPerpetual ?? false;
+      if (lic.status === "expired") setVals.status = "active";
+    } else if (body.isPerpetual === false) {
+      setVals.isPerpetual = false;
+    }
+    const [updated] = await db.update(licenses).set(setVals).where(eq(licenses.id, lic.id)).returning();
+    if (!updated) return c.json({ error: "not_found" }, 404);
+    await logAudit(db, {
+      actorId: c.get("actorId") as string,
+      action: "license.extended",
+      targetTenantId: lic.tenantId ?? undefined,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: {
+        licenseId: lic.id,
+        expiresAt: updated.expiresAt?.toISOString() ?? null,
+        isPerpetual: updated.isPerpetual,
+      },
+    });
+    return c.json({
+      license: {
+        id: updated.id,
+        expiresAt: updated.expiresAt?.toISOString() ?? null,
+        isPerpetual: updated.isPerpetual,
+      },
+    });
+  });
+
+  const assignBody = z.object({
+    tenantId: z.string().uuid(),
+    validFrom: z.string().datetime().optional(),
+  });
 
   app.post("/licenses/:licenseId/assign", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -639,14 +719,16 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     const [t] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, body.tenantId)).limit(1);
     if (!t) return c.json({ error: "tenant_not_found" }, 404);
 
-    const now = new Date();
+    const assignAt = new Date();
+    const startAt = body.validFrom ? new Date(body.validFrom) : (lic.validFrom ?? assignAt);
     const [upd] = await db
       .update(licenses)
       .set({
         tenantId: body.tenantId,
         status: "active",
-        activatedAt: now,
-        updatedAt: now,
+        activatedAt: assignAt,
+        validFrom: startAt,
+        updatedAt: assignAt,
       })
       .where(eq(licenses.id, lic.id))
       .returning();
