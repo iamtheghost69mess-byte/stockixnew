@@ -2,6 +2,10 @@ import type { ProvisionTracer } from "../../provision-trace.js";
 import { STOCKIX_FINANCE_HEALTH_POLL_MS } from "../constants.js";
 import type { IStockixFinanceBootstrap } from "../contracts.js";
 
+function financeApiBase(internalBaseUrl: string): string {
+  return internalBaseUrl.replace(/\/+$/, "");
+}
+
 export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
   async waitUntilReady(
     internalBaseUrl: string,
@@ -10,7 +14,7 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
     requestId?: string,
     trace?: ProvisionTracer,
   ): Promise<void> {
-    const url = `${internalBaseUrl}/api/ping/`;
+    const url = `${financeApiBase(internalBaseUrl)}/api/ping`;
     const started = Date.now();
     const deadline = started + timeoutMs;
     let lastError = "";
@@ -53,7 +57,7 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
     requestId?: string;
     trace?: ProvisionTracer;
   }): Promise<void> {
-    const url = `${params.internalBaseUrl}/api/auth/register`;
+    const url = `${financeApiBase(params.internalBaseUrl)}/api/auth/register`;
     const maxAttempts = 3;
     const requestTimeoutMs = 10_000;
     let lastFailure = "unknown";

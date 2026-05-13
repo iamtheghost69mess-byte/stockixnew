@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import moment from 'moment';
 
 import { DashboardPageContent } from '@/components';
@@ -12,8 +12,9 @@ import { InventoryValuationLoadingBar } from './components';
 import { useInventoryValuationQuery } from './utils';
 import { compose } from '@/utils';
 
-import withInventoryValuationActions from './withInventoryValuationActions';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withInventoryValuationActions } from './withInventoryValuationActions';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
+import { InventoryValuationDialogs } from './InventoryValuationDialogs';
 
 /**
  * Inventory valuation.
@@ -65,6 +66,8 @@ function InventoryValuation({
         />
         <InventoryValuationBody />
       </DashboardPageContent>
+
+      <InventoryValuationDialogs />
     </InventoryValuationProvider>
   );
 }

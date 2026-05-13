@@ -12,15 +12,15 @@ import {
 
 import { useContactDetailDrawerContext } from './ContactDetailDrawerProvider';
 
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
-import { DashboardActionsBar, Icon, FormattedMessage as T } from '@/components';
+import { DrawerActionsBar, Icon, FormattedMessage as T } from '@/components';
 
 import { safeCallback, compose } from '@/utils';
 
 function ContactDetailActionsBar({
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -46,7 +46,7 @@ function ContactDetailActionsBar({
   };
 
   return (
-    <DashboardActionsBar>
+    <DrawerActionsBar>
       <NavbarGroup>
         <Button
           className={Classes.MINIMAL}
@@ -63,11 +63,11 @@ function ContactDetailActionsBar({
           onClick={safeCallback(onDeleteContact)}
         />
       </NavbarGroup>
-    </DashboardActionsBar>
+    </DrawerActionsBar>
   );
 }
 
 export default compose(
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
 )(ContactDetailActionsBar);

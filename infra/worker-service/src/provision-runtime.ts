@@ -17,12 +17,7 @@ import { composeProjectName } from "../domain/provisioning/compose-project-name.
 import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/constants.js";
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
 import { buildTenantComposeEnvBody, writeTenantEnvFileAtomic } from "../domain/provisioning/tenant-env.js";
-import {
-  composeDownBestEffort,
-  executeAppStep,
-  executeDataStep,
-  executeMigrationStep,
-} from "../domain/provisioning/tenant-docker-workflow.js";
+import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 
 function encryptDeploymentSecret(plaintext: string): string {
@@ -205,6 +200,17 @@ export async function executeProvisionRuntime(
       console.error(`[provision][${correlationId}] cleanup log failure step=${step}: ${msg}`);
     }
   };
+  const assertRequiredRuntimeEnv = async (pairs: Array<{ key: string; value: string }>) => {
+    const missing = pairs
+      .filter(({ value }) => value.trim().length === 0)
+      .map(({ key }) => key);
+    if (missing.length === 0) return;
+    await trace.event("preflight.validation", "Missing required runtime env for tenant provisioning", {
+      level: "error",
+      meta: { missing },
+    });
+    throw new Error(`provision_missing_runtime_env:${missing.join(",")}`);
+  };
 
   try {
     log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
@@ -220,6 +226,19 @@ export async function executeProvisionRuntime(
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
+    // Attachments module requires S3 config at startup; provide local defaults for tenant stacks.
+    const s3Region = process.env.S3_REGION ?? "us-east-1";
+    const s3AccessKeyId = process.env.S3_ACCESS_KEY_ID ?? "local";
+    const s3SecretAccessKey = process.env.S3_SECRET_ACCESS_KEY ?? "local";
+    const s3Endpoint = process.env.S3_ENDPOINT ?? "http://localhost:9000";
+    const s3Bucket = process.env.S3_BUCKET ?? "stockix-local";
+    await assertRequiredRuntimeEnv([
+      { key: "S3_REGION", value: s3Region },
+      { key: "S3_ACCESS_KEY_ID", value: s3AccessKeyId },
+      { key: "S3_SECRET_ACCESS_KEY", value: s3SecretAccessKey },
+      { key: "S3_ENDPOINT", value: s3Endpoint },
+      { key: "S3_BUCKET", value: s3Bucket },
+    ]);
     const existingSlug = await db
       .select({ id: tenants.id })
       .from(tenants)
@@ -264,6 +283,11 @@ export async function executeProvisionRuntime(
       signupAllowedEmails: input.adminEmail,
       agendashUser,
       agendashPassword,
+      s3Region,
+      s3AccessKeyId,
+      s3SecretAccessKey,
+      s3Endpoint,
+      s3Bucket,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
@@ -298,6 +322,11 @@ export async function executeProvisionRuntime(
       MAIL_SECURE: "",
       MAIL_FROM_NAME: "",
       MAIL_FROM_ADDRESS: "",
+      S3_REGION: s3Region,
+      S3_ACCESS_KEY_ID: s3AccessKeyId,
+      S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
+      S3_ENDPOINT: s3Endpoint,
+      S3_BUCKET: s3Bucket,
       AGENDASH_AUTH_USER: agendashUser,
       AGENDASH_AUTH_PASSWORD: agendashPassword,
     };
@@ -338,7 +367,16 @@ export async function executeProvisionRuntime(
     await checkNotCancelled();
     if (!hasOp("docker.data_step")) {
       log("[provision] step start: docker.data_step");
-      await runComposeWithCancellation(["up", "-d", "--no-deps", "--remove-orphans", "mysql", "mongo", "redis"]);
+      await runComposeWithCancellation([
+        "up",
+        "-d",
+        "--no-deps",
+        "--remove-orphans",
+        "--build",
+        "mysql",
+        "mongo",
+        "redis",
+      ]);
       await markOp("docker.data_step", "Data services compose step completed", {
         composeProjectName: project,
       });
@@ -352,7 +390,7 @@ export async function executeProvisionRuntime(
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
       log("database_migration");
-      await runComposeWithCancellation(["run", "--rm", "database_migration"]);
+      await runComposeWithCancellation(["run", "--rm", "--build", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs(),
@@ -372,7 +410,15 @@ export async function executeProvisionRuntime(
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() },
       });
-      await runComposeWithCancellation(["up", "-d", "--remove-orphans", "webapp", "nginx", "server"]);
+      await runComposeWithCancellation([
+        "up",
+        "-d",
+        "--remove-orphans",
+        "--build",
+        "webapp",
+        "nginx",
+        "server",
+      ]);
       await markOp("docker.app_step", "Application compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs(),

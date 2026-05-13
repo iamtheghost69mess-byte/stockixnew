@@ -9,7 +9,7 @@ import { CashFlowStatementProvider } from './CashFlowStatementProvider';
 import CashFlowStatementHeader from './CashFlowStatementHeader';
 import CashFlowStatementActionsBar from './CashFlowStatementActionsBar';
 
-import withCashFlowStatementActions from './withCashFlowStatementActions';
+import { withCashFlowStatementActions } from './withCashFlowStatementActions';
 import {
   CashFlowStatementLoadingBar,
   CashFlowStatementAlerts,
@@ -17,6 +17,7 @@ import {
 
 import { useCashflowStatementQuery } from './utils';
 import { compose } from '@/utils';
+import { CashflowSheetDialogs } from './CashflowSheetDialogs';
 
 /**
  * Cash flow statement.
@@ -71,6 +72,8 @@ function CashFlowStatement({
           <CashFlowStatementBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <CashflowSheetDialogs />
     </CashFlowStatementProvider>
   );
 }

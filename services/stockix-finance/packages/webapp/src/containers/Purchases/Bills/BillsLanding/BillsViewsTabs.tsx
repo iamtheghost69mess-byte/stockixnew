@@ -5,8 +5,8 @@ import { Alignment, Navbar, NavbarGroup } from '@blueprintjs/core';
 import { DashboardViewsTabs } from '@/components';
 import { useBillsListContext } from './BillsListProvider';
 
-import withBills from './withBills';
-import withBillActions from './withBillsActions';
+import { withBills } from './withBills';
+import { withBillsActions } from './withBillsActions';
 
 import { compose, transfromViewsToTabs } from '@/utils';
 
@@ -14,7 +14,7 @@ import { compose, transfromViewsToTabs } from '@/utils';
  * Bills view tabs.
  */
 function BillViewTabs({
-  // #withBillActions
+  // #withBillsActions
   setBillsTableState,
 
   // #withBills
@@ -47,7 +47,7 @@ function BillViewTabs({
 }
 
 export default compose(
-  withBillActions,
+  withBillsActions,
   withBills(({ billsTableState }) => ({
     billsCurrentView: billsTableState.viewSlug,
   })),

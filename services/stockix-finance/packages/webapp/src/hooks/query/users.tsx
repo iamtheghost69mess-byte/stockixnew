@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { useEffect } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
-import { useQueryTenant, useRequestQuery } from '../useQueryRequest';
+import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
 import { useSetFeatureDashboardMeta } from '../state/feature';
 import t from './types';
+import { useSetAuthEmailConfirmed } from '../state';
 
 // Common invalidate queries.
 const commonInvalidateQueries = (queryClient) => {
@@ -18,7 +19,7 @@ export function useCreateInviteUser(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation((values) => apiRequest.post('invite/send', values), {
+  return useMutation((values) => apiRequest.patch('invite', values), {
     onSuccess: () => {
       // Common invalidate queries.
       commonInvalidateQueries(queryClient);
@@ -34,7 +35,7 @@ export function useEditUser(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation(([id, values]) => apiRequest.post(`users/${id}`, values), {
+  return useMutation(([id, values]) => apiRequest.put(`users/${id}`, values), {
     onSuccess: (res, [id, values]) => {
       queryClient.invalidateQueries([t.USER, id]);
 
@@ -104,7 +105,7 @@ export function useUsers(props) {
       url: 'users',
     },
     {
-      select: (res) => res.data.users,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -122,7 +123,7 @@ export function useUser(id, props) {
       url: `users/${id}`,
     },
     {
-      select: (response) => response.data.user,
+      select: (response) => response.data,
       defaultData: {},
       ...props,
     },
@@ -130,15 +131,20 @@ export function useUser(id, props) {
 }
 
 export function useAuthenticatedAccount(props) {
+  const setEmailConfirmed = useSetAuthEmailConfirmed();
+
   return useRequestQuery(
     ['AuthenticatedAccount'],
     {
       method: 'get',
-      url: `account`,
+      url: `auth/account`,
     },
     {
-      select: (response) => response.data.data,
+      select: (response) => response.data,
       defaultData: {},
+      onSuccess: (data) => {
+        setEmailConfirmed(data.verified, data.email);
+      },
       ...props,
     },
   );
@@ -154,7 +160,7 @@ export const useDashboardMeta = (props) => {
     [t.DASHBOARD_META],
     { method: 'get', url: 'dashboard/boot' },
     {
-      select: (res) => res.data.meta,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -166,4 +172,3 @@ export const useDashboardMeta = (props) => {
   }, [state.isSuccess, state.data, setFeatureDashboardMeta]);
   return state;
 };
-

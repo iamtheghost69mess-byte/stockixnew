@@ -16,7 +16,7 @@ const initialState = {
   tableState: defaultTableQuery,
 };
 
-const STORAGE_KEY = 'stockix:projects';
+const STORAGE_KEY = 'bigcapital:projects';
 
 const CONFIG = {
   key: STORAGE_KEY,

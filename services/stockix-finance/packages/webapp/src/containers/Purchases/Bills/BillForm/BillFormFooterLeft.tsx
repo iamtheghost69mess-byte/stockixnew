@@ -15,6 +15,8 @@ export function BillFormFooterLeft() {
         <FEditableText
           name={'note'}
           placeholder={intl.get('bill_form.label.note.placeholder')}
+          fastField
+          multiline
         />
       </TermsConditsFormGroup>
     </React.Fragment>
@@ -22,12 +24,12 @@ export function BillFormFooterLeft() {
 }
 
 const TermsConditsFormGroup = styled(FFormGroup)`
-  &.bp3-form-group {
-    .bp3-label {
+  &.bp4-form-group {
+    .bp4-label {
       font-size: 12px;
       margin-bottom: 12px;
     }
-    .bp3-form-content {
+    .bp4-form-content {
       margin-left: 10px;
     }
   }

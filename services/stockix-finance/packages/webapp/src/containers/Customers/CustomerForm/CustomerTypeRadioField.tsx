@@ -1,44 +1,52 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import classNames from 'classnames';
-import { RadioGroup, Radio, FormGroup } from '@blueprintjs/core';
-import { FormattedMessage as T } from '@/components';
+import { Button, ButtonGroup } from '@blueprintjs/core';
 import { FastField } from 'formik';
-
-import { handleStringChange, saveInvoke } from '@/utils';
+import { FormattedMessage as T, FFormGroup } from '@/components';
 
 /**
- * Customer type radio field.
+ * Customer type selector (button group).
  */
-export default function RadioCustomer(props) {
-  const { onChange, ...rest } = props;
-  
-
+export function CustomerTypeRadioField() {
   return (
-    <FastField name={'customer_type'}>
-      {({ form, field: { value }, meta: { error, touched } }) => (
-        <FormGroup
-          inline={true}
-          label={<T id={'customer_type'} />}
-          className={classNames('form-group--customer_type')}
-        >
-          <RadioGroup
-            inline={true}
-            onChange={handleStringChange((value) => {
-              saveInvoke(onChange, value);
-              form.setFieldValue('customer_type', value);
-            })}
-            selectedValue={value}
-          >
-            <Radio label={intl.get('business')} value="business" />
-            <Radio
-              label={intl.get('individual')}
-              value="individual"
-            />
-          </RadioGroup>
-        </FormGroup>
-      )}
-    </FastField>
+    <FFormGroup
+      name={'customer_type'}
+      label={<T id={'customer_type'} />}
+      inline
+      fill
+      fastField
+    >
+      <FastField name="customer_type">
+        {({ field, form }) => (
+          <ButtonGroup>
+            <Button
+              type="button"
+              outlined
+              small
+              active={field.value === 'business'}
+              onClick={() => {
+                form.setFieldValue('customer_type', 'business');
+                form.setFieldTouched('customer_type', true);
+              }}
+            >
+              {intl.get('business')}
+            </Button>
+            <Button
+              type="button"
+              outlined
+              small
+              active={field.value === 'individual'}
+              onClick={() => {
+                form.setFieldValue('customer_type', 'individual');
+                form.setFieldTouched('customer_type', true);
+              }}
+            >
+              {intl.get('individual')}
+            </Button>
+          </ButtonGroup>
+        )}
+      </FastField>
+    </FFormGroup>
   );
 }

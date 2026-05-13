@@ -19,7 +19,10 @@ export default function ReceivableAgingSummaryTable({
   organizationName,
 }) {
   // AR aging summary report context.
-  const { ARAgingSummary, isARAgingLoading } = useARAgingSummaryContext();
+  const {
+    ARAgingSummary: { table, query, meta },
+    isARAgingLoading,
+  } = useARAgingSummaryContext();
 
   // AR aging summary columns.
   const columns = useARAgingSummaryColumns();
@@ -28,12 +31,12 @@ export default function ReceivableAgingSummaryTable({
     <FinancialSheet
       companyName={organizationName}
       sheetType={intl.get('receivable_aging_summary')}
-      asDate={new Date()}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       loading={isARAgingLoading}
     >
       <ARAgingSummaryDataTable
         columns={columns}
-        data={ARAgingSummary.tableRows}
+        data={table.rows}
         rowClassNames={tableRowTypesToClassnames}
         noInitialFetch={true}
         sticky={true}
@@ -44,17 +47,25 @@ export default function ReceivableAgingSummaryTable({
 }
 
 const ARAgingSummaryDataTable = styled(ReportDataTable)`
+  --color-table-text-color: #252a31;
+  --color-table-total-text-color: #000;
+  --color-table-total-border-top: #bbb;
+
+  .bp4-dark & {
+    --color-table-text-color: var(--color-light-gray1);
+    --color-table-total-text-color: var(--color-light-gray4);
+    --color-table-total-border-top: var(--color-dark-gray5);
+  }
   .table {
     .tbody .tr {
       .td {
-        border-bottom: 0;
+        border-bottom-width: 0;
         padding-top: 0.32rem;
         padding-bottom: 0.32rem;
       }
-
       &:not(.no-results) {
         .td {
-          border-bottom: 0;
+          border-bottom-width: 0;
           padding-top: 0.4rem;
           padding-bottom: 0.4rem;
         }
@@ -65,8 +76,9 @@ const ARAgingSummaryDataTable = styled(ReportDataTable)`
           font-weight: 500;
 
           .td {
-            border-top: 1px solid #bbb;
-            border-bottom: 3px double #333;
+            border-top: 1px solid var(--color-table-total-border-top);
+            border-bottom-width: 3px;
+            border-bottom-style: double;
           }
         }
       }

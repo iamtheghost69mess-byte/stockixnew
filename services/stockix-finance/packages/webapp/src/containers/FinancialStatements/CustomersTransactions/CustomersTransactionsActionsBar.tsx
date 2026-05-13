@@ -9,16 +9,19 @@ import {
   PopoverInteractionKind,
   Position,
 } from '@blueprintjs/core';
-import { DashboardActionsBar, FormattedMessage as T, Icon } from '@/components';
 import classNames from 'classnames';
+import { DashboardActionsBar, FormattedMessage as T, Icon } from '@/components';
 
+import { CustomersTransactionsExportMenu } from './components';
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
 import { useCustomersTransactionsContext } from './CustomersTransactionsProvider';
-import withCustomersTransactions from './withCustomersTransactions';
-import withCustomersTransactionsActions from './withCustomersTransactionsActions';
+import { withCustomersTransactions } from './withCustomersTransactions';
+import { withCustomersTransactionsActions } from './withCustomersTransactionsActions';
 
 import { compose, saveInvoke } from '@/utils';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Customers transactions actions bar.
@@ -33,6 +36,9 @@ function CustomersTransactionsActionsBar({
 
   //#withCustomersTransactionsActions
   toggleCustomersTransactionsFilterDrawer,
+
+  // #withDialogActions
+  openDialog
 }) {
   const { isCustomersTransactionsLoading, CustomersTransactionsRefetch } =
     useCustomersTransactionsContext();
@@ -50,6 +56,11 @@ function CustomersTransactionsActionsBar({
   // Handle number format form submit.
   const handleNumberFormatSubmit = (values) => {
     saveInvoke(onNumberFormatSubmit, values);
+  };
+
+  // Handle print button click.
+  const handlePrintBtnClick = () => {
+    openDialog(DialogsName.CustomerTransactionsPdfPreview)
   };
 
   return (
@@ -95,30 +106,26 @@ function CustomersTransactionsActionsBar({
           />
         </Popover>
 
-        <Popover
-          // content={}
-          interactionKind={PopoverInteractionKind.CLICK}
-          position={Position.BOTTOM_LEFT}
-        >
-          <Button
-            className={classNames(Classes.MINIMAL, 'button--filter')}
-            text={<T id={'filter'} />}
-            icon={<Icon icon="filter-16" iconSize={16} />}
-          />
-        </Popover>
-
         <NavbarDivider />
 
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
+        <Popover
+          content={<CustomersTransactionsExportMenu />}
+          interactionKind={PopoverInteractionKind.CLICK}
+          placement="bottom-start"
+          minimal
+        >
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="file-export-16" iconSize={16} />}
+            text={<T id={'export'} />}
+          />
+        </Popover>
       </NavbarGroup>
     </DashboardActionsBar>
   );
@@ -129,4 +136,5 @@ export default compose(
     isFilterDrawerOpen: customersTransactionsDrawerFilter,
   })),
   withCustomersTransactionsActions,
+  withDialogActions
 )(CustomersTransactionsActionsBar);

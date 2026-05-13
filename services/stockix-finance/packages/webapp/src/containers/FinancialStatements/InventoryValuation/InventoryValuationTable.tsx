@@ -8,34 +8,34 @@ import { ReportDataTable, FinancialSheet } from '@/components';
 import { tableRowTypesToClassnames } from '@/utils';
 
 import { useInventoryValuationContext } from './InventoryValuationProvider';
-import { useInventoryValuationTableColumns } from './components';
+import { useInventoryValuationColumns } from './dynamicColumns';
 
 /**
- * inventory valuation data table.
+ * Inventory valuation data table.
  */
 export default function InventoryValuationTable({
-  //#ownProps
+  // #ownProps
   companyName,
 }) {
-  // inventory valuation context.
+  // Inventory valuation context.
   const {
-    inventoryValuation: { tableRows },
+    inventoryValuation: { table, query, meta },
     isLoading,
   } = useInventoryValuationContext();
 
-  // inventory valuation table columns.
-  const columns = useInventoryValuationTableColumns();
+  // Inventory valuation table columns.
+  const columns = useInventoryValuationColumns();
 
   return (
     <InventoryValuationSheet
       companyName={companyName}
       sheetType={intl.get('inventory_valuation')}
-      asDate={new Date()}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       loading={isLoading}
     >
       <InventoryValuationDataTable
         columns={columns}
-        data={tableRows}
+        data={table.rows}
         expandable={true}
         expandToggleColumn={1}
         expandColumnSpace={1}
@@ -55,17 +55,29 @@ const InventoryValuationSheet = styled(FinancialSheet)`
 `;
 
 const InventoryValuationDataTable = styled(ReportDataTable)`
+  --color-table-text-color: #252a31;
+  --color-table-total-text-color: #000;
+  --color-table-total-border: #bbb;
+
+  .bp4-dark & {
+    --color-table-text-color: var(--color-light-gray1);
+    --color-table-total-text-color: var(--color-light-gray4);
+    --color-table-total-border: var(--color-dark-gray5);
+  }
+
   .table {
     .tbody {
       .tr .td {
         border-bottom: 0;
         padding-top: 0.4rem;
         padding-bottom: 0.4rem;
+        color: var(--color-table-text-color);
       }
-      .tr.row_type--total .td {
-        border-top: 1px solid #bbb;
+      .tr.row_type--TOTAL .td {
+        border-top: 1px solid var(--color-table-total-border);
+        border-bottom: 3px double var(--color-table-total-border);
         font-weight: 500;
-        border-bottom: 3px double #000;
+        color: var(--color-table-total-text-color);
       }
     }
   }

@@ -20,18 +20,17 @@ export default function VendorsTransactionsTable({
   companyName,
 }) {
   // Vendor transactions context.
-  const {
-    vendorsTransactions: { tableRows },
-    isVendorsTransactionsLoading,
-    query,
-  } = useVendorsTransactionsContext();
+  const { vendorsTransactions, isVendorsTransactionsLoading } =
+    useVendorsTransactionsContext();
+
+  const { table, query, meta } = vendorsTransactions;
 
   // Retireve vendor transactions table columns.
   const columns = useVendorsTransactionsColumns();
 
   const expandedRows = useMemo(
-    () => defaultExpanderReducer(tableRows, 5),
-    [tableRows],
+    () => defaultExpanderReducer(table.rows, 5),
+    [table.rows],
   );
 
   return (
@@ -40,19 +39,19 @@ export default function VendorsTransactionsTable({
       companyName={companyName}
       sheetType={intl.get('vendors_transactions')}
       loading={isVendorsTransactionsLoading}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       fullWidth={true}
     >
       <VendorsTransactionsDataTable
         columns={columns}
-        data={tableRows}
+        data={table.rows}
         rowClassNames={tableRowTypesToClassnames}
         noInitialFetch={true}
         expandable={true}
         expanded={expandedRows}
         expandToggleColumn={1}
         expandColumnSpace={0.8}
+        sticky={true}
         styleName={TableStyle.Constrant}
       />
     </FinancialSheet>
@@ -60,19 +59,23 @@ export default function VendorsTransactionsTable({
 }
 
 const VendorsTransactionsDataTable = styled(DataTable)`
+  --color-table-border-left-color: #ececec;
+  --color-table-customer-border-color: #ddd;
+  --color-table-border-left-color: var(--color-dark-gray4);
+  --color-table-customer-border-color: var(--color-dark-gray4);
+
   .table {
     .tbody {
       .tr .td {
         padding-top: 0.2rem;
         padding-bottom: 0.2rem;
       }
-      .tr:not(.no-results) .td {
-        border-left: 1px solid #ececec;
+      .tr:not(.no-results) .td:not(:first-of-type) {
+        border-left: 1px solid var(--color-table-border-left-color);
       }
       .tr:last-child .td {
-        border-bottom: 1px solid #e0e0e0;
+        border-bottom-width: 1px;
       }
-
       .tr.row_type {
         &--VENDOR {
           .td {
@@ -81,7 +84,7 @@ const VendorsTransactionsDataTable = styled(DataTable)`
             }
           }
           &:not(:first-child).is-expanded .td {
-            border-top: 1px solid #ddd;
+            border-top: 1px solid var(--color-table-customer-border-color);
           }
         }
         &--OPENING_BALANCE,
@@ -95,12 +98,12 @@ const VendorsTransactionsDataTable = styled(DataTable)`
             }
           }
           &:not(:first-child).is-expanded .td {
-            border-top: 1px solid #ddd;
+            border-top: 1px solid var(--color-table-customer-border-color);
           }
         }
         &--VENDOR:last-child {
           .td {
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--color-table-customer-border-color);
           }
         }
       }

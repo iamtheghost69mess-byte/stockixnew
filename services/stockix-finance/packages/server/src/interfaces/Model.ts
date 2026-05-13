@@ -32,22 +32,48 @@ export interface IModelMetaFieldCommon {
   name: string;
   column: string;
   columnable?: boolean;
-  fieldType: IModelColumnType;
   customQuery?: Function;
+  required?: boolean;
+  importHint?: string;
+  importable?: boolean;
+  importableRelationLabel?: string;
+  order?: number;
+  unique?: number;
+  dataTransferObjectKey?: string;
+  filterCustomQuery?: Function;
+  sortCustomQuery?: Function;
 }
 
-export interface IModelMetaFieldNumber {
-  fieldType: 'number';
+export interface IModelMetaFieldText {
+  fieldType: 'text';
   minLength?: number;
   maxLength?: number;
 }
-
-export interface IModelMetaFieldOther {
-  fieldType: 'text' | 'boolean';
+export interface IModelMetaFieldBoolean {
+  fieldType: 'boolean';
 }
-
+export interface IModelMetaFieldNumber {
+  fieldType: 'number';
+  min?: number;
+  max?: number;
+}
+export interface IModelMetaFieldDate {
+  fieldType: 'date';
+}
+export interface IModelMetaFieldUrl {
+  fieldType: 'url';
+}
 export type IModelMetaField = IModelMetaFieldCommon &
-  (IModelMetaFieldOther | IModelMetaEnumerationField | IModelMetaRelationField);
+  (
+    | IModelMetaFieldText
+    | IModelMetaFieldNumber
+    | IModelMetaFieldBoolean
+    | IModelMetaFieldDate
+    | IModelMetaFieldUrl
+    | IModelMetaEnumerationField
+    | IModelMetaRelationField
+    | IModelMetaCollectionField
+  );
 
 export interface IModelMetaEnumerationOption {
   key: string;
@@ -70,12 +96,103 @@ export interface IModelMetaRelationEnumerationField {
   relationEntityKey: string;
 }
 
-export type IModelMetaRelationField = IModelMetaRelationFieldCommon & (
-  IModelMetaRelationEnumerationField
-);
+export interface IModelMetaFieldWithFields {
+  fields: IModelMetaFieldCommon2 &
+    (
+      | IModelMetaFieldText
+      | IModelMetaFieldNumber
+      | IModelMetaFieldBoolean
+      | IModelMetaFieldDate
+      | IModelMetaFieldUrl
+      | IModelMetaEnumerationField
+      | IModelMetaRelationField
+    );
+}
+
+interface IModelMetaCollectionObjectField extends IModelMetaFieldWithFields {
+  collectionOf: 'object';
+}
+
+export interface IModelMetaCollectionFieldCommon {
+  fieldType: 'collection';
+  collectionMinLength?: number;
+  collectionMaxLength?: number;
+}
+
+export type IModelMetaCollectionField = IModelMetaCollectionFieldCommon &
+  IModelMetaCollectionObjectField;
+
+export type IModelMetaRelationField = IModelMetaRelationFieldCommon &
+  IModelMetaRelationEnumerationField;
+
+interface IModelPrintMeta {
+  pageTitle: string;
+}
 
 export interface IModelMeta {
   defaultFilterField: string;
   defaultSort: IModelMetaDefaultSort;
-  fields: { [key: string]: IModelMetaField };
+
+  exportable?: boolean;
+  exportFlattenOn?: string;
+
+  importable?: boolean;
+  importAggregator?: string;
+  importAggregateOn?: string;
+  importAggregateBy?: string;
+
+  print?: IModelPrintMeta;
+
+  fields: Record<string, IModelMetaField>;
+  fields2: Record<string, IModelMetaField2>;
+  columns: Record<string, IModelMetaColumn>;
 }
+
+// ----
+export interface IModelMetaFieldCommon2 {
+  name: string;
+  required?: boolean;
+  importHint?: string;
+  order?: number;
+  unique?: number;
+  features?: Array<any>;
+}
+
+export interface IModelMetaRelationField2 {
+  fieldType: 'relation';
+  relationModel: string;
+  importableRelationLabel: string | string[];
+}
+
+export type IModelMetaField2 = IModelMetaFieldCommon2 &
+  IModelMetaFieldWithFields &
+  (
+    | IModelMetaFieldText
+    | IModelMetaFieldNumber
+    | IModelMetaFieldBoolean
+    | IModelMetaFieldDate
+    | IModelMetaFieldUrl
+    | IModelMetaEnumerationField
+    | IModelMetaRelationField2
+    | IModelMetaCollectionField
+  );
+
+export interface ImodelMetaColumnMeta {
+  name: string;
+  accessor?: string;
+  exportable?: boolean;
+  features?: Array<any>;
+}
+
+interface IModelMetaColumnText {
+  type: 'text;';
+}
+
+interface IModelMetaColumnCollection {
+  type: 'collection';
+  collectionOf: 'object';
+  columns: { [key: string]: ImodelMetaColumnMeta & IModelMetaColumnText };
+}
+
+export type IModelMetaColumn = ImodelMetaColumnMeta &
+  (IModelMetaColumnText | IModelMetaColumnCollection);

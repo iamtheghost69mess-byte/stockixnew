@@ -1,9 +1,7 @@
 // @ts-nocheck
 import { useQueryClient, useMutation } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
-import { transformPagination } from '@/utils';
 import useApiRequest from '../useRequest';
-import { useRequestPdf } from '../utils';
 import t from './types';
 
 // Common invalidate queries.
@@ -96,7 +94,7 @@ export function useTransactionsLocking(query, props) {
     [t.TRANSACTIONS_LOCKING, query],
     { method: 'get', url: 'transactions-locking', params: query },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -108,7 +106,7 @@ export function useEditTransactionsLocking(query, props) {
     [t.TRANSACTION_LOCKING, query],
     { method: 'get', url: `transactions-locking/${query}` },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },

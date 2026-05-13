@@ -10,8 +10,10 @@ import {
 } from '@blueprintjs/core';
 import { DateInput } from '@blueprintjs/datetime';
 import { FastField, ErrorMessage, useFormikContext } from 'formik';
-import { CLASSES } from '@/constants/classes';
+import { useTheme } from '@emotion/react';
+import { css } from '@emotion/css';
 
+import { CLASSES } from '@/constants/classes';
 import {
   FFormGroup,
   FieldRequiredHint,
@@ -20,6 +22,9 @@ import {
   FormattedMessage as T,
   VendorDrawerLink,
   VendorsSelect,
+  Stack,
+  FDateInput,
+  FInputGroup,
 } from '@/components';
 import {
   vendorsFieldShouldUpdate,
@@ -36,8 +41,25 @@ import {
   handleDateChange,
 } from '@/utils';
 
-import withSettings from '@/containers/Settings/withSettings';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+
+const getFieldsStyle = (theme: Theme) => css`
+  .${theme.bpPrefix}-form-group {
+    margin-bottom: 0;
+
+    &.${theme.bpPrefix}-inline {
+      max-width: 500px;
+    }
+    .${theme.bpPrefix}-label {
+      min-width: 150px;
+      font-weight: 500;
+    }
+    .${theme.bpPrefix}-form-content {
+      width: 100%;
+    }
+  }
+`;
 
 /**
  * Vendor Credit note form header fields.
@@ -51,16 +73,21 @@ function VendorCreditNoteFormHeaderFields({
   vendorcreditNumberPrefix,
   vendorcreditNextNumber,
 }) {
+  const theme = useTheme();
+  const fieldsClassName = getFieldsStyle(theme);
+  const { values } = useFormikContext();
+
   // Handle vendor credit number changing.
   const handleVendorCreditNumberChange = () => {
     openDialog('vendor-credit-form');
   };
 
   // Handle vendor credit no. field blur.
-  const handleVendorCreditNoBlur = (form, field) => (event) => {
+  const handleVendorCreditNoBlur = (event) => {
     const newValue = event.target.value;
+    const oldValue = values.vendor_credit_number;
 
-    if (field.value !== newValue && vendorcreditAutoIncrement) {
+    if (oldValue !== newValue && vendorcreditAutoIncrement) {
       openDialog('vendor-credit-form', {
         initialFormValues: {
           manualTransactionNo: newValue,
@@ -76,7 +103,7 @@ function VendorCreditNoteFormHeaderFields({
   );
 
   return (
-    <div className={classNames(CLASSES.PAGE_FORM_HEADER_FIELDS)}>
+    <Stack spacing={18} flex={1} className={fieldsClassName}>
       {/* ----------- Vendor name ----------- */}
       <VendorCreditFormVendorSelect />
 
@@ -85,88 +112,62 @@ function VendorCreditNoteFormHeaderFields({
         name={'exchange_rate'}
         formGroupProps={{ label: ' ', inline: true }}
       />
-
       {/* ------- Vendor Credit date ------- */}
-      <FastField name={'vendor_credit_date'}>
-        {({ form, field: { value }, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'credit_note.label_credit_note_date'} />}
-            inline={true}
-            labelInfo={<FieldRequiredHint />}
-            className={classNames(
-              'form-group--vendor_credit_date',
-              CLASSES.FILL,
-            )}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="vendor_credit_date" />}
-          >
-            <DateInput
-              {...momentFormatter('YYYY/MM/DD')}
-              value={tansformDateValue(value)}
-              onChange={handleDateChange((formattedDate) => {
-                form.setFieldValue('vendor_credit_date', formattedDate);
-              })}
-              popoverProps={{ position: Position.BOTTOM_LEFT, minimal: true }}
-              inputProps={{
-                leftIcon: <Icon icon={'date-range'} />,
-              }}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'vendor_credit_date'}
+        label={<T id={'credit_note.label_credit_note_date'} />}
+        inline
+        labelInfo={<FieldRequiredHint />}
+        fill
+        fastField
+      >
+        <FDateInput
+          name={'vendor_credit_date'}
+          {...momentFormatter('YYYY/MM/DD')}
+          popoverProps={{ position: Position.BOTTOM_LEFT, minimal: true }}
+          inputProps={{ leftIcon: <Icon icon={'date-range'} />, fill: true }}
+          fill
+          fastField
+        />
+      </FFormGroup>
 
       {/* ----------- Vendor Credit No # ----------- */}
-      <FastField name={'vendor_credit_number'}>
-        {({ form, field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'credit_note.label_credit_note'} />}
-            inline={true}
-            labelInfo={<FieldRequiredHint />}
-            className={('form-group--vendor_credit_number', CLASSES.FILL)}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="vendor_credit_number" />}
-          >
-            <ControlGroup fill={true}>
-              <InputGroup
-                minimal={true}
-                value={field.value}
-                asyncControl={true}
-                onBlur={handleVendorCreditNoBlur(form, field)}
-              />
-              <InputPrependButton
-                buttonProps={{
-                  onClick: handleVendorCreditNumberChange,
-                  icon: <Icon icon={'settings-18'} />,
-                }}
-                tooltip={true}
-                tooltipProps={{
-                  content: (
-                    <T
-                      id={'setting_your_auto_generated_vendor_credit_number'}
-                    />
-                  ),
-                  position: Position.BOTTOM_LEFT,
-                }}
-              />
-            </ControlGroup>
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'vendor_credit_number'}
+        label={<T id={'credit_note.label_credit_note'} />}
+        inline={true}
+        labelInfo={<FieldRequiredHint />}
+        fastField
+      >
+        <ControlGroup fill={true}>
+          <FInputGroup
+            name={'vendor_credit_number'}
+            minimal={true}
+            asyncControl={true}
+            onBlur={handleVendorCreditNoBlur}
+            fastField
+          />
+          <InputPrependButton
+            buttonProps={{
+              onClick: handleVendorCreditNumberChange,
+              icon: <Icon icon={'settings-18'} />,
+            }}
+            tooltip={true}
+            tooltipProps={{
+              content: (
+                <T id={'setting_your_auto_generated_vendor_credit_number'} />
+              ),
+              position: Position.BOTTOM_LEFT,
+            }}
+          />
+        </ControlGroup>
+      </FFormGroup>
+
       {/* ----------- Reference ----------- */}
-      <FastField name={'reference_no'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'reference_no'} />}
-            inline={true}
-            className={classNames('form-group--reference', CLASSES.FILL)}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="reference_no" />}
-          >
-            <InputGroup minimal={true} {...field} />
-          </FormGroup>
-        )}
-      </FastField>
-    </div>
+      <FFormGroup name={'reference_no'} label={<T id={'reference_no'} />} inline={true} fastField>
+        <FInputGroup name={'reference_no'} minimal={true} fastField />
+      </FFormGroup>
+    </Stack>
   );
 }
 

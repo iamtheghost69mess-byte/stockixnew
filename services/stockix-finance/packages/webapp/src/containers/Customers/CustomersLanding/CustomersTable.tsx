@@ -13,12 +13,12 @@ import {
 } from '@/components';
 import { ActionsMenu, useCustomersTableColumns } from './components';
 
-import withCustomers from './withCustomers';
-import withCustomersActions from './withCustomersActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withCustomers } from './withCustomers';
+import { withCustomersActions } from './withCustomersActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { useCustomersListContext } from './CustomersListProvider';
 import { useMemorizedColumnsWidths } from '@/hooks';
@@ -32,6 +32,7 @@ import { DRAWERS } from '@/constants/drawers';
 function CustomersTable({
   // #withCustomersActions
   setCustomersTableState,
+  setCustomersSelectedRows,
 
   // #withCustomers
   customersTableState,
@@ -76,6 +77,14 @@ function CustomersTable({
       });
     },
     [setCustomersTableState],
+  );
+
+  const handleSelectedRowsChange = React.useCallback(
+    (selectedFlatRows) => {
+      const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+      setCustomersSelectedRows(selectedIds);
+    },
+    [setCustomersSelectedRows],
   );
 
   // Handles the customer delete action.
@@ -136,9 +145,12 @@ function CustomersTable({
         sticky={true}
         spinnerProps={{ size: 30 }}
         pagination={true}
+        initialPageSize={customersTableState.pageSize}
         manualSortBy={true}
         manualPagination={true}
         pagesCount={pagination.pagesCount}
+        onSelectedRowsChange={handleSelectedRowsChange}
+        autoResetSelectedRows={false}
         autoResetSortBy={false}
         autoResetPage={false}
         TableLoadingRenderer={TableSkeletonRows}
@@ -162,7 +174,7 @@ function CustomersTable({
 }
 
 export default compose(
-  withAlertsActions,
+  withAlertActions,
   withDialogActions,
   withCustomersActions,
   withDrawerActions,

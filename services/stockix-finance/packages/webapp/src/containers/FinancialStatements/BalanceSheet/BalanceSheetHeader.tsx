@@ -9,8 +9,8 @@ import { FormattedMessage as T } from '@/components';
 import { useFeatureCan } from '@/hooks/state';
 import { Features } from '@/constants';
 
-import withBalanceSheet from './withBalanceSheet';
-import withBalanceSheetActions from './withBalanceSheetActions';
+import { withBalanceSheet } from './withBalanceSheet';
+import { withBalanceSheetActions } from './withBalanceSheetActions';
 
 import BalanceSheetHeaderGeneralPanal from './BalanceSheetHeaderGeneralPanal';
 import BalanceSheetHeaderComparisonPanal from './BalanceSheetHeaderComparisonPanal';
@@ -68,7 +68,6 @@ function BalanceSheetHeader({
   };
   // Detarmines the given feature whether is enabled.
   const { featureCan } = useFeatureCan();
-
   const isBranchesFeatureCan = featureCan(Features.Branches);
 
   return (
@@ -126,7 +125,7 @@ export default compose(
 )(BalanceSheetHeader);
 
 const BalanceSheetFinancialHeader = styled(FinancialStatementHeader)`
-  .bp3-drawer {
+  .bp4-drawer {
     max-height: 520px;
   }
 `;

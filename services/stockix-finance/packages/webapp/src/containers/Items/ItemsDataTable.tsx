@@ -12,11 +12,12 @@ import {
 
 import ItemsEmptyStatus from './ItemsEmptyStatus';
 
-import withItemsActions from './withItemsActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withItemsActions } from './withItemsActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withItems } from './withItems';
 
 import { useItemsListContext } from './ItemsListProvider';
 import { useItemsTableColumns, ItemsActionMenuList } from './components';
@@ -30,11 +31,12 @@ import { DRAWERS } from '@/constants/drawers';
 function ItemsDataTable({
   // #withItemsActions
   setItemsTableState,
+  setItemsSelectedRows,
 
   // #withDialogAction
   openDialog,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -42,6 +44,9 @@ function ItemsDataTable({
 
   // #withSettings
   itemsTableSize,
+
+  // #withItems
+  itemsTableState,
 
   // #ownProps
   tableProps,
@@ -75,6 +80,15 @@ function ItemsDataTable({
       });
     },
     [setItemsTableState],
+  );
+
+  // Handle selected rows change.
+  const handleSelectedRowsChange = React.useCallback(
+    (selectedFlatRows) => {
+      const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+      setItemsSelectedRows(selectedIds);
+    },
+    [setItemsSelectedRows],
   );
 
   // Handle delete action Item.
@@ -132,11 +146,14 @@ function ItemsDataTable({
         progressBarLoading={isItemsFetching}
         noInitialFetch={true}
         selectionColumn={true}
+        onSelectedRowsChange={handleSelectedRowsChange}
+        autoResetSelectedRows={false}
         spinnerProps={{ size: 30 }}
         expandable={false}
         sticky={true}
         rowClassNames={rowClassNames}
         pagination={true}
+        initialPageSize={itemsTableState.pageSize}
         manualSortBy={true}
         manualPagination={true}
         pagesCount={pagination.pagesCount}
@@ -168,10 +185,11 @@ function ItemsDataTable({
 
 export default compose(
   withItemsActions,
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
   withSettings(({ itemsSettings }) => ({
     itemsTableSize: itemsSettings.tableSize,
   })),
+  withItems(({ itemsTableState }) => ({ itemsTableState }))
 )(ItemsDataTable);

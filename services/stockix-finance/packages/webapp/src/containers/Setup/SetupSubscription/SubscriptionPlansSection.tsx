@@ -1,42 +1,23 @@
-// @ts-nocheck
-import React from 'react';
-import { Field } from 'formik';
-
-import { T, SubscriptionPlans } from '@/components';
-
-import { compose } from '@/utils';
-import withPlans from '../../Subscriptions/withPlans';
+import { Callout } from '@blueprintjs/core';
+import { SubscriptionPlans } from './SubscriptionPlans';
+import { SubscriptionPlansPeriodSwitcher } from './SubscriptionPlansPeriodSwitcher';
+import { SubscriptionPlansOfferChecks } from './SubscriptionPlansOfferChecks';
 
 /**
  * Billing plans.
  */
-function SubscriptionPlansSection({ plans }) {
+export function SubscriptionPlansSection() {
   return (
-    <section class="billing-plans__section">
-      <h1 class="title">
-        <T id={'setup.plans.select_plan.title'} />
-      </h1>
-      <div class="description">
-        <p className="paragraph">
-          <T id={'setup.plans.select_plan.description'} />
-        </p>
-      </div>
+    <section>
+      <Callout style={{ marginBottom: '2rem' }} icon={null}>
+        Simple plans. Simple prices. Only pay for what you really need. All
+        plans come with award-winning 24/7 customer support. Prices do not
+        include applicable taxes.
+      </Callout>
 
-      <Field name={'plan_slug'}>
-        {({ form: { setFieldValue }, field: { value } }) => (
-          <SubscriptionPlans
-            value={value}
-            plans={plans}
-            onSelect={(value) => {
-              setFieldValue('plan_slug', value);
-            }}
-          />
-        )}
-      </Field>
+      <SubscriptionPlansOfferChecks />
+      <SubscriptionPlansPeriodSwitcher />
+      <SubscriptionPlans />
     </section>
   );
 }
-
-export default compose(withPlans(({ plans }) => ({ plans })))(
-  SubscriptionPlansSection,
-);

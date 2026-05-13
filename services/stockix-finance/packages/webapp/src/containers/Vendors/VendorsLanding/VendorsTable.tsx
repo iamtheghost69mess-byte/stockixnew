@@ -15,12 +15,12 @@ import { useVendorsListContext } from './VendorsListProvider';
 import { useMemorizedColumnsWidths } from '@/hooks';
 import { ActionsMenu, useVendorsTableColumns } from './components';
 
-import withVendors from './withVendors';
-import withVendorsActions from './withVendorsActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withVendors } from './withVendors';
+import { withVendorsActions } from './withVendorsActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
@@ -31,11 +31,12 @@ import { DRAWERS } from '@/constants/drawers';
 function VendorsTable({
   // #withVendorsActions
   setVendorsTableState,
+  setVendorsSelectedRows,
 
   // #withVendors
   vendorsTableState,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -118,6 +119,14 @@ function VendorsTable({
     [setVendorsTableState],
   );
 
+  const handleSelectedRowsChange = React.useCallback(
+    (selectedFlatRows) => {
+      const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+      setVendorsSelectedRows(selectedIds);
+    },
+    [setVendorsSelectedRows],
+  );
+
   // Display empty status instead of the table.
   if (isEmptyStatus) {
     return <VendorsEmptyStatus />;
@@ -137,10 +146,13 @@ function VendorsTable({
         expandable={false}
         sticky={true}
         pagination={true}
+        initialPageSize={vendorsTableState.pageSize}
         manualSortBy={true}
         pagesCount={pagination.pagesCount}
         autoResetSortBy={false}
         autoResetPage={false}
+        onSelectedRowsChange={handleSelectedRowsChange}
+        autoResetSelectedRows={false}
         TableLoadingRenderer={TableSkeletonRows}
         TableHeaderSkeletonRenderer={TableSkeletonHeader}
         ContextMenu={ActionsMenu}
@@ -163,7 +175,7 @@ function VendorsTable({
 
 export default compose(
   withVendorsActions,
-  withAlertsActions,
+  withAlertActions,
   withDialogActions,
   withDrawerActions,
 

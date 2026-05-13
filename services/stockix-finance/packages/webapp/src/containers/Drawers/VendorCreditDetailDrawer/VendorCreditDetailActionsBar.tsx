@@ -12,15 +12,15 @@ import {
 import { useVendorCreditDetailDrawerContext } from './VendorCreditDetailDrawerProvider';
 import { VendorCreditMenuItem } from './utils';
 import { VendorCreditAction, AbilitySubject } from '@/constants/abilityOption';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import {
   If,
   Icon,
   FormattedMessage as T,
-  DashboardActionsBar,
+  DrawerActionsBar,
   Can,
 } from '@/components';
 
@@ -34,7 +34,7 @@ function VendorCreditDetailActionsBar({
   // #withDialogActions
   openDialog,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -63,7 +63,7 @@ function VendorCreditDetailActionsBar({
   };
 
   return (
-    <DashboardActionsBar>
+    <DrawerActionsBar>
       <NavbarGroup>
         <Can I={VendorCreditAction.Edit} a={AbilitySubject.VendorCredit}>
           <Button
@@ -105,12 +105,12 @@ function VendorCreditDetailActionsBar({
           </If>
         </Can>
       </NavbarGroup>
-    </DashboardActionsBar>
+    </DrawerActionsBar>
   );
 }
 
 export default compose(
   withDialogActions,
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
 )(VendorCreditDetailActionsBar);

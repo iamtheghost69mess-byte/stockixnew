@@ -14,11 +14,11 @@ import ManualJournalsEmptyStatus from './ManualJournalsEmptyStatus';
 
 import { ActionsMenu } from './components';
 
-import withManualJournals from './withManualJournals';
-import withManualJournalsActions from './withManualJournalsActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withManualJournals } from './withManualJournals';
+import { withManualJournalsActions } from './withManualJournalsActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { useManualJournalsContext } from './ManualJournalsListProvider';
 import { useMemorizedColumnsWidths } from '@/hooks';
@@ -33,8 +33,9 @@ import { DRAWERS } from '@/constants/drawers';
 function ManualJournalsDataTable({
   // #withManualJournalsActions
   setManualJournalsTableState,
+  setManualJournalsSelectedRows,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -67,31 +68,26 @@ function ManualJournalsDataTable({
   const handlePublishJournal = ({ id }) => {
     openAlert('journal-publish', { manualJournalId: id });
   };
-
   // Handle the journal edit action.
   const handleEditJournal = ({ id }) => {
     history.push(`/manual-journals/${id}/edit`);
   };
-
   // Handle the journal delete action.
   const handleDeleteJournal = ({ id }) => {
     openAlert('journal-delete', { manualJournalId: id });
   };
-
   // Handle view detail journal.
   const handleViewDetailJournal = ({ id }) => {
     openDrawer(DRAWERS.JOURNAL_DETAILS, {
       manualJournalId: id,
     });
   };
-
   // Handle cell click.
   const handleCellClick = (cell, event) => {
     openDrawer(DRAWERS.JOURNAL_DETAILS, {
       manualJournalId: cell.row.original.id,
     });
   };
-
   // Local storage memorizing columns widths.
   const [initialColumnsWidths, , handleColumnResizing] =
     useMemorizedColumnsWidths(TABLES.MANUAL_JOURNALS);
@@ -107,6 +103,12 @@ function ManualJournalsDataTable({
     },
     [setManualJournalsTableState],
   );
+  // Handle selected rows change.
+  const handleSelectedRowsChange = (selectedFlatRows) => {
+    const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+    setManualJournalsSelectedRows(selectedIds);
+  };
+
 
   // Display manual journal empty status instead of the table.
   if (isEmptyStatus) {
@@ -125,10 +127,12 @@ function ManualJournalsDataTable({
         loading={isManualJournalsLoading}
         headerLoading={isManualJournalsLoading}
         progressBarLoading={isManualJournalsFetching}
-        pagesCount={pagination.pagesCount}
         pagination={true}
+        initialPageSize={manualJournalsTableState.pageSize}
+        pagesCount={pagination.pagesCount}
         autoResetSortBy={false}
         autoResetPage={false}
+        onSelectedRowsChange={handleSelectedRowsChange}
         TableLoadingRenderer={TableSkeletonRows}
         TableHeaderSkeletonRenderer={TableSkeletonHeader}
         ContextMenu={ActionsMenu}
@@ -153,7 +157,7 @@ export default compose(
   withManualJournals(({ manualJournalsTableState }) => ({
     manualJournalsTableState,
   })),
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withSettings(({ manualJournalsSettings }) => ({
     manualJournalsTableSize: manualJournalsSettings?.tableSize,

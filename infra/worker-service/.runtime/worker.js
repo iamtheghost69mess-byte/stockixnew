@@ -17,8 +17,17 @@ import { existsSync } from "fs";
 import { z } from "zod";
 var configDir = path.dirname(fileURLToPath(import.meta.url));
 var monorepoRoot = path.join(configDir, "..", "..", "..");
-var preferredEnvPath = existsSync(path.join(monorepoRoot, ".env.local")) ? path.join(monorepoRoot, ".env.local") : path.join(monorepoRoot, ".env");
-loadEnv({ path: preferredEnvPath, override: false });
+var rootEnv = path.join(monorepoRoot, ".env");
+var rootEnvLocal = path.join(monorepoRoot, ".env.local");
+var shouldLoadRootDotenv = process.env.STOCKIX_LOAD_ROOT_ENV === "1" || process.env.VITEST !== "true";
+if (shouldLoadRootDotenv) {
+  if (existsSync(rootEnv)) {
+    loadEnv({ path: rootEnv, override: false });
+  }
+  if (existsSync(rootEnvLocal)) {
+    loadEnv({ path: rootEnvLocal, override: true });
+  }
+}
 var optionalStringSchema = z.string().min(1).optional();
 var stringSchema = z.string().min(1);
 var numberSchema = z.coerce.number().finite();
@@ -70,8 +79,26 @@ function validateRequiredEnvForProfile(profile) {
   const requiredByProfile = {
     development: [],
     test: [],
-    staging: ["DATABASE_URL", "PLATFORM_API_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"],
-    production: ["DATABASE_URL", "PLATFORM_API_SECRET", "WORKER_SECRET", "SESSION_SECRET", "DASHBOARD_URL", "AUTH_TOKEN_SECRET"]
+    staging: [
+      "DATABASE_URL",
+      "PLATFORM_API_SECRET",
+      "WORKER_SECRET",
+      "SESSION_SECRET",
+      "DASHBOARD_URL",
+      "AUTH_TOKEN_SECRET",
+      "DEPLOYMENT_SECRET_KEY",
+      "LICENSE_SIGNING_SECRET"
+    ],
+    production: [
+      "DATABASE_URL",
+      "PLATFORM_API_SECRET",
+      "WORKER_SECRET",
+      "SESSION_SECRET",
+      "DASHBOARD_URL",
+      "AUTH_TOKEN_SECRET",
+      "DEPLOYMENT_SECRET_KEY",
+      "LICENSE_SIGNING_SECRET"
+    ]
   };
   const required = requiredByProfile[profile] ?? requiredByProfile.production ?? [];
   const missing = required.filter((name) => {
@@ -101,6 +128,8 @@ var env = {
   TENANT_INTERNAL_HOST: readString("TENANT_INTERNAL_HOST", "127.0.0.1"),
   CORS_ORIGINS: readOptionalString("CORS_ORIGINS"),
   SESSION_SECRET: readOptionalString("SESSION_SECRET"),
+  /** HS256 secret for POS offline license JWTs; min 32 chars in staging/production. */
+  LICENSE_SIGNING_SECRET: readOptionalString("LICENSE_SIGNING_SECRET"),
   AUTH_TOKEN_SECRET: readOptionalString("AUTH_TOKEN_SECRET"),
   ALLOW_BOOTSTRAP_LOGIN: readBooleanLike("ALLOW_BOOTSTRAP_LOGIN"),
   PLATFORM_ADMIN_EMAIL: readOptionalString("PLATFORM_ADMIN_EMAIL"),
@@ -142,6 +171,8 @@ var env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
+  WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1e3),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
   DB_CLIENT: readOptionalString("DB_CLIENT"),
   DB_HOST: readOptionalString("DB_HOST"),
@@ -239,6 +270,20 @@ var apiConfig = {
   get sessionSecret() {
     return env.SESSION_SECRET ?? readRequiredString("SESSION_SECRET");
   },
+  /**
+   * Secret used to sign/verify offline license JWTs (POS). Production/staging must set
+   * LICENSE_SIGNING_SECRET (≥32 chars). Development/test fall back to a fixed local value.
+   */
+  get licenseSigningSecret() {
+    const raw = env.LICENSE_SIGNING_SECRET?.trim();
+    if (raw && raw.length >= 32) return raw;
+    if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
+      return "local-dev-license-signing-secret-min-32!";
+    }
+    throw new Error(
+      "[config] LICENSE_SIGNING_SECRET is required (min 32 characters) outside development/test"
+    );
+  },
   get authTokenSecret() {
     return env.AUTH_TOKEN_SECRET ?? env.SESSION_SECRET ?? readRequiredString("AUTH_TOKEN_SECRET");
   },
@@ -250,6 +295,9 @@ var apiConfig = {
   },
   get workerJobId() {
     return env.WORKER_JOB_ID;
+  },
+  get workerJobExecutionTimeoutMs() {
+    return env.WORKER_JOB_EXECUTION_TIMEOUT_MS;
   },
   get metricsEndpoint() {
     return env.METRICS_ENDPOINT;
@@ -2402,7 +2450,11 @@ var schema_exports = {};
 __export(schema_exports, {
   adminAuditLog: () => adminAuditLog,
   apiIdempotencyKeys: () => apiIdempotencyKeys,
+  blacklistedFingerprints: () => blacklistedFingerprints,
+  licenseActivations: () => licenseActivations,
+  licenses: () => licenses,
   owners: () => owners,
+  plans: () => plans,
   tenantConfig: () => tenantConfig,
   tenantDeployments: () => tenantDeployments,
   tenantLifecycleJobs: () => tenantLifecycleJobs,
@@ -2441,6 +2493,10 @@ var owners = pgTable(
       withTimezone: true
     }),
     invitedById: uuid("invited_by_id").references(() => owners.id),
+    passwordResetTokenHash: text("password_reset_token_hash"),
+    passwordResetExpiresAt: timestamp("password_reset_expires_at", {
+      withTimezone: true
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (t) => [uniqueIndex("owners_email_unique").on(t.email)]
@@ -2457,6 +2513,7 @@ var tenants = pgTable(
     adminFirstName: text("admin_first_name").notNull(),
     adminLastName: text("admin_last_name").notNull(),
     status: text("status").notNull().default("active"),
+    planSlug: text("plan_slug").notNull().default("starter"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (t) => [uniqueIndex("tenants_slug_unique").on(t.slug)]
@@ -2584,6 +2641,101 @@ var tenantLifecycleJobs = pgTable(
     index("tenant_lifecycle_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
     index("tenant_lifecycle_jobs_correlation_created_idx").on(t.correlationId, t.createdAt)
   ]
+);
+var plans = pgTable(
+  "plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [uniqueIndex("plans_slug_unique").on(t.slug)]
+);
+var licenses = pgTable(
+  "licenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    licenseKey: text("license_key").notNull(),
+    product: text("product").notNull().default("platform"),
+    planSlug: text("plan_slug").notNull().default("starter"),
+    tenantId: uuid("tenant_id").references(() => tenants.id, {
+      onDelete: "set null"
+    }),
+    status: text("status").notNull().default("unassigned"),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    isPerpetual: boolean("is_perpetual").notNull().default(false),
+    maxActivations: integer("max_activations").notNull().default(1),
+    activationCount: integer("activation_count").notNull().default(0),
+    gracePeriodDays: integer("grace_period_days").notNull().default(7),
+    notes: text("notes"),
+    createdById: uuid("created_by_id").references(() => owners.id, {
+      onDelete: "set null"
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedById: uuid("revoked_by_id").references(() => owners.id, {
+      onDelete: "set null"
+    }),
+    revokeReason: text("revoke_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    uniqueIndex("licenses_key_unique").on(t.licenseKey),
+    index("licenses_tenant_id_idx").on(t.tenantId),
+    index("licenses_status_idx").on(t.status),
+    index("licenses_product_idx").on(t.product),
+    index("licenses_expires_at_idx").on(t.expiresAt)
+  ]
+);
+var licenseActivations = pgTable(
+  "license_activations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    licenseId: uuid("license_id").notNull().references(() => licenses.id, {
+      onDelete: "cascade"
+    }),
+    hardwareFingerprint: text("hardware_fingerprint").notNull(),
+    machineName: text("machine_name"),
+    ipAddress: text("ip_address"),
+    activationStatus: text("activation_status").notNull().default("active"),
+    offlineToken: text("offline_token"),
+    offlineTokenExpiresAt: timestamp("offline_token_expires_at", {
+      withTimezone: true
+    }),
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    deactivatedById: uuid("deactivated_by_id").references(() => owners.id, {
+      onDelete: "set null"
+    }),
+    activatedAt: timestamp("activated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("lic_act_license_id_idx").on(t.licenseId),
+    index("lic_act_fingerprint_idx").on(t.hardwareFingerprint),
+    uniqueIndex("lic_act_license_fingerprint_unique").on(
+      t.licenseId,
+      t.hardwareFingerprint
+    )
+  ]
+);
+var blacklistedFingerprints = pgTable(
+  "blacklisted_fingerprints",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    hardwareFingerprint: text("hardware_fingerprint").notNull(),
+    reason: text("reason"),
+    blacklistedById: uuid("blacklisted_by_id").references(() => owners.id, {
+      onDelete: "set null"
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [uniqueIndex("blacklisted_fp_unique").on(t.hardwareFingerprint)]
 );
 
 // ../../packages/db/src/allocate-tenant-port.ts
@@ -2744,6 +2896,11 @@ function buildTenantComposeEnvBody(params) {
     `MAIL_SECURE=`,
     `MAIL_FROM_NAME=`,
     `MAIL_FROM_ADDRESS=`,
+    `S3_REGION=${params.s3Region}`,
+    `S3_ACCESS_KEY_ID=${params.s3AccessKeyId}`,
+    `S3_SECRET_ACCESS_KEY=${params.s3SecretAccessKey}`,
+    `S3_ENDPOINT=${params.s3Endpoint}`,
+    `S3_BUCKET=${params.s3Bucket}`,
     `AGENDASH_AUTH_USER=${params.agendashUser}`,
     `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`
   ];
@@ -2913,6 +3070,15 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       console.error(`[provision][${correlationId}] cleanup log failure step=${step}: ${msg}`);
     }
   };
+  const assertRequiredRuntimeEnv = async (pairs) => {
+    const missing = pairs.filter(({ value }) => value.trim().length === 0).map(({ key }) => key);
+    if (missing.length === 0) return;
+    await trace.event("preflight.validation", "Missing required runtime env for tenant provisioning", {
+      level: "error",
+      meta: { missing }
+    });
+    throw new Error(`provision_missing_runtime_env:${missing.join(",")}`);
+  };
   try {
     log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
     await checkNotCancelled();
@@ -2926,6 +3092,18 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
+    const s3Region = process.env.S3_REGION ?? "us-east-1";
+    const s3AccessKeyId = process.env.S3_ACCESS_KEY_ID ?? "local";
+    const s3SecretAccessKey = process.env.S3_SECRET_ACCESS_KEY ?? "local";
+    const s3Endpoint = process.env.S3_ENDPOINT ?? "http://localhost:9000";
+    const s3Bucket = process.env.S3_BUCKET ?? "stockix-local";
+    await assertRequiredRuntimeEnv([
+      { key: "S3_REGION", value: s3Region },
+      { key: "S3_ACCESS_KEY_ID", value: s3AccessKeyId },
+      { key: "S3_SECRET_ACCESS_KEY", value: s3SecretAccessKey },
+      { key: "S3_ENDPOINT", value: s3Endpoint },
+      { key: "S3_BUCKET", value: s3Bucket }
+    ]);
     const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, input.slug)).limit(1);
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
@@ -2965,7 +3143,12 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       publicProxyPort: port,
       signupAllowedEmails: input.adminEmail,
       agendashUser,
-      agendashPassword
+      agendashPassword,
+      s3Region,
+      s3AccessKeyId,
+      s3SecretAccessKey,
+      s3Endpoint,
+      s3Bucket
     });
     const envPath = await writeTenantEnvFileAtomic(join5(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
@@ -3000,6 +3183,11 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       MAIL_SECURE: "",
       MAIL_FROM_NAME: "",
       MAIL_FROM_ADDRESS: "",
+      S3_REGION: s3Region,
+      S3_ACCESS_KEY_ID: s3AccessKeyId,
+      S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
+      S3_ENDPOINT: s3Endpoint,
+      S3_BUCKET: s3Bucket,
       AGENDASH_AUTH_USER: agendashUser,
       AGENDASH_AUTH_PASSWORD: agendashPassword
     };
@@ -3033,7 +3221,16 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     await checkNotCancelled();
     if (!hasOp("docker.data_step")) {
       log("[provision] step start: docker.data_step");
-      await runComposeWithCancellation(["up", "-d", "--no-deps", "--remove-orphans", "mysql", "mongo", "redis"]);
+      await runComposeWithCancellation([
+        "up",
+        "-d",
+        "--no-deps",
+        "--remove-orphans",
+        "--build",
+        "mysql",
+        "mongo",
+        "redis"
+      ]);
       await markOp("docker.data_step", "Data services compose step completed", {
         composeProjectName: project
       });
@@ -3047,7 +3244,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
       log("database_migration");
-      await runComposeWithCancellation(["run", "--rm", "database_migration"]);
+      await runComposeWithCancellation(["run", "--rm", "--build", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs()
@@ -3067,7 +3264,15 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() }
       });
-      await runComposeWithCancellation(["up", "-d", "--remove-orphans", "webapp", "nginx", "server"]);
+      await runComposeWithCancellation([
+        "up",
+        "-d",
+        "--remove-orphans",
+        "--build",
+        "webapp",
+        "nginx",
+        "server"
+      ]);
       await markOp("docker.app_step", "Application compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs()
@@ -3271,9 +3476,12 @@ var ExecaDockerComposeRunner = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-bootstrap.ts
+function financeApiBase(internalBaseUrl) {
+  return internalBaseUrl.replace(/\/+$/, "");
+}
 var FetchStockixFinanceBootstrap = class {
   async waitUntilReady(internalBaseUrl, timeoutMs, log, requestId, trace) {
-    const url = `${internalBaseUrl}/api/ping/`;
+    const url = `${financeApiBase(internalBaseUrl)}/api/ping`;
     const started = Date.now();
     const deadline = started + timeoutMs;
     let lastError = "";
@@ -3304,7 +3512,7 @@ var FetchStockixFinanceBootstrap = class {
     );
   }
   async registerBootstrapAdmin(params) {
-    const url = `${params.internalBaseUrl}/api/auth/register`;
+    const url = `${financeApiBase(params.internalBaseUrl)}/api/auth/register`;
     const maxAttempts = 3;
     const requestTimeoutMs2 = 1e4;
     let lastFailure = "unknown";
@@ -3473,7 +3681,7 @@ var workerId = `infra-worker-${randomUUID()}`;
 var pollMs = 1500;
 var apiBaseUrl = `http://localhost:${apiConfig.port}`;
 var requestTimeoutMs = 1e4;
-var jobExecutionTimeoutMs = 10 * 60 * 1e3;
+var jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
 var heartbeatIntervalMs = 15e3;
 var shuttingDown = false;
 var runtimeFingerprint = {
@@ -3729,7 +3937,14 @@ async function loop() {
     throw new Error("DATABASE_URL is required for infra worker");
   }
   const db = createDb(databaseUrl);
-  console.log(JSON.stringify({ level: "info", type: "worker_start", ...runtimeFingerprint }));
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "worker_start",
+      jobExecutionTimeoutMs,
+      ...runtimeFingerprint
+    })
+  );
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {
       console.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);

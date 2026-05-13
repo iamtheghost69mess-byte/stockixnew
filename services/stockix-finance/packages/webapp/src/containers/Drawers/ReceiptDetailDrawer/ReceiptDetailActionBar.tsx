@@ -10,9 +10,9 @@ import {
   Intent,
 } from '@blueprintjs/core';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 import {
   Can,
   Icon,
@@ -33,11 +33,12 @@ function ReceiptDetailActionBar({
   // #withDialogActions
   openDialog,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
   closeDrawer,
+  openDrawer
 }) {
   const history = useHistory();
   const { receiptId } = useReceiptDetailDrawerContext();
@@ -60,6 +61,10 @@ function ReceiptDetailActionBar({
   const handleNotifyViaSMS = () => {
     openDialog('notify-receipt-via-sms', { receiptId });
   };
+  // Handle receipt mail action.
+  const handleReceiptMail = () => {
+    openDrawer(DRAWERS.RECEIPT_SEND_MAIL, { receiptId });
+  };
 
   return (
     <DrawerActionsBar>
@@ -74,6 +79,12 @@ function ReceiptDetailActionBar({
           <NavbarDivider />
         </Can>
         <Can I={SaleReceiptAction.View} a={AbilitySubject.Receipt}>
+          <Button
+            className={Classes.MINIMAL}
+            text={'Send Mail'}
+            icon={<Icon icon="envelope" />}
+            onClick={handleReceiptMail}
+          />
           <Button
             className={Classes.MINIMAL}
             icon={<Icon icon="print-16" />}
@@ -106,5 +117,5 @@ function ReceiptDetailActionBar({
 export default compose(
   withDialogActions,
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
 )(ReceiptDetailActionBar);

@@ -1,10 +1,9 @@
 // @ts-nocheck
-import React from 'react';
 import { Button, Popover, Menu, Position } from '@blueprintjs/core';
 
 import { Icon } from '@/components';
 
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 import { useAuthenticatedAccount } from '@/hooks/query';
 import { compose, firstLettersArgs } from '@/utils';
 
@@ -53,12 +52,11 @@ function SidebarHeadJSX({
       </div>
 
       <div className="sidebar__head-logo">
-        {/* BRAND: Mini mark paths in static/json/icons.tsx (`mini-stockix`). */}
         <Icon
-          icon={'mini-stockix'}
+          icon={'mini-bigcapital'}
           width={28}
           height={28}
-          className="stockix--alt"
+          className="bigcapital--alt"
         />
       </div>
     </div>

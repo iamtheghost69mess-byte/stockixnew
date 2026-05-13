@@ -6,7 +6,7 @@ import { MenuItem, Intent } from '@blueprintjs/core';
 import { Icon, Choose, T, TextStatus } from '@/components';
 
 import { RESOURCES_TYPES } from '@/constants/resourcesTypes';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 import { AbilitySubject, CreditNoteAction } from '@/constants/abilityOption';
 import { DRAWERS } from '@/constants/drawers';
 
@@ -73,7 +73,7 @@ export function CreditNoteUniversalSearchItem(
       text={
         <div>
           <div>{item.text}</div>
-          <span class="bp3-text-muted">
+          <span class="bp4-text-muted">
             {item.reference.credit_note_number}{' '}
             <Icon icon={'caret-right-16'} iconSize={16} />
             {item.reference.formatted_credit_note_date}
@@ -82,7 +82,7 @@ export function CreditNoteUniversalSearchItem(
       }
       label={
         <>
-          <div class="amount">${item.reference.amount}</div>
+          <div class="amount">{item.reference.formatted_amount}</div>
           <CreditNoteUniversalSearchStatus receipt={item.reference} />
         </>
       }

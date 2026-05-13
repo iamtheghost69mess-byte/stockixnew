@@ -1,11 +1,10 @@
 // @ts-nocheck
 import React from 'react';
-import classNames from 'classnames';
 import { FastField } from 'formik';
-import { CLASSES } from '@/constants/classes';
 import ItemsEntriesTable from '@/containers/Entries/ItemsEntriesTable';
 import { useCreditNoteFormContext } from './CreditNoteFormProvider';
 import { entriesFieldShouldUpdate } from './utils';
+import { Box } from '@/components';
 
 /**
  * Credit note items entries editor field.
@@ -14,7 +13,7 @@ export default function CreditNoteItemsEntriesEditorField() {
   const { items } = useCreditNoteFormContext();
 
   return (
-    <div className={classNames(CLASSES.PAGE_FORM_BODY)}>
+    <Box p="18px 32px 0">
       <FastField
         name={'entries'}
         items={items}
@@ -26,17 +25,18 @@ export default function CreditNoteItemsEntriesEditorField() {
           meta: { error, touched },
         }) => (
           <ItemsEntriesTable
-            entries={value}
-            onUpdateData={(entries) => {
+            value={value}
+            onChange={(entries) => {
               setFieldValue('entries', entries);
             }}
             items={items}
             errors={error}
             linesNumber={4}
             currencyCode={values.currency_code}
+            enableTaxRates={false}
           />
         )}
       </FastField>
-    </div>
+    </Box>
   );
 }

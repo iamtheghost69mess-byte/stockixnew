@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useMutation, useQueryClient } from 'react-query';
 import t from './types';
-import { transformPagination } from '@/utils';
+import { transformPagination, transformToCamelCase } from '@/utils';
 import useApiRequest from '../useRequest';
 import { useRequestQuery } from '../useQueryRequest';
 
@@ -55,7 +55,7 @@ export function useEditVendor(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`vendors/${id}`, values),
+    ([id, values]) => apiRequest.put(`vendors/${id}`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Invalidate specific vendor.
@@ -89,6 +89,49 @@ export function useDeleteVendor(props) {
 }
 
 /**
+ * Deletes multiple vendors in bulk.
+ */
+export function useBulkDeleteVendors(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('vendors/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }),
+    {
+      onSuccess: () => {
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Validates which vendors can be deleted in bulk.
+ */
+export function useValidateBulkDeleteVendors(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest.post('vendors/validate-bulk-delete', { ids }).then((res) => transformToCamelCase(res.data)),
+    {
+      ...props,
+    },
+  );
+}
+
+/**
  * Creates a new vendor.
  */
 export function useCreateVendor(props) {
@@ -112,7 +155,7 @@ export function useVendor(id, props) {
     [t.VENDOR, id],
     { method: 'get', url: `vendors/${id}` },
     {
-      select: (res) => res.data.vendor,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -124,7 +167,7 @@ export function useEditVendorOpeningBalance(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`vendors/${id}/opening_balance`, values),
+    ([id, values]) => apiRequest.put(`vendors/${id}/opening-balance`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Invalidate specific vendor.

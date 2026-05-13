@@ -12,13 +12,13 @@ import {
   TableSkeletonRows,
 } from '@/components';
 
-import withInvoices from './withInvoices';
-import withInvoiceActions from './withInvoiceActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withInvoices } from './withInvoices';
+import { withInvoiceActions } from './withInvoiceActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { useMemorizedColumnsWidths } from '@/hooks';
 import { useInvoicesTableColumns, ActionsMenu } from './components';
@@ -26,6 +26,7 @@ import { useInvoicesListContext } from './InvoicesListProvider';
 
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Invoices datatable.
@@ -33,11 +34,12 @@ import { DRAWERS } from '@/constants/drawers';
 function InvoicesDataTable({
   // #withInvoicesActions
   setInvoicesTableState,
+  setInvoicesSelectedRows,
 
   // #withInvoices
   invoicesTableState,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -98,6 +100,11 @@ function InvoicesDataTable({
     openDialog('invoice-pdf-preview', { invoiceId: id });
   };
 
+  // Handle send mail invoice.
+  const handleSendMailInvoice = ({ id }) => {
+    openDrawer(DRAWERS.INVOICE_SEND_MAIL, { invoiceId: id });
+  };
+
   // Handle cell click.
   const handleCellClick = (cell, event) => {
     openDrawer(DRAWERS.INVOICE_DETAILS, { invoiceId: cell.row.original.id });
@@ -119,6 +126,15 @@ function InvoicesDataTable({
     [setInvoicesTableState],
   );
 
+  // Handle selected rows change.
+  const handleSelectedRowsChange = useCallback(
+    (selectedFlatRows) => {
+      const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+      setInvoicesSelectedRows(selectedIds);
+    },
+    [setInvoicesSelectedRows],
+  );
+
   // Display invoice empty status instead of the table.
   if (isEmptyStatus) {
     return <InvoicesEmptyStatus />;
@@ -135,13 +151,16 @@ function InvoicesDataTable({
         onFetchData={handleDataTableFetchData}
         manualSortBy={true}
         selectionColumn={true}
+        onSelectedRowsChange={handleSelectedRowsChange}
         noInitialFetch={true}
         sticky={true}
         pagination={true}
+        initialPageSize={invoicesTableState.pageSize}
         manualPagination={true}
         pagesCount={pagination.pagesCount}
         autoResetSortBy={false}
         autoResetPage={false}
+        autoResetSelectedRows={false}
         TableLoadingRenderer={TableSkeletonRows}
         TableHeaderSkeletonRenderer={TableSkeletonHeader}
         ContextMenu={ActionsMenu}
@@ -157,6 +176,7 @@ function InvoicesDataTable({
           onViewDetails: handleViewDetailInvoice,
           onPrint: handlePrintInvoice,
           onConvert: handleConvertToCreitNote,
+          onSendMail: handleSendMailInvoice
         }}
       />
     </DashboardContentTable>
@@ -166,7 +186,7 @@ function InvoicesDataTable({
 export default compose(
   withDashboardActions,
   withInvoiceActions,
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
   withInvoices(({ invoicesTableState }) => ({ invoicesTableState })),

@@ -1,20 +1,23 @@
 // @ts-nocheck
 import { connect } from 'react-redux';
 
-export default (mapState) => {
+export const withSetupWizard = (mapState) => {
   const mapStateToProps = (state, props) => {
     const {
       isOrganizationSetupCompleted,
       isOrganizationReady,
+      isSubscriptionActive,
       isOrganizationBuildRunning
     } = props;
 
     const condits = {
       isCongratsStep: isOrganizationSetupCompleted,
+      isSubscriptionStep: !isSubscriptionActive,
       isInitializingStep: isOrganizationBuildRunning,
       isOrganizationStep: !isOrganizationReady && !isOrganizationBuildRunning,
     };
     const scenarios = [
+      { condition: condits.isSubscriptionStep, step: 'subscription' },
       { condition: condits.isOrganizationStep, step: 'organization' },
       { condition: condits.isInitializingStep, step: 'initializing' },
       { condition: condits.isCongratsStep, step: 'congrats' },
@@ -23,7 +26,7 @@ export default (mapState) => {
     const mapped = {
       ...condits,
       setupStepId: setupStep?.step,
-      setupStepIndex: scenarios.indexOf(setupStep) + 1,
+      setupStepIndex: scenarios.indexOf(setupStep),
     };
     return mapState ? mapState(mapped, state, props) : mapped;
   };

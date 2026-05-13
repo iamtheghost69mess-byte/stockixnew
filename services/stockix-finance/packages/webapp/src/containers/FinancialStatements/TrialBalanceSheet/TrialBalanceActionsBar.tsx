@@ -14,10 +14,13 @@ import { DashboardActionsBar, FormattedMessage as T, Icon } from '@/components';
 
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
-import withTrialBalance from './withTrialBalance';
-import withTrialBalanceActions from './withTrialBalanceActions';
+import { withTrialBalance } from './withTrialBalance';
+import { withTrialBalanceActions } from './withTrialBalanceActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 import { compose, saveInvoke } from '@/utils';
 import { useTrialBalanceSheetContext } from './TrialBalanceProvider';
+import { TrialBalanceSheetExportMenu } from './components';
+import { DialogsName } from '@/constants/dialogs';
 
 function TrialBalanceActionsBar({
   // #withTrialBalance
@@ -25,6 +28,9 @@ function TrialBalanceActionsBar({
 
   // #withTrialBalanceActions
   toggleTrialBalanceFilterDrawer: toggleFilterDrawer,
+
+  // #withDialogActions
+  openDialog,
 
   // #ownProps
   numberFormat,
@@ -46,6 +52,11 @@ function TrialBalanceActionsBar({
   const handleNumberFormatSubmit = (values) => {
     saveInvoke(onNumberFormatSubmit, values);
   };
+
+  // Handle print button click.
+  const handlePrintBtnClick = () => {
+    openDialog(DialogsName.TrialBalanceSheetPdfPreview);
+  }
 
   return (
     <DashboardActionsBar>
@@ -92,28 +103,24 @@ function TrialBalanceActionsBar({
           />
         </Popover>
 
-        <Popover
-          // content={}
-          interactionKind={PopoverInteractionKind.CLICK}
-          position={Position.BOTTOM_LEFT}
-        >
-          <Button
-            className={classNames(Classes.MINIMAL, 'button--filter')}
-            text={<T id={'filter'} />}
-            icon={<Icon icon="filter-16" iconSize={16} />}
-          />
-        </Popover>
-
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
+        <Popover
+          content={<TrialBalanceSheetExportMenu />}
+          interactionKind={PopoverInteractionKind.CLICK}
+          placement="bottom-start"
+          minimal
+        >
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="file-export-16" iconSize={16} />}
+            text={<T id={'export'} />}
+          />
+        </Popover>
       </NavbarGroup>
     </DashboardActionsBar>
   );
@@ -124,4 +131,5 @@ export default compose(
     trialBalanceDrawerFilter,
   })),
   withTrialBalanceActions,
+  withDialogActions,
 )(TrialBalanceActionsBar);

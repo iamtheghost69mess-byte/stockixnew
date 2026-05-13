@@ -2,20 +2,37 @@
 import React from 'react';
 import moment from 'moment';
 import { castArray } from 'lodash';
+import * as Yup from 'yup';
+import intl from 'react-intl-universal';
 
 import { useAppQueryString } from '@/hooks';
 import { transformToForm } from '@/utils';
+import { transformFilterFormToQuery } from '../common';
 
 /**
  * Retrieves inventory item details default query.
  */
-export const getInventoryItemDetailsDefaultQuery = () => {
-  return {
-    fromDate: moment().startOf('year').format('YYYY-MM-DD'),
-    toDate: moment().endOf('year').format('YYYY-MM-DD'),
-    warehousesIds: [],
-    branchesIds: [],
-  };
+export const getInventoryItemDetailsDefaultQuery = () => ({
+  fromDate: moment().startOf('month').format('YYYY-MM-DD'),
+  toDate: moment().format('YYYY-MM-DD'),
+  itemsIds: [],
+  warehousesIds: [],
+  branchesIds: [],
+  numberFormat: {},
+});
+
+/**
+ * Retrieves inventory item details query schema.
+ * @returns {Yup}
+ */
+export const getInventoryItemDetailsQuerySchema = () => {
+  return Yup.object().shape({
+    fromDate: Yup.date().required().label(intl.get('fromDate')),
+    toDate: Yup.date()
+      .min(Yup.ref('fromDate'))
+      .required()
+      .label(intl.get('toDate')),
+  });
 };
 
 /**
@@ -32,7 +49,8 @@ const parseInventoryItemDetailsQuery = (locationQuery) => {
   return {
     ...transformed,
 
-    // Ensures the branches/warehouses ids is always array.
+    // Ensure the branches, warehouses and items ids is always array.
+    itemsIds: castArray(transformed.itemsIds),
     branchesIds: castArray(transformed.branchesIds),
     warehousesIds: castArray(transformed.warehousesIds),
   };
@@ -56,4 +74,14 @@ export const useInventoryValuationQuery = () => {
     locationQuery,
     setLocationQuery,
   };
+};
+
+/**
+ * Retrieves the inventory valuation http query.
+ * @returns {Object}
+ */
+export const useInventoryValuationHttpQuery = () => {
+  const { query } = useInventoryValuationQuery();
+
+  return React.useMemo(() => transformFilterFormToQuery(query), [query]);
 };

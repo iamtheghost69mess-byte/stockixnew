@@ -7,13 +7,15 @@ import {
   Classes,
   NavbarDivider,
   Intent,
+  Tooltip,
+  Position,
 } from '@blueprintjs/core';
 
 import { useInvoiceDetailDrawerContext } from './InvoiceDetailDrawerProvider';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import {
   If,
@@ -31,6 +33,8 @@ import {
 import { compose } from '@/utils';
 import { BadDebtMenuItem } from './utils';
 import { DRAWERS } from '@/constants/drawers';
+import { DialogsName } from '@/constants/dialogs';
+import { ArrowBottomLeft } from '@/icons/ArrowBottomLeft';
 
 /**
  * Invoice details action bar.
@@ -39,10 +43,11 @@ function InvoiceDetailActionsBar({
   // #withDialogActions
   openDialog,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
+  openDrawer,
   closeDrawer,
 }) {
   const history = useHistory();
@@ -54,6 +59,11 @@ function InvoiceDetailActionsBar({
   const handleEditInvoice = () => {
     history.push(`/invoices/${invoiceId}/edit`);
     closeDrawer(DRAWERS.INVOICE_DETAILS);
+  };
+
+  // Hanlde deliver sale invoice.
+  const handleDeliverInvoice = ({ id }) => {
+    openAlert('invoice-deliver', { invoiceId });
   };
 
   // Handle convert to invoice.
@@ -93,6 +103,18 @@ function InvoiceDetailActionsBar({
     openAlert('cancel-bad-debt', { invoiceId });
   };
 
+  // handle send mail button click.
+  const handleMailInvoice = () => {
+    openDrawer(DRAWERS.INVOICE_SEND_MAIL, { invoiceId });
+  };
+
+  const handleShareButtonClick = () => {
+    openDialog(DialogsName.SharePaymentLink, {
+      transactionId: invoiceId,
+      transactionType: 'SaleInvoice',
+    });
+  };
+
   return (
     <DrawerActionsBar>
       <NavbarGroup>
@@ -109,20 +131,27 @@ function InvoiceDetailActionsBar({
           <If condition={invoice.is_delivered && !invoice.is_fully_paid}>
             <Button
               className={Classes.MINIMAL}
-              icon={<Icon icon="arrow-downward" iconSize={18} />}
+              icon={<ArrowBottomLeft size={16} />}
               text={<T id={'add_payment'} />}
               onClick={handleQuickPaymentInvoice}
             />
+            <NavbarDivider />
           </If>
-          <NavbarDivider />
         </Can>
         <Can I={SaleInvoiceAction.View} a={AbilitySubject.Invoice}>
+          <Button
+            text={'Send Mail'}
+            icon={<Icon icon="envelope" />}
+            onClick={handleMailInvoice}
+            className={Classes.MINIMAL}
+          />
           <Button
             className={Classes.MINIMAL}
             icon={<Icon icon="print-16" />}
             text={<T id={'print'} />}
             onClick={handlePrintInvoice}
           />
+          <NavbarDivider />
         </Can>
         <Can I={SaleInvoiceAction.Delete} a={AbilitySubject.Invoice}>
           <Button
@@ -133,6 +162,15 @@ function InvoiceDetailActionsBar({
             onClick={handleDeleteInvoice}
           />
         </Can>
+        <NavbarDivider />
+        <Tooltip content="Share" position={Position.BOTTOM} minimal>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon={'share'} iconSize={16} />}
+            onClick={handleShareButtonClick}
+          />
+        </Tooltip>
+
         <Can I={SaleInvoiceAction.Writeoff} a={AbilitySubject.Invoice}>
           <NavbarDivider />
           <BadDebtMenuItem
@@ -141,6 +179,7 @@ function InvoiceDetailActionsBar({
               onCancelBadDebt: handleCancelBadDebtInvoice,
               onNotifyViaSMS: handleNotifyViaSMS,
               onConvert: handleConvertToCreitNote,
+              onDeliver: handleDeliverInvoice,
             }}
           />
         </Can>
@@ -152,5 +191,5 @@ function InvoiceDetailActionsBar({
 export default compose(
   withDialogActions,
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
 )(InvoiceDetailActionsBar);

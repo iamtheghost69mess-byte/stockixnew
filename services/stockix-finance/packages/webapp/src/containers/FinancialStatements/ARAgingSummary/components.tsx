@@ -1,71 +1,33 @@
 // @ts-nocheck
-import React from 'react';
-import intl from 'react-intl-universal';
+import React, { useRef } from 'react';
+import classNames from 'classnames';
+import {
+  Classes,
+  Intent,
+  Menu,
+  MenuItem,
+  ProgressBar,
+  Text,
+} from '@blueprintjs/core';
 
 import { useARAgingSummaryContext } from './ARAgingSummaryProvider';
-import { If, FormattedMessage as T } from '@/components';
-import { getColumnWidth } from '@/utils';
-import { Align } from '@/constants';
-
+import { AppToaster, If, Stack, FormattedMessage as T } from '@/components';
 import FinancialLoadingBar from '../FinancialLoadingBar';
+import { agingSummaryDynamicColumns } from '../AgingSummary/dynamicColumns';
+import {
+  useARAgingSheetCsvExport,
+  useARAgingSheetXlsxExport,
+} from '@/hooks/query';
 
 /**
  * Retrieve AR aging summary columns.
  */
 export const useARAgingSummaryColumns = () => {
   const {
-    ARAgingSummary: { tableRows, columns },
+    ARAgingSummary: { table },
   } = useARAgingSummaryContext();
 
-  const agingColumns = React.useMemo(() => {
-    return columns.map(
-      (agingColumn) =>
-        `${agingColumn.before_days} - ${
-          agingColumn.to_days || intl.get('and_over')
-        }`,
-    );
-  }, [columns]);
-
-  return React.useMemo(
-    () => [
-      {
-        Header: <T id={'customer_name'} />,
-        accessor: 'name',
-        className: 'customer_name',
-        sticky: 'left',
-        width: 240,
-        textOverview: true,
-      },
-      {
-        Header: <T id={'current'} />,
-        accessor: 'current',
-        className: 'current',
-        width: getColumnWidth(tableRows, `current`, {
-          minWidth: 120,
-        }),
-        align: Align.Right
-      },
-      ...agingColumns.map((agingColumn, index) => ({
-        Header: agingColumn,
-        accessor: `aging-${index}`,
-        width: getColumnWidth(tableRows, `aging-${index}`, {
-          minWidth: 120,
-        }),
-        align: Align.Right
-      })),
-      {
-        Header: <T id={'total'} />,
-        id: 'total',
-        accessor: 'total',
-        className: 'total',
-        width: getColumnWidth(tableRows, 'total', {
-          minWidth: 120,
-        }),
-        align: Align.Right
-      },
-    ],
-    [tableRows, agingColumns],
-  );
+  return agingSummaryDynamicColumns(table.columns, table.rows);
 };
 
 /**
@@ -78,5 +40,90 @@ export function ARAgingSummarySheetLoadingBar() {
     <If condition={isARAgingFetching}>
       <FinancialLoadingBar />
     </If>
+  );
+}
+
+/**
+ * A/R aging summary export menu.
+ * @returns {JSX.Element}
+ */
+export function ARAgingSummaryExportMenu() {
+  const toastKey = useRef(null);
+  const commonToastConfig = {
+    isCloseButtonShown: true,
+    timeout: 2000,
+  };
+  const { httpQuery } = useARAgingSummaryContext();
+
+  const openProgressToast = (amount: number) => {
+    return (
+      <Stack spacing={8}>
+        <Text>The report has been exported successfully.</Text>
+        <ProgressBar
+          className={classNames('toast-progress', {
+            [Classes.PROGRESS_NO_STRIPES]: amount >= 100,
+          })}
+          intent={amount < 100 ? Intent.PRIMARY : Intent.SUCCESS}
+          value={amount / 100}
+        />
+      </Stack>
+    );
+  };
+
+  // Export the report to xlsx.
+  const { mutateAsync: xlsxExport } = useARAgingSheetXlsxExport(httpQuery, {
+    onDownloadProgress: (xlsxExportProgress: number) => {
+      if (!toastKey.current) {
+        toastKey.current = AppToaster.show({
+          message: openProgressToast(xlsxExportProgress),
+          ...commonToastConfig,
+        });
+      } else {
+        AppToaster.show(
+          {
+            message: openProgressToast(xlsxExportProgress),
+            ...commonToastConfig,
+          },
+          toastKey.current,
+        );
+      }
+    },
+  });
+  // Export the report to csv.
+  const { mutateAsync: csvExport } = useARAgingSheetCsvExport(httpQuery, {
+    onDownloadProgress: (xlsxExportProgress: number) => {
+      if (!toastKey.current) {
+        toastKey.current = AppToaster.show({
+          message: openProgressToast(xlsxExportProgress),
+          ...commonToastConfig,
+        });
+      } else {
+        AppToaster.show(
+          {
+            message: openProgressToast(xlsxExportProgress),
+            ...commonToastConfig,
+          },
+          toastKey.current,
+        );
+      }
+    },
+  });
+  // Handle csv export button click.
+  const handleCsvExportBtnClick = () => {
+    csvExport();
+  };
+  // Handle xlsx export button click.
+  const handleXlsxExportBtnClick = () => {
+    xlsxExport();
+  };
+
+  return (
+    <Menu>
+      <MenuItem
+        text={'XLSX (Microsoft Excel)'}
+        onClick={handleXlsxExportBtnClick}
+      />
+      <MenuItem text={'CSV'} onClick={handleCsvExportBtnClick} />
+    </Menu>
   );
 }

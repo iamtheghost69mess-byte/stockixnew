@@ -1,9 +1,12 @@
 // @ts-nocheck
 import React from 'react';
-import { Icon, For, FormattedMessage as T } from '@/components';
-
+import { useHistory } from 'react-router-dom';
+import { Text } from '@blueprintjs/core';
+import { Icon, For, FormattedMessage as T, Stack } from '@/components';
 import { getFooterLinks } from '@/constants/footerLinks';
 import { useAuthActions } from '@/hooks/state';
+import style from './SetupLeftSection.module.scss';
+import { useAuthMetadata } from '@/hooks/query';
 
 /**
  * Footer item link.
@@ -25,8 +28,24 @@ function SetupLeftSectionFooter() {
   // Retrieve the footer links.
   const footerLinks = getFooterLinks();
 
+  const { data: authMeta } = useAuthMetadata();
+  const demoUrl = authMeta?.meta?.one_click_demo?.demo_url;
+
+  const handleDemoBtnClick = () => {
+    window.open(demoUrl);
+  };
+
   return (
     <div className={'content__footer'}>
+      {demoUrl && (
+        <Stack spacing={16}>
+          <Text className={style.demoButtonLabel}>Not Now?</Text>
+          <button className={style.demoButton} onClick={handleDemoBtnClick}>
+            Try Demo Account
+          </button>
+        </Stack>
+      )}
+
       <div className={'content__links'}>
         <For render={FooterLinkItem} of={footerLinks} />
       </div>
@@ -54,7 +73,6 @@ function SetupLeftSectionHeader() {
       <p className={'content__text'}>
         <T id={'setup.left_side.description'} />
       </p>
-      <div class="content__divider"></div>
 
       <div className={'content__organization'}>
         <span class="signout">
@@ -75,10 +93,9 @@ export default function SetupLeftSection() {
     <section className={'setup-page__left-section'}>
       <div className={'content'}>
         <div className={'content__logo'}>
-          {/* BRAND: Full-width logo placeholder; customize in static/json/icons.tsx. */}
           <Icon
-            icon="stockix"
-            className={'stockix--alt'}
+            icon="bigcapital"
+            className={'bigcapital--alt'}
             height={37}
             width={190}
           />

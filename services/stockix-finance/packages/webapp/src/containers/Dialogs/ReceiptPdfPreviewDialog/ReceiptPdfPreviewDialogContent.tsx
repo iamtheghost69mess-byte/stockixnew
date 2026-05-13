@@ -5,7 +5,7 @@ import { AnchorButton } from '@blueprintjs/core';
 import { DialogContent, PdfDocumentPreview, T } from '@/components';
 import { usePdfReceipt } from '@/hooks/query';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 import { compose } from '@/utils';
 
 function ReceiptPdfPreviewDialogContent({
@@ -13,7 +13,7 @@ function ReceiptPdfPreviewDialogContent({
   // #withDialogActions
   closeDialog,
 }) {
-  const { isLoading, pdfUrl } = usePdfReceipt(receiptId);
+  const { isLoading, pdfUrl, filename } = usePdfReceipt(receiptId);
 
   return (
     <DialogContent>
@@ -29,7 +29,7 @@ function ReceiptPdfPreviewDialogContent({
 
         <AnchorButton
           href={pdfUrl}
-          download={'receipt.pdf'}
+          download={filename}
           minimal={true}
           outlined={true}
         >

@@ -16,9 +16,14 @@ export async function executeDataStep(
   ctx: ComposeCtx,
   options?: ComposeRunOptions,
 ): Promise<void> {
+  // --build: always rebuild data-layer images from STOCKIX_TENANT_APP_ROOT so provisioning
+  // does not silently reuse stale locally tagged images (stockix-*:local).
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
     "-d",
+    "--no-deps",
+    "--remove-orphans",
+    "--build",
     "mysql",
     "mongo",
     "redis",
@@ -35,6 +40,7 @@ export async function executeMigrationStep(
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "run",
     "--rm",
+    "--build",
     "database_migration",
   ], options);
 }
@@ -47,6 +53,8 @@ export async function executeAppStep(
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
     "-d",
+    "--remove-orphans",
+    "--build",
     "webapp",
     "nginx",
     "server",

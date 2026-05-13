@@ -14,9 +14,10 @@ export const defaultTableQuery = {
 
 const initialState = {
   tableState: defaultTableQuery,
+  selectedRows: [],
 };
 
-const STORAGE_KEY = 'stockix:bills';
+const STORAGE_KEY = 'bigcapital:bills';
 
 const CONFIG = {
   key: STORAGE_KEY,
@@ -26,6 +27,10 @@ const CONFIG = {
 
 const reducerInstance = createReducer(initialState, {
   ...createTableStateReducers('BILLS', defaultTableQuery),
+
+  [`BILLS/SET_SELECTED_ROWS`]: (state, action) => {
+    state.selectedRows = action.payload;
+  },
 
   [t.RESET]: () => {
     purgeStoredState(CONFIG);

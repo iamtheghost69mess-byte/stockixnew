@@ -185,6 +185,8 @@ export const env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
+  WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1000),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
   DB_CLIENT: readOptionalString("DB_CLIENT"),
   DB_HOST: readOptionalString("DB_HOST"),
@@ -308,6 +310,9 @@ export const apiConfig = {
   },
   get workerJobId() {
     return env.WORKER_JOB_ID;
+  },
+  get workerJobExecutionTimeoutMs() {
+    return env.WORKER_JOB_EXECUTION_TIMEOUT_MS;
   },
   get metricsEndpoint() {
     return env.METRICS_ENDPOINT;

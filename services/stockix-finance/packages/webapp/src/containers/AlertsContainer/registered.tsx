@@ -6,13 +6,12 @@ import InventoryAdjustmentsAlerts from '@/containers/InventoryAdjustments/Invent
 import EstimatesAlerts from '@/containers/Sales/Estimates/EstimatesAlerts';
 import InvoicesAlerts from '@/containers/Sales/Invoices/InvoicesAlerts';
 import ReceiptsAlerts from '@/containers/Sales/Receipts/ReceiptsAlerts';
-import PaymentReceiveAlerts from '@/containers/Sales/PaymentReceives/PaymentReceiveAlerts';
+import PaymentsReceivedAlerts from '@/containers/Sales/PaymentsReceived/PaymentsReceivedAlerts';
 import BillsAlerts from '@/containers/Purchases/Bills/BillsLanding/BillsAlerts';
-import PaymentMadesAlerts from '@/containers/Purchases/PaymentMades/PaymentMadesAlerts';
+import PaymentsMadeAlerts from '@/containers/Purchases/PaymentsMade/PaymentsMadeAlerts';
 import CustomersAlerts from '@/containers/Customers/CustomersAlerts';
 import VendorsAlerts from '@/containers/Vendors/VendorsAlerts';
 import ManualJournalsAlerts from '@/containers/Accounting/JournalsLanding/ManualJournalsAlerts';
-import ExchangeRatesAlerts from '@/containers/ExchangeRates/ExchangeRatesAlerts';
 import ExpensesAlerts from '@/containers/Expenses/ExpensesAlerts';
 import AccountTransactionsAlerts from '@/containers/CashFlow/AccountTransactions/AccountTransactionsAlerts';
 import UsersAlerts from '@/containers/Preferences/Users/UsersAlerts';
@@ -25,6 +24,13 @@ import WarehousesAlerts from '@/containers/Preferences/Warehouses/WarehousesAler
 import WarehousesTransfersAlerts from '@/containers/WarehouseTransfers/WarehousesTransfersAlerts';
 import BranchesAlerts from '@/containers/Preferences/Branches/BranchesAlerts';
 import ProjectAlerts from '@/containers/Projects/containers/ProjectAlerts';
+import TaxRatesAlerts from '@/containers/TaxRates/alerts';
+import { CashflowAlerts } from '../CashFlow/CashflowAlerts';
+import { BankRulesAlerts } from '../Banking/Rules/RulesList/BankRulesAlerts';
+import { SubscriptionAlerts } from '../Subscriptions/alerts/alerts';
+import { BankAccountAlerts } from '@/containers/CashFlow/AccountTransactions/alerts';
+import { BrandingTemplatesAlerts } from '../BrandingTemplates/alerts/BrandingTemplatesAlerts';
+import { PaymentMethodsAlerts } from '../Preferences/PaymentMethods/alerts/PaymentMethodsAlerts';
 
 export default [
   ...AccountsAlerts,
@@ -34,13 +40,12 @@ export default [
   ...EstimatesAlerts,
   ...InvoicesAlerts,
   ...ReceiptsAlerts,
-  ...PaymentReceiveAlerts,
+  ...PaymentsReceivedAlerts,
   ...BillsAlerts,
-  ...PaymentMadesAlerts,
+  ...PaymentsMadeAlerts,
   ...CustomersAlerts,
   ...VendorsAlerts,
   ...ManualJournalsAlerts,
-  ...ExchangeRatesAlerts,
   ...ExpensesAlerts,
   ...AccountTransactionsAlerts,
   ...UsersAlerts,
@@ -53,4 +58,11 @@ export default [
   ...WarehousesTransfersAlerts,
   ...BranchesAlerts,
   ...ProjectAlerts,
+  ...TaxRatesAlerts,
+  ...CashflowAlerts,
+  ...BankRulesAlerts,
+  ...SubscriptionAlerts,
+  ...BankAccountAlerts,
+  ...BrandingTemplatesAlerts,
+  ...PaymentMethodsAlerts,
 ];

@@ -22,7 +22,7 @@ const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
 const apiBaseUrl = `http://localhost:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
-const jobExecutionTimeoutMs = 10 * 60 * 1000;
+const jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
 const heartbeatIntervalMs = 15_000;
 let shuttingDown = false;
 const runtimeFingerprint = {
@@ -340,7 +340,14 @@ async function loop() {
     throw new Error("DATABASE_URL is required for infra worker");
   }
   const db = createDb(databaseUrl);
-  console.log(JSON.stringify({ level: "info", type: "worker_start", ...runtimeFingerprint }));
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "worker_start",
+      jobExecutionTimeoutMs,
+      ...runtimeFingerprint,
+    }),
+  );
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {
       console.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);

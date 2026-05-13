@@ -1,11 +1,16 @@
 // @ts-nocheck
-import { omit } from 'lodash';
 import { useMutation, useQueryClient } from 'react-query';
 import { batch } from 'react-redux';
+import { omit } from 'lodash';
 import t from './types';
 import useApiRequest from '../useRequest';
 import { useRequestQuery } from '../useQueryRequest';
-import { useSetOrganizations } from '../state';
+import { useSetOrganizations, useSetSubscriptions } from '../state';
+
+const OrganizationRoute = {
+  Current: '/organization/current',
+  Build: '/organization/build',
+};
 
 /**
  * Retrieve organizations of the authenticated user.
@@ -32,17 +37,21 @@ export function useOrganizations(props) {
  */
 export function useCurrentOrganization(props) {
   const setOrganizations = useSetOrganizations();
+  const setSubscriptions = useSetSubscriptions();
 
   return useRequestQuery(
     [t.ORGANIZATION_CURRENT],
-    { method: 'get', url: `organization` },
+    { method: 'get', url: OrganizationRoute.Current },
     {
-      select: (res) => res.data.organization,
+      select: (res) => res.data,
       defaultData: {},
       onSuccess: (data) => {
         const organization = omit(data, ['subscriptions']);
 
         batch(() => {
+          // Sets subscriptions.
+          setSubscriptions(data.subscriptions);
+
           // Sets organizations.
           setOrganizations([organization]);
         });
@@ -60,7 +69,7 @@ export function useOrganizationSetup() {
   const queryClient = useQueryClient();
 
   return useMutation(
-    (values) => apiRequest.post(`organization/build`, values),
+    (values) => apiRequest.post(OrganizationRoute.Build, values),
     {
       onSuccess: (res) => {
         queryClient.invalidateQueries(t.ORGANIZATION_CURRENT);
@@ -73,12 +82,12 @@ export function useOrganizationSetup() {
 /**
  * Saves the settings.
  */
-export function useUpdateOrganization(props) {
+export function useUpdateOrganization(props = {}) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (information) => apiRequest.put('organization', information),
+    (information: any) => apiRequest.put('organization', information),
     {
       onSuccess: () => {
         queryClient.invalidateQueries(t.ORGANIZATION_CURRENT);
@@ -92,7 +101,7 @@ export function useUpdateOrganization(props) {
 export function useOrgBaseCurrencyMutateAbilities(props) {
   return useRequestQuery(
     [t.ORGANIZATION_MUTATE_BASE_CURRENCY_ABILITIES],
-    { method: 'get', url: `organization/base_currency_mutate` },
+    { method: 'get', url: `organization/base-currency-mutate` },
     {
       select: (res) => res.data.abilities,
       defaultData: [],

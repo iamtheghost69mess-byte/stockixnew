@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   useAuthenticatedAccount,
   useCurrentOrganization,
@@ -86,7 +86,7 @@ export function useApplicationBoot() {
   const [startLoading, stopLoading] = useSplashLoading();
 
   // Splash loading when organization request loading and
-  // applicaiton still not booted.
+  // application still not booted.
   useWatchImmediate((value) => {
     value && !isBooted.current && startLoading();
   }, isOrgLoading);
@@ -115,6 +115,14 @@ export function useApplicationBoot() {
     () => {
       isBooted.current = true;
     },
+  );
+  // Reset the loading states once the hook unmount.
+  useEffect(
+    () => () => {
+      isAuthUserLoading && !isBooted.current && stopLoading();
+      isOrgLoading && !isBooted.current && stopLoading();
+    },
+    [isAuthUserLoading, isOrgLoading, stopLoading],
   );
 
   return {

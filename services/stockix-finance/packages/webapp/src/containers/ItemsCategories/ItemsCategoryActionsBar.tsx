@@ -1,5 +1,4 @@
 // @ts-nocheck
-import React from 'react';
 import {
   NavbarGroup,
   NavbarDivider,
@@ -13,16 +12,18 @@ import {
   FormattedMessage as T,
   AdvancedFilterPopover,
   DashboardFilterButton,
-  DashboardActionsBar
+  DashboardActionsBar,
 } from '@/components';
 
-import withItemCategories from './withItemCategories';
-import withItemCategoriesActions from './withItemCategoriesActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertActions from '@/containers/Alert/withAlertActions';
+import { withItemCategories } from './withItemCategories';
+import { withItemCategoriesActions } from './withItemCategoriesActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
 
 import { compose } from '@/utils';
 import { useItemsCategoriesContext } from './ItemsCategoriesProvider';
+import { useHistory } from 'react-router-dom';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Items categories actions bar.
@@ -42,9 +43,14 @@ function ItemsCategoryActionsBar({
   openAlert,
 }) {
   const { fields } = useItemsCategoriesContext();
+  const history = useHistory();
 
   const onClickNewCategory = () => {
     openDialog('item-category-form', {});
+  };
+
+  const handleImportBtnClick = () => {
+    history.push('/item/categories/import');
   };
 
   // Handle the items categories bulk delete.
@@ -52,6 +58,10 @@ function ItemsCategoryActionsBar({
     openAlert('item-categories-bulk-delete', {
       itemCategoriesIds: itemCategoriesSelectedRows,
     });
+  };
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'item_category' });
   };
 
   return (
@@ -94,11 +104,13 @@ function ItemsCategoryActionsBar({
           className={Classes.MINIMAL}
           icon={<Icon icon="file-import-16" iconSize={16} />}
           text={<T id={'import'} />}
+          onClick={handleImportBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-export-16" iconSize={16} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
       </NavbarGroup>
     </DashboardActionsBar>

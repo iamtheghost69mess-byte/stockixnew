@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useMutation, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
-import { transformPagination } from '@/utils';
+import { transformPagination, transformToCamelCase } from '@/utils';
 import useApiRequest from '../useRequest';
 import t from './types';
 
@@ -67,7 +67,7 @@ export function useEditCustomer(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`customers/${id}`, values),
+    ([id, values]) => apiRequest.put(`customers/${id}`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Invalidate specific customer.
@@ -101,6 +101,49 @@ export function useDeleteCustomer(props) {
 }
 
 /**
+ * Deletes multiple customers in bulk.
+ */
+export function useBulkDeleteCustomers(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('customers/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }).then((res) => transformToCamelCase(res.data)),
+    {
+      onSuccess: () => {
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Validates which customers can be deleted in bulk.
+ */
+export function useValidateBulkDeleteCustomers(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest.post('customers/validate-bulk-delete', { ids }).then((res) => transformToCamelCase(res.data)),
+    {
+      ...props,
+    },
+  );
+}
+
+/**
  * Creates a new customer.
  */
 export function useCreateCustomer(props) {
@@ -124,7 +167,7 @@ export function useCustomer(id, props) {
     [t.CUSTOMER, id],
     { method: 'get', url: `customers/${id}` },
     {
-      select: (res) => res.data.customer,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -137,7 +180,7 @@ export function useEditCustomerOpeningBalance(props) {
 
   return useMutation(
     ([id, values]) =>
-      apiRequest.post(`customers/${id}/opening_balance`, values),
+      apiRequest.put(`customers/${id}/opening-balance`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Invalidate specific customer.

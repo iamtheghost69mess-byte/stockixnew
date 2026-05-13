@@ -11,9 +11,9 @@ import {
 
 import { usePaymentReceiveDetailContext } from './PaymentReceiveDetailProvider';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 import { PaymentReceiveMoreMenuItems } from './utils';
 import {
   Can,
@@ -32,12 +32,13 @@ import { DRAWERS } from '@/constants/drawers';
 /**
  * Payment receive actions bar.
  */
-function PaymentReceiveActionsBar({
-  // #withAlertsActions
+function PaymentsReceivedActionsBar({
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
   closeDrawer,
+  openDrawer,
 
   // #withDialogActions
   openDialog,
@@ -49,13 +50,13 @@ function PaymentReceiveActionsBar({
 
   // Handle edit payment receive.
   const handleEditPaymentReceive = () => {
-    history.push(`/payment-receives/${paymentReceiveId}/edit`);
-    closeDrawer(DRAWERS.PAYMENT_RECEIVE_DETAILS);
+    history.push(`/payments-received/${paymentReceiveId}/edit`);
+    closeDrawer(DRAWERS.PAYMENT_RECEIVED_DETAILS);
   };
 
   // Handle delete payment receive.
   const handleDeletePaymentReceive = () => {
-    openAlert('payment-receive-delete', { paymentReceiveId });
+    openAlert('payment-received-delete', { paymentReceiveId });
   };
 
   // Handle notify via SMS.
@@ -68,6 +69,13 @@ function PaymentReceiveActionsBar({
     openDialog('payment-pdf-preview', { paymentReceiveId });
   };
 
+  // Handle mail action.
+  const handleMailPaymentReceive = () => {
+    openDrawer(DRAWERS.PAYMENT_RECEIVED_SEND_MAIL, {
+      paymentReceivedId: paymentReceiveId,
+    });
+  };
+
   return (
     <DrawerActionsBar>
       <NavbarGroup>
@@ -75,7 +83,7 @@ function PaymentReceiveActionsBar({
           <Button
             className={Classes.MINIMAL}
             icon={<Icon icon="pen-18" />}
-            text={<T id={'edit_payment_receive'} />}
+            text={<T id={'edit_payment_received'} />}
             onClick={handleEditPaymentReceive}
           />
           <NavbarDivider />
@@ -83,10 +91,17 @@ function PaymentReceiveActionsBar({
         <Can I={PaymentReceiveAction.View} a={AbilitySubject.PaymentReceive}>
           <Button
             className={Classes.MINIMAL}
+            text={'Send Mail'}
+            icon={<Icon icon="envelope" />}
+            onClick={handleMailPaymentReceive}
+          />
+          <Button
+            className={Classes.MINIMAL}
             icon={<Icon icon="print-16" />}
             text={<T id={'print'} />}
             onClick={handlePrintPaymentReceive}
           />
+          <NavbarDivider />
         </Can>
         <Can I={PaymentReceiveAction.Delete} a={AbilitySubject.PaymentReceive}>
           <Button
@@ -116,5 +131,5 @@ function PaymentReceiveActionsBar({
 export default compose(
   withDialogActions,
   withDrawerActions,
-  withAlertsActions,
-)(PaymentReceiveActionsBar);
+  withAlertActions,
+)(PaymentsReceivedActionsBar);

@@ -6,14 +6,14 @@ import { useSaveSettings } from '@/hooks/query';
 import { TransactionNumberDialogProvider } from './TransactionNumberDialogProvider';
 import ReferenceNumberForm from '@/containers/JournalNumber/ReferenceNumberForm';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
-import { compose } from '@/utils';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
 import {
   transformFormToSettings,
   transformSettingsToForm,
 } from '@/containers/JournalNumber/utils';
+import { compose } from '@/utils';
 
 /**
  * Transaction number dialog content.

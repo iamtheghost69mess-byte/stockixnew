@@ -1,8 +1,8 @@
 // @ts-nocheck
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import moment from 'moment';
 
-import { getDefaultAPAgingSummaryQuery } from './common';
+import { useAPAgingSummaryQuery } from './common';
 import { FinancialStatement, DashboardPageContent } from '@/components';
 
 import APAgingSummaryHeader from './APAgingSummaryHeader';
@@ -12,9 +12,11 @@ import { APAgingSummaryBody } from './APAgingSummaryBody';
 import { APAgingSummaryProvider } from './APAgingSummaryProvider';
 import { APAgingSummarySheetLoadingBar } from './components';
 
-import withAPAgingSummaryActions from './withAPAgingSummaryActions';
+import { withAPAgingSummaryActions } from './withAPAgingSummaryActions';
 
 import { compose } from '@/utils';
+import { APAgingSummaryPdfDialog } from './dialogs/APAgingSummaryPdfDialog';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * A/P aging summary report.
@@ -26,25 +28,22 @@ function APAgingSummary({
   // #withAPAgingSummaryActions
   toggleAPAgingSummaryFilterDrawer: toggleDisplayFilterDrawer,
 }) {
-  const [filter, setFilter] = useState({
-    ...getDefaultAPAgingSummaryQuery(),
-  });
+  const { query, setLocationQuery } = useAPAgingSummaryQuery();
 
   // Handle filter submit.
-  const handleFilterSubmit = useCallback((filter) => {
-    const _filter = {
-      ...filter,
-      asDate: moment(filter.asDate).format('YYYY-MM-DD'),
-    };
-    setFilter(_filter);
-  }, []);
-
+  const handleFilterSubmit = useCallback(
+    (filter) => {
+      const _filter = {
+        ...filter,
+        asDate: moment(filter.asDate).format('YYYY-MM-DD'),
+      };
+      setLocationQuery(_filter);
+    },
+    [setLocationQuery],
+  );
   // Handle number format submit.
   const handleNumberFormatSubmit = (numberFormat) => {
-    setFilter({
-      ...filter,
-      numberFormat,
-    });
+    setLocationQuery({ ...filter, numberFormat });
   };
   // Hide the report filter drawer once the page unmount.
   useEffect(
@@ -55,9 +54,9 @@ function APAgingSummary({
   );
 
   return (
-    <APAgingSummaryProvider filter={filter}>
+    <APAgingSummaryProvider filter={query}>
       <APAgingSummaryActionsBar
-        numberFormat={filter.numberFormat}
+        numberFormat={query.numberFormat}
         onNumberFormatSubmit={handleNumberFormatSubmit}
       />
       <APAgingSummarySheetLoadingBar />
@@ -65,12 +64,16 @@ function APAgingSummary({
       <DashboardPageContent>
         <FinancialStatement name={'AP-aging-summary'}>
           <APAgingSummaryHeader
-            pageFilter={filter}
+            pageFilter={query}
             onSubmitFilter={handleFilterSubmit}
           />
           <APAgingSummaryBody organizationName={organizationName} />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <APAgingSummaryPdfDialog
+        dialogName={DialogsName.APAgingSummaryPdfPreview}
+      />
     </APAgingSummaryProvider>
   );
 }

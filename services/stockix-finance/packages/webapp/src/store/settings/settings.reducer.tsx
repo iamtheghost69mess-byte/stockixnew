@@ -9,8 +9,7 @@ import t from '@/store/types';
 const initialState = {
   data: {
     organization: {
-      // BRAND: Default org label in persisted settings UI; real name comes from API when loaded.
-      name: 'Organization',
+      name: 'Stockix, LLC',
     },
     manualJournals: {
       tableSize: 'small',
@@ -64,15 +63,12 @@ const initialState = {
       tableSize: 'small',
     },
     projectTasks: {
-      tableSize: 'small',
-    },
-    projectTasks: {
       tableSize: 'medium',
     },
   },
 };
 
-const STORAGE_KEY = 'stockix:settings';
+const STORAGE_KEY = 'bigcapital:settings';
 
 const PRESIST_CONFIG = {
   key: STORAGE_KEY,

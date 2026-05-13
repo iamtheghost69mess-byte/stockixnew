@@ -16,7 +16,6 @@ import {
   Icon,
   FormattedMessage as T,
   TextOverviewTooltipCell,
-  FormatNumberCell,
   Choose,
 } from '@/components';
 import { useCreditNoteDetailDrawerContext } from './CreditNoteDetailDrawerProvider';
@@ -48,9 +47,8 @@ export const useCreditNoteReadOnlyEntriesColumns = () => {
       },
       {
         Header: intl.get('quantity'),
-        accessor: 'quantity',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'quantity', {
+        accessor: 'quantity_formatted',
+        width: getColumnWidth(entries, 'quantity_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),
@@ -60,9 +58,8 @@ export const useCreditNoteReadOnlyEntriesColumns = () => {
       },
       {
         Header: intl.get('rate'),
-        accessor: 'rate',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'rate', {
+        accessor: 'rate_formatted',
+        width: getColumnWidth(entries, 'rate_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),
@@ -71,10 +68,21 @@ export const useCreditNoteReadOnlyEntriesColumns = () => {
         textOverview: true,
       },
       {
+        id: 'discount',
+        Header: 'Discount',
+        accessor: 'discount_formatted',
+        align: 'right',
+        disableSortBy: true,
+        textOverview: true,
+        width: getColumnWidth(entries, 'discount_formatted', {
+          minWidth: 60,
+          magicSpacing: 5,
+        }),
+      },
+      {
         Header: intl.get('amount'),
-        accessor: 'amount',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'amount', {
+        accessor: 'total_formatted',
+        width: getColumnWidth(entries, 'total_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),

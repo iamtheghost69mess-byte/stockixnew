@@ -1,33 +1,26 @@
 // @ts-nocheck
 import React from 'react';
-import { FastField, ErrorMessage } from 'formik';
-import { DateInput } from '@blueprintjs/datetime';
 import { FormGroup, Position, ControlGroup } from '@blueprintjs/core';
 import classNames from 'classnames';
 import {
   FormattedMessage as T,
-  AccountsSuggestField,
+  FAccountsSuggestField,
   InputPrependText,
   FieldRequiredHint,
   Col,
   Row,
   FeatureCan,
   BranchSelect,
-  BranchSelectButton,
   FMoneyInputGroup,
-  FInputGroup,
   FFormGroup,
   FTextArea,
+  FDateInput,
+  FInputGroup,
 } from '@/components';
 import { MoneyInOutTransactionNoField } from '../../_components';
 import { MoneyInExchangeRateField } from '../MoneyInExchangeRateField';
 import { CLASSES, ACCOUNT_TYPE, Features } from '@/constants';
-import {
-  inputIntent,
-  momentFormatter,
-  tansformDateValue,
-  handleDateChange,
-} from '@/utils';
+import { momentFormatter } from '@/utils';
 import { useMoneyInDailogContext } from '../MoneyInDialogProvider';
 import { useMoneyInFieldsContext } from '../MoneyInFieldsProvider';
 import {
@@ -55,7 +48,6 @@ export default function TransferFromAccountFormFields() {
               <BranchSelect
                 name={'branch_id'}
                 branches={branches}
-                input={BranchSelectButton}
                 popoverProps={{ minimal: true }}
               />
             </FFormGroup>
@@ -63,34 +55,25 @@ export default function TransferFromAccountFormFields() {
         </Row>
         <BranchRowDivider />
       </FeatureCan>
+
       <Row>
         <Col xs={5}>
           {/*------------ Date -----------*/}
-          <FastField name={'date'}>
-            {({ form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'date'} />}
-                labelInfo={<FieldRequiredHint />}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="date" />}
-                minimal={true}
-                className={classNames(CLASSES.FILL, 'form-group--date')}
-              >
-                <DateInput
-                  {...momentFormatter('YYYY/MM/DD')}
-                  onChange={handleDateChange((formattedDate) => {
-                    form.setFieldValue('date', formattedDate);
-                  })}
-                  value={tansformDateValue(value)}
-                  popoverProps={{
-                    position: Position.BOTTOM,
-                    minimal: true,
-                  }}
-                  intent={inputIntent({ error, touched })}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'date'}
+            label={<T id={'date'} />}
+            labelInfo={<FieldRequiredHint />}
+            fill
+          >
+            <FDateInput
+              name={'date'}
+              {...momentFormatter('YYYY/MM/DD')}
+              popoverProps={{
+                position: Position.BOTTOM_LEFT,
+                minimal: true,
+              }}
+            />
+          </FFormGroup>
         </Col>
         <Col xs={5}>
           {/*------------ Transaction number -----------*/}
@@ -118,34 +101,23 @@ export default function TransferFromAccountFormFields() {
       <Row>
         <Col xs={5}>
           {/*------------ Transfer from account -----------*/}
-          <FastField name={'credit_account_id'}>
-            {({ form, field, meta: { error, touched } }) => (
-              <FormGroup
-                label={
-                  <T id={'cash_flow_transaction.label_transfer_from_account'} />
-                }
-                labelInfo={<FieldRequiredHint />}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="credit_account_id" />}
-                className={'form-group--credit_account_id'}
-              >
-                <AccountsSuggestField
-                  accounts={accounts}
-                  onAccountSelected={({ id }) =>
-                    form.setFieldValue('credit_account_id', id)
-                  }
-                  filterByTypes={[
-                    ACCOUNT_TYPE.CASH,
-                    ACCOUNT_TYPE.BANK,
-                    ACCOUNT_TYPE.CREDIT_CARD,
-                  ]}
-                  inputProps={{
-                    intent: inputIntent({ error, touched }),
-                  }}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'credit_account_id'}
+            label={
+              <T id={'cash_flow_transaction.label_transfer_from_account'} />
+            }
+            labelInfo={<FieldRequiredHint />}
+          >
+            <FAccountsSuggestField
+              name={'credit_account_id'}
+              items={accounts as any[]}
+              filterByTypes={[
+                ACCOUNT_TYPE.CASH,
+                ACCOUNT_TYPE.BANK,
+                ACCOUNT_TYPE.CREDIT_CARD,
+              ]}
+            />
+          </FFormGroup>
         </Col>
 
         <Col xs={5}>

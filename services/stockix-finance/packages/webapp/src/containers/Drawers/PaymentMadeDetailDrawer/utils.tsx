@@ -1,8 +1,6 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import moment from 'moment';
-
 import { getColumnWidth } from '@/utils';
 import { FormatNumberCell } from '@/components';
 import { usePaymentMadeDetailContext } from './PaymentMadeDetailProvider';
@@ -17,7 +15,7 @@ export const usePaymentMadeEntriesColumns = () => {
     () => [
       {
         Header: intl.get('date'),
-        accessor: (row) => moment(row.date).format('YYYY MMM DD'),
+        accessor: 'bill.formatted_bill_date',
         width: 100,
         disableSortBy: true,
         className: 'date',
@@ -52,9 +50,8 @@ export const usePaymentMadeEntriesColumns = () => {
       },
       {
         Header: intl.get('payment_amount'),
-        accessor: 'payment_amount',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'payment_amount', {
+        accessor: 'payment_amount_formatted',
+        width: getColumnWidth(entries, 'payment_amount_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),

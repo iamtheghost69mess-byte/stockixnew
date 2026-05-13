@@ -1,10 +1,9 @@
 // @ts-nocheck
 import { createReducer } from '@reduxjs/toolkit';
-import { isUndefined, isNumber } from 'lodash';
+import { isUndefined, isNumber, omit } from 'lodash';
 import t from '@/store/types';
 import { persistReducer, purgeStoredState } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
-
 
 const initialState = {
   pageTitle: '',
@@ -23,9 +22,10 @@ const initialState = {
   appIntlIsLoading: true,
   sidebarSubmenu: { isOpen: false, submenuId: null },
   features: {},
+  autofill: {},
 };
 
-const STORAGE_KEY = 'stockix:dashboard';
+const STORAGE_KEY = 'bigcapital:dashboard';
 
 const CONFIG = {
   key: STORAGE_KEY,
@@ -89,7 +89,7 @@ const reducerInstance = createReducer(initialState, {
       isOpen: false,
     };
   },
-  [t.CLOSE_ALL_DIALOGS]: (state, action) => {},
+  [t.CLOSE_ALL_DIALOGS]: (state, action) => { },
 
   [t.SET_TOPBAR_EDIT_VIEW]: (state, action) => {
     state.topbarEditViewId = action.id;
@@ -142,6 +142,18 @@ const reducerInstance = createReducer(initialState, {
 
   [t.RESET]: () => {
     purgeStoredState(CONFIG);
+  },
+
+  [t.ADD_AUTOFILL_REF]: (state, action) => {
+    state.autofill[action.payload.ref] = action.payload.payload || null;
+  },
+
+  [t.REMOVE_AUTOFILL_REF]: (state, action) => {
+    state.autofill = omit(state.autofill, [action.payload.ref]);
+  },
+
+  [t.RESET_AUTOFILL_REF]: (state, action) => {
+    state.autofill = {};
   },
 });
 

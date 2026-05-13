@@ -18,7 +18,7 @@ export default function CashFlowStatementTable({
   companyName,
 }) {
   const {
-    cashFlowStatement: { tableRows },
+    cashFlowStatement: { tableRows, meta },
     query,
   } = useCashFlowStatementContext();
 
@@ -32,8 +32,7 @@ export default function CashFlowStatementTable({
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('statement_of_cash_flow')}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       basis={query.basis}
     >
       <CashflowStatementDataTable
@@ -44,6 +43,7 @@ export default function CashFlowStatementTable({
         expandable={true}
         expanded={expandedRows}
         expandToggleColumn={1}
+        sticky={true}
         expandColumnSpace={0.8}
         styleName={TableStyle.Constrant}
       />
@@ -56,23 +56,28 @@ const CashflowStatementDataTable = styled(DataTable)`
     .tbody {
       .tr:not(.no-results) {
         .td {
-          border-bottom: 0;
+          border-bottom-width: 0;
           padding-top: 0.32rem;
           padding-bottom: 0.32rem;
         }
-
-        // &.row-type--AGGREGATE,
         &.row_type--ACCOUNTS {
-          border-top: 1px solid #bbb;
+          .td {
+            border-top-width: 1px;
+            border-top-style: solid;
+          }
         }
         &.row-id--CASH_END_PERIOD {
-          border-bottom: 3px double #333;
+          .td {
+            border-bottom-width: 3px;
+            border-bottom-style: double;
+          }
         }
         &.row_type--TOTAL {
           font-weight: 500;
 
           &:not(:first-child) .td {
-            border-top: 1px solid #bbb;
+            border-top-width: 1px;
+            border-top-style: solid;
           }
         }
       }

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { createContext } from 'react';
+import { css } from '@emotion/css';
 import { DashboardInsider } from '@/components/Dashboard';
 import { Features } from '@/constants';
 import { useFeatureCan } from '@/hooks/state';
@@ -58,8 +59,13 @@ function ExpenseFormPageProvider({ query, expenseId, ...props }) {
   const { mutateAsync: createExpenseMutate } = useCreateExpense();
   const { mutateAsync: editExpenseMutate } = useEditExpense();
 
-  // Submit form payload.
-  const [submitPayload, setSubmitPayload] = React.useState({});
+  // Submit form payload - using ref for synchronous access.
+  const submitPayloadRef = React.useRef({});
+
+  // Setter to update the ref.
+  const setSubmitPayload = React.useCallback((payload) => {
+    submitPayloadRef.current = payload;
+  }, []);
 
   // Detarmines whether the form in new mode.
   const isNewMode = !expenseId;
@@ -68,7 +74,7 @@ function ExpenseFormPageProvider({ query, expenseId, ...props }) {
   const provider = {
     isNewMode,
     expenseId,
-    submitPayload,
+    submitPayloadRef, // Expose ref for synchronous access
 
     currencies,
     customers,
@@ -98,6 +104,10 @@ function ExpenseFormPageProvider({ query, expenseId, ...props }) {
         isProjectsLoading
       }
       name={'expense-form'}
+      className={css`
+        min-height: calc(100vh - var(--top-offset));
+        max-height: calc(100vh - var(--top-offset));
+      `}
     >
       <ExpenseFormPageContext.Provider value={provider} {...props} />
     </DashboardInsider>

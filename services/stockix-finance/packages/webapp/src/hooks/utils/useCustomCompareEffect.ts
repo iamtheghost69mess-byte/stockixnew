@@ -1,5 +1,4 @@
 import { DependencyList, EffectCallback, useEffect, useRef } from 'react';
-import { publicConfig } from '@/lib/public-config';
 
 const isPrimitive = (val: any) => val !== Object(val);
 
@@ -13,7 +12,7 @@ const useCustomCompareEffect = <TDeps extends DependencyList>(
   deps: TDeps,
   depsEqual: DepsEqualFnType<TDeps>,
 ) => {
-  if (publicConfig.nodeEnv !== 'production') {
+  if (process.env.NODE_ENV !== 'production') {
     if (!(deps instanceof Array) || !deps.length) {
       console.warn(
         '`useCustomCompareEffect` should not be used with no dependencies. Use React.useEffect instead.',

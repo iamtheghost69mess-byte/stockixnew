@@ -1,7 +1,6 @@
 // @ts-nocheck
-import React, { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import moment from 'moment';
-
 
 import ARAgingSummaryHeader from './ARAgingSummaryHeader';
 import ARAgingSummaryActionsBar from './ARAgingSummaryActionsBar';
@@ -11,9 +10,11 @@ import { ARAgingSummaryProvider } from './ARAgingSummaryProvider';
 import { ARAgingSummarySheetLoadingBar } from './components';
 import { ARAgingSummaryBody } from './ARAgingSummaryBody';
 
-import withARAgingSummaryActions from './withARAgingSummaryActions';
+import { withARAgingSummaryActions } from './withARAgingSummaryActions';
 
-import { getDefaultARAgingSummaryQuery } from './common';
+import { useARAgingSummaryQuery } from './common';
+import { ARAgingSummaryPdfDialog } from './dialogs/ARAgingSummaryPdfDialog';
+import { DialogsName } from '@/constants/dialogs';
 import { compose } from '@/utils';
 
 /**
@@ -23,35 +24,34 @@ function ReceivableAgingSummarySheet({
   // #withARAgingSummaryActions
   toggleARAgingSummaryFilterDrawer: toggleDisplayFilterDrawer,
 }) {
-  const [filter, setFilter] = useState({
-    ...getDefaultARAgingSummaryQuery(),
-  });
+  const { query, setLocationQuery } = useARAgingSummaryQuery();
 
   // Handle filter submit.
-  const handleFilterSubmit = useCallback((filter) => {
-    const _filter = {
-      ...filter,
-      asDate: moment(filter.asDate).format('YYYY-MM-DD'),
-    };
-    setFilter(_filter);
-  }, []);
+  const handleFilterSubmit = useCallback(
+    (filter) => {
+      const _filter = {
+        ...filter,
+        asDate: moment(filter.asDate).format('YYYY-MM-DD'),
+      };
+      setLocationQuery(_filter);
+    },
+    [setLocationQuery],
+  );
 
   // Handle number format submit.
   const handleNumberFormatSubmit = (numberFormat) => {
-    setFilter({ ...filter, numberFormat });
+    setLocationQuery({ ...query, numberFormat });
   };
   // Hide the filter drawer once the page unmount.
   useEffect(
-    () => () => {
-      toggleDisplayFilterDrawer(false);
-    },
+    () => () => toggleDisplayFilterDrawer(false),
     [toggleDisplayFilterDrawer],
   );
 
   return (
-    <ARAgingSummaryProvider filter={filter}>
+    <ARAgingSummaryProvider filter={query}>
       <ARAgingSummaryActionsBar
-        numberFormat={filter.numberFormat}
+        numberFormat={query.numberFormat}
         onNumberFormatSubmit={handleNumberFormatSubmit}
       />
       <ARAgingSummarySheetLoadingBar />
@@ -59,12 +59,16 @@ function ReceivableAgingSummarySheet({
       <DashboardPageContent>
         <FinancialStatement>
           <ARAgingSummaryHeader
-            pageFilter={filter}
+            pageFilter={query}
             onSubmitFilter={handleFilterSubmit}
           />
           <ARAgingSummaryBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <ARAgingSummaryPdfDialog
+        dialogName={DialogsName.ARAgingSummaryPdfPreview}
+      />
     </ARAgingSummaryProvider>
   );
 }

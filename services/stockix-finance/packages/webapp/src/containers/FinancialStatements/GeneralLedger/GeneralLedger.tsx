@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import moment from 'moment';
 
 import GeneralLedgerHeader from './GeneralLedgerHeader';
@@ -14,8 +14,10 @@ import {
   GeneralLedgerSheetLoadingBar,
 } from './components';
 
-import withGeneralLedgerActions from './withGeneralLedgerActions';
+import { withGeneralLedgerActions } from './withGeneralLedgerActions';
 import { compose } from '@/utils';
+import { GeneralLedgerPdfDialog } from './dialogs/GeneralLedgerPdfDialog';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * General Ledger (GL) sheet.
@@ -41,10 +43,8 @@ function GeneralLedger({
   );
 
   // Hide the filter drawer once the page unmount.
-  React.useEffect(
-    () => () => {
-      toggleGeneralLedgerFilterDrawer(false);
-    },
+  useEffect(
+    () => () => toggleGeneralLedgerFilterDrawer(false),
     [toggleGeneralLedgerFilterDrawer],
   );
 
@@ -63,6 +63,10 @@ function GeneralLedger({
           <GeneralLedgerBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <GeneralLedgerPdfDialog
+        dialogName={DialogsName.GeneralLedgerPdfPreview}
+      />
     </GeneralLedgerProvider>
   );
 }

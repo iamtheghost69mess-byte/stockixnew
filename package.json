@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --filter=dashboard --filter=api",
-    "dev:all": "pnpm db:up && pnpm db:wait && pnpm dev",
+    "dev": "pnpm db:up && pnpm db:wait && pnpm infra:worker:build && concurrently -n apps,worker -c blue,magenta \"pnpm exec turbo run dev --filter=dashboard --filter=api\" \"node infra/worker-service/.runtime/worker.js\"",
+    "dev:all": "pnpm dev",
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
     "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/dev/docker-compose.yml down",
@@ -19,6 +19,10 @@
     "debug:db": "node scripts/debug-db.mjs",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",
     "db:reset:local": "docker compose -f infra/dev/docker-compose.yml down -v && pnpm setup:local",
+    "cleanup:tenant-local": "node scripts/cleanup-tenant-docker-local.mjs",
+    "provision:diagnose": "pnpm --filter api exec node scripts/provision-diagnose.mjs --",
+    "provision:smoke": "pnpm --filter api exec node scripts/provision-smoke.mjs --full",
+    "provision:test": "node scripts/provision-test-local.mjs",
     "lint": "turbo run lint",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "architecture:validate": "node scripts/architecture-validation.mjs",
@@ -27,6 +31,7 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "concurrently": "9.1.2",
     "prettier": "^3.7.4",
     "tsx": "4.20.6",
     "turbo": "^2.9.7",
@@ -41,8 +46,8 @@
     "@repo/db": "workspace:*",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.45.1",
-    "postgres": "^3.4.7",
     "execa": "^9.5.2",
+    "postgres": "^3.4.7",
     "zod": "^3.24.1"
   }
 }

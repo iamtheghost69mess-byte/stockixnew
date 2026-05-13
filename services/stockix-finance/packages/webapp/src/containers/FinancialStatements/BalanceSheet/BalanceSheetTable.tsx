@@ -9,7 +9,6 @@ import { useBalanceSheetContext } from './BalanceSheetProvider';
 import { useBalanceSheetColumns } from './components';
 import { defaultExpanderReducer, tableRowTypesToClassnames } from '@/utils';
 
-
 /**
  * Balance sheet table.
  */
@@ -19,7 +18,7 @@ export default function BalanceSheetTable({
 }) {
   // Balance sheet context.
   const {
-    balanceSheet: { table, query },
+    balanceSheet: { table, query, meta },
   } = useBalanceSheetContext();
 
   // Retrieve the database columns.
@@ -35,7 +34,7 @@ export default function BalanceSheetTable({
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('balance_sheet')}
-      asDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       basis={query.basis}
     >
       <BalanceSheetDataTable
@@ -56,12 +55,20 @@ export default function BalanceSheetTable({
 }
 
 const BalanceSheetDataTable = styled(ReportDataTable)`
+  --color-table-text-color: #252a31;
+  --color-table-total-text-color: #000;
+
+  .bp4-dark & {
+    --color-table-text-color: var(--color-light-gray1);
+    --color-table-total-text-color: var(--color-light-gray4);
+  }
   .table {
     .tbody .tr {
       .td {
-        border-bottom: 0;
+        border-bottom-width: 0;
         padding-top: 0.32rem;
         padding-bottom: 0.32rem;
+        color: var(--color-table-text-color);
       }
       &.is-expanded {
         .td:not(.name) .cell-inner {
@@ -70,18 +77,22 @@ const BalanceSheetDataTable = styled(ReportDataTable)`
       }
       &.row_type--TOTAL {
         .td {
+          color: var(--color-table-total-text-color);
           font-weight: 500;
-          border-top: 1px solid #bbb;
+          border-top-width: 1px;
+          border-top-style: solid;
         }
       }
-
       &:last-of-type .td {
-        border-bottom: 1px solid #bbb;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
       }
       &.row_type--TOTAL.row-id--ASSETS,
       &.row_type--TOTAL.row-id--LIABILITY_EQUITY {
         .td {
-          border-bottom: 3px double #000;
+          color: var(--color-table-total-text-color);
+          border-bottom-width: 3px;
+          border-bottom-style: double;
         }
       }
     }

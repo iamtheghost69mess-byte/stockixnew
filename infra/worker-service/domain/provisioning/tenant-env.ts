@@ -11,6 +11,11 @@ export type TenantEnvFileParams = {
   signupAllowedEmails: string;
   agendashUser: string;
   agendashPassword: string;
+  s3Region: string;
+  s3AccessKeyId: string;
+  s3SecretAccessKey: string;
+  s3Endpoint: string;
+  s3Bucket: string;
 };
 
 export function buildTenantComposeEnvBody(params: TenantEnvFileParams): string {
@@ -47,6 +52,11 @@ export function buildTenantComposeEnvBody(params: TenantEnvFileParams): string {
     `MAIL_SECURE=`,
     `MAIL_FROM_NAME=`,
     `MAIL_FROM_ADDRESS=`,
+    `S3_REGION=${params.s3Region}`,
+    `S3_ACCESS_KEY_ID=${params.s3AccessKeyId}`,
+    `S3_SECRET_ACCESS_KEY=${params.s3SecretAccessKey}`,
+    `S3_ENDPOINT=${params.s3Endpoint}`,
+    `S3_BUCKET=${params.s3Bucket}`,
     `AGENDASH_AUTH_USER=${params.agendashUser}`,
     `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`,
   ];

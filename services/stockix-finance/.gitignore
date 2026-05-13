@@ -1,5 +1,13 @@
 node_modules/
-# Runtime / host data at repo root only — do not ignore packages/server/src/data (required for builds).
+
+# Docker volumes data directory
 /data
+
+# Production env file 
 .env
+
 test-results/
+.qodo
+
+
+.pnpm-store

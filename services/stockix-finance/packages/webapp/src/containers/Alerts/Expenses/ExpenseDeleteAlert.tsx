@@ -4,13 +4,14 @@ import intl from 'react-intl-universal';
 import { AppToaster, FormattedMessage as T } from '@/components';
 import { Intent, Alert } from '@blueprintjs/core';
 
-import withAlertStoreConnect from '@/containers/Alert/withAlertStoreConnect';
-import withAlertActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertStoreConnect } from '@/containers/Alert/withAlertStoreConnect';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import { useDeleteExpense } from '@/hooks/query';
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
+import { handleDeleteErrors } from './_utils';
 
 /**
  * Expense delete alert.
@@ -51,16 +52,7 @@ function ExpenseDeleteAlert({
             data: { errors },
           },
         }) => {
-          if (
-            errors.find((e) => e.type === 'EXPENSE_HAS_ASSOCIATED_LANDED_COST')
-          ) {
-            AppToaster.show({
-              intent: Intent.DANGER,
-              message: intl.get(
-                'couldn_t_delete_expense_transaction_has_associated_located_landed_cost_transaction',
-              ),
-            });
-          }
+          handleDeleteErrors(errors);
         },
       )
       .finally(() => {

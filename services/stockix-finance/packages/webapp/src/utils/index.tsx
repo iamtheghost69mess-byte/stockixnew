@@ -1,21 +1,20 @@
 // @ts-nocheck
-import React from 'react';
 import moment from 'moment';
 import _ from 'lodash';
 import * as R from 'ramda';
 import Currencies from 'js-money/lib/currency';
 import clsx from 'classnames';
-
 import { Intent } from '@blueprintjs/core';
 import Currency from 'js-money/lib/currency';
 import accounting from 'accounting';
-import deepMapKeys from 'deep-map-keys';
 import { createSelectorCreator, defaultMemoize } from 'reselect';
 import { isEqual, castArray, isEmpty, includes, pickBy } from 'lodash';
-
 import jsCookie from 'js-cookie';
-
+import { deepMapKeys } from './map-key-deep';
 export * from './deep';
+
+/** Strips leading slash from a path segment to avoid double slashes when joining with a base (e.g. `/api/` + path). */
+export const normalizeApiPath = (path) => (path || '').replace(/^\//, '');
 
 export const getCookie = (name, defaultValue) =>
   _.defaultTo(jsCookie.get(name), defaultValue);
@@ -83,6 +82,20 @@ export const momentFormatter = (format) => {
 /** Event handler that exposes the target element's value as a boolean. */
 export const handleBooleanChange = (handler) => {
   return (event) => handler(event.target.checked);
+};
+
+/**
+ * Parses a value to boolean (handles 1, 0, '1', '0', true, false).
+ * @param {*} value
+ * @param {boolean} defaultValue - value when empty/unknown
+ * @returns {boolean}
+ */
+export const parseBoolean = (value, defaultValue = false) => {
+  if (typeof value === 'boolean') return value;
+  if (value === 1 || value === '1') return true;
+  if (value === 0 || value === '0') return false;
+  if (value == null || value === '') return defaultValue;
+  return Boolean(value);
 };
 
 /** Event handler that exposes the target element's value as a string. */
@@ -354,6 +367,14 @@ export const transformToForm = (obj, emptyInitialValues) => {
     (val, key) => val !== null && Object.keys(emptyInitialValues).includes(key),
   );
 };
+
+export function excludePrivateProps(
+  obj: Record<string, any>,
+): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key, value]) => !key.startsWith('_')),
+  );
+}
 
 export function inputIntent({ error, touched }) {
   return error && touched ? Intent.DANGER : '';

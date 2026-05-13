@@ -6,11 +6,10 @@ import '@/style/pages/Expense/List.scss';
 import { DashboardPageContent } from '@/components';
 
 import ExpenseActionsBar from './ExpenseActionsBar';
-import ExpenseViewTabs from './ExpenseViewTabs';
 import ExpenseDataTable from './ExpenseDataTable';
 
-import withExpenses from './withExpenses';
-import withExpensesActions from './withExpensesActions';
+import { withExpenses } from './withExpenses';
+import { withExpensesActions } from './withExpensesActions';
 
 import { compose, transformTableStateToQuery } from '@/utils';
 import { ExpensesListProvider } from './ExpensesListProvider';
@@ -42,7 +41,6 @@ function ExpensesList({
       <ExpenseActionsBar />
 
       <DashboardPageContent>
-        <ExpenseViewTabs />
         <ExpenseDataTable />
       </DashboardPageContent>
     </ExpensesListProvider>

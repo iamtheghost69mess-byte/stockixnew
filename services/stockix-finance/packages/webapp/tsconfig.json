@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ESNext",
     "lib": [
       "dom",
       "dom.iterable",
@@ -13,30 +13,20 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "module": "esnext",
+    "module": "ESNext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
-    "types": [
-      "node",
-      "jest",
-      "react",
-      "react-dom",
-      "react-redux",
-      "react-router-dom",
-      "react-body-classname",
-      "react-transition-group",
-      "styled-components",
-      "js-money",
-      "yup",
-      "lodash",
-      "ramda"
-    ]
+    "jsx": "react-jsx"
   },
   "include": [
     "src"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
   ],
   "extends": "./tsconfig.base.json"
 }

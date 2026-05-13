@@ -1,17 +1,20 @@
 import { Knex } from 'knex';
-import { IDynamicListFilterDTO } from '@/interfaces/DynamicFilter';
 
 export interface IAccountDTO {
   name: string;
   code: string;
   description: string;
   accountType: string;
-  parentAccountId: number;
+  parentAccountId?: number;
   active: boolean;
+  bankBalance?: number;
+  accountMask?: string;
 }
 
 export interface IAccountCreateDTO extends IAccountDTO {
   currencyCode?: string;
+  plaidAccountId?: string;
+  plaidItemId?: string;
 }
 
 export interface IAccountEditDTO extends IAccountDTO {}
@@ -33,6 +36,9 @@ export interface IAccount {
   type?: any[];
   accountNormal: string;
   accountParentType: string;
+  bankBalance: string;
+  plaidItemId: number | null;
+  lastFeedsUpdatedAt: Date;
 }
 
 export enum AccountNormal {
@@ -58,10 +64,13 @@ export interface IAccountTransaction {
   date: string | Date;
 
   referenceType: string;
+  referenceTypeFormatted: string;
   referenceId: number;
 
   referenceNumber?: string;
+
   transactionNumber?: string;
+  transactionType?: string;
 
   note?: string;
 
@@ -76,6 +85,9 @@ export interface IAccountTransaction {
   projectId?: number;
 
   account?: IAccount;
+
+  taxRateId?: number;
+  taxRate?: number;
 }
 export interface IAccountResponse extends IAccount {}
 
@@ -84,7 +96,7 @@ export enum IAccountsStructureType {
   Flat = 'flat',
 }
 
-export interface IAccountsFilter extends IDynamicListFilterDTO {
+export interface IAccountsFilter {
   stringifiedFilterRoles?: string;
   onlyInactive: boolean;
   structure?: IAccountsStructureType;
@@ -105,26 +117,22 @@ export interface IAccountsTypesService {
 }
 
 export interface IAccountEventCreatingPayload {
-  tenantId: number;
   accountDTO: any;
   trx: Knex.Transaction;
 }
 export interface IAccountEventCreatedPayload {
-  tenantId: number;
   account: IAccount;
   accountId: number;
   trx: Knex.Transaction;
 }
 
 export interface IAccountEventEditedPayload {
-  tenantId: number;
   account: IAccount;
   oldAccount: IAccount;
   trx: Knex.Transaction;
 }
 
 export interface IAccountEventDeletedPayload {
-  tenantId: number;
   accountId: number;
   oldAccount: IAccount;
   trx: Knex.Transaction;
@@ -148,4 +156,15 @@ export enum AccountAction {
   DELETE = 'Delete',
   VIEW = 'View',
   TransactionsLocking = 'TransactionsLocking',
+}
+
+export enum TaxRateAction {
+  CREATE = 'Create',
+  EDIT = 'Edit',
+  DELETE = 'Delete',
+  VIEW = 'View',
+}
+
+export interface CreateAccountParams {
+  ignoreUniqueName: boolean;
 }

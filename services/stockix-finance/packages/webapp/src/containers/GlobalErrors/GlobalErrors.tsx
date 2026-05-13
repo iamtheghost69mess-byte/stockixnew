@@ -3,12 +3,13 @@ import { Intent } from '@blueprintjs/core';
 import intl from 'react-intl-universal';
 import { AppToaster } from '@/components';
 
-import withGlobalErrors from './withGlobalErrors';
-import withGlobalErrorsActions from './withGlobalErrorsActions';
+import { withGlobalErrors } from './withGlobalErrors';
+import { withGlobalErrorsActions } from './withGlobalErrorsActions';
 import { compose } from '@/utils';
 
 let toastKeySessionExpired;
 let toastKeySomethingWrong;
+let toastTooManyRequests;
 
 function GlobalErrors({
   // #withGlobalErrors
@@ -41,10 +42,22 @@ function GlobalErrors({
       toastKeySomethingWrong,
     );
   }
+  if (globalErrors.too_many_requests) {
+    toastTooManyRequests = AppToaster.show(
+      {
+        message: intl.get('global_error.too_many_requests'),
+        intent: Intent.DANGER,
+        onDismiss: () => {
+          globalErrorsSet({ too_many_requests: false });
+        },
+      },
+      toastTooManyRequests,
+    );
+  }
   if (globalErrors.access_denied) {
     toastKeySomethingWrong = AppToaster.show(
       {
-        message: intl.get('global_error.you_dont_have_permissions'),
+        message: globalErrors.access_denied.message || intl.get('global_error.you_dont_have_permissions'),
         intent: Intent.DANGER,
         onDismiss: () => {
           globalErrorsSet({ access_denied: false });
@@ -56,11 +69,20 @@ function GlobalErrors({
   if (globalErrors.transactionsLocked) {
     AppToaster.show({
       message: intl.get('global_error.transactions_locked', {
-        lockedToDate: globalErrors.transactionsLocked.formatted_locked_to_date,
+        lockedToDate: globalErrors.transactionsLocked.formattedLockedToDate,
       }),
       intent: Intent.DANGER,
       onDismiss: () => {
         globalErrorsSet({ transactionsLocked: false });
+      },
+    });
+  }
+  if (globalErrors.subscriptionInactive) {
+    AppToaster.show({
+      message: `You can't add new data to Stockix because your subscription is inactive. Make sure your billing information is up-to-date from Preferences > Billing page.`,
+      intent: Intent.DANGER,
+      onDismiss: () => {
+        globalErrorsSet({ subscriptionInactive: false });
       },
     });
   }

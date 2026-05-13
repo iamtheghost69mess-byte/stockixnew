@@ -8,11 +8,10 @@ import { DashboardPageContent } from '@/components';
 import { ItemsListProvider } from './ItemsListProvider';
 
 import ItemsActionsBar from './ItemsActionsBar';
-import ItemsViewsTabs from './ItemsViewsTabs';
 import ItemsDataTable from './ItemsDataTable';
 
-import withItems from './withItems';
-import withItemsActions from './withItemsActions';
+import { withItems } from './withItems';
+import { withItemsActions } from './withItemsActions';
 
 /**
  * Items list.
@@ -41,7 +40,6 @@ function ItemsList({
       <ItemsActionsBar />
 
       <DashboardPageContent>
-        <ItemsViewsTabs />
         <ItemsDataTable />
       </DashboardPageContent>
     </ItemsListProvider>

@@ -23,6 +23,7 @@ export declare const apiConfig: {
   readonly tenantDbNamePrefix: string | undefined;
   readonly validateRequiredEnv: () => void;
   readonly workerJobId: string | undefined;
+  readonly workerJobExecutionTimeoutMs: number;
   readonly metricsEndpoint: string | undefined;
   readonly metricsAuthToken: string | undefined;
   readonly deploymentSecretKey: string;

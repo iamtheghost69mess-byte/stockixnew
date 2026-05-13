@@ -15,9 +15,9 @@ import { CreateMoneyInFormSchema } from './MoneyInForm.schema';
 
 import { useMoneyInDailogContext } from './MoneyInDialogProvider';
 
-import withSettings from '@/containers/Settings/withSettings';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
 import { compose, transactionNumber } from '@/utils';
 
@@ -72,7 +72,7 @@ function MoneyInForm({
   };
 
   // Handles the form submit.
-  const handleFormSubmit = (values, { setSubmitting, setErrors }) => {
+  const handleFormSubmit = (values, { setSubmitting }) => {
     const form = {
       ...omit(values, ['currency_code']),
       publish: true,

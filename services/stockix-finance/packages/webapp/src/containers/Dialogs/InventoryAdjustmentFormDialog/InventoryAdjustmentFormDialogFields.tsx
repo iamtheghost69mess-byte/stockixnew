@@ -3,35 +3,27 @@ import React from 'react';
 import intl from 'react-intl-universal';
 import styled from 'styled-components';
 import classNames from 'classnames';
-import { FastField, ErrorMessage, Field } from 'formik';
+import { useFormikContext } from 'formik';
+import { Classes, FormGroup, Position } from '@blueprintjs/core';
 import {
-  Classes,
-  FormGroup,
-  InputGroup,
-  TextArea,
-  Position,
-} from '@blueprintjs/core';
-import { FormattedMessage as T } from '@/components';
-import { DateInput } from '@blueprintjs/datetime';
+  FFormGroup,
+  FormattedMessage as T,
+  FDateInput,
+  FInputGroup,
+  FTextArea,
+  FSelect,
+} from '@/components';
 import { useAutofocus } from '@/hooks';
 import {
-  ListSelect,
   FieldRequiredHint,
   Col,
   Row,
   FeatureCan,
   BranchSelect,
   WarehouseSelect,
-  BranchSelectButton,
-  AccountsSuggestField,
+  FAccountsSuggestField,
 } from '@/components';
-import {
-  inputIntent,
-  momentFormatter,
-  tansformDateValue,
-  handleDateChange,
-  toSafeNumber,
-} from '@/utils';
+import { momentFormatter, toSafeNumber } from '@/utils';
 import { Features, CLASSES } from '@/constants';
 
 import { useInventoryAdjContext } from './InventoryAdjustmentFormProvider';
@@ -59,12 +51,24 @@ export default function InventoryAdjustmentFormDialogFields() {
 
   // Inventory adjustment dialog context.
   const { accounts, branches, warehouses } = useInventoryAdjContext();
+  const { values, setFieldValue } = useFormikContext();
 
   // Sets the primary warehouse to form.
   useSetPrimaryWarehouseToForm();
 
   // Sets the primary branch to form.
   useSetPrimaryBranchToForm();
+
+  // Handle adjustment type change.
+  const handleAdjustmentTypeChange = (type) => {
+    const result = diffQuantity(
+      toSafeNumber(values.quantity),
+      toSafeNumber(values.quantity_on_hand),
+      type.value,
+    );
+    setFieldValue('type', type.value);
+    setFieldValue('new_quantity', result);
+  };
 
   return (
     <div className={Classes.DIALOG_BODY}>
@@ -73,12 +77,11 @@ export default function InventoryAdjustmentFormDialogFields() {
           <Col xs={5}>
             <FormGroup
               label={<T id={'branch'} />}
-              className={classNames('form-group--select-list', Classes.FILL)}
+              fill
             >
               <BranchSelect
                 name={'branch_id'}
                 branches={branches}
-                input={BranchSelectButton}
                 popoverProps={{ minimal: true }}
               />
             </FormGroup>
@@ -88,7 +91,7 @@ export default function InventoryAdjustmentFormDialogFields() {
           <Col xs={5}>
             <FormGroup
               label={<T id={'warehouse'} />}
-              className={classNames('form-group--select-list', Classes.FILL)}
+              fill
             >
               <WarehouseSelect
                 name={'warehouse_id'}
@@ -107,138 +110,98 @@ export default function InventoryAdjustmentFormDialogFields() {
       <Row>
         <Col xs={5}>
           {/*------------ Date -----------*/}
-          <FastField name={'date'}>
-            {({ form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'date'} />}
-                labelInfo={<FieldRequiredHint />}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="date" />}
-                minimal={true}
-                className={classNames(CLASSES.FILL, 'form-group--date')}
-              >
-                <DateInput
-                  {...momentFormatter('YYYY/MM/DD')}
-                  onChange={handleDateChange((formattedDate) => {
-                    form.setFieldValue('date', formattedDate);
-                  })}
-                  value={tansformDateValue(value)}
-                  popoverProps={{
-                    position: Position.BOTTOM,
-                    minimal: true,
-                  }}
-                  intent={inputIntent({ error, touched })}
-                  inputRef={(ref) => (dateFieldRef.current = ref)}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'date'}
+            label={<T id={'date'} />}
+            labelInfo={<FieldRequiredHint />}
+            fill
+            fastField
+          >
+            <FDateInput
+              name={'date'}
+              {...momentFormatter('YYYY/MM/DD')}
+              popoverProps={{
+                position: Position.BOTTOM,
+                minimal: true,
+              }}
+              inputRef={(ref) => (dateFieldRef.current = ref)}
+              fastField
+            />
+          </FFormGroup>
         </Col>
 
         <Col xs={5}>
           {/*------------ Adjustment type -----------*/}
-          <Field name={'type'}>
-            {({
-              form: { values, setFieldValue },
-              field: { value },
-              meta: { error, touched },
-            }) => (
-              <FormGroup
-                label={<T id={'adjustment_type'} />}
-                labelInfo={<FieldRequiredHint />}
-                helperText={<ErrorMessage name="type" />}
-                intent={inputIntent({ error, touched })}
-                className={classNames(CLASSES.FILL, 'form-group--type')}
-              >
-                <ListSelect
-                  items={adjustmentTypes}
-                  onItemSelect={(type) => {
-                    const result = diffQuantity(
-                      toSafeNumber(values.quantity),
-                      toSafeNumber(values.quantity_on_hand),
-                      type.value,
-                    );
-                    setFieldValue('type', type.value);
-                    setFieldValue('new_quantity', result);
-                  }}
-                  filterable={false}
-                  selectedItem={value}
-                  selectedItemProp={'value'}
-                  textProp={'name'}
-                  popoverProps={{ minimal: true }}
-                  intent={inputIntent({ error, touched })}
-                />
-              </FormGroup>
-            )}
-          </Field>
+          <FFormGroup
+            name={'type'}
+            label={<T id={'adjustment_type'} />}
+            labelInfo={<FieldRequiredHint />}
+            fill
+            fastField
+          >
+            <FSelect
+              name={'type'}
+              items={adjustmentTypes}
+              onItemChange={handleAdjustmentTypeChange}
+              filterable={false}
+              valueAccessor={'value'}
+              textAccessor={'name'}
+              popoverProps={{ minimal: true }}
+              fastField
+            />
+          </FFormGroup>
         </Col>
       </Row>
 
       <InventoryAdjustmentQuantityFields />
 
       {/*------------ Adjustment account -----------*/}
-      <FastField name={'adjustment_account_id'}>
-        {({ form, field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'adjustment_account'} />}
-            labelInfo={<FieldRequiredHint />}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="adjustment_account_id" />}
-            className={'form-group--adjustment-account'}
-          >
-            <AccountsSuggestField
-              accounts={accounts}
-              onAccountSelected={({ id }) =>
-                form.setFieldValue('adjustment_account_id', id)
-              }
-              inputProps={{
-                placeholder: intl.get('select_adjustment_account'),
-                intent: inputIntent({ error, touched }),
-              }}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'adjustment_account_id'}
+        label={<T id={'adjustment_account'} />}
+        labelInfo={<FieldRequiredHint />}
+        fill
+      >
+        <FAccountsSuggestField
+          name={'adjustment_account_id'}
+          items={accounts}
+          inputProps={{
+            placeholder: intl.get('select_adjustment_account'),
+          }}
+          fill
+          fastField
+        />
+      </FFormGroup>
 
       {/*------------ Reference -----------*/}
-      <FastField name={'reference_no'}>
-        {({ form, field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'reference_no'} />}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="reference_no" />}
-            className={'form-group--reference-no'}
-          >
-            <InputGroup intent={inputIntent({ error, touched })} {...field} />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'reference_no'}
+        label={<T id={'reference_no'} />}
+        fastField
+      >
+        <FInputGroup name={'reference_no'} fastField />
+      </FFormGroup>
 
       {/*------------ Adjustment reasons -----------*/}
-      <FastField name={'reason'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'adjustment_reasons'} />}
-            labelInfo={<FieldRequiredHint />}
-            className={'form-group--adjustment-reasons'}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name={'reason'} />}
-          >
-            <TextArea
-              growVertically={true}
-              large={true}
-              intent={inputIntent({ error, touched })}
-              {...field}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'reason'}
+        label={<T id={'adjustment_reasons'} />}
+        labelInfo={<FieldRequiredHint />}
+        fill
+        fastField
+      >
+        <FTextArea name={'reason'} growVertically large fastField fill />
+      </FFormGroup>
     </div>
   );
 }
 
 export const FeatureRowDivider = styled.div`
+  --x-color-background: #e9e9e9;
+  .bp4-dark & {
+    --x-color-background: rgba(255, 255, 255, 0.1);
+  }
   height: 2px;
-  background: #e9e9e9;
+  background: var(--x-color-background);
   margin-bottom: 15px;
 `;

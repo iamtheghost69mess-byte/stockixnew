@@ -1,26 +1,22 @@
 // @ts-nocheck
 import React from 'react';
 import { useFormikContext, FastField, ErrorMessage } from 'formik';
-import {
-  FormGroup,
-  Classes,
-  TextArea,
-  Checkbox,
-  ControlGroup,
-} from '@blueprintjs/core';
+import { FormGroup, Classes, Checkbox, ControlGroup } from '@blueprintjs/core';
 import {
   AccountsSelect,
   MoneyInputGroup,
+  FMoneyInputGroup,
   Col,
   Row,
   Hint,
   InputPrependText,
   FFormGroup,
+  FTextArea,
 } from '@/components';
 import { FormattedMessage as T } from '@/components';
 
 import { useItemFormContext } from './ItemFormProvider';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 import { ACCOUNT_PARENT_TYPE } from '@/constants/accountTypes';
 import {
   sellDescriptionFieldShouldUpdate,
@@ -29,14 +25,16 @@ import {
   costPriceFieldShouldUpdate,
   costAccountFieldShouldUpdate,
   purchaseDescFieldShouldUpdate,
+  taxRateFieldShouldUpdate,
 } from './utils';
 import { compose, inputIntent } from '@/utils';
+import { TaxRatesSelect } from '@/components/TaxRates/TaxRatesSelect';
 
 /**
  * Item form body.
  */
 function ItemFormBody({ organization: { base_currency } }) {
-  const { accounts } = useItemFormContext();
+  const { accounts, taxRates } = useItemFormContext();
   const { values } = useFormikContext();
 
   return (
@@ -62,33 +60,24 @@ function ItemFormBody({ organization: { base_currency } }) {
           </FastField>
 
           {/*------------- Selling price ------------- */}
-          <FastField
+          <FFormGroup
             name={'sell_price'}
-            sellable={values.sellable}
-            shouldUpdate={sellPriceFieldShouldUpdate}
+            label={<T id={'selling_price'} />}
+            inline
+            fastField
           >
-            {({ form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'selling_price'} />}
-                className={'form-group--sell_price'}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name={'sell_price'} />}
-                inline={true}
-              >
-                <ControlGroup>
-                  <InputPrependText text={base_currency} />
-                  <MoneyInputGroup
-                    value={value}
-                    inputGroupProps={{ fill: true }}
-                    disabled={!form.values.sellable}
-                    onChange={(unformattedValue) => {
-                      form.setFieldValue('sell_price', unformattedValue);
-                    }}
-                  />
-                </ControlGroup>
-              </FormGroup>
-            )}
-          </FastField>
+            <ControlGroup>
+              <InputPrependText text={base_currency} />
+              <FMoneyInputGroup
+                name={'sell_price'}
+                shouldUpdate={sellPriceFieldShouldUpdate}
+                sellable={values.sellable}
+                inputGroupProps={{ fill: true }}
+                disabled={!values.sellable}
+                fastField
+              />
+            </ControlGroup>
+          </FFormGroup>
 
           {/*------------- Selling account ------------- */}
           <FFormGroup
@@ -111,32 +100,40 @@ function ItemFormBody({ organization: { base_currency } }) {
               filterByParentTypes={[ACCOUNT_PARENT_TYPE.INCOME]}
               fill={true}
               allowCreate={true}
-              fastField={true}  
+              fastField={true}
             />
           </FFormGroup>
 
-          <FastField
+          {/*------------- Sell Tax Rate ------------- */}
+          <FFormGroup
+            name={'sell_tax_rate_id'}
+            label={'Tax Rate'}
+            inline={true}
+          >
+            <TaxRatesSelect
+              name={'sell_tax_rate_id'}
+              items={taxRates}
+              allowCreate
+            />
+          </FFormGroup>
+
+          <FFormGroup
             name={'sell_description'}
+            label={<T id={'description'} />}
+            inline={true}
             sellable={values.sellable}
             shouldUpdate={sellDescriptionFieldShouldUpdate}
+            fastField
           >
-            {({ form: { values }, field, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'description'} />}
-                className={'form-group--sell-description'}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name={'description'} />}
-                inline={true}
-              >
-                <TextArea
-                  growVertically={true}
-                  height={280}
-                  {...field}
-                  disabled={!values.sellable}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+            <FTextArea
+              name={'sell_description'}
+              growVertically={true}
+              height={280}
+              disabled={!values.sellable}
+              fill
+              fastField
+            />
+          </FFormGroup>
         </Col>
 
         <Col xs={6}>
@@ -158,33 +155,25 @@ function ItemFormBody({ organization: { base_currency } }) {
           </FastField>
 
           {/*------------- Cost price ------------- */}
-          <FastField
+          <FFormGroup
             name={'cost_price'}
-            purchasable={values.purchasable}
-            shouldUpdate={costPriceFieldShouldUpdate}
+            label={<T id={'cost_price'} />}
+            inline
+            fastField
           >
-            {({ field, form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'cost_price'} />}
-                className={'form-group--item-cost-price'}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="cost_price" />}
-                inline={true}
-              >
-                <ControlGroup>
-                  <InputPrependText text={base_currency} />
-                  <MoneyInputGroup
-                    value={value}
-                    inputGroupProps={{ medium: true }}
-                    disabled={!form.values.purchasable}
-                    onChange={(unformattedValue) => {
-                      form.setFieldValue('cost_price', unformattedValue);
-                    }}
-                  />
-                </ControlGroup>
-              </FormGroup>
-            )}
-          </FastField>
+            <ControlGroup>
+              <InputPrependText text={base_currency} />
+
+              <FMoneyInputGroup
+                name={'cost_price'}
+                shouldUpdate={costPriceFieldShouldUpdate}
+                purchasable={values.purchasable}
+                inputGroupProps={{ medium: true }}
+                disabled={!values.purchasable}
+                fastField
+              />
+            </ControlGroup>
+          </FFormGroup>
 
           {/*------------- Cost account ------------- */}
           <FFormGroup
@@ -213,28 +202,41 @@ function ItemFormBody({ organization: { base_currency } }) {
             />
           </FFormGroup>
 
-          <FastField
+          {/*------------- Purchase Tax Rate ------------- */}
+          <FFormGroup
+            name={'purchase_tax_rate_id'}
+            label={'Tax Rate'}
+            inline={true}
+            fastField={true}
+            shouldUpdateDeps={{ taxRates }}
+            shouldUpdate={taxRateFieldShouldUpdate}
+          >
+            <TaxRatesSelect
+              name={'purchase_tax_rate_id'}
+              items={taxRates}
+              allowCreate={true}
+              fastField={true}
+              shouldUpdateDeps={{ taxRates }}
+            />
+          </FFormGroup>
+
+          <FFormGroup
             name={'purchase_description'}
+            label={<T id={'description'} />}
+            className={'form-group--purchase-description'}
+            helperText={<ErrorMessage name={'description'} />}
+            inline={true}
             purchasable={values.purchasable}
             shouldUpdate={purchaseDescFieldShouldUpdate}
           >
-            {({ form: { values }, field, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'description'} />}
-                className={'form-group--purchase-description'}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name={'description'} />}
-                inline={true}
-              >
-                <TextArea
-                  growVertically={true}
-                  height={280}
-                  {...field}
-                  disabled={!values.purchasable}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+            <FTextArea
+              name={'purchase_description'}
+              growVertically={true}
+              height={280}
+              disabled={!values.purchasable}
+              fill
+            />
+          </FFormGroup>
         </Col>
       </Row>
     </div>

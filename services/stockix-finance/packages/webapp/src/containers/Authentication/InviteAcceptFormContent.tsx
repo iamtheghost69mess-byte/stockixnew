@@ -70,7 +70,7 @@ export default function InviteUserFormContent() {
       <InviteAcceptFooterParagraphs>
         <p>
           <T id={'you_email_address_is'} /> <b>{inviteMeta.email},</b> <br />
-          <T id={'you_will_use_this_address_to_sign_in_to_stockix'} />
+          <T id={'you_will_use_this_address_to_sign_in_to_bigcapital'} />
         </p>
         <p>
           {intl.getHTML('signing_in_or_creating', {

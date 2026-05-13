@@ -15,11 +15,12 @@ import { TABLES } from '@/constants/tables';
 
 import ExpensesEmptyStatus from './ExpensesEmptyStatus';
 
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withExpensesActions from './withExpensesActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withExpensesActions } from './withExpensesActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withExpenses } from './withExpenses';
 
 import { ActionsMenu, useExpensesTableColumns } from './components';
 import { DRAWERS } from '@/constants/drawers';
@@ -30,15 +31,19 @@ import { DRAWERS } from '@/constants/drawers';
 function ExpensesDataTable({
   // #withExpensesActions
   setExpensesTableState,
+  setExpensesSelectedRows,
 
   // #withDrawerActions
   openDrawer,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withSettings
   expensesTableSize,
+
+  // #withExpenses
+  expensesTableState,
 }) {
   // Expenses list context.
   const {
@@ -98,6 +103,12 @@ function ExpensesDataTable({
     openDrawer(DRAWERS.EXPENSE_DETAILS, { expenseId: cell.row.original.id });
   };
 
+  // Handle selected rows change.
+  const handleSelectedRowsChange = (selectedFlatRows) => {
+    const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+    setExpensesSelectedRows(selectedIds);
+  };
+
   // Display empty status instead of the table.
   if (isEmptyStatus) {
     return <ExpensesEmptyStatus />;
@@ -116,6 +127,7 @@ function ExpensesDataTable({
         sticky={true}
         onFetchData={handleFetchData}
         pagination={true}
+        initialPageSize={expensesTableState.pageSize}
         manualSortBy={true}
         manualPagination={true}
         pagesCount={pagination.pagesCount}
@@ -127,6 +139,7 @@ function ExpensesDataTable({
         onCellClick={handleCellClick}
         initialColumnsWidths={initialColumnsWidths}
         onColumnResizing={handleColumnResizing}
+        onSelectedRowsChange={handleSelectedRowsChange}
         size={expensesTableSize}
         payload={{
           onPublish: handlePublishExpense,
@@ -141,10 +154,11 @@ function ExpensesDataTable({
 
 export default compose(
   withDashboardActions,
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withExpensesActions,
   withSettings(({ expenseSettings }) => ({
     expensesTableSize: expenseSettings?.tableSize,
   })),
+  withExpenses(({ expensesTableState }) => ({ expensesTableState })),
 )(ExpensesDataTable);

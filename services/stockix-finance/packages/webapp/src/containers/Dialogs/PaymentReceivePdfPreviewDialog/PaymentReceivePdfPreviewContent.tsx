@@ -5,13 +5,13 @@ import { AnchorButton } from '@blueprintjs/core';
 import { DialogContent, PdfDocumentPreview, T } from '@/components';
 import { usePdfPaymentReceive } from '@/hooks/query';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 import { compose } from '@/utils';
 
 function PaymentReceivePdfPreviewDialogContent({
   subscriptionForm: { paymentReceiveId },
 }) {
-  const { isLoading, pdfUrl } = usePdfPaymentReceive(paymentReceiveId);
+  const { isLoading, pdfUrl, filename } = usePdfPaymentReceive(paymentReceiveId);
 
   return (
     <DialogContent>
@@ -27,7 +27,7 @@ function PaymentReceivePdfPreviewDialogContent({
 
         <AnchorButton
           href={pdfUrl}
-          download={'payment.pdf'}
+          download={filename}
           minimal={true}
           outlined={true}
         >

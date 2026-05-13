@@ -11,7 +11,7 @@ import { CreateCustomerOpeningBalanceFormSchema } from './CustomerOpeningBalance
 import { useCustomerOpeningBalanceContext } from './CustomerOpeningBalanceFormProvider';
 
 import CustomerOpeningBalanceFormContent from './CustomerOpeningBalanceFormContent';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
 import { compose } from '@/utils';
 
@@ -44,6 +44,7 @@ function CustomerOpeningBalanceForm({
   const handleFormSubmit = (values, { setSubmitting, setErrors }) => {
     const formValues = {
       ...values,
+      opening_balance_at: moment(values.opening_balance_at).format('YYYY-MM-DD'),
     };
 
     // Handle request response success.

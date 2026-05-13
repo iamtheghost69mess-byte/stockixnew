@@ -3,6 +3,14 @@
   $self: '.page-form';
   padding: 20px;
 
+  --x-header-border: #eaeaea;
+  --x-section-border: #eaeaea;
+  
+  .bp4-dark & {
+    --x-header-border: var(--color-dark-gray3);
+    --x-section-border: var(--color-dark-gray3);
+  }
+  
   #{$self}__header {
     padding: 0;
   }
@@ -10,22 +18,22 @@
     overflow: hidden;
     padding-top: 5px;
     margin-bottom: 20px;
-    border-bottom: 1px solid #eaeaea;
+    border-bottom: 1px solid var(--x-header-border);
     padding-bottom: 5px;
     max-width: 1000px;
   }
 
   #{$self}__body {
-    .bp3-form-group {
+    .bp4-form-group {
       max-width: 500px;
       margin-bottom: 14px;
 
-      &.bp3-inline {
-        .bp3-label {
+      &.bp4-inline {
+        .bp4-label {
           min-width: 140px;
         }
       }
-      .bp3-form-content {
+      .bp4-form-content {
         width: 100%;
       }
     }
@@ -36,7 +44,7 @@
       margin-bottom: 1.4rem;
     }
 
-    .bp3-control {
+    .bp4-control {
       h3 {
         display: inline;
         margin-bottom: 0;
@@ -61,29 +69,27 @@
     max-width: 850px;
     margin-bottom: 1rem;
 
-    .bp3-form-group {
+    .bp4-form-group {
       max-width: 400px;
     }
 
     &--selling-cost {
-      border-bottom: 1px solid #eaeaea;
+      border-bottom: 1px solid var(--x-section-border);
       margin-bottom: 1.25rem;
       padding-bottom: 0.25rem;
     }
   }
 
   #{$self}__floating-actions {
-    // margin-left: -40px;
-    // margin-right: -40px;
 
     .form-group--active {
       display: inline-block;
       margin: 0;
-      margin-left: 40px;
+      margin-left: 20px;
     }
   }
 
-  .bp3-tooltip-indicator {
+  .bp4-tooltip-indicator {
     border-bottom: 1px dashed #d0d0d0;
   }
 }

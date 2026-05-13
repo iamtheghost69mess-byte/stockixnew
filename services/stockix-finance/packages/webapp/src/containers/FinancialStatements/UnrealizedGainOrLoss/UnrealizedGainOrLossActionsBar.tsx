@@ -15,8 +15,8 @@ import classNames from 'classnames';
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
 import { useUnrealizedGainOrLossContext } from './UnrealizedGainOrLossProvider';
-import withUnrealizedGainOrLoss from './withUnrealizedGainOrLoss';
-import withUnrealizedGainOrLossActions from './withUnrealizedGainOrLossActions';
+import { withUnrealizedGainOrLoss } from './withUnrealizedGainOrLoss';
+import { withUnrealizedGainOrLossActions } from './withUnrealizedGainOrLossActions';
 
 import { compose, saveInvoke } from '@/utils';
 
@@ -92,11 +92,6 @@ function UnrealizedGainOrLossActionsBar({
           />
         </Popover>
 
-        <Button
-          className={classNames(Classes.MINIMAL, 'button--filter')}
-          text={<T id={'filter'} />}
-          icon={<Icon icon="filter-16" iconSize={16} />}
-        />
         <NavbarDivider />
 
         <Button

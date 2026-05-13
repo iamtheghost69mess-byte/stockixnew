@@ -1,45 +1,77 @@
 // @ts-nocheck
-import React from 'react';
 import styled from 'styled-components';
-
+import { useFormikContext } from 'formik';
 import {
-  T,
   TotalLines,
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
 } from '@/components';
-import { useBillTotals } from './utils';
+import {
+  useBillAdjustmentAmountFormatted,
+  useBillAggregatedTaxRates,
+  useBillDiscountAmountFormatted,
+  useBillDueAmountFormatted,
+  useBillPaidAmountFormatted,
+  useBillSubtotalFormatted,
+  useBillTotalFormatted,
+} from './utils';
+import { TaxType } from '@/interfaces/TaxRates';
+import { AdjustmentTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/AdjustmentTotalLine';
+import { DiscountTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/DiscountTotalLine';
 
 export function BillFormFooterRight() {
   const {
-    formattedSubtotal,
-    formattedTotal,
-    formattedDueTotal,
-    formattedPaymentTotal,
-  } = useBillTotals();
+    values: { inclusive_exclusive_tax, currency_code },
+  } = useFormikContext();
+
+  const dueAmountFormatted = useBillDueAmountFormatted();
+  const paidAmountFormatted = useBillPaidAmountFormatted();
+  const subtotalFormatted = useBillSubtotalFormatted();
+  const totalFormatted = useBillTotalFormatted();
+  const taxEntries = useBillAggregatedTaxRates();
+  const discountAmount = useBillDiscountAmountFormatted();
+  const adjustmentAmount = useBillAdjustmentAmountFormatted();
 
   return (
     <BillTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
       <TotalLine
-        title={<T id={'bill_form.label.subtotal'} />}
-        value={formattedSubtotal}
-        borderStyle={TotalLineBorderStyle.None}
+        title={
+          <>
+            {inclusive_exclusive_tax === TaxType.Inclusive
+              ? 'Subtotal (Tax Inclusive)'
+              : 'Subtotal'}
+          </>
+        }
+        value={subtotalFormatted}
       />
+      <DiscountTotalLine
+        currencyCode={currency_code}
+        discountAmount={discountAmount}
+      />
+      <AdjustmentTotalLine adjustmentAmount={adjustmentAmount} />
+      {taxEntries.map((tax, index) => (
+        <TotalLine
+          key={index}
+          title={tax.label}
+          value={tax.taxAmountFormatted}
+          borderStyle={TotalLineBorderStyle.None}
+        />
+      ))}
       <TotalLine
-        title={<T id={'bill_form.label.total'} />}
-        value={formattedTotal}
+        title={`TOTAL (${currency_code})`}
+        value={totalFormatted}
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
       <TotalLine
-        title={<T id={'bill_form.label.total'} />}
-        value={formattedPaymentTotal}
+        title={'Paid Amount'}
+        value={paidAmountFormatted}
         borderStyle={TotalLineBorderStyle.None}
       />
       <TotalLine
-        title={<T id={'bill_form.label.total'} />}
-        value={formattedDueTotal}
+        title={'Due Amount'}
+        value={dueAmountFormatted}
         textStyle={TotalLineTextStyle.Bold}
       />
     </BillTotalLines>
@@ -47,6 +79,9 @@ export function BillFormFooterRight() {
 }
 
 const BillTotalLines = styled(TotalLines)`
+  --x-color-text: #555;
+  --x-color-text: var(--color-light-gray4);
+
   width: 100%;
-  color: #555555;
+  color: var(--x-color-text);
 `;

@@ -14,6 +14,18 @@ import { useSettingsSelector } from '@/hooks/state';
 import { transformItemFormData } from './ItemForm.schema';
 import { useWatch } from '@/hooks/utils';
 
+/**
+ * Error types for item operations.
+ */
+export const ItemErrorType = {
+  ItemNameExists: 'ITEM_NAME_EXISTS',
+  InventoryAccountCannotModified: 'INVENTORY_ACCOUNT_CANNOT_MODIFIED',
+  TypeCannotChangeWithItemHasTransactions: 'TYPE_CANNOT_CHANGE_WITH_ITEM_HAS_TRANSACTIONS',
+  ItemHasAssociatedTransactions: 'ITEM_HAS_ASSOCIATED_TRANSACTINS',
+  ItemHasAssociatedInventoryAdjustment: 'ITEM_HAS_ASSOCIATED_INVENTORY_ADJUSTMENT',
+  ItemHasAssociatedTransactionsPlural: 'ITEM_HAS_ASSOCIATED_TRANSACTIONS',
+} as const;
+
 const defaultInitialValues = {
   active: 1,
   name: '',
@@ -23,12 +35,14 @@ const defaultInitialValues = {
   sell_price: '',
   cost_account_id: '',
   sell_account_id: '',
+  sell_tax_rate_id: '',
   inventory_account_id: '',
   category_id: '',
   sellable: 1,
   purchasable: true,
   sell_description: '',
   purchase_description: '',
+  purchase_tax_rate_id: '',
 };
 
 /**
@@ -72,7 +86,7 @@ export const transitionItemTypeKeyToLabel = (itemTypeKey) => {
 // handle delete errors.
 export const handleDeleteErrors = (errors) => {
   if (
-    errors.find((error) => error.type === 'ITEM_HAS_ASSOCIATED_TRANSACTINS')
+    errors.find((error) => error.type === ItemErrorType.ItemHasAssociatedTransactions)
   ) {
     AppToaster.show({
       message: intl.get('the_item_has_associated_transactions'),
@@ -82,7 +96,7 @@ export const handleDeleteErrors = (errors) => {
 
   if (
     errors.find(
-      (error) => error.type === 'ITEM_HAS_ASSOCIATED_INVENTORY_ADJUSTMENT',
+      (error) => error.type === ItemErrorType.ItemHasAssociatedInventoryAdjustment,
     )
   ) {
     AppToaster.show({
@@ -94,7 +108,7 @@ export const handleDeleteErrors = (errors) => {
   }
   if (
     errors.find(
-      (error) => error.type === 'TYPE_CANNOT_CHANGE_WITH_ITEM_HAS_TRANSACTIONS',
+      (error) => error.type === ItemErrorType.TypeCannotChangeWithItemHasTransactions,
     )
   ) {
     AppToaster.show({
@@ -105,7 +119,7 @@ export const handleDeleteErrors = (errors) => {
     });
   }
   if (
-    errors.find((error) => error.type === 'ITEM_HAS_ASSOCIATED_TRANSACTIONS')
+    errors.find((error) => error.type === ItemErrorType.ItemHasAssociatedTransactionsPlural)
   ) {
     AppToaster.show({
       message: intl.get('item.error.you_could_not_delete_item_has_associated'),
@@ -187,6 +201,13 @@ export const purchaseDescFieldShouldUpdate = (newProps, oldProps) => {
   );
 };
 
+export const taxRateFieldShouldUpdate = (newProps, oldProps) => {
+  return (
+    newProps.shouldUpdateDeps.taxRates !== oldProps.shouldUpdateDeps.taxRates ||
+    defaultFastFieldShouldUpdate(newProps, oldProps)
+  );
+};
+
 export function transformItemsTableState(tableState) {
   return {
     ...transformTableStateToQuery(tableState),
@@ -205,10 +226,10 @@ export const transformSubmitRequestErrors = (error) => {
   } = error;
   const fields = {};
 
-  if (errors.find((e) => e.type === 'ITEM.NAME.ALREADY.EXISTS')) {
+  if (errors.find((e) => e.type === ItemErrorType.ItemNameExists)) {
     fields.name = intl.get('the_name_used_before');
   }
-  if (errors.find((e) => e.type === 'INVENTORY_ACCOUNT_CANNOT_MODIFIED')) {
+  if (errors.find((e) => e.type === ItemErrorType.InventoryAccountCannotModified)) {
     AppToaster.show({
       message: intl.get('cannot_change_item_inventory_account'),
       intent: Intent.DANGER,
@@ -216,7 +237,7 @@ export const transformSubmitRequestErrors = (error) => {
   }
   if (
     errors.find(
-      (e) => e.type === 'TYPE_CANNOT_CHANGE_WITH_ITEM_HAS_TRANSACTIONS',
+      (e) => e.type === ItemErrorType.TypeCannotChangeWithItemHasTransactions,
     )
   ) {
     AppToaster.show({

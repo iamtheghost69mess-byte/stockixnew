@@ -6,12 +6,13 @@ import {
 } from '@/store/customers/customers.selectors';
 
 
-export default (mapState) => {
+export const withCustomers = (mapState) => {
   const getCustomersTableState = getCustomersTableStateFactory();
   const customersTableStateChanged = customersTableStateChangedFactory();
 
   const mapStateToProps = (state, props) => {
     const mapped = {
+      customersSelectedRows: state.customers.selectedRows,
       customersTableState: getCustomersTableState(state, props),
       customersTableStateChanged: customersTableStateChanged(state, props),
     };

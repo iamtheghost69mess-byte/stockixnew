@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import intl from 'react-intl-universal';
 import styled from 'styled-components';
 
@@ -13,7 +13,7 @@ import {
 } from '@/components';
 
 import { useGeneralLedgerContext } from './GeneralLedgerProvider';
-import { useGeneralLedgerTableColumns } from './components';
+import { useGeneralLedgerTableColumns } from './dynamicColumns';
 
 /**
  * General ledger table.
@@ -21,7 +21,7 @@ import { useGeneralLedgerTableColumns } from './components';
 export default function GeneralLedgerTable({ companyName }) {
   // General ledger context.
   const {
-    generalLedger: { tableRows, query },
+    generalLedger: { query, table, meta },
     isLoading,
   } = useGeneralLedgerContext();
 
@@ -30,16 +30,15 @@ export default function GeneralLedgerTable({ companyName }) {
 
   // Default expanded rows of general ledger table.
   const expandedRows = useMemo(
-    () => defaultExpanderReducer(tableRows, 1),
-    [tableRows],
+    () => defaultExpanderReducer(table.rows, 1),
+    [table.rows],
   );
 
   return (
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('general_ledger_sheet')}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       loading={isLoading}
       fullWidth={true}
     >
@@ -48,7 +47,7 @@ export default function GeneralLedgerTable({ companyName }) {
           'this_report_does_not_contain_any_data_between_date_period',
         )}
         columns={columns}
-        data={tableRows}
+        data={table.rows}
         rowClassNames={tableRowTypesToClassnames}
         expanded={expandedRows}
         virtualizedRows={true}
@@ -69,6 +68,18 @@ export default function GeneralLedgerTable({ companyName }) {
 }
 
 const GeneralLedgerDataTable = styled(ReportDataTable)`
+  --color-table-text-color: #252a31;
+  --color-table-total-text-color: #000;
+  --color-table-border-color: #ececec;
+  --color-table-total-border-color: #ddd;
+
+  .bp4-dark & {
+    --color-table-text-color: var(--color-light-gray1);
+    --color-table-total-text-color: var(--color-light-gray4);
+    --color-table-border-color: var(--color-dark-gray4);
+    --color-table-total-border-color: var(--color-dark-gray4);
+  }
+
   .tbody {
     .tr .td {
       padding-top: 0.2rem;
@@ -79,33 +90,36 @@ const GeneralLedgerDataTable = styled(ReportDataTable)`
         opacity: 0;
       }
     }
-
     .tr:not(.no-results) .td:not(:first-of-type) {
-      border-left: 1px solid #ececec;
+      border-left: 1px solid var(--color-table-border-color);
     }
     .tr:last-child .td {
-      border-bottom: 1px solid #ececec;
+      border-bottom: 1px solid var(--color-table-border-color);
     }
-
     .tr.row_type {
-      &--ACCOUNT_ROW {
+      &--ACCOUNT {
         .td {
           &.date {
             font-weight: 500;
 
             .cell-inner {
-              white-space: nowrap;
-              position: relative;
+              position: absolute;
             }
           }
         }
-        &:not(:first-child).is-expanded .td {
-          border-top: 1px solid #ddd;
-        }
       }
-
       &--OPENING_BALANCE,
       &--CLOSING_BALANCE {
+        .td {
+          color: var(--color-table-total-text-color);
+        }
+        .date {
+          font-weight: 500;
+
+          .cell-inner {
+            position: absolute;
+          }
+        }
         .amount {
           font-weight: 500;
         }
@@ -113,6 +127,9 @@ const GeneralLedgerDataTable = styled(ReportDataTable)`
       &--CLOSING_BALANCE {
         .name {
           font-weight: 500;
+        }
+        .td {
+          border-top: 1px solid var(--color-table-total-border-color);
         }
       }
     }

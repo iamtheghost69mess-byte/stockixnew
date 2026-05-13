@@ -1,23 +1,16 @@
 // @ts-nocheck
-import React from 'react';
-import { FastField, Field } from 'formik';
-import { DateInput } from '@blueprintjs/datetime';
-import { Classes, FormGroup, Position, Checkbox } from '@blueprintjs/core';
+import { Position } from '@blueprintjs/core';
 import {
-  ContactsMultiSelect,
   FormattedMessage as T,
   Row,
   Col,
   FieldHint,
+  CustomersMultiSelect,
+  FFormGroup,
+  FDateInput,
+  FCheckbox,
 } from '@/components';
-import classNames from 'classnames';
-
-import {
-  momentFormatter,
-  tansformDateValue,
-  inputIntent,
-  handleDateChange,
-} from '@/utils';
+import { momentFormatter } from '@/utils';
 import { filterCustomersOptions } from '../constants';
 import { useCustomersBalanceSummaryGeneralContext } from './CustomersBalanceSummaryGeneralProvider';
 import FinancialStatementsFilter from '../FinancialStatementsFilter';
@@ -32,45 +25,40 @@ export default function CustomersBalanceSummaryGeneralPanelContent() {
     <div>
       <Row>
         <Col xs={5}>
-          <FastField name={'asDate'}>
-            {({ form, field: { value }, meta: { error } }) => (
-              <FormGroup
-                label={<T id={'as_date'} />}
-                labelInfo={<FieldHint />}
-                fill={true}
-                intent={inputIntent({ error })}
-              >
-                <DateInput
-                  {...momentFormatter('YYYY/MM/DD')}
-                  value={tansformDateValue(value)}
-                  onChange={handleDateChange((selectedDate) => {
-                    form.setFieldValue('asDate', selectedDate);
-                  })}
-                  popoverProps={{ position: Position.BOTTOM, minimal: true }}
-                  minimal={true}
-                  fill={true}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'asDate'}
+            label={<T id={'as_date'} />}
+            labelInfo={<FieldHint />}
+            fill
+            fastField
+          >
+            <FDateInput
+              name={'asDate'}
+              {...momentFormatter('YYYY/MM/DD')}
+              popoverProps={{ position: Position.BOTTOM, minimal: true }}
+              minimal={true}
+              fill={true}
+              fastField
+            />
+          </FFormGroup>
         </Col>
       </Row>
 
       <Row>
         <Col xs={5}>
-          <FastField name={'percentage_column'} type={'checkbox'}>
-            {({ field }) => (
-              <FormGroup labelInfo={<FieldHint />}>
-                <Checkbox
-                  inline={true}
-                  name={'percentage'}
-                  small={true}
-                  label={<T id={'percentage_of_column'} />}
-                  {...field}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'percentage_column'}
+            labelInfo={<FieldHint />}
+            fastField
+          >
+            <FCheckbox
+              name={'percentage_column'}
+              inline={true}
+              small={true}
+              label={<T id={'percentage_of_column'} />}
+              fastField
+            />
+          </FFormGroup>
         </Col>
       </Row>
 
@@ -86,26 +74,12 @@ export default function CustomersBalanceSummaryGeneralPanelContent() {
 
       <Row>
         <Col xs={5}>
-          <Field name={'customersIds'}>
-            {({
-              form: { setFieldValue },
-              field: { value },
-              meta: { error, touched },
-            }) => (
-              <FormGroup
-                label={<T id={'specific_customers'} />}
-                className={classNames('form-group--select-list', Classes.FILL)}
-              >
-                <ContactsMultiSelect
-                  items={customers}
-                  onItemSelect={(contacts) => {
-                    const customersIds = contacts.map((contact) => contact.id);
-                    setFieldValue('customersIds', customersIds);
-                  }}
-                />
-              </FormGroup>
-            )}
-          </Field>
+          <FFormGroup
+            name={'customersIds'}
+            label={<T id={'specific_customers'} />}
+          >
+            <CustomersMultiSelect name={'customersIds'} items={customers} />
+          </FFormGroup>
         </Col>
       </Row>
     </div>

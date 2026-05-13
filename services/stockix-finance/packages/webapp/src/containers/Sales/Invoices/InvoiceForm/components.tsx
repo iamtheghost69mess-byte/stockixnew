@@ -1,55 +1,63 @@
 // @ts-nocheck
-import React from 'react';
+import { useRef } from 'react';
 import intl from 'react-intl-universal';
 import * as R from 'ramda';
-import { Button, Callout } from '@blueprintjs/core';
+import { Button } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
-import { ExchangeRateInputGroup } from '@/components';
+import { ExchangeRateInputGroup, FormatNumber } from '@/components';
 import { useCurrentOrganization } from '@/hooks/state';
-import { useInvoiceIsForeignCustomer } from './utils';
-import withSettings from '@/containers/Settings/withSettings';
+import {
+  useInvoiceCurrencyCode,
+  useInvoiceDueAmount,
+  useInvoiceIsForeignCustomer,
+  useInvoicePaidAmount,
+  useInvoiceSubtotal,
+  useInvoiceTotal,
+} from './utils';
 import { useUpdateEffect } from '@/hooks';
 import { transactionNumber } from '@/utils';
-import { useLatestExchangeRateForCurrency } from '@/hooks/query/currencies';
+import { DialogsName } from '@/constants/dialogs';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import {
+  useSyncExRateToForm,
+  withExchangeRateFetchingLoading,
+  withExchangeRateItemEntriesPriceRecalc,
+} from '@/containers/Entries/withExRateItemEntriesPriceRecalc';
 
 /**
  * Invoice exchange rate input field.
- * Auto-fills the exchange rate from the latest known rate when currency changes.
  * @returns {JSX.Element}
  */
-export function InvoiceExchangeRateInputField({ ...props }) {
+const InvoiceExchangeRateInputFieldRoot = ({ ...props }) => {
   const currentOrganization = useCurrentOrganization();
-  const { values, setFieldValue } = useFormikContext();
-
+  const { values } = useFormikContext();
   const isForeignCustomer = useInvoiceIsForeignCustomer();
-  const latestRate = useLatestExchangeRateForCurrency(values.currency_code);
-
-  // Auto-fill exchange_rate when currency changes and we have a known rate.
-  useUpdateEffect(() => {
-    if (latestRate != null) {
-      setFieldValue('exchange_rate', latestRate);
-    }
-  }, [values.currency_code]);
 
   // Can't continue if the customer is not foreign.
   if (!isForeignCustomer) {
     return null;
   }
   return (
-    <>
-      {latestRate === null && values.currency_code && (
-        <Callout intent="warning" style={{ marginBottom: 8, fontSize: 12 }}>
-          {intl.get('exchange_rate_not_set_warning', { currency: values.currency_code })}
-        </Callout>
-      )}
-      <ExchangeRateInputGroup
-        fromCurrency={values.currency_code}
-        toCurrency={currentOrganization.base_currency}
-        {...props}
-      />
-    </>
+    <ExchangeRateInputGroup
+      name={'exchange_rate'}
+      fromCurrency={values.currency_code}
+      toCurrency={currentOrganization.base_currency}
+      formGroupProps={{ label: ' ', inline: true }}
+      withPopoverRecalcConfirm
+      {...props}
+    />
   );
-}
+};
+
+/**
+ * Invoice exchange rate input field.
+ * @returns {JSX.Element}
+ */
+export const InvoiceExchangeRateInputField = R.compose(
+  withExchangeRateFetchingLoading,
+  withExchangeRateItemEntriesPriceRecalc,
+)(InvoiceExchangeRateInputFieldRoot);
 
 /**
  * Invoice project select.
@@ -83,3 +91,28 @@ export const InvoiceNoSyncSettingsToForm = R.compose(
 
   return null;
 });
+
+/**
+ * Syncs the realtime exchange rate to the invoice form and shows up popup to the user
+ * as an indication the entries rates have been re-calculated.
+ * @returns {React.ReactNode}
+ */
+export const InvoiceExchangeRateSync = R.compose(withDialogActions)(
+  ({ openDialog }) => {
+    const total = useInvoiceTotal();
+    const timeout = useRef();
+
+    useSyncExRateToForm({
+      onSynced: () => {
+        // If the total bigger then zero show alert to the user after adjusting entries.
+        if (total > 0) {
+          clearTimeout(timeout.current);
+          timeout.current = setTimeout(() => {
+            openDialog(DialogsName.InvoiceExchangeRateChangeNotice);
+          }, 500);
+        }
+      },
+    });
+    return null;
+  },
+);

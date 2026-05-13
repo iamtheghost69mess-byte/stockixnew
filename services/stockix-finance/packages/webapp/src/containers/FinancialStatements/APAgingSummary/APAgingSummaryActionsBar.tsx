@@ -15,11 +15,14 @@ import { DashboardActionsBar, FormattedMessage as T, Icon } from '@/components';
 import { useAPAgingSummaryContext } from './APAgingSummaryProvider';
 
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
+import { APAgingSummaryExportMenu } from './components';
 
-import withAPAgingSummary from './withAPAgingSummary';
-import withAPAgingSummaryActions from './withAPAgingSummaryActions';
+import { withAPAgingSummary } from './withAPAgingSummary';
+import { withAPAgingSummaryActions } from './withAPAgingSummaryActions';
 
 import { saveInvoke, compose } from '@/utils';
+import { DialogsName } from '@/constants/dialogs';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
 /**
  * AP Aging summary sheet - Actions bar.
@@ -30,6 +33,9 @@ function APAgingSummaryActionsBar({
 
   // #withARAgingSummaryActions
   toggleAPAgingSummaryFilterDrawer: toggleFilterDrawerDisplay,
+
+  // #withDialogActions
+  openDialog,
 
   //#ownProps
   numberFormat,
@@ -49,6 +55,11 @@ function APAgingSummaryActionsBar({
   // handle number format submit.
   const handleNumberFormatSubmit = (numberFormat) => {
     saveInvoke(onNumberFormatSubmit, numberFormat);
+  };
+
+  // Handle the print button click.
+  const handlePrintBtnClick = () => {
+    openDialog(DialogsName.APAgingSummaryPdfPreview);
   };
 
   return (
@@ -94,23 +105,26 @@ function APAgingSummaryActionsBar({
           />
         </Popover>
 
-        <Button
-          className={Classes.MINIMAL}
-          text={<T id={'filter'} />}
-          icon={<Icon icon="filter-16" iconSize={16} />}
-        />
         <NavbarDivider />
 
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
+        <Popover
+          content={<APAgingSummaryExportMenu />}
+          interactionKind={PopoverInteractionKind.CLICK}
+          placement="bottom-start"
+          minimal
+        >
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="file-export-16" iconSize={16} />}
+            text={<T id={'export'} />}
+          />
+        </Popover>
       </NavbarGroup>
     </DashboardActionsBar>
   );
@@ -121,4 +135,5 @@ export default compose(
   withAPAgingSummary(({ APAgingSummaryFilterDrawer }) => ({
     isFilterDrawerOpen: APAgingSummaryFilterDrawer,
   })),
+  withDialogActions
 )(APAgingSummaryActionsBar);

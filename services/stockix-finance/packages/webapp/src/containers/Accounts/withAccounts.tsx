@@ -5,7 +5,7 @@ import {
   accountsTableStateChangedFactory,
 } from '@/store/accounts/accounts.selectors';
 
-export default (mapState) => {
+export const withAccounts = (mapState) => {
   const getAccountsTableState = getAccountsTableStateFactory();
   const accountsTableStateChanged = accountsTableStateChangedFactory();
 
@@ -13,6 +13,7 @@ export default (mapState) => {
     const mapped = {
       accountsTableState: getAccountsTableState(state, props),
       accountsTableStateChanged: accountsTableStateChanged(state, props),
+      accountsSelectedRows: state.accounts?.selectedRows || [],
     };
     return mapState ? mapState(mapped, state, props) : mapped;
   };

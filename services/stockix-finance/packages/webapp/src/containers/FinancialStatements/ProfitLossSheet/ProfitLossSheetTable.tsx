@@ -19,11 +19,11 @@ export default function ProfitLossSheetTable({
 }) {
   // Profit/Loss sheet context.
   const {
-    profitLossSheet: { table, query },
+    profitLossSheet: { table, query, meta },
   } = useProfitLossSheetContext();
 
   // Retrieves the profit/loss table columns.
-  const tableColumns = useProfitLossSheetColumns();
+  const columns = useProfitLossSheetColumns();
 
   // Retrieve default expanded rows of balance sheet.
   const expandedRows = React.useMemo(
@@ -35,12 +35,11 @@ export default function ProfitLossSheetTable({
     <FinancialSheet
       companyName={companyName}
       sheetType={<T id={'profit_loss_sheet'} />}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       basis={query.basis}
     >
       <ProfitLossDataTable
-        columns={tableColumns}
+        columns={columns}
         data={table.rows}
         noInitialFetch={true}
         expanded={expandedRows}
@@ -55,12 +54,20 @@ export default function ProfitLossSheetTable({
 }
 
 const ProfitLossDataTable = styled(ReportDataTable)`
+  --color-table-text-color: #252a31;
+  --color-table-total-text-color: #000;
+
+  .bp4-dark & {
+    --color-table-text-color: var(--color-light-gray1);
+    --color-table-total-text-color: var(--color-light-gray4);
+  }
   .table {
     .tbody .tr {
       .td {
-        border-bottom: 0;
+        border-bottom-width: 0;
         padding-top: 0.32rem;
         padding-bottom: 0.32rem;
+        color: var(--color-table-text-color);
       }
       &.is-expanded {
         .td:not(.name) .cell-inner {
@@ -70,11 +77,14 @@ const ProfitLossDataTable = styled(ReportDataTable)`
       &.row_type--TOTAL {
         .td {
           font-weight: 500;
-          border-top: 1px solid #bbb;
+          border-top-width: 1px;
+          border-top-style: solid;
+          color: var(--color-table-total-text-color);
         }
       }
       &:last-of-type .td {
-        border-bottom: 3px double #000;
+        border-bottom-width: 3px;
+        border-bottom-style: double;
       }
     }
   }

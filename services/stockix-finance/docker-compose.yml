@@ -1,9 +1,7 @@
 # WARNING!
-# This is a development version of THE Stockix docker-compose.yml file.
+# This is a development version of THE Bigcapital docker-compose.yml file.
 # Avoid using this file in your production environment.
 # We're exposing here sensitive ports and mounting code volumes for rapid development and debugging of the server stack.
-
-version: '3.3'
 
 services:
   mariadb:
@@ -20,34 +18,35 @@ services:
       - '3306'
     ports:
       - '3306:3306'
-
-  mongo:
-    build: ./docker/mongo
-    expose:
-      - '27017'
-    volumes:
-      - mongo:/var/lib/mongodb
-    ports:
-      - '27017:27017'
+    deploy:
+      restart_policy:
+        condition: unless-stopped
 
   redis:
     build:
       context: ./docker/redis
     expose:
-      - "6379"
+      - '6379'
+    ports:
+      - '6379:6379'
     volumes:
       - redis:/data
+    deploy:
+      restart_policy:
+        condition: unless-stopped
+
+  gotenberg:
+    image: gotenberg/gotenberg:7
+    ports:
+      # Override with GOTENBERG_HOST_PORT=9001 if 9000 is already in use locally.
+      - '${GOTENBERG_HOST_PORT:-9000}:3000'
 
 # Volumes
 volumes:
   mysql:
-    name: stockix_dev_mysql
-    driver: local
-
-  mongo:
-    name: stockix_dev_mongo
+    name: bigcapital_dev_mysql
     driver: local
 
   redis:
-    name: stockix_dev_redis
+    name: bigcapital_dev_redis
     driver: local

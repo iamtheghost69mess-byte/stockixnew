@@ -1,6 +1,6 @@
 {
-  "short_name": "Stockix",
-  "name": "Stockix Financial Managment Software",
+  "short_name": "React App",
+  "name": "Create React App Sample",
   "icons": [
     {
       "src": "favicon.ico",

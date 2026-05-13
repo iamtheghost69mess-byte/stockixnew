@@ -1,14 +1,14 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import { MenuItem } from '@blueprintjs/core';
+import { MenuItem, Intent } from '@blueprintjs/core';
 
-import { T, Choose, Icon } from '@/components';
+import { T, Choose, Icon, TextStatus } from '@/components';
 import { highlightText } from '@/utils';
 
 import { RESOURCES_TYPES } from '@/constants/resourcesTypes';
 import { AbilitySubject, SaleInvoiceAction } from '@/constants/abilityOption';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 import { DRAWERS } from '@/constants/drawers';
 
 /**
@@ -39,29 +39,29 @@ function InvoiceStatus({ customer }) {
   return (
     <Choose>
       <Choose.When condition={customer.is_fully_paid && customer.is_delivered}>
-        <span class="status status-success">
+        <TextStatus intent={Intent.SUCCESS}>
           <T id={'paid'} />
-        </span>
+        </TextStatus>
       </Choose.When>
 
       <Choose.When condition={customer.is_delivered}>
         <Choose>
           <Choose.When condition={customer.is_overdue}>
-            <span className={'status status-warning'}>
+            <TextStatus intent={Intent.DANGER}>
               {intl.get('overdue_by', { overdue: customer.overdue_days })}
-            </span>
+            </TextStatus>
           </Choose.When>
           <Choose.Otherwise>
-            <span className={'status status-warning'}>
+            <TextStatus intent={Intent.WARNING}>
               {intl.get('due_in', { due: customer.remaining_days })}
-            </span>
+            </TextStatus>
           </Choose.Otherwise>
         </Choose>
       </Choose.When>
       <Choose.Otherwise>
-        <span class="status status--gray">
+        <TextStatus intent={Intent.NONE}>
           <T id={'draft'} />
-        </span>
+        </TextStatus>
       </Choose.Otherwise>
     </Choose>
   );
@@ -80,21 +80,20 @@ export function InvoiceUniversalSearchItem(
       text={
         <div>
           <div>{highlightText(item.text, query)}</div>
-          <span class="bp3-text-muted">
+          <span class="bp4-text-muted">
             {highlightText(item.reference.invoice_no, query)}{' '}
             <Icon icon={'caret-right-16'} iconSize={16} />
-            {item.reference.formatted_invoice_date}
+            {item.reference.invoice_date_formatted}
           </span>
         </div>
       }
       label={
         <>
-          <div class="amount">${item.reference.balance}</div>
+          <div class="amount">{item.reference.total_formatted}</div>
           <InvoiceStatus customer={item.reference} />
         </>
       }
       onClick={handleClick}
-      className={'universal-search__item--invoice'}
     />
   );
 }

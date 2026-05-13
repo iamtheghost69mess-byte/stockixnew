@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useMutation, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
-import { transformPagination } from '@/utils';
+import { transformPagination, transformToCamelCase } from '@/utils';
 import useApiRequest from '../useRequest';
 import t from './types';
 
@@ -56,7 +56,7 @@ export function useEditJournal(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`manual-journals/${id}`, values),
+    ([id, values]) => apiRequest.put(`manual-journals/${id}`, values),
     {
       onSuccess: (res, [id]) => {
         // Invalidate specific manual journal.
@@ -89,13 +89,56 @@ export function useDeleteJournal(props) {
 }
 
 /**
+ * Deletes multiple manual journals in bulk.
+ */
+export function useBulkDeleteManualJournals(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('manual-journals/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }),
+    {
+      onSuccess: () => {
+        // Common invalidate queries.
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+export function useValidateBulkDeleteManualJournals(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest
+        .post('manual-journals/validate-bulk-delete', { ids })
+        .then((res) => transformToCamelCase(res.data)),
+    {
+      ...props,
+    },
+  );
+}
+
+/**
  * Publishes the given manual journal.
  */
 export function usePublishJournal(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation((id) => apiRequest.post(`manual-journals/${id}/publish`), {
+  return useMutation((id) => apiRequest.patch(`manual-journals/${id}/publish`), {
     onSuccess: (res, id) => {
       // Invalidate specific manual journal.
       queryClient.invalidateQueries(t.MANUAL_JOURNAL, id);
@@ -139,7 +182,7 @@ export function useJournal(id, props) {
     [t.MANUAL_JOURNAL, id],
     { method: 'get', url: `manual-journals/${id}` },
     {
-      select: (res) => res.data.manual_journal,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },

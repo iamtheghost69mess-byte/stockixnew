@@ -14,18 +14,20 @@ export function ExpenseFormFooterLeft() {
         <FEditableText
           name={'description'}
           placeholder={<T id={'expenses.decscrption.placeholder'} />}
+          multiline
+          fastField
         />
       </DescriptionFormGroup>
     </React.Fragment>
   );
 }
 const DescriptionFormGroup = styled(FFormGroup)`
-  &.bp3-form-group {
-    .bp3-label {
+  &.bp4-form-group {
+    .bp4-label {
       font-size: 12px;
       margin-bottom: 12px;
     }
-    .bp3-form-content {
+    .bp4-form-content {
       margin-left: 10px;
     }
   }

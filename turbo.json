@@ -10,7 +10,8 @@
     "ROOT_DOMAIN",
     "MAX_TENANT_PORT",
     "NEXT_PUBLIC_STOCKIX_API_URL",
-    "PUBLIC_BASE_URL_SCHEME"
+    "PUBLIC_BASE_URL_SCHEME",
+    "WORKER_JOB_EXECUTION_TIMEOUT_MS"
   ],
   "tasks": {
     "build": {

@@ -1,78 +1,47 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import { FormGroup, InputGroup, ControlGroup } from '@blueprintjs/core';
-import { FastField, ErrorMessage } from 'formik';
-import { FormattedMessage as T } from '@/components';
-import { inputIntent } from '@/utils';
+import { ControlGroup } from '@blueprintjs/core';
+import { FormattedMessage as T, FFormGroup, FInputGroup, Box } from '@/components';
 
 /**
  * Vendor form  after primary section.
  */
-function VendorFormAfterPrimarySection() {
-  
-
+export function VendorFormAfterPrimarySection() {
   return (
-    <div class="customer-form__after-primary-section-content">
+    <Box>
       {/*------------ Vendor email -----------*/}
-      <FastField name={'email'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name={'email'} />}
-            className={'form-group--email'}
-            label={<T id={'vendor_email'} />}
-            inline={true}
-          >
-            <InputGroup {...field} />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'email'}
+        label={<T id={'vendor_email'} />}
+        inline
+        fastField
+      >
+        <FInputGroup name={'email'} fastField />
+      </FFormGroup>
 
       {/*------------ Phone number -----------*/}
-      <FormGroup
+      <FFormGroup
+        name={'work_phone'}
         className={'form-group--phone-number'}
         label={<T id={'phone_number'} />}
-        inline={true}
+        inline
+        fastField
       >
         <ControlGroup>
-          <FastField name={'work_phone'}>
-            {({ field, meta: { error, touched } }) => (
-              <InputGroup
-                intent={inputIntent({ error, touched })}
-                placeholder={intl.get('work')}
-                {...field}
-              />
-            )}
-          </FastField>
-          <FastField name={'personal_phone'}>
-            {({ field, meta: { error, touched } }) => (
-              <InputGroup
-                intent={inputIntent({ error, touched })}
-                placeholder={intl.get('mobile')}
-                {...field}
-              />
-            )}
-          </FastField>
+          <FInputGroup name={'work_phone'} placeholder={intl.get('work')} fastField />
+          <FInputGroup
+            name={'personal_phone'}
+            placeholder={intl.get('mobile')}
+            fastField
+          />
         </ControlGroup>
-      </FormGroup>
+      </FFormGroup>
 
       {/*------------ Vendor website -----------*/}
-      <FastField name={'website'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name={'website'} />}
-            className={'form-group--website'}
-            label={<T id={'website'} />}
-            inline={true}
-          >
-            <InputGroup placeholder={'http://'} {...field} />
-          </FormGroup>
-        )}
-      </FastField>
-    </div>
+      <FFormGroup name={'website'} label={<T id={'website'} />} inline fastField>
+        <FInputGroup name={'website'} placeholder={'http://'} fastField />
+      </FFormGroup>
+    </Box>
   );
 }
-
-export default VendorFormAfterPrimarySection;

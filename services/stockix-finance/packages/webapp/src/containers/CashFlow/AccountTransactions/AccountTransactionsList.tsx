@@ -1,43 +1,81 @@
 // @ts-nocheck
-import React from 'react';
-import styled from 'styled-components';
+import * as R from 'ramda';
+import { Spinner } from '@blueprintjs/core';
+import { Suspense, lazy } from 'react';
 
 import '@/style/pages/CashFlow/AccountTransactions/List.scss';
 
 import { DashboardPageContent } from '@/components';
 
 import AccountTransactionsActionsBar from './AccountTransactionsActionsBar';
-import AccountTransactionsDataTable from './AccountTransactionsDataTable';
-import { AccountTransactionsProvider } from './AccountTransactionsProvider';
+import {
+  AccountTransactionsProvider,
+  useAccountTransactionsContext,
+} from './AccountTransactionsProvider';
 import { AccountTransactionsDetailsBar } from './AccountTransactionsDetailsBar';
-import { AccountTransactionsProgressBar } from './components';
+import { AccountTransactionsFilterTabs } from './AccountTransactionsFilterTabs';
+import { AppContentShell } from '@/components/AppShell';
+import { AccountTransactionsAside } from './AccountTransactionsAside';
+import { AccountTransactionsLoadingBar } from './components';
+import { withBanking } from '../withBanking';
 
 /**
  * Account transactions list.
  */
-function AccountTransactionsList() {
+function AccountTransactionsListRoot({
+  // #withBanking
+  openMatchingTransactionAside,
+}) {
   return (
     <AccountTransactionsProvider>
-      <AccountTransactionsActionsBar />
-      <AccountTransactionsDetailsBar />
-      <AccountTransactionsProgressBar />
-
-      <DashboardPageContent>
-        <CashflowTransactionsTableCard>
-          <AccountTransactionsDataTable />
-        </CashflowTransactionsTableCard>
-      </DashboardPageContent>
+      <AppContentShell hideAside={!openMatchingTransactionAside}>
+        <AccountTransactionsMain />
+        <AccountTransactionsAside />
+      </AppContentShell>
     </AccountTransactionsProvider>
   );
 }
 
-export default AccountTransactionsList;
+function AccountTransactionsMain() {
+  const { setScrollableRef } = useAccountTransactionsContext();
 
-const CashflowTransactionsTableCard = styled.div`
-  border: 2px solid #f0f0f0;
-  border-radius: 10px;
-  padding: 30px 18px;
-  margin: 30px 15px;
-  background: #fff;
-  flex: 0 1;
-`;
+  return (
+    <AppContentShell.Main ref={(e) => setScrollableRef(e)}>
+      <AccountTransactionsActionsBar />
+      <AccountTransactionsLoadingBar />
+      <AccountTransactionsDetailsBar />
+
+      <DashboardPageContent>
+        <AccountTransactionsFilterTabs />
+
+        <Suspense fallback={<Spinner size={30} />}>
+          <AccountTransactionsContent />
+        </Suspense>
+      </DashboardPageContent>
+    </AppContentShell.Main>
+  );
+}
+
+export default R.compose(
+  withBanking(
+    ({ selectedUncategorizedTransactionId, openMatchingTransactionAside }) => ({
+      selectedUncategorizedTransactionId,
+      openMatchingTransactionAside,
+    }),
+  ),
+)(AccountTransactionsListRoot);
+
+const AccountsTransactionsAll = lazy(() => import('./AccountsTransactionsAll'));
+const AccountsTransactionsUncategorized = lazy(
+  () => import('./AllTransactionsUncategorized'),
+);
+
+function AccountTransactionsContent() {
+  const { filterTab } = useAccountTransactionsContext();
+
+  return filterTab === 'uncategorized' ? (
+    <AccountsTransactionsUncategorized />
+  ) : (
+    <AccountsTransactionsAll />
+  );
+}

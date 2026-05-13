@@ -4,14 +4,15 @@ import intl from 'react-intl-universal';
 import { AppToaster, FormattedMessage as T } from '@/components';
 import { Intent, Alert } from '@blueprintjs/core';
 
-import withAlertStoreConnect from '@/containers/Alert/withAlertStoreConnect';
-import withAlertActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertStoreConnect } from '@/containers/Alert/withAlertStoreConnect';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import { useDeletePaymentMade } from '@/hooks/query';
 
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
+import { handleDeleteErrors } from './_utils';
 
 /**
  * Payment made delete alert.
@@ -47,6 +48,15 @@ function PaymentMadeDeleteAlert({
         });
         closeDrawer(DRAWERS.PAYMENT_MADE_DETAILS);
       })
+      .catch(
+        ({
+          response: {
+            data: { errors },
+          },
+        }) => {
+          handleDeleteErrors(errors);
+        },
+      )
       .finally(() => {
         closeAlert(name);
       });

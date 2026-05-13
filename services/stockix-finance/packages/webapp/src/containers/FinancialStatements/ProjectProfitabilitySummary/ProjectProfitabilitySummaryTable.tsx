@@ -18,7 +18,7 @@ export default function ProjectProfitabilitySummaryTable({
 }) {
   // Project profitability summary context.
   const {
-    projectProfitabilitySummary: { tableRows },
+    projectProfitabilitySummary: { tableRows, meta },
     query,
   } = useProjectProfitabilitySummaryContext();
 
@@ -29,8 +29,7 @@ export default function ProjectProfitabilitySummaryTable({
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('project_profitability_summary')}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       basis={query.basis}
       name="project-profitability-summary"
     >

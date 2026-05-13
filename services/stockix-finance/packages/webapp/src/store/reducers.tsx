@@ -32,11 +32,16 @@ import paymentMades from './PaymentMades/paymentMades.reducer';
 import organizations from './organizations/organizations.reducers';
 import subscriptions from './subscription/subscription.reducer';
 import inventoryAdjustments from './inventoryAdjustments/inventoryAdjustment.reducer';
-import plans from './plans/plans.reducer';
+import { SubscriptionPlansSlice } from './plans/plans.reducer';
 import creditNotes from './CreditNote/creditNote.reducer';
 import vendorCredit from './VendorCredit/VendorCredit.reducer';
 import warehouseTransfers from './WarehouseTransfer/warehouseTransfer.reducer';
 import projects from './Project/projects.reducer';
+import { PlaidSlice } from './banking/banking.reducer';
+
+export interface ApplicationState {
+  
+}
 
 const appReducer = combineReducers({
   authentication,
@@ -68,11 +73,12 @@ const appReducer = combineReducers({
   paymentReceives,
   paymentMades,
   inventoryAdjustments,
-  plans,
+  plans: SubscriptionPlansSlice.reducer,
   creditNotes,
   vendorCredit,
   warehouseTransfers,
   projects,
+  plaid: PlaidSlice.reducer,
 });
 
 // Reset the state of a redux store

@@ -5,9 +5,14 @@ This document explains variables in **`.env.example`** (full schema). Runtime lo
 | Context | File | Purpose |
 |--------|------|--------|
 | **Local development** | `<repo>/.env` and optional `.env.local` | API, dashboard, workers, Drizzle CLI, scripts |
+| **Vendored finance app (Bigcapital/Stockix)** | `<repo>/services/stockix-finance/.env` | **Separate runtime:** Nest API + Vite webapp, MariaDB/Redis/Gotenberg via *that* folder’s `docker-compose`. **Not** loaded by `@repo/config`. Provisioning generates **per-tenant** env under `TENANT_ENV_ROOT` / `~/.stockix/tenants`; it does **not** read this file. |
 | **Production (Docker)** | `infra/prod/.env` | `docker compose --env-file .env` for Traefik, Postgres, API, dashboard, worker |
 
 **Never commit** real `.env` files. Commit only `*.env.example` templates.
+
+### Why not merge into a single `.env`?
+
+The **control plane** (Postgres tenants, API on `PORT`, dashboard) and the **finance monolith** (MariaDB, `JWT_SECRET`, `GOTENBERG_*`, Nest on `3000` by default) are different processes and different Docker stacks. A single mega-`.env` would mix unrelated secrets, break `docker compose` when run only inside `services/stockix-finance`, and confuse which vars `@repo/config` loads. The professional layout is **two files + two examples**, with **`REPO_ROOT`** (and optional **`STOCKIX_TENANT_APP_ROOT`**) linking provisioning to `services/stockix-finance` (see `infra/worker-service/domain/provision-paths.ts`: if `STOCKIX_TENANT_APP_ROOT` is unset, `${REPO_ROOT}/services/stockix-finance` is used).
 
 ---
 

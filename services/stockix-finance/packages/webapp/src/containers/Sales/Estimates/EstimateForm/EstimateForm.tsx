@@ -1,12 +1,10 @@
 // @ts-nocheck
-import React, { useMemo } from 'react';
 import intl from 'react-intl-universal';
-import classNames from 'classnames';
+import { css } from '@emotion/css';
 import { Formik, Form } from 'formik';
 import { Intent } from '@blueprintjs/core';
-import { sumBy, isEmpty } from 'lodash';
+import { sumBy, isEmpty, defaultTo } from 'lodash';
 import { useHistory } from 'react-router-dom';
-import { CLASSES } from '@/constants/classes';
 
 import {
   CreateEstimateFormSchema,
@@ -19,10 +17,13 @@ import EstimateFloatingActions from './EstimateFloatingActions';
 import EstimateFormFooter from './EstimateFormFooter';
 import EstimateFormDialogs from './EstimateFormDialogs';
 import EstimtaeFormTopBar from './EstimtaeFormTopBar';
-import { EstimateIncrementSyncSettingsToForm } from './components';
+import {
+  EstimateIncrementSyncSettingsToForm,
+  EstimateSyncAutoExRateToForm,
+} from './components';
 
-import withSettings from '@/containers/Settings/withSettings';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
 import { AppToaster } from '@/components';
 import { compose, transactionNumber, orderingLinesIndexes } from '@/utils';
@@ -34,6 +35,7 @@ import {
   handleErrors,
   resetFormState,
 } from './utils';
+import { PageForm } from '@/components/PageForm';
 
 /**
  * Estimate form.
@@ -43,6 +45,8 @@ function EstimateForm({
   estimateNextNumber,
   estimateNumberPrefix,
   estimateAutoIncrementMode,
+  estimateCustomerNotes,
+  estimateTermsConditions,
 
   // #withCurrentOrganization
   organization: { base_currency },
@@ -54,31 +58,31 @@ function EstimateForm({
     submitPayload,
     createEstimateMutate,
     editEstimateMutate,
+    saleEstimateState,
   } = useEstimateFormContext();
 
   const estimateNumber = transactionNumber(
     estimateNumberPrefix,
     estimateNextNumber,
   );
-
   // Initial values in create and edit mode.
-  const initialValues = useMemo(
-    () => ({
-      ...(!isEmpty(estimate)
-        ? { ...transformToEditForm(estimate) }
-        : {
-            ...defaultEstimate,
-            // If the auto-increment mode is enabled, take the next estimate
-            // number from the settings.
-            ...(estimateAutoIncrementMode && {
-              estimate_number: estimateNumber,
-            }),
-            entries: orderingLinesIndexes(defaultEstimate.entries),
-            currency_code: base_currency,
-          }),
-    }),
-    [estimate, estimateNumber, estimateAutoIncrementMode, base_currency],
-  );
+  const initialValues = {
+    ...(!isEmpty(estimate)
+      ? { ...transformToEditForm(estimate) }
+      : {
+        ...defaultEstimate,
+        // If the auto-increment mode is enabled, take the next estimate
+        // number from the settings.
+        ...(estimateAutoIncrementMode && {
+          estimate_number: estimateNumber,
+        }),
+        entries: orderingLinesIndexes(defaultEstimate.entries),
+        currency_code: base_currency,
+        terms_conditions: defaultTo(estimateTermsConditions, ''),
+        note: defaultTo(estimateCustomerNotes, ''),
+        pdf_template_id: saleEstimateState?.defaultTemplateId,
+      }),
+  };
 
   // Handles form submit.
   const handleFormSubmit = (
@@ -144,35 +148,42 @@ function EstimateForm({
   };
 
   return (
-    <div
-      className={classNames(
-        CLASSES.PAGE_FORM,
-        CLASSES.PAGE_FORM_STRIP_STYLE,
-        CLASSES.PAGE_FORM_ESTIMATE,
-      )}
+    <Formik
+      validationSchema={
+        isNewMode ? CreateEstimateFormSchema : EditEstimateFormSchema
+      }
+      initialValues={initialValues}
+      onSubmit={handleFormSubmit}
     >
-      <Formik
-        validationSchema={
-          isNewMode ? CreateEstimateFormSchema : EditEstimateFormSchema
-        }
-        initialValues={initialValues}
-        onSubmit={handleFormSubmit}
+      <Form
+        className={css({
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+        })}
       >
-        <Form>
-          <EstimtaeFormTopBar />
-          <EstimateFormHeader />
-          <EstimateItemsEntriesField />
-          <EstimateFormFooter />
-          <EstimateFloatingActions />
+        <PageForm flex={1}>
+          <PageForm.Body>
+            <EstimtaeFormTopBar />
+            <EstimateFormHeader />
+            <EstimateItemsEntriesField />
+            <EstimateFormFooter />
+          </PageForm.Body>
 
-          {/*------- Dialogs -------*/}
-          <EstimateFormDialogs />
+          <PageForm.Footer>
+            <EstimateFloatingActions />
+          </PageForm.Footer>
+        </PageForm>
 
-          {/*------- Effects -------*/}
-          <EstimateIncrementSyncSettingsToForm />
-        </Form>
-      </Formik>
-    </div>
+        {/*------- Dialogs -------*/}
+        <EstimateFormDialogs />
+
+        {/*------- Effects -------*/}
+        <EstimateIncrementSyncSettingsToForm />
+        <EstimateSyncAutoExRateToForm />
+      </Form>
+    </Formik>
   );
 }
 
@@ -181,6 +192,8 @@ export default compose(
     estimateNextNumber: estimatesSettings?.nextNumber,
     estimateNumberPrefix: estimatesSettings?.numberPrefix,
     estimateAutoIncrementMode: estimatesSettings?.autoIncrement,
+    estimateCustomerNotes: estimatesSettings?.customerNotes,
+    estimateTermsConditions: estimatesSettings?.termsConditions,
   })),
   withCurrentOrganization(),
 )(EstimateForm);

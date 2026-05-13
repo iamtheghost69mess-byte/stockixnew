@@ -1,12 +1,13 @@
 // @ts-nocheck
 import React from 'react';
+import { x } from '@xstyled/emotion';
 
-import SetupDialogs from './SetupDialogs';
 import SetupWizardContent from './SetupWizardContent';
 
-import withOrganization from '@/containers/Organization/withOrganization';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
-import withSetupWizard from '@/store/organizations/withSetupWizard';
+import { withOrganization } from '@/containers/Organization/withOrganization';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
+import { withSetupWizard } from '@/store/organizations/withSetupWizard';
+import { withSubscriptions } from '../Subscriptions/withSubscriptions';
 
 import { compose } from '@/utils';
 
@@ -22,15 +23,14 @@ function SetupRightSection({
   // #withSetupWizard
   setupStepId,
   setupStepIndex,
+
+  // #withSubscriptions
+  isSubscriptionActive,
 }) {
   return (
-    <section className={'setup-page__right-section'}>
-      <SetupWizardContent
-        setupStepId={setupStepId}
-        setupStepIndex={setupStepIndex}
-      />
-      <SetupDialogs />
-    </section>
+    <x.section w="100%" overflow="auto">
+      <SetupWizardContent stepId={setupStepId} stepIndex={setupStepIndex} />
+    </x.section>
   );
 }
 
@@ -52,6 +52,12 @@ export default compose(
       isOrganizationSetupCompleted,
       isOrganizationBuildRunning,
     }),
+  ),
+  withSubscriptions(
+    ({ isSubscriptionActive }) => ({
+      isSubscriptionActive,
+    }),
+    'main',
   ),
   withSetupWizard(({ setupStepId, setupStepIndex }) => ({
     setupStepId,

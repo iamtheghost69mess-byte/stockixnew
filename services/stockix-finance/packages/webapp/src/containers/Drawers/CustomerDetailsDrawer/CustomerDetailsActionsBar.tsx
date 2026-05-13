@@ -18,15 +18,15 @@ import {
 
 import { useCustomerDetailsDrawerContext } from './CustomerDetailsDrawerProvider';
 
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import {
-  DashboardActionsBar,
   Can,
   Icon,
   FormattedMessage as T,
+  DrawerActionsBar,
 } from '@/components';
 import { CustomerMoreMenuItem } from './utils';
 import {
@@ -47,7 +47,7 @@ function CustomerDetailsActionsBar({
   // #withDialogActions
   openDialog,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -68,7 +68,7 @@ function CustomerDetailsActionsBar({
   };
   // Handle new payment receive button click.
   const handleNewPaymentClick = () => {
-    history.push('/payment-receives/new');
+    history.push('/payment-received/new');
     closeDrawer(DRAWERS.CUSTOMER_DETAILS);
   };
   // Handle new estimate button click.
@@ -91,7 +91,7 @@ function CustomerDetailsActionsBar({
   };
 
   return (
-    <DashboardActionsBar>
+    <DrawerActionsBar>
       <NavbarGroup>
         <Popover
           content={
@@ -163,12 +163,12 @@ function CustomerDetailsActionsBar({
           }}
         />
       </NavbarGroup>
-    </DashboardActionsBar>
+    </DrawerActionsBar>
   );
 }
 
 export default compose(
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
   withDialogActions,
 )(CustomerDetailsActionsBar);
