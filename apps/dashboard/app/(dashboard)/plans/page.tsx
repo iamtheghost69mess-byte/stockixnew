@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { MoreHorizontal, Pencil, Plus, Power } from "lucide-react";
+import { CheckCircle2, Circle, MoreHorizontal, Pencil, Plus, Power } from "lucide-react";
 
 import {
   AlertDialog,
@@ -383,9 +383,17 @@ export default function PlansPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{row.maxActivations}</TableCell>
                   <TableCell>
-                    <Badge variant={row.isActive ? "default" : "secondary"}>
-                      {row.isActive ? "Active" : "Inactive"}
-                    </Badge>
+                    {row.isActive ? (
+                      <Badge className="gap-1 border-emerald-600/30 bg-emerald-600/15 text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="gap-1">
+                        <Circle className="h-3.5 w-3.5" />
+                        Inactive
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>

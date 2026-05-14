@@ -220,7 +220,7 @@ export async function executeProvisionRuntime(
     await mkdir(join(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
 
     const { secrets } = deps;
-    const bootstrapPasswordKey = (input.parentTenantSlug?.trim() || input.slug).trim();
+    const bootstrapPasswordKey = input.slug.trim();
     oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
     const jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     const dbPassword = secrets.persistSecret(secrets.randomHex(16));

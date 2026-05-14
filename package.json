@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "pnpm db:up && pnpm db:wait && pnpm infra:worker:build && concurrently -n apps,worker -c blue,magenta \"pnpm exec turbo run dev --filter=dashboard --filter=api\" \"node infra/worker-service/.runtime/worker.js\"",
+    "dev": "pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm infra:worker:build && concurrently -n apps,worker -c blue,magenta \"pnpm exec turbo run dev --filter=dashboard --filter=api\" \"node infra/worker-service/.runtime/worker.js\"",
     "dev:all": "pnpm dev",
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
     "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",

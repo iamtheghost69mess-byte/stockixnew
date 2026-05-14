@@ -84,18 +84,28 @@ export async function signSessionToken(payload: Omit<SessionTokenPayload, "iat">
 }
 
 export async function verifySessionToken(token: string): Promise<SessionTokenPayload | null> {
-  const dot = token.lastIndexOf(".");
-  if (dot < 1) return null;
-  const encoded = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const body = fromB64(encoded);
-  const valid = await verifyPayload(body, sig);
-  if (!valid) return null;
-  const parseResult = sessionTokenPayloadSchema.safeParse(JSON.parse(body));
-  if (!parseResult.success) return null;
-  const parsed = parseResult.data;
-  if (Date.now() - parsed.iat > SESSION_TTL_MS) return null;
-  return parsed;
+  try {
+    const dot = token.lastIndexOf(".");
+    if (dot < 1) return null;
+    const encoded = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const body = fromB64(encoded);
+    const valid = await verifyPayload(body, sig);
+    if (!valid) return null;
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(body);
+    } catch {
+      return null;
+    }
+    const parseResult = sessionTokenPayloadSchema.safeParse(parsedJson);
+    if (!parseResult.success) return null;
+    const parsed = parseResult.data;
+    if (Date.now() - parsed.iat > SESSION_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export async function signMfaToken(ownerId: string): Promise<string> {
@@ -106,16 +116,26 @@ export async function signMfaToken(ownerId: string): Promise<string> {
 }
 
 export async function verifyMfaToken(token: string): Promise<string | null> {
-  const dot = token.lastIndexOf(".");
-  if (dot < 1) return null;
-  const encoded = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const body = fromB64(encoded);
-  const valid = await verifyPayload(body, sig);
-  if (!valid) return null;
-  const parseResult = mfaTokenPayloadSchema.safeParse(JSON.parse(body));
-  if (!parseResult.success) return null;
-  const parsed = parseResult.data;
-  if (Date.now() - parsed.iat > MFA_TTL_MS) return null;
-  return parsed.ownerId;
+  try {
+    const dot = token.lastIndexOf(".");
+    if (dot < 1) return null;
+    const encoded = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const body = fromB64(encoded);
+    const valid = await verifyPayload(body, sig);
+    if (!valid) return null;
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(body);
+    } catch {
+      return null;
+    }
+    const parseResult = mfaTokenPayloadSchema.safeParse(parsedJson);
+    if (!parseResult.success) return null;
+    const parsed = parseResult.data;
+    if (Date.now() - parsed.iat > MFA_TTL_MS) return null;
+    return parsed.ownerId;
+  } catch {
+    return null;
+  }
 }
