@@ -59,7 +59,7 @@ export const generateLicenseSchema = z
       .number()
       .int()
       .min(1, "Must allow at least 1 activation")
-      .max(9999),
+      .max(50, "Must allow at most 50 activations"),
     gracePeriodDays: z
       .number()
       .int()
@@ -69,8 +69,10 @@ export const generateLicenseSchema = z
       .string()
       .max(500, "Notes must be at most 500 characters")
       .optional(),
+    count: z.number().int().min(1, "Count must be at least 1").max(100, "Count must be at most 100"),
+    validFrom: z.string().datetime().optional(),
   })
-  .refine((data) => data.term === "perpetual" || Boolean(data.expiresAt), {
+  .refine((data) => data.term === "perpetual" || Boolean(data.expiresAt?.trim()), {
     message: "Expiry date is required for fixed term licenses",
     path: ["expiresAt"],
   });

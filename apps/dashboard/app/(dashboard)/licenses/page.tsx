@@ -12,7 +12,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/reusabletoast";
 
 import LicenseAssignDialog from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";

@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/reusabletoast";
 
 import LicenseAssignDialog from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";

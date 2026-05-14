@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Trash2, UserCog } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/reusabletoast";
 
 import {
   AlertDialog,
