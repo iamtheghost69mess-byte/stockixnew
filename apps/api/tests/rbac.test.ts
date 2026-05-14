@@ -253,6 +253,7 @@ describe("role rank enforcement logic", () => {
 
   it("super_admin can access all route tiers", () => {
     const routes: Array<[string, string]> = [
+      ["/audit-log", "GET"],
       ["/tenants", "GET"],
       ["/tenants", "POST"],
       ["/owners", "DELETE"],

@@ -303,7 +303,7 @@ export default function AuditLogPage() {
                           <div className="font-mono text-xs text-muted-foreground">{row.actorId}</div>
                         </TableCell>
                         <TableCell className="max-w-md align-top text-sm text-muted-foreground">
-                          <span className="break-words">{formatAuditDetails(row.action, row.metadata)}</span>
+                          <span className="wrap-break-word">{formatAuditDetails(row.action, row.metadata)}</span>
                         </TableCell>
                         <TableCell className="hidden max-w-[140px] align-top font-mono text-xs text-muted-foreground lg:table-cell">
                           {row.ipAddress ?? "—"}
