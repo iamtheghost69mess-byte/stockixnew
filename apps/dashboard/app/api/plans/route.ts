@@ -9,3 +9,21 @@ export async function GET(req: Request) {
     headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
   });
 }
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const res = await apiFetch(
+    "/plans",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    },
+    req,
+  );
+  const responseBody = await res.text();
+  return new NextResponse(responseBody, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+  });
+}

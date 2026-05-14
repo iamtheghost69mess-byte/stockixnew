@@ -7,6 +7,7 @@ import {
   Building2Icon,
   KeyRoundIcon,
   LayoutDashboardIcon,
+  LayoutListIcon,
   ScrollTextIcon,
   Settings2Icon,
   UsersIcon,
@@ -49,6 +50,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/licenses",
         icon: <KeyRoundIcon />,
       },
+      ...(me?.capabilities.canAccessSettings
+        ? [
+            {
+              title: "Plans",
+              url: "/plans",
+              icon: <LayoutListIcon />,
+            },
+          ]
+        : []),
       {
         title: "Team & access",
         url: "/owners",

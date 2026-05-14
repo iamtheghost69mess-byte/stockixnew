@@ -29,8 +29,12 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
   if (pathname.startsWith("/internal/jobs")) return null;
   if (m === "POST" && pathname === "/licenses/activate") return null;
   if (m === "POST" && pathname === "/licenses/verify-offline") return null;
-  if (m === "GET" && pathname === "/plans") return null;
   if (m === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
+
+  if (pathname.startsWith("/plans")) {
+    if (m === "GET") return "read_only";
+    return "super_admin";
+  }
 
   if (pathname.startsWith("/licenses")) {
     if (m === "GET") return "read_only";

@@ -11,6 +11,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/": "Overview",
   "/tenants": "Tenants",
   "/licenses": "Licenses",
+  "/plans": "Plans",
   "/owners": "Team & access",
   "/audit-log": "Audit log",
   "/settings": "Security & settings",

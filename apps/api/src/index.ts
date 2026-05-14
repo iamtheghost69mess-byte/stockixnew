@@ -555,10 +555,6 @@ app.use("/*", async (c, next) => {
     await next();
     return;
   }
-  if (method === "GET" && path === "/plans") {
-    await next();
-    return;
-  }
   if (method === "GET" && path.startsWith("/public/tenant-orgs/")) {
     await next();
     return;

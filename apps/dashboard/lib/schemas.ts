@@ -101,3 +101,28 @@ export const generateLicenseSchema = z
     path: ["expiresAt"],
   });
 export type GenerateLicenseValues = z.infer<typeof generateLicenseSchema>;
+
+export const planSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name must be at most 100 characters"),
+  slug: z
+    .string()
+    .min(2, "Slug must be at least 2 characters")
+    .max(50, "Slug must be at most 50 characters")
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "Slug must be lowercase letters, numbers, and hyphens only",
+    ),
+  description: z.string().max(500, "Description must be at most 500 characters").optional(),
+  maxOrganizations: z.coerce.number().int().min(-1, "Use -1 for unlimited").max(9999),
+  maxActivations: z.coerce.number().int().min(1, "Must allow at least 1 activation").max(9999),
+  isActive: z.boolean(),
+  sortOrder: z.coerce.number().int().min(0).max(9999),
+});
+export type PlanValues = z.infer<typeof planSchema>;
+
+/** Edit plan: same fields as {@link planSchema} except slug (immutable FK). */
+export const planEditSchema = planSchema.omit({ slug: true });
+export type PlanEditValues = z.infer<typeof planEditSchema>;

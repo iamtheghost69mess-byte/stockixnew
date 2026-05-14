@@ -105,8 +105,11 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/licenses/verify-offline", "POST")).toBeNull();
   });
 
-  it("returns null for GET /plans", () => {
-    expect(requiredApiRole("/plans", "GET")).toBeNull();
+  it("GET /plans requires read_only; mutations require super_admin", () => {
+    expect(requiredApiRole("/plans", "GET")).toBe("read_only");
+    expect(requiredApiRole("/plans", "POST")).toBe("super_admin");
+    expect(requiredApiRole("/plans/uuid-here", "PATCH")).toBe("super_admin");
+    expect(requiredApiRole("/plans/uuid-here", "DELETE")).toBe("super_admin");
   });
 
   it("returns null for public tenant orgs", () => {

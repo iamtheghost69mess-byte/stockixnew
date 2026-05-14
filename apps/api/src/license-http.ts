@@ -47,23 +47,169 @@ function clientIp(c: { req: { header: (n: string) => string | undefined } }): st
 export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
   app.get("/plans", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
-    const rows = await db
-      .select()
-      .from(plans)
-      .where(eq(plans.isActive, true))
-      .orderBy(asc(plans.sortOrder), asc(plans.name));
+    const rows = await db.select().from(plans).orderBy(asc(plans.sortOrder), asc(plans.name));
+    const activeCounts = await db
+      .select({ planSlug: licenses.planSlug, c: count() })
+      .from(licenses)
+      .where(eq(licenses.status, "active"))
+      .groupBy(licenses.planSlug);
+    const activeBySlug = new Map(activeCounts.map((r) => [r.planSlug, Number(r.c ?? 0)]));
     return c.json({
       plans: rows.map((p) => ({
         id: p.id,
         name: p.name,
         slug: p.slug,
         description: p.description,
+        maxOrganizations: p.maxOrganizations,
+        maxActivations: p.maxActivations,
         isActive: p.isActive,
         sortOrder: p.sortOrder,
+        activeLicenseCount: activeBySlug.get(p.slug) ?? 0,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
       })),
     });
+  });
+
+  const createPlanBody = z.object({
+    name: z.string().min(2).max(100),
+    slug: z
+      .string()
+      .min(2)
+      .max(50)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    description: z.string().max(500).optional(),
+    maxOrganizations: z.number().int().min(-1).max(9999).default(1),
+    maxActivations: z.number().int().min(1).max(9999).default(1),
+    isActive: z.boolean().default(true),
+    sortOrder: z.number().int().min(0).max(9999).default(0),
+  });
+
+  app.post("/plans", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const raw = await c.req.json().catch(() => null);
+    const parsed = createPlanBody.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "VALIDATION_ERROR", detail: parsed.error.flatten() }, 400);
+    }
+    const [existing] = await db
+      .select({ id: plans.id })
+      .from(plans)
+      .where(eq(plans.slug, parsed.data.slug))
+      .limit(1);
+    if (existing) {
+      return c.json({ error: "SLUG_EXISTS", message: "A plan with this slug already exists" }, 409);
+    }
+    const [created] = await db
+      .insert(plans)
+      .values({
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+        description: parsed.data.description ?? null,
+        maxOrganizations: parsed.data.maxOrganizations,
+        maxActivations: parsed.data.maxActivations,
+        isActive: parsed.data.isActive,
+        sortOrder: parsed.data.sortOrder,
+      })
+      .returning();
+    if (!created) return c.json({ error: "create_failed" }, 500);
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "plan.created",
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { planSlug: parsed.data.slug },
+    });
+    return c.json({ plan: created }, 201);
+  });
+
+  const patchPlanBody = z
+    .object({
+      name: z.string().min(2).max(100).optional(),
+      description: z.union([z.string().max(500), z.null()]).optional(),
+      maxOrganizations: z.number().int().min(-1).max(9999).optional(),
+      maxActivations: z.number().int().min(1).max(9999).optional(),
+      isActive: z.boolean().optional(),
+      sortOrder: z.number().int().min(0).max(9999).optional(),
+    })
+    .strict();
+
+  app.patch("/plans/:planId", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const idParsed = z.string().uuid().safeParse(c.req.param("planId"));
+    if (!idParsed.success) return c.json({ error: "invalid_plan_id" }, 400);
+    const raw = await c.req.json().catch(() => null);
+    const parsed = patchPlanBody.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "VALIDATION_ERROR", detail: parsed.error.flatten() }, 400);
+    }
+    if (Object.keys(parsed.data).length === 0) {
+      return c.json({ error: "no_fields_to_update" }, 400);
+    }
+    const [existing] = await db.select().from(plans).where(eq(plans.id, idParsed.data)).limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+    const setVals: {
+      updatedAt: Date;
+      name?: string;
+      description?: string | null;
+      maxOrganizations?: number;
+      maxActivations?: number;
+      isActive?: boolean;
+      sortOrder?: number;
+    } = { updatedAt: new Date() };
+    if (parsed.data.name !== undefined) setVals.name = parsed.data.name;
+    if (parsed.data.description !== undefined) setVals.description = parsed.data.description;
+    if (parsed.data.maxOrganizations !== undefined) setVals.maxOrganizations = parsed.data.maxOrganizations;
+    if (parsed.data.maxActivations !== undefined) setVals.maxActivations = parsed.data.maxActivations;
+    if (parsed.data.isActive !== undefined) setVals.isActive = parsed.data.isActive;
+    if (parsed.data.sortOrder !== undefined) setVals.sortOrder = parsed.data.sortOrder;
+    const [updated] = await db
+      .update(plans)
+      .set(setVals)
+      .where(eq(plans.id, idParsed.data))
+      .returning();
+    if (!updated) return c.json({ error: "not_found" }, 404);
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "plan.updated",
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { planId: updated.id, planSlug: updated.slug },
+    });
+    return c.json({ plan: updated });
+  });
+
+  app.delete("/plans/:planId", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const idParsed = z.string().uuid().safeParse(c.req.param("planId"));
+    if (!idParsed.success) return c.json({ error: "invalid_plan_id" }, 400);
+    const [planRow] = await db.select().from(plans).where(eq(plans.id, idParsed.data)).limit(1);
+    if (!planRow) return c.json({ error: "not_found" }, 404);
+    const [activeN] = await db
+      .select({ c: count() })
+      .from(licenses)
+      .where(and(eq(licenses.planSlug, planRow.slug), eq(licenses.status, "active")));
+    if (Number(activeN?.c ?? 0) > 0) {
+      return c.json(
+        {
+          error: "PLAN_IN_USE",
+          message: "Cannot deactivate a plan with active licenses",
+        },
+        409,
+      );
+    }
+    await db
+      .update(plans)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(plans.id, planRow.id));
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "plan.deactivated",
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { planSlug: planRow.slug, planId: planRow.id },
+    });
+    return c.json({ ok: true });
   });
 
   const generateBody = z.object({
