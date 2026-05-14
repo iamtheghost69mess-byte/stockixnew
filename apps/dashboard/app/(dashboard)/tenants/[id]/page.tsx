@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +28,14 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,6 +50,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
 import { formatDate, formatDateTime, formatTime } from "@/lib/date-format";
+import { tenantProfileSchema, type TenantProfileValues } from "@/lib/schemas";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { cn } from "@/lib/utils";
 import type { LicenseRow, LicenseStatus } from "@/types/license";
@@ -93,11 +104,14 @@ export default function TenantDetailPage() {
   const [licenseHistory, setLicenseHistory] = useState<LicenseRow[]>([]);
   const [licenseHistoryLoading, setLicenseHistoryLoading] = useState(false);
   const [licenseHistoryOpen, setLicenseHistoryOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    adminEmail: "",
-    adminFirstName: "",
-    adminLastName: "",
+  const profileForm = useForm<TenantProfileValues>({
+    resolver: zodResolver(tenantProfileSchema),
+    defaultValues: {
+      name: "",
+      adminFirstName: "",
+      adminLastName: "",
+      adminEmail: "",
+    },
   });
 
   const loadTenant = async () => {
@@ -111,12 +125,6 @@ export default function TenantDetailPage() {
         throw new Error(formatApiError(body, data.error ?? `HTTP ${res.status}`));
       }
       setTenant(data.tenant);
-      setForm({
-        name: data.tenant.name,
-        adminEmail: data.tenant.adminEmail,
-        adminFirstName: data.tenant.adminFirstName,
-        adminLastName: data.tenant.adminLastName,
-      });
     } catch (e) {
       setError(String(e));
     } finally {
@@ -173,6 +181,16 @@ export default function TenantDetailPage() {
     void loadEvents();
     void loadLicense();
   }, [id]);
+
+  useEffect(() => {
+    if (!tenant) return;
+    profileForm.reset({
+      name: tenant.name,
+      adminFirstName: tenant.adminFirstName,
+      adminLastName: tenant.adminLastName,
+      adminEmail: tenant.adminEmail,
+    });
+  }, [tenant, profileForm]);
 
   useEffect(() => {
     if (!licenseHistoryOpen) return;
@@ -238,13 +256,13 @@ export default function TenantDetailPage() {
 
   const provisionFailed = deploymentStatus === "failed" || tenant.status === "failed";
 
-  const saveProfile = async () => {
+  const saveProfile = profileForm.handleSubmit(async (values) => {
     setSaving(true);
     try {
       const res = await fetch(`/api/tenants/${tenant.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(values),
       });
       const body = await readJson(res);
       const data = body as { tenant?: TenantDetail; error?: string };
@@ -258,7 +276,7 @@ export default function TenantDetailPage() {
     } finally {
       setSaving(false);
     }
-  };
+  });
 
   return (
     <div className="space-y-6">
@@ -308,21 +326,87 @@ export default function TenantDetailPage() {
                 </div>
               </>
             ) : (
-              <div className="space-y-2">
-                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-                <Input value={form.adminEmail} onChange={(e) => setForm((p) => ({ ...p, adminEmail: e.target.value }))} />
-                <Input value={form.adminFirstName} onChange={(e) => setForm((p) => ({ ...p, adminFirstName: e.target.value }))} />
-                <Input value={form.adminLastName} onChange={(e) => setForm((p) => ({ ...p, adminLastName: e.target.value }))} />
-                <div className="flex gap-2">
-                  <Button onClick={() => void saveProfile()} disabled={saving}>
-                    {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-                    Save changes
-                  </Button>
-                  <Button variant="ghost" onClick={() => setEditing(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+              <Form {...profileForm}>
+                <form
+                  onSubmit={(e) => void saveProfile(e)}
+                  className="space-y-3"
+                  noValidate
+                >
+                  <FormField
+                    control={profileForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Business name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Business name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="adminEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Admin email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="admin@example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="adminFirstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Admin first name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="First name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="adminLastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Admin last name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Last name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={saving}>
+                      {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                      Save changes
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(false);
+                        profileForm.reset({
+                          name: tenant.name,
+                          adminFirstName: tenant.adminFirstName,
+                          adminLastName: tenant.adminLastName,
+                          adminEmail: tenant.adminEmail,
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Form>
             )}
           </CardContent>
         </Card>

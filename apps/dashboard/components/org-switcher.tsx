@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2, ChevronDown, Loader2, Pencil, PauseCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +29,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +49,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useOrganizations, type Organization } from "@/hooks/use-organizations";
 import { cn } from "@/lib/utils";
+import { createOrgSchema, type CreateOrgValues } from "@/lib/schemas";
 import { validateOrganizationDisplayName } from "@/lib/validate-org-name";
 
 interface OrgSwitcherProps {
@@ -166,13 +178,18 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
   const { organizations, isLoading, error, refetch } = useOrganizations(tenantId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [nameInput, setNameInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [renameOrg, setRenameOrg] = useState<Organization | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
   const [suspendOrg, setSuspendOrg] = useState<Organization | null>(null);
   const [suspendSaving, setSuspendSaving] = useState(false);
+
+  const orgForm = useForm<CreateOrgValues>({
+    resolver: zodResolver(createOrgSchema),
+    defaultValues: { name: "" },
+    mode: "onTouched",
+  });
 
   const hasProvisioning = organizations.some((o) => o.status === "provisioning");
   const primaryId = organizations[0]?.id;
@@ -192,16 +209,11 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
 
   const closeDialog = () => {
     setDialogOpen(false);
-    setNameInput("");
+    orgForm.reset();
   };
 
-  const submitCreate = async () => {
-    const nameErr = validateOrganizationDisplayName(nameInput);
-    if (nameErr) {
-      toast.error(nameErr);
-      return;
-    }
-    const name = nameInput.trim();
+  const onOrgSubmit = orgForm.handleSubmit(async (values) => {
+    const name = values.name.trim();
     setSubmitting(true);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/organizations`, {
@@ -226,7 +238,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
     } finally {
       setSubmitting(false);
     }
-  };
+  });
 
   const saveRename = async () => {
     if (!renameOrg) return;
@@ -422,30 +434,44 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
             <DialogTitle>Add Organization</DialogTitle>
             <p className="text-sm text-muted-foreground">A new Bigcapital instance will be provisioned.</p>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="org-name">Organization name</Label>
-            <Input
-              id="org-name"
-              placeholder="Organization name"
-              maxLength={100}
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              disabled={submitting}
-            />
-            <p className="text-xs text-muted-foreground">2–100 characters. Avoid leading or trailing spaces.</p>
-            <p className="text-sm text-muted-foreground">
-              Currency, timezone, and regional settings will be inherited from your main organization.
-            </p>
-          </div>
+          <Form {...orgForm}>
+            <form
+              id="org-create-form"
+              onSubmit={(e) => void onOrgSubmit(e)}
+              className="space-y-2 py-2"
+              noValidate
+            >
+              <FormField
+                control={orgForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Organization name"
+                        maxLength={100}
+                        disabled={submitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      2–100 characters. Avoid leading or trailing spaces.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <p className="text-sm text-muted-foreground">
+                Currency, timezone, and regional settings will be inherited from your main organization.
+              </p>
+            </form>
+          </Form>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeDialog} disabled={submitting}>
               Cancel
             </Button>
-            <Button
-              type="button"
-              onClick={() => void submitCreate()}
-              disabled={submitting || validateOrganizationDisplayName(nameInput) !== null}
-            >
+            <Button type="submit" form="org-create-form" disabled={submitting}>
               {submitting ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               Create
             </Button>

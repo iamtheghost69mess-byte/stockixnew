@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Copy,
   Loader2,
@@ -23,6 +25,7 @@ import {
   ROLES,
   type Role,
 } from "@/lib/roles";
+import { inviteOwnerSchema, type InviteOwnerValues } from "@/lib/schemas";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -42,6 +45,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,17 +113,19 @@ export default function OwnersPage() {
   const [loadErr, setLoadErr] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState("");
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteErr, setDeleteErr] = useState("");
-  const [inviteRole, setInviteRole] = useState<Role>(ROLE.READ_ONLY);
   const [inviteUrl, setInviteUrl] = useState("");
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  const inviteForm = useForm<InviteOwnerValues>({
+    resolver: zodResolver(inviteOwnerSchema),
+    defaultValues: { email: "", name: "", role: ROLE.READ_ONLY },
+  });
 
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [roleChangeTarget, setRoleChangeTarget] = useState<{
@@ -158,15 +171,18 @@ export default function OwnersPage() {
     void load();
   }, [load]);
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
+  const onInviteSubmit = inviteForm.handleSubmit(async (values) => {
     setAddErr("");
     setAdding(true);
     try {
       const res = await fetch("/api/owners/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, role: inviteRole }),
+        body: JSON.stringify({
+          email: values.email,
+          name: values.name,
+          role: values.role,
+        }),
       });
       const data = (await res.json()) as {
         owner?: Owner;
@@ -177,18 +193,17 @@ export default function OwnersPage() {
         setAddErr(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         return;
       }
-      setEmail("");
-      setName("");
       setInviteUrl(data.inviteUrl ?? "");
       setCopiedInvite(false);
       setInviteOpen(false);
+      inviteForm.reset();
       await load();
     } catch (e) {
       setAddErr(e instanceof Error ? e.message : String(e));
     } finally {
       setAdding(false);
     }
-  }
+  });
 
   async function copyInviteUrl() {
     if (!inviteUrl) return;
@@ -357,7 +372,16 @@ export default function OwnersPage() {
         )}
       </div>
 
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={(open) => {
+          setInviteOpen(open);
+          if (!open) {
+            inviteForm.reset();
+            setAddErr("");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Invite team member</DialogTitle>
@@ -365,53 +389,84 @@ export default function OwnersPage() {
               Send an invitation to a new owner. They will receive an email to set up their account.
             </DialogDescription>
           </DialogHeader>
-          <form id="owners-invite-form" onSubmit={handleAdd} className="grid gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="invite-email">
-                Email
-              </label>
-              <Input
-                id="invite-email"
-                type="email"
-                placeholder="owner@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+          <Form {...inviteForm}>
+            <form
+              id="owners-invite-form"
+              onSubmit={(e) => void onInviteSubmit(e)}
+              className="grid gap-4"
+              noValidate
+            >
+              <FormField
+                control={inviteForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-muted-foreground">
+                      Email
+                    </FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="owner@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="invite-role">
-                Role
-              </label>
-              <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as Role)}>
-                <SelectTrigger id="invite-role" className="h-9 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {ROLE_LABELS[role]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="invite-name">
-                Name
-              </label>
-              <Input
-                id="invite-name"
-                type="text"
-                placeholder="Full name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
+              <FormField
+                control={inviteForm.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-muted-foreground">
+                      Role
+                    </FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => field.onChange(value as Role)}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="h-9 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {ROLES.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-          </form>
+              <FormField
+                control={inviteForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-muted-foreground">
+                      Name
+                    </FormLabel>
+                    <FormControl>
+                      <Input type="text" placeholder="Full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </form>
+          </Form>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setInviteOpen(false);
+                inviteForm.reset();
+                setAddErr("");
+              }}
+            >
               Cancel
             </Button>
             <Button type="submit" form="owners-invite-form" disabled={adding} className="gap-2">
