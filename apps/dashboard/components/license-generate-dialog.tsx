@@ -110,16 +110,24 @@ export default function LicenseGenerateDialog({
         fetch("/api/plans"),
         fetch("/api/tenants?page=1&pageSize=1000"),
       ]);
-      const pJson = (await pRes.json().catch(() => ({}))) as { plans?: { slug: string; name: string }[] };
+      const pJson = (await pRes.json().catch(() => ({}))) as {
+        plans?: { slug: string; name: string; isActive?: boolean }[];
+      };
       const tJson = (await tRes.json().catch(() => ({}))) as {
         tenants?: { tenantId: string; name: string; slug: string }[];
       };
       if (pRes.ok && pJson.plans?.length) {
-        const list = pJson.plans.map((p) => ({ slug: p.slug, name: p.name }));
-        setPlans(list);
-        const prev = form.getValues("planSlug");
-        const nextSlug = list.some((p) => p.slug === prev) ? prev : list[0]!.slug;
-        form.setValue("planSlug", nextSlug, { shouldValidate: false });
+        const list = pJson.plans
+          .filter((p) => p.isActive !== false)
+          .map((p) => ({ slug: p.slug, name: p.name }));
+        if (list.length > 0) {
+          setPlans(list);
+          const prev = form.getValues("planSlug");
+          const nextSlug = list.some((p) => p.slug === prev) ? prev : list[0]!.slug;
+          form.setValue("planSlug", nextSlug, { shouldValidate: false });
+        } else {
+          setPlans([]);
+        }
       }
       if (tRes.ok && Array.isArray(tJson.tenants)) {
         setTenants(

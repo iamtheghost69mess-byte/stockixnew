@@ -38,6 +38,11 @@ type ApiEnv = {
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+function csvEscapeCell(value: string | number | boolean | null | undefined): string {
+  const cell = value === null || value === undefined ? "" : String(value);
+  return /[",\n\r]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+}
+
 function clientIp(c: { req: { header: (n: string) => string | undefined } }): string | null {
   const xf = c.req.header("x-forwarded-for");
   if (xf) return xf.split(",")[0]!.trim();
@@ -366,6 +371,115 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       expiringIn30Days: Number(expiringRows[0]?.c ?? 0),
       byProduct,
       byPlan,
+    });
+  });
+
+  app.get("/licenses/export.csv", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const q = c.req.query();
+    const status = q.status?.trim();
+    const product = q.product?.trim();
+    const planSlug = q.planSlug?.trim();
+    const tenantId = q.tenantId?.trim();
+    const expiringInDays = q.expiringInDays ? Number(q.expiringInDays) : null;
+    const search = q.search?.trim();
+
+    const conditions: ReturnType<typeof eq>[] = [];
+    if (status) conditions.push(eq(licenses.status, status));
+    if (product) conditions.push(eq(licenses.product, product));
+    if (planSlug) conditions.push(eq(licenses.planSlug, planSlug));
+    if (tenantId) conditions.push(eq(licenses.tenantId, tenantId));
+    if (expiringInDays !== null && !Number.isNaN(expiringInDays) && expiringInDays > 0) {
+      const until = new Date();
+      until.setDate(until.getDate() + expiringInDays);
+      conditions.push(eq(licenses.status, "active"));
+      conditions.push(isNotNull(licenses.expiresAt));
+      conditions.push(lte(licenses.expiresAt, until));
+      conditions.push(gte(licenses.expiresAt, new Date()));
+    }
+    const whereClause =
+      conditions.length > 0
+        ? conditions.length === 1
+          ? conditions[0]
+          : and(...conditions)
+        : undefined;
+
+    let searchClause: ReturnType<typeof or> | undefined;
+    if (search) {
+      const pat = `%${search}%`;
+      searchClause = or(ilike(licenses.licenseKey, pat), ilike(tenants.name, pat));
+    }
+
+    const fullWhere =
+      whereClause && searchClause
+        ? and(whereClause, searchClause)
+        : whereClause ?? searchClause;
+
+    const baseQuery = db
+      .select({
+        licenseKey: licenses.licenseKey,
+        product: licenses.product,
+        planSlug: licenses.planSlug,
+        status: licenses.status,
+        tenantSlug: tenants.slug,
+        tenantName: tenants.name,
+        maxActivations: licenses.maxActivations,
+        activationCount: licenses.activationCount,
+        isPerpetual: licenses.isPerpetual,
+        validFrom: licenses.validFrom,
+        expiresAt: licenses.expiresAt,
+        gracePeriodDays: licenses.gracePeriodDays,
+        notes: licenses.notes,
+        createdAt: licenses.createdAt,
+      })
+      .from(licenses)
+      .leftJoin(tenants, eq(tenants.id, licenses.tenantId))
+      .orderBy(desc(licenses.createdAt));
+
+    const rows = fullWhere ? await baseQuery.where(fullWhere) : await baseQuery;
+
+    const headers = [
+      "License Key",
+      "Product",
+      "Plan",
+      "Status",
+      "Tenant Slug",
+      "Tenant Name",
+      "Max Activations",
+      "Activation Count",
+      "Is Perpetual",
+      "Valid From",
+      "Expires At",
+      "Grace Period Days",
+      "Notes",
+      "Created At",
+    ];
+
+    const csvRows = rows.map((r) =>
+      [
+        r.licenseKey,
+        r.product,
+        r.planSlug,
+        r.status,
+        r.tenantSlug ?? "",
+        r.tenantName ?? "",
+        r.maxActivations,
+        r.activationCount,
+        r.isPerpetual ? "true" : "false",
+        r.validFrom?.toISOString() ?? "",
+        r.expiresAt?.toISOString() ?? "",
+        r.gracePeriodDays,
+        r.notes ?? "",
+        r.createdAt.toISOString(),
+      ].map(csvEscapeCell).join(","),
+    );
+
+    const csv = [headers.map(csvEscapeCell).join(","), ...csvRows].join("\n");
+    const filename = `licenses-${new Date().toISOString().slice(0, 10)}.csv`;
+
+    return c.text(csv, 200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
     });
   });
 

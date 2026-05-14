@@ -120,6 +120,12 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/audit-log", "GET")).toBe("super_admin");
   });
 
+  it("GET /search and CSV exports require read_only", () => {
+    expect(requiredApiRole("/search", "GET")).toBe("read_only");
+    expect(requiredApiRole("/tenants/export.csv", "GET")).toBe("read_only");
+    expect(requiredApiRole("/licenses/export.csv", "GET")).toBe("read_only");
+  });
+
   it("GET /owners requires at least read_only", () => {
     expect(requiredApiRole("/owners", "GET")).toBe("read_only");
   });
@@ -257,6 +263,11 @@ describe("role rank enforcement logic", () => {
   it("super_admin can access all route tiers", () => {
     const routes: Array<[string, string]> = [
       ["/audit-log", "GET"],
+      ["/search", "GET"],
+      ["/tenants/export.csv", "GET"],
+      ["/plans", "POST"],
+      ["/plans/pid", "PATCH"],
+      ["/plans/pid", "DELETE"],
       ["/tenants", "GET"],
       ["/tenants", "POST"],
       ["/owners", "DELETE"],

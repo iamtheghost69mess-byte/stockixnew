@@ -99,19 +99,20 @@ export default function TenantCreateWizard(props: Props) {
     void (async () => {
       const res = await fetch("/api/plans");
       const data = (await res.json().catch(() => ({}))) as {
-        plans?: { slug: string; name: string; description: string | null }[];
+        plans?: { slug: string; name: string; description: string | null; isActive?: boolean }[];
       };
       if (res.ok && data.plans?.length) {
+        const active = data.plans.filter((p) => p.isActive !== false);
         setPlans(
-          data.plans.map((p) => ({
+          active.map((p) => ({
             slug: p.slug,
             name: p.name,
             description: p.description ?? null,
           })),
         );
-        setPlanSlug((prev) =>
-          data.plans!.some((p) => p.slug === prev) ? prev : data.plans![0]!.slug,
-        );
+        if (active.length > 0) {
+          setPlanSlug((prev) => (active.some((p) => p.slug === prev) ? prev : active[0]!.slug));
+        }
       }
     })();
   }, []);

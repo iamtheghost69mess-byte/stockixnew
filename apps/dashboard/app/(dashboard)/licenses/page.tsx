@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Download,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -372,6 +373,24 @@ function LicensesPageContent() {
               Clear filters
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (search.trim()) params.set("search", search.trim());
+              if (statusFilter !== "all") params.set("status", statusFilter);
+              if (productFilter !== "all") params.set("product", productFilter);
+              if (planFilter !== "all") params.set("planSlug", planFilter);
+              if (expiring30) params.set("expiringInDays", "30");
+              const query = params.toString();
+              window.location.href = `/api/licenses/export.csv${query ? `?${query}` : ""}`;
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
 
         <div className="rounded-md border">

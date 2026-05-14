@@ -36,6 +36,10 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
     return "super_admin";
   }
 
+  if (pathname === "/tenants/export.csv" && m === "GET") return "read_only";
+  if (pathname === "/licenses/export.csv" && m === "GET") return "read_only";
+  if (pathname === "/search" && m === "GET") return "read_only";
+
   if (pathname.startsWith("/licenses")) {
     if (m === "GET") return "read_only";
     if (m === "POST" && pathname.endsWith("/extend")) return "billing_manager";

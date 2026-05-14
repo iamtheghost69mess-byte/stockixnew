@@ -1849,6 +1849,118 @@ app.get("/tenants", async (c) => {
   });
 });
 
+function csvEscapeCell(value: string | number | boolean | null | undefined): string {
+  const cell = value === null || value === undefined ? "" : String(value);
+  return /[",\n\r]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+}
+
+app.get("/tenants/export.csv", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+
+  const search = c.req.query("search")?.trim() ?? "";
+  const statusFilter = c.req.query("status")?.trim() ?? "";
+  const sortRaw = c.req.query("sort")?.trim() ?? "newest";
+
+  const childOrgFilter = notExists(
+    db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(and(eq(organizations.slug, tenants.slug), ne(organizations.tenantId, tenants.id))),
+  );
+
+  const conditions: SQL[] = [childOrgFilter];
+
+  if (search) {
+    const pat = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(tenants.name, pat),
+        ilike(tenants.slug, pat),
+        ilike(tenants.adminEmail, pat),
+      )!,
+    );
+  }
+
+  if (statusFilter && statusFilter !== "all") {
+    if (statusFilter === "provisioning") {
+      conditions.push(
+        or(eq(tenantDeployments.status, "provisioning"), eq(tenantDeployments.status, "pending"))!,
+      );
+    } else {
+      conditions.push(eq(tenantDeployments.status, statusFilter));
+    }
+  }
+
+  const fullWhere = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+  const orderClause =
+    sortRaw === "oldest"
+      ? asc(tenants.createdAt)
+      : sortRaw === "name_asc"
+        ? asc(tenants.name)
+        : sortRaw === "name_desc"
+          ? desc(tenants.name)
+          : desc(tenants.createdAt);
+
+  const joinDeployments = eq(tenantDeployments.tenantId, tenants.id);
+
+  const rows = await db
+    .select({
+      name: tenants.name,
+      slug: tenants.slug,
+      adminEmail: tenants.adminEmail,
+      adminFirstName: tenants.adminFirstName,
+      adminLastName: tenants.adminLastName,
+      planSlug: tenants.planSlug,
+      deploymentStatus: tenantDeployments.status,
+      internalPort: tenantDeployments.internalPort,
+      registrationCompletedAt: tenantDeployments.registrationCompletedAt,
+      createdAt: tenants.createdAt,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, joinDeployments)
+    .where(fullWhere)
+    .orderBy(orderClause);
+
+  const headers = [
+    "Name",
+    "Slug",
+    "Admin Email",
+    "Admin First Name",
+    "Admin Last Name",
+    "Plan",
+    "Status",
+    "Internal Port",
+    "Registration Completed",
+    "Created At",
+  ];
+
+  const csvRows = rows.map((r) =>
+    [
+      r.name,
+      r.slug,
+      r.adminEmail,
+      r.adminFirstName ?? "",
+      r.adminLastName ?? "",
+      r.planSlug ?? "",
+      r.deploymentStatus ?? "",
+      r.internalPort?.toString() ?? "",
+      r.registrationCompletedAt?.toISOString() ?? "",
+      r.createdAt.toISOString(),
+    ].map(csvEscapeCell).join(","),
+  );
+
+  const csv = [headers.map(csvEscapeCell).join(","), ...csvRows].join("\n");
+  const filename = `tenants-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  return c.text(csv, 200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+  });
+});
+
 app.delete("/tenants/:tenantId", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -3741,6 +3853,108 @@ app.get("/tenants/:tenantId/events", async (c) => {
       ...row,
       meta: row.meta ?? null,
       createdAt: row.createdAt.toISOString(),
+    })),
+  });
+});
+
+app.get("/search", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+
+  const query = c.req.query("q")?.trim() ?? "";
+  if (query.length < 2) {
+    return c.json({ tenants: [], licenses: [], owners: [] });
+  }
+
+  const pattern = `%${query}%`;
+  const LIMIT = 5;
+
+  const childOrgFilter = notExists(
+    db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(and(eq(organizations.slug, tenants.slug), ne(organizations.tenantId, tenants.id))),
+  );
+
+  const joinDeployments = eq(tenantDeployments.tenantId, tenants.id);
+
+  const [tenantResults, licenseResults, ownerResults] = await Promise.all([
+    db
+      .select({
+        id: tenants.id,
+        slug: tenants.slug,
+        name: tenants.name,
+        adminEmail: tenants.adminEmail,
+        status: tenantDeployments.status,
+      })
+      .from(tenants)
+      .leftJoin(tenantDeployments, joinDeployments)
+      .where(
+        and(
+          childOrgFilter,
+          or(
+            ilike(tenants.name, pattern),
+            ilike(tenants.slug, pattern),
+            ilike(tenants.adminEmail, pattern),
+          )!,
+        ),
+      )
+      .orderBy(desc(tenants.createdAt))
+      .limit(LIMIT),
+
+    db
+      .select({
+        id: licenses.id,
+        licenseKey: licenses.licenseKey,
+        planSlug: licenses.planSlug,
+        status: licenses.status,
+        tenantSlug: tenants.slug,
+      })
+      .from(licenses)
+      .leftJoin(tenants, eq(tenants.id, licenses.tenantId))
+      .where(
+        or(
+          ilike(licenses.licenseKey, pattern),
+          ilike(licenses.planSlug, pattern),
+          ilike(tenants.slug, pattern),
+        )!,
+      )
+      .orderBy(desc(licenses.createdAt))
+      .limit(LIMIT),
+
+    db
+      .select({
+        id: owners.id,
+        name: owners.name,
+        email: owners.email,
+        role: owners.role,
+      })
+      .from(owners)
+      .where(or(ilike(owners.name, pattern), ilike(owners.email, pattern))!)
+      .limit(LIMIT),
+  ]);
+
+  return c.json({
+    tenants: tenantResults.map((t) => ({
+      id: t.id,
+      slug: t.slug,
+      name: t.name,
+      adminEmail: t.adminEmail,
+      status: t.status ?? null,
+    })),
+    licenses: licenseResults.map((l) => ({
+      id: l.id,
+      licenseKey: l.licenseKey,
+      planSlug: l.planSlug,
+      status: l.status,
+      tenantSlug: l.tenantSlug ?? null,
+    })),
+    owners: ownerResults.map((o) => ({
+      id: o.id,
+      name: o.name,
+      email: o.email,
+      role: o.role,
     })),
   });
 });

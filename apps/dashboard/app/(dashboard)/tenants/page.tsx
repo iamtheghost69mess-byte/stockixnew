@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
 
 import TenantCreateWizard from "@/components/tenant-create-wizard";
 import { TenantList, type TenantSortOrder } from "@/components/tenant-list";
@@ -797,6 +797,23 @@ function TenantsPageContent() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (search.trim()) params.set("search", search.trim());
+                if (statusFilter !== "all") params.set("status", statusFilter);
+                params.set("sort", sortOrder);
+                const query = params.toString();
+                window.location.href = `/api/tenants/export.csv${query ? `?${query}` : ""}`;
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
             <Button
               type="button"
               variant="outline"
