@@ -58,7 +58,7 @@ export default function LicenseAssignDialog({
     }
     setTenantId("");
     void (async () => {
-      const res = await fetch("/api/tenants");
+      const res = await fetch("/api/tenants?page=1&pageSize=1000");
       const data = (await res.json().catch(() => ({}))) as {
         tenants?: {
           tenantId: string;

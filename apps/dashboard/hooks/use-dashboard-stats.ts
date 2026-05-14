@@ -45,6 +45,22 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+function parseDirectoryTotals(body: unknown): TenantStats | null {
+  if (!isRecord(body) || !isRecord(body.directoryTotals)) return null;
+  const d = body.directoryTotals;
+  const n = (k: string): number => {
+    const v = d[k];
+    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+  };
+  return {
+    total: n("total"),
+    active: n("active"),
+    suspended: n("suspended"),
+    provisioning: n("provisioning"),
+    failed: n("failed"),
+  };
+}
+
 function parseTenantRows(body: unknown): TenantRow[] {
   if (!isRecord(body) || !Array.isArray(body.tenants)) return [];
   return body.tenants.filter((row): row is TenantRow => {
@@ -114,7 +130,7 @@ export function useDashboardStats(): DashboardStats {
       const expiringUrl =
         "/api/licenses?status=active&expiringInDays=30&pageSize=100&page=1";
       const [tRes, aRes, eRes] = await Promise.all([
-        fetch("/api/tenants"),
+        fetch("/api/tenants?page=1&pageSize=1"),
         fetch("/api/licenses/analytics"),
         fetch(expiringUrl),
       ]);
@@ -130,8 +146,12 @@ export function useDashboardStats(): DashboardStats {
           ),
         );
       }
-      const tenantRows = parseTenantRows(tBody);
-      setTenants(aggregateTenants(tenantRows));
+      const fromTotals = parseDirectoryTotals(tBody);
+      if (fromTotals) {
+        setTenants(fromTotals);
+      } else {
+        setTenants(aggregateTenants(parseTenantRows(tBody)));
+      }
 
       const aBody: unknown = await aRes.json().catch(() => ({}));
       if (!aRes.ok) {

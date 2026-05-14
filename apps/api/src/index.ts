@@ -40,6 +40,7 @@ import {
   isNull,
   ne,
   notExists,
+  type SQL,
 } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -1628,7 +1629,67 @@ app.get("/tenants", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
-  const rows = await db
+
+  const rawPage = c.req.query("page");
+  const rawPageSize = c.req.query("pageSize");
+  const search = c.req.query("search")?.trim() ?? "";
+  const statusFilter = c.req.query("status")?.trim() ?? "";
+  const sortRaw = c.req.query("sort")?.trim() ?? "newest";
+
+  const page = Math.max(1, Number(rawPage ?? 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(rawPageSize ?? 20) || 20));
+  const offset = (page - 1) * pageSize;
+
+  const childOrgFilter = notExists(
+    db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(and(eq(organizations.slug, tenants.slug), ne(organizations.tenantId, tenants.id))),
+  );
+
+  const conditions: SQL[] = [childOrgFilter];
+
+  if (search) {
+    const pat = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(tenants.name, pat),
+        ilike(tenants.slug, pat),
+        ilike(tenants.adminEmail, pat),
+      )!,
+    );
+  }
+
+  if (statusFilter && statusFilter !== "all") {
+    if (statusFilter === "provisioning") {
+      conditions.push(
+        or(eq(tenantDeployments.status, "provisioning"), eq(tenantDeployments.status, "pending"))!,
+      );
+    } else {
+      conditions.push(eq(tenantDeployments.status, statusFilter));
+    }
+  }
+
+  const fullWhere = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+  const orderClause =
+    sortRaw === "oldest"
+      ? asc(tenants.createdAt)
+      : sortRaw === "name_asc"
+        ? asc(tenants.name)
+        : sortRaw === "name_desc"
+          ? desc(tenants.name)
+          : desc(tenants.createdAt);
+
+  const joinDeployments = eq(tenantDeployments.tenantId, tenants.id);
+
+  const countQuery = db
+    .select({ c: count() })
+    .from(tenants)
+    .leftJoin(tenantDeployments, joinDeployments)
+    .where(fullWhere);
+
+  const dataQuery = db
     .select({
       tenantId: tenants.id,
       slug: tenants.slug,
@@ -1642,19 +1703,69 @@ app.get("/tenants", async (c) => {
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
     })
     .from(tenants)
-    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
-    .where(
-      notExists(
-        db
-          .select({ id: organizations.id })
-          .from(organizations)
-          .where(
-            and(eq(organizations.slug, tenants.slug), ne(organizations.tenantId, tenants.id)),
-          ),
-      ),
-    );
+    .leftJoin(tenantDeployments, joinDeployments)
+    .where(fullWhere)
+    .orderBy(orderClause)
+    .limit(pageSize)
+    .offset(offset);
 
-  return c.json({ tenants: rows });
+  const dirJoin = joinDeployments;
+
+  const [countResult, rows, totalAllRow, activeRow, suspendedRow, provisioningRow, failedRow] =
+    await Promise.all([
+      countQuery,
+      dataQuery,
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(childOrgFilter),
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(and(childOrgFilter, eq(tenantDeployments.status, "active"))),
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(and(childOrgFilter, eq(tenantDeployments.status, "suspended"))),
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(
+          and(
+            childOrgFilter,
+            or(eq(tenantDeployments.status, "provisioning"), eq(tenantDeployments.status, "pending"))!,
+          ),
+        ),
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(and(childOrgFilter, eq(tenantDeployments.status, "failed"))),
+    ]);
+
+  const total = Number(countResult[0]?.c ?? 0);
+  const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+
+  const directoryTotals = {
+    total: Number(totalAllRow[0]?.c ?? 0),
+    active: Number(activeRow[0]?.c ?? 0),
+    suspended: Number(suspendedRow[0]?.c ?? 0),
+    provisioning: Number(provisioningRow[0]?.c ?? 0),
+    failed: Number(failedRow[0]?.c ?? 0),
+  };
+
+  return c.json({
+    tenants: rows,
+    total,
+    page,
+    pageSize,
+    totalPages,
+    directoryTotals,
+  });
 });
 
 app.delete("/tenants/:tenantId", async (c) => {

@@ -11,11 +11,21 @@ export type TenantRow = {
   slug: string;
   name: string;
   adminEmail: string;
+  planSlug?: string;
   deploymentStatus: string | null;
   internalPort: number | null;
   composeProject: string | null;
   lastError: string | null;
   registrationCompletedAt: string | null;
+};
+
+/** Full-directory counts (child-org filter only), for headers and dashboard stats. */
+export type TenantDirectoryTotals = {
+  total: number;
+  active: number;
+  suspended: number;
+  provisioning: number;
+  failed: number;
 };
 
 export type TenantDetail = {

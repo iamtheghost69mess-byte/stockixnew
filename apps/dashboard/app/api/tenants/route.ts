@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
 
 export async function GET(req: Request) {
-  const res = await apiFetch("/tenants", {}, req);
+  const url = new URL(req.url);
+  const res = await apiFetch(`/tenants${url.search}`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

@@ -106,7 +106,10 @@ export default function LicenseGenerateDialog({
     setGeneratedKeys([]);
     setError(null);
     void (async () => {
-      const [pRes, tRes] = await Promise.all([fetch("/api/plans"), fetch("/api/tenants")]);
+      const [pRes, tRes] = await Promise.all([
+        fetch("/api/plans"),
+        fetch("/api/tenants?page=1&pageSize=1000"),
+      ]);
       const pJson = (await pRes.json().catch(() => ({}))) as { plans?: { slug: string; name: string }[] };
       const tJson = (await tRes.json().catch(() => ({}))) as {
         tenants?: { tenantId: string; name: string; slug: string }[];
@@ -118,7 +121,7 @@ export default function LicenseGenerateDialog({
         const nextSlug = list.some((p) => p.slug === prev) ? prev : list[0]!.slug;
         form.setValue("planSlug", nextSlug, { shouldValidate: false });
       }
-      if (tRes.ok && tJson.tenants?.length) {
+      if (tRes.ok && Array.isArray(tJson.tenants)) {
         setTenants(
           tJson.tenants.map((t) => ({ id: t.tenantId, name: t.name, slug: t.slug })),
         );

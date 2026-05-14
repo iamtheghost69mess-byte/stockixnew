@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
+  Ban,
   ChevronLeft,
   ChevronRight,
   Copy,
+  Loader2,
   MoreHorizontal,
   Plus,
   Search,
@@ -17,6 +19,16 @@ import { toast } from "@/components/reusabletoast";
 import LicenseAssignDialog from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";
 import LicenseStatusBadge from "@/components/license-status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -44,6 +57,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -53,6 +67,7 @@ import {
 import type { LicenseAnalytics, LicenseRow, LicenseStatus } from "@/types/license";
 import { format } from "date-fns";
 import { useMe } from "@/hooks/use-me";
+import { formatApiError } from "@/lib/api-errors";
 
 function productLabel(p: string): string {
   if (p === "pos_desktop") return "POS Desktop";
@@ -92,6 +107,9 @@ function LicensesPageContent() {
   const [expiring30, setExpiring30] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [assignLicense, setAssignLicense] = useState<LicenseRow | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<LicenseRow | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [revoking, setRevoking] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
@@ -489,13 +507,20 @@ function LicensesPageContent() {
                               Assign to tenant
                             </DropdownMenuItem>
                           ) : null}
-                          {canGenerateLicenses && row.status === "active" ? (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => router.push(`/licenses/${row.id}`)}
-                            >
-                              Revoke…
-                            </DropdownMenuItem>
+                          {canGenerateLicenses && row.status !== "revoked" ? (
+                            <>
+                              {row.status === "unassigned" ? <DropdownMenuSeparator /> : null}
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => {
+                                  setRevokeReason("");
+                                  setRevokeTarget(row);
+                                }}
+                              >
+                                <Ban className="mr-2 h-4 w-4" />
+                                Revoke license
+                              </DropdownMenuItem>
+                            </>
                           ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -556,6 +581,77 @@ function LicensesPageContent() {
           }}
         />
       ) : null}
+
+      <AlertDialog
+        open={revokeTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRevokeTarget(null);
+            setRevokeReason("");
+            setRevoking(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke license?</AlertDialogTitle>
+            <AlertDialogDescription>
+              License{" "}
+              <span className="font-mono font-medium">{revokeTarget?.licenseKey}</span> will be permanently revoked.
+              This cannot be undone. The tenant will lose access immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="revoke-reason-list">Reason (optional)</Label>
+            <Textarea
+              id="revoke-reason-list"
+              placeholder="Why is this license being revoked?"
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={revoking}
+              onClick={() => {
+                void (async () => {
+                  if (!revokeTarget) return;
+                  setRevoking(true);
+                  try {
+                    const res = await fetch(`/api/licenses/${revokeTarget.id}/revoke`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        reason: revokeReason.trim() || undefined,
+                      }),
+                    });
+                    if (!res.ok) {
+                      const body = (await res.json().catch(() => ({}))) as unknown;
+                      toast.error(formatApiError(body, "Revoke failed"));
+                      return;
+                    }
+                    toast.success("License revoked");
+                    setRevokeTarget(null);
+                    setRevokeReason("");
+                    void loadAnalytics();
+                    void loadList();
+                  } catch {
+                    toast.error("Failed to revoke license");
+                  } finally {
+                    setRevoking(false);
+                  }
+                })();
+              }}
+            >
+              {revoking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Revoke
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }

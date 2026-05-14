@@ -3,10 +3,10 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 
 import TenantCreateWizard from "@/components/tenant-create-wizard";
-import TenantList from "@/components/tenant-list";
+import { TenantList, type TenantSortOrder } from "@/components/tenant-list";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
-import type { ProvisionEventRow, TenantRow } from "@/types/tenant";
+import type { ProvisionEventRow, TenantDirectoryTotals, TenantRow } from "@/types/tenant";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
 
@@ -110,6 +110,18 @@ function TenantsPageContent() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteVolumesOpen, setDeleteVolumesOpen] = useState(false);
   const [deleteSlugInput, setDeleteSlugInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "suspended" | "provisioning" | "failed"
+  >(initialListStatus);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [listTotal, setListTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [directoryTotals, setDirectoryTotals] = useState<TenantDirectoryTotals | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState<TenantSortOrder>("newest");
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -117,14 +129,59 @@ function TenantsPageContent() {
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
 
+  const queryString = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("page", String(page));
+    p.set("pageSize", String(pageSize));
+    if (search.trim()) p.set("search", search.trim());
+    if (statusFilter !== "all") p.set("status", statusFilter);
+    p.set("sort", sortOrder);
+    return p.toString();
+  }, [page, pageSize, search, statusFilter, sortOrder]);
+
   const load = useCallback(async () => {
-    const tRes = await fetch("/api/tenants");
-    const t = (await readJson(tRes)) as { tenants?: TenantRow[]; error?: string };
-    if (!tRes.ok) {
-      throw new Error(formatApiError(t, t.error ?? `tenants: HTTP ${tRes.status}`));
+    setListLoading(true);
+    try {
+      const tRes = await fetch(`/api/tenants?${queryString}`);
+      const t = (await readJson(tRes)) as {
+        tenants?: TenantRow[];
+        total?: number;
+        totalPages?: number;
+        directoryTotals?: TenantDirectoryTotals;
+        error?: string;
+      };
+      if (!tRes.ok) {
+        throw new Error(formatApiError(t, t.error ?? `tenants: HTTP ${tRes.status}`));
+      }
+      setTenants(t.tenants ?? []);
+      setListTotal(t.total ?? 0);
+      setTotalPages(t.totalPages ?? 1);
+      if (t.directoryTotals) setDirectoryTotals(t.directoryTotals);
+    } finally {
+      setListLoading(false);
     }
-    setTenants(t.tenants ?? []);
-  }, []);
+  }, [queryString]);
+
+  const statusParam = searchParams.get("status");
+  useEffect(() => {
+    const next =
+      statusParam === "active" ||
+      statusParam === "suspended" ||
+      statusParam === "provisioning" ||
+      statusParam === "failed"
+        ? statusParam
+        : "all";
+    setStatusFilter(next);
+  }, [statusParam]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setSearch(searchInput), 300);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, sortOrder]);
 
   const requestTenantDelete = useCallback((tenantId: string, slug: string) => {
     setDeleteTarget({ tenantId, slug });
@@ -583,6 +640,9 @@ function TenantsPageContent() {
     }
   };
 
+  const from = listTotal === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, listTotal);
+
   return (
     <div className="w-full space-y-8">
       <div>
@@ -753,6 +813,26 @@ function TenantsPageContent() {
         </div>
         <TenantList
           tenants={tenants}
+          directoryTotals={directoryTotals}
+          listLoading={listLoading}
+          searchQuery={searchInput}
+          onSearchQueryChange={(v) => {
+            setSearchInput(v);
+            setPage(1);
+            if (v.trim() === "") {
+              setSearch("");
+            }
+          }}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+          sortOrder={sortOrder}
+          onSortOrderChange={(v) => {
+            setSortOrder(v);
+            setPage(1);
+          }}
           onRequestDelete={requestTenantDelete}
           onSuspend={handleSuspend}
           onReactivate={handleReactivate}
@@ -762,8 +842,39 @@ function TenantsPageContent() {
           reactivatingId={reactivatingId}
           stoppingId={stoppingId}
           onAddTenant={() => setAddTenantOpen(true)}
-          initialStatusFilter={initialListStatus}
         />
+        {directoryTotals && directoryTotals.total > 0 ? (
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {from}–{to} of {listTotal} tenants
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <Dialog

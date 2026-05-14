@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Building2,
   Copy,
@@ -46,13 +46,22 @@ import {
 } from "@/components/ui/table";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { formatDateTime } from "@/lib/date-format";
-import type { TenantRow } from "@/types/tenant";
+import type { TenantDirectoryTotals, TenantRow } from "@/types/tenant";
 
 type StatusFilter = "all" | "active" | "suspended" | "provisioning" | "failed";
-type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
+export type TenantSortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 type Props = {
   tenants: TenantRow[];
+  /** Directory-wide counts (child-org filter only). Null before first load. */
+  directoryTotals: TenantDirectoryTotals | null;
+  listLoading: boolean;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  statusFilter: StatusFilter;
+  onStatusFilterChange: (value: StatusFilter) => void;
+  sortOrder: TenantSortOrder;
+  onSortOrderChange: (value: TenantSortOrder) => void;
   onRequestDelete: (tenantId: string, slug: string) => void;
   onSuspend: (tenantId: string, slug: string) => Promise<boolean>;
   onReactivate: (tenantId: string, slug: string) => Promise<boolean>;
@@ -62,13 +71,19 @@ type Props = {
   reactivatingId: string | null;
   stoppingId: string | null;
   onAddTenant?: () => void;
-  /** Initial status filter (e.g. from `?status=` on /tenants). */
-  initialStatusFilter?: StatusFilter;
 };
 
-export default function TenantList(props: Props) {
+export function TenantList(props: Props) {
   const {
     tenants,
+    directoryTotals,
+    listLoading,
+    searchQuery,
+    onSearchQueryChange,
+    statusFilter,
+    onStatusFilterChange,
+    sortOrder,
+    onSortOrderChange,
     onRequestDelete,
     onSuspend,
     onReactivate,
@@ -78,13 +93,8 @@ export default function TenantList(props: Props) {
     reactivatingId,
     stoppingId,
     onAddTenant,
-    initialStatusFilter,
   } = props;
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter ?? "all");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<{ tenantId: string; slug: string } | null>(null);
   const [suspendSlugInput, setSuspendSlugInput] = useState("");
@@ -96,52 +106,20 @@ export default function TenantList(props: Props) {
   );
   const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
 
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
-    return () => window.clearTimeout(id);
-  }, [query]);
-
   const counts = useMemo(() => {
-    const active = tenants.filter((t) => t.deploymentStatus === "active").length;
-    const suspended = tenants.filter((t) => t.deploymentStatus === "suspended").length;
-    return { total: tenants.length, active, suspended };
-  }, [tenants]);
-
-  const filtered = useMemo(() => {
-    const q = debouncedQuery.toLowerCase();
-    let rows = tenants.filter((t) => {
-      if (!q) return true;
-      return (
-        t.name.toLowerCase().includes(q) ||
-        t.slug.toLowerCase().includes(q) ||
-        t.adminEmail.toLowerCase().includes(q)
-      );
-    });
-
-    if (statusFilter !== "all") {
-      rows = rows.filter((t) => {
-        const d = (t.deploymentStatus ?? "unknown").toLowerCase();
-        if (statusFilter === "provisioning") return d === "provisioning" || d === "pending";
-        return d === statusFilter;
-      });
+    if (directoryTotals) {
+      return {
+        total: directoryTotals.total,
+        active: directoryTotals.active,
+        suspended: directoryTotals.suspended,
+      };
     }
-
-    const out = [...rows];
-    out.sort((a, b) => {
-      if (sortOrder === "name_asc") return a.name.localeCompare(b.name);
-      if (sortOrder === "name_desc") return b.name.localeCompare(a.name);
-      const aTime = a.registrationCompletedAt ? Date.parse(a.registrationCompletedAt) : 0;
-      const bTime = b.registrationCompletedAt ? Date.parse(b.registrationCompletedAt) : 0;
-      if (sortOrder === "oldest") return aTime - bTime;
-      return bTime - aTime;
-    });
-    return out;
-  }, [debouncedQuery, sortOrder, statusFilter, tenants]);
+    return { total: 0, active: 0, suspended: 0 };
+  }, [directoryTotals]);
 
   const clearFilters = () => {
-    setQuery("");
-    setDebouncedQuery("");
-    setStatusFilter("all");
+    onSearchQueryChange("");
+    onStatusFilterChange("all");
   };
 
   const copyText = async (key: string, text: string) => {
@@ -150,7 +128,7 @@ export default function TenantList(props: Props) {
     window.setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  if (tenants.length === 0) {
+  if (directoryTotals && directoryTotals.total === 0) {
     return (
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center py-16 text-center">
@@ -331,14 +309,14 @@ export default function TenantList(props: Props) {
           <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
               placeholder="Search name, slug, or email…"
               className="h-9 pl-9"
               aria-label="Filter tenants"
             />
           </div>
-          <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
+          <Select value={sortOrder} onValueChange={(v) => onSortOrderChange(v as TenantSortOrder)}>
             <SelectTrigger className="h-9 w-full sm:w-[160px]">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
@@ -359,7 +337,7 @@ export default function TenantList(props: Props) {
             key={status}
             variant={statusFilter === status ? "default" : "outline"}
             className="cursor-pointer rounded-md px-2.5 py-0.5 text-xs font-normal capitalize"
-            onClick={() => setStatusFilter(status)}
+            onClick={() => onStatusFilterChange(status)}
           >
             {status}
           </Badge>
@@ -381,29 +359,41 @@ export default function TenantList(props: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {listLoading && tenants.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
                   colSpan={6}
-                  className="h-[min(50vh,22rem)] align-top whitespace-normal px-4 py-10 md:py-14"
+                  className="py-12 text-center text-sm text-muted-foreground"
                 >
-                  <div className="flex max-w-lg flex-col gap-3 text-left">
-                    <p className="text-sm font-medium text-foreground">No matching tenants</p>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      No organizations match the current search or status filter. Try another status,
-                      clear the search, or reset all filters.
-                    </p>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <Button type="button" variant="secondary" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    </div>
-                  </div>
+                  Loading tenants…
                 </TableCell>
               </TableRow>
             ) : null}
-            {filtered.length > 0
-              ? filtered.map((t) => {
+            {!listLoading || tenants.length > 0 ? (
+              <>
+                {tenants.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={6}
+                      className="h-[min(50vh,22rem)] align-top whitespace-normal px-4 py-10 md:py-14"
+                    >
+                      <div className="flex max-w-lg flex-col gap-3 text-left">
+                        <p className="text-sm font-medium text-foreground">No matching tenants</p>
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                          No organizations match the current search or status filter. Try another status,
+                          clear the search, or reset all filters.
+                        </p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Button type="button" variant="secondary" size="sm" onClick={clearFilters}>
+                            Clear filters
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {tenants.length > 0
+                  ? tenants.map((t) => {
                 const status = t.deploymentStatus ?? "unknown";
                 const publicOrigin = tenantPublicBaseUrl(t.slug, t.internalPort);
                 const canOpen = status === "active" && Boolean(publicOrigin);
@@ -556,8 +546,10 @@ export default function TenantList(props: Props) {
                     </TableCell>
                   </TableRow>
                 );
-              })
-              : null}
+                  })
+                  : null}
+              </>
+            ) : null}
           </TableBody>
         </Table>
       </div>
