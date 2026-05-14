@@ -1,7 +1,15 @@
-import { createDecipheriv, createHash, createCipheriv, randomBytes, randomUUID } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 import { rm } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { apiConfig } from "@repo/config";
+import { publicConfig } from "@repo/config/public";
 import {
   createDb,
 } from "@repo/db";
@@ -109,6 +117,46 @@ function rootDomainForOrganizationSubdomain(): string {
     return fromApi.trim();
   }
   return "localhost";
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function readNonEmptyString(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+/** Same derivation as `CryptoTenantSecretGenerator.bootstrapAdminPassword(tenantKey)`. */
+function bootstrapAdminPasswordFromTenantSlug(slug: string): string {
+  const key = slug.trim();
+  if (key.length === 0) {
+    throw new Error("bootstrapAdminPassword requires non-empty tenant slug");
+  }
+  const secretHex = apiConfig.deploymentSecretKey;
+  const hmacKey = Buffer.from(secretHex, "hex");
+  return createHmac("sha256", hmacKey).update(`bootstrap:${key}`, "utf8").digest("base64url");
+}
+
+function parseSigninAccessToken(body: unknown): string | null {
+  if (!isRecord(body)) return null;
+  const accessToken =
+    readNonEmptyString(body.accessToken) ??
+    readNonEmptyString(body.access_token) ??
+    readNonEmptyString(body.token);
+  return accessToken ?? null;
+}
+
+/** Mirrors `apps/dashboard/lib/tenant-url.ts` for the browser origin of a tenant Finance stack. */
+function tenantFinanceBrowserOrigin(slug: string, internalPort: number | null): string | null {
+  const scheme = publicConfig.stockixPublicScheme.replace(/:+$/, "");
+  if (publicConfig.stockixRootDomain === "localhost" && internalPort != null) {
+    return `${scheme}://${publicConfig.stockixLocalTenantHost}:${internalPort}`;
+  }
+  if (publicConfig.stockixRootDomain === "localhost") {
+    return null;
+  }
+  return `${scheme}://${slug}.${publicConfig.stockixRootDomain}`;
 }
 
 function orgRandomSuffix4(): string {
@@ -4070,6 +4118,124 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
     composeProject: row.composeProjectName,
     jobId: job?.id ?? null,
   }, 202);
+});
+
+app.post("/tenants/:tenantId/impersonate", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) {
+    return c.json({ error: "tenantId must be a UUID" }, 400);
+  }
+
+  const [row] = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      adminEmail: tenants.adminEmail,
+      tenantStatus: tenants.status,
+      internalPort: tenantDeployments.internalPort,
+      deploymentStatus: tenantDeployments.status,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
+  if (row.tenantStatus !== "active") {
+    return c.json(
+      { error: "tenant_not_active", message: "Tenant must be active to impersonate" },
+      409,
+    );
+  }
+  if (row.deploymentStatus !== "active") {
+    return c.json(
+      { error: "tenant_not_active", message: "Tenant must be active to impersonate" },
+      409,
+    );
+  }
+
+  const port = row.internalPort == null ? null : Number(row.internalPort);
+  if (port == null || Number.isNaN(port)) {
+    return c.json({ error: "tenant_no_port" }, 503);
+  }
+
+  let adminPassword: string;
+  try {
+    adminPassword = bootstrapAdminPasswordFromTenantSlug(row.slug);
+  } catch {
+    return c.json(
+      {
+        error: "impersonate_bootstrap_failed",
+        message: "Invalid deployment secret configuration",
+      },
+      500,
+    );
+  }
+
+  const internalBase = `http://${apiConfig.tenantInternalHost}:${port}`;
+  const signinRes = await fetch(`${internalBase}/api/auth/signin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify({
+      email: row.adminEmail,
+      password: adminPassword,
+    }),
+  });
+
+  let signinJson: unknown;
+  try {
+    signinJson = (await signinRes.json()) as unknown;
+  } catch {
+    return c.json(
+      {
+        error: "impersonate_signin_failed",
+        message: "Could not authenticate to tenant Finance instance",
+      },
+      502,
+    );
+  }
+
+  if (!signinRes.ok) {
+    return c.json(
+      {
+        error: "impersonate_signin_failed",
+        message: "Could not authenticate to tenant Finance instance",
+      },
+      502,
+    );
+  }
+
+  const accessToken = parseSigninAccessToken(signinJson);
+  if (!accessToken) {
+    return c.json({ error: "impersonate_no_token" }, 502);
+  }
+
+  const origin = tenantFinanceBrowserOrigin(row.slug, port);
+  if (!origin) {
+    return c.json(
+      {
+        error: "tenant_no_public_url",
+        message: "No public tenant URL is configured for this environment",
+      },
+      503,
+    );
+  }
+
+  const impersonateUrl = `${origin}/api/auth/impersonate?t=${encodeURIComponent(accessToken)}`;
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "tenant.impersonate",
+    targetTenantId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { tenantSlug: row.slug, adminEmail: row.adminEmail },
+  });
+
+  return c.json({ impersonateUrl });
 });
 
 app.post("/tenants/:tenantId/stop", async (c) => {

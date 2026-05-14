@@ -5,9 +5,12 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
@@ -31,6 +34,8 @@ import { LocalAuthGuard } from './guards/Local.guard';
 import { AuthSigninService } from './commands/AuthSignin.service';
 import { TenantModel } from '../System/models/TenantModel';
 import { SystemUser } from '../System/models/SystemUser';
+import { IgnoreTenantInitializedRoute } from '../Tenancy/EnsureTenantIsInitialized.guard';
+import { IgnoreTenantSeededRoute } from '../Tenancy/EnsureTenantIsSeeded.guards';
 
 @Controller('/auth')
 @ApiTags('Auth')
@@ -132,5 +137,33 @@ export class AuthController {
   })
   meta(): Promise<AuthMetaResponseDto> {
     return this.authApp.getAuthMeta();
+  }
+
+  /**
+   * One-hop session bootstrap: Stockix API obtains a short-lived JWT via server-side
+   * sign-in, then redirects the owner’s browser here to persist it as the `token` cookie.
+   */
+  @Get('/impersonate')
+  @IgnoreTenantInitializedRoute()
+  @IgnoreTenantSeededRoute()
+  @ApiOperation({ summary: 'Set session cookie from a one-time token query param' })
+  @ApiResponse({ status: 302, description: 'Cookie set; redirect to app root' })
+  @ApiResponse({ status: 400, description: 'Missing or invalid token' })
+  impersonate(
+    @Query('t') token: string | undefined,
+    @Res() res: Response,
+  ): void {
+    const t = typeof token === 'string' ? token.trim() : '';
+    if (t.length < 10) {
+      res.status(400).json({ error: 'Invalid token' });
+      return;
+    }
+    res.cookie('token', t, {
+      httpOnly: false,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 1000,
+      path: '/',
+    });
+    res.redirect('/');
   }
 }

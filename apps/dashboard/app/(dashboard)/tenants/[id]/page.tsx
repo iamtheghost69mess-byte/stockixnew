@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2, UserCheck } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
 import { LicenseAssignDialog } from "@/components/license-assign-dialog";
@@ -95,6 +95,7 @@ export default function TenantDetailPage() {
   const [stopProvisionOpen, setStopProvisionOpen] = useState(false);
   const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
   const [retryingProvision, setRetryingProvision] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
   const [assignPickOpen, setAssignPickOpen] = useState(false);
   const [unassignedPickLoading, setUnassignedPickLoading] = useState(false);
   const [unassignedList, setUnassignedList] = useState<LicenseRow[]>([]);
@@ -450,15 +451,59 @@ export default function TenantDetailPage() {
                 </Button>
               ) : null}
               {tenant.deployment?.status === "active" && baseUrl ? (
-                <a
-                  href={`${baseUrl}/auth/login`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonVariants({ size: "sm" })}
-                >
-                  <ExternalLink className="mr-1 h-4 w-4" />
-                  Open login
-                </a>
+                <>
+                  <a
+                    href={`${baseUrl}/auth/login`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={buttonVariants({ size: "sm" })}
+                  >
+                    <ExternalLink className="mr-1 h-4 w-4" />
+                    Open login
+                  </a>
+                  {isSuper ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={impersonating}
+                      onClick={async () => {
+                        setImpersonating(true);
+                        try {
+                          const res = await fetch(`/api/tenants/${tenant.id}/impersonate`, {
+                            method: "POST",
+                          });
+                          const data = (await readJson(res)) as {
+                            error?: string;
+                            message?: string;
+                            impersonateUrl?: string;
+                          };
+                          if (!res.ok) {
+                            toast.error(data.message ?? "Failed to impersonate tenant");
+                            return;
+                          }
+                          if (!data.impersonateUrl) {
+                            toast.error("Failed to impersonate tenant");
+                            return;
+                          }
+                          window.open(data.impersonateUrl, "_blank", "noopener");
+                          toast.success("Impersonation session opened in new tab");
+                        } catch {
+                          toast.error("Failed to impersonate tenant");
+                        } finally {
+                          setImpersonating(false);
+                        }
+                      }}
+                    >
+                      {impersonating ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserCheck className="mr-2 h-4 w-4" />
+                      )}
+                      Impersonate
+                    </Button>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </CardHeader>
