@@ -680,6 +680,30 @@ app.use("/*", async (c, next) => {
     return;
   }
 
+  // Platform secret: same gate as first middleware, but actor must be a real owners.id
+  // (RBAC loads owners by actorId; logAudit requires UUID and FK references owners).
+  if (platformApiSecret && headerToken === platformApiSecret) {
+    const [platformActor] = await db
+      .select({ id: owners.id })
+      .from(owners)
+      .where(and(eq(owners.role, ROLES[0]), eq(owners.status, "active")))
+      .orderBy(asc(owners.createdAt))
+      .limit(1);
+    if (!platformActor) {
+      return c.json(
+        {
+          error: "platform_actor_unresolved",
+          message: "No active super_admin owner for platform API secret auth",
+        },
+        503,
+      );
+    }
+    c.set("actorId", platformActor.id);
+    c.set("actorRole", "super_admin");
+    await next();
+    return;
+  }
+
   if (!headerToken) {
     return c.json({ error: "unauthorized_actor" }, 401);
   }
