@@ -104,7 +104,12 @@ export async function executeProvisionRuntime(
   const trace = createProvisionTracer(
     db,
     correlationId,
-    () => ({ slug: input.slug, tenantId, deploymentId }),
+    () => ({
+      slug: input.slug,
+      tenantId,
+      deploymentId,
+      parentTenantId: input.stockixTenantId ?? null,
+    }),
     log,
   );
   const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
@@ -562,7 +567,7 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() },
       });
       try {
-        const result = await finance.buildOrganization(
+        const buildResult = await finance.buildOrganization(
           {
             internalBaseUrl: internalUrl,
             adminEmail: input.adminEmail,
@@ -572,16 +577,47 @@ export async function executeProvisionRuntime(
           },
           log,
         );
-        if (!result.ok) {
-          throw new Error(result.error ?? "Organization build failed");
+        if (!buildResult.ok) {
+          throw new Error(buildResult.error ?? "Organization build failed");
+        }
+        if (input.controlPlaneOrgId && buildResult.financeOrganizationId) {
+          const apiBase = `http://localhost:${apiConfig.port}`;
+          const saveUrl = `${apiBase}/internal/organizations/${input.controlPlaneOrgId}`;
+          const secret = apiConfig.workerSecret;
+          try {
+            const saveRes = await fetch(saveUrl, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+              },
+              body: JSON.stringify({
+                financeOrganizationId: buildResult.financeOrganizationId,
+              }),
+              signal: AbortSignal.timeout(10_000),
+            });
+            if (!saveRes.ok) {
+              log(
+                `[provision] Warning: failed to save financeOrganizationId: ${saveRes.status}`,
+              );
+            } else {
+              log("[provision] Saved financeOrganizationId mapping");
+            }
+          } catch (err) {
+            log(
+              `[provision] Warning: failed to save financeOrganizationId: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
         }
         await markOp("tenant.build_organization", "Organization build completed", {
-          alreadyBuilt: result.alreadyBuilt === true,
+          alreadyBuilt: buildResult.alreadyBuilt === true,
           elapsedMs: elapsedMs(),
         });
         await trace.event(
           "progress",
-          result.alreadyBuilt
+          buildResult.alreadyBuilt
             ? "Organization was already built (skipped)"
             : "Organization built and seeded successfully",
           {

@@ -11,6 +11,8 @@ export interface BuildOrgInput {
 export interface BuildOrgResult {
   ok: boolean;
   alreadyBuilt?: boolean;
+  /** Finance-internal organization id from sign-in (control-plane mapping). */
+  financeOrganizationId?: string;
   error?: string;
 }
 
@@ -149,7 +151,7 @@ export async function fetchBuildOrganization(
 
   if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
     log("Organization already built, skipping");
-    return { ok: true, alreadyBuilt: true };
+    return { ok: true, alreadyBuilt: true, financeOrganizationId: creds.organizationId };
   }
 
   const buildBody = {
@@ -180,7 +182,7 @@ export async function fetchBuildOrganization(
   if (!buildRes.ok) {
     if (isTenantAlreadyBuilt(buildText, buildJson)) {
       log("Organization already built (TENANT_ALREADY_BUILT), treating as success");
-      return { ok: true, alreadyBuilt: true };
+      return { ok: true, alreadyBuilt: true, financeOrganizationId: creds.organizationId };
     }
     return {
       ok: false,
@@ -231,5 +233,5 @@ export async function fetchBuildOrganization(
     throw new Error("organization_build_timeout: builtAt not set within 120s");
   }
 
-  return { ok: true };
+  return { ok: true, financeOrganizationId: creds.organizationId };
 }

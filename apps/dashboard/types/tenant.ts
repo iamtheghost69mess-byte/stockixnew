@@ -62,5 +62,7 @@ export type ProvisionEventRow = {
   level: string;
   message: string;
   meta: Record<string, unknown> | null;
+  slug?: string | null;
+  parentTenantId?: string | null;
   createdAt: string;
 };

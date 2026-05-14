@@ -252,6 +252,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
       stockixApiUrl: payload.stockixApiUrl,
       parentTenantSlug: payload.parentTenantSlug,
       mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
+      controlPlaneOrgId: payload.organizationId ?? undefined,
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),

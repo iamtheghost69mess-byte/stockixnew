@@ -13,6 +13,8 @@ export type ProvisionInput = {
   stockixTenantId?: string;
   /** Public Stockix API base URL for webapp org switcher (optional). */
   stockixApiUrl?: string;
+  /** Control-plane organization row id (UUID); set when provisioning a sub-org stack. */
+  controlPlaneOrgId?: string;
 };
 
 export type ProvisionResult =

@@ -11,6 +11,7 @@ import { ROLE_RANK, type Role } from "@repo/shared/roles";
 import {
   adminAuditLog,
   apiIdempotencyKeys,
+  apiKeys,
   blacklistedFingerprints,
   licenseActivations,
   licenses,
@@ -67,6 +68,11 @@ import { canCreateOrganization, getTenantLicenseEligibility } from "./plan-limit
 import { insertTenantJob, listTenantJobs } from "./services/tenant-jobs.js";
 import { validateOwnerSession } from "./services/auth/session-validation.js";
 import { verifySessionToken } from "./services/auth/tokens.js";
+import {
+  findActiveApiKeyByRaw,
+  generateApiKeyMaterial,
+  scheduleApiKeyLastUsedTouch,
+} from "./services/api-keys.js";
 import {
   getTenantReadiness,
   invalidateTenantReadinessCache,
@@ -181,6 +187,7 @@ function serializeOrganizationRow(
     subdomain: row.subdomain,
     status: row.status,
     isPrimary: row.isPrimary,
+    financeOrganizationId: row.financeOrganizationId ?? null,
     provisioningError: row.provisioningError,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -196,6 +203,7 @@ function rowToProvisionPayload(
     correlationId: row.correlationId,
     slug: row.slug ?? null,
     tenantId: row.tenantId ?? null,
+    parentTenantId: row.parentTenantId ?? null,
     deploymentId: row.deploymentId ?? null,
     phase: row.phase,
     level: row.level,
@@ -237,6 +245,9 @@ type ApiEnv = {
   Variables: {
     actorId: string;
     actorRole: string;
+    /** When set, RBAC uses this rank instead of the owner's DB role (API key auth → read_only). */
+    actorEffectiveRole?: string;
+    apiKeyId?: string;
     requestId: string;
     requestStartMs: number;
   };
@@ -521,7 +532,10 @@ app.use("/*", async (c, next) => {
   }
   // Internal job routes are protected by WORKER_SECRET, not PLATFORM_API_SECRET.
   // A dashboard operator must not be able to reach these endpoints (CRIT-01).
-  if (c.req.path.startsWith("/internal/jobs")) {
+  if (
+    c.req.path.startsWith("/internal/jobs")
+    || c.req.path.startsWith("/internal/organizations")
+  ) {
     const auth = c.req.header("Authorization") ?? "";
     if (!workerSecret || auth !== `Bearer ${workerSecret}`) {
       return c.json({ error: "unauthorized" }, 401);
@@ -533,7 +547,12 @@ app.use("/*", async (c, next) => {
     return c.json({ error: "unauthorized" }, 401);
   }
   const auth = c.req.header("Authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
   if (auth === `Bearer ${platformApiSecret}`) {
+    await next();
+    return;
+  }
+  if (bearer.startsWith("sk_live_")) {
     await next();
     return;
   }
@@ -552,7 +571,12 @@ app.use("/*", async (c, next) => {
 app.use("/*", async (c, next) => {
   const method = c.req.method.toUpperCase();
   const path = c.req.path;
-  if (path === "/health" || path.startsWith("/auth") || path.startsWith("/internal/jobs")) {
+  if (
+    path === "/health"
+    || path.startsWith("/auth")
+    || path.startsWith("/internal/jobs")
+    || path.startsWith("/internal/organizations")
+  ) {
     await next();
     return;
   }
@@ -567,12 +591,52 @@ app.use("/*", async (c, next) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
   const cookieToken = readCookie(c.req.raw, "stockix-session");
-  // Dashboard calls include platform Authorization; actor identity should come from session cookie first.
-  const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  const token = cookieToken || headerToken;
-  if (!token) return c.json({ error: "unauthorized_actor" }, 401);
+  const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
 
-  const session = await verifySessionToken(token);
+  if (cookieToken) {
+    const session = await verifySessionToken(cookieToken);
+    if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+    const sessionCheck = await validateOwnerSession(db, {
+      ownerId: session.sub,
+      role: session.role,
+      sessionVersion: session.sessionVersion,
+    });
+    if (!sessionCheck.success) {
+      return c.json({ error: "forbidden_actor" }, 403);
+    }
+    c.set("actorId", session.sub);
+    c.set("actorRole", session.role);
+    await next();
+    return;
+  }
+
+  if (headerToken.startsWith("sk_live_")) {
+    const resolved = await findActiveApiKeyByRaw(db, headerToken);
+    if (!resolved) {
+      return c.json({ error: "unauthorized_actor" }, 401);
+    }
+    const [ownerRow] = await db
+      .select({ id: owners.id, status: owners.status })
+      .from(owners)
+      .where(eq(owners.id, resolved.ownerId))
+      .limit(1);
+    if (!ownerRow || ownerRow.status !== "active") {
+      return c.json({ error: "forbidden_actor" }, 403);
+    }
+    c.set("actorId", resolved.ownerId);
+    c.set("actorRole", "read_only");
+    c.set("actorEffectiveRole", "read_only");
+    c.set("apiKeyId", resolved.keyId);
+    scheduleApiKeyLastUsedTouch(db, resolved.keyId);
+    await next();
+    return;
+  }
+
+  if (!headerToken) {
+    return c.json({ error: "unauthorized_actor" }, 401);
+  }
+
+  const session = await verifySessionToken(headerToken);
   if (!session) return c.json({ error: "unauthorized_actor" }, 401);
   const sessionCheck = await validateOwnerSession(db, {
     ownerId: session.sub,
@@ -712,7 +776,11 @@ app.use("/*", async (c, next) => {
   if (!(actor.role in ROLE_RANK)) {
     return c.json({ error: "forbidden_role" }, 403);
   }
-  const actorRank = ROLE_RANK[actor.role as Role];
+  const effectiveRole = (c.get("actorEffectiveRole") as Role | undefined) ?? (actor.role as Role);
+  if (!(effectiveRole in ROLE_RANK)) {
+    return c.json({ error: "forbidden_role" }, 403);
+  }
+  const actorRank = ROLE_RANK[effectiveRole];
   if (actorRank < ROLE_RANK[minRole]) {
     return c.json({ error: "forbidden_role" }, 403);
   }
@@ -750,6 +818,7 @@ app.get("/public/tenant-orgs/:tenantId", async (c) => {
         subdomain: full.subdomain,
         status: full.status,
         isPrimary: full.isPrimary,
+        financeOrganizationId: full.financeOrganizationId,
         createdAt: full.createdAt,
         publicUrl: full.publicUrl,
       };
@@ -919,6 +988,45 @@ app.get("/internal/jobs/:jobId/cancel-check", async (c) => {
     return c.json({ cancelled: true, reason: "cancel_requested_by_user" });
   }
   return c.json({ cancelled: false });
+});
+
+app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+  const orgId = c.req.param("controlPlaneOrgId");
+  const parsed = z.string().uuid().safeParse(orgId);
+  if (!parsed.success) {
+    return c.json({ error: "INVALID_ORG_ID" }, 400);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  const bodyParsed = z
+    .object({
+      financeOrganizationId: z.string().min(1).max(255),
+    })
+    .safeParse(body);
+
+  if (!bodyParsed.success) {
+    return c.json(
+      { error: "VALIDATION_ERROR", detail: bodyParsed.error.flatten() },
+      400,
+    );
+  }
+
+  const [updated] = await db
+    .update(organizations)
+    .set({
+      financeOrganizationId: bodyParsed.data.financeOrganizationId,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizations.id, parsed.data))
+    .returning({ id: organizations.id });
+
+  if (!updated) {
+    return c.json({ error: "organization_not_found" }, 404);
+  }
+
+  return c.json({ ok: true });
 });
 
 app.post("/internal/jobs/:jobId/complete", async (c) => {
@@ -1623,6 +1731,60 @@ app.patch("/owners/:ownerId", async (c) => {
   return c.json({ updated: true, owner: updated });
 });
 
+app.get("/admin/orphan-check", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+
+  const orphans = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      name: tenants.name,
+      status: tenants.status,
+      createdAt: tenants.createdAt,
+    })
+    .from(tenants)
+    .where(
+      and(
+        notExists(
+          db
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.slug, tenants.slug)),
+        ),
+        notExists(
+          db
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.tenantId, tenants.id)),
+        ),
+        notExists(
+          db
+            .select({ id: tenantDeployments.id })
+            .from(tenantDeployments)
+            .where(eq(tenantDeployments.tenantId, tenants.id)),
+        ),
+      ),
+    );
+
+  const count = orphans.length;
+  return c.json({
+    orphans: orphans.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      name: r.name,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    count,
+    message:
+      count === 0
+        ? "No orphaned child tenant rows detected."
+        : `${count} potential orphan(s) found. Review before cleanup.`,
+  });
+});
+
 app.get("/audit-log", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -1706,6 +1868,136 @@ app.get("/audit-log", async (c) => {
   }));
 
   return c.json({ entries, total, page, pageSize, totalPages });
+});
+
+const apiKeyCreateBody = z.object({
+  name: z.string().min(1).max(255),
+});
+
+app.get("/api-keys", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  if (c.get("apiKeyId")) {
+    return c.json(
+      { error: "forbidden", message: "API keys cannot be listed using an API key." },
+      403,
+    );
+  }
+  const actorId = String(c.get("actorId") ?? "");
+  const rows = await db
+    .select({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      keyPrefix: apiKeys.keyPrefix,
+      lastUsedAt: apiKeys.lastUsedAt,
+      createdAt: apiKeys.createdAt,
+    })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.ownerId, actorId), isNull(apiKeys.revokedAt)))
+    .orderBy(desc(apiKeys.createdAt));
+  return c.json({
+    keys: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      keyPrefix: r.keyPrefix,
+      lastUsedAt: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  });
+});
+
+app.post("/api-keys", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  if (c.get("apiKeyId")) {
+    return c.json(
+      { error: "forbidden", message: "API keys cannot be created using an API key." },
+      403,
+    );
+  }
+  const actorId = String(c.get("actorId") ?? "");
+  let body: z.infer<typeof apiKeyCreateBody>;
+  try {
+    body = apiKeyCreateBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json(
+      { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
+      400,
+    );
+  }
+  const { rawKey, keyPrefix, keyHash } = generateApiKeyMaterial();
+  const now = new Date();
+  const [inserted] = await db
+    .insert(apiKeys)
+    .values({
+      ownerId: actorId,
+      name: body.name.trim(),
+      keyPrefix,
+      keyHash,
+      updatedAt: now,
+    })
+    .returning({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      keyPrefix: apiKeys.keyPrefix,
+      createdAt: apiKeys.createdAt,
+    });
+  if (!inserted) {
+    return c.json({ error: "api_key_create_failed" }, 500);
+  }
+  await logAudit(db, {
+    actorId,
+    action: "api_key.created",
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { keyId: inserted.id, name: inserted.name },
+  });
+  return c.json(
+    {
+      id: inserted.id,
+      name: inserted.name,
+      keyPrefix: inserted.keyPrefix,
+      createdAt: inserted.createdAt.toISOString(),
+      rawKey,
+    },
+    201,
+  );
+});
+
+app.delete("/api-keys/:keyId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  if (c.get("apiKeyId")) {
+    return c.json(
+      { error: "forbidden", message: "API keys cannot be revoked using an API key." },
+      403,
+    );
+  }
+  const parsedId = z.string().uuid().safeParse(c.req.param("keyId"));
+  if (!parsedId.success) {
+    return c.json({ error: "keyId must be a UUID" }, 400);
+  }
+  const actorId = String(c.get("actorId") ?? "");
+  const now = new Date();
+  const [updated] = await db
+    .update(apiKeys)
+    .set({ revokedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(apiKeys.id, parsedId.data),
+        eq(apiKeys.ownerId, actorId),
+        isNull(apiKeys.revokedAt),
+      ),
+    )
+    .returning({ id: apiKeys.id });
+  if (!updated) {
+    return c.json({ error: "api_key_not_found" }, 404);
+  }
+  await logAudit(db, {
+    actorId,
+    action: "api_key.revoked",
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { keyId: updated.id },
+  });
+  return c.json({ ok: true });
 });
 
 app.get("/tenants", async (c) => {
@@ -2058,6 +2350,65 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Failed tenant fully deleted from database.",
     }, 200);
   }
+  // Deprovision child org stacks (separate tenants rows, slug = org.slug) before parent.
+  // Jobs are async; we only enqueue here — parent deprovision is still queued immediately after.
+  const childOrgs = await db
+    .select({
+      id: organizations.id,
+      slug: organizations.slug,
+    })
+    .from(organizations)
+    .where(
+      and(eq(organizations.tenantId, parsed.data), ne(organizations.status, "failed")),
+    );
+
+  for (const org of childOrgs) {
+    const [childTenant] = await db
+      .select({ id: tenants.id, slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.slug, org.slug))
+      .limit(1);
+
+    if (!childTenant || childTenant.id === parsed.data) {
+      continue;
+    }
+
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        lastError: sql`'cancelled_by_parent_delete'`,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tenantLifecycleJobs.tenantId, childTenant.id),
+          eq(tenantLifecycleJobs.type, "tenant.provision"),
+          or(
+            eq(tenantLifecycleJobs.status, "pending"),
+            eq(tenantLifecycleJobs.status, "running"),
+          ),
+        ),
+      );
+
+    await insertTenantJob(db, {
+      type: "tenant.deprovision",
+      tenantId: childTenant.id,
+      payload: {
+        tenantId: childTenant.id,
+        removeVolumes: true,
+        removeImages: false,
+      },
+    });
+
+    await db
+      .update(organizations)
+      .set({ status: "suspended", updatedAt: new Date() })
+      .where(eq(organizations.id, org.id));
+  }
+
   // Always cancel in-flight tenant.provision jobs first so the worker can abort
   // any long-running compose pull/build and proceed to deprovision cleanup.
   await db
@@ -3824,12 +4175,13 @@ app.get("/tenants/:tenantId/events", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
   const correlationId = c.req.query("correlationId");
+  const tenantMatch = or(
+    eq(tenantProvisionEvents.tenantId, parsed.data),
+    eq(tenantProvisionEvents.parentTenantId, parsed.data),
+  );
   const whereClause = correlationId
-    ? and(
-        eq(tenantProvisionEvents.tenantId, parsed.data),
-        eq(tenantProvisionEvents.correlationId, correlationId),
-      )
-    : eq(tenantProvisionEvents.tenantId, parsed.data);
+    ? and(tenantMatch, eq(tenantProvisionEvents.correlationId, correlationId))
+    : tenantMatch;
   const rows = await db
     .select({
       id: tenantProvisionEvents.id,
@@ -3837,6 +4189,8 @@ app.get("/tenants/:tenantId/events", async (c) => {
       level: tenantProvisionEvents.level,
       message: tenantProvisionEvents.message,
       meta: tenantProvisionEvents.meta,
+      slug: tenantProvisionEvents.slug,
+      parentTenantId: tenantProvisionEvents.parentTenantId,
       createdAt: tenantProvisionEvents.createdAt,
     })
     .from(tenantProvisionEvents)

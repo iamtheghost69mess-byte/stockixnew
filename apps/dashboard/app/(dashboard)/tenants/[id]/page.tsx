@@ -875,6 +875,11 @@ export default function TenantDetailPage() {
                         }
                       >
                         {e.message}
+                        {e.parentTenantId ? (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (sub-org: {e.slug ?? "unknown"})
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                   </div>

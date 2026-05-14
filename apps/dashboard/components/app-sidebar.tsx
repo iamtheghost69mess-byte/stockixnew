@@ -72,6 +72,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         icon: <ScrollTextIcon />,
       });
       items.push({
+        title: "API keys",
+        url: "/api-keys",
+        icon: <KeyRoundIcon />,
+      });
+      items.push({
         title: "Security & settings",
         url: "/settings",
         icon: <Settings2Icon />,

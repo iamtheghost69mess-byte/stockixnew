@@ -13,6 +13,7 @@ type RbacEnv = {
   Variables: {
     actorId: string;
     actorRole: string;
+    actorEffectiveRole?: string;
     requestId: string;
     requestStartMs: number;
   };
@@ -27,9 +28,12 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
   if (pathname === "/health") return null;
   if (pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/internal/jobs")) return null;
+  if (pathname.startsWith("/internal/organizations")) return null;
   if (m === "POST" && pathname === "/licenses/activate") return null;
   if (m === "POST" && pathname === "/licenses/verify-offline") return null;
   if (m === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
+
+  if (pathname === "/admin/orphan-check" && m === "GET") return "super_admin";
 
   if (pathname.startsWith("/plans")) {
     if (m === "GET") return "read_only";
@@ -49,6 +53,7 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
   }
   if (pathname.startsWith("/fingerprints")) return "super_admin";
   if (pathname.startsWith("/audit-log")) return "super_admin";
+  if (pathname.startsWith("/api-keys")) return "super_admin";
   if (pathname.startsWith("/owners")) {
     if (m === "GET") return "read_only";
     return "super_admin";
@@ -94,7 +99,11 @@ export function createRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> 
     if (!(actor.role in ROLE_RANK)) {
       return c.json({ error: "forbidden_role" }, 403);
     }
-    const actorRank = ROLE_RANK[actor.role as Role];
+    const effectiveRole = (c.get("actorEffectiveRole") as Role | undefined) ?? (actor.role as Role);
+    if (!(effectiveRole in ROLE_RANK)) {
+      return c.json({ error: "forbidden_role" }, 403);
+    }
+    const actorRank = ROLE_RANK[effectiveRole];
     if (actorRank < ROLE_RANK[minRole]) {
       return c.json({ error: "forbidden_role" }, 403);
     }

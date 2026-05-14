@@ -9,6 +9,7 @@ export type ProvisionEventPayload = {
   correlationId: string;
   slug: string | null;
   tenantId: string | null;
+  parentTenantId: string | null;
   deploymentId: string | null;
   phase: string;
   level: string;
@@ -32,6 +33,7 @@ type TraceContext = () => {
   slug: string;
   tenantId?: string;
   deploymentId?: string;
+  parentTenantId?: string | null;
 };
 
 export function createProvisionTracer(
@@ -58,6 +60,7 @@ export function createProvisionTracer(
           correlationId,
           slug: ctx.slug,
           tenantId: ctx.tenantId ?? null,
+          parentTenantId: ctx.parentTenantId ?? null,
           deploymentId: ctx.deploymentId ?? null,
           phase,
           level,
@@ -76,6 +79,7 @@ export function createProvisionTracer(
         correlationId,
         slug: ctx.slug,
         tenantId: ctx.tenantId ?? null,
+        parentTenantId: ctx.parentTenantId ?? null,
         deploymentId: ctx.deploymentId ?? null,
         phase,
         level,

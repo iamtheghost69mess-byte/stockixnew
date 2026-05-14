@@ -14,6 +14,8 @@ type TraceContext = () => {
   slug: string;
   tenantId?: string;
   deploymentId?: string;
+  /** Parent Stockix tenant when provisioning a child org stack (events visible on parent). */
+  parentTenantId?: string | null;
 };
 
 export function createProvisionTracer(
@@ -38,6 +40,7 @@ export function createProvisionTracer(
         correlationId,
         slug: ctx.slug,
         tenantId: ctx.tenantId ?? null,
+        parentTenantId: ctx.parentTenantId ?? null,
         deploymentId: ctx.deploymentId ?? null,
         phase,
         level,

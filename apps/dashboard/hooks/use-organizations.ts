@@ -19,6 +19,8 @@ export type Organization = {
   updatedAt: string;
   /** Local dev: full `http://{subdomain}:{nginxPort}` when nginx is published on a host port. */
   publicUrl: string | null;
+  /** Finance app organization id (from org build / sign-in); null until worker persists mapping. */
+  financeOrganizationId: string | null;
 };
 
 function isOrgStatus(value: unknown): value is Organization["status"] {
@@ -44,6 +46,8 @@ function parseOrganization(row: unknown): Organization | null {
       : typeof o.publicUrl === "string"
         ? o.publicUrl
         : null;
+  const financeOrganizationId =
+    typeof o.financeOrganizationId === "string" ? o.financeOrganizationId : null;
   return {
     id: o.id,
     tenantId: o.tenantId,
@@ -56,6 +60,7 @@ function parseOrganization(row: unknown): Organization | null {
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
     publicUrl,
+    financeOrganizationId,
   };
 }
 

@@ -79,6 +79,7 @@ export const organizations = pgTable("organizations", {
   status: varchar("status", { length: 50 }).notNull().default("provisioning"),
   // provisioning | active | suspended | failed
   isPrimary: boolean("is_primary").notNull().default(false),
+  financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
   provisioningError: text("provisioning_error"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -181,6 +182,7 @@ export const tenantProvisionEvents = pgTable(
     correlationId: text("correlation_id").notNull(),
     slug: text("slug"),
     tenantId: uuid("tenant_id"),
+    parentTenantId: uuid("parent_tenant_id"),
     deploymentId: uuid("deployment_id"),
     phase: text("phase").notNull(),
     level: text("level").notNull().default("info"),
@@ -214,6 +216,28 @@ export const adminAuditLog = pgTable(
     index("admin_audit_log_actor_created_idx").on(t.actorId, t.createdAt),
     index("admin_audit_log_tenant_created_idx").on(t.targetTenantId, t.createdAt),
     index("admin_audit_log_owner_created_idx").on(t.targetOwnerId, t.createdAt),
+  ],
+);
+
+/** Named API keys (sk_live_*) for programmatic access; secret stored as hash only. */
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    keyPrefix: varchar("key_prefix", { length: 32 }).notNull(),
+    keyHash: varchar("key_hash", { length: 128 }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("api_keys_key_hash_unique").on(t.keyHash),
+    index("api_keys_owner_id_idx").on(t.ownerId),
   ],
 );
 
