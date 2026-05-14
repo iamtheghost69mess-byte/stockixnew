@@ -10,9 +10,11 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { useReceiptTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function ReceiptFormFooterRight() {
   const {
+    total,
     formattedSubtotal,
     formattedTotal,
     formattedDueTotal,
@@ -32,6 +34,7 @@ export function ReceiptFormFooterRight() {
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={<T id={'receipt_form.label.payment_amount'} />}
         value={formattedPaymentTotal}

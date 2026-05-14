@@ -37,6 +37,7 @@ export default class SaleInvoice extends mixin(TenantModel, [
   static get virtualAttributes() {
     return [
       'localAmount',
+      'localDueAmount',
       'dueAmount',
       'balanceAmount',
       'isDelivered',
@@ -57,6 +58,14 @@ export default class SaleInvoice extends mixin(TenantModel, [
    */
   get localAmount() {
     return this.balance * this.exchangeRate;
+  }
+
+  /**
+   * Invoice due amount in local currency.
+   * @returns {number}
+   */
+  get localDueAmount() {
+    return this.dueAmount * this.exchangeRate;
   }
 
   /**

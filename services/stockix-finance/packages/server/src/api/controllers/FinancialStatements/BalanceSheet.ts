@@ -88,6 +88,7 @@ export default class BalanceSheetStatementController extends BaseFinancialReport
   async balanceSheet(req: Request, res: Response, next: NextFunction) {
     const { tenantId, settings } = req;
     const i18n = this.tenancy.i18n(tenantId);
+    const baseCurrency: string = settings.get({ group: 'organization', key: 'base_currency' }) ?? '';
 
     let filter = this.matchedQueryData(req);
 
@@ -103,7 +104,7 @@ export default class BalanceSheetStatementController extends BaseFinancialReport
       const accept = this.accepts(req);
       const acceptType = accept.types(['json', 'application/json+table']);
 
-      const table = new BalanceSheetTable(data, query, i18n);
+      const table = new BalanceSheetTable(data, query, i18n, baseCurrency);
 
       switch (acceptType) {
         case 'application/json+table':

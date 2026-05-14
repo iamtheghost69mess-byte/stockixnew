@@ -551,3 +551,12 @@ html[lang^=en] body {
 .payment__conditions + .payment__notes {
   margin-top: 20px;
 }
+.payment__table-total table tbody tr.total-display-currency td,
+.payment__table-total table tbody tr.balance-due-display-currency td {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  border-top: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}

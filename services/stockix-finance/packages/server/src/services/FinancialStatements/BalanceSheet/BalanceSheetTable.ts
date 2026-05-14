@@ -52,16 +52,20 @@ export default class BalanceSheetTable extends R.compose(
    * @param {IBalanceSheetStatementData} reportData -
    * @param {IBalanceSheetQuery} query -
    */
+  private baseCurrency: string;
+
   constructor(
     reportData: IBalanceSheetStatementData,
     query: IBalanceSheetQuery,
-    i18n: any
+    i18n: any,
+    baseCurrency?: string
   ) {
     super();
 
     this.reportData = reportData;
     this.query = new BalanceSheetQuery(query);
     this.i18n = i18n;
+    this.baseCurrency = baseCurrency ?? '';
   }
 
   /**
@@ -204,10 +208,13 @@ export default class BalanceSheetTable extends R.compose(
    * @returns {ITableColumn[]}
    */
   private totalColumn = (): ITableColumn[] => {
+    const label = this.baseCurrency
+      ? `${this.i18n.__('balance_sheet.total')} (${this.baseCurrency})`
+      : this.i18n.__('balance_sheet.total');
     return [
       {
         key: 'total',
-        label: this.i18n.__('balance_sheet.total'),
+        label,
         children: this.totalColumnChildren(),
       },
     ];

@@ -12,6 +12,7 @@ export class PaymentReceiveTransfromer extends Transformer {
     return [
       'formattedPaymentDate',
       'formattedAmount',
+      'formattedLocalAmount',
       'formattedExchangeRate',
       'entries',
     ];
@@ -33,6 +34,15 @@ export class PaymentReceiveTransfromer extends Transformer {
    */
   protected formattedAmount = (payment: IPaymentReceive): string => {
     return formatNumber(payment.amount, { currencyCode: payment.currencyCode });
+  };
+
+  /**
+   * Retrieve formatted payment local amount.
+   * @param {IPaymentReceive} payment
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (payment: IPaymentReceive): string => {
+    return this.formatMoney(payment.localAmount);
   };
 
   /**

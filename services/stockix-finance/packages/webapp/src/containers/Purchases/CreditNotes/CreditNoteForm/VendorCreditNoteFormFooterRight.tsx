@@ -9,9 +9,10 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { useVendorCrditNoteTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function VendorCreditNoteFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = useVendorCrditNoteTotals();
+  const { total, formattedSubtotal, formattedTotal } = useVendorCrditNoteTotals();
 
   return (
     <VendorCreditNoteTotalLines
@@ -28,6 +29,7 @@ export function VendorCreditNoteFormFooterRight() {
         value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </VendorCreditNoteTotalLines>
   );
 }

@@ -22,8 +22,10 @@ import { safeCallback } from '@/utils';
  */
 export function ActionMenuList({
   row: { original },
-  payload: { onEditCurrency, onDeleteCurrency, onSetRate },
+  payload: { onEditCurrency, onDeleteCurrency, onSetRate, onEditRate },
 }) {
+  const hasRate = original.latest_exchange_rate != null;
+
   return (
     <Menu>
       <MenuItem
@@ -31,11 +33,18 @@ export function ActionMenuList({
         text={intl.get('edit_currency')}
         onClick={safeCallback(onEditCurrency, original)}
       />
-      {!original.is_base_currency && (
+      {!original.is_base_currency && !hasRate && (
         <MenuItem
           icon={<Icon icon="plus" />}
           text={intl.get('set_exchange_rate')}
           onClick={safeCallback(onSetRate, original)}
+        />
+      )}
+      {!original.is_base_currency && hasRate && (
+        <MenuItem
+          icon={<Icon icon="pen-18" />}
+          text={intl.get('edit_exchange_rate')}
+          onClick={safeCallback(onEditRate, original)}
         />
       )}
       <MenuDivider />

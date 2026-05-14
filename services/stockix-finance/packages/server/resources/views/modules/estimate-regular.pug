@@ -60,15 +60,20 @@ block content
            td.total=entry.amount
 
   div.estimate__table-after
-    div.estimate__table-total 
+    div.estimate__table-total
       table
         tbody
-          tr.subtotal 
+          tr.subtotal
             td #{__('estimate.paper.subtotal')}
             td #{saleEstimate.formattedAmount}
-          tr.total 
+          tr.total
             td #{__('estimate.paper.total')}
             td #{saleEstimate.formattedAmount}
+          if displayTotals && displayTotals.length
+            each dc in displayTotals
+              tr.total-display-currency
+                td ≈ #{dc.currency}
+                td #{dc.formattedTotal}
 
   div.estimate__footer
     if saleEstimate.termsConditions

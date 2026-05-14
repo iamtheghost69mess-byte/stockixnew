@@ -115,7 +115,8 @@ export function useJournalSheet(query, props) {
     { method: 'get', url: '/financial_statements/journal', params: query },
     {
       select: (res) => ({
-        tableRows: journalTableRowsReducer(res.data.data),
+        // reportData() now returns { entries: [...] }; fall back to array for safety.
+        tableRows: journalTableRowsReducer(res.data.data?.entries ?? res.data.data),
         ...res.data,
       }),
       defaultData: {

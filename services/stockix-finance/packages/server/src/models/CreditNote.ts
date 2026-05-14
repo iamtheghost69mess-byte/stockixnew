@@ -31,6 +31,7 @@ export default class CreditNote extends mixin(TenantModel, [
   static get virtualAttributes() {
     return [
       'localAmount',
+      'localCreditsRemaining',
       'isDraft',
       'isPublished',
       'isOpen',
@@ -46,6 +47,14 @@ export default class CreditNote extends mixin(TenantModel, [
    */
   get localAmount() {
     return this.amount * this.exchangeRate;
+  }
+
+  /**
+   * Credits remaining in organization base currency.
+   * @returns {number}
+   */
+  get localCreditsRemaining() {
+    return this.creditsRemaining * this.exchangeRate;
   }
 
   /**

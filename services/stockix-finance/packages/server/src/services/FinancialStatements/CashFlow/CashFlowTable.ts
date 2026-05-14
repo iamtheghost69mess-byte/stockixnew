@@ -36,9 +36,12 @@ export default class CashFlowTable implements ICashFlowTable {
    * Constructor method.
    * @param {ICashFlowStatement} reportStatement
    */
-  constructor(reportStatement: ICashFlowStatementDOO, i18n) {
+  private baseCurrency: string;
+
+  constructor(reportStatement: ICashFlowStatementDOO, i18n, baseCurrency?: string) {
     this.report = reportStatement;
     this.i18n = i18n;
+    this.baseCurrency = baseCurrency ?? '';
     this.dateRangeSet = [];
     this.initDateRangeCollection();
   }
@@ -297,7 +300,10 @@ export default class CashFlowTable implements ICashFlowTable {
    * @returns {ITableColumn}
    */
   private totalColumns = (): ITableColumn[] => {
-    return [{ key: 'total', label: this.i18n.__('Total') }];
+    const label = this.baseCurrency
+      ? `${this.i18n.__('Total')} (${this.baseCurrency})`
+      : this.i18n.__('Total');
+    return [{ key: 'total', label }];
   };
 
   /**

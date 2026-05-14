@@ -2,6 +2,13 @@ import { Knex } from 'knex';
 
 export interface ITenantMetadata {
   currencyCode: string;
+  baseCurrency?: string;
+  language?: string;
+  timezone?: string;
+  dateFormat?: string;
+  fiscalYear?: string;
+  displayCurrencies?: string[];
+  secondaryCurrency?: string | null;
 }
 export interface ITenant {
   id: number,

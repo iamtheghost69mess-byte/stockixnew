@@ -54,8 +54,13 @@ export default function useApiRequest() {
           setGlobalErrors({ something_wrong: true });
         }
         if (status === 401) {
-          setGlobalErrors({ session_expired: true });
-          setLogout();
+          // Only treat as session-expired when the request included an organization-id.
+          // Without it we're on the setup page and the 401 just means "no org context yet".
+          const hadOrgHeader = !!error.config?.headers?.['organization-id'];
+          if (hadOrgHeader) {
+            setGlobalErrors({ session_expired: true });
+            setLogout();
+          }
         }
         if (status === 403) {
           setGlobalErrors({ access_denied: true });

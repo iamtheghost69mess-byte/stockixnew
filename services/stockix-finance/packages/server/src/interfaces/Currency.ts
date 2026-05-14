@@ -19,6 +19,7 @@ export interface ICurrency {
   isBaseCurrency: boolean,
   latestExchangeRate: number | null,
   latestExchangeRateDate: string | null,
+  latestExchangeRateId: number | null,
 };
 
 export interface ICurrenciesService {

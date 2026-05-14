@@ -178,11 +178,11 @@ export default class CurrenciesService implements ICurrenciesService {
 
     const [currencies, allRates] = await Promise.all([
       Currency.query().orderBy('createdAt', 'ASC'),
-      ExchangeRate.query().select('currency_code', 'exchange_rate', 'date').orderBy('date', 'DESC'),
+      ExchangeRate.query().select('id', 'currency_code', 'exchange_rate', 'date').orderBy('date', 'DESC'),
     ]);
 
     // Build latest-rate-per-currency map; rates are DESC so first seen is latest.
-    const latestRatesMap: Record<string, { exchangeRate: number; date: string }> = {};
+    const latestRatesMap: Record<string, { id: number; exchangeRate: number; date: string }> = {};
     for (const rate of allRates) {
       if (!(rate.currencyCode in latestRatesMap)) {
         latestRatesMap[rate.currencyCode] = rate;

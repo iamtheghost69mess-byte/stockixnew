@@ -87,10 +87,11 @@ export default class CashFlowController extends BaseFinancialReportController {
    */
   private transformToTableRows(
     cashFlowDOO: ICashFlowStatementDOO,
-    tenantId: number
+    tenantId: number,
+    baseCurrency?: string
   ) {
     const i18n = this.tenancy.i18n(tenantId);
-    const cashFlowTable = new CashFlowTable(cashFlowDOO, i18n);
+    const cashFlowTable = new CashFlowTable(cashFlowDOO, i18n, baseCurrency);
 
     return {
       table: {
@@ -111,6 +112,7 @@ export default class CashFlowController extends BaseFinancialReportController {
    */
   async cashFlow(req: Request, res: Response, next: NextFunction) {
     const { tenantId, settings } = req;
+    const baseCurrency: string = settings.get({ group: 'organization', key: 'base_currency' }) ?? '';
     const filter = {
       ...this.matchedQueryData(req),
     };
@@ -125,7 +127,7 @@ export default class CashFlowController extends BaseFinancialReportController {
         case 'application/json+table':
           return res
             .status(200)
-            .send(this.transformToTableRows(cashFlow, tenantId));
+            .send(this.transformToTableRows(cashFlow, tenantId, baseCurrency));
         case 'json':
         default:
           return res.status(200).send(this.transformJsonResponse(cashFlow));

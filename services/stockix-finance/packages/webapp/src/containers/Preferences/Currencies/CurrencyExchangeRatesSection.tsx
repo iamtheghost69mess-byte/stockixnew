@@ -4,7 +4,6 @@ import intl from 'react-intl-universal';
 import styled from 'styled-components';
 import {
   Button,
-  Classes,
   Colors,
   Intent,
   Menu,
@@ -21,14 +20,12 @@ import {
   TableSkeletonRows,
   TableSkeletonHeader,
 } from '@/components';
-import { useExchangeRates } from '@/hooks/query';
+import { useExchangeRates, useCurrencies } from '@/hooks/query';
+import { CurrencySelectList } from '@/components';
 import withDialogActions from '@/containers/Dialog/withDialogActions';
 import withAlertActions from '@/containers/Alert/withAlertActions';
 import { compose } from '@/utils';
 
-/**
- * Context-menu per exchange-rate row.
- */
 function ExchangeRateRowMenu({ row: { original }, payload: { onEdit, onDelete } }) {
   return (
     <Menu>
@@ -95,18 +92,27 @@ function useExchangeRateSectionColumns() {
 }
 
 /**
- * Exchange rate history section embedded in the currencies preferences page.
+ * Exchange rate history section with currency filter and pagination.
  */
 function CurrencyExchangeRatesSection({ openDialog, openAlert }) {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
+  const [filterCurrency, setFilterCurrency] = useState('');
   const columns = useExchangeRateSectionColumns();
+
+  const { data: currencies } = useCurrencies();
+
+  const query = {
+    page,
+    page_size: pageSize,
+    ...(filterCurrency ? { currency_code: filterCurrency } : {}),
+  };
 
   const {
     data: { exchangesRates, pagination },
     isFetching,
     isLoading,
-  } = useExchangeRates({ page, page_size: pageSize });
+  } = useExchangeRates(query);
 
   const handleEdit = useCallback(
     (rate) => {
@@ -126,18 +132,26 @@ function CurrencyExchangeRatesSection({ openDialog, openAlert }) {
     setPage(pageIndex + 1);
   }, []);
 
+  const handleCurrencyFilter = (currency) => {
+    setFilterCurrency(currency?.currency_code ?? '');
+    setPage(1);
+  };
+
   return (
     <SectionRoot>
       <SectionHeader>
         <SectionTitle>
           <T id={'exchange_rate_history'} />
         </SectionTitle>
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="plus" />}
-          text={<T id={'new_exchange_rate'} />}
-          onClick={() => openDialog('exchangeRate-form', {})}
-        />
+        <CurrencyFilterWrap>
+          <CurrencySelectList
+            currenciesList={currencies}
+            selectedCurrencyCode={filterCurrency}
+            onCurrencySelected={handleCurrencyFilter}
+            placeholder={intl.get('all_currencies')}
+            allowClear
+          />
+        </CurrencyFilterWrap>
       </SectionHeader>
 
       <RatesTable
@@ -171,7 +185,7 @@ const SectionRoot = styled.div`
 const SectionHeader = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
   padding: 16px 20px 8px;
 `;
 
@@ -180,6 +194,10 @@ const SectionTitle = styled.h3`
   font-size: 14px;
   font-weight: 600;
   color: ${Colors.DARK_GRAY1};
+`;
+
+const CurrencyFilterWrap = styled.div`
+  min-width: 160px;
 `;
 
 const RatesTable = styled(DataTable)`

@@ -65,6 +65,19 @@ export default class OrganizationController extends BaseController {
       check('fiscal_year').exists().isIn(MONTHS),
       check('language').exists().isString().isIn(ACCEPTED_LOCALES),
       check('date_format').optional().isIn(DATE_FORMATS),
+      check('display_currencies').optional({ nullable: true }).isArray(),
+      check('display_currencies.*').optional().isString().trim().isISO4217(),
+      check('secondary_currency')
+        .optional({ nullable: true, checkFalsy: true })
+        .isString()
+        .trim()
+        .isISO4217()
+        .custom((value, { req }) => {
+          if (value && value === req.body.base_currency) {
+            throw new Error('Secondary currency must differ from the base currency.');
+          }
+          return true;
+        }),
     ];
   }
 

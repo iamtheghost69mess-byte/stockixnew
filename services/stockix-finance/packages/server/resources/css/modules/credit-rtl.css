@@ -551,3 +551,12 @@ html[lang^=en] body {
 .credit__conditions + .credit__notes {
   margin-top: 20px;
 }
+.credit__table-total table tbody tr.total-display-currency td,
+.credit__table-total table tbody tr.balance-due-display-currency td {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  border-top: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}

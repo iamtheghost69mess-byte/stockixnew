@@ -88,6 +88,7 @@ export default class ProfitLossSheetController extends BaseFinancialReportContro
   async profitLossSheet(req: Request, res: Response, next: NextFunction) {
     const { tenantId, settings } = req;
     const i18n = this.tenancy.i18n(tenantId);
+    const baseCurrency: string = settings.get({ group: 'organization', key: 'base_currency' }) ?? '';
     const filter = this.matchedQueryData(req);
 
     try {
@@ -99,7 +100,7 @@ export default class ProfitLossSheetController extends BaseFinancialReportContro
 
       switch (acceptType) {
         case 'application/json+table':
-          const table = new ProfitLossSheetTable(data, query, i18n);
+          const table = new ProfitLossSheetTable(data, query, i18n, baseCurrency);
 
           return res.status(200).send({
             table: {

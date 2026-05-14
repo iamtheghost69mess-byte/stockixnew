@@ -9,9 +9,10 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { usePaymentMadeTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function PaymentMadeFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = usePaymentMadeTotals();
+  const { total, formattedSubtotal, formattedTotal } = usePaymentMadeTotals();
 
   return (
     <PaymentMadeTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -25,6 +26,7 @@ export function PaymentMadeFormFooterRight() {
         value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </PaymentMadeTotalLines>
   );
 }

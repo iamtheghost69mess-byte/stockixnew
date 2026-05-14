@@ -10,7 +10,10 @@ export class VendorCreditTransformer extends Transformer {
     return [
       'formattedVendorCreditDate',
       'formattedAmount',
+      'formattedLocalAmount',
+      'formattedLocalDueAmount',
       'formattedCreditsRemaining',
+      'formattedLocalCreditsRemaining',
     ];
   };
 
@@ -35,6 +38,15 @@ export class VendorCreditTransformer extends Transformer {
   };
 
   /**
+   * Retrieve formatted local amount.
+   * @param {IVendorCredit} vendorCredit
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (vendorCredit): string => {
+    return this.formatMoney(vendorCredit.localAmount);
+  };
+
+  /**
    * Retrieve formatted credits remaining.
    * @param {IVendorCredit} credit
    * @returns {string}
@@ -43,5 +55,18 @@ export class VendorCreditTransformer extends Transformer {
     return formatNumber(credit.creditsRemaining, {
       currencyCode: credit.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted local credits remaining.
+   * @param {IVendorCredit} credit
+   * @returns {string}
+   */
+  protected formattedLocalCreditsRemaining = (credit): string => {
+    return this.formatMoney(credit.localCreditsRemaining);
+  };
+
+  protected formattedLocalDueAmount = (credit): string => {
+    return this.formatMoney(credit.localCreditsRemaining);
   };
 }

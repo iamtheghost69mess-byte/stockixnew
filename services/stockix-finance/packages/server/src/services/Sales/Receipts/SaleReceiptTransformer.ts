@@ -10,7 +10,12 @@ export class SaleReceiptTransformer extends Transformer {
    * @returns {Array}
    */
   public includeAttributes = (): string[] => {
-    return ['formattedAmount', 'formattedReceiptDate', 'formattedClosedAtDate'];
+    return [
+      'formattedAmount',
+      'formattedLocalAmount',
+      'formattedReceiptDate',
+      'formattedClosedAtDate'
+    ];
   };
 
   /**
@@ -40,5 +45,14 @@ export class SaleReceiptTransformer extends Transformer {
     return formatNumber(receipt.amount, {
       currencyCode: receipt.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted local amount.
+   * @param {ISaleReceipt} receipt
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (receipt: ISaleReceipt): string => {
+    return this.formatMoney(receipt.localAmount);
   };
 }

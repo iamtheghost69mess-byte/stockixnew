@@ -102,14 +102,16 @@ RUN pnpm install --frozen-lockfile
 # -----------------------------------------------------------------------------
 FROM deps AS build-migration
 COPY --chown=node:node ./packages/server ./packages/server
-RUN cd packages/server && npm run build:commands
+RUN cd packages/server && pnpm run build:commands
 
 FROM build-migration AS migration
 USER root
-RUN apt-get update && apt-get install -y git \
-  && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
+ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /wait-for-it.sh
+RUN chmod +x /wait-for-it.sh
+
 WORKDIR /app/packages/server
-CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./build/commands.js", "system:migrate:latest"]
+# Use a robust retry loop for the migration to handle DB startup delays
+CMD ["/bin/bash", "-c", "until (node ./build/commands.js system:migrate:unlock 2>/dev/null; node ./build/commands.js system:migrate:latest); do echo 'Waiting for database to be ready...'; sleep 5; done"]
 
 # -----------------------------------------------------------------------------
 # Full API server image: resources + app + CLI bundles.

@@ -9,9 +9,10 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { usePaymentReceiveTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function PaymentReceiveFormFootetRight() {
-  const { formattedSubtotal, formattedTotal } = usePaymentReceiveTotals();
+  const { total, formattedSubtotal, formattedTotal } = usePaymentReceiveTotals();
 
   return (
     <PaymentReceiveTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -25,6 +26,7 @@ export function PaymentReceiveFormFootetRight() {
         value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </PaymentReceiveTotalLines>
   );
 }

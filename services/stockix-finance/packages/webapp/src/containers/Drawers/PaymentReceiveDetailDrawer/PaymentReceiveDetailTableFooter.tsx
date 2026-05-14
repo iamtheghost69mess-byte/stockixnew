@@ -9,6 +9,7 @@ import {
   T,
   TotalLine,
   TotalLines,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { usePaymentReceiveDetailContext } from './PaymentReceiveDetailProvider';
 
@@ -35,6 +36,7 @@ export default function PaymentReceiveDetailTableFooter() {
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={paymentReceive} />
       </PaymentReceiveTotalLines>
     </PaymentReceiveDetailsFooterRoot>
   );

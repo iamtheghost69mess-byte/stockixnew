@@ -10,9 +10,11 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { useBillTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function BillFormFooterRight() {
   const {
+    total,
     formattedSubtotal,
     formattedTotal,
     formattedDueTotal,
@@ -32,13 +34,14 @@ export function BillFormFooterRight() {
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
-        title={<T id={'bill_form.label.total'} />}
+        title={<T id={'bill_form.label.payment_amount'} />}
         value={formattedPaymentTotal}
         borderStyle={TotalLineBorderStyle.None}
       />
       <TotalLine
-        title={<T id={'bill_form.label.total'} />}
+        title={<T id={'bill_form.label.due_amount'} />}
         value={formattedDueTotal}
         textStyle={TotalLineTextStyle.Bold}
       />

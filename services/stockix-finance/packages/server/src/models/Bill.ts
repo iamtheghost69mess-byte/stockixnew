@@ -181,6 +181,7 @@ export default class Bill extends mixin(TenantModel, [
       'isOverdue',
       'unallocatedCostAmount',
       'localAmount',
+      'localDueAmount',
       'localAllocatedCostAmount',
       'billableAmount',
     ];
@@ -192,6 +193,14 @@ export default class Bill extends mixin(TenantModel, [
    */
   get localAmount() {
     return this.amount * this.exchangeRate;
+  }
+
+  /**
+   * Bill due amount in organization base currency.
+   * @returns {number}
+   */
+  get localDueAmount() {
+    return this.dueAmount * this.exchangeRate;
   }
 
   /**

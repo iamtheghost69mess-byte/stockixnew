@@ -11,7 +11,9 @@ export class SaleInvoiceTransformer extends Transformer {
       'formattedInvoiceDate',
       'formattedDueDate',
       'formattedAmount',
+      'formattedLocalAmount',
       'formattedDueAmount',
+      'formattedLocalDueAmount',
       'formattedPaymentAmount',
       'formattedBalanceAmount',
       'formattedExchangeRate',
@@ -56,6 +58,24 @@ export class SaleInvoiceTransformer extends Transformer {
     return formatNumber(invoice.dueAmount, {
       currencyCode: invoice.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted invoice local amount.
+   * @param {ISaleInvoice} invoice
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (invoice): string => {
+    return this.formatMoney(invoice.localAmount);
+  };
+
+  /**
+   * Retrieve formatted invoice local due amount.
+   * @param {ISaleInvoice} invoice
+   * @returns {string}
+   */
+  protected formattedLocalDueAmount = (invoice): string => {
+    return this.formatMoney(invoice.localDueAmount);
   };
 
   /**

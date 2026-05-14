@@ -9,6 +9,7 @@ import {
   TotalLineBorderStyle,
   TotalLineTextStyle,
   FormatNumber,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useReceiptDetailDrawerContext } from './ReceiptDetailDrawerProvider';
 
@@ -40,6 +41,7 @@ export default function ReceiptDetailTableFooter() {
           title={<T id={'receipt.details.due_amount'} />}
           value={'0'}
         />
+        <DualCurrencyTotalLinesView invoice={receipt} />
       </ReceiptTotalLines>
     </ReceiptDetailsFooterRoot>
   );

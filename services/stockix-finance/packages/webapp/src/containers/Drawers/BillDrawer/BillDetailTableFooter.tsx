@@ -9,6 +9,7 @@ import {
   T,
   TotalLines,
   TotalLine,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useBillDrawerContext } from './BillDrawerProvider';
 
@@ -23,7 +24,7 @@ export function BillDetailTableFooter() {
       <BillTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
         <TotalLine
           title={<T id={'bill.details.subtotal'} />}
-          value={<FormatNumber value={bill.amont} />}
+          value={<FormatNumber value={bill.amount} />}
           borderStyle={TotalLineBorderStyle.SingleDark}
         />
         <TotalLine
@@ -40,6 +41,7 @@ export function BillDetailTableFooter() {
           title={<T id={'bill.details.due_amount'} />}
           value={bill.formatted_due_amount}
         />
+        <DualCurrencyTotalLinesView invoice={bill} />
       </BillTotalLines>
     </BillDetailsFooterRoot>
   );

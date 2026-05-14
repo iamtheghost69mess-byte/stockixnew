@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useCallback } from 'react';
+import moment from 'moment';
 import { compose } from '@/utils';
 import { DataTable, TableSkeletonRows } from '@/components';
 import { useCurrenciesContext } from './CurrenciesProvider';
@@ -27,10 +28,26 @@ function CurrenciesDataTable({
     openAlert('currency-delete', { currency_code });
   };
 
-  // Opens the exchange rate dialog with the currency pre-filled and locked.
+  // Opens the exchange rate dialog in new mode with currency pre-filled.
   const handleSetRate = useCallback(
     (currency) => {
       openDialog('exchangeRate-form', { currencyCode: currency.currency_code });
+    },
+    [openDialog],
+  );
+
+  // Opens the exchange rate dialog in edit mode for the currency's latest rate.
+  const handleEditRate = useCallback(
+    (currency) => {
+      openDialog('exchangeRate-form', {
+        action: 'edit',
+        exchangeRate: {
+          id: currency.latest_exchange_rate_id,
+          currency_code: currency.currency_code,
+          exchange_rate: currency.latest_exchange_rate,
+          date: moment(currency.latest_exchange_rate_date).format('YYYY-MM-DD'),
+        },
+      });
     },
     [openDialog],
   );
@@ -48,6 +65,7 @@ function CurrenciesDataTable({
         onDeleteCurrency: handleDeleteCurrency,
         onEditCurrency: handleEditCurrency,
         onSetRate: handleSetRate,
+        onEditRate: handleEditRate,
       }}
       rowContextMenu={ActionMenuList}
       {...tableProps}

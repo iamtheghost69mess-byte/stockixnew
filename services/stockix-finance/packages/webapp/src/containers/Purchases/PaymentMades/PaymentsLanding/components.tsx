@@ -11,7 +11,7 @@ import {
   Position,
 } from '@blueprintjs/core';
 
-import { Icon, Money, FormatDateCell, Can } from '@/components';
+import { Icon, Money, FormatDateCell, Can, DualCurrencyAmountCell } from '@/components';
 import { PaymentMadeAction, AbilitySubject } from '@/constants/abilityOption';
 
 import { safeCallback } from '@/utils';
@@ -113,7 +113,8 @@ export function usePaymentMadesTableColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: AmountAccessor,
+        accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 140,
         className: 'amount',
         align: 'right',

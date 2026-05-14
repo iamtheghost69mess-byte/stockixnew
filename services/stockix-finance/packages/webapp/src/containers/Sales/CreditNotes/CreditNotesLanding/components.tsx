@@ -11,6 +11,7 @@ import {
   If,
   Icon,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import { safeCallback } from '@/utils';
 import { CreditNoteAction, AbilitySubject } from '@/constants/abilityOption';
@@ -140,6 +141,7 @@ export function useCreditNoteTableColumns() {
         id: 'amount',
         Header: intl.get('amount'),
         accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,
@@ -150,6 +152,7 @@ export function useCreditNoteTableColumns() {
         id: 'balance',
         Header: intl.get('balance'),
         accessor: 'formatted_credits_remaining',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

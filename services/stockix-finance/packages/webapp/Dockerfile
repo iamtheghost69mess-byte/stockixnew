@@ -7,7 +7,7 @@ RUN npm install -g pnpm@7
 COPY lerna.json ./
 
 # Copy workspace configuration
-COPY pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml .npmrc package.json ./
 
 WORKDIR /app/packages/webapp
 

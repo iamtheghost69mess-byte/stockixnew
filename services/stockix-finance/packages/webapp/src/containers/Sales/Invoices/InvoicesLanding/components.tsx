@@ -19,6 +19,7 @@ import {
   If,
   Icon,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import { formattedAmount, safeCallback, calculateStatus } from '@/utils';
 import {
@@ -227,6 +228,7 @@ export function useInvoicesTableColumns() {
         id: 'amount',
         Header: intl.get('balance'),
         accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

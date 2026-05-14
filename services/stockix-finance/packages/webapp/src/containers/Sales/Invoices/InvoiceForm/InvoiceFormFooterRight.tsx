@@ -10,10 +10,12 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { useInvoiceTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function InvoiceFormFooterRight() {
   // Calculate the total due amount of invoice entries.
   const {
+    total,
     formattedSubtotal,
     formattedTotal,
     formattedDueTotal,
@@ -33,6 +35,7 @@ export function InvoiceFormFooterRight() {
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={<T id={'invoice_form.label.payment_amount'} />}
         value={formattedPaymentTotal}

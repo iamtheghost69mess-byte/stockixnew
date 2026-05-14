@@ -111,3 +111,39 @@ export function useRefreshExchangeRate() {
     },
   };
 }
+
+/**
+ * Looks up a single exchange rate by currency code + date.
+ * Used by the form to auto-switch to edit mode on PERIOD_EXISTS.
+ */
+export function useExchangeRateLookup() {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({ currencyCode, date }: { currencyCode: string; date: string }) =>
+      apiRequest.get('exchange_rates/lookup', {
+        params: { currency_code: currencyCode, date },
+      }),
+  );
+}
+
+/**
+ * Fetches the most recent exchange rate on or before a given date.
+ * Used by form footers for transaction-date dual-currency conversion.
+ */
+export function useExchangeRateByDate(currencyCode: string, date: string, props?) {
+  const apiRequest = useApiRequest();
+
+  return useQueryTenant(
+    ['EXCHANGE_RATE_BY_DATE', currencyCode, date],
+    () =>
+      apiRequest.get('exchange_rates/by-date', {
+        params: { currency_code: currencyCode, date },
+      }),
+    {
+      enabled: !!(currencyCode && date),
+      select: (res) => res.data.exchange_rate,
+      ...props,
+    },
+  );
+}

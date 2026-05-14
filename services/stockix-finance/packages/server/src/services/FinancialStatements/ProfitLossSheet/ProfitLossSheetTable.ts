@@ -37,12 +37,15 @@ export class ProfitLossSheetTable extends R.compose(
    * @param {} date
    * @param {IProfitLossSheetQuery} query
    */
-  constructor(data: any, query: IProfitLossSheetQuery, i18n: any) {
+  private baseCurrency: string;
+
+  constructor(data: any, query: IProfitLossSheetQuery, i18n: any, baseCurrency?: string) {
     super();
 
     this.query = new ProfitLossSheetQuery(query);
     this.reportData = data;
     this.i18n = i18n;
+    this.baseCurrency = baseCurrency ?? '';
   }
 
   // ----------------------------------
@@ -204,10 +207,13 @@ export class ProfitLossSheetTable extends R.compose(
    * @returns {ITableColumn[]}
    */
   private totalColumn = (): ITableColumn[] => {
+    const label = this.baseCurrency
+      ? `${this.i18n.__('profit_loss_sheet.total')} (${this.baseCurrency})`
+      : this.i18n.__('profit_loss_sheet.total');
     return [
       {
         key: 'total',
-        label: this.i18n.__('profit_loss_sheet.total'),
+        label,
         children: this.tableColumnChildren(),
       },
     ];

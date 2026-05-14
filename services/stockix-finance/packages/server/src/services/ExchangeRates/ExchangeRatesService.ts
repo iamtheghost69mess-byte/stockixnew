@@ -129,10 +129,47 @@ export default class ExchangeRatesService implements IExchangeRatesService {
     const exchangeRates = await ExchangeRate.query()
       .onBuild((query) => {
         dynamicFilter.buildQuery()(query);
+        if (exchangeRateFilter.currencyCode) {
+          query.where('currency_code', exchangeRateFilter.currencyCode);
+        }
       })
       .pagination(exchangeRateFilter.page - 1, exchangeRateFilter.pageSize);
 
     return exchangeRates;
+  }
+
+  /**
+   * Looks up a single exchange rate by currency code and exact date.
+   */
+  public async lookupExchangeRate(
+    tenantId: number,
+    currencyCode: string,
+    date: string
+  ): Promise<IExchangeRate | null> {
+    const { ExchangeRate } = this.tenancy.models(tenantId);
+    const rate = await ExchangeRate.query()
+      .where('currency_code', currencyCode)
+      .where('date', moment(date).format('YYYY-MM-DD'))
+      .first();
+    return rate || null;
+  }
+
+  /**
+   * Returns the most recent exchange rate on or before the given date.
+   * Used for transaction-date conversion on invoice/bill/payment forms.
+   */
+  public async lookupRateByDate(
+    tenantId: number,
+    currencyCode: string,
+    date: string
+  ): Promise<IExchangeRate | null> {
+    const { ExchangeRate } = this.tenancy.models(tenantId);
+    const rate = await ExchangeRate.query()
+      .where('currency_code', currencyCode)
+      .where('date', '<=', moment(date).format('YYYY-MM-DD'))
+      .orderBy('date', 'DESC')
+      .first();
+    return rate || null;
   }
 
   /**

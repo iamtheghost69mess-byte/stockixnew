@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { FormattedMessage as T } from '@/components';
 import { CLASSES } from '@/constants/classes';
 import classNames from 'classnames';
-import { MenuItem, Button } from '@blueprintjs/core';
+import { MenuItem, Button, Icon } from '@blueprintjs/core';
 import { Select } from '@blueprintjs/select';
 
 export function CurrencySelectList({
@@ -13,6 +13,8 @@ export function CurrencySelectList({
   onCurrencySelected,
   popoverFill = false,
   disabled = false,
+  placeholder,
+  allowClear = false,
 }) {
   const [selectedCurrency, setSelectedCurrency] = useState(null);
 
@@ -49,16 +51,32 @@ export function CurrencySelectList({
 
   useEffect(() => {
     if (typeof selectedCurrencyCode !== 'undefined') {
+      const list = Array.isArray(currenciesList) ? currenciesList : [];
       const currency = selectedCurrencyCode
-        ? currenciesList.find((a) => a.currency_code === selectedCurrencyCode)
+        ? list.find((a) => a.currency_code === selectedCurrencyCode)
         : null;
-      setSelectedCurrency(currency);
+      setSelectedCurrency(currency ?? null);
     }
-  }, [selectedCurrencyCode, currenciesList, setSelectedCurrency]);
+  }, [selectedCurrencyCode, currenciesList]);
+
+  const handleClear = useCallback(
+    (e) => {
+      e.stopPropagation();
+      setSelectedCurrency(null);
+      if (onCurrencySelected) {
+        onCurrencySelected(null);
+      }
+    },
+    [onCurrencySelected],
+  );
+
+  const buttonText = selectedCurrency
+    ? selectedCurrency.currency_code
+    : placeholder ?? defaultSelectText;
 
   return (
     <Select
-      items={currenciesList}
+      items={Array.isArray(currenciesList) ? currenciesList : []}
       itemRenderer={currencyCodeRenderer}
       itemPredicate={filterCurrencies}
       onItemSelect={onCurrencySelect}
@@ -74,8 +92,17 @@ export function CurrencySelectList({
     >
       <Button
         disabled={disabled}
-        text={
-          selectedCurrency ? selectedCurrency.currency_code : defaultSelectText
+        text={buttonText}
+        rightIcon={
+          allowClear && selectedCurrency ? (
+            <Icon
+              icon="cross"
+              iconSize={12}
+              onClick={handleClear}
+              title="Clear"
+              style={{ cursor: 'pointer' }}
+            />
+          ) : undefined
         }
       />
     </Select>

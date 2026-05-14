@@ -25,6 +25,8 @@ export interface IOrganizationUpdateDTO {
   timezone: string;
   fiscalYear: string;
   industry: string;
+  displayCurrencies?: string[];
+  secondaryCurrency?: string | null;
 }
 
 export interface IOrganizationBuildEventPayload {

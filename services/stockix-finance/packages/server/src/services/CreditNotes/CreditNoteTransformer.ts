@@ -9,8 +9,11 @@ export class CreditNoteTransformer extends Transformer {
   public includeAttributes = (): string[] => {
     return [
       'formattedCreditsRemaining',
+      'formattedLocalCreditsRemaining',
       'formattedCreditNoteDate',
       'formattedAmount',
+      'formattedLocalAmount',
+      'formattedLocalDueAmount',
       'formattedCreditsUsed'
     ];
   };
@@ -36,6 +39,15 @@ export class CreditNoteTransformer extends Transformer {
   };
 
   /**
+   * Retrieve formatted local amount.
+   * @param {ICreditNote} credit
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (credit): string => {
+    return this.formatMoney(credit.localAmount);
+  };
+
+  /**
    * Retrieve formatted credits remaining.
    * @param {ICreditNote} credit
    * @returns {string}
@@ -44,6 +56,19 @@ export class CreditNoteTransformer extends Transformer {
     return formatNumber(credit.creditsRemaining, {
       currencyCode: credit.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted local credits remaining.
+   * @param {ICreditNote} credit
+   * @returns {string}
+   */
+  protected formattedLocalCreditsRemaining = (credit): string => {
+    return this.formatMoney(credit.localCreditsRemaining);
+  };
+
+  protected formattedLocalDueAmount = (credit): string => {
+    return this.formatMoney(credit.localCreditsRemaining);
   };
 
   /**

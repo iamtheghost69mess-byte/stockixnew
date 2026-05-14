@@ -20,7 +20,9 @@ import { useExchangeRateFromContext } from './ExchangeRateFormProvider';
 
 
 export default function ExchangeRateFormFields() {
-  const { action, currencies } = useExchangeRateFromContext();
+  const { action, currencies, currencyCode } = useExchangeRateFromContext();
+  // Lock the currency select when pre-filled via "Set Rate" or in edit mode.
+  const isCurrencyLocked = action === 'edit' || !!currencyCode;
 
   return (
     <div className={Classes.DIALOG_BODY}>
@@ -64,7 +66,7 @@ export default function ExchangeRateFormFields() {
               onCurrencySelected={({ currency_code }) => {
                 form.setFieldValue('currency_code', currency_code);
               }}
-              disabled={action === 'edit'}
+              disabled={isCurrencyLocked}
             />
           </FormGroup>
         )}

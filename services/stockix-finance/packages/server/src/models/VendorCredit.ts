@@ -23,7 +23,15 @@ export default class VendorCredit extends mixin(TenantModel, [
    * Virtual attributes.
    */
   static get virtualAttributes() {
-    return ['localAmount'];
+    return [
+      'localAmount',
+      'localCreditsRemaining',
+      'isDraft',
+      'isPublished',
+      'isOpen',
+      'isClosed',
+      'creditsRemaining',
+    ];
   }
 
   /**
@@ -32,6 +40,14 @@ export default class VendorCredit extends mixin(TenantModel, [
    */
   get localAmount() {
     return this.amount * this.exchangeRate;
+  }
+
+  /**
+   * Credits remaining in organization base currency.
+   * @returns {number}
+   */
+  get localCreditsRemaining() {
+    return this.creditsRemaining * this.exchangeRate;
   }
 
   /**
@@ -119,9 +135,6 @@ export default class VendorCredit extends mixin(TenantModel, [
   /**
    * Virtual attributes.
    */
-  static get virtualAttributes() {
-    return ['isDraft', 'isPublished', 'isOpen', 'isClosed', 'creditsRemaining'];
-  }
 
   /**
    * Detarmines whether the vendor credit is draft.
