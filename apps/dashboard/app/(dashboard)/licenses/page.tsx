@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import LicenseAssignDialog from "@/components/license-assign-dialog";
+import { LicenseAssignDialog } from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";
 import LicenseStatusBadge from "@/components/license-status-badge";
 import {

@@ -49,6 +49,30 @@ export const createOrgSchema = z.object({
 });
 export type CreateOrgValues = z.infer<typeof createOrgSchema>;
 
+/** Same rules as create org (Unicode, reserved names, length). */
+export const renameOrgSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Organization name is required")
+    .superRefine((value, ctx) => {
+      const err = validateOrganizationDisplayName(value);
+      if (err) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+      }
+    }),
+});
+export type RenameOrgValues = z.infer<typeof renameOrgSchema>;
+
+/** Assign unassigned license to a tenant (`notes` reserved for future API use). */
+export const assignLicenseSchema = z.object({
+  tenantId: z
+    .string()
+    .min(1, "Please select a tenant")
+    .uuid("Please select a valid tenant"),
+  notes: z.string().max(500, "Notes must be at most 500 characters").optional(),
+});
+export type AssignLicenseValues = z.infer<typeof assignLicenseSchema>;
+
 export const generateLicenseSchema = z
   .object({
     product: z.enum(["platform", "pos_desktop", "bundle"]),

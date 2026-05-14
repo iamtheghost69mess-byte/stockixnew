@@ -39,7 +39,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -49,8 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useOrganizations, type Organization } from "@/hooks/use-organizations";
 import { cn } from "@/lib/utils";
-import { createOrgSchema, type CreateOrgValues } from "@/lib/schemas";
-import { validateOrganizationDisplayName } from "@/lib/validate-org-name";
+import { createOrgSchema, renameOrgSchema, type CreateOrgValues, type RenameOrgValues } from "@/lib/schemas";
 
 interface OrgSwitcherProps {
   tenantId: string;
@@ -180,13 +178,18 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [renameOrg, setRenameOrg] = useState<Organization | null>(null);
-  const [renameValue, setRenameValue] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
   const [suspendOrg, setSuspendOrg] = useState<Organization | null>(null);
   const [suspendSaving, setSuspendSaving] = useState(false);
 
   const orgForm = useForm<CreateOrgValues>({
     resolver: zodResolver(createOrgSchema),
+    defaultValues: { name: "" },
+    mode: "onTouched",
+  });
+
+  const renameForm = useForm<RenameOrgValues>({
+    resolver: zodResolver(renameOrgSchema),
     defaultValues: { name: "" },
     mode: "onTouched",
   });
@@ -240,14 +243,9 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
     }
   });
 
-  const saveRename = async () => {
+  const onRenameSubmit = renameForm.handleSubmit(async (values) => {
     if (!renameOrg) return;
-    const nameErr = validateOrganizationDisplayName(renameValue);
-    if (nameErr) {
-      toast.error(nameErr);
-      return;
-    }
-    const name = renameValue.trim();
+    const name = values.name.trim();
     setRenameSaving(true);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/organizations/${renameOrg.id}`, {
@@ -262,11 +260,12 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
       }
       toast.success("Renamed");
       setRenameOrg(null);
+      renameForm.reset({ name: "" });
       await refetch(true);
     } finally {
       setRenameSaving(false);
     }
-  };
+  });
 
   const confirmSuspend = async () => {
     if (!suspendOrg) return;
@@ -315,8 +314,8 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
                     primaryId={primaryId}
                     closeMenu={() => setMenuOpen(false)}
                     onRenameRequest={(o) => {
-                      setRenameValue(o.name);
                       setRenameOrg(o);
+                      renameForm.reset({ name: o.name });
                     }}
                     onSuspendRequest={(o) => setSuspendOrg(o)}
                   />
@@ -401,8 +400,8 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        setRenameValue(org.name);
                         setRenameOrg(org);
+                        renameForm.reset({ name: org.name });
                       }}
                     >
                       <Pencil className="mr-1 size-3.5" />
@@ -479,24 +478,54 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={renameOrg !== null} onOpenChange={(o) => !o && setRenameOrg(null)}>
+      <Dialog
+        open={renameOrg !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRenameOrg(null);
+            renameForm.reset({ name: "" });
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename organization</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} maxLength={100} />
-            <p className="text-xs text-muted-foreground">2–100 characters.</p>
-          </div>
+          <Form {...renameForm}>
+            <form
+              id="org-rename-form"
+              className="space-y-2 py-2"
+              noValidate
+              onSubmit={(e) => void onRenameSubmit(e)}
+            >
+              <FormField
+                control={renameForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Organization name" maxLength={100} disabled={renameSaving} {...field} />
+                    </FormControl>
+                    <FormDescription className="text-xs">2–100 characters.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </form>
+          </Form>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setRenameOrg(null)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setRenameOrg(null);
+                renameForm.reset({ name: "" });
+              }}
+            >
               Cancel
             </Button>
-            <Button
-              disabled={renameSaving || validateOrganizationDisplayName(renameValue) !== null}
-              onClick={() => void saveRename()}
-            >
+            <Button type="submit" form="org-rename-form" disabled={renameSaving}>
               {renameSaving ? <Loader2 className="size-4 animate-spin" /> : "Save"}
             </Button>
           </DialogFooter>
