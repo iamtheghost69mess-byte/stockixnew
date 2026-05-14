@@ -73,24 +73,29 @@ function resolveOrgOpenUrl(org: Organization): string {
 
 function OrgMenuRow({
   org,
-  primaryId,
   closeMenu,
   onRenameRequest,
   onSuspendRequest,
 }: {
   org: Organization;
-  primaryId: string | undefined;
   closeMenu: () => void;
   onRenameRequest: (org: Organization) => void;
   onSuspendRequest: (org: Organization) => void;
 }) {
   const href = resolveOrgOpenUrl(org);
-  const isPrimary = org.id === primaryId;
+  const isPrimary = org.isPrimary;
 
   if (org.status === "active") {
     return (
       <DropdownMenuGroup>
-        <DropdownMenuLabel className="max-w-[220px] truncate font-medium text-foreground">{org.name}</DropdownMenuLabel>
+        <DropdownMenuLabel className="flex w-full max-w-[220px] items-center gap-2 font-medium text-foreground">
+          <span className="min-w-0 truncate">{org.name}</span>
+          {org.isPrimary ? (
+            <Badge variant="secondary" className="ml-auto shrink-0 text-xs">
+              Primary
+            </Badge>
+          ) : null}
+        </DropdownMenuLabel>
         <DropdownMenuItem
           onSelect={(e) => {
             e.preventDefault();
@@ -131,6 +136,11 @@ function OrgMenuRow({
       <DropdownMenuItem disabled className="opacity-100">
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate">{org.name}</span>
+          {org.isPrimary ? (
+            <Badge variant="secondary" className="ml-auto shrink-0 text-xs">
+              Primary
+            </Badge>
+          ) : null}
           <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
         </span>
       </DropdownMenuItem>
@@ -142,6 +152,11 @@ function OrgMenuRow({
       <DropdownMenuItem disabled className="opacity-100">
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate">{org.name}</span>
+          {org.isPrimary ? (
+            <Badge variant="secondary" className="ml-auto shrink-0 text-xs">
+              Primary
+            </Badge>
+          ) : null}
           <Badge variant="secondary" className="shrink-0">
             Suspended
           </Badge>
@@ -158,6 +173,11 @@ function OrgMenuRow({
           render={
             <span className="flex min-w-0 flex-1 cursor-default items-center gap-2 outline-none">
               <span className="truncate">{org.name}</span>
+              {org.isPrimary ? (
+                <Badge variant="secondary" className="ml-auto shrink-0 text-xs">
+                  Primary
+                </Badge>
+              ) : null}
               <Badge variant="destructive" className="shrink-0">
                 Failed
               </Badge>
@@ -195,7 +215,6 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
   });
 
   const hasProvisioning = organizations.some((o) => o.status === "provisioning");
-  const primaryId = organizations[0]?.id;
 
   useEffect(() => {
     if (!hasProvisioning) return;
@@ -311,7 +330,6 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
                   <OrgMenuRow
                     key={org.id}
                     org={org}
-                    primaryId={primaryId}
                     closeMenu={() => setMenuOpen(false)}
                     onRenameRequest={(o) => {
                       setRenameOrg(o);
@@ -357,7 +375,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
         {organizations.length > 0 && !isLoading ? (
           <ul className="mt-2 max-w-md space-y-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
             {organizations.map((org) => {
-              const isPrimary = org.id === primaryId;
+              const isPrimary = org.isPrimary;
               return (
                 <li
                   key={org.id}

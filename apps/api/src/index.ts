@@ -180,6 +180,7 @@ function serializeOrganizationRow(
     slug: row.slug,
     subdomain: row.subdomain,
     status: row.status,
+    isPrimary: row.isPrimary,
     provisioningError: row.provisioningError,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -733,7 +734,7 @@ app.get("/public/tenant-orgs/:tenantId", async (c) => {
     .where(
       and(eq(organizations.tenantId, tenantId), eq(organizations.status, "active")),
     )
-    .orderBy(asc(organizations.createdAt));
+    .orderBy(desc(organizations.isPrimary), asc(organizations.createdAt));
   const composeNames = rows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
   const portMap = await internalPortsByComposeProject(db, composeNames);
   return c.json({
@@ -748,6 +749,7 @@ app.get("/public/tenant-orgs/:tenantId", async (c) => {
         slug: full.slug,
         subdomain: full.subdomain,
         status: full.status,
+        isPrimary: full.isPrimary,
         createdAt: full.createdAt,
         publicUrl: full.publicUrl,
       };
@@ -2791,7 +2793,7 @@ app.get("/tenants/:tenantId/organizations", async (c) => {
     .select()
     .from(organizations)
     .where(eq(organizations.tenantId, parsed.data))
-    .orderBy(asc(organizations.createdAt));
+    .orderBy(desc(organizations.isPrimary), asc(organizations.createdAt));
 
   const actorId = String(c.get("actorId") ?? "");
   const actorRole = String(c.get("actorRole") ?? "");
@@ -2877,6 +2879,13 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
     );
   }
 
+  const existingOrgCountRows = await db
+    .select({ count: count() })
+    .from(organizations)
+    .where(eq(organizations.tenantId, parsed.data));
+  const existingOrgCount = Number(existingOrgCountRows[0]?.count ?? 0);
+  const isFirstOrg = existingOrgCount === 0;
+
   const slug = await pickUniqueOrganizationSlug(db, body.name);
   const root = rootDomainForOrganizationSubdomain();
   const subdomain = `${slug}.${root}`.slice(0, 255);
@@ -2889,6 +2898,7 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
       slug,
       subdomain,
       status: "provisioning",
+      isPrimary: isFirstOrg,
     })
     .returning();
 
@@ -3008,22 +3018,14 @@ app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
     );
   }
 
-  if (body.status === "suspended") {
-    const [firstOrg] = await db
-      .select({ id: organizations.id })
-      .from(organizations)
-      .where(eq(organizations.tenantId, tenantParsed.data))
-      .orderBy(asc(organizations.createdAt))
-      .limit(1);
-    if (firstOrg?.id === orgParsed.data) {
-      return c.json(
-        {
-          error: "CANNOT_SUSPEND_PRIMARY",
-          message: "Cannot suspend the primary organization.",
-        },
-        400,
-      );
-    }
+  if (body.status === "suspended" && org.isPrimary) {
+    return c.json(
+      {
+        error: "CANNOT_SUSPEND_PRIMARY",
+        message: "Cannot suspend the primary organization.",
+      },
+      400,
+    );
   }
 
   const setVals: { name?: string; status?: string; updatedAt: Date } = { updatedAt: new Date() };
@@ -3120,14 +3122,7 @@ app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
     );
   }
 
-  const [firstOrg] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(eq(organizations.tenantId, tenantParsed.data))
-    .orderBy(asc(organizations.createdAt))
-    .limit(1);
-
-  if (firstOrg?.id === orgParsed.data) {
+  if (org.isPrimary) {
     return c.json(
       {
         error: "CANNOT_DELETE_PRIMARY",

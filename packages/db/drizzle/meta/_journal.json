@@ -120,6 +120,13 @@
       "when": 1778900000000,
       "tag": "0017_plans_org_activation_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778746833262,
+      "tag": "0018_organizations_is_primary",
+      "breakpoints": true
     }
   ]
 }

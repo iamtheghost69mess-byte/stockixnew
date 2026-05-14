@@ -78,6 +78,7 @@ export const organizations = pgTable("organizations", {
   subdomain: varchar("subdomain", { length: 255 }).notNull().unique(),
   status: varchar("status", { length: 50 }).notNull().default("provisioning"),
   // provisioning | active | suspended | failed
+  isPrimary: boolean("is_primary").notNull().default(false),
   provisioningError: text("provisioning_error"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

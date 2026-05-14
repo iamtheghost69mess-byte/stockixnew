@@ -14,6 +14,7 @@ export type Organization = {
   subdomain: string;
   status: (typeof ORG_STATUSES)[number];
   provisioningError: string | null;
+  isPrimary: boolean;
   createdAt: string;
   updatedAt: string;
   /** Local dev: full `http://{subdomain}:{nginxPort}` when nginx is published on a host port. */
@@ -51,6 +52,7 @@ function parseOrganization(row: unknown): Organization | null {
     subdomain: o.subdomain,
     status: o.status,
     provisioningError,
+    isPrimary: typeof o.isPrimary === "boolean" ? o.isPrimary : false,
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
     publicUrl,

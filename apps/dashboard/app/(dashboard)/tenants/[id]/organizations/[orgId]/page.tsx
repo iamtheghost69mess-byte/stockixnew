@@ -86,8 +86,8 @@ export default function OrgDetailPage() {
     void load();
   }, [load]);
 
-  const primaryId = organizations[0]?.id;
-  const isPrimary = primaryId === orgId;
+  const row = org ?? organizations.find((o) => o.id === orgId);
+  const isPrimary = row?.isPrimary === true;
 
   const saveRename = async () => {
     const nameErr = validateOrganizationDisplayName(renameValue);
