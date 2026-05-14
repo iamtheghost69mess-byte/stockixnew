@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { BookOpenIcon, Building2Icon, KeyRoundIcon, LayoutDashboardIcon, Settings2Icon, UsersIcon } from "lucide-react";
+import {
+  BookOpenIcon,
+  Building2Icon,
+  KeyRoundIcon,
+  LayoutDashboardIcon,
+  ScrollTextIcon,
+  Settings2Icon,
+  UsersIcon,
+} from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { NavDocuments, type NavDocumentItem } from "@/components/nav-documents";
@@ -48,6 +56,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       },
     ];
     if (me?.capabilities.canAccessSettings) {
+      items.push({
+        title: "Audit log",
+        url: "/audit-log",
+        icon: <ScrollTextIcon />,
+      });
       items.push({
         title: "Security & settings",
         url: "/settings",

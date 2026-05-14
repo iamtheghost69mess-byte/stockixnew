@@ -1625,6 +1625,91 @@ app.patch("/owners/:ownerId", async (c) => {
   return c.json({ updated: true, owner: updated });
 });
 
+app.get("/audit-log", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+
+  const rawPage = c.req.query("page");
+  const rawPageSize = c.req.query("pageSize");
+  const actionFilter = c.req.query("action")?.trim() ?? "";
+  const rawActorId = c.req.query("actorId")?.trim() ?? "";
+  const rawTenantId = c.req.query("tenantId")?.trim() ?? "";
+
+  const page = Math.max(1, Number(rawPage ?? 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(rawPageSize ?? 20) || 20));
+  const offset = (page - 1) * pageSize;
+
+  const conditions: SQL[] = [];
+  if (actionFilter) {
+    conditions.push(ilike(adminAuditLog.action, `%${actionFilter}%`));
+  }
+  if (rawActorId) {
+    const parsed = z.string().uuid().safeParse(rawActorId);
+    if (parsed.success) {
+      conditions.push(eq(adminAuditLog.actorId, parsed.data));
+    }
+  }
+  if (rawTenantId) {
+    const parsed = z.string().uuid().safeParse(rawTenantId);
+    if (parsed.success) {
+      conditions.push(eq(adminAuditLog.targetTenantId, parsed.data));
+    }
+  }
+
+  const fullWhere =
+    conditions.length === 0 ? undefined : conditions.length === 1 ? conditions[0] : and(...conditions);
+
+  const joinActor = eq(owners.id, adminAuditLog.actorId);
+
+  const countQuery = db
+    .select({ c: count() })
+    .from(adminAuditLog)
+    .innerJoin(owners, joinActor);
+
+  const dataQuery = db
+    .select({
+      id: adminAuditLog.id,
+      action: adminAuditLog.action,
+      actorId: adminAuditLog.actorId,
+      actorName: owners.name,
+      targetTenantId: adminAuditLog.targetTenantId,
+      targetOwnerId: adminAuditLog.targetOwnerId,
+      ipAddress: adminAuditLog.ipAddress,
+      userAgent: adminAuditLog.userAgent,
+      metadata: adminAuditLog.metadata,
+      createdAt: adminAuditLog.createdAt,
+    })
+    .from(adminAuditLog)
+    .innerJoin(owners, joinActor)
+    .orderBy(desc(adminAuditLog.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  const [countResult, rows] = await Promise.all([
+    fullWhere ? countQuery.where(fullWhere) : countQuery,
+    fullWhere ? dataQuery.where(fullWhere) : dataQuery,
+  ]);
+
+  const total = Number(countResult[0]?.c ?? 0);
+  const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+
+  const entries = rows.map((r) => ({
+    id: r.id,
+    action: r.action,
+    actorId: r.actorId,
+    actorName: r.actorName,
+    targetTenantId: r.targetTenantId,
+    targetOwnerId: r.targetOwnerId,
+    ipAddress: r.ipAddress,
+    userAgent: r.userAgent,
+    metadata: r.metadata ?? null,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  return c.json({ entries, total, page, pageSize, totalPages });
+});
+
 app.get("/tenants", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);

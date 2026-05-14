@@ -40,6 +40,7 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
     return "super_admin";
   }
   if (pathname.startsWith("/fingerprints")) return "super_admin";
+  if (pathname.startsWith("/audit-log")) return "super_admin";
   if (pathname.startsWith("/owners")) {
     if (m === "GET") return "read_only";
     return "super_admin";

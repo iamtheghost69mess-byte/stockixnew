@@ -113,6 +113,10 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/public/tenant-orgs/abc", "GET")).toBeNull();
   });
 
+  it("GET /audit-log requires super_admin", () => {
+    expect(requiredApiRole("/audit-log", "GET")).toBe("super_admin");
+  });
+
   it("GET /owners requires at least read_only", () => {
     expect(requiredApiRole("/owners", "GET")).toBe("read_only");
   });
