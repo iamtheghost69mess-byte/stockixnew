@@ -3,6 +3,16 @@ import { difference } from 'lodash';
 import { IFilterRole, IModel } from '@/interfaces';
 
 /**
+ * Extract relation table name from relation.
+ * @param {String} column -
+ * @return {String} - join relation table.
+ */
+export const getTableFromRelationColumn = (column: string) => {
+  const splitedColumn = column.split('.');
+  return splitedColumn.length > 0 ? splitedColumn[0] : '';
+};
+
+/**
  * Get field column metadata and its relation with other tables.
  * @param {String} tableName - Table name of target column.
  * @param {String} fieldKey - Target column key that stored in resource field.

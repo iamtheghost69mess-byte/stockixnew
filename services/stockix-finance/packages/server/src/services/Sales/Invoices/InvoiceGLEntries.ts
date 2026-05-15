@@ -3,6 +3,7 @@ import {
   ISaleInvoice,
   IItemEntry,
   ILedgerEntry,
+  ICommonLedgerEntry,
   AccountNormal,
   ILedger,
 } from '@/interfaces';
@@ -108,7 +109,7 @@ export class SaleInvoiceGLEntries {
    */
   private getInvoiceGLCommonEntry = (
     saleInvoice: ISaleInvoice
-  ): Partial<ILedgerEntry> => ({
+  ): ICommonLedgerEntry => ({
     credit: 0,
     debit: 0,
     currencyCode: saleInvoice.currencyCode,
