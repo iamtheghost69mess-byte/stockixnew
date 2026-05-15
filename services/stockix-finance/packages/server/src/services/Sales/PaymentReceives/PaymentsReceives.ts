@@ -439,7 +439,7 @@ export default class PaymentReceiveService implements IPaymentsReceiveService {
   ) {
     const { PaymentReceive, Contact } = this.tenancy.models(tenantId);
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Validate customer existance.
     const paymentCustomer = await Contact.query()
@@ -531,7 +531,7 @@ export default class PaymentReceiveService implements IPaymentsReceiveService {
   ) {
     const { PaymentReceive, Contact } = this.tenancy.models(tenantId);
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Validate the payment receive existance.
     const oldPaymentReceive = await this.getPaymentReceiveOrThrowError(

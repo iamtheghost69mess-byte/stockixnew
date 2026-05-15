@@ -19,8 +19,8 @@ export interface IInventoryTransaction {
   entryId: number;
   meta?: IInventoryTransactionMeta;
   costLotAggregated?: IInventoryCostLotAggregated;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
   warehouseId?: number;
 }
 

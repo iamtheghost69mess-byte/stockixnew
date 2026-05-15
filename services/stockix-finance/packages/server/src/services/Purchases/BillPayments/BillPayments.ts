@@ -337,7 +337,7 @@ export default class BillPaymentsService implements IBillPaymentsService {
   ): Promise<IBillPayment> {
     const { BillPayment, Contact } = this.tenancy.models(tenantId);
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieves the payment vendor or throw not found error.
     const vendor = await Contact.query()
@@ -427,7 +427,7 @@ export default class BillPaymentsService implements IBillPaymentsService {
   ): Promise<IBillPayment> {
     const { BillPayment, Contact } = this.tenancy.models(tenantId);
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     //
     const oldBillPayment = await this.getPaymentMadeOrThrowError(

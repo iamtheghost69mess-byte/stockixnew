@@ -174,7 +174,7 @@ export default class InventoryAdjustmentsGL {
       .findById(inventoryAdjustmentId)
       .withGraphFetched('entries.item');
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieves the inventory adjustment GL entries.
     const entries = this.getIncrementAdjustmentGLEntries(

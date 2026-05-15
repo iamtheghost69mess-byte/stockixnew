@@ -4,7 +4,8 @@ import styled from 'styled-components';
 import { ControlGroup } from '@blueprintjs/core';
 
 import { FlagIcon } from '../Tags';
-import { FMoneyInputGroup, FFormGroup } from '../Forms';
+import { FFormGroup } from '../Forms';
+import { InverseExchangeRateInput } from './InverseExchangeRateInput';
 
 export function ExchangeRateInputGroup({
   fromCurrency,
@@ -13,28 +14,35 @@ export function ExchangeRateInputGroup({
   formGroupProps,
   name,
 }) {
+  const displayFrom = toCurrency; 
+  const displayTo = fromCurrency;
+
   return (
     <FFormGroup inline={true} {...formGroupProps} name={name}>
       <ControlGroup>
         <ExchangeRatePrepend>
-          <ExchangeFlagIcon currencyCode={fromCurrency} /> 1 {fromCurrency} =
+          <ExchangeFlagIcon currencyCode={displayFrom} /> 1 {displayFrom} =
         </ExchangeRatePrepend>
         <ExchangeRateField
           allowDecimals={true}
-          allowNegativeValue={true}
+          allowNegativeValue={false}
+          decimalsLimit={8}
           {...inputGroupProps}
           name={name}
         />
         <ExchangeRateAppend>
-          <ExchangeFlagIcon currencyCode={toCurrency} /> {toCurrency}
+          <ExchangeFlagIcon currencyCode={displayTo} /> {displayTo}
         </ExchangeRateAppend>
       </ControlGroup>
     </FFormGroup>
   );
 }
 
-const ExchangeRateField = styled(FMoneyInputGroup)`
-  max-width: 75px;
+const ExchangeRateField = styled(InverseExchangeRateInput)`
+  max-width: 110px;
+  .bp3-input {
+    text-align: right;
+  }
 `;
 
 const ExchangeRateSideIcon = styled.div`

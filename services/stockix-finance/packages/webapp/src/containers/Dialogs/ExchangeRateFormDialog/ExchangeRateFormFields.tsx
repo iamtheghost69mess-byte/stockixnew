@@ -17,10 +17,14 @@ import {
   CurrencySelectList,
 } from '@/components';
 import { useExchangeRateFromContext } from './ExchangeRateFormProvider';
-
+import { InverseExchangeRateInput } from '@/components';
+import { useCurrentOrganization } from '@/hooks/state';
 
 export default function ExchangeRateFormFields() {
   const { action, currencies, currencyCode } = useExchangeRateFromContext();
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency || 'Base';
+
   // Lock the currency select when pre-filled via "Set Rate" or in edit mode.
   const isCurrencyLocked = action === 'edit' || !!currencyCode;
 
@@ -74,17 +78,23 @@ export default function ExchangeRateFormFields() {
 
       {/*------------ Exchange Rate  -----------*/}
       <FastField name={'exchange_rate'}>
-        {({ form, field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'exchange_rate'} />}
-            labelInfo={<FieldRequiredHint />}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="exchange_rate" />}
-            inline={true}
-          >
-            <InputGroup intent={inputIntent({ error, touched })} {...field} />
-          </FormGroup>
-        )}
+        {({ form, field, meta: { error, touched } }) => {
+          const selectedCurrency = form.values.currency_code || 'Foreign';
+          return (
+            <FormGroup
+              label={`Exchange Rate (1 ${baseCurrency} = ? ${selectedCurrency})`}
+              labelInfo={<FieldRequiredHint />}
+              intent={inputIntent({ error, touched })}
+              helperText={<ErrorMessage name="exchange_rate" />}
+              inline={true}
+            >
+              <InverseExchangeRateInput 
+                name={'exchange_rate'}
+                intent={inputIntent({ error, touched })} 
+              />
+            </FormGroup>
+          );
+        }}
       </FastField>
     </div>
   );

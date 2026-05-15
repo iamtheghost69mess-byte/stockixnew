@@ -6,11 +6,26 @@ import { DEFAULT_VIEWS } from '@/services/CreditNotes/constants';
 import ModelSearchable from './ModelSearchable';
 import CreditNoteMeta from './CreditNote.Meta';
 
-export default class CreditNote extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class CreditNote extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any,
+) {
+  id: number;
+  customerId: number;
+  amount: number;
+  exchangeRate: number;
+  openedAt: Date | string | null;
+  refundedAmount: number;
+  invoicesAmount: number;
+  creditDate: Date | string;
+  creditNumber: string;
+  referenceNo?: string;
+  branchId?: number;
+  currencyCode?: string;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -46,7 +61,7 @@ export default class CreditNote extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    return this.amount / this.exchangeRate;
   }
 
   /**

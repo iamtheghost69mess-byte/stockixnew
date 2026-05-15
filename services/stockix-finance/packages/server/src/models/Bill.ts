@@ -8,11 +8,30 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Purchases/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class Bill extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class Bill extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  vendorId: number;
+  amount: number;
+  exchangeRate: number;
+  billDate: Date | string;
+  billNumber: string;
+  referenceNo?: string;
+  note?: string;
+  openedAt: Date | string | null;
+  paymentAmount: number;
+  creditedAmount: number;
+  dueDate: Date | string;
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
+  landedCostAmount: number;
+  allocatedCostAmount: number;
+  invoicedAmount: number;
+
   /**
    * Table name
    */
@@ -192,7 +211,7 @@ export default class Bill extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    return this.amount / this.exchangeRate;
   }
 
   /**
@@ -200,7 +219,7 @@ export default class Bill extends mixin(TenantModel, [
    * @returns {number}
    */
   get localDueAmount() {
-    return this.dueAmount * this.exchangeRate;
+    return this.dueAmount / this.exchangeRate;
   }
 
   /**
@@ -208,7 +227,7 @@ export default class Bill extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAllocatedCostAmount() {
-    return this.allocatedCostAmount * this.exchangeRate;
+    return this.allocatedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -216,7 +235,7 @@ export default class Bill extends mixin(TenantModel, [
    * @returns {number}
    */
   get localLandedCostAmount() {
-    return this.landedCostAmount * this.exchangeRate;
+    return this.landedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -224,7 +243,7 @@ export default class Bill extends mixin(TenantModel, [
    * @returns {number}
    */
   get localUnallocatedCostAmount() {
-    return this.unallocatedCostAmount * this.exchangeRate;
+    return this.unallocatedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -400,7 +419,7 @@ export default class Bill extends mixin(TenantModel, [
       }
     });
 
-    const storedBillsIds = storedBills.map((t) => t.id);
+    const storedBillsIds = storedBills.map((t: any) => t.id);
 
     const notFoundBillsIds = difference(billsIds, storedBillsIds);
     return notFoundBillsIds;

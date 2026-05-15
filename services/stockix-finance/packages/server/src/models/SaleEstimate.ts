@@ -8,11 +8,29 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Sales/Estimates/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class SaleEstimate extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class SaleEstimate extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any,
+) {
+  id: number;
+  customerId: number;
+  balance: number;
+  exchangeRate: number;
+  estimateDate: Date | string;
+  estimateNumber: string;
+  referenceNo?: string;
+  deliveredAt: Date | string | null;
+  expirationDate?: Date | string | null;
+  convertedToInvoiceId?: number;
+  convertedToInvoiceAt?: Date | string | null;
+  approvedAt?: Date | string | null;
+  rejectedAt?: Date | string | null;
+  branchId?: number;
+  currencyCode?: string;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -46,7 +64,7 @@ export default class SaleEstimate extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    return this.balance / this.exchangeRate;
   }
 
   /**

@@ -74,14 +74,14 @@ export function DualCurrencyTotalLines({ total }) {
     values.date;
   const formExchangeRate = values.exchange_rate ?? 1;
 
-  // Nothing to show when total is zero or date is missing.
-  if (!total || !formDate) return null;
+  // Nothing to show when date is missing.
+  if (!formDate) return null;
 
   // Convert total to base currency.
   const totalInBase =
     !formCurrency || formCurrency === baseCurrency
-      ? total
-      : total * formExchangeRate;
+      ? (total || 0)
+      : (total || 0) * formExchangeRate;
 
   // Show base-currency row only when the form is in a foreign currency.
   const showBase = !!(formCurrency && baseCurrency && formCurrency !== baseCurrency);
@@ -143,7 +143,7 @@ export function DualCurrencyTotalLines({ total }) {
  */
 function deriveBaseTotal(entity, baseCurrency) {
   const amount = Number(entity?.amount ?? entity?.total ?? entity?.balance ?? 0);
-  if (!amount) return null;
+  if (!amount && amount !== 0) return null;
 
   const currency = entity?.currency_code;
   const exRate = Number(entity?.exchange_rate ?? 1);
@@ -159,9 +159,8 @@ function deriveBaseTotal(entity, baseCurrency) {
  *
  * Shows:
  *  - The base-currency equivalent when the entity is in a foreign currency
- *    (sourced from the entity's pre-formatted `formatted_local_*` fields).
- *  - The configured "secondary currency" when set and different from the
- *    entity's own currency (computed client-side via the latest known rate).
+ *  - The configured "secondary currency" when set and different from the entity's currency.
+ *  - The configured "display currencies" when set and different from the entity's currency.
  */
 export function DualCurrencyTotalLinesView({
   invoice,
@@ -171,6 +170,7 @@ export function DualCurrencyTotalLinesView({
   const org = useCurrentOrganization();
   const secondaryCurrency = useSecondaryCurrency();
   const baseCurrency = org?.base_currency;
+  const displayCurrencies = org?.display_currencies ?? [];
 
   const isForeign = invoice.currency_code && invoice.currency_code !== baseCurrency;
   const localAmount = invoice[amountField];
@@ -197,7 +197,22 @@ export function DualCurrencyTotalLinesView({
         ? baseTotal / secondaryRate
         : null;
 
-  if (!showBase && !showSecondary) return null;
+  const displayToShow = (Array.isArray(displayCurrencies) ? displayCurrencies : [])
+    .filter(
+      (c) => c !== invoice.currency_code && c !== baseCurrency && c !== secondaryCurrency,
+    );
+
+  const dateToUse =
+    invoice.invoice_date ??
+    invoice.bill_date ??
+    invoice.payment_date ??
+    invoice.receipt_date ??
+    invoice.estimate_date ??
+    invoice.credit_note_date ??
+    invoice.vendor_credit_date ??
+    invoice.date;
+
+  if (!showBase && !showSecondary && !displayToShow.length) return null;
 
   return (
     <>
@@ -226,6 +241,14 @@ export function DualCurrencyTotalLinesView({
           borderStyle={TotalLineBorderStyle.None}
         />
       )}
+      {baseTotal !== null && displayToShow.map((dc) => (
+        <DualCurrencyTotalLineItem
+          key={dc}
+          totalInBase={baseTotal}
+          date={dateToUse}
+          displayCurrency={dc}
+        />
+      ))}
     </>
   );
 }

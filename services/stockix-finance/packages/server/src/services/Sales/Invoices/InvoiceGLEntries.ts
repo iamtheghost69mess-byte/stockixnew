@@ -165,7 +165,7 @@ export class SaleInvoiceGLEntries {
       index: number
     ): ILedgerEntry => {
       const commonEntry = this.getInvoiceGLCommonEntry(saleInvoice);
-      const localAmount = entry.amount * saleInvoice.exchangeRate;
+      const localAmount = entry.amount / (saleInvoice.exchangeRate || 1);
 
       return {
         ...commonEntry,

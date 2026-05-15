@@ -61,8 +61,8 @@ export async function buildPdfDisplayTotals(
     try {
       const rateRow = await exchangeRatesService.lookupRateByDate(tenantId, dc, docDate);
       if (!rateRow) continue;
-      const converted = totalInBase / rateRow.exchangeRate;
-      const convertedDue = dueInBase / rateRow.exchangeRate;
+      const converted = totalInBase * rateRow.exchangeRate;
+      const convertedDue = dueInBase * rateRow.exchangeRate;
       results.push({
         currency: dc,
         formattedTotal: formatNumber(converted, { currencyCode: dc }),

@@ -134,12 +134,12 @@ export class SaleReceiptGLEntries {
       index: number
     ): ILedgerEntry => {
       const commonEntry = this.getIncomeGLCommonEntry(saleReceipt);
-      const itemIncome = entry.amount * saleReceipt.exchangeRate;
+      const itemIncome = entry.amount / (saleReceipt.exchangeRate || 1);
 
       return {
         ...commonEntry,
         credit: itemIncome,
-        accountId: entry.item.sellAccountId,
+        accountId: entry.item?.sellAccountId,
         note: entry.description,
         index: index + 2,
         itemId: entry.itemId,

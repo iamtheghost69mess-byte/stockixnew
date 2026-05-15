@@ -6,11 +6,24 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Sales/Receipts/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class SaleReceipt extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class SaleReceipt extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  customerId: number;
+  amount: number;
+  exchangeRate: number;
+  receiptDate: Date | string;
+  receiptNumber: string;
+  referenceNo?: string;
+  depositAccountId: number;
+  closedAt: Date | string | null;
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -37,7 +50,7 @@ export default class SaleReceipt extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    return this.amount / this.exchangeRate;
   }
 
   /**

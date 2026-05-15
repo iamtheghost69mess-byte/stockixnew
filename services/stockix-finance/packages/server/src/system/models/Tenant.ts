@@ -145,7 +145,7 @@ export default class Tenant extends BaseModel {
    * Saves the metadata of the given tenant.
    */
   static async saveMetadata(tenantId: number, metadata: any) {
-    const foundMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const foundMetadata = await TenantMetadata.findByTenantId(tenantId);
     const updateOrInsert = foundMetadata ? 'update' : 'insert';
 
     return TenantMetadata.query()

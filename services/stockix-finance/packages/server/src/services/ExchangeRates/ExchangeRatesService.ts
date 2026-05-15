@@ -161,7 +161,7 @@ export default class ExchangeRatesService implements IExchangeRatesService {
   public async lookupRateByDate(
     tenantId: number,
     currencyCode: string,
-    date: string
+    date: string | Date
   ): Promise<IExchangeRate | null> {
     const { ExchangeRate } = this.tenancy.models(tenantId);
     const rate = await ExchangeRate.query()

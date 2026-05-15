@@ -35,7 +35,7 @@ export class PaymentReceiveGLEntries {
     const { PaymentReceive } = this.tenancy.models(tenantId);
 
     // Retrieves the given tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieves the payment receive with associated entries.
     const paymentReceive = await PaymentReceive.query(trx)
@@ -115,7 +115,7 @@ export class PaymentReceiveGLEntries {
     // Exchange gain/loss account.
     const exGainLossAccount = await Account.query(trx).modify(
       'findBySlug',
-      'exchange-grain-loss'
+      'exchange-gain-loss'
     );
     const ledgerEntries = this.getPaymentReceiveGLEntries(
       paymentReceive,
@@ -136,8 +136,9 @@ export class PaymentReceiveGLEntries {
   ): number => {
     return sumBy(paymentReceive.entries, (entry) => {
       const paymentLocalAmount =
-        entry.paymentAmount * paymentReceive.exchangeRate;
-      const invoicePayment = entry.paymentAmount * entry.invoice.exchangeRate;
+        entry.paymentAmount / (paymentReceive.exchangeRate || 1);
+      const invoicePayment =
+        entry.paymentAmount / (entry.invoice?.exchangeRate || 1);
 
       return paymentLocalAmount - invoicePayment;
     });

@@ -6,11 +6,24 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Sales/PaymentReceives/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class BillPayment extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class BillPayment extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any,
+) {
+  id: number;
+  vendorId: number;
+  amount: number;
+  exchangeRate: number;
+  paymentDate: Date | string;
+  paymentNumber: string;
+  referenceNo?: string;
+  paymentAccountId: number;
+  branchId?: number;
+  currencyCode?: string;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -37,7 +50,7 @@ export default class BillPayment extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    return this.amount / this.exchangeRate;
   }
 
   /**

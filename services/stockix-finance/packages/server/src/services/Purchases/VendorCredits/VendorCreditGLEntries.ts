@@ -77,7 +77,7 @@ export default class VendorCreditGLEntries {
       index: number
     ): ILedgerEntry => {
       const commonEntity = this.getVendorCreditGLCommonEntry(vendorCredit);
-      const localAmount = entry.amount * vendorCredit.exchangeRate;
+      const localAmount = entry.amount / (vendorCredit.exchangeRate || 1);
 
       return {
         ...commonEntity,

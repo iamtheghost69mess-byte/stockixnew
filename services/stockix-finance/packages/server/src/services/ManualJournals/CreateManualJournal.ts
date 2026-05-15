@@ -138,7 +138,7 @@ export class CreateManualJournalService {
     const { ManualJournal } = this.tenancy.models(tenantId);
 
     // Retrieves the tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Authorize manual journal creating.
     await this.authorize(

@@ -61,8 +61,8 @@ export default class JournalSheet extends FinancialSheet {
     const exchangeRate = entry.exchangeRate ?? 1;
     const isForeign = foreignCurrencyCode !== this.baseCurrency && exchangeRate !== 1;
 
-    const foreignCredit = isForeign ? entry.credit / exchangeRate : null;
-    const foreignDebit  = isForeign ? entry.debit  / exchangeRate : null;
+    const foreignCredit = isForeign ? entry.credit * exchangeRate : null;
+    const foreignDebit  = isForeign ? entry.debit  * exchangeRate : null;
 
     return {
       entryId: entry.id,
@@ -72,8 +72,8 @@ export default class JournalSheet extends FinancialSheet {
       contactName: get(contact, 'displayName'),
       contactType: get(contact, 'contactService'),
 
-      accountName: account.name,
-      accountCode: account.code,
+      accountName: account?.name ?? '',
+      accountCode: account?.code ?? '',
       transactionNumber: entry.transactionNumber,
 
       currencyCode: this.baseCurrency,
@@ -135,7 +135,7 @@ export default class JournalSheet extends FinancialSheet {
     return chain(entries)
       .groupBy((entry) => `${entry.referenceId}-${entry.referenceType}`)
       .map((entriesGroup: IJournalEntry[]) => {
-        const headEntry = head(entriesGroup);
+        const headEntry = head(entriesGroup)!;
         return this.entriesGroupsMapper(entriesGroup, headEntry);
       })
       .value() as IJournalReportEntriesGroup[];

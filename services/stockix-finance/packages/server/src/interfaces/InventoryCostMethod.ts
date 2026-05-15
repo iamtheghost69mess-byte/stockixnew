@@ -1,6 +1,6 @@
 
 
 interface IInventoryCostMethod {
-  computeItemsCost(fromDate: Date): void,
-  storeInventoryLotsCost(transactions: any[]): void,
+  computeItemCost(): Promise<any>;
+  storeInventoryLotsCost(transactions: any[]): void;
 }

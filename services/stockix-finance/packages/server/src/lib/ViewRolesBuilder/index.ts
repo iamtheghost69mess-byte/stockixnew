@@ -127,3 +127,30 @@ export function getModelFields(Model: IModel) {
     };
   });
 }
+
+/**
+ * Validates the view roles.
+ * @param {Array} roles 
+ * @param {string} logicExpression 
+ * @returns {boolean}
+ */
+export function validateViewRoles(roles, logicExpression) {
+  return validateRolesLogicExpression(logicExpression, roles);
+}
+
+/**
+ * Builds the filter query.
+ * @param {IModel} model 
+ * @param {IFilterRole[]} roles 
+ * @param {string} logicExpression 
+ */
+export function buildFilterQuery(model: any, roles: any[], logicExpression: string = '') {
+  const FilterRoles = require('@/lib/DynamicFilter/DynamicFilterFilterRoles').default;
+  const filterRoles = new FilterRoles();
+
+  filterRoles.setModel(model);
+  filterRoles.filterRoles = roles;
+  filterRoles.onInitialize();
+
+  return filterRoles.buildQuery();
+}

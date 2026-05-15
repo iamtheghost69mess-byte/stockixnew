@@ -81,7 +81,7 @@ export default class SaleReceiptNotifyBySms {
     saleReceipt: ISaleReceipt & { customer: ICustomer }
   ) => {
     const smsClient = this.tenancy.smsClient(tenantId);
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieve formatted sms notification message of receipt details.
     const formattedSmsMessage = this.formattedReceiptDetailsMessage(
@@ -184,7 +184,7 @@ export default class SaleReceiptNotifyBySms {
     this.validateSaleReceiptExistance(saleReceipt);
 
     // Current tenant metadata.
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieve the sale receipt formatted sms notification message.
     const formattedSmsMessage = this.formattedReceiptDetailsMessage(

@@ -94,7 +94,7 @@ export class LedgerContactsBalanceStorage {
     const contact = await Contact.query(trx).findById(contactId);
 
     // Retrieves the given tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Detarmines whether the contact has foreign currency.
     const isForeignContact = contact.currencyCode !== tenantMeta.baseCurrency;
