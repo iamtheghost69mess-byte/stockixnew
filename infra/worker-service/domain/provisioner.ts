@@ -53,7 +53,7 @@ export async function deprovisionTenant(
   const project = row.composeProject ?? composeProjectName(row.slug);
   const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
   const envPath = join(defaultTenantEnvRoot(), row.slug, ".env");
-  const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
+  const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot, COMPOSE_PROJECT_NAME: project };
   let dockerStatus: "stopped" | "skipped" | "failed" = "skipped";
   try {
     await stat(envPath);

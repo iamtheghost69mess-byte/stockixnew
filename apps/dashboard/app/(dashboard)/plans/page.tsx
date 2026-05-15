@@ -50,6 +50,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -620,8 +621,14 @@ export default function PlansPage() {
               <Form {...editForm}>
                 <form onSubmit={onEditSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <FormLabel>Slug</FormLabel>
-                    <Input value={editTarget.slug} disabled className="font-mono" readOnly />
+                    <Label htmlFor="edit-plan-slug">Slug</Label>
+                    <Input
+                      id="edit-plan-slug"
+                      value={editTarget.slug}
+                      disabled
+                      className="font-mono"
+                      readOnly
+                    />
                     <p className="text-xs text-muted-foreground">Slug cannot be changed; it is referenced by licenses.</p>
                   </div>
                   <FormField

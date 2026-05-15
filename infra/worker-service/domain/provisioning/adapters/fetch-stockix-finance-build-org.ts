@@ -1,4 +1,9 @@
-import type { OrgBuildSettings } from "./fetch-stockix-finance-org-settings.js";
+import {
+  type OrgBuildSettings,
+  normalizeDateFormatForFinanceBuild,
+  normalizeFiscalYearForFinanceBuild,
+  normalizeLanguageForFinanceBuild,
+} from "./fetch-stockix-finance-org-settings.js";
 
 export interface BuildOrgInput {
   internalBaseUrl: string;
@@ -16,7 +21,10 @@ export interface BuildOrgResult {
   error?: string;
 }
 
-const POLL_MS = 3000;
+/** Wait before first poll so Finance can register the build job (reduces burst polling). */
+const INITIAL_POLL_DELAY_MS = 5000;
+/** Paced to stay under Finance `API_RATE_LIMIT` (~120 req/min). */
+const POLL_INTERVAL_MS = 8000;
 const TIMEOUT_MS = 120_000;
 
 function financeApiBase(internalBaseUrl: string): string {
@@ -159,9 +167,11 @@ export async function fetchBuildOrganization(
     location: input.settings.location,
     baseCurrency: input.settings.baseCurrency,
     timezone: input.settings.timezone,
-    fiscalYear: input.settings.fiscalYear,
-    language: input.settings.language,
-    ...(input.settings.dateFormat ? { dateFormat: input.settings.dateFormat } : {}),
+    fiscalYear: normalizeFiscalYearForFinanceBuild(input.settings.fiscalYear),
+    language: normalizeLanguageForFinanceBuild(input.settings.language),
+    ...(input.settings.dateFormat
+      ? { dateFormat: normalizeDateFormatForFinanceBuild(input.settings.dateFormat) }
+      : {}),
   };
 
   const buildRes = await fetch(`${base}/api/organization/build`, {
@@ -195,6 +205,7 @@ export async function fetchBuildOrganization(
 
   if (jobId) {
     log(`[build] polling organization build job id=${jobId}`);
+    await sleep(INITIAL_POLL_DELAY_MS);
     while (Date.now() < deadline) {
       const jobRes = await fetch(`${base}/api/organization/build/${encodeURIComponent(jobId)}`, {
         method: "GET",
@@ -217,15 +228,16 @@ export async function fetchBuildOrganization(
       if (done === "completed") {
         break;
       }
-      await sleep(POLL_MS);
+      await sleep(POLL_INTERVAL_MS);
     }
   } else {
     log("[build] no job id in response; polling /organization/current for builtAt");
+    await sleep(INITIAL_POLL_DELAY_MS);
     while (Date.now() < deadline) {
       if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
         break;
       }
-      await sleep(POLL_MS);
+      await sleep(POLL_INTERVAL_MS);
     }
   }
 

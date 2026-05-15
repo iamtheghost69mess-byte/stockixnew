@@ -13,7 +13,7 @@ import * as dbSchema from "@repo/db/schema";
 import { defaultTenantEnvRoot } from "../domain/env-paths.js";
 import { getTenantStackPaths } from "../domain/provision-paths.js";
 import { createProvisionTracer } from "../domain/provision-trace.js";
-import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
+import { composeProjectName, tenantMysqlVolumeName } from "../domain/provisioning/compose-project-name.js";
 import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/constants.js";
 import { MENA_DEFAULTS, type OrgBuildSettings } from "../domain/provisioning/adapters/fetch-stockix-finance-org-settings.js";
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
@@ -118,6 +118,7 @@ export async function executeProvisionRuntime(
   const maxPort = apiConfig.maxTenantPort;
   const tenantEnvRoot = defaultTenantEnvRoot();
   const project = composeProjectName(input.slug);
+  const mysqlVolumeName = tenantMysqlVolumeName(input.slug);
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
   const requestId = correlationId;
   let port: number | undefined;
@@ -225,7 +226,10 @@ export async function executeProvisionRuntime(
     await mkdir(join(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
 
     const { secrets } = deps;
-    const bootstrapPasswordKey = input.slug.trim();
+    // Same admin email for all orgs under a tenant; password must match the parent stack's
+    // bootstrap key so operators can sign in everywhere. Sub-org jobs set parentTenantSlug.
+    const bootstrapPasswordKey =
+      input.parentTenantSlug?.trim() || input.slug.trim();
     oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
     const jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     const dbPassword = secrets.persistSecret(secrets.randomHex(16));
@@ -284,6 +288,7 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
     const envBody = buildTenantComposeEnvBody({
+      mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,
       jwtSecret,
@@ -304,6 +309,8 @@ export async function executeProvisionRuntime(
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
       STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot,
+      COMPOSE_PROJECT_NAME: project,
+      MYSQL_VOLUME_NAME: mysqlVolumeName,
       BASE_URL: baseUrl,
       DB_CLIENT: "mysql",
       DB_HOST: "mysql",

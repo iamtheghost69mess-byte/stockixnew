@@ -2,6 +2,7 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export type TenantEnvFileParams = {
+  mysqlVolumeName: string;
   stockixFinanceRoot: string;
   baseUrl: string;
   jwtSecret: string;
@@ -22,6 +23,7 @@ export type TenantEnvFileParams = {
 
 export function buildTenantComposeEnvBody(params: TenantEnvFileParams): string {
   const lines: string[] = [
+    `MYSQL_VOLUME_NAME=${params.mysqlVolumeName}`,
     `STOCKIX_TENANT_APP_ROOT=${params.stockixFinanceRoot}`,
     `BASE_URL=${params.baseUrl}`,
     `DB_CLIENT=mysql`,

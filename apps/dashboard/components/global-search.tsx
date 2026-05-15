@@ -22,13 +22,18 @@ import {
 } from "@/components/ui/command";
 import { useGlobalSearch } from "@/hooks/use-global-search";
 
+const MAC_UA = /Mac|iPhone|iPod|iPad/i;
+
 export function GlobalSearch() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [showMacHint, setShowMacHint] = useState(false);
   const { results, isLoading, error } = useGlobalSearch(query);
 
   useEffect(() => {
+    setShowMacHint(MAC_UA.test(navigator.userAgent));
+
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -45,9 +50,6 @@ export function GlobalSearch() {
     router.push(path);
   };
 
-  const showMacHint =
-    typeof navigator !== "undefined" && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent);
-
   const empty =
     query.length < 2
       ? "Type at least 2 characters to search."
@@ -55,10 +57,10 @@ export function GlobalSearch() {
         ? "Searching…"
         : error
           ? error
-          : !results
-              || (results.tenants.length === 0
-                && results.licenses.length === 0
-                && results.owners.length === 0)
+          : !results ||
+              (results.tenants.length === 0 &&
+                results.licenses.length === 0 &&
+                results.owners.length === 0)
             ? "No results found."
             : null;
 
@@ -75,7 +77,11 @@ export function GlobalSearch() {
         <SearchIcon className="mr-2 h-4 w-4 shrink-0" />
         <span className="truncate">Search…</span>
         <kbd className="pointer-events-none absolute right-2 hidden select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:inline-flex">
-          {showMacHint ? <span className="text-xs">⌘</span> : <span className="text-xs">Ctrl</span>}
+          {showMacHint ? (
+            <span className="text-xs">⌘</span>
+          ) : (
+            <span className="text-xs">Ctrl</span>
+          )}
           <span className="text-xs">K</span>
         </kbd>
       </Button>
@@ -111,7 +117,9 @@ export function GlobalSearch() {
                         <Building2Icon className="mr-2 h-4 w-4 shrink-0" />
                         <div className="flex min-w-0 flex-col">
                           <span className="truncate">{t.name}</span>
-                          <span className="truncate text-xs text-muted-foreground">{t.adminEmail}</span>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {t.adminEmail}
+                          </span>
                         </div>
                       </CommandItem>
                     ))}
@@ -130,7 +138,9 @@ export function GlobalSearch() {
                         >
                           <KeyRoundIcon className="mr-2 h-4 w-4 shrink-0" />
                           <div className="flex min-w-0 flex-col">
-                            <span className="truncate font-mono text-xs">{l.licenseKey}</span>
+                            <span className="truncate font-mono text-xs">
+                              {l.licenseKey}
+                            </span>
                             <span className="truncate text-xs text-muted-foreground">
                               {l.planSlug}
                               {l.tenantSlug ? ` · ${l.tenantSlug}` : " · Unassigned"}
@@ -157,7 +167,9 @@ export function GlobalSearch() {
                           <UsersIcon className="mr-2 h-4 w-4 shrink-0" />
                           <div className="flex min-w-0 flex-col">
                             <span className="truncate">{o.name}</span>
-                            <span className="truncate text-xs text-muted-foreground">{o.email}</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {o.email}
+                            </span>
                           </div>
                         </CommandItem>
                       ))}

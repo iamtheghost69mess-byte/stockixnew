@@ -202,6 +202,10 @@ services:
 
 volumes:
   mysql:
+    # Explicit name per tenant (MYSQL_VOLUME_NAME in per-tenant .env). Fallback matches
+    # Compose legacy default when MYSQL_VOLUME_NAME is unset (already-provisioned stacks).
+    name: ${MYSQL_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_mysql}
+    driver: local
   mongo:
   redis:
   nginx_logs:

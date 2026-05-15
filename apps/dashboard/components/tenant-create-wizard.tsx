@@ -192,7 +192,7 @@ export default function TenantCreateWizard(props: Props) {
 
   const wizardBody = (
     <>
-      <div className="space-y-4 pt-1">
+      <div className="min-w-0 space-y-4 pt-1">
         {step === 1 ? (
           <div className="space-y-3">
             <p className="text-sm font-medium">Step 1 of 4 — Business details</p>
@@ -249,7 +249,7 @@ export default function TenantCreateWizard(props: Props) {
         {step === 3 ? (
           <div className="space-y-4">
             <p className="text-sm font-medium">Step 3 of 4 — Plan &amp; license</p>
-            <div>
+            <div className="min-w-0">
               <p className="mb-2 text-xs font-medium text-muted-foreground">Plan</p>
               <ToggleGroup
                 multiple={false}
@@ -260,23 +260,23 @@ export default function TenantCreateWizard(props: Props) {
                 }}
                 variant="outline"
                 spacing={2}
-                className="grid w-full grid-cols-2 gap-2"
+                className="grid w-full min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2"
               >
                 {plans.map((p) => (
                   <ToggleGroupItem
                     key={p.slug}
                     value={p.slug}
-                    className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
+                    className="flex h-auto min-h-[5.25rem] w-full min-w-0 max-w-full shrink flex-col items-start justify-start gap-1.5 whitespace-normal rounded-lg px-3 py-3 text-left break-words shadow-none [text-wrap:pretty]"
                   >
-                    <span className="text-sm font-semibold">{p.name}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {p.description ?? " "}
+                    <span className="w-full text-sm font-semibold leading-tight">{p.name}</span>
+                    <span className="w-full text-xs font-normal leading-snug text-muted-foreground">
+                      {p.description?.trim() ? p.description : "—"}
                     </span>
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
             </div>
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <Label>License</Label>
               <ToggleGroup
                 multiple={false}
@@ -294,24 +294,24 @@ export default function TenantCreateWizard(props: Props) {
                 variant="outline"
                 spacing={2}
                 orientation="vertical"
-                className="grid w-full gap-2"
+                className="grid w-full min-w-0 gap-2.5"
               >
                 <ToggleGroupItem
                   value="auto"
-                  className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
+                  className="flex h-auto min-h-0 w-full min-w-0 max-w-full shrink flex-col items-start justify-start gap-1.5 whitespace-normal rounded-lg px-3 py-3 text-left break-words shadow-none [text-wrap:pretty]"
                 >
-                  <span className="text-sm font-medium">Auto-generate new license</span>
-                  <span className="text-xs font-normal text-muted-foreground">
-                    A platform license will be created and assigned automatically
+                  <span className="w-full text-sm font-medium leading-tight">Auto-generate new license</span>
+                  <span className="w-full text-xs font-normal leading-snug text-muted-foreground">
+                    A platform license will be created and assigned automatically.
                   </span>
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="existing"
                   disabled={unassignedLicenses.length === 0}
-                  className="flex h-auto flex-col items-start gap-1 px-3 py-3 text-left"
+                  className="flex h-auto min-h-0 w-full min-w-0 max-w-full shrink flex-col items-start justify-start gap-1.5 whitespace-normal rounded-lg px-3 py-3 text-left break-words shadow-none [text-wrap:pretty] disabled:opacity-60"
                 >
-                  <span className="text-sm font-medium">Use existing unassigned license</span>
-                  <span className="text-xs font-normal text-muted-foreground">
+                  <span className="w-full text-sm font-medium leading-tight">Use existing unassigned license</span>
+                  <span className="w-full text-xs font-normal leading-snug text-muted-foreground">
                     {unassignedLicenses.length === 0
                       ? "No unassigned licenses available"
                       : "Pick a platform license from the pool"}
@@ -403,7 +403,7 @@ export default function TenantCreateWizard(props: Props) {
     return (
       <Dialog open={dialog.open} onOpenChange={dialog.onOpenChange}>
         <DialogContent
-          className="max-h-[min(90vh,720px)] overflow-y-auto sm:max-w-md"
+          className="max-h-[min(90vh,720px)] min-w-0 max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden sm:max-w-lg"
           showCloseButton={!loading}
         >
           <DialogHeader>

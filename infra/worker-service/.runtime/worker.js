@@ -2450,6 +2450,7 @@ var schema_exports = {};
 __export(schema_exports, {
   adminAuditLog: () => adminAuditLog,
   apiIdempotencyKeys: () => apiIdempotencyKeys,
+  apiKeys: () => apiKeys,
   blacklistedFingerprints: () => blacklistedFingerprints,
   licenseActivations: () => licenseActivations,
   licenses: () => licenses,
@@ -2529,6 +2530,8 @@ var organizations = pgTable("organizations", {
   subdomain: varchar("subdomain", { length: 255 }).notNull().unique(),
   status: varchar("status", { length: 50 }).notNull().default("provisioning"),
   // provisioning | active | suspended | failed
+  isPrimary: boolean("is_primary").notNull().default(false),
+  financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
   provisioningError: text("provisioning_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
@@ -2596,6 +2599,7 @@ var tenantProvisionEvents = pgTable(
     correlationId: text("correlation_id").notNull(),
     slug: text("slug"),
     tenantId: uuid("tenant_id"),
+    parentTenantId: uuid("parent_tenant_id"),
     deploymentId: uuid("deployment_id"),
     phase: text("phase").notNull(),
     level: text("level").notNull().default("info"),
@@ -2622,6 +2626,24 @@ var adminAuditLog = pgTable(
     index("admin_audit_log_actor_created_idx").on(t.actorId, t.createdAt),
     index("admin_audit_log_tenant_created_idx").on(t.targetTenantId, t.createdAt),
     index("admin_audit_log_owner_created_idx").on(t.targetOwnerId, t.createdAt)
+  ]
+);
+var apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull().references(() => owners.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    keyPrefix: varchar("key_prefix", { length: 32 }).notNull(),
+    keyHash: varchar("key_hash", { length: 128 }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    uniqueIndex("api_keys_key_hash_unique").on(t.keyHash),
+    index("api_keys_owner_id_idx").on(t.ownerId)
   ]
 );
 var apiIdempotencyKeys = pgTable(
@@ -2679,6 +2701,8 @@ var plans = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
+    maxOrganizations: integer("max_organizations").notNull().default(1),
+    maxActivations: integer("max_activations").notNull().default(1),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2853,6 +2877,9 @@ function getTenantStackPaths() {
 function composeProjectName(slug) {
   return `stockix-${slug}`.replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
 }
+function tenantMysqlVolumeName(slug) {
+  return `${composeProjectName(slug)}-mysql`;
+}
 
 // ../../infra/worker-service/src/provision-runtime.ts
 import { mkdir as mkdir2 } from "fs/promises";
@@ -2878,6 +2905,7 @@ function createProvisionTracer(db, correlationId, getContext, log) {
         correlationId,
         slug: ctx.slug,
         tenantId: ctx.tenantId ?? null,
+        parentTenantId: ctx.parentTenantId ?? null,
         deploymentId: ctx.deploymentId ?? null,
         phase,
         level,
@@ -2898,10 +2926,20 @@ var MENA_DEFAULTS = {
   baseCurrency: "USD",
   timezone: "Asia/Beirut",
   location: "LB",
-  fiscalYear: "January",
-  language: "en-US",
-  dateFormat: "MM/DD/YYYY"
+  fiscalYear: "january",
+  language: "en",
+  dateFormat: "MM/DD/yyyy"
 };
+function normalizeFiscalYearForFinanceBuild(value) {
+  return value.trim().toLowerCase();
+}
+function normalizeLanguageForFinanceBuild(value) {
+  const primary = value.trim().split(/[-_]/)[0]?.toLowerCase() ?? "en";
+  return primary === "ar" ? "ar" : "en";
+}
+function normalizeDateFormatForFinanceBuild(value) {
+  return value.trim().replace(/YYYY/g, "yyyy");
+}
 function financeApiBase(internalBaseUrl) {
   return internalBaseUrl.replace(/\/+$/, "");
 }
@@ -2941,9 +2979,9 @@ function parseCurrentOrg(body) {
     baseCurrency,
     timezone,
     location,
-    fiscalYear,
-    language,
-    dateFormat
+    fiscalYear: normalizeFiscalYearForFinanceBuild(fiscalYear),
+    language: normalizeLanguageForFinanceBuild(language),
+    dateFormat: dateFormat ? normalizeDateFormatForFinanceBuild(dateFormat) : void 0
   };
 }
 async function fetchOrgSettingsFromMainInstance(params) {
@@ -3005,6 +3043,7 @@ import { mkdir, rename, writeFile } from "fs/promises";
 import { join as join4 } from "path";
 function buildTenantComposeEnvBody(params) {
   const lines = [
+    `MYSQL_VOLUME_NAME=${params.mysqlVolumeName}`,
     `STOCKIX_TENANT_APP_ROOT=${params.stockixFinanceRoot}`,
     `BASE_URL=${params.baseUrl}`,
     `DB_CLIENT=mysql`,
@@ -3132,7 +3171,12 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   const trace = createProvisionTracer(
     db,
     correlationId,
-    () => ({ slug: input.slug, tenantId, deploymentId }),
+    () => ({
+      slug: input.slug,
+      tenantId,
+      deploymentId,
+      parentTenantId: input.stockixTenantId ?? null
+    }),
     log
   );
   const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
@@ -3141,6 +3185,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   const maxPort = apiConfig.maxTenantPort;
   const tenantEnvRoot = defaultTenantEnvRoot();
   const project = composeProjectName(input.slug);
+  const mysqlVolumeName = tenantMysqlVolumeName(input.slug);
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
   const requestId = correlationId;
   let port;
@@ -3230,7 +3275,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     await mkdir2(join5(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
     await mkdir2(join5(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
     const { secrets } = deps;
-    const bootstrapPasswordKey = (input.parentTenantSlug?.trim() || input.slug).trim();
+    const bootstrapPasswordKey = input.parentTenantSlug?.trim() || input.slug.trim();
     oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
     const jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     const dbPassword = secrets.persistSecret(secrets.randomHex(16));
@@ -3284,6 +3329,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     }
     await checkNotCancelled();
     const envBody = buildTenantComposeEnvBody({
+      mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,
       jwtSecret,
@@ -3304,6 +3350,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     const envPath = await writeTenantEnvFileAtomic(join5(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
       STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot,
+      COMPOSE_PROJECT_NAME: project,
+      MYSQL_VOLUME_NAME: mysqlVolumeName,
       BASE_URL: baseUrl,
       DB_CLIENT: "mysql",
       DB_HOST: "mysql",
@@ -3554,7 +3602,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() }
       });
       try {
-        const result = await finance.buildOrganization(
+        const buildResult = await finance.buildOrganization(
           {
             internalBaseUrl: internalUrl,
             adminEmail: input.adminEmail,
@@ -3564,16 +3612,45 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
           },
           log
         );
-        if (!result.ok) {
-          throw new Error(result.error ?? "Organization build failed");
+        if (!buildResult.ok) {
+          throw new Error(buildResult.error ?? "Organization build failed");
+        }
+        if (input.controlPlaneOrgId && buildResult.financeOrganizationId) {
+          const apiBase = `http://localhost:${apiConfig.port}`;
+          const saveUrl = `${apiBase}/internal/organizations/${input.controlPlaneOrgId}`;
+          const secret = apiConfig.workerSecret;
+          try {
+            const saveRes = await fetch(saveUrl, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                ...secret ? { Authorization: `Bearer ${secret}` } : {}
+              },
+              body: JSON.stringify({
+                financeOrganizationId: buildResult.financeOrganizationId
+              }),
+              signal: AbortSignal.timeout(1e4)
+            });
+            if (!saveRes.ok) {
+              log(
+                `[provision] Warning: failed to save financeOrganizationId: ${saveRes.status}`
+              );
+            } else {
+              log("[provision] Saved financeOrganizationId mapping");
+            }
+          } catch (err) {
+            log(
+              `[provision] Warning: failed to save financeOrganizationId: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
         await markOp("tenant.build_organization", "Organization build completed", {
-          alreadyBuilt: result.alreadyBuilt === true,
+          alreadyBuilt: buildResult.alreadyBuilt === true,
           elapsedMs: elapsedMs()
         });
         await trace.event(
           "progress",
-          result.alreadyBuilt ? "Organization was already built (skipped)" : "Organization built and seeded successfully",
+          buildResult.alreadyBuilt ? "Organization was already built (skipped)" : "Organization built and seeded successfully",
           {
             meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() }
           }
@@ -3739,7 +3816,8 @@ var ExecaDockerComposeRunner = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-build-org.ts
-var POLL_MS = 3e3;
+var INITIAL_POLL_DELAY_MS = 5e3;
+var POLL_INTERVAL_MS = 8e3;
 var TIMEOUT_MS = 12e4;
 function financeApiBase2(internalBaseUrl) {
   return internalBaseUrl.replace(/\/+$/, "");
@@ -3845,16 +3923,16 @@ async function fetchBuildOrganization(input, log) {
   };
   if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
     log("Organization already built, skipping");
-    return { ok: true, alreadyBuilt: true };
+    return { ok: true, alreadyBuilt: true, financeOrganizationId: creds.organizationId };
   }
   const buildBody = {
     name: input.settings.name,
     location: input.settings.location,
     baseCurrency: input.settings.baseCurrency,
     timezone: input.settings.timezone,
-    fiscalYear: input.settings.fiscalYear,
-    language: input.settings.language,
-    ...input.settings.dateFormat ? { dateFormat: input.settings.dateFormat } : {}
+    fiscalYear: normalizeFiscalYearForFinanceBuild(input.settings.fiscalYear),
+    language: normalizeLanguageForFinanceBuild(input.settings.language),
+    ...input.settings.dateFormat ? { dateFormat: normalizeDateFormatForFinanceBuild(input.settings.dateFormat) } : {}
   };
   const buildRes = await fetch(`${base}/api/organization/build`, {
     method: "POST",
@@ -3872,7 +3950,7 @@ async function fetchBuildOrganization(input, log) {
   if (!buildRes.ok) {
     if (isTenantAlreadyBuilt(buildText, buildJson)) {
       log("Organization already built (TENANT_ALREADY_BUILT), treating as success");
-      return { ok: true, alreadyBuilt: true };
+      return { ok: true, alreadyBuilt: true, financeOrganizationId: creds.organizationId };
     }
     return {
       ok: false,
@@ -3883,6 +3961,7 @@ async function fetchBuildOrganization(input, log) {
   const deadline = Date.now() + TIMEOUT_MS;
   if (jobId) {
     log(`[build] polling organization build job id=${jobId}`);
+    await sleep(INITIAL_POLL_DELAY_MS);
     while (Date.now() < deadline) {
       const jobRes = await fetch(`${base}/api/organization/build/${encodeURIComponent(jobId)}`, {
         method: "GET",
@@ -3905,21 +3984,22 @@ async function fetchBuildOrganization(input, log) {
       if (done === "completed") {
         break;
       }
-      await sleep(POLL_MS);
+      await sleep(POLL_INTERVAL_MS);
     }
   } else {
     log("[build] no job id in response; polling /organization/current for builtAt");
+    await sleep(INITIAL_POLL_DELAY_MS);
     while (Date.now() < deadline) {
       if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
         break;
       }
-      await sleep(POLL_MS);
+      await sleep(POLL_INTERVAL_MS);
     }
   }
   if (!await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
     throw new Error("organization_build_timeout: builtAt not set within 120s");
   }
-  return { ok: true };
+  return { ok: true, financeOrganizationId: creds.organizationId };
 }
 
 // ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-bootstrap.ts
@@ -4100,7 +4180,7 @@ async function deprovisionTenant(db, tenantId, options = {}) {
   const project = row.composeProject ?? composeProjectName(row.slug);
   const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
   const envPath = join7(defaultTenantEnvRoot(), row.slug, ".env");
-  const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot };
+  const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot, COMPOSE_PROJECT_NAME: project };
   let dockerStatus = "skipped";
   try {
     await stat(envPath);
@@ -4326,7 +4406,8 @@ async function runProvisionJob(db, job) {
       stockixTenantId: payload.stockixTenantId,
       stockixApiUrl: payload.stockixApiUrl,
       parentTenantSlug: payload.parentTenantSlug,
-      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl
+      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
+      controlPlaneOrgId: payload.organizationId ?? void 0
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),

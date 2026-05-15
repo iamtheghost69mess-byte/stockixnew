@@ -26,6 +26,7 @@ import {
   type Role,
 } from "@/lib/roles";
 import { inviteOwnerSchema, type InviteOwnerValues } from "@/lib/schemas";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -569,7 +570,15 @@ export default function OwnersPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Badge variant={o.hasPassword ? "default" : "secondary"}>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "font-medium shadow-none",
+                            o.hasPassword
+                              ? "border-emerald-600/45 bg-emerald-500/12 text-emerald-800 dark:border-emerald-400/50 dark:bg-emerald-500/15 dark:text-emerald-200"
+                              : "border-red-600/45 bg-red-500/10 text-red-800 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-200",
+                          )}
+                        >
                           {o.hasPassword ? "Active" : "Pending invite"}
                         </Badge>
                         <TooltipProvider delay={200}>

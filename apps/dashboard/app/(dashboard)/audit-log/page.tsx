@@ -2,13 +2,30 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -52,31 +69,51 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-function formatAuditDetails(action: string, metadata: unknown): string {
+/** Short human-readable line for known shapes; otherwise null → render JSON block. */
+function humanMetadataSummary(action: string, metadata: unknown): string | null {
   const m = isRecord(metadata) ? metadata : null;
+  if (!m) return null;
   const a = action.toLowerCase();
   if (a.includes("org")) {
-    if (typeof m?.name === "string" && m.name.trim()) {
+    if (typeof m.name === "string" && m.name.trim()) {
       const n = m.name.trim();
       return n.length > 80 ? `${n.slice(0, 77)}…` : n;
     }
-    if (typeof m?.slug === "string" && m.slug.trim()) {
+    if (typeof m.slug === "string" && m.slug.trim()) {
       const s = m.slug.trim();
       return s.length > 76 ? `Slug ${s.slice(0, 73)}…` : `Slug ${s}`;
     }
   }
   if (a.includes("license")) {
-    if (typeof m?.licenseKey === "string" && m.licenseKey.trim()) {
+    if (typeof m.licenseKey === "string" && m.licenseKey.trim()) {
       const k = m.licenseKey.trim().toUpperCase();
       return k.length > 28 ? `${k.slice(0, 25)}…` : k;
     }
-    if (typeof m?.licenseId === "string" && m.licenseId.length > 0) {
+    if (typeof m.licenseId === "string" && m.licenseId.length > 0) {
       return `License ${m.licenseId.slice(0, 8)}…`;
     }
   }
-  const raw = m ? JSON.stringify(m) : "";
-  if (!raw) return "—";
-  return raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
+  return null;
+}
+
+function AuditMetadataCell({ action, metadata }: { action: string; metadata: unknown }) {
+  const human = humanMetadataSummary(action, metadata);
+  if (human !== null) {
+    return <span className="leading-relaxed text-muted-foreground">{human}</span>;
+  }
+  if (!isRecord(metadata) || Object.keys(metadata).length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="max-w-full min-w-0 rounded-md border border-border/60 bg-muted/25">
+      <pre
+        className="max-h-40 w-full min-w-0 overflow-auto whitespace-pre-wrap wrap-break-word p-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground"
+        tabIndex={0}
+      >
+        {JSON.stringify(metadata, null, 2)}
+      </pre>
+    </div>
+  );
 }
 
 function parseEntries(body: unknown): AuditLogEntry[] {
@@ -92,6 +129,8 @@ function parseEntries(body: unknown): AuditLogEntry[] {
     );
   });
 }
+
+const SKELETON_ROWS = 6;
 
 export default function AuditLogPage() {
   const me = useMe();
@@ -165,113 +204,183 @@ export default function AuditLogPage() {
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
-  if (me && !canView) {
+  if (!me) {
     return (
-      <Card className="max-w-lg border-destructive/40">
-        <CardHeader>
-          <CardTitle>Access denied</CardTitle>
-          <CardDescription>Audit log is restricted to Super Admins.</CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-40 w-full max-w-2xl" />
+        <Skeleton className="h-72 w-full" />
+      </div>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <div className="space-y-6">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Audit log</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <Card className="max-w-lg border-destructive/40">
+          <CardHeader>
+            <CardTitle>Access denied</CardTitle>
+            <CardDescription>Audit log is restricted to Super Admins.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
     );
   }
 
   return (
     <TooltipProvider delay={200}>
       <div className="space-y-6">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">Dashboard</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Audit log</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Audit log</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">Audit log</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Read-only history of platform actions (super admin).
           </p>
         </div>
 
         {error ? (
-          <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>Could not load audit log</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
 
-        {canView ? (
-          <>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Filters</CardTitle>
-                <CardDescription>Optional filters apply to the list below.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="audit-action">Action contains</Label>
-                  <Input
-                    id="audit-action"
-                    value={actionInput}
-                    onChange={(e) => setActionInput(e.target.value)}
-                    placeholder="e.g. license, org"
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="audit-actor">Actor ID</Label>
-                  <Input
-                    id="audit-actor"
-                    value={actorId}
-                    onChange={(e) => setActorId(e.target.value)}
-                    placeholder="UUID"
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="audit-tenant">Target tenant ID</Label>
-                  <Input
-                    id="audit-tenant"
-                    value={tenantId}
-                    onChange={(e) => setTenantId(e.target.value)}
-                    placeholder="UUID"
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="flex items-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                    onClick={() => {
-                      setActionInput("");
-                      setActionFilter("");
-                      setActorId("");
-                      setTenantId("");
-                      setPage(1);
-                    }}
-                  >
-                    Clear filters
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Filters</CardTitle>
+            <CardDescription>Optional filters apply to the table below.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor="audit-action">Action contains</Label>
+              <Input
+                id="audit-action"
+                value={actionInput}
+                onChange={(e) => setActionInput(e.target.value)}
+                placeholder="e.g. license, impersonate"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="audit-actor">Actor ID</Label>
+              <Input
+                id="audit-actor"
+                value={actorId}
+                onChange={(e) => setActorId(e.target.value)}
+                placeholder="UUID"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="audit-tenant">Target tenant ID</Label>
+              <Input
+                id="audit-tenant"
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value)}
+                placeholder="UUID"
+                autoComplete="off"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  setActionInput("");
+                  setActionFilter("");
+                  setActorId("");
+                  setTenantId("");
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-            <div className="rounded-xl border border-border/80 bg-card shadow-sm">
-              <Table>
+        <Card className="overflow-hidden shadow-sm ring-1 ring-foreground/10">
+          <CardHeader className="border-b border-border/80 pb-4">
+            <CardTitle className="text-base">Recent activity</CardTitle>
+            <CardDescription>
+              Newest entries first. Hover a timestamp for the exact date and time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="relative w-full overflow-x-auto">
+              <Table className="w-full min-w-[800px] table-fixed">
+                <colgroup>
+                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "15%" }} />
+                  <col style={{ width: "20%" }} />
+                  <col style={{ width: "42%" }} />
+                  <col style={{ width: "12%" }} />
+                </colgroup>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[140px]">When</TableHead>
-                    <TableHead className="min-w-[160px]">Action</TableHead>
-                    <TableHead>Actor</TableHead>
-                    <TableHead className="min-w-[200px]">Details</TableHead>
-                    <TableHead className="hidden lg:table-cell">IP</TableHead>
+                  <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="whitespace-nowrap font-medium">When</TableHead>
+                    <TableHead className="whitespace-nowrap font-medium">Action</TableHead>
+                    <TableHead className="whitespace-nowrap font-medium">Actor</TableHead>
+                    <TableHead className="whitespace-normal font-medium">Details</TableHead>
+                    <TableHead className="hidden whitespace-nowrap font-medium lg:table-cell">IP</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {listLoading && entries.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                        Loading…
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
+                  {listLoading && entries.length === 0
+                    ? Array.from({ length: SKELETON_ROWS }, (_, i) => (
+                        <TableRow key={`sk-${i}`} className="hover:bg-transparent">
+                          <TableCell>
+                            <Skeleton className="h-4 w-24" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-5 w-32" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-40" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-full max-w-xs" />
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <Skeleton className="h-4 w-20" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    : null}
                   {!listLoading && entries.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                        No audit entries match the current filters.
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={5} className="h-40 text-center align-middle">
+                        <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
+                          <FileText className="h-10 w-10 opacity-40" aria-hidden />
+                          <p className="text-sm font-medium text-foreground">No matching entries</p>
+                          <p className="max-w-sm text-xs">
+                            Try clearing filters or broadening the action search.
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -280,32 +389,35 @@ export default function AuditLogPage() {
                     const rel = formatDistanceToNow(created, { addSuffix: true });
                     const full = format(created, "PPpp");
                     return (
-                      <TableRow key={row.id}>
-                        <TableCell className="align-top text-sm text-muted-foreground">
+                      <TableRow key={row.id} className="border-b transition-colors hover:bg-muted/50">
+                        <TableCell className="align-top whitespace-normal wrap-break-word text-sm text-muted-foreground">
                           <Tooltip>
                             <TooltipTrigger
                               render={
-                                <span className="cursor-default border-b border-dotted border-muted-foreground/60" />
+                                <button
+                                  type="button"
+                                  className="cursor-default border-b border-dotted border-muted-foreground/50 bg-transparent p-0 text-left text-inherit tabular-nums hover:border-muted-foreground"
+                                >
+                                  {rel}
+                                </button>
                               }
-                            >
-                              {rel}
-                            </TooltipTrigger>
-                            <TooltipContent>{full}</TooltipContent>
+                            />
+                            <TooltipContent side="top">{full}</TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell className="align-top">
+                        <TableCell className="align-top whitespace-normal wrap-break-word">
                           <Badge variant={actionVariant(row.action)} className="font-mono text-xs font-normal">
                             {row.action}
                           </Badge>
                         </TableCell>
-                        <TableCell className="align-top">
-                          <div className="text-sm font-medium">{row.actorName}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{row.actorId}</div>
+                        <TableCell className="align-top whitespace-normal wrap-break-word">
+                          <div className="text-sm font-medium leading-snug">{row.actorName}</div>
+                          <div className="mt-0.5 font-mono text-xs text-muted-foreground">{row.actorId}</div>
                         </TableCell>
-                        <TableCell className="max-w-md align-top text-sm text-muted-foreground">
-                          <span className="wrap-break-word">{formatAuditDetails(row.action, row.metadata)}</span>
+                        <TableCell className="min-w-0 align-top whitespace-normal py-2.5 text-sm">
+                          <AuditMetadataCell action={row.action} metadata={row.metadata} />
                         </TableCell>
-                        <TableCell className="hidden max-w-[140px] align-top font-mono text-xs text-muted-foreground lg:table-cell">
+                        <TableCell className="hidden min-w-0 align-top whitespace-nowrap border-l border-border/50 bg-muted/15 px-3 font-mono text-xs text-muted-foreground lg:table-cell">
                           {row.ipAddress ?? "—"}
                         </TableCell>
                       </TableRow>
@@ -314,39 +426,41 @@ export default function AuditLogPage() {
                 </TableBody>
               </Table>
             </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Showing {from}–{to} of {total} entries
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3 border-t bg-muted/30 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{from}</span>
+              –
+              <span className="font-medium text-foreground">{to}</span> of{" "}
+              <span className="font-medium text-foreground">{total}</span> entries
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || listLoading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <span className="min-w-28 text-center text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || listLoading}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-          </>
-        ) : null}
+          </CardFooter>
+        </Card>
       </div>
     </TooltipProvider>
   );

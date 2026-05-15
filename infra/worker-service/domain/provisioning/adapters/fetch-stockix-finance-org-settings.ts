@@ -17,10 +17,25 @@ export const MENA_DEFAULTS: OrgBuildSettings = {
   baseCurrency: "USD",
   timezone: "Asia/Beirut",
   location: "LB",
-  fiscalYear: "January",
-  language: "en-US",
-  dateFormat: "MM/DD/YYYY",
+  fiscalYear: "january",
+  language: "en",
+  dateFormat: "MM/DD/yyyy",
 };
+
+export function normalizeFiscalYearForFinanceBuild(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/** Finance `BuildOrganizationDto.language`: ACCEPTED_LOCALES = ['en', 'ar']. */
+export function normalizeLanguageForFinanceBuild(value: string): string {
+  const primary = value.trim().split(/[-_]/)[0]?.toLowerCase() ?? "en";
+  return primary === "ar" ? "ar" : "en";
+}
+
+/** Finance `DATE_FORMATS` use lowercase `yyyy` for four-digit years. */
+export function normalizeDateFormatForFinanceBuild(value: string): string {
+  return value.trim().replace(/YYYY/g, "yyyy");
+}
 
 function financeApiBase(internalBaseUrl: string): string {
   return internalBaseUrl.replace(/\/+$/, "");
@@ -71,9 +86,9 @@ function parseCurrentOrg(body: unknown): OrgBuildSettings | null {
     baseCurrency,
     timezone,
     location,
-    fiscalYear,
-    language,
-    dateFormat,
+    fiscalYear: normalizeFiscalYearForFinanceBuild(fiscalYear),
+    language: normalizeLanguageForFinanceBuild(language),
+    dateFormat: dateFormat ? normalizeDateFormatForFinanceBuild(dateFormat) : undefined,
   };
 }
 
