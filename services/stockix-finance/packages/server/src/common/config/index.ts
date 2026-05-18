@@ -1,7 +1,6 @@
 import app from './app';
 import systemDatabase from './system-database';
 import tenantDatabase from './tenant-database';
-import signup from './signup';
 import gotenberg from './gotenberg';
 import plaid from './plaid';
 import lemonsqueezy from './lemonsqueezy';
@@ -26,7 +25,6 @@ export const config = [
   systemDatabase,
   cloud,
   tenantDatabase,
-  signup,
   gotenberg,
   plaid,
   lemonsqueezy,
