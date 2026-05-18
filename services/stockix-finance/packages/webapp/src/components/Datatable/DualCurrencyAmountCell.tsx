@@ -2,7 +2,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import { Colors } from '@blueprintjs/core';
-import { useCurrentOrganization } from '@/hooks/state';
+import { useCurrentOrganization, useDisplayCurrencies } from '@/hooks/state';
 import { useLatestExchangeRateForCurrency } from '@/hooks/query/currencies';
 import { formattedAmount } from '@/utils';
 
@@ -36,7 +36,7 @@ export function DualCurrencyAmountCell({
 }) {
   const org = useCurrentOrganization();
   const baseCurrency = org?.base_currency;
-  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const displayCurrencies = useDisplayCurrencies();
 
   const localValue = isAmountColumn(id)
     ? original.formatted_local_amount
@@ -54,8 +54,8 @@ export function DualCurrencyAmountCell({
   // Convention: 1 base = rowExRate foreign  →  base = foreign / rowExRate
   const baseTotal = isForeign && rowExRate > 0 ? rowAmount / rowExRate : rowAmount;
 
-  // Show display currencies that differ from both the row currency and the base
-  const displayToShow = displayCurrencies.filter((c) => c !== rowCurrency && c !== baseCurrency);
+  // useDisplayCurrencies already excludes base; only additionally filter the row currency
+  const displayToShow = displayCurrencies.filter((c) => c !== rowCurrency);
 
   return (
     <CellWrapper>

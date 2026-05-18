@@ -177,6 +177,7 @@ export const useExpensesTotals = () => {
   );
 
   return {
+    total,
     formattedTotal,
     formattedSubtotal,
   };

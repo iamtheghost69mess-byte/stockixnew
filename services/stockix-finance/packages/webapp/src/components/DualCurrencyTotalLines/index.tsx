@@ -5,7 +5,7 @@ import { Colors, Tooltip } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
 import { TotalLine, TotalLineBorderStyle } from '../TotalLines';
 import { useExchangeRateByDate } from '@/hooks/query/exchangeRates';
-import { useCurrentOrganization } from '@/hooks/state';
+import { useCurrentOrganization, useDisplayCurrencies } from '@/hooks/state';
 import { formattedAmount } from '@/utils';
 
 // ─── Footer row helpers ───────────────────────────────────────────────────────
@@ -29,13 +29,6 @@ function DisplayCurrencyLineItem({ amount, currency, date }) {
       borderStyle={TotalLineBorderStyle.None}
     />
   );
-}
-
-function useDisplayCurrencies(formCurrency) {
-  const org = useCurrentOrganization();
-  const baseCurrency = org?.base_currency;
-  const all = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
-  return all.filter((c) => c !== formCurrency && c !== baseCurrency);
 }
 
 function useFormTransactionDate() {
@@ -62,7 +55,7 @@ export function DualCurrencyFormTotalLine({ amount, ...totalLineProps }) {
   const { values } = useFormikContext();
   const formCurrency = values.currency_code;
   const date = useFormTransactionDate();
-  const displayToShow = useDisplayCurrencies(formCurrency);
+  const displayToShow = useDisplayCurrencies().filter((c) => c !== formCurrency);
 
   return (
     <>
@@ -84,10 +77,7 @@ export function DualCurrencyDetailTotalLine({
   invoiceCurrency,
   ...totalLineProps
 }) {
-  const org = useCurrentOrganization();
-  const baseCurrency = org?.base_currency;
-  const all = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
-  const displayToShow = all.filter((c) => c !== invoiceCurrency && c !== baseCurrency);
+  const displayToShow = useDisplayCurrencies().filter((c) => c !== invoiceCurrency);
 
   return (
     <>
@@ -121,10 +111,7 @@ export function DualCurrencyTotalLines({ total }) {
       : total / formExchangeRate;
 
   const showBase = !!(formCurrency && baseCurrency && formCurrency !== baseCurrency);
-  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
-  const displayToShow = displayCurrencies.filter(
-    (c) => c !== formCurrency && c !== baseCurrency,
-  );
+  const displayToShow = useDisplayCurrencies().filter((c) => c !== formCurrency);
 
   if (!showBase && !displayToShow.length) return null;
 
@@ -209,26 +196,12 @@ export function DualCurrencyTableCellAmount({ baseAmount, currency, date }) {
 }
 
 /**
- * Currency column cell — stacks "USD (base)" label and each display-currency
- * code below it, giving the user a clear header for the stacked value cells.
+ * Currency column cell — shows just the document's own currency code as a
+ * simple tag. Secondary-currency amounts are shown inline in the value cells.
  */
 export function DualCurrencyTableCurrencyCell({ column }) {
-  const org = useCurrentOrganization();
-  const baseCurrency = org?.base_currency;
-  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
   const { invoiceCurrency } = column;
-  const toShow = displayCurrencies.filter((c) => c !== invoiceCurrency && c !== baseCurrency);
-
-  if (!toShow.length) return <span>{baseCurrency}</span>;
-
-  return (
-    <TableCurrencyStack>
-      <TableBaseValue>{baseCurrency} (base)</TableBaseValue>
-      {toShow.map((dc) => (
-        <SecondaryTableValue key={dc}>{dc}</SecondaryTableValue>
-      ))}
-    </TableCurrencyStack>
-  );
+  return <span>{invoiceCurrency || '—'}</span>;
 }
 
 /**
@@ -239,7 +212,7 @@ export function DualCurrencyTableCurrencyCell({ column }) {
  */
 export function DualCurrencyFormTotalCell({ payload: { currencyCode }, value }) {
   const date = useFormTransactionDate();
-  const displayToShow = useDisplayCurrencies(currencyCode);
+  const displayToShow = useDisplayCurrencies().filter((c) => c !== currencyCode);
 
   if (!displayToShow.length || !value || !date) {
     return <span>{formattedAmount(value, currencyCode, { noZero: true })}</span>;
@@ -262,9 +235,8 @@ export function DualCurrencyFormTotalCell({ payload: { currencyCode }, value }) 
 export function DualCurrencyTableValueCell({ value, column }) {
   const org = useCurrentOrganization();
   const baseCurrency = org?.base_currency;
-  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
   const { invoiceCurrency, invoiceDate } = column;
-  const toShow = displayCurrencies.filter((c) => c !== invoiceCurrency && c !== baseCurrency);
+  const toShow = useDisplayCurrencies().filter((c) => c !== invoiceCurrency);
 
   if (!toShow.length) {
     return <span>{formattedAmount(value, invoiceCurrency || baseCurrency)}</span>;

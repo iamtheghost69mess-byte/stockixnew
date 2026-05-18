@@ -16,18 +16,24 @@ export const useCurrentOrganization = () => {
   return useSelector(getCurrentOrganizationFactory());
 };
 
+/**
+ * Returns the effective set of display currencies for the tenant:
+ * - Configured display_currencies from org settings
+ * - Plus secondary_currency (if set and not already included)
+ * - Base currency is always excluded (amounts in base need no conversion)
+ */
 export const useDisplayCurrencies = (): string[] => {
   const org = useCurrentOrganization();
-  return org?.display_currencies ?? [];
-};
+  const base = org?.base_currency;
+  const secondary = org?.secondary_currency;
+  const configured: string[] = Array.isArray(org?.display_currencies)
+    ? org.display_currencies
+    : [];
 
-/**
- * Returns the tenant's optional secondary currency code (or null if not set).
- * When set, every currency output across the app shows a converted secondary
- * value below the primary one.
- */
-export const useSecondaryCurrency = (): string | null => {
-  const org = useCurrentOrganization();
-  const code = org?.secondary_currency;
-  return code ? code : null;
+  const effective =
+    secondary && !configured.includes(secondary)
+      ? [...configured, secondary]
+      : configured;
+
+  return effective.filter((c) => Boolean(c) && c !== base);
 };
