@@ -10,7 +10,8 @@ export interface ITableCell {
 }
 
 export type ITableRow = {
-  rows: ITableCell[];
+  cells: ITableCell[];
+  [key: string]: any;
 };
 
 export interface ITableColumn {

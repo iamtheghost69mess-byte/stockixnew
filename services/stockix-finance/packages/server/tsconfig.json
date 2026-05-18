@@ -10,7 +10,7 @@
       "../../node_modules/@types",
       "./src/types"
     ],
-    "types": ["node", "lodash"],
+    "types": ["node", "lodash", "jest"],
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
@@ -29,10 +29,10 @@
     },
   },
   "include": [
-    "./src/**/*"
+    "./src/**/*",
+    "./tests/**/*"
   ],
   "exclude": [
-    "./node_modules",
-    "tests"
+    "./node_modules"
   ]
 }
