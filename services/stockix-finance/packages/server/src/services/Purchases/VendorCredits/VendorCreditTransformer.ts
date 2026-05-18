@@ -43,6 +43,7 @@ export class VendorCreditTransformer extends Transformer {
    * @returns {string}
    */
   protected formattedLocalAmount = (vendorCredit): string => {
+    if (vendorCredit.localAmount == null) return '';
     return this.formatMoney(vendorCredit.localAmount);
   };
 
@@ -63,10 +64,12 @@ export class VendorCreditTransformer extends Transformer {
    * @returns {string}
    */
   protected formattedLocalCreditsRemaining = (credit): string => {
+    if (credit.localCreditsRemaining == null) return '';
     return this.formatMoney(credit.localCreditsRemaining);
   };
 
   protected formattedLocalDueAmount = (credit): string => {
+    if (credit.localCreditsRemaining == null) return '';
     return this.formatMoney(credit.localCreditsRemaining);
   };
 }

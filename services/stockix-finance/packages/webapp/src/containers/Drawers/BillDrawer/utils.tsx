@@ -21,14 +21,23 @@ import {
 } from '@/components';
 import { getColumnWidth } from '@/utils';
 import { useBillDrawerContext } from './BillDrawerProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import {
+  DualCurrencyTableCurrencyCell,
+  DualCurrencyTableValueCell,
+} from '@/components/DualCurrencyTotalLines';
 
 /**
  * Retrieve bill readonly details entries table columns.
  */
 export const useBillReadonlyEntriesTableColumns = () => {
   const {
-    bill: { entries },
+    bill: { entries, bill_date, currency_code },
   } = useBillDrawerContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
 
   return React.useMemo(
     () => [
@@ -53,46 +62,55 @@ export const useBillReadonlyEntriesTableColumns = () => {
         Header: intl.get('quantity'),
         accessor: 'quantity',
         Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'quantity', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'quantity', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
       },
+      ...(hasSecondary
+        ? [
+            {
+              Header: intl.get('currency'),
+              id: 'currency',
+              accessor: () => null,
+              Cell: DualCurrencyTableCurrencyCell,
+              disableSortBy: true,
+              width: 110,
+              invoiceCurrency: currency_code,
+              invoiceDate: bill_date,
+            },
+          ]
+        : []),
       {
         Header: intl.get('rate'),
         accessor: 'rate',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'rate', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'rate', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: bill_date,
       },
       {
         Header: intl.get('amount'),
         accessor: 'amount',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'amount', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'amount', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: bill_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, bill_date, currency_code],
   );
 };
 
 /**
  * Bill details status.
- * @returns {React.JSX}
  */
 export function BillDetailsStatus({ bill }) {
   return (

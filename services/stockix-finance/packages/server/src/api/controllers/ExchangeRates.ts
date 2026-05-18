@@ -162,7 +162,8 @@ export default class ExchangeRatesController extends BaseController {
 
   /**
    * Returns the most recent exchange rate on or before the given date.
-   * Used for transaction-date conversion on form footers.
+   * Always responds 200 — exchange_rate is null when no rate is found.
+   * Used for transaction-date conversion on form footers and table cells.
    */
   async rateByDate(req: Request, res: Response, next: NextFunction) {
     const { tenantId } = req;
@@ -174,10 +175,9 @@ export default class ExchangeRatesController extends BaseController {
         currency_code,
         date,
       );
-      if (!rate) {
-        return res.status(404).send({ exchange_rate: null });
-      }
-      return res.status(200).send({ exchange_rate: this.transfromToResponse(rate) });
+      return res.status(200).send({
+        exchange_rate: rate ? this.transfromToResponse(rate) : null,
+      });
     } catch (error) {
       next(error);
     }

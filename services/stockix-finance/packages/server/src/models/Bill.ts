@@ -211,6 +211,7 @@ export default class Bill extends mixin(TenantModel,
    * @returns {number}
    */
   get localAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.amount / this.exchangeRate;
   }
 
@@ -219,6 +220,7 @@ export default class Bill extends mixin(TenantModel,
    * @returns {number}
    */
   get localDueAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.dueAmount / this.exchangeRate;
   }
 
@@ -227,6 +229,7 @@ export default class Bill extends mixin(TenantModel,
    * @returns {number}
    */
   get localAllocatedCostAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.allocatedCostAmount / this.exchangeRate;
   }
 
@@ -235,6 +238,7 @@ export default class Bill extends mixin(TenantModel,
    * @returns {number}
    */
   get localLandedCostAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.landedCostAmount / this.exchangeRate;
   }
 
@@ -243,6 +247,7 @@ export default class Bill extends mixin(TenantModel,
    * @returns {number}
    */
   get localUnallocatedCostAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.unallocatedCostAmount / this.exchangeRate;
   }
 

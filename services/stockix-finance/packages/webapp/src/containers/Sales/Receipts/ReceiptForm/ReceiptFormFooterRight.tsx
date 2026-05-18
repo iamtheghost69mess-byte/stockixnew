@@ -10,11 +10,13 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { useReceiptTotals } from './utils';
-import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
 
 export function ReceiptFormFooterRight() {
   const {
     total,
+    paymentTotal,
+    dueTotal,
     formattedSubtotal,
     formattedTotal,
     formattedDueTotal,
@@ -23,26 +25,29 @@ export function ReceiptFormFooterRight() {
 
   return (
     <ReceiptTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.subtotal'} />}
         value={formattedSubtotal}
+        amount={total}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.total'} />}
         value={formattedTotal}
+        amount={total}
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
-      <DualCurrencyTotalLines total={total} />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.payment_amount'} />}
         value={formattedPaymentTotal}
+        amount={paymentTotal}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.due_amount'} />}
         value={formattedDueTotal}
+        amount={dueTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
     </ReceiptTotalLines>

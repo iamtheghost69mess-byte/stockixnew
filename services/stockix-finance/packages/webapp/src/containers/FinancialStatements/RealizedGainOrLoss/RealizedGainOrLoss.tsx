@@ -7,6 +7,7 @@ import RealizedGainOrLossHeader from './RealizedGainOrLossHeader';
 import RealizedGainOrLossActionsBar from './RealizedGainOrLossActionsBar';
 import { RealizedGainOrLossLoadingBar } from './components';
 import { RealizedGainOrLossProvider } from './RealizedGainOrLossProvider';
+import RealizedGainOrLossTable from './RealizedGainOrLossTable';
 
 import withCurrentOrganization from '../../Organization/withCurrentOrganization';
 import withRealizedGainOrLossActions from './withRealizedGainOrLossActions';
@@ -44,6 +45,7 @@ function RealizedGainOrLoss({
             onSubmitFilter={handleFilterSubmit}
           />
           <RealizedGainOrLossLoadingBar />
+          <RealizedGainOrLossTable companyName={organizationName} />
         </FinancialStatement>
       </DashboardPageContent>
     </RealizedGainOrLossProvider>

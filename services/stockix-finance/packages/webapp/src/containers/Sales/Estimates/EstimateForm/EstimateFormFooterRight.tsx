@@ -9,24 +9,25 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { useEstimateTotals } from './utils';
-import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
 
 export function EstimateFormFooterRight() {
   const { total, formattedSubtotal, formattedTotal } = useEstimateTotals();
 
   return (
     <EstimateTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'estimate_form.label.subtotal'} />}
         value={formattedSubtotal}
+        amount={total}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'estimate_form.label.total'} />}
         value={formattedTotal}
+        amount={total}
         textStyle={TotalLineTextStyle.Bold}
       />
-      <DualCurrencyTotalLines total={total} />
     </EstimateTotalLines>
   );
 }

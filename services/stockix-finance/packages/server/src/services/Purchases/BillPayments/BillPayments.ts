@@ -33,6 +33,7 @@ import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
 import { TenantMetadata } from '@/system/models';
 import { TransformerInjectable } from '@/lib/Transformer/TransformerInjectable';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 /**
  * Bill payments service.
@@ -345,6 +346,11 @@ export default class BillPaymentsService implements IBillPaymentsService {
       .modify('vendor')
       .throwIfNotFound();
 
+    validateForeignCurrencyExchangeRate(
+      vendor.currencyCode,
+      tenantMeta.baseCurrency,
+      billPaymentDTO.exchangeRate
+    );
     // Transform create DTO to model object.
     const billPaymentObj = await this.transformDTOToModel(
       tenantId,
@@ -441,6 +447,11 @@ export default class BillPaymentsService implements IBillPaymentsService {
       .findById(billPaymentDTO.vendorId)
       .throwIfNotFound();
 
+    validateForeignCurrencyExchangeRate(
+      vendor.currencyCode,
+      tenantMeta.baseCurrency,
+      billPaymentDTO.exchangeRate
+    );
     // Transform bill payment DTO to model object.
     const billPaymentObj = await this.transformDTOToModel(
       tenantId,

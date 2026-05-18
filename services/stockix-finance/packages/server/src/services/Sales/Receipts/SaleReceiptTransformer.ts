@@ -53,6 +53,7 @@ export class SaleReceiptTransformer extends Transformer {
    * @returns {string}
    */
   protected formattedLocalAmount = (receipt: ISaleReceipt): string => {
+    if (receipt.localAmount == null) return '';
     return this.formatMoney(receipt.localAmount);
   };
 }

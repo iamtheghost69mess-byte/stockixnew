@@ -20,6 +20,8 @@ import InventoryDetailsController from './FinancialStatements/InventoryDetails';
 import TransactionsByReferenceController from './FinancialStatements/TransactionsByReference';
 import CashflowAccountTransactions from './FinancialStatements/CashflowAccountTransactions';
 import ProjectProfitabilityController from './FinancialStatements/ProjectProfitabilitySummary';
+import UnrealizedGainLossController from './FinancialStatements/UnrealizedGainLoss';
+import RealizedGainLossController from './FinancialStatements/RealizedGainLoss';
 
 @Service()
 export default class FinancialStatementsService {
@@ -101,7 +103,15 @@ export default class FinancialStatementsService {
     router.use(
       '/project-profitability-summary',
       Container.get(ProjectProfitabilityController).router(),
-    )
+    );
+    router.use(
+      '/unrealized-gain-loss',
+      Container.get(UnrealizedGainLossController).router(),
+    );
+    router.use(
+      '/realized-gain-loss',
+      Container.get(RealizedGainLossController).router(),
+    );
     return router;
   }
 }

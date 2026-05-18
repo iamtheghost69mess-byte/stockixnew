@@ -66,6 +66,7 @@ export class SaleInvoiceTransformer extends Transformer {
    * @returns {string}
    */
   protected formattedLocalAmount = (invoice): string => {
+    if (invoice.localAmount == null) return '';
     return this.formatMoney(invoice.localAmount);
   };
 
@@ -75,6 +76,7 @@ export class SaleInvoiceTransformer extends Transformer {
    * @returns {string}
    */
   protected formattedLocalDueAmount = (invoice): string => {
+    if (invoice.localDueAmount == null) return '';
     return this.formatMoney(invoice.localDueAmount);
   };
 

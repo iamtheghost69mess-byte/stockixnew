@@ -40,6 +40,8 @@ import UnitOfWork from '@/services/UnitOfWork';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
 import { WarehouseTransactionDTOTransform } from '@/services/Warehouses/Integrations/WarehouseTransactionDTOTransform';
 import { TransformerInjectable } from '@/lib/Transformer/TransformerInjectable';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 /**
  * Vendor bills services.
@@ -335,6 +337,12 @@ export default class BillsService
       .findById(billDTO.vendorId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      vendor.currencyCode,
+      tenantMeta.baseCurrency,
+      billDTO.exchangeRate
+    );
     // Validate the bill number uniqiness on the storage.
     await this.validateBillNumberExists(tenantId, billDTO.billNumber);
 
@@ -417,6 +425,12 @@ export default class BillsService
       .modify('vendor')
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      vendor.currencyCode,
+      tenantMeta.baseCurrency,
+      billDTO.exchangeRate
+    );
     // Validate bill number uniqiness on the storage.
     if (billDTO.billNumber) {
       await this.validateBillNumberExists(tenantId, billDTO.billNumber, billId);

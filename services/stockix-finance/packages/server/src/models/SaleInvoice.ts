@@ -75,6 +75,7 @@ export default class SaleInvoice extends mixin(TenantModel,
    * @returns {number}
    */
   get localAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.balance / this.exchangeRate;
   }
 
@@ -83,6 +84,7 @@ export default class SaleInvoice extends mixin(TenantModel,
    * @returns {number}
    */
   get localDueAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.dueAmount / this.exchangeRate;
   }
 
@@ -91,6 +93,7 @@ export default class SaleInvoice extends mixin(TenantModel,
    * @returns {number}
    */
   get localWrittenoffAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.writtenoffAmount / this.exchangeRate;
   }
 

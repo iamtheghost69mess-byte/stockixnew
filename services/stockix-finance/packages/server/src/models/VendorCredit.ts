@@ -53,6 +53,7 @@ export default class VendorCredit extends mixin(TenantModel,
    * @returns {number}
    */
   get localAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.amount / this.exchangeRate;
   }
 
@@ -61,6 +62,7 @@ export default class VendorCredit extends mixin(TenantModel,
    * @returns {number}
    */
   get localCreditsRemaining() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.creditsRemaining * this.exchangeRate;
   }
 

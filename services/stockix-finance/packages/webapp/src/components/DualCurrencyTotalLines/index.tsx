@@ -1,69 +1,46 @@
 // @ts-nocheck
 import React from 'react';
 import styled from 'styled-components';
-import { Colors } from '@blueprintjs/core';
+import { Colors, Tooltip } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
 import { TotalLine, TotalLineBorderStyle } from '../TotalLines';
 import { useExchangeRateByDate } from '@/hooks/query/exchangeRates';
-import { useLatestExchangeRateForCurrency } from '@/hooks/query/currencies';
-import { useCurrentOrganization, useSecondaryCurrency } from '@/hooks/state';
+import { useCurrentOrganization } from '@/hooks/state';
 import { formattedAmount } from '@/utils';
 
+// ─── Footer row helpers ───────────────────────────────────────────────────────
+
 /**
- * Renders one secondary currency row via a rate-lookup (display currencies).
+ * Renders one secondary-currency row for a given base-currency amount.
+ *
+ * Exchange rate convention: "1 base = X foreign" (Indirect Quote).
+ * Conversion: foreignAmount = baseAmount × rate
  */
-function DualCurrencyTotalLineItem({ totalInBase, date, displayCurrency }) {
-  const { data: rateRow } = useExchangeRateByDate(displayCurrency, date);
+function DisplayCurrencyLineItem({ amount, currency, date }) {
+  const { data: rateRow } = useExchangeRateByDate(currency, date);
   const rate = rateRow?.exchange_rate;
 
-  if (!rate) return null;
-
-  const converted = totalInBase / rate;
+  if (!rate || !amount) return null;
 
   return (
     <SecondaryTotalLine
-      title={<SecondaryLabel>≈ {displayCurrency}</SecondaryLabel>}
-      value={<SecondaryAmount>{formattedAmount(converted, displayCurrency)}</SecondaryAmount>}
+      title={<SecondaryLabel>≈ {currency}</SecondaryLabel>}
+      value={<SecondaryAmount>{formattedAmount(amount * rate, currency)}</SecondaryAmount>}
       borderStyle={TotalLineBorderStyle.None}
     />
   );
 }
 
-/**
- * Renders the base-currency equivalent row (no rate lookup needed — totalInBase
- * is already expressed in base currency).
- */
-function BaseCurrencyTotalLineItem({ totalInBase, baseCurrency }) {
-  return (
-    <SecondaryTotalLine
-      title={<SecondaryLabel>≈ {baseCurrency}</SecondaryLabel>}
-      value={<SecondaryAmount>{formattedAmount(totalInBase, baseCurrency)}</SecondaryAmount>}
-      borderStyle={TotalLineBorderStyle.None}
-    />
-  );
-}
-
-/**
- * Drop-in below any TotalLine block.
- *
- * Renders, in order, any of the following rows that apply:
- *  - Base currency equivalent (when the form is in a foreign currency).
- *  - The tenant's "secondary currency" (when set and different from the form currency).
- *  - One row per configured display currency that differs from both the form
- *    and base currency.
- *
- * Must be rendered inside a Formik form (reads currency_code, date,
- * exchange_rate from context).
- */
-export function DualCurrencyTotalLines({ total }) {
-  const { values } = useFormikContext();
+function useDisplayCurrencies(formCurrency) {
   const org = useCurrentOrganization();
-  const secondaryCurrency = useSecondaryCurrency();
-
   const baseCurrency = org?.base_currency;
-  const displayCurrencies: string[] = org?.display_currencies ?? [];
-  const formCurrency = values.currency_code;
-  const formDate =
+  const all = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  return all.filter((c) => c !== formCurrency && c !== baseCurrency);
+}
+
+function useFormTransactionDate() {
+  const { values } = useFormikContext();
+  return (
     values.invoice_date ??
     values.bill_date ??
     values.payment_date ??
@@ -71,96 +48,105 @@ export function DualCurrencyTotalLines({ total }) {
     values.estimate_date ??
     values.credit_note_date ??
     values.vendor_credit_date ??
-    values.date;
+    values.date
+  );
+}
+
+// ─── Form footer components ───────────────────────────────────────────────────
+
+/**
+ * Drop-in replacement for <TotalLine> that appends secondary-currency rows
+ * for every configured display currency. Must be inside a Formik form.
+ */
+export function DualCurrencyFormTotalLine({ amount, ...totalLineProps }) {
+  const { values } = useFormikContext();
+  const formCurrency = values.currency_code;
+  const date = useFormTransactionDate();
+  const displayToShow = useDisplayCurrencies(formCurrency);
+
+  return (
+    <>
+      <TotalLine {...totalLineProps} />
+      {amount && date &&
+        displayToShow.map((dc) => (
+          <DisplayCurrencyLineItem key={dc} amount={amount} currency={dc} date={date} />
+        ))}
+    </>
+  );
+}
+
+/**
+ * Read-only variant for detail drawers. No Formik required.
+ */
+export function DualCurrencyDetailTotalLine({
+  amount,
+  invoiceDate,
+  invoiceCurrency,
+  ...totalLineProps
+}) {
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency;
+  const all = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const displayToShow = all.filter((c) => c !== invoiceCurrency && c !== baseCurrency);
+
+  return (
+    <>
+      <TotalLine {...totalLineProps} />
+      {amount && invoiceDate &&
+        displayToShow.map((dc) => (
+          <DisplayCurrencyLineItem key={dc} amount={amount} currency={dc} date={invoiceDate} />
+        ))}
+    </>
+  );
+}
+
+/**
+ * Legacy block-level secondary currency (still used by DualCurrencyTotalLines).
+ * Prefer DualCurrencyFormTotalLine for new code.
+ */
+export function DualCurrencyTotalLines({ total }) {
+  const { values } = useFormikContext();
+  const org = useCurrentOrganization();
+
+  const baseCurrency = org?.base_currency;
+  const formCurrency = values.currency_code;
+  const date = useFormTransactionDate();
   const formExchangeRate = values.exchange_rate ?? 1;
 
-  // Nothing to show when date is missing.
-  if (!formDate) return null;
+  if (!total || !date) return null;
 
-  // Convert total to base currency.
   const totalInBase =
     !formCurrency || formCurrency === baseCurrency
-      ? (total || 0)
-      : (total || 0) * formExchangeRate;
+      ? total
+      : total / formExchangeRate;
 
-  // Show base-currency row only when the form is in a foreign currency.
   const showBase = !!(formCurrency && baseCurrency && formCurrency !== baseCurrency);
-
-  // Secondary currency: render whenever it's set and differs from the form currency.
-  // (When the form is in the secondary currency itself, the primary line already
-  // shows it — no need to duplicate.)
-  const showSecondary = !!(
-    secondaryCurrency && formCurrency && secondaryCurrency !== formCurrency
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const displayToShow = displayCurrencies.filter(
+    (c) => c !== formCurrency && c !== baseCurrency,
   );
 
-  // Display currencies to show via rate-lookup (skip base, form, and secondary
-  // currency to avoid double-rendering).
-  const displayToShow = (Array.isArray(displayCurrencies) ? displayCurrencies : [])
-    .filter(
-      (c) => c !== formCurrency && c !== baseCurrency && c !== secondaryCurrency,
-    );
+  if (!showBase && !displayToShow.length) return null;
 
-  if (!showBase && !showSecondary && !displayToShow.length) return null;
   return (
     <>
       {showBase && (
-        <BaseCurrencyTotalLineItem totalInBase={totalInBase} baseCurrency={baseCurrency} />
-      )}
-      {showSecondary && (
-        secondaryCurrency === baseCurrency ? (
-          // Base equivalent already covers this when applicable; otherwise show
-          // base-equivalent as the secondary too.
-          !showBase && (
-            <BaseCurrencyTotalLineItem
-              totalInBase={totalInBase}
-              baseCurrency={baseCurrency}
-            />
-          )
-        ) : (
-          <DualCurrencyTotalLineItem
-            totalInBase={totalInBase}
-            date={formDate}
-            displayCurrency={secondaryCurrency}
-          />
-        )
+        <SecondaryTotalLine
+          title={<SecondaryLabel>≈ {baseCurrency}</SecondaryLabel>}
+          value={<SecondaryAmount>{formattedAmount(totalInBase, baseCurrency)}</SecondaryAmount>}
+          borderStyle={TotalLineBorderStyle.None}
+        />
       )}
       {displayToShow.map((dc) => (
-        <DualCurrencyTotalLineItem
-          key={dc}
-          totalInBase={totalInBase}
-          date={formDate}
-          displayCurrency={dc}
-        />
+        <DisplayCurrencyLineItem key={dc} amount={totalInBase} currency={dc} date={date} />
       ))}
     </>
   );
 }
 
 /**
- * Computes a base-currency total from a stored amount + the entity's currency,
- * exchange rate, and the tenant's base currency. Returns null when the result
- * isn't reliable (missing inputs).
- */
-function deriveBaseTotal(entity, baseCurrency) {
-  const amount = Number(entity?.amount ?? entity?.total ?? entity?.balance ?? 0);
-  if (!amount && amount !== 0) return null;
-
-  const currency = entity?.currency_code;
-  const exRate = Number(entity?.exchange_rate ?? 1);
-
-  if (!currency || currency === baseCurrency) return amount;
-  if (!exRate || Number.isNaN(exRate)) return null;
-  return amount * exRate;
-}
-
-/**
- * View-mode secondary rows for an entity that already has formatted local
- * (base-currency) amounts on it.
- *
- * Shows:
- *  - The base-currency equivalent when the entity is in a foreign currency
- *  - The configured "secondary currency" when set and different from the entity's currency.
- *  - The configured "display currencies" when set and different from the entity's currency.
+ * View-mode footer rows for detail drawers.
+ * For foreign-currency documents, shows the server-computed base-currency total.
  */
 export function DualCurrencyTotalLinesView({
   invoice,
@@ -168,90 +154,138 @@ export function DualCurrencyTotalLinesView({
   dueAmountField = 'formatted_local_due_amount',
 }) {
   const org = useCurrentOrganization();
-  const secondaryCurrency = useSecondaryCurrency();
   const baseCurrency = org?.base_currency;
-  const displayCurrencies = org?.display_currencies ?? [];
 
   const isForeign = invoice.currency_code && invoice.currency_code !== baseCurrency;
   const localAmount = invoice[amountField];
   const localDueAmount = invoice[dueAmountField];
 
-  // Latest rate from the cached currencies list — no extra HTTP calls.
-  const secondaryRate = useLatestExchangeRateForCurrency(
-    secondaryCurrency && secondaryCurrency !== baseCurrency ? secondaryCurrency : null,
-  );
-
-  const showBase = isForeign && (localAmount || localDueAmount);
-
-  const baseTotal = deriveBaseTotal(invoice, baseCurrency);
-  const showSecondary =
-    !!secondaryCurrency &&
-    secondaryCurrency !== invoice.currency_code &&
-    baseTotal !== null &&
-    (secondaryCurrency === baseCurrency || (secondaryRate && secondaryRate > 0));
-
-  const secondaryAmount =
-    secondaryCurrency === baseCurrency
-      ? baseTotal
-      : showSecondary
-        ? baseTotal / secondaryRate
-        : null;
-
-  const displayToShow = (Array.isArray(displayCurrencies) ? displayCurrencies : [])
-    .filter(
-      (c) => c !== invoice.currency_code && c !== baseCurrency && c !== secondaryCurrency,
-    );
-
-  const dateToUse =
-    invoice.invoice_date ??
-    invoice.bill_date ??
-    invoice.payment_date ??
-    invoice.receipt_date ??
-    invoice.estimate_date ??
-    invoice.credit_note_date ??
-    invoice.vendor_credit_date ??
-    invoice.date;
-
-  if (!showBase && !showSecondary && !displayToShow.length) return null;
+  if (!isForeign || (!localAmount && !localDueAmount)) return null;
 
   return (
     <>
-      {showBase && localAmount && (
+      {localAmount && (
         <SecondaryTotalLine
           title={<SecondaryLabel>≈ {baseCurrency}</SecondaryLabel>}
           value={<SecondaryAmount>{localAmount}</SecondaryAmount>}
           borderStyle={TotalLineBorderStyle.None}
         />
       )}
-      {showBase && localDueAmount && localDueAmount !== localAmount && (
+      {localDueAmount && localDueAmount !== localAmount && (
         <SecondaryTotalLine
           title={<SecondaryLabel>≈ {baseCurrency}</SecondaryLabel>}
           value={<SecondaryAmount>{localDueAmount}</SecondaryAmount>}
           borderStyle={TotalLineBorderStyle.None}
         />
       )}
-      {showSecondary && secondaryAmount !== null && (
-        <SecondaryTotalLine
-          title={<SecondaryLabel>≈ {secondaryCurrency}</SecondaryLabel>}
-          value={
-            <SecondaryAmount>
-              {formattedAmount(secondaryAmount, secondaryCurrency)}
-            </SecondaryAmount>
-          }
-          borderStyle={TotalLineBorderStyle.None}
-        />
-      )}
-      {baseTotal !== null && displayToShow.map((dc) => (
-        <DualCurrencyTotalLineItem
-          key={dc}
-          totalInBase={baseTotal}
-          date={dateToUse}
-          displayCurrency={dc}
-        />
-      ))}
     </>
   );
 }
+
+// ─── Shared table cell components (for React Table column defs) ──────────────
+//
+// These are proper React components (capital letter) so hooks work inside
+// React Table. Pass invoiceCurrency and invoiceDate on the column definition
+// object; they are accessible via column.invoiceCurrency / column.invoiceDate.
+
+/**
+ * One stacked secondary-currency amount inside a table cell.
+ * Shows a tooltip when no exchange rate is configured for the given date.
+ */
+export function DualCurrencyTableCellAmount({ baseAmount, currency, date }) {
+  const { data: rateRow } = useExchangeRateByDate(currency, date);
+  const rate = rateRow?.exchange_rate;
+
+  if (!rate) {
+    return (
+      <Tooltip content={`No ${currency} rate for this date`} placement="top">
+        <SecondaryTableValue style={{ cursor: 'help', textDecoration: 'underline dotted' }}>
+          —
+        </SecondaryTableValue>
+      </Tooltip>
+    );
+  }
+  return <SecondaryTableValue>{formattedAmount(baseAmount * rate, currency)}</SecondaryTableValue>;
+}
+
+/**
+ * Currency column cell — stacks "USD (base)" label and each display-currency
+ * code below it, giving the user a clear header for the stacked value cells.
+ */
+export function DualCurrencyTableCurrencyCell({ column }) {
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency;
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const { invoiceCurrency } = column;
+  const toShow = displayCurrencies.filter((c) => c !== invoiceCurrency && c !== baseCurrency);
+
+  if (!toShow.length) return <span>{baseCurrency}</span>;
+
+  return (
+    <TableCurrencyStack>
+      <TableBaseValue>{baseCurrency} (base)</TableBaseValue>
+      {toShow.map((dc) => (
+        <SecondaryTableValue key={dc}>{dc}</SecondaryTableValue>
+      ))}
+    </TableCurrencyStack>
+  );
+}
+
+/**
+ * React Table cell for editable form entry tables (Invoice, Bill, Estimate, etc.).
+ * Renders the row amount in the form currency, then stacked secondary-currency
+ * conversions for each configured display currency.
+ * Must render inside a Formik <Form> (uses useFormikContext and useFormTransactionDate).
+ */
+export function DualCurrencyFormTotalCell({ payload: { currencyCode }, value }) {
+  const date = useFormTransactionDate();
+  const displayToShow = useDisplayCurrencies(currencyCode);
+
+  if (!displayToShow.length || !value || !date) {
+    return <span>{formattedAmount(value, currencyCode, { noZero: true })}</span>;
+  }
+
+  return (
+    <TableCurrencyStack>
+      <TableBaseValue>{formattedAmount(value, currencyCode, { noZero: true })}</TableBaseValue>
+      {displayToShow.map((dc) => (
+        <DualCurrencyTableCellAmount key={dc} baseAmount={value} currency={dc} date={date} />
+      ))}
+    </TableCurrencyStack>
+  );
+}
+
+/**
+ * Value cell — renders the base-currency value on top, then one stacked row
+ * per display currency beneath it.
+ */
+export function DualCurrencyTableValueCell({ value, column }) {
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency;
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const { invoiceCurrency, invoiceDate } = column;
+  const toShow = displayCurrencies.filter((c) => c !== invoiceCurrency && c !== baseCurrency);
+
+  if (!toShow.length) {
+    return <span>{formattedAmount(value, invoiceCurrency || baseCurrency)}</span>;
+  }
+
+  return (
+    <TableCurrencyStack>
+      <TableBaseValue>{formattedAmount(value, invoiceCurrency || baseCurrency)}</TableBaseValue>
+      {toShow.map((dc) => (
+        <DualCurrencyTableCellAmount
+          key={dc}
+          baseAmount={value}
+          currency={dc}
+          date={invoiceDate}
+        />
+      ))}
+    </TableCurrencyStack>
+  );
+}
+
+// ─── Styled components ────────────────────────────────────────────────────────
 
 const SecondaryTotalLine = styled(TotalLine)`
   .title,
@@ -269,6 +303,22 @@ const SecondaryLabel = styled.span`
 `;
 
 const SecondaryAmount = styled.span`
+  font-size: 11px;
+  color: ${Colors.GRAY2};
+  font-variant-numeric: tabular-nums;
+`;
+
+export const TableCurrencyStack = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`;
+
+export const TableBaseValue = styled.span`
+  font-size: 13px;
+`;
+
+export const SecondaryTableValue = styled.span`
   font-size: 11px;
   color: ${Colors.GRAY2};
   font-variant-numeric: tabular-nums;

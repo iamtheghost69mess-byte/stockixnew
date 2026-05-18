@@ -143,6 +143,8 @@ export function useExchangeRateByDate(currencyCode: string, date: string, props?
     {
       enabled: !!(currencyCode && date),
       select: (res) => res.data.exchange_rate,
+      retry: false,
+      staleTime: 5 * 60 * 1000,
       ...props,
     },
   );

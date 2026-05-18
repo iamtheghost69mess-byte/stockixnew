@@ -42,6 +42,7 @@ export class PaymentReceiveTransfromer extends Transformer {
    * @returns {string}
    */
   protected formattedLocalAmount = (payment: IPaymentReceive): string => {
+    if (payment.localAmount == null) return '';
     return this.formatMoney(payment.localAmount);
   };
 

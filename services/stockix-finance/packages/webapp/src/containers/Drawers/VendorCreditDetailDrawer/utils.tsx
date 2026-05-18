@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
+import styled from 'styled-components';
 import {
   Button,
   Popover,
@@ -20,14 +21,24 @@ import {
   Choose,
 } from '@/components';
 import { useVendorCreditDetailDrawerContext } from './VendorCreditDetailDrawerProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import {
+  DualCurrencyTableCurrencyCell,
+  DualCurrencyTableValueCell,
+} from '@/components/DualCurrencyTotalLines';
 
 /**
  * Retrieve vendor credit readonly details entries table columns.
  */
 export const useVendorCreditReadonlyEntriesTableColumns = () => {
   const {
-    vendorCredit: { entries },
+    vendorCredit: { entries, vendor_credit_date, currency_code },
   } = useVendorCreditDetailDrawerContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
+
   return React.useMemo(
     () => [
       {
@@ -51,46 +62,55 @@ export const useVendorCreditReadonlyEntriesTableColumns = () => {
         Header: intl.get('quantity'),
         accessor: 'quantity',
         Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'quantity', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'quantity', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
       },
+      ...(hasSecondary
+        ? [
+            {
+              Header: intl.get('currency'),
+              id: 'currency',
+              accessor: () => null,
+              Cell: DualCurrencyTableCurrencyCell,
+              disableSortBy: true,
+              width: 110,
+              invoiceCurrency: currency_code,
+              invoiceDate: vendor_credit_date,
+            },
+          ]
+        : []),
       {
         Header: intl.get('rate'),
         accessor: 'rate',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'rate', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'rate', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: vendor_credit_date,
       },
       {
         Header: intl.get('amount'),
         accessor: 'amount',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'amount', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'amount', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: vendor_credit_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, vendor_credit_date, currency_code],
   );
 };
 
 /**
  * Vendor note more actions menu.
- * @returns {React.JSX}
  */
 export const VendorCreditMenuItem = ({ payload: { onReconcile } }) => {
   return (
@@ -117,7 +137,6 @@ export const VendorCreditMenuItem = ({ payload: { onReconcile } }) => {
 
 /**
  * Vendor Credit details status.
- * @returns {React.JSX}
  */
 export function VendorCreditDetailsStatus({ vendorCredit }) {
   return (

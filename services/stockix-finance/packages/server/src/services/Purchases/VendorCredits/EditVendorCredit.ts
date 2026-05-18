@@ -5,6 +5,8 @@ import {
   IVendorCreditEditingPayload,
 } from '@/interfaces';
 import BaseVendorCredit from './BaseVendorCredit';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import ItemsEntriesService from '@/services/Items/ItemsEntriesService';
@@ -44,6 +46,12 @@ export default class EditVendorCredit extends BaseVendorCredit {
       .findById(vendorCreditDTO.vendorId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      vendor.currencyCode,
+      tenantMeta.baseCurrency,
+      vendorCreditDTO.exchangeRate
+    );
     // Validate items ids existance.
     await this.itemsEntriesService.validateItemsIdsExistance(
       tenantId,

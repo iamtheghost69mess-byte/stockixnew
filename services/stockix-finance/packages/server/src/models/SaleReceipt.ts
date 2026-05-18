@@ -50,6 +50,7 @@ export default class SaleReceipt extends mixin(TenantModel,
    * @returns {number}
    */
   get localAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
     return this.amount / this.exchangeRate;
   }
 

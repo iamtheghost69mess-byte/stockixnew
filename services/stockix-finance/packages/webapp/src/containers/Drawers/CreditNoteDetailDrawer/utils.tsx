@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
+import styled from 'styled-components';
 import {
   Button,
   Popover,
@@ -20,12 +21,20 @@ import {
   Choose,
 } from '@/components';
 import { useCreditNoteDetailDrawerContext } from './CreditNoteDetailDrawerProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import {
+  DualCurrencyTableCurrencyCell,
+  DualCurrencyTableValueCell,
+} from '@/components/DualCurrencyTotalLines';
 
 export const useCreditNoteReadOnlyEntriesColumns = () => {
-  // credit note details drawer context.
   const {
-    creditNote: { entries },
+    creditNote: { entries, credit_note_date, currency_code },
   } = useCreditNoteDetailDrawerContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
 
   return React.useMemo(
     () => [
@@ -50,46 +59,55 @@ export const useCreditNoteReadOnlyEntriesColumns = () => {
         Header: intl.get('quantity'),
         accessor: 'quantity',
         Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'quantity', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'quantity', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
       },
+      ...(hasSecondary
+        ? [
+            {
+              Header: intl.get('currency'),
+              id: 'currency',
+              accessor: () => null,
+              Cell: DualCurrencyTableCurrencyCell,
+              disableSortBy: true,
+              width: 110,
+              invoiceCurrency: currency_code,
+              invoiceDate: credit_note_date,
+            },
+          ]
+        : []),
       {
         Header: intl.get('rate'),
         accessor: 'rate',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'rate', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'rate', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: credit_note_date,
       },
       {
         Header: intl.get('amount'),
         accessor: 'amount',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'amount', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'amount', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: credit_note_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, credit_note_date, currency_code],
   );
 };
 
 /**
- * Credit note more actions mneu.
- * @returns {React.JSX}
+ * Credit note more actions menu.
  */
 export function CreditNoteMenuItem({ payload: { onReconcile } }) {
   return (
@@ -116,7 +134,6 @@ export function CreditNoteMenuItem({ payload: { onReconcile } }) {
 
 /**
  * Credit note details status.
- * @returns {React.JSX}
  */
 export function CreditNoteDetailsStatus({ creditNote }) {
   return (
