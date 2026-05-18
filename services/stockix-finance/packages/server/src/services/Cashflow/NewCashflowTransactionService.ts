@@ -20,6 +20,8 @@ import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { CashflowTransactionAutoIncrement } from './CashflowTransactionAutoIncrement';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export default class NewCashflowTransactionService {
@@ -138,6 +140,12 @@ export default class NewCashflowTransactionService {
       .findById(newTransactionDTO.creditAccountId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      cashflowAccount.currencyCode,
+      tenantMeta.baseCurrency,
+      newTransactionDTO.exchangeRate
+    );
     // Authorize before creating cashflow transaction.
     await this.authorize(tenantId, newTransactionDTO, creditAccount);
 

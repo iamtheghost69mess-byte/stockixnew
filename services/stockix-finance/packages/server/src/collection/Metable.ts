@@ -1,5 +1,3 @@
-
-
 export default {
   METADATA_GROUP: 'default',
   KEY_COLUMN: 'key',
@@ -115,6 +113,7 @@ export default {
       metadata.markAsDeleted = true;
     }
     this.shouldReload = true;
+  },
   
 
   /**
@@ -160,6 +159,7 @@ export default {
    * Saved the modified metadata.
    */
   async saveMeta() {
+    const knex = (this as any).knex || (this.constructor as any).knex?.() || (this as any).bookshelf?.knex;
     const inserted = this.metadata.filter((m) => (m.markAsInserted === true));
     const updated = this.metadata.filter((m) => (m.markAsUpdated === true));
     const deleted = this.metadata.filter((m) => (m.markAsDeleted === true));

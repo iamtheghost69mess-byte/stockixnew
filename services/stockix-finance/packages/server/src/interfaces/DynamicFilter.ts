@@ -23,6 +23,8 @@ export interface IDynamicListFilter {
   viewSlug?: string;
 }
 
+export interface IDynamicListFilterDTO extends IDynamicListFilter {}
+
 export interface IDynamicListService {
   dynamicList(
     tenantId: number,

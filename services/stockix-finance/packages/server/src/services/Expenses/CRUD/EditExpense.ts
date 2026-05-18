@@ -14,6 +14,8 @@ import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import HasTenancyService from '@/services/Tenancy/TenancyService';
 import { ExpenseDTOTransformer } from './ExpenseDTOTransformer';
 import EntriesService from '@/services/Entries';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export class EditExpense {
@@ -75,6 +77,12 @@ export class EditExpense {
     // Validate the given expense categories not equal zero.
     this.validator.validateCategoriesNotEqualZero(expenseDTO);
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      expenseDTO.currencyCode,
+      tenantMeta.baseCurrency,
+      expenseDTO.exchangeRate
+    );
     // Validate expense entries that have allocated landed cost cannot be deleted.
     this.entriesService.validateLandedCostEntriesNotDeleted(
       oldExpense.categories,

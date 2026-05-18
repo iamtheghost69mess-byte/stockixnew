@@ -13,6 +13,7 @@ import {
 import TenancyService from '@/services/Tenancy/TenancyService';
 import events from '@/subscribers/events';
 import { Tenant, TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { CommandManualJournalValidators } from './CommandManualJournalValidators';
@@ -121,6 +122,11 @@ export class CreateManualJournalService {
       tenantId,
       manualJournalDTO,
       baseCurrency
+    );
+    validateForeignCurrencyExchangeRate(
+      manualJournalDTO.currencyCode,
+      baseCurrency,
+      manualJournalDTO.exchangeRate
     );
   };
 
