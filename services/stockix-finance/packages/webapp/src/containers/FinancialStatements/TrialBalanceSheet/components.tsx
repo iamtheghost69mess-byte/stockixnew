@@ -4,25 +4,46 @@ import intl from 'react-intl-universal';
 import { Button } from '@blueprintjs/core';
 
 import { Align } from '@/constants';
-import { getColumnWidth } from '@/utils';
+import { getColumnWidth, formattedAmount } from '@/utils';
 import { CellTextSpan } from '@/components/Datatable/Cells';
 import { If, Icon, FormattedMessage as T } from '@/components';
 import { useTrialBalanceSheetContext } from './TrialBalanceProvider';
 import FinancialLoadingBar from '../FinancialLoadingBar';
-import { useCurrentOrganization } from '@/hooks/state';
+import { useCurrentOrganization, useSecondaryCurrency } from '@/hooks/state';
+import { useExchangeRateByDate } from '@/hooks/query/exchangeRates';
 
+
+/**
+ * Cell that converts a raw base-currency amount to the secondary currency
+ * using the exchange rate for the report's end date.
+ */
+function SecondaryCurrencyAmountCell({ value, column }) {
+  const { data: rateRow } = useExchangeRateByDate(
+    column.secondaryCurrency,
+    column.reportDate,
+  );
+  const rate = rateRow?.exchange_rate;
+  if (!rate || value == null) return <CellTextSpan>—</CellTextSpan>;
+  return (
+    <CellTextSpan>
+      {formattedAmount(value * rate, column.secondaryCurrency)}
+    </CellTextSpan>
+  );
+}
 
 /**
  * Retrieve trial balance sheet table columns.
  */
 export const useTrialBalanceTableColumns = () => {
   const {
-    trialBalanceSheet: { tableRows },
+    trialBalanceSheet: { tableRows, query },
   } = useTrialBalanceSheetContext();
 
   const org = useCurrentOrganization();
   const baseCurrency = org?.base_currency ?? '';
   const suffix = baseCurrency ? ` (${baseCurrency})` : '';
+  const secondaryCurrency = useSecondaryCurrency();
+  const reportDate = query?.to_date;
 
   return React.useMemo(
     () => [
@@ -42,6 +63,20 @@ export const useTrialBalanceTableColumns = () => {
         textOverview: true,
         align: Align.Right,
       },
+      ...(secondaryCurrency
+        ? [
+            {
+              Header: `≈ ${secondaryCurrency} ${intl.get('credit')}`,
+              Cell: SecondaryCurrencyAmountCell,
+              accessor: 'credit',
+              width: getColumnWidth(tableRows, 'credit', { minWidth: 140 }),
+              align: Align.Right,
+              secondaryCurrency,
+              reportDate,
+              disableSortBy: true,
+            },
+          ]
+        : []),
       {
         Header: intl.get('debit') + suffix,
         Cell: CellTextSpan,
@@ -50,6 +85,20 @@ export const useTrialBalanceTableColumns = () => {
         textOverview: true,
         align: Align.Right,
       },
+      ...(secondaryCurrency
+        ? [
+            {
+              Header: `≈ ${secondaryCurrency} ${intl.get('debit')}`,
+              Cell: SecondaryCurrencyAmountCell,
+              accessor: 'debit',
+              width: getColumnWidth(tableRows, 'debit', { minWidth: 140 }),
+              align: Align.Right,
+              secondaryCurrency,
+              reportDate,
+              disableSortBy: true,
+            },
+          ]
+        : []),
       {
         Header: intl.get('balance') + suffix,
         Cell: CellTextSpan,
@@ -59,8 +108,23 @@ export const useTrialBalanceTableColumns = () => {
         textOverview: true,
         align: Align.Right,
       },
+      ...(secondaryCurrency
+        ? [
+            {
+              Header: `≈ ${secondaryCurrency} ${intl.get('balance')}`,
+              Cell: SecondaryCurrencyAmountCell,
+              accessor: 'balance',
+              width: getColumnWidth(tableRows, 'balance', { minWidth: 140 }),
+              align: Align.Right,
+              secondaryCurrency,
+              reportDate,
+              disableSortBy: true,
+            },
+          ]
+        : []),
     ],
-    [tableRows, suffix],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tableRows, suffix, secondaryCurrency, reportDate],
   );
 };
 

@@ -17,6 +17,16 @@ export const useCurrentOrganization = () => {
 };
 
 /**
+ * Returns the tenant's optional secondary currency (null if not configured).
+ * Use this when you need exactly the secondary currency — e.g. financial
+ * report secondary columns where you want one currency, not the full list.
+ */
+export const useSecondaryCurrency = (): string | null => {
+  const org = useCurrentOrganization();
+  return org?.secondary_currency || null;
+};
+
+/**
  * Returns the effective set of display currencies for the tenant:
  * - Configured display_currencies from org settings
  * - Plus secondary_currency (if set and not already included)

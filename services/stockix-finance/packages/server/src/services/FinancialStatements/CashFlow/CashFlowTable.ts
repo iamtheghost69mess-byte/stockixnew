@@ -11,7 +11,7 @@ import {
   IDateRange,
   ICashFlowStatementDOO,
 } from '@/interfaces';
-import { dateRangeFromToCollection, tableRowMapper } from 'utils';
+import { dateRangeFromToCollection, tableRowMapper, formatNumber } from 'utils';
 import { mapValuesDeep } from 'utils/deepdash';
 
 enum IROW_TYPE {
@@ -37,14 +37,33 @@ export default class CashFlowTable implements ICashFlowTable {
    * @param {ICashFlowStatement} reportStatement
    */
   private baseCurrency: string;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
 
-  constructor(reportStatement: ICashFlowStatementDOO, i18n, baseCurrency?: string) {
+  constructor(
+    reportStatement: ICashFlowStatementDOO,
+    i18n,
+    baseCurrency?: string,
+    secondaryCurrency?: string,
+    secondaryRate?: number
+  ) {
     this.report = reportStatement;
     this.i18n = i18n;
     this.baseCurrency = baseCurrency ?? '';
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
     this.dateRangeSet = [];
     this.initDateRangeCollection();
   }
+
+  private decorateNodeSecondary = (section: any): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate || section.total?.amount == null) {
+      return section;
+    }
+    const converted = section.total.amount * this.secondaryRate;
+    const formatted = formatNumber(converted, { currencyCode: this.secondaryCurrency, money: true });
+    return { ...section, secondary: { formattedAmount: formatted } };
+  };
 
   /**
    * Initialize date range set.
@@ -71,7 +90,13 @@ export default class CashFlowTable implements ICashFlowTable {
    * Retrieve the total column accessor.
    */
   private totalColumnAccessor = () => {
-    return [{ key: 'total', accessor: 'total.formattedAmount' }];
+    const accessors: { key: string; accessor: string }[] = [
+      { key: 'total', accessor: 'total.formattedAmount' },
+    ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+    }
+    return accessors;
   };
 
   /**
@@ -98,7 +123,7 @@ export default class CashFlowTable implements ICashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.AGGREGATE],
       id: section.id,
     });
@@ -114,7 +139,7 @@ export default class CashFlowTable implements ICashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.NET_INCOME, IROW_TYPE.TOTAL],
       id: section.id,
     });
@@ -130,7 +155,7 @@ export default class CashFlowTable implements ICashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.ACCOUNTS],
       id: section.id,
     });
@@ -146,7 +171,7 @@ export default class CashFlowTable implements ICashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.ACCOUNT],
       id: `account-${section.id}`,
     });
@@ -162,7 +187,7 @@ export default class CashFlowTable implements ICashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.TOTAL],
       id: section.id,
     });
@@ -303,7 +328,14 @@ export default class CashFlowTable implements ICashFlowTable {
     const label = this.baseCurrency
       ? `${this.i18n.__('Total')} (${this.baseCurrency})`
       : this.i18n.__('Total');
-    return [{ key: 'total', label }];
+    const columns: ITableColumn[] = [{ key: 'total', label }];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({
+        key: 'secondary_total',
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.__('Total')}`,
+      });
+    }
+    return columns;
   };
 
   /**
