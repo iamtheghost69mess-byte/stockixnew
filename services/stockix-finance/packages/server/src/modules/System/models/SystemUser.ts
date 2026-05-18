@@ -8,13 +8,28 @@ export class SystemUser extends BaseModel {
   public password: string;
 
   public readonly active: boolean;
-  public readonly tenantId: number;
+  public readonly tenantId?: number | null;
   public readonly verifyToken: string;
   public readonly verified: boolean;
   public readonly inviteAcceptedAt!: string;
 
   static get tableName() {
     return 'users';
+  }
+
+  static get relationMappings() {
+    const { Model } = require('objection');
+
+    return {
+      userTenants: {
+        relation: Model.HasManyRelation,
+        modelClass: require('./UserTenant').default,
+        join: {
+          from: 'users.id',
+          to: 'user_tenants.user_id',
+        },
+      },
+    };
   }
 
   /**

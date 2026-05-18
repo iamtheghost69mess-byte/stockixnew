@@ -50,10 +50,16 @@ export async function executeAppStep(
   ctx: ComposeCtx,
   options?: ComposeRunOptions,
 ): Promise<void> {
+  // Build webapp explicitly so logs show CACHED vs RUN; force-recreate picks up a new image digest.
+  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
+    "build",
+    "webapp",
+  ], options);
   await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
     "up",
     "-d",
     "--remove-orphans",
+    "--force-recreate",
     "--build",
     "webapp",
     "nginx",

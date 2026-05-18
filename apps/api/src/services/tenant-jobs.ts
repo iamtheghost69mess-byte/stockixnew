@@ -5,6 +5,7 @@ import * as schema from "@repo/db/schema";
 
 export type TenantLifecycleJobType =
   | "tenant.provision"
+  | "organization.provision"
   | "tenant.deprovision"
   | "tenant.lifecycle";
 

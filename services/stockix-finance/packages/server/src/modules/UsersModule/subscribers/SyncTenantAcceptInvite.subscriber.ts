@@ -3,6 +3,8 @@ import * as moment from 'moment';
 import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
+import { TenantModel } from '@/modules/System/models/TenantModel';
+import UserTenant from '@/modules/System/models/UserTenant';
 import { TenantUser } from '@/modules/Tenancy/TenancyModels/models/TenantUser.model';
 import { events } from '@/common/events/events';
 import { IAcceptInviteEventPayload } from '../Users.types';
@@ -12,6 +14,12 @@ export class SyncTenantAcceptInviteSubscriber {
   constructor(
     @Inject(TenantUser.name)
     private readonly tenantUserModel: TenantModelProxy<typeof TenantUser>,
+
+    @Inject(TenantModel.name)
+    private readonly tenantModel: typeof TenantModel,
+
+    @Inject(UserTenant.name)
+    private readonly userTenantModel: typeof UserTenant,
   ) {}
 
   /**
@@ -30,5 +38,29 @@ export class SyncTenantAcceptInviteSubscriber {
         ...pick(user, ['firstName', 'lastName', 'email', 'active']),
         inviteAcceptedAt: moment().toDate(),
       });
+
+    try {
+      const tenant = await this.tenantModel
+        .query()
+        .findById(inviteToken.tenantId);
+
+      if (tenant) {
+        const exists = await this.userTenantModel.query().findOne({
+          userId: inviteToken.userId,
+          tenantId: tenant.id,
+        });
+
+        if (!exists) {
+          await this.userTenantModel.query().insert({
+            userId: inviteToken.userId,
+            tenantId: tenant.id,
+            organizationId: tenant.organizationId,
+            role: 'member',
+          });
+        }
+      }
+    } catch {
+      // Non-fatal — membership may already exist from send-invite
+    }
   }
 }

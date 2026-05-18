@@ -34,6 +34,9 @@ services:
 
   webapp:
     image: stockix-webapp:local
+    # If src changes appear ignored: BuildKit may reuse COPY/RUN layers. Use:
+    #   node scripts/rebuild-tenant-webapp.mjs --tenant <slug>
+    # or: docker compose ... build --no-cache webapp && up -d --force-recreate webapp
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
@@ -100,6 +103,7 @@ services:
       - SIGNUP_DISABLED=${SIGNUP_DISABLED}
       - SIGNUP_ALLOWED_DOMAINS=${SIGNUP_ALLOWED_DOMAINS:-}
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
     ports:
       # Expose API on a random localhost-only port for worker health/bootstrap checks.
       - "127.0.0.1::3000"

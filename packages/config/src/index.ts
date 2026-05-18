@@ -185,6 +185,8 @@ export const env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  /** Shared with stockix-finance for POST /api/internal/* (provisioning attach-user). */
+  INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
   /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
   WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1000),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
@@ -236,6 +238,14 @@ export const apiConfig = {
   },
   get workerSecret() {
     return env.WORKER_SECRET;
+  },
+  /** Secret for finance internal routes; dev/test fall back to WORKER_SECRET when unset. */
+  get internalApiSecret(): string | undefined {
+    if (env.INTERNAL_API_SECRET) return env.INTERNAL_API_SECRET;
+    if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
+      return env.WORKER_SECRET;
+    }
+    return undefined;
   },
   get dashboardUrl() {
     return env.DASHBOARD_URL ?? readRequiredString("DASHBOARD_URL");

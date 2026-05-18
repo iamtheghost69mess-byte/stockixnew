@@ -48,7 +48,11 @@ export default function useApiRequest() {
     instance.interceptors.response.use(
       (response) => response,
       (error) => {
-        const { status, data } = error.response;
+        const { status, data } = error.response ?? {};
+
+        if (!status) {
+          return Promise.reject(error);
+        }
 
         if (status >= 500) {
           setGlobalErrors({ something_wrong: true });
@@ -63,7 +67,7 @@ export default function useApiRequest() {
         if (status === 429) {
           setGlobalErrors({ too_many_requests: true });
         }
-        if (status === 400) {
+        if (status === 400 && Array.isArray(data?.errors)) {
           const lockedError = data.errors.find(
             (error) => error.type === 'TRANSACTIONS_DATE_LOCKED',
           );

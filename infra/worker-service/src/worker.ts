@@ -18,6 +18,7 @@ import {
   deprovisionTenant,
   provisionTenant,
 } from "../domain/provisioner.js";
+import { executeOrgProvisionRuntime } from "./org-provision-runtime.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
@@ -120,14 +121,20 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
   return body.job ?? null;
 }
 
-async function markJobComplete(jobId: string, oneTimeAdminPassword?: string): Promise<void> {
+async function markJobComplete(
+  jobId: string,
+  opts?: { oneTimeAdminPassword?: string; financeOrganizationId?: string },
+): Promise<void> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
   const completionBody: Record<string, unknown> = { workerId };
   // Pass the one-time admin password so the API holds it in memory only — never persisted to DB (CRIT-02).
-  if (oneTimeAdminPassword !== undefined) {
-    completionBody.oneTimeAdminPassword = oneTimeAdminPassword;
+  if (opts?.oneTimeAdminPassword !== undefined) {
+    completionBody.oneTimeAdminPassword = opts.oneTimeAdminPassword;
+  }
+  if (opts?.financeOrganizationId) {
+    completionBody.result = { financeOrganizationId: opts.financeOrganizationId };
   }
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
     method: "POST",
@@ -229,11 +236,23 @@ const provisionPayloadSchema = z.object({
   mainTenantInternalBaseUrl: z.string().optional(),
 });
 
+const orgProvisionPayloadSchema = z.object({
+  organizationId: z.string().uuid(),
+  adminEmail: z.string().email(),
+  adminFirstName: z.string().min(1),
+  adminLastName: z.string().min(1),
+  orgName: z.string().min(1),
+  parentTenantSlug: z.string().min(1),
+  mainTenantInternalBaseUrl: z.string().min(1),
+  stockixTenantId: z.string().uuid(),
+  stockixApiUrl: z.string().optional(),
+});
+
 async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
   correlationId: string | null;
   payload: Record<string, unknown>;
-}): Promise<string | undefined> {
+}): Promise<{ oneTimeAdminPassword?: string; financeOrganizationId?: string }> {
   const guard = async () => {
     await assertProvisionNotCancelled(job.id);
   };
@@ -292,7 +311,41 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   });
   // Return the one-time password so the loop can pass it to markJobComplete
   // without persisting it to any database (CRIT-02).
-  return result.oneTimeAdminPassword;
+  return {
+    oneTimeAdminPassword: result.oneTimeAdminPassword,
+    financeOrganizationId: result.financeOrganizationId,
+  };
+}
+
+async function runOrgProvisionJob(
+  db: ReturnType<typeof createDb>,
+  job: {
+    id: string;
+    correlationId: string | null;
+    payload: Record<string, unknown>;
+  },
+): Promise<void> {
+  const guard = async () => {
+    await assertProvisionNotCancelled(job.id);
+  };
+  await guard();
+  const payload = orgProvisionPayloadSchema.parse(job.payload);
+  await executeOrgProvisionRuntime(
+    db,
+    {
+      organizationId: payload.organizationId,
+      adminEmail: payload.adminEmail,
+      adminFirstName: payload.adminFirstName,
+      adminLastName: payload.adminLastName,
+      orgName: payload.orgName,
+      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
+      parentTenantSlug: payload.parentTenantSlug,
+      stockixTenantId: payload.stockixTenantId,
+      correlationId: job.correlationId ?? randomUUID(),
+    },
+    (m) => console.log(`[worker][${job.id}] ${m}`),
+    guard,
+  );
 }
 
 async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
@@ -338,6 +391,7 @@ async function runTenantLifecycleCommand(
 
 const handlers = {
   "tenant.provision": runProvisionJob,
+  "organization.provision": runOrgProvisionJob,
   "tenant.deprovision": runDeprovisionJob,
   "tenant.lifecycle": (
     db: ReturnType<typeof createDb>,
@@ -403,13 +457,13 @@ async function loop() {
       }
       // For tenant.provision jobs, capture the one-time admin password so it can be
       // forwarded to the API in-memory store without being written to the DB (CRIT-02).
-      let oneTimeAdminPassword: string | undefined;
+      let provisionComplete: { oneTimeAdminPassword?: string; financeOrganizationId?: string } | undefined;
       if (job.type === "tenant.provision") {
-        oneTimeAdminPassword = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
+        provisionComplete = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
-      await markJobComplete(job.id, oneTimeAdminPassword);
+      await markJobComplete(job.id, provisionComplete);
       await emitWorkerMetric("worker.job.success", 1, { jobType: job.type });
       console.log(
         JSON.stringify({
@@ -427,7 +481,11 @@ async function loop() {
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
         // Provisioning should fail fast and never retry automatically.
-        const noRetry = cancelledByUser || job.type === "tenant.provision" || isPermanentProvisionError(message);
+        const noRetry =
+          cancelledByUser
+          || job.type === "tenant.provision"
+          || job.type === "organization.provision"
+          || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         console.log(
@@ -445,7 +503,10 @@ async function loop() {
         console.error(
           `[worker][${job.id}] failed to report failure: ${reportError instanceof Error ? reportError.message : String(reportError)}`,
         );
-        const fallbackNoRetry = job.type === "tenant.provision" || isPermanentProvisionError(message);
+        const fallbackNoRetry =
+          job.type === "tenant.provision"
+          || job.type === "organization.provision"
+          || isPermanentProvisionError(message);
         const status = fallbackNoRetry ? "dead" : "pending";
         const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 30_000);
         await db.transaction(async (tx) => {

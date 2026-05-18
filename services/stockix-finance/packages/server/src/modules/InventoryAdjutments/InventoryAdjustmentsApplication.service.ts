@@ -2,10 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { DeleteInventoryAdjustmentService } from './commands/DeleteInventoryAdjustment.service';
 import { PublishInventoryAdjustmentService } from './commands/PublishInventoryAdjustment.service';
 import { CreateQuickInventoryAdjustmentService } from './commands/CreateQuickInventoryAdjustment.service';
-import {
-  IInventoryAdjustmentsFilter,
-  IQuickInventoryAdjustmentDTO,
-} from './types/InventoryAdjustments.types';
+import { IQuickInventoryAdjustmentDTO } from './types/InventoryAdjustments.types';
+import { InventoryAdjustmentsFilterDto } from './dtos/InventoryAdjustmentsFilter.dto';
 import { InventoryAdjustment } from './models/InventoryAdjustment';
 import { GetInventoryAdjustmentService } from './queries/GetInventoryAdjustment.service';
 import { GetInventoryAdjustmentsService } from './queries/GetInventoryAdjustments.service';
@@ -75,7 +73,7 @@ export class InventoryAdjustmentsApplicationService {
    * Retrieves the inventory adjustments paginated list.
    * @param {IInventoryAdjustmentsFilter} adjustmentsFilter - Inventory adjustments filter.
    */
-  public async getInventoryAdjustments(filterDTO: IInventoryAdjustmentsFilter) {
+  public async getInventoryAdjustments(filterDTO: InventoryAdjustmentsFilterDto) {
     return this.getInventoryAdjustmentsService.getInventoryAdjustments(
       filterDTO,
     );

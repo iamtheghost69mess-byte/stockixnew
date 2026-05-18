@@ -6,10 +6,17 @@ import { TenantModel } from '@/modules/System/models/TenantModel';
 import { SystemKnexConnection } from '../SystemDB/SystemDB.constants';
 import { SystemModelsConnection } from './SystemModels.constants';
 import { SystemUser } from '../models/SystemUser';
+import UserTenant from '../models/UserTenant';
 import { TenantMetadata } from '../models/TenantMetadataModel';
 import { TenantRepository } from '../repositories/Tenant.repository';
 
-const models = [SystemUser, PlanSubscription, TenantModel, TenantMetadata];
+const models = [
+  SystemUser,
+  UserTenant,
+  PlanSubscription,
+  TenantModel,
+  TenantMetadata,
+];
 
 const modelProviders = models.map((model) => {
   return {

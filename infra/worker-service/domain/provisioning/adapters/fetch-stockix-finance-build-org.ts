@@ -11,6 +11,8 @@ export interface BuildOrgInput {
   adminPassword: string;
   settings: OrgBuildSettings;
   correlationId: string;
+  /** When set, skip sign-in and build under this Finance session (sub-org on parent stack). */
+  session?: { accessToken: string; organizationId: string };
 }
 
 export interface BuildOrgResult {
@@ -144,7 +146,8 @@ export async function fetchBuildOrganization(
 ): Promise<BuildOrgResult> {
   const base = financeApiBase(input.internalBaseUrl);
 
-  const creds = await signin(base, input.adminEmail, input.adminPassword, input.correlationId);
+  const creds =
+    input.session ?? (await signin(base, input.adminEmail, input.adminPassword, input.correlationId));
   if (!creds) {
     return { ok: false, error: "signin_failed" };
   }

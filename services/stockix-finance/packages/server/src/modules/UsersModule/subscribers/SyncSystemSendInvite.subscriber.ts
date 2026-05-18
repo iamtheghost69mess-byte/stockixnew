@@ -11,6 +11,8 @@ import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { TenantUser } from '@/modules/Tenancy/TenancyModels/models/TenantUser.model';
 import { UserInvite } from '../models/InviteUser.model';
 import { SystemUser } from '@/modules/System/models/SystemUser';
+import { TenantModel } from '@/modules/System/models/TenantModel';
+import UserTenant from '@/modules/System/models/UserTenant';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
@@ -21,6 +23,12 @@ export class SyncSystemSendInviteSubscriber {
 
     @Inject(SystemUser.name)
     private readonly systemUserModel: typeof SystemUser,
+
+    @Inject(TenantModel.name)
+    private readonly tenantModel: typeof TenantModel,
+
+    @Inject(UserTenant.name)
+    private readonly userTenantModel: typeof UserTenant,
 
     @Inject(UserInvite.name)
     private readonly inviteModel: typeof UserInvite,
@@ -34,18 +42,36 @@ export class SyncSystemSendInviteSubscriber {
    */
   @OnEvent(events.inviteUser.sendInvite)
   async syncSendInviteSystem({ inviteToken, user, invitingUser }: IUserInvitedEventPayload) {
-    const authorizedUser = await this.tenancyContext.getSystemUser();
-    const tenantId = authorizedUser.tenantId;
+    const tenant = await this.tenancyContext.getTenant().throwIfNotFound();
+    const tenantId = tenant.id;
 
-    // Creates a new system user.
-    const systemUser = await this.systemUserModel.query().insert({
-      email: user.email,
-      active: user.active,
-      tenantId,
+    let systemUser = await this.systemUserModel
+      .query()
+      .findOne({ email: user.email });
 
-      // Email should be verified since the user got the invite token through email.
-      verified: true,
-    });
+    if (!systemUser) {
+      systemUser = await this.systemUserModel.query().insert({
+        email: user.email,
+        active: user.active,
+        tenantId,
+
+        // Email should be verified since the user got the invite token through email.
+        verified: true,
+      });
+    }
+
+    const existingMembership = await this.userTenantModel
+      .query()
+      .findOne({ userId: systemUser.id, tenantId });
+
+    if (!existingMembership) {
+      await this.userTenantModel.query().insert({
+        userId: systemUser.id,
+        tenantId,
+        organizationId: tenant.organizationId,
+        role: 'member',
+      });
+    }
     // Creates a invite user token.
     const invite = await this.inviteModel.query().insert({
       email: user.email,
@@ -77,8 +103,8 @@ export class SyncSystemSendInviteSubscriber {
     inviteToken,
     user,
   }: IUserInviteResendEventPayload) {
-    const authorizedUser = await this.tenancyContext.getSystemUser();
-    const tenantId = authorizedUser.tenantId;
+    const tenant = await this.tenancyContext.getTenant().throwIfNotFound();
+    const tenantId = tenant.id;
 
     // Clear all invite tokens of the given user id.
     await this.clearInviteTokensByUserId(tenantId, user.systemUserId);

@@ -42,6 +42,8 @@ import { AuthApiKeysController } from './AuthApiKeys.controllers';
 import { AuthApiKeyAuthorizeService } from './commands/AuthApiKeyAuthorization.service';
 import { GenerateApiKey } from './commands/GenerateApiKey.service';
 import { GetApiKeysService } from './queries/GetApiKeys.service';
+import { ListMyTenantsService } from './queries/ListMyTenants.service';
+import { SwitchTenantService } from './commands/SwitchTenant.service';
 
 const models = [
   InjectSystemModel(PasswordReset),
@@ -74,7 +76,7 @@ const models = [
       adapter: BullMQAdapter,
     }),
   ],
-  exports: [...models],
+  exports: [...models, ListMyTenantsService, SwitchTenantService],
   providers: [
     ...models,
     LocalStrategy,
@@ -96,6 +98,8 @@ const models = [
     AuthApiKeyAuthorizeService,
     GenerateApiKey,
     GetApiKeysService,
+    ListMyTenantsService,
+    SwitchTenantService,
     JwtAuthGuard,
     {
       provide: APP_GUARD,

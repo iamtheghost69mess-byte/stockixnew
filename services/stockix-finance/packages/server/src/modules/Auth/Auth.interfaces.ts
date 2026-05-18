@@ -5,8 +5,9 @@ import { AuthSignupDto } from './dtos/AuthSignup.dto';
 
 export interface JwtPayload {
   sub: string;
-  iat: number;
-  exp: number;
+  organizationId: string;
+  iat?: number;
+  exp?: number;
 }
 
 export interface IAuthSignedInEventPayload {}

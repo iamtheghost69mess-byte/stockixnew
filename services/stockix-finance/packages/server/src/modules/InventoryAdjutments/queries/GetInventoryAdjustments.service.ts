@@ -3,7 +3,7 @@ import * as R from 'ramda';
 import { IPaginationMeta } from '@/interfaces/Model';
 import { InventoryAdjustmentTransformer } from '../InventoryAdjustmentTransformer';
 import { InventoryAdjustment } from '../models/InventoryAdjustment';
-import { IInventoryAdjustmentsFilter } from '../types/InventoryAdjustments.types';
+import { InventoryAdjustmentsFilterDto } from '../dtos/InventoryAdjustmentsFilter.dto';
 import { TransformerInjectable } from '@/modules/Transformer/TransformerInjectable.service';
 import { DynamicListService } from '@/modules/DynamicListing/DynamicList.service';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
@@ -26,7 +26,7 @@ export class GetInventoryAdjustmentsService {
    * @param {IInventoryAdjustmentsFilter} adjustmentsFilter
    */
   public async getInventoryAdjustments(
-    filterDTO: IInventoryAdjustmentsFilter,
+    filterDTO: InventoryAdjustmentsFilterDto,
   ): Promise<{
     data: InventoryAdjustment[];
     pagination: IPaginationMeta;

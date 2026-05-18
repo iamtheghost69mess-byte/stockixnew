@@ -2,6 +2,7 @@ import { ClsService } from 'nestjs-cls';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { SystemUser } from '@/modules/System/models/SystemUser';
+import UserTenant from '@/modules/System/models/UserTenant';
 import { ModelObject } from 'objection';
 import { JwtPayload } from '../Auth.interfaces';
 import { InvalidEmailPasswordException } from '../exceptions/InvalidEmailPassword.exception';
@@ -12,9 +13,11 @@ export class AuthSigninService {
   constructor(
     @Inject(SystemUser.name)
     private readonly systemUserModel: typeof SystemUser,
+    @Inject(UserTenant.name)
+    private readonly userTenantModel: typeof UserTenant,
     private readonly jwtService: JwtService,
     private readonly clsService: ClsService,
-  ) { }
+  ) {}
 
   /**
    * Validates the given email and password.
@@ -58,6 +61,13 @@ export class AuthSigninService {
 
       this.clsService.set('tenantId', user.tenantId);
       this.clsService.set('userId', user.id);
+
+      await this.userTenantModel
+        .query()
+        .findOne({ userId: user.id, organizationId: payload.organizationId })
+        .throwIfNotFound();
+
+      this.clsService.set('organizationId', payload.organizationId);
     } catch (error) {
       throw new UserNotFoundException(String(payload.sub));
     }
@@ -65,14 +75,9 @@ export class AuthSigninService {
   }
 
   /**
-   *
-   * @param {SystemUser} user
-   * @returns {string}
+   * Signs a JWT for the given user and organization.
    */
-  signToken(user: SystemUser): string {
-    const payload = {
-      sub: user.email,
-    };
-    return this.jwtService.sign(payload);
+  async signToken(user: SystemUser, organizationId: string): Promise<string> {
+    return this.jwtService.sign({ sub: user.email, organizationId });
   }
 }

@@ -8,6 +8,7 @@ import {
   Query,
   Request,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
@@ -34,6 +35,7 @@ import { LocalAuthGuard } from './guards/Local.guard';
 import { AuthSigninService } from './commands/AuthSignin.service';
 import { TenantModel } from '../System/models/TenantModel';
 import { SystemUser } from '../System/models/SystemUser';
+import UserTenant from '../System/models/UserTenant';
 import { IgnoreTenantInitializedRoute } from '../Tenancy/EnsureTenantIsInitialized.guard';
 import { IgnoreTenantSeededRoute } from '../Tenancy/EnsureTenantIsSeeded.guards';
 
@@ -49,6 +51,9 @@ export class AuthController {
 
     @Inject(TenantModel.name)
     private readonly tenantModel: typeof TenantModel,
+
+    @Inject(UserTenant.name)
+    private readonly userTenantModel: typeof UserTenant,
   ) { }
 
   @Post('/signin')
@@ -65,12 +70,36 @@ export class AuthController {
     @Body() signinDto: AuthSigninDto,
   ): Promise<AuthSigninResponseDto> {
     const { user } = req;
-    const tenant = await this.tenantModel.query().findById(user.tenantId);
+
+    let organizationId: string | undefined;
+    let tenantId: number | undefined;
+
+    if (user.tenantId) {
+      const tenant = await this.tenantModel.query().findById(user.tenantId);
+      organizationId = tenant?.organizationId;
+      tenantId = tenant?.id;
+    }
+
+    if (!organizationId) {
+      const membership = await this.userTenantModel
+        .query()
+        .where({ userId: user.id })
+        .orderBy('createdAt', 'asc')
+        .first();
+      organizationId = membership?.organizationId;
+      tenantId = membership?.tenantId;
+    }
+
+    if (!organizationId || tenantId === undefined) {
+      throw new UnauthorizedException(
+        'No organization found for this user',
+      );
+    }
 
     return {
-      accessToken: this.authSignin.signToken(user),
-      organizationId: tenant.organizationId,
-      tenantId: tenant.id,
+      accessToken: await this.authSignin.signToken(user, organizationId),
+      organizationId,
+      tenantId,
       userId: user.id,
     };
   }

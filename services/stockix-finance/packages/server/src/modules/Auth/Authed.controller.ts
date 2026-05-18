@@ -5,7 +5,15 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { GetAuthenticatedAccount } from './queries/GetAuthedAccount.service';
-import { Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
+import { SwitchTenantDto } from './dtos/SwitchTenant.dto';
 import { Throttle } from '@nestjs/throttler';
 import { TenantAgnosticRoute } from '../Tenancy/TenancyGlobal.guard';
 import { AuthenticationApplication } from './AuthApplication.sevice';
@@ -46,5 +54,19 @@ export class AuthedController {
   @ApiOperation({ summary: 'Retrieve the authenticated account' })
   async getAuthedAcccount() {
     return this.getAuthedAccountService.getAccount();
+  }
+
+  @Get('/my-tenants')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List organizations the authenticated user belongs to' })
+  async getMyTenants() {
+    return this.authApp.listMyTenants();
+  }
+
+  @Post('/switch-tenant')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Switch active organization and issue a new JWT' })
+  async switchTenant(@Body() body: SwitchTenantDto) {
+    return this.authApp.switchTenant(body.organizationId);
   }
 }

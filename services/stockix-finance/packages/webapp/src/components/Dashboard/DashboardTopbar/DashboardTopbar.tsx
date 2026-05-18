@@ -25,6 +25,7 @@ import { withUniversalSearchActions } from '@/containers/UniversalSearch/withUni
 import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
 import { withDashboard } from '@/containers/Dashboard/withDashboard';
 import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
 import QuickNewDropdown from '@/containers/QuickNewDropdown/QuickNewDropdown';
 import {
@@ -60,6 +61,9 @@ function DashboardTopbar({
 
   // #withDialogActions
   openDialog,
+
+  // #withCurrentOrganization
+  organization,
 }) {
   const history = useHistory();
 
@@ -164,6 +168,21 @@ function DashboardTopbar({
         </Navbar>
 
         <div class="dashboard__topbar-user">
+          {organization?.name ? (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                padding: '2px 8px',
+                borderRadius: 4,
+                background: '#e8f0fe',
+                color: '#1a56db',
+                marginRight: 8,
+              }}
+            >
+              {organization.name}
+            </span>
+          ) : null}
           <DashboardTopbarUser />
         </div>
       </div>
@@ -181,4 +200,5 @@ export default compose(
   })),
   withDashboardActions,
   withDialogActions,
+  withCurrentOrganization(({ organization }) => ({ organization })),
 )(DashboardTopbar);

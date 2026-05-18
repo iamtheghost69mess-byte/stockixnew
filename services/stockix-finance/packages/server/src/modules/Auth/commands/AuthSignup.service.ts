@@ -3,6 +3,7 @@ import * as moment from 'moment';
 import { events } from '@/common/events/events';
 import { ServiceError } from '@/modules/Items/ServiceError';
 import { SystemUser } from '@/modules/System/models/SystemUser';
+import UserTenant from '@/modules/System/models/UserTenant';
 import { TenantsManagerService } from '@/modules/TenantDBManager/TenantsManager';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -33,7 +34,10 @@ export class AuthSignupService {
 
     @Inject(SystemUser.name)
     private readonly systemUserModel: typeof SystemUser,
-  ) { }
+
+    @Inject(UserTenant.name)
+    private readonly userTenantModel: typeof UserTenant,
+  ) {}
 
   /**
    * Registers a new tenant with user from user input.
@@ -42,9 +46,6 @@ export class AuthSignupService {
   public async signUp(signupDTO: AuthSignupDto) {
     // Validates the signup disable restrictions.
     await this.validateSignupRestrictions(signupDTO.email);
-
-    // Validates the given email uniqiness.
-    await this.validateEmailUniqiness(signupDTO.email);
 
     const hashedPassword = await hashPassword(signupDTO.password);
     const signupConfirmation = this.configService.get('signupConfirmation');
@@ -62,17 +63,49 @@ export class AuthSignupService {
     } as IAuthSigningUpEventPayload);
 
     const tenant = await this.tenantsManager.createTenant();
-    const user = await this.systemUserModel.query().insert({
-      ...signupDTO,
-      verifyToken,
-      verified,
-      active: true,
-      password: hashedPassword,
-      tenantId: tenant.id,
-      inviteAcceptedAt,
-    });
+    await this.validateEmailUniqiness(signupDTO.email, tenant.organizationId);
+
+    const existingUser = await this.systemUserModel
+      .query()
+      .findOne({ email: signupDTO.email });
+
+    let user: SystemUser;
+    if (existingUser) {
+      user = existingUser;
+    } else {
+      user = await this.systemUserModel.query().insert({
+        ...signupDTO,
+        verifyToken,
+        verified,
+        active: true,
+        password: hashedPassword,
+        tenantId: tenant.id,
+        inviteAcceptedAt,
+      });
+    }
+
+    const existingMembership = await this.userTenantModel
+      .query()
+      .findOne({ userId: user.id, tenantId: tenant.id });
+
+    if (!existingMembership) {
+      await this.userTenantModel.query().insert({
+        userId: user.id,
+        tenantId: tenant.id,
+        organizationId: tenant.organizationId,
+        role: 'owner',
+      });
+    }
+
+    if (!user.tenantId) {
+      await this.systemUserModel
+        .query()
+        .findById(user.id)
+        .patch({ tenantId: tenant.id });
+    }
+
     // Set the user in the cls service.
-    this.clsService.set('tenantId', user.tenantId);
+    this.clsService.set('tenantId', tenant.id);
     this.clsService.set('userId', user.id);
     this.clsService.set('organizationId', tenant.organizationId);
 
@@ -85,7 +118,7 @@ export class AuthSignupService {
 
     return {
       userId: user.id,
-      tenantId: user.tenantId,
+      tenantId: tenant.id,
       organizationId: tenant.organizationId,
     };
   }
@@ -94,10 +127,18 @@ export class AuthSignupService {
    * Validates email uniqiness on the storage.
    * @param {string} email - Email address
    */
-  private async validateEmailUniqiness(email: string) {
-    const isEmailExists = await this.systemUserModel.query().findOne({ email });
+  private async validateEmailUniqiness(email: string, organizationId: string) {
+    const existingUser = await this.systemUserModel.query().findOne({ email });
 
-    if (isEmailExists) {
+    if (!existingUser) {
+      return;
+    }
+
+    const existingMembership = await this.userTenantModel
+      .query()
+      .findOne({ userId: existingUser.id, organizationId });
+
+    if (existingMembership) {
       throw new ServiceError(
         ERRORS.EMAIL_EXISTS,
         'The given email address is already signed-up',

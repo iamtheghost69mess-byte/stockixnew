@@ -73,27 +73,27 @@ export async function enqueueOrgProvisioning(
     { meta: { organizationId, parentTenantId: tenantId } },
   );
 
+  if (!mainTenantInternalBaseUrl) {
+    throw new Error("parent_tenant_not_deployed");
+  }
+
   await insertTenantJob(db, {
-    type: "tenant.provision",
+    type: "organization.provision",
+    tenantId,
     correlationId,
     payload: {
-      slug: org.slug,
-      name: org.name,
-      ownerId: tenant.ownerId,
+      organizationId,
       adminEmail: tenant.adminEmail,
       adminFirstName: tenant.adminFirstName,
       adminLastName: tenant.adminLastName,
-      planSlug: tenant.planSlug,
-      assignExistingLicenseId: null,
-      provisionRequestedById: null,
-      organizationId,
+      orgName: org.name,
+      parentTenantSlug: tenant.slug,
+      mainTenantInternalBaseUrl,
       stockixTenantId: tenantId,
       stockixApiUrl:
         process.env.STOCKIX_API_URL?.trim()
         ?? process.env.NEXT_PUBLIC_STOCKIX_API_URL?.trim()
         ?? "",
-      parentTenantSlug: tenant.slug,
-      mainTenantInternalBaseUrl,
     },
   });
 }

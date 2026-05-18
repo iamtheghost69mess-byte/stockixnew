@@ -171,6 +171,8 @@ var env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  /** Shared with stockix-finance for POST /api/internal/* (provisioning attach-user). */
+  INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
   /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
   WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1e3),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
@@ -221,6 +223,14 @@ var apiConfig = {
   },
   get workerSecret() {
     return env.WORKER_SECRET;
+  },
+  /** Secret for finance internal routes; dev/test fall back to WORKER_SECRET when unset. */
+  get internalApiSecret() {
+    if (env.INTERNAL_API_SECRET) return env.INTERNAL_API_SECRET;
+    if (env.NODE_ENV === "development" || env.NODE_ENV === "test") {
+      return env.WORKER_SECRET;
+    }
+    return void 0;
   },
   get dashboardUrl() {
     return env.DASHBOARD_URL ?? readRequiredString("DASHBOARD_URL");
@@ -3083,6 +3093,7 @@ function buildTenantComposeEnvBody(params) {
     `S3_BUCKET=${params.s3Bucket}`,
     `AGENDASH_AUTH_USER=${params.agendashUser}`,
     `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`,
+    `INTERNAL_API_SECRET=${params.internalApiSecret ?? ""}`,
     "",
     "# Stockix platform integration",
     `REACT_APP_STOCKIX_API_URL=${params.stockixApiUrl ?? ""}`,
@@ -3190,6 +3201,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   const requestId = correlationId;
   let port;
   let oneTimeAdminPassword;
+  let financeOrganizationId;
   let composeCtx = null;
   let sideEffectsStarted = false;
   const completedOps = await loadProvisionJournal(db, correlationId);
@@ -3345,7 +3357,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       s3Endpoint,
       s3Bucket,
       stockixTenantId: input.stockixTenantId,
-      stockixApiUrl: input.stockixApiUrl
+      stockixApiUrl: input.stockixApiUrl,
+      internalApiSecret: apiConfig.internalApiSecret
     });
     const envPath = await writeTenantEnvFileAtomic(join5(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
@@ -3388,7 +3401,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       S3_ENDPOINT: s3Endpoint,
       S3_BUCKET: s3Bucket,
       AGENDASH_AUTH_USER: agendashUser,
-      AGENDASH_AUTH_PASSWORD: agendashPassword
+      AGENDASH_AUTH_PASSWORD: agendashPassword,
+      INTERNAL_API_SECRET: apiConfig.internalApiSecret ?? ""
     };
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
@@ -3463,10 +3477,12 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() }
       });
+      await runComposeWithCancellation(["build", "webapp"]);
       await runComposeWithCancellation([
         "up",
         "-d",
         "--remove-orphans",
+        "--force-recreate",
         "--build",
         "webapp",
         "nginx",
@@ -3615,6 +3631,9 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         if (!buildResult.ok) {
           throw new Error(buildResult.error ?? "Organization build failed");
         }
+        if (buildResult.financeOrganizationId) {
+          financeOrganizationId = buildResult.financeOrganizationId;
+        }
         if (input.controlPlaneOrgId && buildResult.financeOrganizationId) {
           const apiBase = `http://localhost:${apiConfig.port}`;
           const saveUrl = `${apiBase}/internal/organizations/${input.controlPlaneOrgId}`;
@@ -3642,6 +3661,37 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
             log(
               `[provision] Warning: failed to save financeOrganizationId: ${err instanceof Error ? err.message : String(err)}`
             );
+          }
+        }
+        if (input.adminEmail && internalUrl && buildResult.financeOrganizationId) {
+          const internalSecret = apiConfig.internalApiSecret;
+          if (internalSecret) {
+            try {
+              const attachUrl = `${internalUrl.replace(/\/+$/, "")}/api/internal/attach-user-to-tenant`;
+              const attachRes = await fetch(attachUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-internal-secret": internalSecret
+                },
+                body: JSON.stringify({
+                  email: input.adminEmail,
+                  organization_id: buildResult.financeOrganizationId
+                }),
+                signal: AbortSignal.timeout(1e4)
+              });
+              if (!attachRes.ok) {
+                log(`[provision] Warning: attach-user failed ${attachRes.status}`);
+              } else {
+                log("[provision] Admin user attached to org");
+              }
+            } catch (err) {
+              log(
+                `[provision] Warning: attach-user error: ${err instanceof Error ? err.message : String(err)}`
+              );
+            }
+          } else {
+            log("[provision] Warning: INTERNAL_API_SECRET not configured; skipping attach-user");
           }
         }
         await markOp("tenant.build_organization", "Organization build completed", {
@@ -3707,7 +3757,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       composeProjectName: project,
       internalPort: port,
       baseUrl,
-      oneTimeAdminPassword
+      oneTimeAdminPassword,
+      financeOrganizationId
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -3910,7 +3961,7 @@ async function currentHasBuiltAt(base, accessToken, organizationId, correlationI
 }
 async function fetchBuildOrganization(input, log) {
   const base = financeApiBase2(input.internalBaseUrl);
-  const creds = await signin(base, input.adminEmail, input.adminPassword, input.correlationId);
+  const creds = input.session ?? await signin(base, input.adminEmail, input.adminPassword, input.correlationId);
   if (!creds) {
     return { ok: false, error: "signin_failed" };
   }
@@ -4209,6 +4260,226 @@ async function deprovisionTenant(db, tenantId, options = {}) {
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }
 
+// ../../infra/worker-service/src/org-provision-runtime.ts
+function financeApiBase4(internalBaseUrl) {
+  return internalBaseUrl.replace(/\/+$/, "");
+}
+function isRecord3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readString4(v) {
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function parseAuthSession(body) {
+  if (!isRecord3(body)) return null;
+  const accessToken = readString4(body.accessToken) ?? readString4(body.access_token) ?? readString4(body.token);
+  const organizationId = readString4(body.organizationId) ?? readString4(body.organization_id);
+  if (!accessToken || !organizationId) return null;
+  return { accessToken, organizationId };
+}
+function parseSignupOrganizationId(body) {
+  if (!isRecord3(body)) return null;
+  return readString4(body.organizationId) ?? readString4(body.organization_id) ?? null;
+}
+async function registerNewFinanceOrg(base, params) {
+  const res = await fetch(`${base}/api/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-request-id": params.correlationId,
+      "x-correlation-id": params.correlationId
+    },
+    body: JSON.stringify({
+      first_name: params.firstName,
+      last_name: params.lastName,
+      email: params.email,
+      password: params.password
+    }),
+    signal: AbortSignal.timeout(1e4)
+  });
+  const text2 = await res.text();
+  let json;
+  try {
+    json = text2 ? JSON.parse(text2) : {};
+  } catch {
+    json = { raw: text2 };
+  }
+  if (!res.ok) {
+    throw new Error(`register_failed_http_${res.status}: ${text2.slice(0, 500)}`);
+  }
+  const organizationId = parseSignupOrganizationId(json);
+  if (!organizationId) {
+    throw new Error("register_missing_organization_id");
+  }
+  return organizationId;
+}
+async function signin2(base, email, password, correlationId) {
+  const res = await fetch(`${base}/api/auth/signin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-request-id": correlationId,
+      "x-correlation-id": correlationId
+    },
+    body: JSON.stringify({ email, password }),
+    signal: AbortSignal.timeout(1e4)
+  });
+  const text2 = await res.text();
+  let json;
+  try {
+    json = text2 ? JSON.parse(text2) : {};
+  } catch {
+    json = { raw: text2 };
+  }
+  if (!res.ok) {
+    throw new Error(`signin_failed_http_${res.status}: ${text2.slice(0, 500)}`);
+  }
+  const session = parseAuthSession(json);
+  if (!session) {
+    throw new Error("signin_missing_token");
+  }
+  return session;
+}
+async function switchTenant(base, accessToken, organizationId, correlationId) {
+  const res = await fetch(`${base}/api/auth/switch-tenant`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "x-request-id": correlationId,
+      "x-correlation-id": correlationId
+    },
+    body: JSON.stringify({ organizationId }),
+    signal: AbortSignal.timeout(1e4)
+  });
+  const text2 = await res.text();
+  let json;
+  try {
+    json = text2 ? JSON.parse(text2) : {};
+  } catch {
+    json = { raw: text2 };
+  }
+  if (!res.ok) {
+    throw new Error(`switch_tenant_failed_http_${res.status}: ${text2.slice(0, 500)}`);
+  }
+  const session = parseAuthSession(json);
+  if (!session) {
+    throw new Error("switch_tenant_missing_token");
+  }
+  return session;
+}
+async function saveFinanceOrganizationId(controlPlaneOrgId, financeOrganizationId, log) {
+  const apiBase = `http://localhost:${apiConfig.port}`;
+  const saveUrl = `${apiBase}/internal/organizations/${controlPlaneOrgId}`;
+  const secret = apiConfig.workerSecret;
+  const saveRes = await fetch(saveUrl, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...secret ? { Authorization: `Bearer ${secret}` } : {}
+    },
+    body: JSON.stringify({ financeOrganizationId }),
+    signal: AbortSignal.timeout(1e4)
+  });
+  if (!saveRes.ok) {
+    throw new Error(`save_finance_organization_id_http_${saveRes.status}`);
+  }
+  log("[org-provision] Saved financeOrganizationId mapping");
+}
+async function attachAdminToOrg(mainBase, adminEmail, financeOrganizationId, log) {
+  const internalSecret = apiConfig.internalApiSecret;
+  if (!internalSecret) {
+    log("[org-provision] Warning: INTERNAL_API_SECRET not configured; skipping attach-user");
+    return;
+  }
+  const attachUrl = `${mainBase}/api/internal/attach-user-to-tenant`;
+  const attachRes = await fetch(attachUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": internalSecret
+    },
+    body: JSON.stringify({
+      email: adminEmail,
+      organization_id: financeOrganizationId
+    }),
+    signal: AbortSignal.timeout(1e4)
+  });
+  if (!attachRes.ok) {
+    log(`[org-provision] Warning: attach-user failed ${attachRes.status}`);
+    return;
+  }
+  log("[org-provision] Admin user attached to org");
+}
+async function executeOrgProvisionRuntime(_db, input, log, assertNotCancelled) {
+  const secrets = new CryptoTenantSecretGenerator();
+  const mainBase = financeApiBase4(input.mainTenantInternalBaseUrl);
+  const adminPassword = secrets.bootstrapAdminPassword(input.parentTenantSlug.trim());
+  const correlationId = input.correlationId;
+  const check = async () => {
+    if (assertNotCancelled) await assertNotCancelled();
+  };
+  await check();
+  log("[org-provision] Registering new Finance org on parent stack");
+  const newFinanceOrganizationId = await registerNewFinanceOrg(mainBase, {
+    firstName: input.adminFirstName,
+    lastName: input.adminLastName,
+    email: input.adminEmail,
+    password: adminPassword,
+    correlationId
+  });
+  await check();
+  log("[org-provision] Signing in and switching to new org");
+  const signinSession = await signin2(mainBase, input.adminEmail, adminPassword, correlationId);
+  const buildSession = await switchTenant(
+    mainBase,
+    signinSession.accessToken,
+    newFinanceOrganizationId,
+    correlationId
+  );
+  let inheritedSettings = {
+    ...MENA_DEFAULTS,
+    name: input.orgName
+  };
+  try {
+    const fetched = await fetchOrgSettingsFromMainInstance({
+      mainInternalBaseUrl: mainBase,
+      adminEmail: input.adminEmail,
+      adminPassword,
+      correlationId
+    });
+    if (fetched) {
+      inheritedSettings = { ...fetched, name: input.orgName };
+      log("[org-provision] Using inherited settings from main org");
+    }
+  } catch (err) {
+    log(
+      `[org-provision] Settings fetch failed, using defaults: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  await check();
+  log("[org-provision] Building organization database");
+  const buildResult = await fetchBuildOrganization(
+    {
+      internalBaseUrl: mainBase,
+      adminEmail: input.adminEmail,
+      adminPassword,
+      settings: inheritedSettings,
+      correlationId,
+      session: buildSession
+    },
+    log
+  );
+  if (!buildResult.ok) {
+    throw new Error(buildResult.error ?? "organization_build_failed");
+  }
+  const financeOrganizationId = buildResult.financeOrganizationId ?? buildSession.organizationId;
+  await check();
+  await attachAdminToOrg(mainBase, input.adminEmail, financeOrganizationId, log);
+  await check();
+  await saveFinanceOrganizationId(input.organizationId, financeOrganizationId, log);
+}
+
 // ../../infra/worker-service/src/worker.ts
 var workerId = `infra-worker-${randomUUID()}`;
 var pollMs = 1500;
@@ -4292,12 +4563,15 @@ async function claimNextJob() {
   const body = await res.json();
   return body.job ?? null;
 }
-async function markJobComplete(jobId, oneTimeAdminPassword) {
+async function markJobComplete(jobId, opts) {
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
   const completionBody = { workerId };
-  if (oneTimeAdminPassword !== void 0) {
-    completionBody.oneTimeAdminPassword = oneTimeAdminPassword;
+  if (opts?.oneTimeAdminPassword !== void 0) {
+    completionBody.oneTimeAdminPassword = opts.oneTimeAdminPassword;
+  }
+  if (opts?.financeOrganizationId) {
+    completionBody.result = { financeOrganizationId: opts.financeOrganizationId };
   }
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
     method: "POST",
@@ -4388,6 +4662,17 @@ var provisionPayloadSchema = z2.object({
   parentTenantSlug: z2.string().optional(),
   mainTenantInternalBaseUrl: z2.string().optional()
 });
+var orgProvisionPayloadSchema = z2.object({
+  organizationId: z2.string().uuid(),
+  adminEmail: z2.string().email(),
+  adminFirstName: z2.string().min(1),
+  adminLastName: z2.string().min(1),
+  orgName: z2.string().min(1),
+  parentTenantSlug: z2.string().min(1),
+  mainTenantInternalBaseUrl: z2.string().min(1),
+  stockixTenantId: z2.string().uuid(),
+  stockixApiUrl: z2.string().optional()
+});
 async function runProvisionJob(db, job) {
   const guard = async () => {
     await assertProvisionNotCancelled(job.id);
@@ -4443,7 +4728,33 @@ async function runProvisionJob(db, job) {
       });
     }
   });
-  return result.oneTimeAdminPassword;
+  return {
+    oneTimeAdminPassword: result.oneTimeAdminPassword,
+    financeOrganizationId: result.financeOrganizationId
+  };
+}
+async function runOrgProvisionJob(db, job) {
+  const guard = async () => {
+    await assertProvisionNotCancelled(job.id);
+  };
+  await guard();
+  const payload = orgProvisionPayloadSchema.parse(job.payload);
+  await executeOrgProvisionRuntime(
+    db,
+    {
+      organizationId: payload.organizationId,
+      adminEmail: payload.adminEmail,
+      adminFirstName: payload.adminFirstName,
+      adminLastName: payload.adminLastName,
+      orgName: payload.orgName,
+      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
+      parentTenantSlug: payload.parentTenantSlug,
+      stockixTenantId: payload.stockixTenantId,
+      correlationId: job.correlationId ?? randomUUID()
+    },
+    (m) => console.log(`[worker][${job.id}] ${m}`),
+    guard
+  );
 }
 async function runDeprovisionJob(db, job) {
   if (!job.tenantId) throw new Error("tenantId is required");
@@ -4473,6 +4784,7 @@ async function runTenantLifecycleCommand(db, job, command) {
 }
 var handlers = {
   "tenant.provision": runProvisionJob,
+  "organization.provision": runOrgProvisionJob,
   "tenant.deprovision": runDeprovisionJob,
   "tenant.lifecycle": (db, job) => {
     const rawCommand = String(job.payload.command ?? "");
@@ -4525,13 +4837,13 @@ async function loop() {
       if (!handler) {
         throw new Error(`unsupported_job_type:${job.type}`);
       }
-      let oneTimeAdminPassword;
+      let provisionComplete;
       if (job.type === "tenant.provision") {
-        oneTimeAdminPassword = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
+        provisionComplete = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
-      await markJobComplete(job.id, oneTimeAdminPassword);
+      await markJobComplete(job.id, provisionComplete);
       await emitWorkerMetric("worker.job.success", 1, { jobType: job.type });
       console.log(
         JSON.stringify({
@@ -4548,7 +4860,7 @@ async function loop() {
       console.error(`[worker][${job.id}] failed: ${message}`);
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
-        const noRetry = cancelledByUser || job.type === "tenant.provision" || isPermanentProvisionError(message);
+        const noRetry = cancelledByUser || job.type === "tenant.provision" || job.type === "organization.provision" || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         console.log(
@@ -4566,7 +4878,7 @@ async function loop() {
         console.error(
           `[worker][${job.id}] failed to report failure: ${reportError instanceof Error ? reportError.message : String(reportError)}`
         );
-        const fallbackNoRetry = job.type === "tenant.provision" || isPermanentProvisionError(message);
+        const fallbackNoRetry = job.type === "tenant.provision" || job.type === "organization.provision" || isPermanentProvisionError(message);
         const status = fallbackNoRetry ? "dead" : "pending";
         const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 3e4);
         await db.transaction(async (tx) => {

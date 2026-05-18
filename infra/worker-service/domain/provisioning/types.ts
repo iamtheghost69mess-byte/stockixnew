@@ -26,6 +26,7 @@ export type ProvisionResult =
       internalPort: number;
       baseUrl: string;
       oneTimeAdminPassword: string;
+      financeOrganizationId?: string;
     }
   | { ok: false; message: string; cause?: string };
 

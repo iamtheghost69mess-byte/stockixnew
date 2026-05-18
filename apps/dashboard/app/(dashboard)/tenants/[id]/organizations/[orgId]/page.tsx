@@ -7,6 +7,17 @@ import { toast } from "@/components/reusabletoast";
 
 import OrgStatusBadge from "@/components/org-status-badge";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
@@ -59,6 +70,7 @@ export default function OrgDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -136,6 +148,24 @@ export default function OrgDetailPage() {
       void refetch(true);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/organizations/${orgId}`, {
+        method: "DELETE",
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        toast.error(formatApiError(body, "Delete failed"));
+        return;
+      }
+      toast.success("Organization deleted");
+      router.push(`/tenants/${tenantId}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -259,6 +289,37 @@ export default function OrgDetailPage() {
               </Button>
             ) : null}
           </div>
+          {!isPrimary ? (
+            <div className="border-t pt-4">
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button variant="destructive" size="sm" disabled={deleting}>
+                      Delete Organization
+                    </Button>
+                  }
+                />
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {org.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete this organization and all its data. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => void handleDelete()}
+                      disabled={deleting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

@@ -77,7 +77,7 @@ export function useInventoryAdjustments(query, props) {
     {
       select: inventoryAdjustmentsTransformer,
       defaultData: {
-        transactions: [],
+        inventoryAdjustments: [],
         pagination: {
           page: 1,
           pageSize: 20,

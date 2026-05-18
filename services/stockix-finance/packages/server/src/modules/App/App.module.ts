@@ -84,6 +84,7 @@ import { OrganizationModule } from '../Organization/Organization.module';
 import { TenantDBManagerModule } from '../TenantDBManager/TenantDBManager.module';
 import { PaymentServicesModule } from '../PaymentServices/PaymentServices.module';
 import { AuthModule } from '../Auth/Auth.module';
+import { InternalModule } from '../Internal/Internal.module';
 import { TenancyModule } from '../Tenancy/Tenancy.module';
 import { LoopsModule } from '../Loops/Loops.module';
 import { AttachmentsModule } from '../Attachments/Attachment.module';
@@ -191,6 +192,7 @@ import { AppThrottleModule } from './AppThrottle.module';
     TenancyModelsModule,
     TenantModelsInitializeModule,
     AuthModule,
+    InternalModule,
     TenancyModule,
     ChromiumlyTenancyModule,
     TransformerModule,

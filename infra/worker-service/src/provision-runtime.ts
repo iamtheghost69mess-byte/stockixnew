@@ -123,6 +123,7 @@ export async function executeProvisionRuntime(
   const requestId = correlationId;
   let port: number | undefined;
   let oneTimeAdminPassword: string | undefined;
+  let financeOrganizationId: string | undefined;
   let composeCtx:
     | { composeFile: string; project: string; envPath: string; composeEnv: Record<string, string> }
     | null = null;
@@ -305,6 +306,7 @@ export async function executeProvisionRuntime(
       s3Bucket,
       stockixTenantId: input.stockixTenantId,
       stockixApiUrl: input.stockixApiUrl,
+      internalApiSecret: apiConfig.internalApiSecret,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
     const composeEnv = {
@@ -348,6 +350,7 @@ export async function executeProvisionRuntime(
       S3_BUCKET: s3Bucket,
       AGENDASH_AUTH_USER: agendashUser,
       AGENDASH_AUTH_PASSWORD: agendashPassword,
+      INTERNAL_API_SECRET: apiConfig.internalApiSecret ?? "",
     };
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
@@ -429,10 +432,12 @@ export async function executeProvisionRuntime(
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() },
       });
+      await runComposeWithCancellation(["build", "webapp"]);
       await runComposeWithCancellation([
         "up",
         "-d",
         "--remove-orphans",
+        "--force-recreate",
         "--build",
         "webapp",
         "nginx",
@@ -587,6 +592,9 @@ export async function executeProvisionRuntime(
         if (!buildResult.ok) {
           throw new Error(buildResult.error ?? "Organization build failed");
         }
+        if (buildResult.financeOrganizationId) {
+          financeOrganizationId = buildResult.financeOrganizationId;
+        }
         if (input.controlPlaneOrgId && buildResult.financeOrganizationId) {
           const apiBase = `http://localhost:${apiConfig.port}`;
           const saveUrl = `${apiBase}/internal/organizations/${input.controlPlaneOrgId}`;
@@ -616,6 +624,39 @@ export async function executeProvisionRuntime(
                 err instanceof Error ? err.message : String(err)
               }`,
             );
+          }
+        }
+        if (input.adminEmail && internalUrl && buildResult.financeOrganizationId) {
+          const internalSecret = apiConfig.internalApiSecret;
+          if (internalSecret) {
+            try {
+              const attachUrl = `${internalUrl.replace(/\/+$/, "")}/api/internal/attach-user-to-tenant`;
+              const attachRes = await fetch(attachUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-internal-secret": internalSecret,
+                },
+                body: JSON.stringify({
+                  email: input.adminEmail,
+                  organization_id: buildResult.financeOrganizationId,
+                }),
+                signal: AbortSignal.timeout(10_000),
+              });
+              if (!attachRes.ok) {
+                log(`[provision] Warning: attach-user failed ${attachRes.status}`);
+              } else {
+                log("[provision] Admin user attached to org");
+              }
+            } catch (err) {
+              log(
+                `[provision] Warning: attach-user error: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            }
+          } else {
+            log("[provision] Warning: INTERNAL_API_SECRET not configured; skipping attach-user");
           }
         }
         await markOp("tenant.build_organization", "Organization build completed", {
@@ -685,6 +726,7 @@ export async function executeProvisionRuntime(
       internalPort: port,
       baseUrl,
       oneTimeAdminPassword: oneTimeAdminPassword!,
+      financeOrganizationId,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

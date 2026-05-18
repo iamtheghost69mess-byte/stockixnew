@@ -1,4 +1,5 @@
 import { Knex } from 'knex';
+import { IDynamicListFilter } from '@/modules/DynamicListing/DynamicFilter/DynamicFilter.types';
 import { InventoryAdjustment } from '../models/InventoryAdjustment';
 import { CreateQuickInventoryAdjustmentDto } from '../dtos/CreateQuickInventoryAdjustment.dto';
 
@@ -19,9 +20,9 @@ export interface IQuickInventoryAdjustmentDTO {
   warehouseId?: number;
   branchId?: number;
 }
-export interface IInventoryAdjustmentsFilter {
-  page: number;
-  pageSize: number;
+export interface IInventoryAdjustmentsFilter extends IDynamicListFilter {
+  page?: number;
+  pageSize?: number;
 }
 
 export interface IInventoryAdjustmentEventCreatedPayload {

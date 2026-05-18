@@ -9,6 +9,8 @@ import { AuthSendResetPasswordService } from './commands/AuthSendResetPassword.s
 import { AuthResetPasswordService } from './commands/AuthResetPassword.service';
 import { GetAuthMetaService } from './queries/GetAuthMeta.service';
 import { GetAuthenticatedAccount } from './queries/GetAuthedAccount.service';
+import { ListMyTenantsService } from './queries/ListMyTenants.service';
+import { SwitchTenantService } from './commands/SwitchTenant.service';
 
 @Injectable()
 export class AuthenticationApplication {
@@ -21,6 +23,8 @@ export class AuthenticationApplication {
     private readonly authSendResetPasswordService: AuthSendResetPasswordService,
     private readonly authGetMeta: GetAuthMetaService,
     private readonly getAuthedAccountService: GetAuthenticatedAccount,
+    private readonly listMyTenantsService: ListMyTenantsService,
+    private readonly switchTenantService: SwitchTenantService,
   ) {}
 
   /**
@@ -91,5 +95,13 @@ export class AuthenticationApplication {
    */
   public getAuthedAccount() {
     return this.getAuthedAccountService.getAccount();
+  }
+
+  public listMyTenants() {
+    return this.listMyTenantsService.listMyTenants();
+  }
+
+  public switchTenant(organizationId: string) {
+    return this.switchTenantService.switchTenant(organizationId);
   }
 }

@@ -19,6 +19,7 @@ export type TenantEnvFileParams = {
   s3Bucket: string;
   stockixTenantId?: string;
   stockixApiUrl?: string;
+  internalApiSecret?: string;
 };
 
 export function buildTenantComposeEnvBody(params: TenantEnvFileParams): string {
@@ -63,6 +64,7 @@ export function buildTenantComposeEnvBody(params: TenantEnvFileParams): string {
     `S3_BUCKET=${params.s3Bucket}`,
     `AGENDASH_AUTH_USER=${params.agendashUser}`,
     `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`,
+    `INTERNAL_API_SECRET=${params.internalApiSecret ?? ""}`,
     "",
     "# Stockix platform integration",
     `REACT_APP_STOCKIX_API_URL=${params.stockixApiUrl ?? ""}`,

@@ -17,7 +17,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { InventoryAdjustmentsApplicationService } from './InventoryAdjustmentsApplication.service';
-import { IInventoryAdjustmentsFilter } from './types/InventoryAdjustments.types';
 import { InventoryAdjustment } from './models/InventoryAdjustment';
 import { CreateQuickInventoryAdjustmentDto } from './dtos/CreateQuickInventoryAdjustment.dto';
 import { InventoryAdjustmentsFilterDto } from './dtos/InventoryAdjustmentsFilter.dto';
@@ -85,7 +84,7 @@ export class InventoryAdjustmentsController {
     @Query() filterDTO: InventoryAdjustmentsFilterDto,
   ) {
     return this.inventoryAdjustmentsApplicationService.getInventoryAdjustments(
-      filterDTO as IInventoryAdjustmentsFilter,
+      filterDTO,
     );
   }
 

@@ -1112,6 +1112,10 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     typeof (body as { oneTimeAdminPassword?: unknown }).oneTimeAdminPassword === "string"
       ? (body as { oneTimeAdminPassword: string }).oneTimeAdminPassword
       : undefined;
+  const completeResult = isRecord(body) && isRecord(body.result) ? body.result : null;
+  const financeOrganizationIdFromResult = completeResult
+    ? readNonEmptyString(completeResult.financeOrganizationId)
+    : undefined;
   const [currentJob] = await db
     .select({
       id: tenantLifecycleJobs.id,
@@ -1275,6 +1279,50 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           licenseErr instanceof Error ? licenseErr.message : String(licenseErr),
         );
       }
+
+      if (updated.type === "tenant.provision" && financeOrganizationIdFromResult) {
+        const existingPrimary = await db
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(
+            and(
+              eq(organizations.tenantId, targetTenantId),
+              eq(organizations.isPrimary, true),
+            ),
+          )
+          .limit(1);
+
+        if (existingPrimary.length === 0) {
+          const [tenant] = await db
+            .select()
+            .from(tenants)
+            .where(eq(tenants.id, targetTenantId))
+            .limit(1);
+
+          if (tenant) {
+            const root = rootDomainForOrganizationSubdomain();
+            const subdomain = `${tenant.slug}.${root}`.slice(0, 255);
+            await db.insert(organizations).values({
+              tenantId: tenant.id,
+              name: tenant.name,
+              slug: tenant.slug,
+              subdomain,
+              status: "active",
+              isPrimary: true,
+              financeOrganizationId: financeOrganizationIdFromResult,
+            });
+          }
+        } else {
+          await db
+            .update(organizations)
+            .set({
+              status: "active",
+              financeOrganizationId: financeOrganizationIdFromResult,
+              updatedAt: new Date(),
+            })
+            .where(eq(organizations.id, existingPrimary[0]!.id));
+        }
+      }
     }
 
     const provisionJobPayload =
@@ -1282,6 +1330,23 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         ? (currentJob.payload as Record<string, unknown>)
         : {};
     const organizationIdRaw = provisionJobPayload.organizationId;
+    const organizationIdForRow =
+      typeof organizationIdRaw === "string" && z.string().uuid().safeParse(organizationIdRaw).success
+        ? organizationIdRaw
+        : null;
+    if (organizationIdForRow) {
+      await db
+        .update(organizations)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(eq(organizations.id, organizationIdForRow));
+    }
+  }
+  if (currentJob?.type === "organization.provision") {
+    const orgPayload =
+      currentJob.payload && typeof currentJob.payload === "object"
+        ? (currentJob.payload as Record<string, unknown>)
+        : {};
+    const organizationIdRaw = orgPayload.organizationId;
     const organizationIdForRow =
       typeof organizationIdRaw === "string" && z.string().uuid().safeParse(organizationIdRaw).success
         ? organizationIdRaw
@@ -1406,7 +1471,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
 
     if (
       updated.status === "dead"
-      && updated.type === "tenant.provision"
+      && (updated.type === "tenant.provision" || updated.type === "organization.provision")
       && updated.payload
       && typeof updated.payload === "object"
     ) {

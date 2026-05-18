@@ -94,6 +94,20 @@ describe('Inventory Adjustments (e2e)', () => {
       .expect(200);
   });
 
+  it('/inventory-adjustments (GET)', async () => {
+    return request(app.getHttpServer())
+      .get('/inventory-adjustments')
+      .query({ page: 1, page_size: 20 })
+      .set('organization-id', orgainzationId)
+      .set('Authorization', AuthorizationHeader)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toHaveProperty('data');
+        expect(res.body).toHaveProperty('pagination');
+        expect(Array.isArray(res.body.data)).toBe(true);
+      });
+  });
+
   it('/inventory-adjustments/:id/publish (POST)', async () => {
     const itemResponse = await request(app.getHttpServer())
       .post('/items')

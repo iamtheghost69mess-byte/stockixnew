@@ -14,6 +14,7 @@
     "infra:worker:build": "pnpm --filter api exec tsup --config tsup.worker.config.ts",
     "infra:worker:run": "node infra/worker-service/.runtime/worker.js",
     "infra:worker:dev": "pnpm infra:worker:build && pnpm infra:worker:run",
+    "get-password": "node scripts/get-bootstrap-password.mjs",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "debug:db": "node scripts/debug-db.mjs",
@@ -47,6 +48,8 @@
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.45.1",
     "execa": "^9.5.2",
+    "knex": "^3.1.0",
+    "mysql2": "^3.11.3",
     "postgres": "^3.4.7",
     "zod": "^3.24.1"
   }
