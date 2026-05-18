@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { execa } from "execa";
 
-import { apiConfig, env } from "@repo/config";
+import { apiConfig } from "@repo/config";
 import { allocateTenantPort } from "@repo/db";
 import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -18,8 +18,7 @@ import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/consta
 import { MENA_DEFAULTS, type OrgBuildSettings } from "../domain/provisioning/adapters/fetch-stockix-finance-org-settings.js";
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
 import {
-  buildTenantComposeEnvBody,
-  buildTenantSignupEnv,
+  buildTenantEnvMap,
   writeTenantEnvFileAtomic,
 } from "../domain/provisioning/tenant-env.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
@@ -292,7 +291,7 @@ export async function executeProvisionRuntime(
       throw new Error("provision_internal: expected allocated port after transaction");
     }
     await checkNotCancelled();
-    const envBody = buildTenantComposeEnvBody({
+    const tenantEnvMap = buildTenantEnvMap({
       mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,
@@ -300,7 +299,7 @@ export async function executeProvisionRuntime(
       dbPassword,
       dbRootPassword,
       publicProxyPort: port,
-      signupAllowedEmails: input.adminEmail,
+      adminEmail: input.adminEmail,
       agendashUser,
       agendashPassword,
       s3Region,
@@ -312,52 +311,10 @@ export async function executeProvisionRuntime(
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret,
     });
-    const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
-    const signup = buildTenantSignupEnv(input.adminEmail);
-    const mailSecure =
-      env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
+    const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
     const composeEnv = {
-      STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot,
+      ...tenantEnvMap,
       COMPOSE_PROJECT_NAME: project,
-      MYSQL_VOLUME_NAME: mysqlVolumeName,
-      BASE_URL: baseUrl,
-      DB_CLIENT: "mysql",
-      DB_HOST: "mysql",
-      DB_USER: "stockix_tenant",
-      DB_PASSWORD: dbPassword,
-      DB_ROOT_PASSWORD: dbRootPassword,
-      DB_CHARSET: "utf8",
-      SYSTEM_DB_CLIENT: "mysql",
-      SYSTEM_DB_HOST: "mysql",
-      SYSTEM_DB_USER: "stockix_tenant",
-      SYSTEM_DB_PASSWORD: dbPassword,
-      SYSTEM_DB_NAME: "stockix_system",
-      TENANT_DB_CLIENT: "mysql",
-      TENANT_DB_HOST: "mysql",
-      TENANT_DB_USER: "stockix_tenant",
-      TENANT_DB_PASSWORD: dbPassword,
-      TENANT_DB_NAME_PERFIX: "stockix_tenant_",
-      JWT_SECRET: jwtSecret,
-      PUBLIC_PROXY_PORT: String(port),
-      PUBLIC_PROXY_SSL_PORT: "443",
-      SIGNUP_DISABLED: signup.SIGNUP_DISABLED,
-      SIGNUP_ALLOWED_DOMAINS: signup.SIGNUP_ALLOWED_DOMAINS,
-      SIGNUP_ALLOWED_EMAILS: signup.SIGNUP_ALLOWED_EMAILS,
-      MAIL_HOST: env.MAIL_HOST ?? "",
-      MAIL_USERNAME: env.MAIL_USERNAME ?? "",
-      MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",
-      MAIL_PORT: env.MAIL_PORT ?? "",
-      MAIL_SECURE: mailSecure,
-      MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
-      MAIL_FROM_ADDRESS: env.MAIL_FROM_ADDRESS ?? "",
-      S3_REGION: s3Region,
-      S3_ACCESS_KEY_ID: s3AccessKeyId,
-      S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
-      S3_ENDPOINT: s3Endpoint,
-      S3_BUCKET: s3Bucket,
-      AGENDASH_AUTH_USER: agendashUser,
-      AGENDASH_AUTH_PASSWORD: agendashPassword,
-      INTERNAL_API_SECRET: apiConfig.internalApiSecret ?? "",
     };
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;

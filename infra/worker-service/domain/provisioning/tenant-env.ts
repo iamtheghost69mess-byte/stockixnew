@@ -10,7 +10,7 @@ export type TenantEnvFileParams = {
   dbPassword: string;
   dbRootPassword: string;
   publicProxyPort: number;
-  signupAllowedEmails: string;
+  adminEmail: string;
   agendashUser: string;
   agendashPassword: string;
   s3Region: string;
@@ -49,62 +49,81 @@ function mailSecureEnvValue(): string {
   return env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
 }
 
-export function buildTenantComposeEnvBody(params: TenantEnvFileParams): string {
-  const signup = buildTenantSignupEnv(params.signupAllowedEmails);
-  const lines: string[] = [
-    `MYSQL_VOLUME_NAME=${params.mysqlVolumeName}`,
-    `STOCKIX_TENANT_APP_ROOT=${params.stockixFinanceRoot}`,
-    `BASE_URL=${params.baseUrl}`,
-    `DB_CLIENT=mysql`,
-    `DB_HOST=mysql`,
-    `DB_USER=stockix_tenant`,
-    `DB_PASSWORD=${params.dbPassword}`,
-    `DB_ROOT_PASSWORD=${params.dbRootPassword}`,
-    `DB_CHARSET=utf8`,
-    `SYSTEM_DB_CLIENT=mysql`,
-    `SYSTEM_DB_HOST=mysql`,
-    `SYSTEM_DB_USER=stockix_tenant`,
-    `SYSTEM_DB_PASSWORD=${params.dbPassword}`,
-    `SYSTEM_DB_NAME=stockix_system`,
-    `TENANT_DB_CLIENT=mysql`,
-    `TENANT_DB_HOST=mysql`,
-    `TENANT_DB_USER=stockix_tenant`,
-    `TENANT_DB_PASSWORD=${params.dbPassword}`,
-    `TENANT_DB_NAME_PERFIX=stockix_tenant_`,
-    `JWT_SECRET=${params.jwtSecret}`,
-    `MONGODB_DATABASE_URL=mongodb://mongo/stockix`,
-    `PUBLIC_PROXY_PORT=${params.publicProxyPort}`,
-    `PUBLIC_PROXY_SSL_PORT=443`,
-    `SIGNUP_DISABLED=${signup.SIGNUP_DISABLED}`,
-    `SIGNUP_ALLOWED_DOMAINS=${signup.SIGNUP_ALLOWED_DOMAINS}`,
-    `SIGNUP_ALLOWED_EMAILS=${signup.SIGNUP_ALLOWED_EMAILS}`,
-    `MAIL_HOST=${env.MAIL_HOST ?? ""}`,
-    `MAIL_USERNAME=${env.MAIL_USERNAME ?? ""}`,
-    `MAIL_PASSWORD=${env.MAIL_PASSWORD ?? ""}`,
-    `MAIL_PORT=${env.MAIL_PORT ?? ""}`,
-    `MAIL_SECURE=${mailSecureEnvValue()}`,
-    `MAIL_FROM_NAME=${env.MAIL_FROM_NAME ?? ""}`,
-    `MAIL_FROM_ADDRESS=${env.MAIL_FROM_ADDRESS ?? ""}`,
-    `S3_REGION=${params.s3Region}`,
-    `S3_ACCESS_KEY_ID=${params.s3AccessKeyId}`,
-    `S3_SECRET_ACCESS_KEY=${params.s3SecretAccessKey}`,
-    `S3_ENDPOINT=${params.s3Endpoint}`,
-    `S3_BUCKET=${params.s3Bucket}`,
-    `AGENDASH_AUTH_USER=${params.agendashUser}`,
-    `AGENDASH_AUTH_PASSWORD=${params.agendashPassword}`,
-    `INTERNAL_API_SECRET=${params.internalApiSecret ?? ""}`,
-    "",
-    "# Stockix platform integration",
-    `REACT_APP_STOCKIX_API_URL=${params.stockixApiUrl ?? ""}`,
-    `REACT_APP_STOCKIX_TENANT_ID=${params.stockixTenantId ?? ""}`,
-  ];
-  return `${lines.join("\n")}\n`;
+/** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
+export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, string> {
+  const signup = buildTenantSignupEnv(params.adminEmail);
+  return {
+    MYSQL_VOLUME_NAME: params.mysqlVolumeName,
+    STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
+    BASE_URL: params.baseUrl,
+    DB_CLIENT: "mysql",
+    DB_HOST: "mysql",
+    DB_USER: "stockix_tenant",
+    DB_PASSWORD: params.dbPassword,
+    DB_ROOT_PASSWORD: params.dbRootPassword,
+    DB_CHARSET: "utf8",
+    SYSTEM_DB_CLIENT: "mysql",
+    SYSTEM_DB_HOST: "mysql",
+    SYSTEM_DB_USER: "stockix_tenant",
+    SYSTEM_DB_PASSWORD: params.dbPassword,
+    SYSTEM_DB_NAME: "stockix_system",
+    SYSTEM_DB_CHARSET: "utf8",
+    TENANT_DB_CLIENT: "mysql",
+    TENANT_DB_HOST: "mysql",
+    TENANT_DB_USER: "stockix_tenant",
+    TENANT_DB_PASSWORD: params.dbPassword,
+    TENANT_DB_NAME_PREFIX: "stockix_tenant_",
+    TENANT_DB_NAME_PERFIX: "stockix_tenant_",
+    TENANT_DB_CHARSET: "utf8",
+    JWT_SECRET: params.jwtSecret,
+    MONGODB_DATABASE_URL: env.MONGODB_DATABASE_URL ?? "mongodb://mongo/stockix",
+    PUBLIC_PROXY_PORT: String(params.publicProxyPort),
+    PUBLIC_PROXY_SSL_PORT: "443",
+    SIGNUP_DISABLED: signup.SIGNUP_DISABLED,
+    SIGNUP_ALLOWED_DOMAINS: signup.SIGNUP_ALLOWED_DOMAINS,
+    SIGNUP_ALLOWED_EMAILS: signup.SIGNUP_ALLOWED_EMAILS,
+    MAIL_HOST: env.MAIL_HOST ?? "",
+    MAIL_USERNAME: env.MAIL_USERNAME ?? "",
+    MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",
+    MAIL_PORT: env.MAIL_PORT ?? "",
+    MAIL_SECURE: mailSecureEnvValue(),
+    MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
+    MAIL_FROM_ADDRESS: env.MAIL_FROM_ADDRESS ?? "",
+    REDIS_HOST: "redis",
+    REDIS_PORT: "6379",
+    REDIS_PASSWORD: "",
+    REDIS_DB: "0",
+    QUEUE_HOST: "redis",
+    QUEUE_PORT: "6379",
+    S3_REGION: params.s3Region,
+    S3_ACCESS_KEY_ID: params.s3AccessKeyId,
+    S3_SECRET_ACCESS_KEY: params.s3SecretAccessKey,
+    S3_ENDPOINT: params.s3Endpoint,
+    S3_BUCKET: params.s3Bucket,
+    S3_FORCE_PATH_STYLE: "false",
+    AGENDASH_AUTH_USER: params.agendashUser,
+    AGENDASH_AUTH_PASSWORD: params.agendashPassword,
+    INTERNAL_API_SECRET: params.internalApiSecret ?? "",
+    REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
+    REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
+  };
+}
+
+export function serializeTenantEnvMap(map: Record<string, string>): string {
+  return `${Object.entries(map)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n")}\n`;
+}
+
+export function buildTenantEnvFileContent(params: TenantEnvFileParams): string {
+  return serializeTenantEnvMap(buildTenantEnvMap(params));
 }
 
 export async function writeTenantEnvFileAtomic(
   tenantEnvDir: string,
-  contents: string,
+  map: Record<string, string>,
 ): Promise<string> {
+  const contents = serializeTenantEnvMap(map);
   await mkdir(tenantEnvDir, { recursive: true, mode: 0o700 });
   const target = join(tenantEnvDir, ".env");
   const tmp = join(tenantEnvDir, ".env.tmp");
