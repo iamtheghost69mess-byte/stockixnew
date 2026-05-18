@@ -315,6 +315,19 @@ export const apiConfig = {
   get allowBootstrapLogin() {
     return env.ALLOW_BOOTSTRAP_LOGIN === "true" || env.ALLOW_BOOTSTRAP_LOGIN === "1";
   },
+  get signupDisabled(): boolean {
+    // Default true — tenants are operator-provisioned. Override: SIGNUP_DISABLED=false
+    const val = env.SIGNUP_DISABLED;
+    if (val === undefined || val === null) return true;
+    return val === "true" || val === "1";
+  },
+  get signupAllowedDomains(): string {
+    return env.SIGNUP_ALLOWED_DOMAINS ?? "";
+  },
+  /** Platform-wide email allowlist appended to each tenant admin email at provision time. */
+  get signupAllowedEmailsOverride(): string {
+    return env.SIGNUP_ALLOWED_EMAILS ?? "";
+  },
   get hostname() {
     return env.HOSTNAME;
   },

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { execa } from "execa";
 
-import { apiConfig } from "@repo/config";
+import { apiConfig, env } from "@repo/config";
 import { allocateTenantPort } from "@repo/db";
 import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -17,7 +17,11 @@ import { composeProjectName, tenantMysqlVolumeName } from "../domain/provisionin
 import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/constants.js";
 import { MENA_DEFAULTS, type OrgBuildSettings } from "../domain/provisioning/adapters/fetch-stockix-finance-org-settings.js";
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
-import { buildTenantComposeEnvBody, writeTenantEnvFileAtomic } from "../domain/provisioning/tenant-env.js";
+import {
+  buildTenantComposeEnvBody,
+  buildTenantSignupEnv,
+  writeTenantEnvFileAtomic,
+} from "../domain/provisioning/tenant-env.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 
@@ -309,6 +313,9 @@ export async function executeProvisionRuntime(
       internalApiSecret: apiConfig.internalApiSecret,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), envBody);
+    const signup = buildTenantSignupEnv(input.adminEmail);
+    const mailSecure =
+      env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
     const composeEnv = {
       STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot,
       COMPOSE_PROJECT_NAME: project,
@@ -333,16 +340,16 @@ export async function executeProvisionRuntime(
       JWT_SECRET: jwtSecret,
       PUBLIC_PROXY_PORT: String(port),
       PUBLIC_PROXY_SSL_PORT: "443",
-      SIGNUP_DISABLED: "true",
-      SIGNUP_ALLOWED_DOMAINS: "",
-      SIGNUP_ALLOWED_EMAILS: input.adminEmail,
-      MAIL_HOST: "",
-      MAIL_USERNAME: "",
-      MAIL_PASSWORD: "",
-      MAIL_PORT: "",
-      MAIL_SECURE: "",
-      MAIL_FROM_NAME: "",
-      MAIL_FROM_ADDRESS: "",
+      SIGNUP_DISABLED: signup.SIGNUP_DISABLED,
+      SIGNUP_ALLOWED_DOMAINS: signup.SIGNUP_ALLOWED_DOMAINS,
+      SIGNUP_ALLOWED_EMAILS: signup.SIGNUP_ALLOWED_EMAILS,
+      MAIL_HOST: env.MAIL_HOST ?? "",
+      MAIL_USERNAME: env.MAIL_USERNAME ?? "",
+      MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",
+      MAIL_PORT: env.MAIL_PORT ?? "",
+      MAIL_SECURE: mailSecure,
+      MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
+      MAIL_FROM_ADDRESS: env.MAIL_FROM_ADDRESS ?? "",
       S3_REGION: s3Region,
       S3_ACCESS_KEY_ID: s3AccessKeyId,
       S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
