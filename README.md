@@ -46,51 +46,139 @@ pnpm dev
 
 > To reset the database back to a clean state: `pnpm db:reset:local`
 
-## Stockix Finance local dev
+## Environment configuration
 
-Stockix Finance has its own database stack. Run it separately from `services/stockix-finance`:
+Stockix uses a **three-layer** environment model. Each layer has its own file, its own runtime, and a clear owner. Treating them as one “mega `.env`” will cause drift (for example, changing root `SIGNUP_DISABLED` without reprovisioning tenants).
 
-```sh
-# Start MariaDB, MongoDB, and Redis
-docker compose up -d
+| Layer | File | Loaded by | Purpose |
+|-------|------|-----------|---------|
+| **1 — Platform** | Repo root `.env` (+ optional `.env.local`) | `@repo/config` → API, dashboard, worker | Control plane: Postgres, auth secrets, signup policy, mail/S3 defaults for provisioning |
+| **2 — Tenant runtime** | `~/.stockix/tenants/{slug}/.env` (or `TENANT_ENV_ROOT`) | `docker compose --env-file` per tenant | Isolated Finance stack: per-tenant DB passwords, JWT, ports, signup/mail copied at provision time |
+| **3 — Finance local dev** | `services/stockix-finance/.env` | NestJS when running `pnpm dev` in `packages/server` | Optional; only for hacking Finance **outside** tenant Docker |
 
-# Start the server (from services/stockix-finance/packages/server)
-pnpm inspect
+```text
+root .env  →  @repo/config  →  worker (provision)
+                    ↓
+         buildTenantEnvMap() writes ~/.stockix/tenants/{slug}/.env
+                    ↓
+         docker compose  →  Finance server + webapp containers
 ```
 
-The server reads `services/stockix-finance/.env` (created by `pnpm bootstrap:env`).
-Default values are safe for local dev. Two placeholders to be aware of:
-- `JWT_SECRET` — change before using in production
-- `AGENDASH_AUTH_PASSWORD` — change before using in production
+**Deeper reference:** [docs/env-guide.md](docs/env-guide.md) · [docs/envexplanation.md](docs/envexplanation.md) · [env.md](env.md) (audit)
 
-## Environment files
+### First-time setup
 
-`pnpm bootstrap:env` copies each `*.env.example` to a real env file. Run it once after cloning, or with `--force` to reset:
+```sh
+# Copy all example env files (root, db, finance)
+pnpm bootstrap:env
+
+# Optional: put machine-specific secrets in .env.local (overrides .env)
+cp .env .env.local   # then edit .env.local only
+```
+
+| Example | Copied to | Used when |
+|---------|-----------|-----------|
+| `.env.example` | `.env` | API, dashboard, worker (`pnpm dev`) |
+| `services/stockix-finance/.env.example` | `services/stockix-finance/.env` | Finance `pnpm dev` only |
+| `infra/prod/.env.example` | `infra/prod/.env` | Production Docker Compose |
 
 ```sh
 pnpm bootstrap:env          # copy only if destination is missing
-pnpm bootstrap:env --force  # overwrite from examples (reset local config)
+pnpm bootstrap:env --force  # reset from examples (overwrites existing)
 ```
 
-| Example | Copied to | Purpose |
-|---------|-----------|---------|
-| `.env.example` | `.env` | **Canonical local config** for API, dashboard (`next.config` imports `@repo/config`), and workers |
-| `packages/db/.env.example` | `packages/db/.env` | Drizzle CLI (optional; can mirror `DATABASE_URL` from root) |
-| `services/stockix-finance/.env.example` | `services/stockix-finance/.env` | Stockix Finance server |
+**Do not use** `apps/api/.env` or `apps/dashboard/.env` — the control plane loads **repo root only**.
 
-**Do not use** `apps/api/.env` or `apps/dashboard/.env` — they are not loaded by the control-plane API and are easy to get out of sync. Use repo root `.env` and optional `.env.local` only.
+**Load order** (`@repo/config`): `.env` first, then `.env.local` overrides.
 
-Runtime precedence (`@repo/config`):
-1. `root/.env` (gitignored — create via `pnpm bootstrap:env` from this example)
-2. `root/.env.local` (optional overrides; gitignored — preferred place for secrets if you split base vs local)
+### Generate secrets (required before staging/production)
 
-Production: use `infra/prod/.env` with Docker Compose (see `infra/prod/.env.example`), not root files on the server image.
+Use OpenSSL on macOS, Linux, or Git Bash on Windows:
 
-Dashboard: `NEXT_PUBLIC_*` are inlined at **build** time in Docker; locally they come from the same root env files when you run `next dev`.
+```sh
+# One secret per line (64 hex chars = 32 bytes)
+openssl rand -hex 32
+```
 
-Root `scripts/*.mjs` that read `process.env` should call `loadRootEnv(import.meta.url)` from `scripts/load-root-env.mjs` (same order as `@repo/config`). Example: `pnpm debug:db` runs `scripts/debug-db.mjs` against local Postgres using root `.env` / `.env.local`.
+| Variable | Layer | Notes |
+|----------|-------|-------|
+| `PLATFORM_API_SECRET` | Root / prod | Dashboard → API privileged routes |
+| `WORKER_SECRET` | Root / prod | Worker ↔ API `/internal/jobs/*` |
+| `INTERNAL_API_SECRET` | Root / prod | Finance internal API (`attach-user`); **set explicitly in prod** (dev can fall back to `WORKER_SECRET`) |
+| `SESSION_SECRET` | Root / prod | Dashboard session cookies |
+| `AUTH_TOKEN_SECRET` | Root / prod | Owner JWT signing |
+| `LICENSE_SIGNING_SECRET` | Root / prod | POS offline license JWT (≥32 chars) |
+| `DEPLOYMENT_SECRET_KEY` | Root / prod | Tenant secret derivation (≥32 chars) |
+| `JWT_SECRET` | Root (legacy) / tenant file | Per-tenant JWT is **generated at provision**; root value is not copied to tenants |
+| `POSTGRES_PASSWORD` | Root / prod | Control-plane Postgres |
+| `AGENDASH_AUTH_PASSWORD` | Root / tenant | Queue dashboard basic auth |
 
-Turbo invalidates caches when repo-root `.env` or `.env.local` changes (`globalDependencies` in `turbo.json`).
+**Production checklist** (also at top of root `.env`): rotate every secret above, set strong `PLATFORM_ADMIN_PASSWORD` and `BOOTSTRAP_ADMIN_PASSWORD`, fill `infra/prod/.env`, never commit real `.env` files.
+
+### Platform policy → tenant behavior
+
+These root variables are read by the **provisioner** when creating `~/.stockix/tenants/{slug}/.env`:
+
+| Root variable | Effect on new tenants |
+|---------------|------------------------|
+| `SIGNUP_DISABLED` | `true` by default; controls Finance signup + login “Sign up” link |
+| `SIGNUP_ALLOWED_DOMAINS` | Domain allowlist (comma-separated) |
+| `SIGNUP_ALLOWED_EMAILS` | Extra emails appended to each tenant’s admin email |
+| `MAIL_*` | Copied into tenant env when set |
+| `S3_*` | Worker uses root S3 defaults when provisioning (Backblaze B2 in templates) |
+
+**Existing tenants** keep their on-disk `.env` until you **reprovision** or edit `~/.stockix/tenants/{slug}/.env` and restart the tenant server container.
+
+**Verify signup policy on a running tenant:**
+
+```sh
+curl -s http://127.0.0.1:<PUBLIC_PROXY_PORT>/api/auth/meta
+# Expect: "signupDisabled": true when SIGNUP_DISABLED=true
+```
+
+### Integrations (configured in env)
+
+| Service | Variables | Local default |
+|---------|-----------|---------------|
+| **Email** | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_SECURE`, `MAIL_FROM_*` | Empty (configure Resend: `smtp.resend.com:587`, user `resend`, password = API key) |
+| **Files** | `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE` | Backblaze B2 template in root; MinIO block commented in `services/stockix-finance/.env` |
+| **Analytics** | `POSTHOG_API_KEY`, `POSTHOG_HOST` | Optional |
+| **Exchange rates** | `EXCHANGE_RATE_SERVICE` | Leave empty — manual rates (MENA-friendly) |
+
+Stripe, Plaid, and LemonSqueezy are **disabled** in Finance `.env` (commented blocks kept for future use).
+
+### Production deployment
+
+1. Copy and fill `infra/prod/.env` from `infra/prod/.env.example`.
+2. Generate all secrets with `openssl rand -hex 32`.
+3. Set `DATABASE_URL` / `POSTGRES_*`, domain URLs (`ROOT_DOMAIN`, `DASHBOARD_URL`, `NEXT_PUBLIC_*`), Traefik (`ACME_EMAIL`, `CF_DNS_API_TOKEN`), and provisioning paths (`STOCKIX_REPO`, `TENANT_ENV_ROOT`, `STOCKIX_TENANT_APP_ROOT`).
+4. Run production Compose from `infra/prod` with `--env-file .env` (not laptop root `.env`).
+
+See [docs/deployment-checklist.md](docs/deployment-checklist.md) for the full deploy flow.
+
+### Stockix Finance local dev (layer 3)
+
+Finance has its **own** Docker stack under `services/stockix-finance` (MariaDB, MongoDB, Redis). This is separate from the control-plane Postgres used by `apps/api`.
+
+```sh
+cd services/stockix-finance
+docker compose up -d
+
+cd packages/server
+pnpm dev    # reads services/stockix-finance/.env
+```
+
+Important naming in `services/stockix-finance/.env`:
+
+- Use `JWT_SECRET` (not `APP_JWT_SECRET`).
+- `SYSTEM_DB_NAME=stockix_system` and `TENANT_DB_NAME_PREFIX=stockix_tenant_` (match the provisioner).
+- For local file uploads, uncomment the **MinIO** block and comment out the Backblaze B2 block.
+
+### Scripts and tooling
+
+- Root `scripts/*.mjs` should call `loadRootEnv()` from `scripts/load-root-env.mjs` (same order as `@repo/config`).
+- Turbo invalidates caches when root `.env` or `.env.local` changes (`globalDependencies` in `turbo.json`).
+- `NEXT_PUBLIC_*` are inlined at **Docker build** time for the dashboard; locally they come from root env when running `next dev`.
 
 ## Schema changes
 
