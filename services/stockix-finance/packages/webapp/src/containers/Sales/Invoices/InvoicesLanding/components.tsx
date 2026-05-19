@@ -12,6 +12,7 @@ import {
   If,
   Icon,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import { formattedAmount, safeCallback } from '@/utils';
 import {
@@ -218,6 +219,7 @@ export function useInvoicesTableColumns() {
         id: 'amount',
         Header: intl.get('amount'),
         accessor: 'total_formatted',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

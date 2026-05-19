@@ -15,7 +15,9 @@ import {
   useBillPaidAmountFormatted,
   useBillSubtotalFormatted,
   useBillTotalFormatted,
+  useBillTotal,
 } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 import { TaxType } from '@/interfaces/TaxRates';
 import { AdjustmentTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/AdjustmentTotalLine';
 import { DiscountTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/DiscountTotalLine';
@@ -32,6 +34,7 @@ export function BillFormFooterRight() {
   const taxEntries = useBillAggregatedTaxRates();
   const discountAmount = useBillDiscountAmountFormatted();
   const adjustmentAmount = useBillAdjustmentAmountFormatted();
+  const total = useBillTotal();
 
   return (
     <BillTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -64,6 +67,7 @@ export function BillFormFooterRight() {
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={'Paid Amount'}
         value={paidAmountFormatted}

@@ -19,6 +19,8 @@ export class TenantMetadata extends BaseModel {
   public logoKey!: string;
   public logoUri!: string;
   public address!: Record<string, any>;
+  public displayCurrencies!: string[];
+  public secondaryCurrency?: string | null;
 
   /**
    * Json schema.
@@ -40,8 +42,28 @@ export class TenantMetadata extends BaseModel {
         primaryColor: { type: 'string', maxLength: 7 }, // Assuming hex color code
         logoKey: { type: 'string', maxLength: 255 },
         address: { type: 'object' },
+        displayCurrencies: { type: ['array', 'null'], items: { type: 'string' } },
+        secondaryCurrency: { type: ['string', 'null'], maxLength: 3 },
       },
     };
+  }
+
+  /**
+   * Parses display_currencies JSON from the database.
+   */
+  $parseDatabaseJson(json: Record<string, any>) {
+    const parsed = super.$parseDatabaseJson(json);
+    if (typeof parsed.displayCurrencies === 'string') {
+      try {
+        parsed.displayCurrencies = JSON.parse(parsed.displayCurrencies);
+      } catch {
+        parsed.displayCurrencies = [];
+      }
+    }
+    if (parsed.displayCurrencies == null) {
+      parsed.displayCurrencies = [];
+    }
+    return parsed;
   }
 
   /**

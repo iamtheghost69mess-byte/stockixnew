@@ -12,7 +12,7 @@ import {
   Position,
 } from '@blueprintjs/core';
 
-import { Money, Icon, Can } from '@/components';
+import { Money, Icon, Can, DualCurrencyAmountCell } from '@/components';
 import { safeCallback } from '@/utils';
 import { CLASSES } from '@/constants/classes';
 import {
@@ -108,7 +108,8 @@ export function usePaymentReceivesColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: AmountAccessor,
+        accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

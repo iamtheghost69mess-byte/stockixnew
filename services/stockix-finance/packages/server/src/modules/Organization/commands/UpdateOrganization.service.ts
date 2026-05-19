@@ -1,5 +1,6 @@
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { UpdateOrganizationDto } from '../dtos/Organization.dto';
+import { normalizeOrganizationMetadataForSave } from '../Organization.utils';
 import { throwIfTenantNotExists } from '../Organization/_utils';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { events } from '@/common/events/events';
@@ -34,7 +35,11 @@ export class UpdateOrganizationService {
         tenant.metadata?.baseCurrency,
       );
     }
-    await this.tenantRepository.saveMetadata(tenant.id, organizationDTO);
+    const metadataPayload = normalizeOrganizationMetadataForSave(
+      organizationDTO,
+      tenant.metadata?.baseCurrency,
+    );
+    await this.tenantRepository.saveMetadata(tenant.id, metadataPayload);
 
     if (organizationDTO.baseCurrency !== tenant.metadata?.baseCurrency) {
       // Triggers `onOrganizationBaseCurrencyUpdated` event.

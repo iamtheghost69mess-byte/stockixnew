@@ -15,6 +15,7 @@ import {
   PaperTemplate,
   PaperTemplateProps,
   PaperTemplateTotalBorder,
+  PdfDisplayTotalItem,
 } from './PaperTemplate';
 import { theme } from '../constants';
 
@@ -96,6 +97,8 @@ export interface EstimatePaperTemplateProps extends PaperTemplateProps {
   // # Line Discount
   lineDiscountLabel?: string;
   showLineDiscount?: boolean;
+
+  displayTotals?: PdfDisplayTotalItem[];
 }
 
 export function EstimatePaperTemplate({
@@ -181,6 +184,7 @@ export function EstimatePaperTemplate({
   // # Line Discount
   lineDiscountLabel = 'Discount',
   showLineDiscount = false,
+  displayTotals = [],
 }: EstimatePaperTemplateProps) {
   return (
     <PaperTemplate primaryColor={primaryColor} secondaryColor={secondaryColor}>
@@ -286,6 +290,7 @@ export function EstimatePaperTemplate({
                 style={{ fontWeight: 500 }}
               />
             )}
+            <PaperTemplate.DisplayCurrencyTotals items={displayTotals} />
           </PaperTemplate.Totals>
         </Stack>
 

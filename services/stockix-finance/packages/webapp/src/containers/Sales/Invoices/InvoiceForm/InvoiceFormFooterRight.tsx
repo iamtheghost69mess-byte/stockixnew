@@ -21,6 +21,8 @@ import {
 import { TaxType } from '@/interfaces/TaxRates';
 import { AdjustmentTotalLine } from './AdjustmentTotalLine';
 import { DiscountTotalLine } from './DiscountTotalLine';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
+import { useInvoiceTotal } from './utils';
 
 export function InvoiceFormFooterRight() {
   const {
@@ -34,6 +36,7 @@ export function InvoiceFormFooterRight() {
   const subtotalFormatted = useInvoiceSubtotalFormatted();
   const paidAmountFormatted = useInvoicePaidAmountFormatted();
   const dueAmountFormatted = useInvoiceDueAmountFormatted();
+  const total = useInvoiceTotal();
 
   return (
     <InvoiceTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -67,6 +70,7 @@ export function InvoiceFormFooterRight() {
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={<T id={'invoice_form.label.payment_amount'} />}
         value={paidAmountFormatted}

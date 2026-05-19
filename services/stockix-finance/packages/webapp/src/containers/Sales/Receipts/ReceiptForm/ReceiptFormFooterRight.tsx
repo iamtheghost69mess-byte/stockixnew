@@ -16,7 +16,9 @@ import {
   useReceiptPaidAmountFormatted,
   useReceiptSubtotalFormatted,
   useReceiptTotalFormatted,
+  useReceiptTotal,
 } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 import { DiscountTotalLine } from '../../Invoices/InvoiceForm/DiscountTotalLine';
 import { AdjustmentTotalLine } from '../../Invoices/InvoiceForm/AdjustmentTotalLine';
 
@@ -33,6 +35,7 @@ export function ReceiptFormFooterRight() {
 
   const discountAmount = useReceiptDiscountAmountFormatted();
   const adjustmentAmount = useReceiptAdjustmentFormatted();
+  const total = useReceiptTotal();
 
   return (
     <ReceiptTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -51,6 +54,7 @@ export function ReceiptFormFooterRight() {
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={<T id={'receipt_form.label.payment_amount'} />}
         value={paidAmountFormatted}

@@ -8,6 +8,7 @@ import {
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useEstimateDetailDrawerContext } from './EstimateDetailDrawerProvider';
 
@@ -49,6 +50,7 @@ export default function EstimateDetailTableFooter() {
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={estimate} />
       </EstimateTotalLines>
     </EstimateDetailsFooterRoot>
   );

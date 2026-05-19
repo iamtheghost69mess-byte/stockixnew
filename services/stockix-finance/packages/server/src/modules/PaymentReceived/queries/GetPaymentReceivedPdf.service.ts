@@ -10,6 +10,7 @@ import { ChromiumlyTenancy } from '@/modules/ChromiumlyTenancy/ChromiumlyTenancy
 import { PaymentReceivedPdfTemplateAttributes } from '../types/PaymentReceived.types';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { events } from '@/common/events/events';
+import { PdfDisplayTotalsService } from '@/modules/Pdf/PdfDisplayTotals.service';
 
 @Injectable()
 export class GetPaymentReceivedPdfService {
@@ -18,6 +19,7 @@ export class GetPaymentReceivedPdfService {
     private getPaymentService: GetPaymentReceivedService,
     private paymentBrandingTemplateService: PaymentReceivedBrandingTemplate,
     private eventPublisher: EventEmitter2,
+    private pdfDisplayTotalsService: PdfDisplayTotalsService,
 
     @Inject(PaymentReceived.name)
     private paymentReceiveModel: TenantModelProxy<typeof PaymentReceived>,
@@ -90,6 +92,18 @@ export class GetPaymentReceivedPdfService {
   ): Promise<PaymentReceivedPdfTemplateAttributes> {
     const paymentReceived =
       await this.getPaymentService.getPaymentReceive(paymentReceivedId);
+    const paymentModel = await this.paymentReceiveModel()
+      .query()
+      .findById(paymentReceivedId);
+
+    const displayTotals = paymentModel
+      ? await this.pdfDisplayTotalsService.buildForDocument({
+          docCurrency: paymentModel.currencyCode,
+          docDate: paymentModel.paymentDate,
+          totalInBase: paymentModel.localAmount,
+          dueInBase: paymentModel.localAmount,
+        })
+      : [];
 
     const templateId =
       paymentReceived?.pdfTemplateId ??
@@ -107,6 +121,7 @@ export class GetPaymentReceivedPdfService {
     return {
       ...brandingTemplate.attributes,
       ...transformPaymentReceivedToPdfTemplate(paymentReceived),
+      displayTotals,
     };
   }
 }

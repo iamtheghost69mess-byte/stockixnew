@@ -3,6 +3,7 @@ import {
   PaperTemplate,
   PaperTemplateProps,
   PaperTemplateTotalBorder,
+  PdfDisplayTotalItem,
 } from './PaperTemplate';
 import { Box } from '../lib/layout/Box';
 import { Text } from '../lib/text/Text';
@@ -120,6 +121,7 @@ export interface InvoicePaperTemplateProps extends PaperTemplateProps {
 
   lines?: Array<InvoiceLine>;
   taxes?: Array<InvoiceTaxLine>;
+  displayTotals?: PdfDisplayTotalItem[];
 }
 
 export function InvoicePaperTemplate({
@@ -214,6 +216,7 @@ export function InvoicePaperTemplate({
   statementLabel = 'Statement',
   showStatement = true,
   statement = DefaultPdfTemplateStatement,
+  displayTotals = [],
   ...props
 }: InvoicePaperTemplateProps) {
   return (
@@ -335,6 +338,10 @@ export function InvoicePaperTemplate({
                 style={{ fontWeight: 500 }}
               />
             )}
+            <PaperTemplate.DisplayCurrencyTotals
+              items={displayTotals}
+              variant="total"
+            />
             {showPaymentMade && (
               <PaperTemplate.TotalLine
                 label={paymentMadeLabel}
@@ -349,6 +356,10 @@ export function InvoicePaperTemplate({
                 style={{ fontWeight: 500 }}
               />
             )}
+            <PaperTemplate.DisplayCurrencyTotals
+              items={displayTotals}
+              variant="due"
+            />
           </PaperTemplate.Totals>
         </Stack>
 

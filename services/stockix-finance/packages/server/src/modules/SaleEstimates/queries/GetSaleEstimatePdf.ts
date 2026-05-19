@@ -10,6 +10,7 @@ import { events } from '@/common/events/events';
 import { SaleEstimate } from '../models/SaleEstimate';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { renderEstimatePaperTemplateHtml } from '@stockix/pdf-templates';
+import { PdfDisplayTotalsService } from '@/modules/Pdf/PdfDisplayTotals.service';
 
 @Injectable()
 export class GetSaleEstimatePdf {
@@ -18,6 +19,7 @@ export class GetSaleEstimatePdf {
     private readonly getSaleEstimate: GetSaleEstimate,
     private readonly estimatePdfTemplate: SaleEstimatePdfTemplate,
     private readonly eventPublisher: EventEmitter2,
+    private readonly pdfDisplayTotalsService: PdfDisplayTotalsService,
 
     @Inject(PdfTemplateModel.name)
     private readonly pdfTemplateModel: TenantModelProxy<
@@ -85,6 +87,17 @@ export class GetSaleEstimatePdf {
     estimateId: number,
   ): Promise<EstimatePdfBrandingAttributes> {
     const saleEstimate = await this.getSaleEstimate.getEstimate(estimateId);
+    const estimateModel = await this.saleEstimateModel().query().findById(estimateId);
+
+    const displayTotals = estimateModel
+      ? await this.pdfDisplayTotalsService.buildForDocument({
+          docCurrency: estimateModel.currencyCode,
+          docDate: estimateModel.estimateDate,
+          totalInBase: estimateModel.totalLocal,
+          dueInBase: estimateModel.totalLocal,
+        })
+      : [];
+
     // Retrieve the invoice template id of not found get the default template id.
     const templateId =
       saleEstimate.pdfTemplateId ??
@@ -99,6 +112,7 @@ export class GetSaleEstimatePdf {
     return {
       ...brandingTemplate.attributes,
       ...transformEstimateToPdfTemplate(saleEstimate),
+      displayTotals,
     };
   }
 }

@@ -21,6 +21,7 @@ import { PaymentReceivedIncrement } from './commands/PaymentReceivedIncrement.se
 import { BranchesModule } from '../Branches/Branches.module';
 import { WarehousesModule } from '../Warehouses/Warehouses.module';
 import { PdfTemplatesModule } from '../PdfTemplate/PdfTemplates.module';
+import { PdfModule } from '../Pdf/Pdf.module';
 import { AutoIncrementOrdersModule } from '../AutoIncrementOrders/AutoIncrementOrders.module';
 import { PaymentReceivedAutoIncrementSubscriber } from './subscribers/PaymentReceivedAutoIncrementSubscriber';
 import { PaymentReceivedGLEntriesSubscriber } from './subscribers/PaymentReceivedGLEntriesSubscriber';
@@ -90,6 +91,7 @@ import { ValidateBulkDeletePaymentReceivedService } from './ValidateBulkDeletePa
     BranchesModule,
     WarehousesModule,
     PdfTemplatesModule,
+    PdfModule,
     AutoIncrementOrdersModule,
     LedgerModule,
     AccountsModule,

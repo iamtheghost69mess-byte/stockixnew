@@ -7,6 +7,7 @@ import {
   PaperTemplate,
   PaperTemplateProps,
   PaperTemplateTotalBorder,
+  PdfDisplayTotalItem,
 } from './PaperTemplate';
 import {
   DefaultPdfTemplateTerms,
@@ -94,6 +95,8 @@ export interface ReceiptPaperTemplateProps extends PaperTemplateProps {
   lineQuantityLabel?: string;
   lineRateLabel?: string;
   lineTotalLabel?: string;
+
+  displayTotals?: PdfDisplayTotalItem[];
 }
 
 export function ReceiptPaperTemplate({
@@ -174,6 +177,7 @@ export function ReceiptPaperTemplate({
   // # Line Discount
   lineDiscountLabel = 'Discount',
   showLineDiscount = false,
+  displayTotals = [],
 }: ReceiptPaperTemplateProps) {
   return (
     <PaperTemplate primaryColor={primaryColor} secondaryColor={secondaryColor}>
@@ -275,6 +279,7 @@ export function ReceiptPaperTemplate({
                 style={{ fontWeight: 500 }}
               />
             )}
+            <PaperTemplate.DisplayCurrencyTotals items={displayTotals} />
           </PaperTemplate.Totals>
         </Stack>
 

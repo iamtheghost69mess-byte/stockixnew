@@ -9,6 +9,7 @@ import {
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useInvoiceDetailDrawerContext } from './InvoiceDetailDrawerProvider';
 
@@ -67,6 +68,7 @@ export function InvoiceDetailTableFooter() {
           value={invoice.due_amount_formatted}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={invoice} />
       </InvoiceTotalLines>
     </InvoiceDetailsFooterRoot>
   );

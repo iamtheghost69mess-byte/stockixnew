@@ -5,6 +5,7 @@ import {
   PaperTemplate,
   PaperTemplateProps,
   PaperTemplateTotalBorder,
+  PdfDisplayTotalItem,
 } from './PaperTemplate';
 import {
   DefaultPdfTemplateAddressBilledFrom,
@@ -54,6 +55,8 @@ export interface PaymentReceivedPaperTemplateProps extends PaperTemplateProps {
   paymentReceivedNumebr?: string;
   paymentReceivedNumberLabel?: string;
   showPaymentReceivedNumber?: boolean;
+
+  displayTotals?: PdfDisplayTotalItem[];
 }
 
 export function PaymentReceivedPaperTemplate({
@@ -100,6 +103,7 @@ export function PaymentReceivedPaperTemplate({
   paymentReceivedDate = 'September 3, 2024',
   showPaymentReceivedDate = true,
   paymentReceivedDateLabel = 'Payment Date',
+  displayTotals = [],
 }: PaymentReceivedPaperTemplateProps) {
   return (
     <PaperTemplate primaryColor={primaryColor} secondaryColor={secondaryColor}>
@@ -172,6 +176,7 @@ export function PaymentReceivedPaperTemplate({
                 style={{ fontWeight: 500 }}
               />
             )}
+            <PaperTemplate.DisplayCurrencyTotals items={displayTotals} />
           </PaperTemplate.Totals>
         </Stack>
       </Stack>

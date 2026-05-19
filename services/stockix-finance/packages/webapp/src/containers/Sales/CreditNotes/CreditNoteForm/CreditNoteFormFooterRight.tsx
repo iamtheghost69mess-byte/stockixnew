@@ -14,7 +14,9 @@ import {
   useCreditNoteDiscountAmountFormatted,
   useCreditNoteSubtotalFormatted,
   useCreditNoteTotalFormatted,
+  useCreditNoteTotal,
 } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 import { DiscountTotalLine } from '../../Invoices/InvoiceForm/DiscountTotalLine';
 import { AdjustmentTotalLine } from '../../Invoices/InvoiceForm/AdjustmentTotalLine';
 
@@ -27,6 +29,7 @@ export function CreditNoteFormFooterRight() {
   const totalFormatted = useCreditNoteTotalFormatted();
   const discountAmount = useCreditNoteDiscountAmountFormatted();
   const adjustmentAmount = useCreditNoteAdjustmentFormatted();
+  const total = useCreditNoteTotal();
 
   return (
     <CreditNoteTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -45,6 +48,7 @@ export function CreditNoteFormFooterRight() {
         value={totalFormatted}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </CreditNoteTotalLines>
   );
 }

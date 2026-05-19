@@ -8,7 +8,9 @@ import {
   useVendorCreditDiscountAmountFormatted,
   useVendorCreditSubtotalFormatted,
   useVendorCreditTotalFormatted,
+  useVendorCreditTotal,
 } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 import { DiscountTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/DiscountTotalLine';
 import { AdjustmentTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/AdjustmentTotalLine';
 
@@ -21,6 +23,7 @@ export function VendorCreditNoteFormFooterRight() {
 
   const discountAmountFormatted = useVendorCreditDiscountAmountFormatted();
   const adjustmentAmountFormatted = useVendorCreditAdjustmentAmountFormatted();
+  const total = useVendorCreditTotal();
 
   return (
     <VendorCreditNoteTotalLines
@@ -41,6 +44,7 @@ export function VendorCreditNoteFormFooterRight() {
         value={totalFormatted}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </VendorCreditNoteTotalLines>
   );
 }

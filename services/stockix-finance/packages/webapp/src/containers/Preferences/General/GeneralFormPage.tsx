@@ -25,6 +25,8 @@ const defaultValues = {
   timezone: '',
   tax_number: '',
   address: {},
+  display_currencies: [],
+  secondary_currency: '',
 };
 
 /**

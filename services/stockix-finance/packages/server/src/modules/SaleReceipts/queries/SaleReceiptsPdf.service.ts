@@ -10,6 +10,7 @@ import { ISaleReceiptBrandingTemplateAttributes } from '../types/SaleReceipts.ty
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { renderReceiptPaperTemplateHtml } from '@stockix/pdf-templates';
+import { PdfDisplayTotalsService } from '@/modules/Pdf/PdfDisplayTotals.service';
 
 @Injectable()
 export class SaleReceiptsPdfService {
@@ -27,6 +28,7 @@ export class SaleReceiptsPdfService {
     private readonly getSaleReceiptService: GetSaleReceipt,
     private readonly saleReceiptBrandingTemplate: SaleReceiptBrandingTemplate,
     private readonly eventPublisher: EventEmitter2,
+    private readonly pdfDisplayTotalsService: PdfDisplayTotalsService,
 
     @Inject(SaleReceipt.name)
     private readonly saleReceiptModel: TenantModelProxy<typeof SaleReceipt>,
@@ -92,6 +94,16 @@ export class SaleReceiptsPdfService {
   ): Promise<ISaleReceiptBrandingTemplateAttributes> {
     const saleReceipt =
       await this.getSaleReceiptService.getSaleReceipt(receiptId);
+    const receiptModel = await this.saleReceiptModel().query().findById(receiptId);
+
+    const displayTotals = receiptModel
+      ? await this.pdfDisplayTotalsService.buildForDocument({
+          docCurrency: receiptModel.currencyCode,
+          docDate: receiptModel.receiptDate,
+          totalInBase: receiptModel.totalLocal,
+          dueInBase: receiptModel.totalLocal,
+        })
+      : [];
 
     // Retrieve the invoice template id of not found get the default template id.
     const templateId =
@@ -110,6 +122,7 @@ export class SaleReceiptsPdfService {
     return {
       ...brandingTemplate.attributes,
       ...transformReceiptToBrandingTemplateAttributes(saleReceipt),
+      displayTotals,
     };
   }
 }

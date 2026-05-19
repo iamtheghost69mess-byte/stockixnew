@@ -16,6 +16,9 @@ import {
 import { ExchangeRateApplication } from './ExchangeRates.application';
 import { ExchangeRateLatestQueryDto } from './dtos/ExchangeRateLatestQuery.dto';
 import { ExchangeRateLatestResponseDto } from './dtos/ExchangeRateLatestResponse.dto';
+import { ExchangeRateByDateQueryDto } from './dtos/ExchangeRateByDateQuery.dto';
+import { ExchangeRateByDateResponseDto } from './dtos/ExchangeRateByDateResponse.dto';
+import { NotFoundException } from '@nestjs/common';
 
 interface RequestWithTenantId extends Request {
   tenantId: number;
@@ -69,5 +72,35 @@ export class ExchangeRatesController {
       toCurrency: query.to_currency,
     });
     return exchangeRate;
+  }
+
+  @Get('/by-date')
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  @ApiOperation({ summary: 'Get exchange rate by currency and date' })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully retrieved exchange rate',
+    type: ExchangeRateByDateResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Exchange rate not found' })
+  async getRateByDate(
+    @Query() query: ExchangeRateByDateQueryDto,
+  ): Promise<{ exchange_rate: ExchangeRateByDateResponseDto }> {
+    const rate = await this.exchangeRateApp.rateByDate(
+      query.currency_code,
+      query.date,
+    );
+
+    if (!rate) {
+      throw new NotFoundException('Exchange rate not found');
+    }
+
+    return { exchange_rate: rate };
   }
 }

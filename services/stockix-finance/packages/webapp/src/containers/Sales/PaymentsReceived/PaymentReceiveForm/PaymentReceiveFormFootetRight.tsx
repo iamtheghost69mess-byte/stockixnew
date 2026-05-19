@@ -13,9 +13,10 @@ import {
   usePaymentReceiveTotals,
   usePaymentReceivedTotalExceededAmount,
 } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function PaymentReceiveFormFootetRight() {
-  const { formattedSubtotal, formattedTotal } = usePaymentReceiveTotals();
+  const { total, formattedSubtotal, formattedTotal } = usePaymentReceiveTotals();
   const exceededAmount = usePaymentReceivedTotalExceededAmount();
 
   return (
@@ -30,6 +31,7 @@ export function PaymentReceiveFormFootetRight() {
         value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={'Exceeded Amount'}
         value={<FormatNumber value={exceededAmount} />}

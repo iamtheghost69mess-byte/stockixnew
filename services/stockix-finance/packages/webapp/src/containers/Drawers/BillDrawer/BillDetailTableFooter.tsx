@@ -6,6 +6,7 @@ import {
   T,
   TotalLines,
   TotalLine,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useBillDrawerContext } from './BillDrawerProvider';
 
@@ -63,6 +64,7 @@ export function BillDetailTableFooter() {
           value={bill.formatted_due_amount}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={bill} />
       </BillTotalLines>
     </BillDetailsFooterRoot>
   );

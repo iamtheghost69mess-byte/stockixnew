@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { useMemo } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
@@ -72,4 +73,20 @@ export function useCurrencies(props) {
       ...props
     },
   );
+}
+
+/**
+ * Returns the latest stored exchange rate for a currency from the currencies list.
+ */
+export function useLatestExchangeRateForCurrency(
+  currencyCode: string | null | undefined,
+): number | null {
+  const { data: currencies } = useCurrencies();
+  return useMemo(() => {
+    if (!currencyCode || !currencies?.length) {
+      return null;
+    }
+    const match = currencies.find((c) => c.currency_code === currencyCode);
+    return match?.latest_exchange_rate ?? null;
+  }, [currencies, currencyCode]);
 }

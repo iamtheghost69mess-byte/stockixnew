@@ -10,6 +10,7 @@ import { PdfTemplateModel } from '@/modules/PdfTemplate/models/PdfTemplate';
 import { events } from '@/common/events/events';
 import { InvoicePdfTemplateAttributes } from '../SaleInvoice.types';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
+import { PdfDisplayTotalsService } from '@/modules/Pdf/PdfDisplayTotals.service';
 
 @Injectable()
 export class SaleInvoicePdf {
@@ -18,6 +19,7 @@ export class SaleInvoicePdf {
     private getInvoiceService: GetSaleInvoice,
     private invoiceBrandingTemplateService: SaleInvoicePdfTemplate,
     private eventPublisher: EventEmitter2,
+    private pdfDisplayTotalsService: PdfDisplayTotalsService,
 
     @Inject(SaleInvoice.name)
     private saleInvoiceModel: TenantModelProxy<typeof SaleInvoice>,
@@ -80,6 +82,16 @@ export class SaleInvoicePdf {
     invoiceId: number,
   ): Promise<InvoicePdfTemplateAttributes> {
     const invoice = await this.getInvoiceService.getSaleInvoice(invoiceId);
+    const invoiceModel = await this.saleInvoiceModel().query().findById(invoiceId);
+
+    const displayTotals = invoiceModel
+      ? await this.pdfDisplayTotalsService.buildForDocument({
+          docCurrency: invoiceModel.currencyCode,
+          docDate: invoiceModel.invoiceDate,
+          totalInBase: invoiceModel.totalLocal,
+          dueInBase: invoiceModel.dueAmount * invoiceModel.exchangeRate,
+        })
+      : [];
 
     // Retrieve the invoice template id or get the default template id if not found.
     const templateId =
@@ -101,6 +113,7 @@ export class SaleInvoicePdf {
     return {
       ...brandingTemplate.attributes,
       ...transformInvoiceToPdfTemplate(invoice),
+      displayTotals,
     };
   }
 }

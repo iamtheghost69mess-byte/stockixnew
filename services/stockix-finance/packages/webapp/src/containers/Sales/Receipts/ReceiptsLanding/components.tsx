@@ -16,7 +16,15 @@ import {
 
 import { CLASSES } from '@/constants/classes';
 import { safeCallback } from '@/utils';
-import { FormatDateCell, Choose, Money, Icon, If, Can } from '@/components';
+import {
+  FormatDateCell,
+  Choose,
+  Money,
+  Icon,
+  If,
+  Can,
+  DualCurrencyAmountCell,
+} from '@/components';
 import { SaleReceiptAction, AbilitySubject } from '@/constants/abilityOption';
 
 /**
@@ -155,7 +163,8 @@ export function useReceiptsTableColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: (r) => <Money amount={r.amount} currency={r.currency_code} />,
+        accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 140,
         align: 'right',
         clickable: true,

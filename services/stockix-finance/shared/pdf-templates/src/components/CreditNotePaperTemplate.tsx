@@ -2,6 +2,7 @@ import {
   PaperTemplate,
   PaperTemplateProps,
   PaperTemplateTotalBorder,
+  PdfDisplayTotalItem,
 } from './PaperTemplate';
 import { Box } from '../lib/layout/Box';
 import { Text } from '../lib/text/Text';
@@ -79,6 +80,7 @@ export interface CreditNotePaperTemplateProps extends PaperTemplateProps {
   termsConditionsLabel?: string;
 
   lines?: Array<CreditNoteLine>;
+  displayTotals?: PdfDisplayTotalItem[];
 }
 
 export function CreditNotePaperTemplate({
@@ -146,6 +148,7 @@ export function CreditNotePaperTemplate({
       total: '$1000.00',
     },
   ],
+  displayTotals = [],
   ...props
 }: CreditNotePaperTemplateProps) {
   return (
@@ -235,6 +238,7 @@ export function CreditNotePaperTemplate({
                 style={{ fontWeight: 500 }}
               />
             )}
+            <PaperTemplate.DisplayCurrencyTotals items={displayTotals} />
           </PaperTemplate.Totals>
         </Stack>
 

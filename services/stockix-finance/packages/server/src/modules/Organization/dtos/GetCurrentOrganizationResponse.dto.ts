@@ -92,6 +92,20 @@ export class OrganizationMetadataResponseDto {
     nullable: true,
   })
   address: string;
+
+  @ApiPropertyOptional({
+    description: 'Additional display currencies (ISO 4217 codes)',
+    example: ['EUR', 'GBP'],
+    type: [String],
+  })
+  displayCurrencies: string[];
+
+  @ApiPropertyOptional({
+    description: 'Optional secondary currency for dual-currency display',
+    example: 'EUR',
+    nullable: true,
+  })
+  secondaryCurrency: string | null;
 }
 
 export class GetCurrentOrganizationResponseDto {

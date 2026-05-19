@@ -8,7 +8,9 @@ import {
   useEstimateDiscountFormatted,
   useEstimateSubtotalFormatted,
   useEstimateTotalFormatted,
+  useEstimateTotal,
 } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 import { AdjustmentTotalLine } from '../../Invoices/InvoiceForm/AdjustmentTotalLine';
 import { DiscountTotalLine } from '../../Invoices/InvoiceForm/DiscountTotalLine';
 
@@ -20,6 +22,7 @@ export function EstimateFormFooterRight() {
   const totalFormatted = useEstimateTotalFormatted();
   const discountAmountFormatted = useEstimateDiscountFormatted();
   const adjustmentAmountFormatted = useEstimateAdjustmentFormatted();
+  const total = useEstimateTotal();
 
   return (
     <EstimateTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
@@ -37,6 +40,7 @@ export function EstimateFormFooterRight() {
         value={totalFormatted}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </EstimateTotalLines>
   );
 }

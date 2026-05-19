@@ -10,6 +10,7 @@ import { PdfTemplateModel } from '@/modules/PdfTemplate/models/PdfTemplate';
 import { CreditNotePdfTemplateAttributes } from '../types/CreditNotes.types';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
+import { PdfDisplayTotalsService } from '@/modules/Pdf/PdfDisplayTotals.service';
 
 @Injectable()
 export class GetCreditNotePdf {
@@ -26,6 +27,7 @@ export class GetCreditNotePdf {
     private readonly getCreditNoteService: GetCreditNoteService,
     private readonly creditNoteBrandingTemplate: CreditNoteBrandingTemplate,
     private readonly eventPublisher: EventEmitter2,
+    private readonly pdfDisplayTotalsService: PdfDisplayTotalsService,
 
     @Inject(CreditNote.name)
     private readonly creditNoteModel: TenantModelProxy<typeof CreditNote>,
@@ -103,6 +105,18 @@ export class GetCreditNotePdf {
   ): Promise<CreditNotePdfTemplateAttributes> {
     const creditNote =
       await this.getCreditNoteService.getCreditNote(creditNoteId);
+    const creditNoteModel = await this.creditNoteModel()
+      .query()
+      .findById(creditNoteId);
+
+    const displayTotals = creditNoteModel
+      ? await this.pdfDisplayTotalsService.buildForDocument({
+          docCurrency: creditNoteModel.currencyCode,
+          docDate: creditNoteModel.creditNoteDate,
+          totalInBase: creditNoteModel.totalLocal,
+          dueInBase: creditNoteModel.totalLocal,
+        })
+      : [];
 
     // Retrieve the invoice template id of not found get the default template id.
     const templateId =
@@ -121,6 +135,7 @@ export class GetCreditNotePdf {
     return {
       ...brandingTemplate.attributes,
       ...transformCreditNoteToPdfTemplate(creditNote),
+      displayTotals,
     };
   }
 }

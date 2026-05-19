@@ -5,7 +5,14 @@ import clsx from 'classnames';
 import { Intent, Tag, Menu, MenuItem, MenuDivider } from '@blueprintjs/core';
 
 import { CLASSES } from '@/constants/classes';
-import { FormattedMessage as T, Choose, If, Icon, Can } from '@/components';
+import {
+  FormattedMessage as T,
+  Choose,
+  If,
+  Icon,
+  Can,
+  DualCurrencyAmountCell,
+} from '@/components';
 import { safeCallback } from '@/utils';
 import { VendorCreditAction, AbilitySubject } from '@/constants/abilityOption';
 
@@ -139,6 +146,7 @@ export function useVendorsCreditNoteTableColumns() {
         id: 'amount',
         Header: intl.get('amount'),
         accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

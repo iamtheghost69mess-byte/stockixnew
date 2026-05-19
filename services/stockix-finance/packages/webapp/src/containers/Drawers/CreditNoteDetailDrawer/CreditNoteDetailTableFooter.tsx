@@ -6,6 +6,7 @@ import {
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useCreditNoteDetailDrawerContext } from './CreditNoteDetailDrawerProvider';
 
@@ -45,6 +46,7 @@ export default function CreditNoteDetailTableFooter() {
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={creditNote} />
       </CreditNoteTotalLines>
     </CreditNoteDetailsFooterRoot>
   );

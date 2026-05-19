@@ -173,6 +173,43 @@ export enum PaperTemplateTotalBorder {
   Dark = 'dark',
 }
 
+export interface PdfDisplayTotalItem {
+  currency: string;
+  formattedTotal: string;
+  formattedDueAmount: string;
+}
+
+PaperTemplate.DisplayCurrencyTotals = ({
+  items,
+  variant = 'total',
+}: {
+  items?: PdfDisplayTotalItem[];
+  variant?: 'total' | 'due';
+}) => {
+  if (!items?.length) {
+    return null;
+  }
+
+  return (
+    <>
+      {items.map((dc, index) => (
+        <PaperTemplate.TotalLine
+          key={`${dc.currency}-${variant}-${index}`}
+          label={
+            variant === 'due'
+              ? `≈ ${dc.currency} Balance Due`
+              : `≈ ${dc.currency}`
+          }
+          amount={
+            variant === 'due' ? dc.formattedDueAmount : dc.formattedTotal
+          }
+          style={{ fontSize: 11, color: '#5f6b7c', fontWeight: 400 }}
+        />
+      ))}
+    </>
+  );
+};
+
 PaperTemplate.Totals = ({ children }: { children: React.ReactNode }) => {
   return (
     <x.div

@@ -18,4 +18,11 @@ export class ExchangeRateApplication {
   ): Promise<EchangeRateLatestPOJO> {
     return this.exchangeRateService.latest(tenantId, exchangeRateLatestDTO);
   }
+
+  /**
+   * Returns the stored exchange rate for a currency on or before a date.
+   */
+  public rateByDate(currencyCode: string, date: string) {
+    return this.exchangeRateService.lookupRateByDate(currencyCode, date);
+  }
 }

@@ -11,9 +11,10 @@ import {
   FormatNumber,
 } from '@/components';
 import { usePaymentMadeExcessAmount, usePaymentMadeTotals } from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
 
 export function PaymentMadeFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = usePaymentMadeTotals();
+  const { total, formattedSubtotal, formattedTotal } = usePaymentMadeTotals();
   const excessAmount = usePaymentMadeExcessAmount();
   const {
     values: { currency_code: currencyCode },
@@ -31,6 +32,7 @@ export function PaymentMadeFormFooterRight() {
         value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
       <TotalLine
         title={'Excess Amount'}
         value={<FormatNumber value={excessAmount} currency={currencyCode} />}

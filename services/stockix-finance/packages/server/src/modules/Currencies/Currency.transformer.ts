@@ -6,7 +6,12 @@ export class CurrencyTransformer extends Transformer {
    * @returns {Array}
    */
   public includeAttributes = (): string[] => {
-    return ['isBaseCurrency'];
+    return [
+      'isBaseCurrency',
+      'latestExchangeRate',
+      'latestExchangeRateDate',
+      'latestExchangeRateId',
+    ];
   };
 
   /**
@@ -15,5 +20,18 @@ export class CurrencyTransformer extends Transformer {
    */
   public isBaseCurrency(currency): boolean {
     return this.context.organization.baseCurrency === currency.currencyCode;
+  }
+
+  public latestExchangeRate(currency): number | null {
+    return this.options?.latestRatesMap?.[currency.currencyCode]?.exchangeRate ?? null;
+  }
+
+  public latestExchangeRateDate(currency): string | null {
+    const rate = this.options?.latestRatesMap?.[currency.currencyCode];
+    return rate?.date ? this.formatDate(rate.date) : null;
+  }
+
+  public latestExchangeRateId(currency): number | null {
+    return this.options?.latestRatesMap?.[currency.currencyCode]?.id ?? null;
   }
 }

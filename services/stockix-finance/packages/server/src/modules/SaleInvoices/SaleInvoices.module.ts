@@ -20,6 +20,7 @@ import { CommandSaleInvoiceDTOTransformer } from './commands/CommandSaleInvoiceD
 import { SaleEstimateValidators } from '../SaleEstimates/commands/SaleEstimateValidators.service';
 import { UnlinkConvertedSaleEstimate } from '../SaleEstimates/commands/UnlinkConvertedSaleEstimate.service';
 import { PdfTemplatesModule } from '../PdfTemplate/PdfTemplates.module';
+import { PdfModule } from '../Pdf/Pdf.module';
 import { AutoIncrementOrdersModule } from '../AutoIncrementOrders/AutoIncrementOrders.module';
 import { ChromiumlyTenancyModule } from '../ChromiumlyTenancy/ChromiumlyTenancy.module';
 import { SaleInvoicePdfTemplate } from './queries/SaleInvoicePdfTemplate.service';
@@ -69,6 +70,7 @@ import { ValidateBulkDeleteSaleInvoicesService } from './ValidateBulkDeleteSaleI
   imports: [
     TenancyDatabaseModule,
     PdfTemplatesModule,
+    PdfModule,
     AutoIncrementOrdersModule,
     ChromiumlyTenancyModule,
     BranchesModule,

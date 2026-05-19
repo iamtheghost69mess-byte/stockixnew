@@ -21,6 +21,7 @@ import { BranchesModule } from '../Branches/Branches.module';
 import { WarehousesModule } from '../Warehouses/Warehouses.module';
 import { SaleReceiptIncrement } from './commands/SaleReceiptIncrement.service';
 import { PdfTemplatesModule } from '../PdfTemplate/PdfTemplates.module';
+import { PdfModule } from '../Pdf/Pdf.module';
 import { AutoIncrementOrdersModule } from '../AutoIncrementOrders/AutoIncrementOrders.module';
 import { SaleReceiptsController } from './SaleReceipts.controller';
 import { SaleReceiptGLEntriesSubscriber } from './subscribers/SaleReceiptGLEntriesSubscriber';
@@ -56,6 +57,7 @@ import { ValidateBulkDeleteSaleReceiptsService } from './ValidateBulkDeleteSaleR
     BranchesModule,
     WarehousesModule,
     PdfTemplatesModule,
+    PdfModule,
     AutoIncrementOrdersModule,
     LedgerModule,
     AccountsModule,

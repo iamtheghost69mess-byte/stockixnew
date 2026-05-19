@@ -36,6 +36,7 @@ import { ChromiumlyTenancyModule } from '../ChromiumlyTenancy/ChromiumlyTenancy.
 import { TemplateInjectableModule } from '../TemplateInjectable/TemplateInjectable.module';
 import { SaleEstimatePdfTemplate } from '../SaleInvoices/queries/SaleEstimatePdfTemplate.service';
 import { PdfTemplatesModule } from '../PdfTemplate/PdfTemplates.module';
+import { PdfModule } from '../Pdf/Pdf.module';
 import { SendSaleEstimateMailQueue } from './types/SaleEstimates.types';
 import { SaleEstimatesExportable } from './SaleEstimatesExportable';
 import { SaleEstimatesImportable } from './SaleEstimatesImportable';
@@ -55,6 +56,7 @@ import { SendSaleEstimateMailProcess } from './processes/SendSaleEstimateMail.pr
     ChromiumlyTenancyModule,
     TemplateInjectableModule,
     PdfTemplatesModule,
+    PdfModule,
     BullModule.registerQueue({ name: SendSaleEstimateMailQueue }),
     BullBoardModule.forFeature({
       name: SendSaleEstimateMailQueue,

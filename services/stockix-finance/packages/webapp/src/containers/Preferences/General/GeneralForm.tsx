@@ -1,9 +1,10 @@
 // @ts-nocheck
 import React from 'react';
+import intl from 'react-intl-universal';
 import styled from 'styled-components';
 import classNames from 'classnames';
 import { Form, useFormikContext } from 'formik';
-import { Button, FormGroup, Intent } from '@blueprintjs/core';
+import { Button, FormGroup, Intent, MenuItem } from '@blueprintjs/core';
 import { TimezonePicker, getTimezoneMetadata } from '@blueprintjs/timezone';
 import { ErrorMessage } from 'formik';
 import { useHistory } from 'react-router-dom';
@@ -27,6 +28,7 @@ import { useGeneralFormContext } from './GeneralFormProvider';
 
 import { shouldBaseCurrencyUpdate } from './utils';
 import { SelectButton } from '@/components/Forms/Select';
+import { FMultiSelect } from '@/components/Forms/BlueprintFormik';
 
 const Countries = getAllCountries();
 /**
@@ -34,14 +36,25 @@ const Countries = getAllCountries();
  */
 export default function PreferencesGeneralForm({ isSubmitting }) {
   const history = useHistory();
+  const { values, setFieldValue } = useFormikContext();
 
   const FiscalYear = getFiscalYear();
   const Languages = getLanguages();
   const Currencies = getAllCurrenciesOptions();
 
-  const { dateFormats, baseCurrencyMutateAbility } = useGeneralFormContext();
+  const { dateFormats, baseCurrencyMutateAbility, currencies } =
+    useGeneralFormContext();
+  const nonBaseCurrencies = (Array.isArray(currencies) ? currencies : []).filter(
+    (c) => !c.is_base_currency,
+  );
 
   const baseCurrencyDisabled = baseCurrencyMutateAbility.length > 0;
+
+  React.useEffect(() => {
+    if (!Array.isArray(values.display_currencies)) {
+      setFieldValue('display_currencies', []);
+    }
+  }, [values.display_currencies, setFieldValue]);
 
   // Handle close click.
   const handleCloseClick = () => {
@@ -173,6 +186,41 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
         />
       </FFormGroup>
 
+      {/* ----------  Secondary currency ----------  */}
+      <FFormGroup
+        name={'secondary_currency'}
+        label={<T id={'secondary_currency'} />}
+        inline={true}
+        helperText={<T id={'secondary_currency_helper'} />}
+      >
+        <SecondaryCurrencyRow>
+          <SecondaryCurrencySelectWrap>
+            <FSelect
+              name={'secondary_currency'}
+              items={nonBaseCurrencies}
+              valueAccessor={(item) => item?.currency_code}
+              labelAccessor={(item) => item?.currency_code}
+              textAccessor={(item) =>
+                item ? `${item.currency_name} (${item.currency_code})` : ''
+              }
+              placeholder={<T id={'select_secondary_currency'} />}
+              popoverProps={{ minimal: true }}
+              filterable={true}
+              disabled={!nonBaseCurrencies.length}
+            />
+          </SecondaryCurrencySelectWrap>
+          {values.secondary_currency ? (
+            <Button
+              minimal
+              small
+              icon="cross"
+              onClick={() => setFieldValue('secondary_currency', '')}
+              title={intl.get('clear')}
+            />
+          ) : null}
+        </SecondaryCurrencyRow>
+      </FFormGroup>
+
       {/* --------- Fiscal Year ----------- */}
       <FFormGroup
         name={'fiscal_year'}
@@ -235,6 +283,45 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
         />
       </FFormGroup>
 
+      {/* ---------- Display Currencies ---------- */}
+      {nonBaseCurrencies.length > 0 &&
+        Array.isArray(values.display_currencies) && (
+          <FFormGroup
+            name={'display_currencies'}
+            label={<T id={'display_currencies'} />}
+            inline={true}
+            helperText={<T id={'display_currencies_helper'} />}
+            fastField={false}
+          >
+            <FMultiSelect
+              name={'display_currencies'}
+              items={nonBaseCurrencies}
+              valueAccessor={(item) => item.currency_code}
+              labelAccessor={(item) => item.currency_code}
+              tagRenderer={(item) => item.currency_code}
+              itemRenderer={(item, { handleClick, modifiers }, { isSelected }) => (
+                <MenuItem
+                  key={item.currency_code}
+                  active={modifiers.active}
+                  icon={isSelected ? 'tick' : 'blank'}
+                  text={item.currency_name}
+                  label={item.currency_code}
+                  onClick={handleClick}
+                />
+              )}
+              itemPredicate={(query, item) => {
+                const q = query.toLowerCase();
+                return (
+                  item.currency_code.toLowerCase().includes(q) ||
+                  item.currency_name.toLowerCase().includes(q)
+                );
+              }}
+              popoverProps={{ minimal: true }}
+              placeholder={<T id={'select_display_currencies'} />}
+            />
+          </FFormGroup>
+        )}
+
       <CardFooterActions>
         <Button loading={isSubmitting} intent={Intent.PRIMARY} type="submit">
           <T id={'save'} />
@@ -246,6 +333,16 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
     </Form>
   );
 }
+
+const SecondaryCurrencyRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const SecondaryCurrencySelectWrap = styled.div`
+  flex: 1;
+`;
 
 const CardFooterActions = styled.div`
   --x-color-border: #e0e7ea;

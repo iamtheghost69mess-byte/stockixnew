@@ -1,15 +1,35 @@
 import * as momentTz from 'moment-timezone';
 import {
+  IsArray,
   IsHexColor,
   IsIn,
   IsISO31661Alpha2,
   IsISO4217CurrencyCode,
   IsOptional,
   IsString,
+  Validate,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
 import { MONTHS } from '../Organization/constants';
 import { ACCEPTED_LOCALES, DATE_FORMATS } from '../Organization.constants';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+@ValidatorConstraint({ name: 'secondaryCurrencyNotBase', async: false })
+class SecondaryCurrencyNotBaseConstraint implements ValidatorConstraintInterface {
+  validate(secondaryCurrency: string, args: ValidationArguments) {
+    if (!secondaryCurrency) {
+      return true;
+    }
+    const obj = args.object as { baseCurrency?: string };
+    return !obj.baseCurrency || secondaryCurrency !== obj.baseCurrency;
+  }
+
+  defaultMessage() {
+    return 'Secondary currency must differ from the base currency.';
+  }
+}
 
 export class BuildOrganizationDto {
   @IsString()
@@ -69,6 +89,26 @@ export class BuildOrganizationDto {
     example: 'MM/DD/YYYY',
   })
   dateFormat?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsISO4217CurrencyCode({ each: true })
+  @ApiPropertyOptional({
+    description: 'Additional currencies to display alongside the base currency',
+    example: ['EUR', 'GBP'],
+    type: [String],
+  })
+  displayCurrencies?: string[];
+
+  @IsOptional()
+  @IsISO4217CurrencyCode()
+  @Validate(SecondaryCurrencyNotBaseConstraint)
+  @ApiPropertyOptional({
+    description: 'Optional secondary currency for dual-currency display',
+    example: 'EUR',
+    nullable: true,
+  })
+  secondaryCurrency?: string | null;
 }
 
 export class UpdateOrganizationDto {
@@ -180,4 +220,24 @@ export class UpdateOrganizationDto {
     example: '12-3456789',
   })
   taxNumber?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsISO4217CurrencyCode({ each: true })
+  @ApiPropertyOptional({
+    description: 'Additional currencies to display alongside the base currency',
+    example: ['EUR', 'GBP'],
+    type: [String],
+  })
+  displayCurrencies?: string[];
+
+  @IsOptional()
+  @IsISO4217CurrencyCode()
+  @Validate(SecondaryCurrencyNotBaseConstraint)
+  @ApiPropertyOptional({
+    description: 'Optional secondary currency for dual-currency display',
+    example: 'EUR',
+    nullable: true,
+  })
+  secondaryCurrency?: string | null;
 }
