@@ -53,15 +53,17 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
 
   async registerBootstrapAdmin(params: {
     internalBaseUrl: string;
+    internalApiSecret: string;
     firstName: string;
     lastName: string;
     email: string;
     password: string;
+    organizationNumber?: string;
     log: (m: string) => void;
     requestId?: string;
     trace?: ProvisionTracer;
-  }): Promise<void> {
-    const url = `${financeApiBase(params.internalBaseUrl)}/api/auth/register`;
+  }): Promise<{ tenantId: number; organizationId: string }> {
+    const url = `${financeApiBase(params.internalBaseUrl)}/api/internal/provision-user`;
     const maxAttempts = 3;
     const requestTimeoutMs = 10_000;
     let lastFailure = "unknown";
@@ -80,6 +82,7 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-internal-secret": params.internalApiSecret,
             ...(params.requestId
               ? {
                   "x-request-id": params.requestId,
@@ -92,19 +95,40 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
             last_name: params.lastName,
             email: params.email,
             password: params.password,
+            role: "admin",
+            ...(params.organizationNumber
+              ? { organizationNumber: params.organizationNumber }
+              : {}),
           }),
           signal: AbortSignal.timeout(requestTimeoutMs),
         });
 
         if (res.ok) {
-          await params.trace?.event("bootstrap", "Bootstrap registration succeeded", {
-            meta: {
-              url,
-              attempt,
-              elapsedMs: Date.now() - attemptStartedAt,
-            },
-          });
-          return;
+          const text = await res.text();
+          let json: Record<string, unknown> = {};
+          try {
+            json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+          } catch {
+            json = {};
+          }
+          const tenantId = Number(json.tenantId ?? json.tenant_id);
+          const organizationId = String(
+            json.organizationId ?? json.organization_id ?? "",
+          );
+          if (!tenantId || !organizationId) {
+            lastFailure = "provision_user_missing_tenant_or_organization_id";
+          } else {
+            await params.trace?.event("bootstrap", "Bootstrap registration succeeded", {
+              meta: {
+                url,
+                attempt,
+                elapsedMs: Date.now() - attemptStartedAt,
+                tenantId,
+                organizationId,
+              },
+            });
+            return { tenantId, organizationId };
+          }
         }
 
         const text = await res.text();

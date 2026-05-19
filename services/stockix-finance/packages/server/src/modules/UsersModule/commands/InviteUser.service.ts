@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import * as uniqid from 'uniqid';
 import * as moment from 'moment';
 import {
@@ -16,6 +16,8 @@ import { Role } from '@/modules/Roles/models/Role.model';
 import { ModelObject } from 'objection';
 import { SendInviteUserDto } from '../dtos/InviteUser.dto';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { TenantLicense } from '@/modules/System/models/TenantLicense';
+import UserTenant from '@/modules/System/models/UserTenant';
 
 @Injectable()
 export class InviteTenantUserService {
@@ -28,6 +30,12 @@ export class InviteTenantUserService {
 
     @Inject(Role.name)
     private readonly roleModel: TenantModelProxy<typeof Role>,
+
+    @Inject(TenantLicense.name)
+    private readonly tenantLicenseModel: typeof TenantLicense,
+
+    @Inject(UserTenant.name)
+    private readonly userTenantModel: typeof UserTenant,
   ) {}
 
   /**
@@ -44,6 +52,8 @@ export class InviteTenantUserService {
 
     // Validates the given email not exists on the storage.
     await this.validateUserEmailNotExists(sendInviteDTO.email);
+
+    await this.validateUserLimitNotReached();
 
     // Generates a new invite token.
     const inviteToken = uniqid();
@@ -147,6 +157,33 @@ export class InviteTenantUserService {
    * @param {string} email
    * @throws {ServiceError}
    */
+  private async validateUserLimitNotReached(): Promise<void> {
+    const tenant = await this.tenancyContext.getTenant();
+    const licenseRow = await this.tenantLicenseModel
+      .query()
+      .findOne({ tenantId: tenant.id });
+
+    if (!licenseRow) {
+      return;
+    }
+
+    const countRow = await this.userTenantModel
+      .query()
+      .where({ tenantId: tenant.id })
+      .count('id as count')
+      .first();
+
+    const userCount = Number((countRow as { count?: number })?.count ?? 0);
+    if (userCount >= licenseRow.maxUsers) {
+      throw new ServiceError(
+        'USER_LIMIT_REACHED',
+        'User limit reached for current plan',
+        undefined,
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
+  }
+
   private async validateUserEmailNotExists(email: string): Promise<void> {
     const foundUser = await this.tenantUserModel()
       .query()

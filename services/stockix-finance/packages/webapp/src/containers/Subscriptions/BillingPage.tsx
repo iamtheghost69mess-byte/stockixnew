@@ -22,6 +22,14 @@ function BillingPageRoot({
     changePreferencesPageTitle('Billing');
   }, [changePreferencesPageTitle]);
 
+  const billingEnabled =
+    dashboardMeta?.billingEnabled === true ||
+    dashboardMeta?.billing_enabled === true;
+
+  if (!billingEnabled) {
+    return <Redirect to={{ pathname: '/' }} />;
+  }
+
   // In case the edition is not Stockix Cloud, redirect to the homepage.
   if (!dashboardMeta.is_bigcapital_cloud) {
     return <Redirect to={{ pathname: '/' }} />;

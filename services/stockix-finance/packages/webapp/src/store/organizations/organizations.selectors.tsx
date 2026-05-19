@@ -31,7 +31,9 @@ export const isOrganizationSubscribedFactory = () =>
 
 export const isOrganizationCongratsFactory = () =>
   createSelector(organizationSelector, (organization) => {
-    return !!organization?.is_congrats;
+    return !!(
+      organization?.setup_completed_at ?? organization?.setupCompletedAt
+    );
   });
 
 export const isOrganizationBuildRunningFactory = () =>

@@ -5,6 +5,7 @@ import { PlanSubscription } from '@/modules/Subscription/models/PlanSubscription
 
 export class TenantModel extends BaseModel {
   public readonly organizationId: string;
+  public readonly parentTenantId?: number | null;
   public readonly initializedAt: string;
   public readonly seededAt: string;
   public readonly builtAt: string;

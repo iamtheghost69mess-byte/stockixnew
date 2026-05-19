@@ -6,18 +6,18 @@ export const withSetupWizard = (mapState) => {
     const {
       isOrganizationSetupCompleted,
       isOrganizationReady,
-      isSubscriptionActive,
       isOrganizationBuildRunning
     } = props;
 
     const condits = {
-      isCongratsStep: isOrganizationSetupCompleted,
-      isSubscriptionStep: !isSubscriptionActive,
       isInitializingStep: isOrganizationBuildRunning,
       isOrganizationStep: !isOrganizationReady && !isOrganizationBuildRunning,
+      isCongratsStep:
+        isOrganizationReady &&
+        !isOrganizationSetupCompleted &&
+        !isOrganizationBuildRunning,
     };
     const scenarios = [
-      { condition: condits.isSubscriptionStep, step: 'subscription' },
       { condition: condits.isOrganizationStep, step: 'organization' },
       { condition: condits.isInitializingStep, step: 'initializing' },
       { condition: condits.isCongratsStep, step: 'congrats' },

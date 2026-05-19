@@ -97,6 +97,7 @@ import { ViewsModule } from '../Views/Views.module';
 import { CurrenciesModule } from '../Currencies/Currencies.module';
 import { MiscellaneousModule } from '../Miscellaneous/Miscellaneous.module';
 import { UsersModule } from '../UsersModule/Users.module';
+import { LicenseModule } from '../License/License.module';
 import { ContactsModule } from '../Contacts/Contacts.module';
 import { BankingPlaidModule } from '../BankingPlaid/BankingPlaid.module';
 import { BankingCategorizeModule } from '../BankingCategorize/BankingCategorize.module';
@@ -193,6 +194,7 @@ import { AppThrottleModule } from './AppThrottle.module';
     TenantModelsInitializeModule,
     AuthModule,
     InternalModule,
+    LicenseModule,
     TenancyModule,
     ChromiumlyTenancyModule,
     TransformerModule,
@@ -298,10 +300,16 @@ import { AppThrottleModule } from './AppThrottle.module';
     AppService,
   ],
 })
+import { LicenseGuardMiddleware } from '../License/LicenseGuard.middleware';
+
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(LoggerMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+
+    consumer
+      .apply(LicenseGuardMiddleware)
       .forRoutes({ path: '*', method: RequestMethod.ALL });
   }
 }

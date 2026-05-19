@@ -14,6 +14,9 @@ import '@/style/pages/Dashboard/Dashboard.scss';
 const SetupWizardPage = lazy(
   () => import('@/containers/Setup/WizardSetupPage'),
 );
+const SetupCompleteProfile = lazy(
+  () => import('@/containers/Setup/SetupCompleteProfile'),
+);
 /**
  * Dashboard inner private pages.
  */
@@ -24,6 +27,11 @@ export default function DashboardPrivatePages() {
         <PrivatePagesProvider>
           <Switch>
             <Route path={'/setup'} children={<SetupWizardPage />} />
+            <Route path={'/setup/complete'}>
+              <EnsureOrganizationIsReady requireSetupCompleted={false}>
+                <SetupCompleteProfile />
+              </EnsureOrganizationIsReady>
+            </Route>
             <Route path="/">
               <EnsureOrganizationIsReady>
                 <Dashboard />

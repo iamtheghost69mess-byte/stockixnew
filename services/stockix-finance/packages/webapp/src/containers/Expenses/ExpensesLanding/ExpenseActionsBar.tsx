@@ -21,6 +21,7 @@ import {
   AdvancedFilterPopover,
   FormattedMessage as T,
 } from '@/components';
+import { LicenseGatedButton } from '@/components/License/LicenseGatedButton';
 
 import { ExpenseAction, AbilitySubject } from '@/constants/abilityOption';
 import { DialogsName } from '@/constants/dialogs';
@@ -140,7 +141,7 @@ function ExpensesActionsBar({
         />
         <NavbarDivider />
         <Can I={ExpenseAction.Create} a={AbilitySubject.Expense}>
-          <Button
+          <LicenseGatedButton
             className={Classes.MINIMAL}
             icon={<Icon icon="plus" />}
             text={<T id={'new_expense'} />}

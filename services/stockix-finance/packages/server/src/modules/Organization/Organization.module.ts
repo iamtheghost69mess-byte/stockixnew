@@ -14,7 +14,12 @@ import { TenantDBManagerModule } from '../TenantDBManager/TenantDBManager.module
 import { OrganizationBaseCurrencyLocking } from './Organization/OrganizationBaseCurrencyLocking.service';
 import { SyncSystemUserToTenantService } from './commands/SyncSystemUserToTenant.service';
 import { SyncSystemUserToTenantSubscriber } from './subscribers/SyncSystemUserToTenant.subscriber';
+import { SeedTenantLicenseOnBuiltSubscriber } from './subscribers/SeedTenantLicenseOnBuilt.subscriber';
 import { GetBuildOrganizationBuildJob } from './commands/GetBuildOrganizationJob.service';
+import { CompleteOrganizationSetupService } from './commands/CompleteOrganizationSetup.service';
+import { GetAllOrganizationsService } from './GetAllOrganizations.service';
+import { CopyParentTenantSettingsService } from './CopyParentTenantSettings.service';
+import { TenantKnexFactory } from '@/modules/Tenancy/TenantKnexFactory';
 import { AttachmentsModule } from '../Attachments/Attachment.module';
 import { TransformerModule } from '../Transformer/Transformer.module';
 
@@ -29,7 +34,12 @@ import { TransformerModule } from '../Transformer/Transformer.module';
     OrganizationBaseCurrencyLocking,
     SyncSystemUserToTenantService,
     SyncSystemUserToTenantSubscriber,
+    SeedTenantLicenseOnBuiltSubscriber,
     GetBuildOrganizationBuildJob,
+    CompleteOrganizationSetupService,
+    GetAllOrganizationsService,
+    CopyParentTenantSettingsService,
+    TenantKnexFactory,
   ],
   imports: [
     BullModule.registerQueue({ name: OrganizationBuildQueue }),

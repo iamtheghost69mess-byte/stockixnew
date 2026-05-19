@@ -1,7 +1,7 @@
 // @ts-nocheck
 import intl from 'react-intl-universal';
 import { Formik } from 'formik';
-import { Link } from 'react-router-dom';
+import { Link, Redirect } from 'react-router-dom';
 import { Intent } from '@blueprintjs/core';
 
 import { AppToaster, FormattedMessage as T } from '@/components';
@@ -19,6 +19,7 @@ import {
   AuthFooterLink,
   AuthInsiderCard,
 } from './_components';
+import { useAuthMetaBoot } from './AuthMetaBoot';
 
 const initialValues = {
   first_name: '',
@@ -31,8 +32,13 @@ const initialValues = {
  * Register form.
  */
 export default function RegisterUserForm() {
+  const { signupDisabled } = useAuthMetaBoot();
   const { mutateAsync: authLoginMutate } = useAuthLogin();
   const { mutateAsync: authRegisterMutate } = useAuthRegister();
+
+  if (signupDisabled) {
+    return <Redirect to="/auth/login" />;
+  }
 
   const handleSubmit = (values, { setSubmitting, setErrors }) => {
     authRegisterMutate(values)

@@ -5,6 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import { TenancyContext } from '../Tenancy/TenancyContext.service';
 import { IFeatureAllItem } from '@/common/types/Features';
 import { TenantUser } from '../Tenancy/TenancyModels/models/TenantUser.model';
+import { LicenseService } from '../License/License.service';
+import { LicenseStatus } from '../License/License.types';
 
 interface IRoleAbility {
   subject: string;
@@ -15,6 +17,10 @@ interface IDashboardBootMeta {
   abilities: IRoleAbility[];
   features: IFeatureAllItem[];
   isBigcapitalCloud: boolean;
+  licenseStatus: LicenseStatus | null;
+  licenseExpiresAt: string | null;
+  licenseGracePeriodEndsAt: string | null;
+  billingEnabled: boolean;
 }
 
 export class DashboardService {
@@ -22,6 +28,7 @@ export class DashboardService {
     private readonly featuresManager: FeaturesManager,
     private readonly configService: ConfigService,
     private readonly tenancyContext: TenancyContext,
+    private readonly licenseService: LicenseService,
 
     @Inject(TenantUser.name)
     private readonly tenantUserModel: TenantModelProxy<typeof TenantUser>,
@@ -37,10 +44,16 @@ export class DashboardService {
     // Retrieves all organization features.
     const features = await this.featuresManager.all();
 
+    const tenant = await this.tenancyContext.getTenant();
+    const licenseMeta = await this.licenseService.getLicenseStatusMeta(tenant.id);
+    const billingEnabled = process.env.BILLING_ENABLED === 'true';
+
     return {
       abilities,
       features,
       isBigcapitalCloud: this.configService.get('hostedOnBigcapitalCloud'),
+      ...licenseMeta,
+      billingEnabled,
     };
   };
 

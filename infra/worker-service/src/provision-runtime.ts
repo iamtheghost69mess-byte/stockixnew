@@ -4,7 +4,7 @@ import { createCipheriv, randomBytes } from "node:crypto";
 import { execa } from "execa";
 
 import { apiConfig } from "@repo/config";
-import { allocateTenantPort } from "@repo/db";
+import { allocateOrganizationNumber, allocateTenantPort } from "@repo/db";
 import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { asc, eq } from "drizzle-orm";
@@ -21,6 +21,7 @@ import {
   buildTenantEnvMap,
   writeTenantEnvFileAtomic,
 } from "../domain/provisioning/tenant-env.js";
+import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 
@@ -126,7 +127,8 @@ export async function executeProvisionRuntime(
   const requestId = correlationId;
   let port: number | undefined;
   let oneTimeAdminPassword: string | undefined;
-  let financeOrganizationId: string | undefined;
+    let financeOrganizationId: string | undefined;
+    let financeTenantId: number | undefined;
   let composeCtx:
     | { composeFile: string; project: string; envPath: string; composeEnv: Record<string, string> }
     | null = null;
@@ -262,6 +264,8 @@ export async function executeProvisionRuntime(
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
     }
+    const organizationNumber = await allocateOrganizationNumber(db);
+
     await db.transaction(async (tx) => {
       const allocated = await allocateTenantPort(tx, maxPort);
       port = allocated;
@@ -273,6 +277,7 @@ export async function executeProvisionRuntime(
         adminFirstName: input.adminFirstName,
         adminLastName: input.adminLastName,
         status: "provisioning",
+        organizationNumber,
       }).returning({ id: tenants.id });
       tenantId = tRow!.id;
       const [dRow] = await tx.insert(tenantDeployments).values({
@@ -452,19 +457,29 @@ export async function executeProvisionRuntime(
       await trace.event("progress", "Starting bootstrap admin registration", {
         meta: { operationKey: "tenant.bootstrap_admin", elapsedMs: elapsedMs(), adminEmail: input.adminEmail },
       });
-      await finance.registerBootstrapAdmin({
+      const internalApiSecret = apiConfig.internalApiSecret;
+      if (!internalApiSecret) {
+        throw new Error(
+          "INTERNAL_API_SECRET is required for bootstrap admin provisioning",
+        );
+      }
+      const bootstrapResult = await finance.registerBootstrapAdmin({
         internalBaseUrl: internalUrl,
+        internalApiSecret,
         firstName: input.adminFirstName,
         lastName: input.adminLastName,
         email: input.adminEmail,
         password: oneTimeAdminPassword,
+        organizationNumber,
         log,
         requestId,
         trace,
       });
+      financeTenantId = bootstrapResult.tenantId;
       await markOp("tenant.bootstrap_admin", "Tenant bootstrap admin registered", {
         internalBaseUrl: internalUrl,
         adminEmail: input.adminEmail,
+        financeTenantId: bootstrapResult.tenantId,
         elapsedMs: elapsedMs(),
       });
       log("[provision] step done: tenant.bootstrap_admin");
@@ -681,6 +696,14 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
       });
     }
+    if (financeTenantId && internalUrl) {
+      await syncFinanceLicense(
+        internalUrl,
+        { tenantId: financeTenantId, status: "active", isPerpetual: true },
+        log,
+      );
+    }
+
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
     return {
       ok: true,
@@ -691,6 +714,7 @@ export async function executeProvisionRuntime(
       baseUrl,
       oneTimeAdminPassword: oneTimeAdminPassword!,
       financeOrganizationId,
+      financeTenantId,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

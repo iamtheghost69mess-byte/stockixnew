@@ -15,11 +15,13 @@ import { setCookie, compose, transfromToSnakeCase } from '@/utils';
 // Initial values.
 const defaultValues = {
   name: '',
+  industry: '',
   location: '',
   baseCurrency: '',
   language: 'en',
   fiscalYear: '',
   timezone: '',
+  dateFormat: 'DD MMM YYYY',
 };
 
 /**

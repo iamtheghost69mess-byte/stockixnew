@@ -4,12 +4,20 @@ import { SETTINGS_PROVIDER } from '../Settings/Settings.types';
 import { SettingsStore } from '../Settings/SettingsStore';
 import { IFeatureAllItem } from '@/common/types/Features';
 import { FeaturesConfigure } from './FeaturesConfigure';
+import { LicenseService } from '../License/License.service';
+import { ClsService } from 'nestjs-cls';
+import { TenantModel } from '../System/models/TenantModel';
 
 @Injectable()
 export class FeaturesSettingsDriver {
   constructor(
     private readonly configure: FeaturesConfigureManager,
     private readonly featuresConfigure: FeaturesConfigure,
+    private readonly licenseService: LicenseService,
+    private readonly clsService: ClsService,
+
+    @Inject(TenantModel.name)
+    private readonly tenantModel: typeof TenantModel,
 
     @Inject(SETTINGS_PROVIDER)
     private readonly settings: () => SettingsStore,
@@ -49,7 +57,39 @@ export class FeaturesSettingsDriver {
       feature,
       'defaultValue',
     );
-    return settingsStore.get({ group: 'features', key: feature }, defaultValue);
+    const settingsValue = settingsStore.get(
+      { group: 'features', key: feature },
+      defaultValue,
+    );
+
+    try {
+      const organizationId = this.clsService.get('organizationId') as
+        | string
+        | undefined;
+      if (!organizationId) {
+        return settingsValue;
+      }
+
+      const tenant = await this.tenantModel
+        .query()
+        .findOne({ organizationId });
+      if (!tenant) {
+        return settingsValue;
+      }
+
+      const license = await this.licenseService.findByTenantId(tenant.id);
+      if (!license?.featureFlags || typeof license.featureFlags !== 'object') {
+        return settingsValue;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(license.featureFlags, feature)) {
+        return Boolean(license.featureFlags[feature]);
+      }
+    } catch {
+      return settingsValue;
+    }
+
+    return settingsValue;
   }
 
   /**

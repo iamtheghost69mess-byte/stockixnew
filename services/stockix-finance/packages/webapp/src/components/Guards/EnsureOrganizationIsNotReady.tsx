@@ -16,7 +16,7 @@ function EnsureOrganizationIsNotReady({
   isOrganizationReady,
   isOrganizationSetupCompleted
 }) {
-  return (isOrganizationReady && !isOrganizationSetupCompleted) ? (
+  return isOrganizationReady && isOrganizationSetupCompleted ? (
     <Redirect to={{ pathname: '/' }} />
   ) : children;
 }

@@ -5,7 +5,7 @@ import { ServiceError } from '@/modules/Items/ServiceError';
 import { SystemUser } from '@/modules/System/models/SystemUser';
 import UserTenant from '@/modules/System/models/UserTenant';
 import { TenantsManagerService } from '@/modules/TenantDBManager/TenantsManager';
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { isEmpty } from 'class-validator';
@@ -172,6 +172,8 @@ export class AuthSignupService {
         throw new ServiceError(
           ERRORS.SIGNUP_RESTRICTED_NOT_ALLOWED,
           'The given email address format is not allowed to signup.',
+          undefined,
+          HttpStatus.FORBIDDEN,
         );
       }
       // Throw error if the signup is disabled with no exceptions.
@@ -179,6 +181,8 @@ export class AuthSignupService {
       throw new ServiceError(
         ERRORS.SIGNUP_RESTRICTED,
         'The sign-up is disabled',
+        undefined,
+        HttpStatus.FORBIDDEN,
       );
     }
   }

@@ -29,14 +29,14 @@ export const fetchOrganizations = () => (dispatch) =>
   });
 
 export const setOrganizationSetupCompleted =
-  (congrats) => (dispatch, getState) => {
+  (setupCompletedAt) => (dispatch, getState) => {
     const tenantId = getState().authentication.tenantId;
 
     dispatch({
-      type: t.SET_ORGANIZATION_CONGRATS,
+      type: t.SET_ORGANIZATION_SETUP_COMPLETED,
       payload: {
         tenantId,
-        congrats,
+        setupCompletedAt: setupCompletedAt ?? new Date().toISOString(),
       },
     });
   };

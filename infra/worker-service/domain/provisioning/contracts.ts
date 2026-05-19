@@ -39,14 +39,16 @@ export interface IStockixFinanceBootstrap {
 
   registerBootstrapAdmin(params: {
     internalBaseUrl: string;
+    internalApiSecret: string;
     firstName: string;
     lastName: string;
     email: string;
     password: string;
+    organizationNumber?: string;
     log: (m: string) => void;
     requestId?: string;
     trace?: ProvisionTracer;
-  }): Promise<void>;
+  }): Promise<{ tenantId: number; organizationId: string }>;
 
   fetchOrgSettings(params: {
     mainInternalBaseUrl: string;

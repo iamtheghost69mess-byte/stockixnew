@@ -27,6 +27,7 @@ export type ProvisionResult =
       baseUrl: string;
       oneTimeAdminPassword: string;
       financeOrganizationId?: string;
+      financeTenantId?: number;
     }
   | { ok: false; message: string; cause?: string };
 

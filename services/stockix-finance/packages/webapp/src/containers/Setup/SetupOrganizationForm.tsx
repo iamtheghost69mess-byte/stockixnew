@@ -24,6 +24,18 @@ import { getAllCurrenciesOptions } from '@/constants/currencies';
 
 const countries = getAllCountries();
 
+const DATE_FORMAT_OPTIONS = [
+  { key: 'MM/DD/YY', label: 'MM/DD/YY' },
+  { key: 'DD/MM/YY', label: 'DD/MM/YY' },
+  { key: 'YY/MM/DD', label: 'YY/MM/DD' },
+  { key: 'MM/DD/yyyy', label: 'MM/DD/yyyy' },
+  { key: 'DD/MM/yyyy', label: 'DD/MM/yyyy' },
+  { key: 'yyyy/MM/DD', label: 'yyyy/MM/DD' },
+  { key: 'DD MMM YYYY', label: 'DD MMM YYYY' },
+  { key: 'DD MMMM YYYY', label: 'DD MMMM YYYY' },
+  { key: 'MMMM DD, YYYY', label: 'MMMM DD, YYYY' },
+];
+
 /**
  * Setup organization form.
  */
@@ -49,6 +61,15 @@ export default function SetupOrganizationForm({ isSubmitting, values }) {
         fastField
       >
         <FInputGroup name={'name'} large fastField />
+      </FFormGroup>
+
+      {/* ---------- Industry ---------- */}
+      <FFormGroup
+        name={'industry'}
+        label={<T id={'organization_industry'} />}
+        fastField
+      >
+        <FInputGroup name={'industry'} large fastField />
       </FFormGroup>
 
       {/* ---------- Location ---------- */}
@@ -106,6 +127,20 @@ export default function SetupOrganizationForm({ isSubmitting, values }) {
           </FFormGroup>
         </Col>
       </Row>
+
+      {/* ---------- Date format ---------- */}
+      <FFormGroup name={'dateFormat'} label={<T id={'date_format'} />} fastField>
+        <FSelect
+          name={'dateFormat'}
+          items={DATE_FORMAT_OPTIONS}
+          valueAccessor={'key'}
+          textAccessor={'label'}
+          placeholder={<T id={'select_date_format'} />}
+          popoverProps={{ minimal: true }}
+          buttonProps={{ large: true }}
+          fastField
+        />
+      </FFormGroup>
 
       {/* --------- Fiscal Year ----------- */}
       <FFormGroup

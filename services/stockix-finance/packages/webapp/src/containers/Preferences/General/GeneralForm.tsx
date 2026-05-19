@@ -42,7 +42,7 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
   const Languages = getLanguages();
   const Currencies = getAllCurrenciesOptions();
 
-  const { dateFormats, baseCurrencyMutateAbility, currencies } =
+  const { dateFormats, baseCurrencyMutateAbility, currencies, organization } =
     useGeneralFormContext();
   const nonBaseCurrencies = (Array.isArray(currencies) ? currencies : []).filter(
     (c) => !c.is_base_currency,
@@ -74,6 +74,18 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
       >
         <FInputGroup medium={'true'} name={'name'} fastField={true} />
       </FFormGroup>
+
+      {organization?.organizationNumber ? (
+        <FFormGroup
+          name={'organization_number_display'}
+          label={'Organization Number'}
+          inline={true}
+        >
+          <OrgNumberBadge>
+            <code>{organization.organizationNumber}</code>
+          </OrgNumberBadge>
+        </FFormGroup>
+      ) : null}
 
       {/* ---------- Organization Tax Number ----------  */}
       <FFormGroup
@@ -333,6 +345,18 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
     </Form>
   );
 }
+
+const OrgNumberBadge = styled.div`
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--x-color-surface-muted, #f0f3f5);
+  font-size: 13px;
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+`;
 
 const SecondaryCurrencyRow = styled.div`
   display: flex;

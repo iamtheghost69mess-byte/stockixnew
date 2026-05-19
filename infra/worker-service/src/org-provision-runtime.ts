@@ -34,14 +34,22 @@ function readString(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-function parseAuthSession(body: unknown): { accessToken: string; organizationId: string } | null {
+function parseAuthSession(
+  body: unknown,
+): { accessToken: string; organizationId: string; tenantId: number | null } | null {
   if (!isRecord(body)) return null;
   const accessToken =
     readString(body.accessToken) ?? readString(body.access_token) ?? readString(body.token);
   const organizationId =
     readString(body.organizationId) ?? readString(body.organization_id);
+  const tenantIdRaw = isRecord(body) ? (body.tenantId ?? body.tenant_id) : null;
+  const tenantId = Number(tenantIdRaw);
   if (!accessToken || !organizationId) return null;
-  return { accessToken, organizationId };
+  return {
+    accessToken,
+    organizationId,
+    tenantId: Number.isFinite(tenantId) && tenantId > 0 ? tenantId : null,
+  };
 }
 
 function parseSignupOrganizationId(body: unknown): string | null {
@@ -57,12 +65,14 @@ async function registerNewFinanceOrg(
     email: string;
     password: string;
     correlationId: string;
+    internalApiSecret: string;
   },
-): Promise<string> {
-  const res = await fetch(`${base}/api/auth/register`, {
+): Promise<{ organizationId: string; tenantId: number }> {
+  const res = await fetch(`${base}/api/internal/provision-user`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-internal-secret": params.internalApiSecret,
       "x-request-id": params.correlationId,
       "x-correlation-id": params.correlationId,
     },
@@ -71,6 +81,7 @@ async function registerNewFinanceOrg(
       last_name: params.lastName,
       email: params.email,
       password: params.password,
+      role: "admin",
     }),
     signal: AbortSignal.timeout(10_000),
   });
@@ -85,10 +96,13 @@ async function registerNewFinanceOrg(
     throw new Error(`register_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
   const organizationId = parseSignupOrganizationId(json);
-  if (!organizationId) {
-    throw new Error("register_missing_organization_id");
+  const tenantId = Number(
+    isRecord(json) ? (json.tenantId ?? json.tenant_id) : NaN,
+  );
+  if (!organizationId || !tenantId) {
+    throw new Error("register_missing_organization_or_tenant_id");
   }
-  return organizationId;
+  return { organizationId, tenantId };
 }
 
 async function signin(
@@ -96,7 +110,7 @@ async function signin(
   email: string,
   password: string,
   correlationId: string,
-): Promise<{ accessToken: string; organizationId: string }> {
+): Promise<{ accessToken: string; organizationId: string; tenantId: number | null }> {
   const res = await fetch(`${base}/api/auth/signin`, {
     method: "POST",
     headers: {
@@ -227,18 +241,29 @@ export async function executeOrgProvisionRuntime(
     if (assertNotCancelled) await assertNotCancelled();
   };
 
+  const internalApiSecret = apiConfig.internalApiSecret;
+  if (!internalApiSecret) {
+    throw new Error(
+      "INTERNAL_API_SECRET is required for org provisioning user creation",
+    );
+  }
+
   await check();
   log("[org-provision] Registering new Finance org on parent stack");
-  const newFinanceOrganizationId = await registerNewFinanceOrg(mainBase, {
+  const registered = await registerNewFinanceOrg(mainBase, {
     firstName: input.adminFirstName,
     lastName: input.adminLastName,
     email: input.adminEmail,
     password: adminPassword,
     correlationId,
+    internalApiSecret,
   });
 
   await check();
   log("[org-provision] Signing in and switching to new org");
+  const newFinanceOrganizationId = registered.organizationId;
+  const newFinanceTenantId = registered.tenantId;
+
   const signinSession = await signin(mainBase, input.adminEmail, adminPassword, correlationId);
   const buildSession = await switchTenant(
     mainBase,
@@ -294,4 +319,68 @@ export async function executeOrgProvisionRuntime(
 
   await check();
   await saveFinanceOrganizationId(input.organizationId, financeOrganizationId, log);
+
+  const parentFinanceTenantId =
+    signinSession.tenantId ??
+    (await resolveParentFinanceTenantId(
+      mainBase,
+      signinSession.organizationId,
+      correlationId,
+    ));
+
+  if (parentFinanceTenantId && apiConfig.internalApiSecret) {
+    try {
+      const copyUrl = `${mainBase}/api/internal/tenants/${newFinanceTenantId}/copy-from/${parentFinanceTenantId}`;
+      const copyRes = await fetch(copyUrl, {
+        method: "POST",
+        headers: {
+          "x-internal-secret": apiConfig.internalApiSecret,
+          "x-request-id": correlationId,
+        },
+        signal: AbortSignal.timeout(60_000),
+      });
+      const copyText = await copyRes.text();
+      log(
+        `[org-provision] COA copy ${copyRes.ok ? "ok" : "failed"}: ${copyText.slice(0, 200)}`,
+      );
+
+      const parentUrl = `${mainBase}/api/internal/tenants/${newFinanceTenantId}/set-parent`;
+      await fetch(parentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": apiConfig.internalApiSecret,
+        },
+        body: JSON.stringify({ parentTenantId: parentFinanceTenantId }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (err) {
+      log(
+        `[org-provision] COA copy error: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+}
+
+async function resolveParentFinanceTenantId(
+  mainBase: string,
+  organizationId: string,
+  correlationId: string,
+): Promise<number | null> {
+  // Parent tenant is the one used before switch-tenant during sign-in.
+  const signinRes = await fetch(`${mainBase}/api/organization/current`, {
+    headers: {
+      "organization-id": organizationId,
+      "x-request-id": correlationId,
+    },
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null);
+
+  if (!signinRes?.ok) return 1;
+
+  const body = (await signinRes.json().catch(() => ({}))) as Record<string, unknown>;
+  const tenantId = Number(body.id ?? body.tenant_id);
+  return Number.isFinite(tenantId) && tenantId > 0 ? tenantId : 1;
 }

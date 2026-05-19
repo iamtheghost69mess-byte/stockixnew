@@ -17,6 +17,10 @@ export class GetAuthMetaService {
   public async getAuthMeta(): Promise<IAuthGetMetaPOJO> {
     return {
       signupDisabled: this.configService.get('signupRestrictions.disabled'),
+      licenseStatus: null,
+      licenseExpiresAt: null,
+      licenseGracePeriodEndsAt: null,
+      billingEnabled: process.env.BILLING_ENABLED === 'true',
     };
   }
 }

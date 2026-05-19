@@ -16,6 +16,8 @@ export class GetCurrentOrganizationTransformer extends Transformer {
     return {
       ...tenant,
       metadata: transformedMetadata,
+      setupCompletedAt: tenant.metadata?.setupCompletedAt ?? null,
+      organizationNumber: tenant.metadata?.organizationNumber ?? null,
     };
   };
 }

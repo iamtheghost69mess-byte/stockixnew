@@ -383,6 +383,16 @@ Unique organization number from owner dashboard; stored in finance; visible read
 7. **Multi-org UX:** Single finance deployment per Stockix customer with switch-tenant, or separate finance stack per sub-org? (Current: same stack, multiple tenants — `org-provision-runtime.ts` L231–238.)
 8. **LemonSqueezy:** Keep Bigcapital native billing for self-serve, or fully replace with Stockix `licenses` table only?
 
+Answers
+1. Stockix pushes to finance via internal URL on every license event.
+2. Suspended → immediate 402 lockout on all requests. Expired → read-only (GET only) with 30-day grace period, then lockout.
+3. Force a condensed 1-step "complete your profile" wizard on first login collecting only missing fields (tax number, logo, address). Set setup_completed_at in DB when done.
+4. Full duplicate of parent tenant DB accounts and tax rates copied at sub-org creation time via post-build worker job.
+5. Human-readable ORG-00042 — auto-incremented sequential with prefix, stored in tenants_metadata.
+6. All user creation through internal API only. Remove SIGNUP_ALLOWED_EMAILS entirely. Block /auth/register completely — no public register ever.
+7. Single finance Docker stack per Stockix customer with switch-tenant for sub-orgs. Keep current architecture.
+8. Remove LemonSqueezy entirely. Stockix licenses table is the single source of truth. BILLING_ENABLED=false in all tenant .env files.
+
 ---
 
 End of file.

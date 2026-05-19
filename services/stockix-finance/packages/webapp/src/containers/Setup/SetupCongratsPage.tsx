@@ -3,24 +3,25 @@ import React from 'react';
 import { Button, Intent } from '@blueprintjs/core';
 import { x } from '@xstyled/emotion';
 import { css } from '@emotion/css';
+import { useHistory } from 'react-router-dom';
 import { useIsDarkMode } from '@/hooks/useDarkMode';
 
 import WorkflowIcon from './WorkflowIcon';
 import { FormattedMessage as T } from '@/components';
 
-import { withOrganizationActions } from '@/containers/Organization/withOrganizationActions';
 import { compose } from '@/utils';
 
 /**
  * Setup congrats page.
  */
-function SetupCongratsPage({ setOrganizationSetupCompleted }) {
-  const [isReloading, setIsReloading] = React.useState(false);
+function SetupCongratsPage() {
+  const [isNavigating, setIsNavigating] = React.useState(false);
   const isDarkMode = useIsDarkMode();
+  const history = useHistory();
 
   const handleBtnClick = () => {
-    setIsReloading(true);
-    window.location.reload();
+    setIsNavigating(true);
+    history.push('/setup/complete');
   };
 
   return (
@@ -65,7 +66,7 @@ function SetupCongratsPage({ setOrganizationSetupCompleted }) {
           <Button
             intent={Intent.PRIMARY}
             type="submit"
-            loading={isReloading}
+            loading={isNavigating}
             onClick={handleBtnClick}
           >
             <T id={'setup.congrats.go_to_dashboard'} />
@@ -76,4 +77,4 @@ function SetupCongratsPage({ setOrganizationSetupCompleted }) {
   );
 }
 
-export default compose(withOrganizationActions)(SetupCongratsPage);
+export default SetupCongratsPage;

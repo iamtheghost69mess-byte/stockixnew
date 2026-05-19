@@ -12,6 +12,7 @@ import 'moment/locale/es-us';
 import AppIntlLoader from './AppIntlLoader';
 import { EnsureAuthenticated } from '@/components/Guards/EnsureAuthenticated';
 import GlobalErrors from '@/containers/GlobalErrors/GlobalErrors';
+import SuspendedOverlay from '@/components/License/SuspendedOverlay';
 
 import { SplashScreen, DashboardThemeProvider } from '../components';
 import { queryConfig } from '../hooks/query/base';
@@ -70,6 +71,7 @@ function AppInsider({ history }) {
         </Suspense>
 
         <GlobalErrors />
+        <SuspendedOverlay />
       </DashboardThemeProvider>
     </div>
   );

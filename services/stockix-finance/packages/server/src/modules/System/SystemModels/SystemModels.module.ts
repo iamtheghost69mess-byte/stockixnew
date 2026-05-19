@@ -8,6 +8,7 @@ import { SystemModelsConnection } from './SystemModels.constants';
 import { SystemUser } from '../models/SystemUser';
 import UserTenant from '../models/UserTenant';
 import { TenantMetadata } from '../models/TenantMetadataModel';
+import { TenantLicense } from '../models/TenantLicense';
 import { TenantRepository } from '../repositories/Tenant.repository';
 
 const models = [
@@ -16,6 +17,7 @@ const models = [
   PlanSubscription,
   TenantModel,
   TenantMetadata,
+  TenantLicense,
 ];
 
 const modelProviders = models.map((model) => {

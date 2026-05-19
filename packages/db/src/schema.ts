@@ -61,11 +61,16 @@ export const tenants = pgTable(
     adminLastName: text("admin_last_name").notNull(),
     status: text("status").notNull().default("active"),
     planSlug: text("plan_slug").notNull().default("starter"),
+    /** Human-readable org identifier (ORG-00001). */
+    organizationNumber: varchar("organization_number", { length: 20 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex("tenants_slug_unique").on(t.slug)],
+  (t) => [
+    uniqueIndex("tenants_slug_unique").on(t.slug),
+    uniqueIndex("tenants_organization_number_unique").on(t.organizationNumber),
+  ],
 );
 
 export const organizations = pgTable("organizations", {
@@ -156,6 +161,8 @@ export const tenantDeployments = pgTable(
     registrationCompletedAt: timestamp("registration_completed_at", {
       withTimezone: true,
     }),
+    /** Finance stack tenant id (numeric) for internal license sync. */
+    financeTenantId: integer("finance_tenant_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

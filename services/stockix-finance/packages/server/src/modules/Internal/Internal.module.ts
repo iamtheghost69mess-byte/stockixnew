@@ -1,12 +1,37 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { InternalController } from './Internal.controller';
+import { InternalProvisionController } from './InternalProvision.controller';
+import { InternalLicenseController } from './InternalLicense.controller';
+import { InternalUsersController } from './InternalUsers.controller';
+import { InternalOrgController } from './InternalOrg.controller';
 import { AttachUserToTenantService } from './commands/AttachUserToTenant.service';
+import { ProvisionUserService } from './commands/ProvisionUser.service';
+import { SyncLicenseService } from './commands/SyncLicense.service';
+import { InternalUsersService } from './commands/InternalUsers.service';
 import { InternalSecretGuard } from './guards/InternalSecret.guard';
+import { TenantDBManagerModule } from '@/modules/TenantDBManager/TenantDBManager.module';
+import { TenantKnexFactory } from '@/modules/Tenancy/TenantKnexFactory';
+import { CopyParentTenantSettingsService } from '@/modules/Organization/CopyParentTenantSettings.service';
 
 @Module({
-  imports: [ConfigModule],
-  controllers: [InternalController],
-  providers: [AttachUserToTenantService, InternalSecretGuard],
+  imports: [ConfigModule, TenantDBManagerModule],
+  controllers: [
+    InternalController,
+    InternalProvisionController,
+    InternalLicenseController,
+    InternalUsersController,
+    InternalOrgController,
+  ],
+  providers: [
+    AttachUserToTenantService,
+    ProvisionUserService,
+    SyncLicenseService,
+    InternalUsersService,
+    InternalSecretGuard,
+    TenantKnexFactory,
+    CopyParentTenantSettingsService,
+  ],
+  exports: [SyncLicenseService],
 })
 export class InternalModule {}

@@ -22,6 +22,7 @@ import {
   DashboardRowsHeightButton,
   DashboardActionsBar,
 } from '@/components';
+import { LicenseGatedButton } from '@/components/License/LicenseGatedButton';
 import { BillAction, AbilitySubject } from '@/constants/abilityOption';
 
 import { withBills } from './withBills';
@@ -141,7 +142,7 @@ function BillActionsBar({
         />
         <NavbarDivider />
         <Can I={BillAction.Create} a={AbilitySubject.Bill}>
-          <Button
+          <LicenseGatedButton
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus'} />}
             text={<T id={'new_bill'} />}

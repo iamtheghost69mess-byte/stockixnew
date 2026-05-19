@@ -21,6 +21,8 @@ export class TenantMetadata extends BaseModel {
   public address!: Record<string, any>;
   public displayCurrencies!: string[];
   public secondaryCurrency?: string | null;
+  public setupCompletedAt?: string | null;
+  public organizationNumber?: string | null;
 
   /**
    * Json schema.

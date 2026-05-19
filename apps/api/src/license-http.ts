@@ -26,6 +26,7 @@ import * as schema from "@repo/db/schema";
 import { z } from "zod";
 import { logAudit } from "./audit.js";
 import { generateLicenseKey, signOfflineToken, verifyOfflineToken } from "./license-utils.js";
+import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 
 type ApiEnv = {
   Variables: {
@@ -947,6 +948,13 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         isPerpetual: updated.isPerpetual,
       },
     });
+    void triggerFinanceLicenseSync(db, lic.tenantId).catch((err) => {
+      console.error(
+        "[license] finance sync failed (non-fatal)",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+
     return c.json({
       license: {
         id: updated.id,
@@ -1001,6 +1009,13 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       ipAddress: c.req.header("x-forwarded-for") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
       metadata: { licenseId: lic.id },
+    });
+
+    void triggerFinanceLicenseSync(db, body.tenantId).catch((err) => {
+      console.error(
+        "[license] finance sync failed (non-fatal)",
+        err instanceof Error ? err.message : String(err),
+      );
     });
 
     return c.json({
@@ -1072,6 +1087,13 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       ipAddress: c.req.header("x-forwarded-for") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
       metadata: { reason: body.reason ?? null, licenseId: lic.id },
+    });
+
+    void triggerFinanceLicenseSync(db, lic.tenantId).catch((err) => {
+      console.error(
+        "[license] finance sync failed (non-fatal)",
+        err instanceof Error ? err.message : String(err),
+      );
     });
 
     return c.json({ revoked: true });

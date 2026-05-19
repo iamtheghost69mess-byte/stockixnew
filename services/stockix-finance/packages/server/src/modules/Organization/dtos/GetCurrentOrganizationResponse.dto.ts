@@ -169,4 +169,19 @@ export class GetCurrentOrganizationResponseDto {
     example: false,
   })
   isUpgradeRunning: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When the tenant completed the post-provision profile setup step',
+    example: '2024-06-01T12:00:00.000Z',
+    nullable: true,
+  })
+  setupCompletedAt: Date | null;
+
+  @ApiPropertyOptional({
+    description: 'Human-readable organization number',
+    example: 'ORG-00042',
+    nullable: true,
+  })
+  organizationNumber: string | null;
 }

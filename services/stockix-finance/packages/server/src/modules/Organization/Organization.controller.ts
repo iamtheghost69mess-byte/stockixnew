@@ -30,6 +30,9 @@ import { IgnoreTenantSeededRoute } from '../Tenancy/EnsureTenantIsSeeded.guards'
 import { IgnoreTenantModelsInitialize } from '../Tenancy/TenancyInitializeModels.guard';
 import { IgnoreUserVerifiedRoute } from '../Auth/guards/EnsureUserVerified.guard';
 import { GetBuildOrganizationBuildJob } from './commands/GetBuildOrganizationJob.service';
+import { CompleteOrganizationSetupService } from './commands/CompleteOrganizationSetup.service';
+import { GetAllOrganizationsService } from './GetAllOrganizations.service';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { OrganizationBaseCurrencyLocking } from './Organization/OrganizationBaseCurrencyLocking.service';
 import {
   OrganizationBuildResponseExample,
@@ -54,7 +57,23 @@ export class OrganizationController {
     private readonly updateOrganizationService: UpdateOrganizationService,
     private readonly getBuildOrganizationJobService: GetBuildOrganizationBuildJob,
     private readonly orgBaseCurrencyLockingService: OrganizationBaseCurrencyLocking,
+    private readonly completeOrganizationSetupService: CompleteOrganizationSetupService,
+    private readonly getAllOrganizationsService: GetAllOrganizationsService,
+    private readonly tenancyContext: TenancyContext,
   ) {}
+
+  @Get('all')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'List organizations for current user' })
+  async getAllOrganizations() {
+    const authorizedUser = await this.tenancyContext.getSystemUser();
+    const organizations =
+      await this.getAllOrganizationsService.getAllOrganizations(
+        authorizedUser.id,
+      );
+
+    return { organizations };
+  }
 
   @Post('build')
   @HttpCode(200)
@@ -125,6 +144,23 @@ export class OrganizationController {
       await this.orgBaseCurrencyLockingService.baseCurrencyMutateLocks();
 
     return { abilities };
+  }
+
+  @Post('setup/complete')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Mark organization setup profile as completed' })
+  @ApiResponse({
+    status: 200,
+    description: 'Setup completion timestamp recorded',
+  })
+  async completeSetup() {
+    const result = await this.completeOrganizationSetupService.execute();
+
+    return {
+      code: 200,
+      message: 'Organization setup has been marked complete.',
+      data: result,
+    };
   }
 
   @Put()

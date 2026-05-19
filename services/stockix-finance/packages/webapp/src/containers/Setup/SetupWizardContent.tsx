@@ -3,7 +3,6 @@ import React from 'react';
 import { x } from '@xstyled/emotion';
 import { css } from '@emotion/css';
 
-import SetupSubscription from './SetupSubscription/SetupSubscription';
 import SetupOrganizationPage from './SetupOrganizationPage';
 import SetupInitializingForm from './SetupInitializingForm';
 import SetupCongratsPage from './SetupCongratsPage';
@@ -33,10 +32,6 @@ export default function SetupWizardContent({
           items: itemsClassName,
         }}
       >
-        <Stepper.Step label={'Subscription'}>
-          <SetupSubscription />
-        </Stepper.Step>
-
         <Stepper.Step label={'Organization'}>
           <SetupOrganizationPage id="organization" />
         </Stepper.Step>

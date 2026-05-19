@@ -1,6 +1,6 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { apiConfig, env } from "@repo/config";
+import { env } from "@repo/config";
 
 export type TenantEnvFileParams = {
   mysqlVolumeName: string;
@@ -29,19 +29,12 @@ export type TenantSignupEnv = {
   SIGNUP_ALLOWED_EMAILS: string;
 };
 
-/** Shared signup policy for tenant .env file and composeEnv (root .env → apiConfig). */
-export function buildTenantSignupEnv(adminEmail: string): TenantSignupEnv {
-  const override = apiConfig.signupAllowedEmailsOverride.trim();
-  const allowedEmails = [adminEmail];
-  if (override) {
-    allowedEmails.push(
-      ...override.split(",").map((s) => s.trim()).filter(Boolean),
-    );
-  }
+/** Shared signup policy for tenant .env — public register fully disabled, no allowlist. */
+export function buildTenantSignupEnv(): TenantSignupEnv {
   return {
-    SIGNUP_DISABLED: apiConfig.signupDisabled ? "true" : "false",
-    SIGNUP_ALLOWED_DOMAINS: apiConfig.signupAllowedDomains,
-    SIGNUP_ALLOWED_EMAILS: allowedEmails.join(","),
+    SIGNUP_DISABLED: "true",
+    SIGNUP_ALLOWED_DOMAINS: "",
+    SIGNUP_ALLOWED_EMAILS: "",
   };
 }
 
@@ -51,7 +44,7 @@ function mailSecureEnvValue(): string {
 
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
 export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, string> {
-  const signup = buildTenantSignupEnv(params.adminEmail);
+  const signup = buildTenantSignupEnv();
   return {
     MYSQL_VOLUME_NAME: params.mysqlVolumeName,
     STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
@@ -104,6 +97,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
+    BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
   };

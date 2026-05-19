@@ -22,6 +22,7 @@ import {
   DashboardRowsHeightButton,
   DashboardActionsBar,
 } from '@/components';
+import { LicenseGatedButton } from '@/components/License/LicenseGatedButton';
 
 import { Can, If, DashboardActionViewsList } from '@/components';
 import { SaleInvoiceAction, AbilitySubject } from '@/constants/abilityOption';
@@ -153,7 +154,7 @@ function InvoiceActionsBar({
         />
         <NavbarDivider />
         <Can I={SaleInvoiceAction.Create} a={AbilitySubject.Invoice}>
-          <Button
+          <LicenseGatedButton
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus'} />}
             text={<T id={'new_invoice'} />}

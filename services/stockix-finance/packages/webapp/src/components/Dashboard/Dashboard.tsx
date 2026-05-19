@@ -15,6 +15,7 @@ import DashboardProvider from './DashboardProvider';
 import DrawersContainer from '@/components/DrawersContainer';
 import AlertsContainer from '@/containers/AlertsContainer';
 import { DashboardSockets } from './DashboardSockets';
+import LicenseBanner from '@/components/License/LicenseBanner';
 
 /**
  * Dashboard preferences.
@@ -46,6 +47,7 @@ function DashboardAnyPage() {
 export default function Dashboard() {
   return (
     <DashboardProvider>
+      <LicenseBanner />
       <Switch>
         <Route path="/preferences" component={DashboardPreferences} />
         <Route path="/" component={DashboardAnyPage} />

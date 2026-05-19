@@ -98,6 +98,25 @@ export function useUpdateOrganization(props = {}) {
   );
 }
 
+/**
+ * Marks organization setup profile as complete (persists setup_completed_at).
+ */
+export function useCompleteOrganizationSetup(props = {}) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    () => apiRequest.post('organization/setup/complete'),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(t.ORGANIZATION_CURRENT);
+        queryClient.invalidateQueries(t.ORGANIZATIONS);
+      },
+      ...props,
+    },
+  );
+}
+
 export function useOrgBaseCurrencyMutateAbilities(props) {
   return useRequestQuery(
     [t.ORGANIZATION_MUTATE_BASE_CURRENCY_ABILITIES],

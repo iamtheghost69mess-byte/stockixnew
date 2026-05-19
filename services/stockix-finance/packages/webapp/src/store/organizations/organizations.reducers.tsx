@@ -27,14 +27,14 @@ const reducer = createReducer(initialState, {
     state.byOrganizationId = _dataByOrganizationId;
   },
 
-  [t.SET_ORGANIZATION_CONGRATS]: (state, action) => {
-    const { tenantId, congrats } = action.payload;
+  [t.SET_ORGANIZATION_SETUP_COMPLETED]: (state, action) => {
+    const { tenantId, setupCompletedAt } = action.payload;
 
     state.data[tenantId] = {
       ...(state.data[tenantId] || {}),
-      is_congrats: !!congrats,
+      setup_completed_at: setupCompletedAt,
     };
-  }
+  },
 })
 
 export default reducer;

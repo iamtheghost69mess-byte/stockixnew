@@ -60,6 +60,7 @@ import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { generateLicenseKey } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
+import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 
 import {
   createProvisionTracer,
@@ -1116,6 +1117,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const financeOrganizationIdFromResult = completeResult
     ? readNonEmptyString(completeResult.financeOrganizationId)
     : undefined;
+  const financeTenantIdFromResult = completeResult
+    ? Number(completeResult.financeTenantId)
+    : NaN;
   const [currentJob] = await db
     .select({
       id: tenantLifecycleJobs.id,
@@ -1278,6 +1282,30 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           "[provision] license assignment failed (non-fatal)",
           licenseErr instanceof Error ? licenseErr.message : String(licenseErr),
         );
+      }
+
+      if (
+        targetTenantId &&
+        Number.isFinite(financeTenantIdFromResult) &&
+        financeTenantIdFromResult > 0
+      ) {
+        await db
+          .update(tenantDeployments)
+          .set({
+            financeTenantId: financeTenantIdFromResult,
+            updatedAt: new Date(),
+          })
+          .where(eq(tenantDeployments.tenantId, targetTenantId));
+
+        void syncFinanceLicenseForStockixTenant(db, {
+          stockixTenantId: targetTenantId,
+          financeTenantId: financeTenantIdFromResult,
+        }).catch((err) => {
+          console.error(
+            "[provision] finance license sync failed (non-fatal)",
+            err instanceof Error ? err.message : String(err),
+          );
+        });
       }
 
       if (updated.type === "tenant.provision" && financeOrganizationIdFromResult) {

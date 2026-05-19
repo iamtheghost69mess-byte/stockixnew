@@ -4,11 +4,12 @@ import {
   Get,
   Body,
   Req,
-  Res,
   Next,
   HttpCode,
+  HttpStatus,
+  HttpException,
 } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import { Request, NextFunction } from 'express';
 import { ApiOperation, ApiTags, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { SubscriptionApplication } from './SubscriptionApplication';
 
@@ -16,6 +17,15 @@ import { SubscriptionApplication } from './SubscriptionApplication';
 @ApiTags('Subscriptions')
 export class SubscriptionsController {
   constructor(private readonly subscriptionApp: SubscriptionApplication) {}
+
+  private assertBillingEnabled(): void {
+    if (process.env.BILLING_ENABLED !== 'true') {
+      throw new HttpException(
+        { error: 'Billing is managed externally.' },
+        HttpStatus.NOT_IMPLEMENTED,
+      );
+    }
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get all subscriptions for the current tenant' })
@@ -25,6 +35,7 @@ export class SubscriptionsController {
   })
   @HttpCode(200)
   async getSubscriptions() {
+    this.assertBillingEnabled();
     const subscriptions = await this.subscriptionApp.getSubscriptions();
 
     return { subscriptions };
@@ -50,6 +61,7 @@ export class SubscriptionsController {
     description: 'Checkout URL retrieved successfully',
   })
   async getCheckoutUrl(@Body('variantId') variantId: number) {
+    this.assertBillingEnabled();
     const checkout =
       await this.subscriptionApp.getLemonSqueezyCheckoutUri(variantId);
 
@@ -63,6 +75,7 @@ export class SubscriptionsController {
     description: 'Subscription canceled successfully',
   })
   async cancelSubscription(@Req() req: Request, @Next() next: NextFunction) {
+    this.assertBillingEnabled();
     const tenantId = req.headers['organization-id'] as string;
     await this.subscriptionApp.cancelSubscription(tenantId);
 
@@ -80,6 +93,7 @@ export class SubscriptionsController {
     description: 'Subscription resumed successfully',
   })
   async resumeSubscription(@Req() req: Request, @Next() next: NextFunction) {
+    this.assertBillingEnabled();
     const tenantId = req.headers['organization-id'] as string;
     await this.subscriptionApp.resumeSubscription(tenantId);
 
@@ -110,6 +124,7 @@ export class SubscriptionsController {
     description: 'Subscription plan changed successfully',
   })
   async changeSubscriptionPlan(@Body('variant_id') variantId: number) {
+    this.assertBillingEnabled();
     await this.subscriptionApp.changeSubscriptionPlan(variantId);
 
     return {

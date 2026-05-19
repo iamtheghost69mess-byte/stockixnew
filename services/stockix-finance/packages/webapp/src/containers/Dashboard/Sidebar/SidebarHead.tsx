@@ -5,7 +5,7 @@ import { Icon } from '@/components';
 
 import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 import { useAuthenticatedAccount } from '@/hooks/query';
-import { useStockixOrgs } from '@/hooks/query/useStockixOrgs';
+import { useOrganizations } from '@/hooks/query/organization';
 import { useSwitchTenant } from '@/hooks/query/useSwitchTenant';
 import { useAuthOrganizationId } from '@/hooks/state';
 import { compose, firstLettersArgs } from '@/utils';
@@ -35,7 +35,7 @@ function SidebarHeadJSX({
 }) {
   // Retrieve authenticated user information.
   const { data: user } = useAuthenticatedAccount();
-  const { data: stockixOrgs = [] } = useStockixOrgs();
+  const { data: organizations = [] } = useOrganizations();
   const { mutate: switchTenant, isLoading: isSwitching } = useSwitchTenant();
   const currentOrganizationId = useAuthOrganizationId();
   const currentHost =
@@ -46,7 +46,7 @@ function SidebarHeadJSX({
     const isSameHost = !targetHost || currentHost === targetHost;
 
     if (isSameHost) {
-      switchTenant(org.organizationId);
+      switchTenant(org.organizationId ?? org.organization_id);
       return;
     }
 
@@ -69,16 +69,26 @@ function SidebarHeadJSX({
           boundary={'window'}
           content={
             <Menu className={'menu--dashboard-organization'}>
-              {stockixOrgs.length >= 1 ? (
+              {organizations.length >= 1 ? (
                 <>
-                  {stockixOrgs.map((org) => {
-                    const isCurrent =
-                      org.organizationId === currentOrganizationId ||
-                      (org.subdomain && currentHost === org.subdomain);
+                  {organizations.map((org) => {
+                    const orgId = org.organizationId ?? org.organization_id;
+                    const isCurrent = orgId === currentOrganizationId;
+                    const subtitle = org.organizationNumber ?? org.organization_number;
                     return (
                       <MenuItem
-                        key={org.organizationId || org.id}
-                        text={org.name}
+                        key={orgId ?? org.tenantId}
+                        text={
+                          subtitle ? (
+                            <span>
+                              {org.name}
+                              <br />
+                              <small style={{ opacity: 0.7 }}>{subtitle}</small>
+                            </span>
+                          ) : (
+                            org.name
+                          )
+                        }
                         icon={isCurrent ? 'tick' : 'office'}
                         active={isCurrent}
                         disabled={isSwitching}

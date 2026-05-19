@@ -7,6 +7,7 @@ export class UserTenant extends BaseModel {
   public readonly tenantId!: number;
   public readonly organizationId!: string;
   public readonly role!: string | null;
+  public readonly isActive!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 

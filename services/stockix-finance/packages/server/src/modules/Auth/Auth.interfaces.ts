@@ -60,6 +60,10 @@ export interface IAuthSendedResetPassword {
 
 export interface IAuthGetMetaPOJO {
   signupDisabled: boolean;
+  licenseStatus: string | null;
+  licenseExpiresAt: string | null;
+  licenseGracePeriodEndsAt: string | null;
+  billingEnabled: boolean;
 }
 
 export interface IAuthSignUpVerifingEventPayload {
