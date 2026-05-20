@@ -17,10 +17,14 @@ import { ProfitLossSheetModule } from './modules/ProfitLossSheet/ProfitLossSheet
 import { CashflowStatementModule } from './modules/CashFlowStatement/CashflowStatement.module';
 import { VendorBalanceSummaryModule } from './modules/VendorBalanceSummary/VendorBalanceSummary.module';
 import { BalanceSheetModule } from './modules/BalanceSheet/BalanceSheet.module';
+import { RealizedGainLossModule } from './modules/RealizedGainLoss/RealizedGainLoss.module';
+import { UnrealizedGainLossModule } from './modules/UnrealizedGainLoss/UnrealizedGainLoss.module';
 
 @Module({
   imports: [
     BalanceSheetModule,
+    RealizedGainLossModule,
+    UnrealizedGainLossModule,
     PurchasesByItemsModule,
     CustomerBalanceSummaryModule,
     VendorBalanceSummaryModule,

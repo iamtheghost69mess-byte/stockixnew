@@ -38,6 +38,8 @@ export enum ReportsAction {
   READ_CASHFLOW_ACCOUNT_TRANSACTION = 'read-cashflow-account-transactions',
   READ_PROJECT_PROFITABILITY_SUMMARY = 'read-project-profitability-summary',
   READ_SALES_TAX_LIABILITY_SUMMARY = 'read-sales-tax-liability-summary',
+  READ_REALIZED_GAIN_LOSS = 'read-realized-gain-loss',
+  READ_UNREALIZED_GAIN_LOSS = 'read-unrealized-gain-loss',
 }
 
 export interface IFinancialSheetBranchesQuery {

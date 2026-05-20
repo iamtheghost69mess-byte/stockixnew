@@ -30,14 +30,13 @@ const dateRangeMapper = (data, index, column) => ({
   key: column.key,
   accessor: `cells[${index}].value`,
   width: getColumnWidth(data, `cells.${index}.value`, {
-    magicSpacing: 12,
+    magicSpacing: 10,
     minWidth: 100,
   }),
   className: `date-period ${column.key}`,
   disableSortBy: true,
   textOverview: true,
   align: Align.Right,
-  money: true
 });
 
 /**
@@ -51,12 +50,28 @@ const totalMapper = (data, index, column) => ({
   textOverview: true,
   Cell: CellTextSpan,
   width: getColumnWidth(data, `cells[${index}].value`, {
-    magicSpacing: 12,
+    magicSpacing: 10,
     minWidth: 100,
   }),
   disableSortBy: true,
   align: Align.Right,
-  money: true
+});
+
+/**
+ * Secondary total column mapper.
+ */
+const secondaryTotalMapper = (data, index, column) => ({
+  key: 'secondary_total',
+  Header: column.label,
+  accessor: `cells[${index}].value`,
+  textOverview: true,
+  Cell: CellTextSpan,
+  width: getColumnWidth(data, `cells[${index}].value`, {
+    magicSpacing: 10,
+    minWidth: 100,
+  }),
+  disableSortBy: true,
+  align: Align.Right,
 });
 
 /**
@@ -76,6 +91,7 @@ export const dynamicColumns = (columns, data) => {
       ),
       R.when(R.pathEq(['key'], 'name'), accountNameMapper),
       R.when(R.pathEq(['key'], 'total'), R.curry(totalMapper)(data, index)),
+      R.when(R.pathEq(['key'], 'secondary_total'), R.curry(secondaryTotalMapper)(data, index)),
     )(column);
   };
   return columns.map(mapper);

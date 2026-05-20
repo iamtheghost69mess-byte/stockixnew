@@ -47,13 +47,17 @@ export function useCurrentOrganization(props) {
       defaultData: {},
       onSuccess: (data) => {
         const organization = omit(data, ['subscriptions']);
+        const flat = {
+          ...organization,
+          ...(organization.metadata ?? {}),
+        };
 
         batch(() => {
           // Sets subscriptions.
           setSubscriptions(data.subscriptions);
 
-          // Sets organizations.
-          setOrganizations([organization]);
+          // Sets organizations (flatten metadata for display/secondary currency).
+          setOrganizations([flat]);
         });
       },
       ...props,

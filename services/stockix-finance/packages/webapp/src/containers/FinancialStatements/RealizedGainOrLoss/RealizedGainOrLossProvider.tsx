@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import FinancialReportPage from '../FinancialReportPage';
+import { useRealizedGainOrLoss } from '@/hooks/query/FinancialReports';
 
 const RealizedGainOrLossContext = React.createContext();
 
@@ -8,7 +9,13 @@ const RealizedGainOrLossContext = React.createContext();
  * Realized Gain or Loss provider.
  */
 function RealizedGainOrLossProvider({ filter, ...props }) {
-  const provider = {};
+  const { data, isLoading, isFetching } = useRealizedGainOrLoss(filter || {});
+
+  const provider = {
+    report: data,
+    isLoading,
+    isFetching,
+  };
 
   return (
     <FinancialReportPage name="realized-gain-loss">

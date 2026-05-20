@@ -10,9 +10,10 @@ import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.mo
 import { BalanceSheetStatementController } from './BalanceSheet.controller';
 import { BalanceSheetRepository } from './BalanceSheetRepository';
 import { AccountsModule } from '@/modules/Accounts/Accounts.module';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [FinancialSheetCommonModule, AccountsModule],
+  imports: [FinancialSheetCommonModule, AccountsModule, ExchangeRatesModule],
   controllers: [BalanceSheetStatementController],
   providers: [
     BalanceSheetRepository,

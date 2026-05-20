@@ -16,3 +16,5 @@ export * from './use-customer-transactions';
 export * from './use-vendor-transactions';
 export * from './use-sales-tax-liabilities-summary';
 export * from './use-transactions-by-reference';
+export * from './use-realized-gain-loss';
+export * from './use-unrealized-gain-loss';

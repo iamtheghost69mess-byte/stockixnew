@@ -7,9 +7,10 @@ import { UnrealizedGainOrLossLoadingBar } from './components';
 
 import UnrealizedGainOrLossHeader from './UnrealizedGainOrLossHeader';
 import UnrealizedGainOrLossActionsBar from './UnrealizedGainOrLossActionsBar';
+import UnrealizedGainOrLossTable from './UnrealizedGainOrLossTable';
 
-import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
-import { withUnrealizedGainOrLossActions } from './withUnrealizedGainOrLossActions';
+import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import withUnrealizedGainOrLossActions from './withUnrealizedGainOrLossActions';
 
 import { compose } from '@/utils';
 
@@ -44,6 +45,7 @@ function UnrealizedGainOrLoss({
           />
 
           <UnrealizedGainOrLossLoadingBar />
+          <UnrealizedGainOrLossTable companyName={organizationName} />
         </FinancialStatement>
       </DashboardPageContent>
     </UnrealizedGainOrLossProvider>

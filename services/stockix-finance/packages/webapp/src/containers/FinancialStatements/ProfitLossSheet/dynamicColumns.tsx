@@ -3,6 +3,7 @@ import * as R from 'ramda';
 import { isEmpty } from 'lodash';
 
 import { Align } from '@/constants';
+import { CellTextSpan } from '@/components/Datatable/Cells';
 import { getColumnWidth } from '@/utils';
 
 const getTableCellValueAccessor = (index) => `cells[${index}].value`;
@@ -33,7 +34,6 @@ const percentageOfIncomeAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -52,7 +52,6 @@ const percentageOfExpenseAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -71,7 +70,6 @@ const percentageOfColumnAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -90,7 +88,6 @@ const percentageOfRowAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -109,7 +106,6 @@ const previousYearAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -128,7 +124,6 @@ const previousYearChangeAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -147,7 +142,6 @@ const previousYearPercentageAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -166,7 +160,6 @@ const previousPeriodAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -185,7 +178,6 @@ const previousPeriodChangeAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -204,7 +196,6 @@ const previousPeriodPercentageAccessor = R.curry((data, column) => {
     align: Align.Right,
     disableSortBy: true,
     textOverview: true,
-    money: true
   };
 });
 
@@ -283,10 +274,10 @@ const totalColumn = R.curry((data, column) => {
     Header: column.label,
     accessor,
     textOverview: true,
+    Cell: CellTextSpan,
     width,
     disableSortBy: true,
     align: hasChildren ? Align.Center : Align.Right,
-    money: true
   };
 });
 
@@ -347,7 +338,6 @@ const dateRangeColumn = R.curry((data, column) => {
     disableSortBy: true,
     textOverview: true,
     align: isDateColumnHasColumns ? Align.Center : Align.Right,
-    money: true
   };
   return R.compose(
     R.when(
@@ -380,6 +370,7 @@ const dynamicColumnMapper = R.curry((data, column) => {
     R.when(R.pathSatisfies(isMatchesDateRange, ['key']), indexDatePeriodMapper),
     R.when(R.pathEq(['key'], 'name'), indexAccountNameColumn),
     R.when(R.pathEq(['key'], 'total'), indexTotalColumn),
+    R.when(R.pathEq(['key'], 'secondary_total'), indexTotalColumn),
   )(column);
 });
 
