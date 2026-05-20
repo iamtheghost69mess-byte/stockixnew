@@ -1,32 +1,40 @@
 # Implementation Plan — Bigcapital SaaS Gaps
 
-Work task by task in order. Do NOT skip tasks. Each task must be fully complete before moving to the next.
+**Codebase root:** `services/stockix-finance/`  
+**Control plane:** `apps/api/`, `packages/db/`, `infra/worker-service/`  
+**Last updated:** Tuesday, May 19, 2026
 
-See full plan in agent context / `accountmissing2.md` audit.
+---
 
-**Codebase root:** `services/stockix-finance/`
+## Completed (removed from active plan)
 
-## RULES FOR CURSOR
-- Read the full audit file `accountmissing2.md` before starting any task
-- Read every file mentioned before editing it
+Tasks 1–10 are **done** in code (signup lockdown, setup wizard + DB flag, wizard fields, license sync, internal users API, org number, org switcher, sub-org COA/tax copy, license UI, LemonSqueezy removed).
+
+See `VERIFICATION_REPORT.md` for what was verified. Historical audit: `accountmissing2.md` (now tracks gaps only).
+
+---
+
+## Remaining work
+
+Work in order. Do not skip operational steps before production.
+
+| # | Item | Status | What to do |
+|---|------|--------|------------|
+| A | **Staging / production migrations** | Partial | Run finance system migrations `20260519000001`–`00006` and Stockix Drizzle migrations on every environment. |
+| B | **Worker rebuild & deploy** | Partial | Rebuild `infra/worker-service` after `tenant-env.ts` changes (compiled `.runtime/worker.js` may still emit old `SIGNUP_ALLOWED_*` keys until rebuilt). |
+| C | **Manual E2E verification** | Missing | Execute checklist in `VERIFICATION_REPORT.md` § Remaining manual tests (signup 403, license 402, sub-org COA copy, etc.). |
+| D | **Owner dashboard — finance user UI** | Missing | `apps/api` exposes `/api/tenants/:tenantId/users` (+ suspend, reset-password, etc.) via `finance-users-http.ts`. **No UI** in `apps/dashboard` calls these routes yet. |
+| E | **Sub-org default account settings** | Partial | COA rows + tax rates are copied (`CopyParentTenantSettings.service.ts`). Parent **default AR/AP/inventory account pointers** in org metadata are not explicitly copied to child. Confirm product need; add copy step if required. |
+| F | **JWT license claims** | Deferred | Original audit mentioned signed JWT license validation in finance. Not implemented; license enforced via `tenant_licenses` + `LicenseGuard.middleware` + boot meta instead. Implement only if required. |
+
+---
+
+## Rules (unchanged)
+
+- Read `accountmissing2.md` for open gaps before new work
+- Read every file mentioned before editing
 - Never delete existing functionality — only extend or fix
-- After each task, confirm what was changed and what files were modified
-- If a migration is created, it must be backward compatible
-- All new endpoints must be tested with a curl example in comments
-- TypeScript strict mode — no `any` types
-- All new services must follow existing patterns (InversifyJS DI, existing base classes)
-
-## TASK STATUS
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 1 | Signup lockdown | Done |
-| 2 | Setup wizard completion in DB | Done |
-| 3 | Extend setup wizard fields | Done |
-| 4 | License sync Stockix → Finance | Done |
-| 5 | Platform user management API | Done |
-| 6 | Organization number | Done |
-| 7 | GET /organization/all + org switcher | Done |
-| 8 | Sub-org COA/tax inheritance | Done |
-| 9 | Read-only mode on license expiry | Done |
-| 10 | Remove LemonSqueezy | Done |
+- Migrations must be backward compatible
+- New endpoints: curl example in comments
+- TypeScript strict — no `any`
+- Follow existing DI / service patterns
