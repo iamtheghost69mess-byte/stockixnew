@@ -8,7 +8,6 @@ import { TenantsManagerService } from '@/modules/TenantDBManager/TenantsManager'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { isEmpty } from 'class-validator';
 import { AuthSignupDto } from '../dtos/AuthSignup.dto';
 import {
   IAuthSignedUpEventPayload,
@@ -150,40 +149,16 @@ export class AuthSignupService {
    * Validate sign-up disable restrictions.
    * @param {string} email - Signup email address
    */
-  private async validateSignupRestrictions(email: string) {
+  private async validateSignupRestrictions(_email: string) {
     const signupRestrictions = this.configService.get('signupRestrictions');
 
-    // Can't continue if the signup is not disabled.
     if (!signupRestrictions.disabled) return;
 
-    // Validate the allowed email addresses and domains.
-    if (
-      !isEmpty(signupRestrictions.allowedEmails) ||
-      !isEmpty(signupRestrictions.allowedDomains)
-    ) {
-      const emailDomain = email.split('@').pop();
-      const isAllowedEmail =
-        signupRestrictions.allowedEmails.indexOf(email) !== -1;
-
-      const isAllowedDomain = signupRestrictions.allowedDomains.some(
-        (domain) => emailDomain === domain,
-      );
-      if (!isAllowedEmail && !isAllowedDomain) {
-        throw new ServiceError(
-          ERRORS.SIGNUP_RESTRICTED_NOT_ALLOWED,
-          'The given email address format is not allowed to signup.',
-          undefined,
-          HttpStatus.FORBIDDEN,
-        );
-      }
-      // Throw error if the signup is disabled with no exceptions.
-    } else {
-      throw new ServiceError(
-        ERRORS.SIGNUP_RESTRICTED,
-        'The sign-up is disabled',
-        undefined,
-        HttpStatus.FORBIDDEN,
-      );
-    }
+    throw new ServiceError(
+      ERRORS.SIGNUP_RESTRICTED,
+      'The sign-up is disabled',
+      undefined,
+      HttpStatus.FORBIDDEN,
+    );
   }
 }

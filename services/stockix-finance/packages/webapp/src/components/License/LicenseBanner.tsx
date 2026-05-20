@@ -6,7 +6,7 @@ export default function LicenseBanner() {
   const { data } = useDashboardMeta({ enabled: true });
   const status = data?.licenseStatus ?? data?.license_status;
 
-  if (status !== 'grace' && status !== 'expired') {
+  if (status !== 'grace') {
     return null;
   }
 

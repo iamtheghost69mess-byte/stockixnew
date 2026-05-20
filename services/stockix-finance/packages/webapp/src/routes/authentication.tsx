@@ -30,6 +30,6 @@ export default [
   },
   {
     path: `${BASE_URL}/register`,
-    component: lazy(() => import('@/containers/Authentication/Register')),
+    component: lazy(() => import('@/containers/Authentication/RegisterRoute')),
   },
 ];

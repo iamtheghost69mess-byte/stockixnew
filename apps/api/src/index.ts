@@ -60,6 +60,7 @@ import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { generateLicenseKey } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
+import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 
 import {
@@ -4681,6 +4682,7 @@ function startReadinessReconciler() {
 }
 
 registerLicenseApi(app, db);
+registerTenantFinanceUsersApi(app, db);
 
 const port = apiConfig.port;
 startReadinessReconciler();

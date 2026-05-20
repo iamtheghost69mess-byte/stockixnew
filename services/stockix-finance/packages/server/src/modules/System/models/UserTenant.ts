@@ -1,5 +1,6 @@
 import { BaseModel } from '@/models/Model';
 import { Model } from 'objection';
+import type { TenantModel } from './TenantModel';
 
 export class UserTenant extends BaseModel {
   public readonly id!: number;
@@ -8,6 +9,7 @@ export class UserTenant extends BaseModel {
   public readonly organizationId!: string;
   public readonly role!: string | null;
   public readonly isActive!: boolean;
+  public tenant?: TenantModel;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 

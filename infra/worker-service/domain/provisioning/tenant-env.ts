@@ -23,18 +23,10 @@ export type TenantEnvFileParams = {
   internalApiSecret?: string;
 };
 
-export type TenantSignupEnv = {
-  SIGNUP_DISABLED: string;
-  SIGNUP_ALLOWED_DOMAINS: string;
-  SIGNUP_ALLOWED_EMAILS: string;
-};
-
-/** Shared signup policy for tenant .env — public register fully disabled, no allowlist. */
-export function buildTenantSignupEnv(): TenantSignupEnv {
+/** Shared signup policy for tenant .env — public register fully disabled. */
+export function buildTenantSignupEnv(): { SIGNUP_DISABLED: string } {
   return {
     SIGNUP_DISABLED: "true",
-    SIGNUP_ALLOWED_DOMAINS: "",
-    SIGNUP_ALLOWED_EMAILS: "",
   };
 }
 
@@ -73,8 +65,6 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     PUBLIC_PROXY_PORT: String(params.publicProxyPort),
     PUBLIC_PROXY_SSL_PORT: "443",
     SIGNUP_DISABLED: signup.SIGNUP_DISABLED,
-    SIGNUP_ALLOWED_DOMAINS: signup.SIGNUP_ALLOWED_DOMAINS,
-    SIGNUP_ALLOWED_EMAILS: signup.SIGNUP_ALLOWED_EMAILS,
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
     MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",

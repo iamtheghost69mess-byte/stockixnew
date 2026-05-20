@@ -99,5 +99,9 @@ export class FinanceUsersClient {
 }
 
 export function createFinanceUsersClient(internalBaseUrl: string): FinanceUsersClient {
-  return new FinanceUsersClient(internalBaseUrl, apiConfig.internalApiSecret);
+  const secret = apiConfig.internalApiSecret;
+  if (!secret) {
+    throw new Error("INTERNAL_API_SECRET is not configured");
+  }
+  return new FinanceUsersClient(internalBaseUrl, secret);
 }

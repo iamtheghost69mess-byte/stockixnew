@@ -56,12 +56,12 @@ export class SeedTenantLicenseOnBuiltSubscriber {
         .first();
 
       if (ownerManagedPlan) {
-        await this.planSubscriptionModel.query().insert({
-          tenantId,
-          planId: ownerManagedPlan.id,
+        await this.tenantModel.knex().table('subscription_plan_subscriptions').insert({
+          tenant_id: tenantId,
+          plan_id: ownerManagedPlan.id,
           slug: 'main',
-          startsAt: moment().toMySqlDateTime(),
-          endsAt: null,
+          starts_at: moment().toMySqlDateTime(),
+          ends_at: null,
         });
       }
     }
