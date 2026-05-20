@@ -30,9 +30,11 @@ import { VendorCreditsExportable } from './commands/VendorCreditsExportable';
 import { VendorCreditsImportable } from './commands/VendorCreditsImportable';
 import { BulkDeleteVendorCreditsService } from './BulkDeleteVendorCredits.service';
 import { ValidateBulkDeleteVendorCreditsService } from './ValidateBulkDeleteVendorCredits.service';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 
 @Module({
   imports: [
+    CurrenciesModule,
     ItemsModule,
     PdfTemplatesModule,
     ChromiumlyTenancyModule,

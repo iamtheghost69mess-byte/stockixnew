@@ -13,6 +13,8 @@ import { events } from '@/common/events/events';
 import { ManualJournal } from '../models/ManualJournal';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { EditManualJournalDto } from '../dtos/ManualJournal.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class EditManualJournal {
@@ -20,6 +22,8 @@ export class EditManualJournal {
     private eventPublisher: EventEmitter2,
     private uow: UnitOfWork,
     private validator: CommandManualJournalValidators,
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(ManualJournal.name)
     private manualJournalModel: TenantModelProxy<typeof ManualJournal>,
@@ -53,6 +57,15 @@ export class EditManualJournal {
     // Validate accounts with contact type from the given config.
     await this.validator.dynamicValidateAccountsWithContactType(
       manualJournalDTO.entries,
+    );
+
+    const tenant = await this.tenancyContext.getTenant(true);
+    const currencyCode =
+      manualJournalDTO.currencyCode || tenant.metadata.baseCurrency;
+    this.exchangeRateValidator.validate(
+      currencyCode,
+      tenant.metadata.baseCurrency,
+      manualJournalDTO.exchangeRate,
     );
   };
 

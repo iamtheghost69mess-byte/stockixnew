@@ -13,6 +13,8 @@ import { events } from '@/common/events/events';
 import { CommandCreditNoteDTOTransform } from './CommandCreditNoteDTOTransform.service';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { EditCreditNoteDto } from '../dtos/CreditNote.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class EditCreditNoteService {
@@ -35,6 +37,8 @@ export class EditCreditNoteService {
     private itemsEntriesService: ItemsEntriesService,
     private eventPublisher: EventEmitter2,
     private uow: UnitOfWork,
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
   ) {}
 
   /**
@@ -70,6 +74,14 @@ export class EditCreditNoteService {
       'CreditNote',
       creditNoteEditDTO.entries,
     );
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      customer.currencyCode,
+      baseCurrency,
+      creditNoteEditDTO.exchangeRate,
+    );
+
     // Transformes the given DTO to storage layer data.
     const creditNoteModel =
       await this.commandCreditNoteDTOTransform.transformCreateEditDTOToModel(

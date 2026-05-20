@@ -13,6 +13,8 @@ import { UnitOfWork } from '@/modules/Tenancy/TenancyDB/UnitOfWork.service';
 import { VendorCreditDTOTransformService } from './VendorCreditDTOTransform.service';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateVendorCreditDto } from '../dtos/VendorCredit.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateVendorCreditService {
@@ -28,6 +30,8 @@ export class CreateVendorCreditService {
     private readonly itemsEntriesService: ItemsEntriesService,
     private readonly eventPublisher: EventEmitter2,
     private readonly vendorCreditDTOTransformService: VendorCreditDTOTransformService,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(VendorCredit.name)
     private readonly vendorCreditModel: TenantModelProxy<typeof VendorCredit>,
@@ -59,6 +63,14 @@ export class CreateVendorCreditService {
     await this.itemsEntriesService.validateNonSellableEntriesItems(
       vendorCreditCreateDTO.entries,
     );
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      vendor.currencyCode,
+      baseCurrency,
+      vendorCreditCreateDTO.exchangeRate,
+    );
+
     // Transforms the credit DTO to storage layer.
     const vendorCreditModel =
       await this.vendorCreditDTOTransformService.transformCreateEditDTOToModel(

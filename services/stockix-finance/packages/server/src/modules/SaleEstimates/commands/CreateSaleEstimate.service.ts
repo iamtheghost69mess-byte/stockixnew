@@ -15,6 +15,8 @@ import { ItemsEntriesService } from '@/modules/Items/ItemsEntries.service';
 import { Customer } from '@/modules/Customers/models/Customer';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateSaleEstimateDto } from '../dtos/SaleEstimate.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateSaleEstimate {
@@ -30,6 +32,8 @@ export class CreateSaleEstimate {
     private uow: UnitOfWork,
     private transformerDTO: SaleEstimateDTOTransformer,
     private validators: SaleEstimateValidators,
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
   ) {}
 
   /**
@@ -46,6 +50,13 @@ export class CreateSaleEstimate {
       .query()
       .findById(estimateDTO.customerId)
       .throwIfNotFound();
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      customer.currencyCode,
+      baseCurrency,
+      estimateDTO.exchangeRate,
+    );
 
     // Transform DTO object to model object.
     const estimateObj = await this.transformerDTO.transformDTOToModel(

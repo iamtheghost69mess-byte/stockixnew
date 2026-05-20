@@ -15,6 +15,8 @@ import { Vendor } from '@/modules/Vendors/models/Vendor';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateBillDto } from '../dtos/Bill.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateBill {
@@ -24,6 +26,8 @@ export class CreateBill {
     private validators: BillsValidators,
     private itemsEntriesService: ItemsEntriesService,
     private transformerDTO: BillDTOTransformer,
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(Bill.name)
     private billModel: TenantModelProxy<typeof Bill>,
@@ -55,6 +59,13 @@ export class CreateBill {
       .query()
       .findById(billDTO.vendorId)
       .throwIfNotFound();
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      vendor.currencyCode,
+      baseCurrency,
+      billDTO.exchangeRate,
+    );
 
     // Validate the bill number uniqiness on the storage.
     await this.validators.validateBillNumberExists(billDTO.billNumber);

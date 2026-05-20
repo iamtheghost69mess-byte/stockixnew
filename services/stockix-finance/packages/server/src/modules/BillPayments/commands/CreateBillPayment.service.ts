@@ -14,6 +14,7 @@ import { BillPayment } from '../models/BillPayment';
 import { Vendor } from '../../Vendors/models/Vendor';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateBillPaymentDto } from '../dtos/BillPayment.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
 
 @Injectable()
 export class CreateBillPaymentService {
@@ -32,6 +33,7 @@ export class CreateBillPaymentService {
     private validators: BillPaymentValidators,
     private commandTransformerDTO: CommandBillPaymentDTOTransformer,
     private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(Vendor.name)
     private readonly vendorModel: TenantModelProxy<typeof Vendor>,
@@ -66,6 +68,12 @@ export class CreateBillPaymentService {
       .query()
       .findById(billPaymentDTO.vendorId)
       .throwIfNotFound();
+
+    this.exchangeRateValidator.validate(
+      vendor.currencyCode,
+      tenantMeta.metadata.baseCurrency,
+      billPaymentDTO.exchangeRate,
+    );
 
     // Transform create DTO to model object.
     const billPaymentObj = await this.commandTransformerDTO.transformDTOToModel(

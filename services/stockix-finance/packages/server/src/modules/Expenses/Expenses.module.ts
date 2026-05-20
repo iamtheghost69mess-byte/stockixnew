@@ -22,8 +22,10 @@ import { ExpensesImportable } from './ExpensesImportable';
 import { BulkDeleteExpensesService } from './BulkDeleteExpenses.service';
 import { ValidateBulkDeleteExpensesService } from './ValidateBulkDeleteExpenses.service';
 
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+
 @Module({
-  imports: [LedgerModule, BranchesModule, DynamicListModule],
+  imports: [CurrenciesModule, LedgerModule, BranchesModule, DynamicListModule],
   controllers: [ExpensesController],
   exports: [CreateExpense, ExpensesExportable, ExpensesImportable],
   providers: [

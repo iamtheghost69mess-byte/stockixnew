@@ -23,8 +23,10 @@ import { GetBillPaymentsService } from './queries/GetBillPayments.service';
 import { DynamicListModule } from '../DynamicListing/DynamicList.module';
 import { BillPaymentsPages } from './commands/BillPaymentsPages.service';
 
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+
 @Module({
-  imports: [LedgerModule, AccountsModule, DynamicListModule],
+  imports: [CurrenciesModule, LedgerModule, AccountsModule, DynamicListModule],
   providers: [
     BillPaymentsApplication,
     CreateBillPaymentService,

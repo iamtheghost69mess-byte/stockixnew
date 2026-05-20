@@ -16,6 +16,8 @@ import { Customer } from '@/modules/Customers/models/Customer';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateSaleInvoiceDto } from '../dtos/SaleInvoice.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateSaleInvoice {
@@ -37,6 +39,8 @@ export class CreateSaleInvoice {
     private readonly eventPublisher: EventEmitter2,
     private readonly commandEstimateValidators: SaleEstimateValidators,
     private readonly uow: UnitOfWork,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(SaleInvoice.name)
     private readonly saleInvoiceModel: TenantModelProxy<typeof SaleInvoice>,
@@ -65,6 +69,13 @@ export class CreateSaleInvoice {
       .query()
       .findById(saleInvoiceDTO.customerId)
       .throwIfNotFound();
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      customer.currencyCode,
+      baseCurrency,
+      saleInvoiceDTO.exchangeRate,
+    );
 
     // Validate the from estimate id exists on the storage.
     if (saleInvoiceDTO.fromEstimateId) {

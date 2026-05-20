@@ -20,6 +20,7 @@ import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { ManualJournalBranchesDTOTransformer } from '@/modules/Branches/integrations/ManualJournals/ManualJournalDTOTransformer.service';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateManualJournalDto } from '../dtos/ManualJournal.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
 
 @Injectable()
 export class CreateManualJournalService {
@@ -28,6 +29,7 @@ export class CreateManualJournalService {
     private eventPublisher: EventEmitter2,
     private uow: UnitOfWork,
     private validator: CommandManualJournalValidators,
+    private exchangeRateValidator: ExchangeRateValidator,
     private autoIncrement: AutoIncrementManualJournal,
     private branchesDTOTransformer: ManualJournalBranchesDTOTransformer,
 
@@ -116,6 +118,14 @@ export class CreateManualJournalService {
     await this.validator.validateJournalCurrencyWithAccountsCurrency(
       manualJournalDTO,
       tenant.metadata.baseCurrency,
+    );
+
+    const currencyCode =
+      manualJournalDTO.currencyCode || tenant.metadata.baseCurrency;
+    this.exchangeRateValidator.validate(
+      currencyCode,
+      tenant.metadata.baseCurrency,
+      manualJournalDTO.exchangeRate,
     );
   };
 

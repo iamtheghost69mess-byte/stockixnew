@@ -42,6 +42,7 @@ import { GetSaleInvoicesService } from './queries/GetSaleInvoices';
 import { SendSaleInvoiceMail } from './commands/SendSaleInvoiceMail';
 import { GetSaleInvoiceMailState } from './queries/GetSaleInvoiceMailState.service';
 import { InventoryCostModule } from '../InventoryCost/InventoryCost.module';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 import { SendSaleInvoiceMailCommon } from './commands/SendInvoiceInvoiceMailCommon.service';
 import { DynamicListModule } from '../DynamicListing/DynamicList.module';
 import { MailNotificationModule } from '../MailNotification/MailNotification.module';
@@ -68,6 +69,7 @@ import { ValidateBulkDeleteSaleInvoicesService } from './ValidateBulkDeleteSaleI
 
 @Module({
   imports: [
+    CurrenciesModule,
     TenancyDatabaseModule,
     PdfTemplatesModule,
     PdfModule,

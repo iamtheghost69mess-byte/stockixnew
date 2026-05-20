@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { ServiceError } from '@/modules/Items/ServiceError';
 
 export const EXCHANGE_RATE_ERRORS = {
@@ -23,6 +24,21 @@ export function validateForeignCurrencyExchangeRate(
     throw new ServiceError(
       EXCHANGE_RATE_ERRORS.EXCHANGE_RATE_REQUIRED_FOR_FOREIGN_CURRENCY,
       'Exchange rate is required for foreign currency transactions.',
+    );
+  }
+}
+
+@Injectable()
+export class ExchangeRateValidator {
+  validate(
+    currencyCode: string,
+    baseCurrency: string,
+    exchangeRate: number | undefined | null,
+  ): void {
+    validateForeignCurrencyExchangeRate(
+      currencyCode,
+      baseCurrency,
+      exchangeRate,
     );
   }
 }

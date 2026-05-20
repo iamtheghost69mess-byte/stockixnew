@@ -15,6 +15,8 @@ import { SaleInvoice } from '../models/SaleInvoice';
 import { Customer } from '@/modules/Customers/models/Customer';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { EditSaleInvoiceDto } from '../dtos/SaleInvoice.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class EditSaleInvoice {
@@ -33,6 +35,8 @@ export class EditSaleInvoice {
     private readonly validators: CommandSaleInvoiceValidators,
     private readonly transformerDTO: CommandSaleInvoiceDTOTransformer,
     private readonly uow: UnitOfWork,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(SaleInvoice.name)
     private readonly saleInvoiceModel: TenantModelProxy<typeof SaleInvoice>,
@@ -66,6 +70,13 @@ export class EditSaleInvoice {
       .query()
       .findById(saleInvoiceDTO.customerId)
       .throwIfNotFound();
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      customer.currencyCode,
+      baseCurrency,
+      saleInvoiceDTO.exchangeRate,
+    );
 
     // Validate items ids existance.
     await this.itemsEntriesService.validateItemsIdsExistance(

@@ -31,9 +31,11 @@ import { BillsImportable } from './commands/BillsImportable';
 import { GetBillPaymentTransactionsService } from './queries/GetBillPayments';
 import { BulkDeleteBillsService } from './BulkDeleteBills.service';
 import { ValidateBulkDeleteBillsService } from './ValidateBulkDeleteBills.service';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 
 @Module({
   imports: [
+    CurrenciesModule,
     BillLandedCostsModule,
     LedgerModule,
     AccountsModule,

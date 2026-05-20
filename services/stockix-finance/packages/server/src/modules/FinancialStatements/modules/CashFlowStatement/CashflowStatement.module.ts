@@ -9,9 +9,10 @@ import { CashflowTableInjectable } from './CashflowTableInjectable';
 import { CashFlowStatementService } from './CashFlowService';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { CashflowSheetApplication } from './CashflowSheetApplication';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [FinancialSheetCommonModule],
+  imports: [FinancialSheetCommonModule, ExchangeRatesModule],
   providers: [
     CashFlowRepository,
     CashflowSheetMeta,

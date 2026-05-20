@@ -41,8 +41,11 @@ const models = [
   RegisterTenancyModel(BankAccount),
 ];
 
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+
 @Module({
   imports: [
+    CurrenciesModule,
     AutoIncrementOrdersModule,
     LedgerModule,
     BranchesModule,

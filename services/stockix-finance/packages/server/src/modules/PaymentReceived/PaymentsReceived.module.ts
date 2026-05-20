@@ -44,6 +44,7 @@ import { GetPaymentReceivedMailTemplate } from './queries/GetPaymentReceivedMail
 import { GetPaymentReceivedMailState } from './queries/GetPaymentReceivedMailState.service';
 import { BulkDeletePaymentReceivedService } from './BulkDeletePaymentReceived.service';
 import { ValidateBulkDeletePaymentReceivedService } from './ValidateBulkDeletePaymentReceived.service';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 
 @Module({
   controllers: [PaymentReceivesController],
@@ -86,6 +87,7 @@ import { ValidateBulkDeletePaymentReceivedService } from './ValidateBulkDeletePa
     PaymentReceivedValidators,
   ],
   imports: [
+    CurrenciesModule,
     ChromiumlyTenancyModule,
     TemplateInjectableModule,
     BranchesModule,

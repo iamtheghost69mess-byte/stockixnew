@@ -13,6 +13,7 @@ import { ITableRow, ITableColumn } from '../../types/Table.types';
 import { dateRangeFromToCollection } from '@/utils/date-range-collection';
 import { tableRowMapper } from '../../utils/Table.utils';
 import { mapValuesDeep } from '@/utils/deepdash';
+import { formatNumber } from '@/utils/format-number';
 
 enum IROW_TYPE {
   AGGREGATE = 'AGGREGATE',
@@ -31,18 +32,48 @@ export class CashFlowTable {
   private report: ICashFlowStatementDOO;
   private i18n: I18nService;
   private dateRangeSet: IDateRange[];
+  private baseCurrency: string;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
 
   /**
    * Constructor method.
    * @param {ICashFlowStatement} reportStatement - Statement.
    * @param {I18nService} i18n - I18n service.
    */
-  constructor(reportStatement: ICashFlowStatementDOO, i18n: I18nService) {
+  constructor(
+    reportStatement: ICashFlowStatementDOO,
+    i18n: I18nService,
+    baseCurrency?: string,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
+  ) {
     this.report = reportStatement;
     this.i18n = i18n;
+    this.baseCurrency = baseCurrency ?? '';
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
     this.dateRangeSet = [];
     this.initDateRangeCollection();
   }
+
+  private decorateNodeSecondary = (section: any): any => {
+    if (
+      !this.secondaryCurrency ||
+      !this.secondaryRate ||
+      section.total?.amount == null
+    ) {
+      return section;
+    }
+
+    const converted = section.total.amount * this.secondaryRate;
+    const formatted = formatNumber(converted, {
+      currencyCode: this.secondaryCurrency,
+      money: true,
+    });
+
+    return { ...section, secondary: { formattedAmount: formatted } };
+  };
 
   /**
    * Initialize date range set.
@@ -69,7 +100,18 @@ export class CashFlowTable {
    * Retrieve the total column accessor.
    */
   private totalColumnAccessor = () => {
-    return [{ key: 'total', accessor: 'total.formattedAmount' }];
+    const accessors: { key: string; accessor: string }[] = [
+      { key: 'total', accessor: 'total.formattedAmount' },
+    ];
+
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({
+        key: 'secondary_total',
+        accessor: 'secondary.formattedAmount',
+      });
+    }
+
+    return accessors;
   };
 
   /**
@@ -96,7 +138,7 @@ export class CashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.AGGREGATE],
       id: section.id,
     });
@@ -112,7 +154,7 @@ export class CashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.NET_INCOME, IROW_TYPE.TOTAL],
       id: section.id,
     });
@@ -128,7 +170,7 @@ export class CashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.ACCOUNTS],
       id: section.id,
     });
@@ -144,7 +186,7 @@ export class CashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.ACCOUNT],
       id: `account-${section.id}`,
     });
@@ -160,7 +202,7 @@ export class CashFlowTable {
   ): ITableRow => {
     const columns = this.commonColumns();
 
-    return tableRowMapper(section, columns, {
+    return tableRowMapper(this.decorateNodeSecondary(section), columns, {
       rowTypes: [IROW_TYPE.TOTAL],
       id: section.id,
     });
@@ -302,7 +344,19 @@ export class CashFlowTable {
    * @returns {ITableColumn}
    */
   private totalColumns = (): ITableColumn[] => {
-    return [{ key: 'total', label: this.i18n.t('cash_flow_statement.total') }];
+    const label = this.baseCurrency
+      ? `${this.i18n.t('cash_flow_statement.total')} (${this.baseCurrency})`
+      : this.i18n.t('cash_flow_statement.total');
+    const columns: ITableColumn[] = [{ key: 'total', label }];
+
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({
+        key: 'secondary_total',
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('cash_flow_statement.total')}`,
+      });
+    }
+
+    return columns;
   };
 
   /**

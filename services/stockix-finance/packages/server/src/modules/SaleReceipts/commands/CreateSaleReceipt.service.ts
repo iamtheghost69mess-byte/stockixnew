@@ -14,6 +14,8 @@ import { Customer } from '@/modules/Customers/models/Customer';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateSaleReceiptDto } from '../dtos/SaleReceipt.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateSaleReceipt {
@@ -32,6 +34,8 @@ export class CreateSaleReceipt {
     private readonly uow: UnitOfWork,
     private readonly transformer: SaleReceiptDTOTransformer,
     private readonly validators: SaleReceiptValidators,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(SaleReceipt.name)
     private readonly saleReceiptModel: TenantModelProxy<typeof SaleReceipt>,
@@ -55,6 +59,13 @@ export class CreateSaleReceipt {
       .query()
       .findById(saleReceiptDTO.customerId)
       .throwIfNotFound();
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      paymentCustomer.currencyCode,
+      baseCurrency,
+      saleReceiptDTO.exchangeRate,
+    );
 
     // Transform sale receipt DTO to model.
     const saleReceiptObj = await this.transformer.transformDTOToModel(

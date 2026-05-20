@@ -46,9 +46,11 @@ import { SaleEstimateAutoIncrementSubscriber } from './subscribers/SaleEstimateA
 import { BulkDeleteSaleEstimatesService } from './BulkDeleteSaleEstimates.service';
 import { ValidateBulkDeleteSaleEstimatesService } from './ValidateBulkDeleteSaleEstimates.service';
 import { SendSaleEstimateMailProcess } from './processes/SendSaleEstimateMail.process';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 
 @Module({
   imports: [
+    CurrenciesModule,
     TenancyDatabaseModule,
     DynamicListModule,
     MailNotificationModule,

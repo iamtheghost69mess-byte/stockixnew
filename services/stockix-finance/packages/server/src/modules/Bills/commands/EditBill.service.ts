@@ -16,6 +16,8 @@ import { Knex } from 'knex';
 import { TransactionLandedCostEntriesService } from '@/modules/BillLandedCosts/TransactionLandedCostEntries.service';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { EditBillDto } from '../dtos/Bill.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class EditBillService {
@@ -26,6 +28,8 @@ export class EditBillService {
     private eventPublisher: EventEmitter2,
     private transactionLandedCostEntries: TransactionLandedCostEntriesService,
     private transformerDTO: BillDTOTransformer,
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(Bill.name) private billModel: TenantModelProxy<typeof Bill>,
     @Inject(Vendor.name) private vendorModel: TenantModelProxy<typeof Vendor>,
@@ -62,6 +66,13 @@ export class EditBillService {
       .query()
       .findById(billDTO.vendorId)
       .throwIfNotFound();
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      vendor.currencyCode,
+      baseCurrency,
+      billDTO.exchangeRate,
+    );
 
     // Validate bill number uniqiness on the storage.
     if (billDTO.billNumber) {

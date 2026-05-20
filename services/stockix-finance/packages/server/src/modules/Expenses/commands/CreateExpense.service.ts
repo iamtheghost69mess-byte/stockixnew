@@ -13,6 +13,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateExpenseDto } from '../dtos/Expense.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateExpense {
@@ -35,6 +37,9 @@ export class CreateExpense {
 
     @Inject(Expense.name)
     private readonly expenseModel: TenantModelProxy<typeof Expense>,
+
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRateValidator: ExchangeRateValidator,
   ) {}
 
   /**
@@ -69,6 +74,13 @@ export class CreateExpense {
 
     // Validate the given expense categories not equal zero.
     this.validator.validateCategoriesNotEqualZero(expenseDTO);
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      expenseDTO.currencyCode || baseCurrency,
+      baseCurrency,
+      expenseDTO.exchangeRate,
+    );
   };
 
   /**

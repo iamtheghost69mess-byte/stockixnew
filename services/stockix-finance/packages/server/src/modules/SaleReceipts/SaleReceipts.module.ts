@@ -47,10 +47,12 @@ import { SaleReceiptCostGLEntriesSubscriber } from './subscribers/SaleReceiptCos
 import { SaleReceiptCostGLEntries } from './SaleReceiptCostGLEntries';
 import { BulkDeleteSaleReceiptsService } from './BulkDeleteSaleReceipts.service';
 import { ValidateBulkDeleteSaleReceiptsService } from './ValidateBulkDeleteSaleReceipts.service';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 
 @Module({
   controllers: [SaleReceiptsController],
   imports: [
+    CurrenciesModule,
     ItemsModule,
     ChromiumlyTenancyModule,
     TemplateInjectableModule,

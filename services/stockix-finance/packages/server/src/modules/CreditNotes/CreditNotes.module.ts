@@ -37,9 +37,11 @@ import { CreditNoteRefundsModule } from '../CreditNoteRefunds/CreditNoteRefunds.
 import { CreditNotesApplyInvoiceModule } from '../CreditNotesApplyInvoice/CreditNotesApplyInvoice.module';
 import { BulkDeleteCreditNotesService } from './BulkDeleteCreditNotes.service';
 import { ValidateBulkDeleteCreditNotesService } from './ValidateBulkDeleteCreditNotes.service';
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
 
 @Module({
   imports: [
+    CurrenciesModule,
     ItemsModule,
     BranchesModule,
     WarehousesModule,

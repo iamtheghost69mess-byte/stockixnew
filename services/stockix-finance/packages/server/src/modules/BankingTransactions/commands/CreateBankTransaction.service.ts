@@ -19,6 +19,8 @@ import {
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateBankTransactionDto } from '../dtos/CreateBankTransaction.dto';
 import { formatDateFields } from '@/utils/format-date-fields';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateBankTransactionService {
@@ -28,6 +30,8 @@ export class CreateBankTransactionService {
     private eventPublisher: EventEmitter2,
     private autoIncrement: BankTransactionAutoIncrement,
     private branchDTOTransform: BranchTransactionDTOTransformer,
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(BankTransaction.name)
     private bankTransactionModel: TenantModelProxy<typeof BankTransaction>,
@@ -133,6 +137,13 @@ export class CreateBankTransactionService {
 
     // Authorize before creating cashflow transaction.
     await this.authorize(newTransactionDTO, creditAccount);
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      cashflowAccount.currencyCode,
+      baseCurrency,
+      newTransactionDTO.exchangeRate,
+    );
 
     // Transformes owner contribution DTO to cashflow transaction.
     const cashflowTransactionObj = await this.transformCashflowTransactionDTO(

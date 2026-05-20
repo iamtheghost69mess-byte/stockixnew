@@ -22,8 +22,10 @@ import { DynamicListModule } from '../DynamicListing/DynamicList.module';
 import { BulkDeleteManualJournalsService } from './BulkDeleteManualJournals.service';
 import { ValidateBulkDeleteManualJournalsService } from './ValidateBulkDeleteManualJournals.service';
 
+import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+
 @Module({
-  imports: [BranchesModule, LedgerModule, DynamicListModule],
+  imports: [CurrenciesModule, BranchesModule, LedgerModule, DynamicListModule],
   controllers: [ManualJournalsController],
   providers: [
     TenancyContext,

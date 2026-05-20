@@ -15,6 +15,7 @@ import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { Inject, Injectable } from '@nestjs/common';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreatePaymentReceivedDto } from '../dtos/PaymentReceived.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
 
 @Injectable()
 export class CreatePaymentReceivedService {
@@ -24,6 +25,7 @@ export class CreatePaymentReceivedService {
     private uow: UnitOfWork,
     private transformer: PaymentReceiveDTOTransformer,
     private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(PaymentReceived.name)
     private paymentReceived: TenantModelProxy<typeof PaymentReceived>,
@@ -49,6 +51,12 @@ export class CreatePaymentReceivedService {
       .query()
       .findById(paymentReceiveDTO.customerId)
       .throwIfNotFound();
+
+    this.exchangeRateValidator.validate(
+      paymentCustomer.currencyCode,
+      tenant.metadata.baseCurrency,
+      paymentReceiveDTO.exchangeRate,
+    );
 
     // Transformes the payment receive DTO to model.
     const paymentReceiveObj = await this.transformCreateDTOToModel(

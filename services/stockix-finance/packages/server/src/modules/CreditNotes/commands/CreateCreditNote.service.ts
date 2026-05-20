@@ -13,6 +13,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { CreateCreditNoteDto } from '../dtos/CreditNote.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class CreateCreditNoteService {
@@ -29,6 +31,8 @@ export class CreateCreditNoteService {
     private readonly itemsEntriesService: ItemsEntriesService,
     private readonly eventPublisher: EventEmitter2,
     private readonly commandCreditNoteDTOTransform: CommandCreditNoteDTOTransform,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRateValidator: ExchangeRateValidator,
 
     @Inject(CreditNote.name)
     private readonly creditNoteModel: TenantModelProxy<typeof CreditNote>,
@@ -64,6 +68,14 @@ export class CreateCreditNoteService {
     await this.itemsEntriesService.validateNonSellableEntriesItems(
       creditNoteDTO.entries,
     );
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      customer.currencyCode,
+      baseCurrency,
+      creditNoteDTO.exchangeRate,
+    );
+
     // Transformes the given DTO to storage layer data.
     const creditNoteModel =
       await this.commandCreditNoteDTOTransform.transformCreateEditDTOToModel(

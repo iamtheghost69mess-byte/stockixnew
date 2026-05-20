@@ -13,6 +13,8 @@ import { Expense } from '../models/Expense.model';
 import { events } from '@/common/events/events';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { EditExpenseDto } from '../dtos/Expense.dto';
+import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 
 @Injectable()
 export class EditExpense {
@@ -34,6 +36,9 @@ export class EditExpense {
 
     @Inject(Account.name)
     private accountModel: TenantModelProxy<typeof Account>,
+
+    private tenancyContext: TenancyContext,
+    private exchangeRateValidator: ExchangeRateValidator,
   ) {}
 
   /**
@@ -70,6 +75,13 @@ export class EditExpense {
     await this.validator.validateExpensesAccountsType(expenseAccounts);
     // Validate the given expense categories not equal zero.
     this.validator.validateCategoriesNotEqualZero(expenseDTO);
+
+    const { baseCurrency } = await this.tenancyContext.getTenantMetadata();
+    this.exchangeRateValidator.validate(
+      expenseDTO.currencyCode || oldExpense.currencyCode || baseCurrency,
+      baseCurrency,
+      expenseDTO.exchangeRate,
+    );
 
     // Validate expense entries that have allocated landed cost cannot be deleted.
     // this.entriesService.validateLandedCostEntriesNotDeleted(
