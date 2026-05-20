@@ -60,7 +60,7 @@ export async function syncFinanceLicenseForStockixTenant(
     financeTenantId: number;
     internalBaseUrl?: string | null;
   },
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = () => {},
 ): Promise<void> {
   const secret = apiConfig.internalApiSecret;
   if (!secret) {

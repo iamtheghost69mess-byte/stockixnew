@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from 'react';
+import { Redirect } from 'react-router-dom';
 import { x } from '@xstyled/emotion';
 
 import SetupWizardContent from './SetupWizardContent';
@@ -27,6 +28,10 @@ function SetupRightSection({
   // #withSubscriptions
   isSubscriptionActive,
 }) {
+  if (isOrganizationReady && !isOrganizationSetupCompleted) {
+    return <Redirect to="/setup/complete" />;
+  }
+
   return (
     <x.section w="100%" overflow="auto">
       <SetupWizardContent stepId={setupStepId} stepIndex={setupStepIndex} />

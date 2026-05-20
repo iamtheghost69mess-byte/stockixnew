@@ -61,26 +61,16 @@ export class LicenseGuardMiddleware implements NestMiddleware {
 
     if (effectiveStatus === 'suspended') {
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
-        errors: [
-          {
-            statusCode: HttpStatus.PAYMENT_REQUIRED,
-            type: 'ACCOUNT_SUSPENDED',
-            message: 'Account suspended. Contact your provider.',
-          },
-        ],
+        error: 'LICENSE_SUSPENDED',
+        message: 'Account suspended. Contact your provider.',
       });
       return;
     }
 
     if (effectiveStatus === 'expired') {
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
-        errors: [
-          {
-            statusCode: HttpStatus.PAYMENT_REQUIRED,
-            type: 'LICENSE_EXPIRED',
-            message: 'License expired. Contact your provider.',
-          },
-        ],
+        error: 'LICENSE_EXPIRED',
+        message: 'License expired. Contact your provider.',
       });
       return;
     }
@@ -91,14 +81,8 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       }
 
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
-        errors: [
-          {
-            statusCode: HttpStatus.PAYMENT_REQUIRED,
-            type: 'LICENSE_GRACE',
-            message:
-              'License in grace period. Upgrade to continue editing.',
-          },
-        ],
+        error: 'LICENSE_GRACE',
+        message: 'License in grace period. Upgrade to continue editing.',
       });
       return;
     }

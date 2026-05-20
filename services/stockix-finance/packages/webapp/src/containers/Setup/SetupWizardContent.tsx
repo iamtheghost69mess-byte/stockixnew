@@ -5,7 +5,6 @@ import { css } from '@emotion/css';
 
 import SetupOrganizationPage from './SetupOrganizationPage';
 import SetupInitializingForm from './SetupInitializingForm';
-import SetupCongratsPage from './SetupCongratsPage';
 import { Stepper } from '@/components/Stepper';
 
 interface SetupWizardContentProps {
@@ -38,10 +37,6 @@ export default function SetupWizardContent({
 
         <Stepper.Step label={'Initializing'}>
           <SetupInitializingForm id={'initializing'} />
-        </Stepper.Step>
-
-        <Stepper.Step label={'Congrats'}>
-          <SetupCongratsPage id="congrats" />
         </Stepper.Step>
       </Stepper>
     </x.div>

@@ -11,7 +11,12 @@ export class GetAuthMetaService {
 
   }
   /**
-   * Retrieves the authentication meta for SPA.
+   * Retrieves authentication meta for unauthenticated SPA routes (login/register).
+   *
+   * License fields are intentionally null here: there is no tenant context before
+   * sign-in. After login, license state is provided by dashboard boot meta
+   * (`DashboardService.getBootMeta` → `useDashboardMeta`).
+   *
    * @returns {Promise<IAuthGetMetaPOJO>}
    */
   public async getAuthMeta(): Promise<IAuthGetMetaPOJO> {

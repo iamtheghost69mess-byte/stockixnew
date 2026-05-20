@@ -14,6 +14,7 @@ import LicenseGenerateDialog from "@/components/license-generate-dialog";
 import LicenseStatusBadge from "@/components/license-status-badge";
 import { OrgSwitcher } from "@/components/org-switcher";
 import TenantOrgAccessPanel from "@/components/tenant-org-access-panel";
+import TenantUsersPanel from "@/components/tenant-users-panel";
 import TenantStatusBadge from "@/components/tenant-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -540,6 +541,16 @@ export default function TenantDetailPage() {
           <TenantOrgAccessPanel tenantId={tenant.id} />
         </div>
       ) : null}
+
+      <div className="mt-6">
+        <TenantUsersPanel
+          tenantId={tenant.id}
+          financeLinked={
+            tenant.deployment != null &&
+            Number(tenant.deployment.internalPort) > 0
+          }
+        />
+      </div>
 
       <Card>
         <CardHeader>
