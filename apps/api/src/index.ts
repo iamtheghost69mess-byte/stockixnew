@@ -4180,6 +4180,15 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
 
   const row = await loadTenantForLifecycle(parsed.data);
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
+  if (row.tenantStatus === "suspended" || row.deploymentStatus === "suspended") {
+    return c.json({
+      accepted: true,
+      suspended: true,
+      slug: row.slug,
+      composeProject: row.composeProjectName,
+      alreadySuspended: true,
+    }, 200);
+  }
   if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
   const job = await insertTenantJob(db, {
     type: "tenant.lifecycle",

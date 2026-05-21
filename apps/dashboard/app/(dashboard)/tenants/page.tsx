@@ -221,7 +221,11 @@ function TenantsPageContent() {
             error?: string;
             message?: string;
           };
-          if (!transitionRes.ok) {
+          const alreadyTransitioned =
+            !transitionRes.ok
+            && (transitionData.error === "tenant_not_active"
+              || transitionData.error === "tenant_not_provisioning");
+          if (!transitionRes.ok && !alreadyTransitioned) {
             throw new Error(
               formatApiError(
                 transitionData,
@@ -232,7 +236,7 @@ function TenantsPageContent() {
             );
           }
 
-          for (let i = 0; i < 6; i += 1) {
+          for (let i = 0; i < 15; i += 1) {
             await new Promise((r) => setTimeout(r, 2000));
             const attempt = await deleteOnce();
             res = attempt.res;
