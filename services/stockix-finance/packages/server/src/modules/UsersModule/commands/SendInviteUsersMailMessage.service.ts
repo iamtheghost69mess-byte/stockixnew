@@ -52,7 +52,7 @@ export class SendInviteUsersMailMessage {
         email: fromUser.email,
         organizationName: tenant.metadata.name,
       });
-    mail.setIdempotencyKey(`invite/${invite.email}/${invite.token?.substring(0, 8) ?? invite.id}`);
+    mail.setIdempotencyKey(`invite/${invite.email}/${invite.token.substring(0, 8)}`);
     await this.mailTransporter.send(mail);
   }
 }
