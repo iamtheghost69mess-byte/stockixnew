@@ -13,9 +13,11 @@ import {
 } from '../SaleInvoice.types';
 import { ISaleInvoiceMailSend } from '../SaleInvoice.types';
 import { Mail } from '@/modules/Mail/Mail';
+import { formatMailFromList } from '@/modules/Mail/Mail.utils';
 import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
 import { SendSaleInvoiceMailJob, SendSaleInvoiceQueue } from '../constants';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { MAIL_QUEUE_JOB_OPTIONS } from '@/modules/Mail/mail-queue.constants';
 
 @Injectable()
 export class SendSaleInvoiceMail {
@@ -57,7 +59,7 @@ export class SendSaleInvoiceMail {
       organizationId,
     } as SendSaleInvoiceMailJobPayload;
 
-    await this.sendInvoiceQueue.add(SendSaleInvoiceMailJob, payload);
+    await this.sendInvoiceQueue.add(SendSaleInvoiceMailJob, payload, MAIL_QUEUE_JOB_OPTIONS);
 
     // Triggers the event `onSaleInvoicePreMailSend`.
     await this.eventEmitter.emitAsync(events.saleInvoice.onPreMailSend, {
@@ -109,7 +111,9 @@ export class SendSaleInvoiceMail {
       .setTo(formattedMessageOptions.to)
       .setCC(formattedMessageOptions.cc)
       .setBCC(formattedMessageOptions.bcc)
-      .setContent(formattedMessageOptions.message);
+      .setFrom(formatMailFromList(formattedMessageOptions.from))
+      .setContent(formattedMessageOptions.message)
+      .setIdempotencyKey(`invoice/${saleInvoiceId}`);
 
     // Attach invoice document.
     if (formattedMessageOptions.attachInvoice) {

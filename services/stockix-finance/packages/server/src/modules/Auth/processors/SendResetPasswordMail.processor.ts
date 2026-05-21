@@ -3,7 +3,6 @@ import { Scope } from '@nestjs/common';
 import { SendResetPasswordMailQueue } from '../Auth.constants';
 import { Job } from 'bullmq';
 import { AuthenticationMailMesssages } from '../AuthMailMessages.esrvice';
-import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
 import { ModelObject } from 'objection';
 import { SystemUser } from '@/modules/System/models/SystemUser';
 
@@ -14,7 +13,6 @@ import { SystemUser } from '@/modules/System/models/SystemUser';
 export class SendResetPasswordMailProcessor extends WorkerHost {
   constructor(
     private readonly authMailMesssages: AuthenticationMailMesssages,
-    private readonly mailTransporter: MailTransporter,
   ) {
     super();
   }
@@ -26,7 +24,12 @@ export class SendResetPasswordMailProcessor extends WorkerHost {
         job.data.token,
       );
     } catch (error) {
-      console.log('Error occured during send reset password mail', error);
+      console.error('[MailProcessor] Failed to send reset password email:', {
+        jobId: job.id,
+        jobName: job.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   }
 }

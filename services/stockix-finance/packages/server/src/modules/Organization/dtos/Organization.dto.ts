@@ -1,6 +1,7 @@
 import * as momentTz from 'moment-timezone';
 import {
   IsArray,
+  IsEmail,
   IsHexColor,
   IsIn,
   IsISO31661Alpha2,
@@ -240,4 +241,23 @@ export class UpdateOrganizationDto {
     nullable: true,
   })
   secondaryCurrency?: string | null;
+
+  @IsOptional()
+  @IsEmail()
+  @ApiPropertyOptional({
+    description:
+      'Outbound email address for invoices and estimates (must be on a Resend-verified domain)',
+    example: 'billing@yourdomain.com',
+    nullable: true,
+  })
+  fromEmailAddress?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({
+    description: 'Display name for outbound transactional email',
+    example: 'Acme Billing',
+    nullable: true,
+  })
+  fromEmailName?: string | null;
 }

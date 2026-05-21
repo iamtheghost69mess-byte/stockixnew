@@ -14,14 +14,21 @@ export class MailTenancy {
    */
   public async senders() {
     const tenantMetadata = await this.tenancyContext.getTenantMetadata();
-    const from = this.config.get('mail.from');
+    const globalFrom = this.config.get('mail.from');
+
+    const fromAddress = tenantMetadata.fromEmailAddress
+      ? {
+          name: tenantMetadata.fromEmailName ?? tenantMetadata.name,
+          address: tenantMetadata.fromEmailAddress,
+        }
+      : globalFrom;
 
     return [
       {
-        mail: from,
-        label: tenantMetadata.name,
+        mail: fromAddress,
+        label: tenantMetadata.fromEmailName ?? tenantMetadata.name,
         primary: true,
-      }
-    ].filter((item) => item.mail)
+      },
+    ].filter((item) => item.mail);
   }
 }

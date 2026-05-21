@@ -23,6 +23,8 @@ import {
 import { SaleReceipt } from '../models/SaleReceipt';
 import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
 import { Mail } from '@/modules/Mail/Mail';
+import { formatMailFromList } from '@/modules/Mail/Mail.utils';
+import { MAIL_QUEUE_JOB_OPTIONS } from '@/modules/Mail/mail-queue.constants';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { GetSaleReceiptMailTemplateService } from '../queries/GetSaleReceiptMailTemplate.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
@@ -74,9 +76,11 @@ export class SaleReceiptMailNotification {
       organizationId,
     } as SaleReceiptSendMailPayload;
 
-    await this.sendSaleReceiptMailProcess.add(SendSaleReceiptMailJob, {
-      ...payload,
-    });
+    await this.sendSaleReceiptMailProcess.add(
+      SendSaleReceiptMailJob,
+      { ...payload },
+      MAIL_QUEUE_JOB_OPTIONS,
+    );
     // Triggers the event `onSaleReceiptPreMailSend`.
     await this.eventEmitter.emitAsync(events.saleReceipt.onPreMailSend, {
       saleReceiptId,
@@ -196,7 +200,9 @@ export class SaleReceiptMailNotification {
       .setTo(formattedMessageOptions.to)
       .setCC(formattedMessageOptions.cc)
       .setBCC(formattedMessageOptions.bcc)
-      .setContent(formattedMessageOptions.message);
+      .setFrom(formatMailFromList(formattedMessageOptions.from))
+      .setContent(formattedMessageOptions.message)
+      .setIdempotencyKey(`receipt/${saleReceiptId}`);
 
     // Attaches the receipt pdf document.
     if (formattedMessageOptions.attachReceipt) {

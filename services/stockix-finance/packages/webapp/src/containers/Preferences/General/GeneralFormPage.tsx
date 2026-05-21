@@ -27,6 +27,8 @@ const defaultValues = {
   address: {},
   display_currencies: [],
   secondary_currency: '',
+  from_email_address: '',
+  from_email_name: '',
 };
 
 /**

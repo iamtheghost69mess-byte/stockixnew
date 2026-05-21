@@ -106,6 +106,20 @@ export class OrganizationMetadataResponseDto {
     nullable: true,
   })
   secondaryCurrency: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Custom from email for outbound mail (verified domain in Resend)',
+    example: 'billing@yourdomain.com',
+    nullable: true,
+  })
+  fromEmailAddress: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Custom from display name for outbound mail',
+    example: 'Acme Billing',
+    nullable: true,
+  })
+  fromEmailName: string | null;
 }
 
 export class GetCurrentOrganizationResponseDto {

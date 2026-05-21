@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModelObject } from 'objection';
 import { Mail } from '@/modules/Mail/Mail';
+import { formatMailFrom } from '@/modules/Mail/Mail.utils';
 import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
 import { SystemUser } from '@/modules/System/models/SystemUser';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
@@ -32,6 +33,7 @@ export class SendInviteUsersMailMessage {
 
     const mail = new Mail()
       .setSubject(`${fromUser.firstName} has invited you to join Stockix`)
+      .setFrom(formatMailFrom())
       .setView('mail/UserInvite.html')
       .setTo(invite.email)
       .setAttachments([
@@ -50,6 +52,7 @@ export class SendInviteUsersMailMessage {
         email: fromUser.email,
         organizationName: tenant.metadata.name,
       });
-    this.mailTransporter.send(mail);
+    mail.setIdempotencyKey(`invite/${invite.email}/${invite.token?.substring(0, 8) ?? invite.id}`);
+    await this.mailTransporter.send(mail);
   }
 }

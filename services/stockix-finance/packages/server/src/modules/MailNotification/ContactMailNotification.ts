@@ -5,6 +5,7 @@ import { TenancyContext } from '../Tenancy/TenancyContext.service';
 import { Customer } from '../Customers/models/Customer';
 import { CommonMailOptions } from './MailNotification.types';
 import { formatMessage } from '@/utils/format-message';
+import { formatMailFrom } from '@/modules/Mail/Mail.utils';
 import { TenantModelProxy } from '../System/models/TenantBaseModel';
 
 @Injectable()
@@ -39,7 +40,9 @@ export class ContactMailNotification {
     const fromAddress = fromOptions.find((a) => a.primary);
 
     const to = toAddress?.mail ? castArray(toAddress?.mail) : [];
-    const from = fromAddress?.mail ? castArray(fromAddress?.mail) : [];
+    const from = fromAddress?.mail
+      ? castArray(formatMailFrom(fromAddress.mail))
+      : [];
 
     return { to, from, toOptions, fromOptions };
   }

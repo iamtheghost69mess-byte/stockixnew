@@ -2,7 +2,6 @@ import { Scope } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { SendSignupVerificationMailQueue } from '../Auth.constants';
-import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
 import { AuthenticationMailMesssages } from '../AuthMailMessages.esrvice';
 
 @Processor({
@@ -12,7 +11,6 @@ import { AuthenticationMailMesssages } from '../AuthMailMessages.esrvice';
 export class SendSignupVerificationMailProcessor extends WorkerHost {
   constructor(
     private readonly authMailMesssages: AuthenticationMailMesssages,
-    private readonly mailTransporter: MailTransporter,
   ) {
     super();
   }
@@ -25,7 +23,12 @@ export class SendSignupVerificationMailProcessor extends WorkerHost {
         job.data.token,
       );
     } catch (error) {
-      console.log('Error occured during send signup verification mail', error);
+      console.error('[MailProcessor] Failed to send signup verification email:', {
+        jobId: job.id,
+        jobName: job.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   }
 }

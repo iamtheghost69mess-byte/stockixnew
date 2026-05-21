@@ -229,6 +229,16 @@ export const env = {
   npm_package_type: readOptionalString("npm_package_type"),
 } as const;
 
+export const mailConfig = {
+  host: env.MAIL_HOST ?? '',
+  port: parseInt(env.MAIL_PORT ?? '587', 10),
+  username: env.MAIL_USERNAME ?? '',
+  password: env.MAIL_PASSWORD ?? '',
+  secure: env.MAIL_SECURE === 'true' || env.MAIL_SECURE === '1',
+  fromName: env.MAIL_FROM_NAME ?? 'Stockix',
+  fromAddress: env.MAIL_FROM_ADDRESS ?? '',
+} as const;
+
 export const apiConfig = {
   get databaseUrl() {
     return env.DATABASE_URL ?? readRequiredString("DATABASE_URL");

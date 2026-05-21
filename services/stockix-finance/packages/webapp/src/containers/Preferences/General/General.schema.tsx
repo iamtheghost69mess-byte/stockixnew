@@ -37,6 +37,10 @@ const Schema = Yup.object().shape({
       [Yup.ref('base_currency')],
       intl.get('secondary_currency_must_differ_from_base'),
     ),
+  from_email_address: Yup.string()
+    .nullable()
+    .email(intl.get('invalid_email_address') || 'Invalid email'),
+  from_email_name: Yup.string().nullable(),
 });
 
 export const PreferencesGeneralSchema = Schema;

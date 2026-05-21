@@ -1,13 +1,15 @@
-import { tenantDeployments } from "@repo/db/schema";
+import { tenantDeployments, tenants, licenses } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
+import { sendLicenseExpiringEmail } from "./mail/send.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /**
  * Pushes current Stockix license state to the tenant Finance stack (non-blocking).
+ * Sends a grace-period warning email when the license has expired but is still within grace.
  */
 export async function triggerFinanceLicenseSync(
   db: Db,
@@ -15,6 +17,8 @@ export async function triggerFinanceLicenseSync(
   log: (message: string) => void = console.log,
 ): Promise<void> {
   if (!stockixTenantId) return;
+
+  await maybeSendLicenseGraceWarningEmail(db, stockixTenantId, log);
 
   const [deployment] = await db
     .select({ financeTenantId: tenantDeployments.financeTenantId })
@@ -35,4 +39,59 @@ export async function triggerFinanceLicenseSync(
     { stockixTenantId, financeTenantId },
     log,
   );
+}
+
+async function maybeSendLicenseGraceWarningEmail(
+  db: Db,
+  stockixTenantId: string,
+  log: (message: string) => void,
+): Promise<void> {
+  const [license] = await db
+    .select()
+    .from(licenses)
+    .where(eq(licenses.tenantId, stockixTenantId))
+    .limit(1);
+
+  if (!license?.expiresAt || license.isPerpetual) {
+    return;
+  }
+
+  const now = new Date();
+  const expiresAt = license.expiresAt;
+  const graceDays = license.gracePeriodDays ?? 7;
+  const graceEnds = new Date(expiresAt);
+  graceEnds.setDate(graceEnds.getDate() + graceDays);
+
+  const inGrace =
+    expiresAt < now && now <= graceEnds && license.status !== "revoked";
+
+  if (!inGrace) {
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenants.name, adminEmail: tenants.adminEmail })
+    .from(tenants)
+    .where(eq(tenants.id, stockixTenantId))
+    .limit(1);
+
+  if (!tenant?.adminEmail) {
+    return;
+  }
+
+  try {
+    await sendLicenseExpiringEmail({
+      to: tenant.adminEmail,
+      tenantName: tenant.name,
+      expiresAt,
+      gracePeriodDays: graceDays,
+    });
+    log(`[mail] Sent license grace warning to ${tenant.adminEmail}`);
+  } catch (err) {
+    log(
+      `[mail] License grace email failed (non-fatal): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
 }

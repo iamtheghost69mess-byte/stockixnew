@@ -12,6 +12,7 @@ import {
   SendInviteUserMailQueue,
 } from '../Users.constants';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { MAIL_QUEUE_JOB_OPTIONS } from '@/modules/Mail/mail-queue.constants';
 
 @Injectable()
 export default class InviteSendMainNotificationSubscribe {
@@ -37,11 +38,15 @@ export default class InviteSendMainNotificationSubscribe {
     const organizationId = tenant.organizationId;
     const userId = authedUser.id;
 
-    await this.sendInviteMailQueue.add(SendInviteUserMailJob, {
-      fromUser: invitingUser,
-      invite,
-      userId,
-      organizationId,
-    } as SendInviteUserMailJobPayload);
+    await this.sendInviteMailQueue.add(
+      SendInviteUserMailJob,
+      {
+        fromUser: invitingUser,
+        invite,
+        userId,
+        organizationId,
+      } as SendInviteUserMailJobPayload,
+      MAIL_QUEUE_JOB_OPTIONS,
+    );
   }
 }

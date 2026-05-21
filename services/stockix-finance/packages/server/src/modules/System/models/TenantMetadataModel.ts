@@ -23,6 +23,8 @@ export class TenantMetadata extends BaseModel {
   public secondaryCurrency?: string | null;
   public setupCompletedAt?: string | null;
   public organizationNumber?: string | null;
+  public fromEmailAddress?: string | null;
+  public fromEmailName?: string | null;
 
   /**
    * Json schema.

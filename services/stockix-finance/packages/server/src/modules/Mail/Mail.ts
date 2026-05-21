@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as Mustache from 'mustache';
 import * as path from 'path';
 import { IMailAttachment } from './Mail.types';
+import { formatMailFrom } from './Mail.utils';
 
 export class Mail {
   view: string;
@@ -11,15 +12,17 @@ export class Mail {
   cc: string | string[];
   bcc: string | string[];
   replyTo: string | string[];
-  from: string = `${process.env.MAIL_FROM_NAME} ${process.env.MAIL_FROM_ADDRESS}`;
+  /** Resend / Nodemailer format: "Display Name <email@domain.com>" */
+  from: string = formatMailFrom();
   data: { [key: string]: string | number };
   attachments: IMailAttachment[];
+  idempotencyKey?: string;
 
   /**
    * Mail options.
    */
   public get mailOptions() {
-    return {
+    const options: Record<string, unknown> = {
       to: this.to,
       from: this.from,
       cc: this.cc,
@@ -29,6 +32,14 @@ export class Mail {
       attachments: this.attachments,
       replyTo: this.replyTo,
     };
+
+    if (this.idempotencyKey) {
+      options.headers = {
+        'Resend-Idempotency-Key': this.idempotencyKey,
+      };
+    }
+
+    return options;
   }
 
   /**
@@ -70,6 +81,11 @@ export class Mail {
    */
   setFrom(from: string) {
     this.from = from;
+    return this;
+  }
+
+  setIdempotencyKey(key: string) {
+    this.idempotencyKey = key;
     return this;
   }
 

@@ -63,6 +63,29 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
 
   return (
     <Form>
+      {/* ---------- Outbound email (Resend verified domain) ---------- */}
+      <FFormGroup
+        name={'from_email_name'}
+        label={'Sender display name'}
+        inline={true}
+        helperText={'Shown on invoices and estimates sent to customers.'}
+        fastField={true}
+      >
+        <FInputGroup medium={'true'} name={'from_email_name'} fastField={true} />
+      </FFormGroup>
+
+      <FFormGroup
+        name={'from_email_address'}
+        label={'Sender email address'}
+        inline={true}
+        helperText={
+          'Must use a domain verified in Resend. Leave empty to use the platform default.'
+        }
+        fastField={true}
+      >
+        <FInputGroup medium={'true'} name={'from_email_address'} fastField={true} />
+      </FFormGroup>
+
       {/* ---------- Organization name ----------  */}
       <FFormGroup
         name={'name'}

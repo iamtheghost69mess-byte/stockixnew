@@ -21,7 +21,9 @@ import {
 } from '../types/SaleEstimates.types';
 import { SaleEstimateMailOptions } from '../types/SaleEstimates.types';
 import { Mail } from '@/modules/Mail/Mail';
+import { formatMailFromList } from '@/modules/Mail/Mail.utils';
 import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
+import { MAIL_QUEUE_JOB_OPTIONS } from '@/modules/Mail/mail-queue.constants';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { GetSaleEstimateMailTemplateService } from '../queries/GetSaleEstimateMailTemplate.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
@@ -75,7 +77,11 @@ export class SendSaleEstimateMail {
       organizationId,
     };
 
-    await this.sendEstimateMailQueue.add(SendSaleEstimateMailJob, payload);
+    await this.sendEstimateMailQueue.add(
+      SendSaleEstimateMailJob,
+      payload,
+      MAIL_QUEUE_JOB_OPTIONS,
+    );
 
     // Triggers `onSaleEstimatePreMailSend` event.
     await this.eventPublisher.emitAsync(events.saleEstimate.onPreMailSend, {
@@ -195,7 +201,9 @@ export class SendSaleEstimateMail {
       .setTo(formattedOptions.to)
       .setCC(formattedOptions.cc)
       .setBCC(formattedOptions.bcc)
-      .setContent(formattedOptions.message);
+      .setFrom(formatMailFromList(formattedOptions.from))
+      .setContent(formattedOptions.message)
+      .setIdempotencyKey(`estimate/${saleEstimateId}`);
 
     // Attaches the estimate pdf to the mail.
     if (formattedOptions.attachEstimate) {

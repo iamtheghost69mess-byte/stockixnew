@@ -22,7 +22,9 @@ import { PaymentReceiveMailOpts } from '../types/PaymentReceived.types';
 import { PaymentReceiveMailPresendEvent } from '../types/PaymentReceived.types';
 import { SendInvoiceMailDTO } from '@/modules/SaleInvoices/SaleInvoice.types';
 import { Mail } from '@/modules/Mail/Mail';
+import { formatMailFromList } from '@/modules/Mail/Mail.utils';
 import { MailTransporter } from '@/modules/Mail/MailTransporter.service';
+import { MAIL_QUEUE_JOB_OPTIONS } from '@/modules/Mail/mail-queue.constants';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { GetPaymentReceivedMailTemplate } from '../queries/GetPaymentReceivedMailTemplate.service';
@@ -73,6 +75,7 @@ export class SendPaymentReceiveMailNotification {
     await this.sendPaymentMailQueue.add(
       SEND_PAYMENT_RECEIVED_MAIL_JOB,
       payload,
+      MAIL_QUEUE_JOB_OPTIONS,
     );
     // Triggers `onPaymentReceivePreMailSend` event.
     await this.eventEmitter.emitAsync(events.paymentReceive.onPreMailSend, {
@@ -205,7 +208,9 @@ export class SendPaymentReceiveMailNotification {
       .setTo(formattedMessageOptions.to)
       .setCC(formattedMessageOptions.cc)
       .setBCC(formattedMessageOptions.bcc)
-      .setContent(formattedMessageOptions.message);
+      .setFrom(formatMailFromList(formattedMessageOptions.from))
+      .setContent(formattedMessageOptions.message)
+      .setIdempotencyKey(`payment-received/${paymentReceiveId}`);
 
     const eventPayload = {
       paymentReceiveId,

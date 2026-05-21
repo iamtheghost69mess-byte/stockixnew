@@ -4,6 +4,7 @@ import { SystemUser } from '../System/models/SystemUser';
 import { ModelObject } from 'objection';
 import { ConfigService } from '@nestjs/config';
 import { Mail } from '../Mail/Mail';
+import { formatMailFrom } from '../Mail/Mail.utils';
 import { MailTransporter } from '../Mail/MailTransporter.service';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class AuthenticationMailMesssages {
 
     return new Mail()
       .setSubject('Stockix - Password Reset')
+      .setFrom(formatMailFrom())
       .setView('mail/ResetPassword.html')
       .setTo(user.email)
       .setAttachments([
@@ -41,9 +43,12 @@ export class AuthenticationMailMesssages {
   }
 
   sendResetPasswordMail(user: ModelObject<SystemUser>, token: string) {
-      const mail = this.resetPasswordMessage(user, token);
+    const mail = this.resetPasswordMessage(user, token);
+    mail.setIdempotencyKey(
+      `reset-password/${user.email}/${token.substring(0, 8)}`,
+    );
 
-      return this.mailTransporter.send(mail);
+    return this.mailTransporter.send(mail);
   }
 
   /**
@@ -59,6 +64,7 @@ export class AuthenticationMailMesssages {
 
     return new Mail()
       .setSubject('Stockix - Verify your email')
+      .setFrom(formatMailFrom())
       .setView('mail/SignupVerifyEmail.html')
       .setTo(email)
       .setAttachments([
@@ -72,10 +78,9 @@ export class AuthenticationMailMesssages {
   }
 
   sendSignupVerificationMail(email: string, fullName: string, token: string) {
-    const mail = this.signupVerificationMail(
-      email,
-      fullName,
-      token,
+    const mail = this.signupVerificationMail(email, fullName, token);
+    mail.setIdempotencyKey(
+      `signup-verify/${email}/${token.substring(0, 8)}`,
     );
     return this.mailTransporter.send(mail);
   }

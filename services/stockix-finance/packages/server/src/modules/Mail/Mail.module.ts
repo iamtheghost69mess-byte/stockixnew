@@ -19,6 +19,9 @@ import { MailTransporter } from './MailTransporter.service';
             user: configService.get('mail.username'),
             pass: configService.get('mail.password'),
           },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 30000,
         });
         return transporter;
       },

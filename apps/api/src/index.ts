@@ -62,6 +62,7 @@ import { generateLicenseKey } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
+import { sendTenantWelcomeEmail } from "./mail/send.js";
 
 import {
   createProvisionTracer,
@@ -1368,6 +1369,50 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         .update(organizations)
         .set({ status: "active", updatedAt: new Date() })
         .where(eq(organizations.id, organizationIdForRow));
+    }
+
+    if (currentJob?.type === "tenant.provision" && targetTenantId) {
+      void (async () => {
+        try {
+          const [tenant] = await db
+            .select({
+              name: tenants.name,
+              adminEmail: tenants.adminEmail,
+              organizationNumber: tenants.organizationNumber,
+              slug: tenants.slug,
+            })
+            .from(tenants)
+            .where(eq(tenants.id, targetTenantId))
+            .limit(1);
+          if (!tenant?.adminEmail) return;
+
+          const baseUrlFromResult =
+            completeResult && typeof completeResult.baseUrl === "string"
+              ? completeResult.baseUrl
+              : null;
+          const root = rootDomainForOrganizationSubdomain();
+          const loginUrl =
+            baseUrlFromResult ??
+            (root && tenant.slug
+              ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
+              : apiConfig.dashboardUrl);
+
+          await sendTenantWelcomeEmail({
+            to: tenant.adminEmail,
+            tenantName: tenant.name,
+            organizationNumber:
+              tenant.organizationNumber ??
+              financeOrganizationIdFromResult ??
+              "—",
+            loginUrl,
+          });
+        } catch (welcomeErr) {
+          console.error(
+            "[provision] welcome email failed (non-fatal)",
+            welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
+          );
+        }
+      })();
     }
   }
   if (currentJob?.type === "organization.provision") {
