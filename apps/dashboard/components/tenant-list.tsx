@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import TenantStatusBadge from "@/components/tenant-status-badge";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -405,7 +406,13 @@ export function TenantList(props: Props) {
                   stoppingId === t.tenantId;
 
                 return (
-                  <TableRow key={t.tenantId} className="group">
+                  <TableRow
+                    key={t.tenantId}
+                    className={cn(
+                      "group",
+                      deletingId === t.tenantId && "bg-muted/40 opacity-60",
+                    )}
+                  >
                     <TableCell className="max-w-[260px] pl-4 align-top whitespace-normal">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -433,7 +440,15 @@ export function TenantList(props: Props) {
                       <span className="break-all text-sm">{t.adminEmail}</span>
                     </TableCell>
                     <TableCell className="align-top">
-                      <TenantStatusBadge status={status} />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <TenantStatusBadge status={status} />
+                        {deletingId === t.tenantId ? (
+                          <Badge variant="secondary" className="gap-1">
+                            <Loader2 className="size-3 animate-spin" aria-hidden />
+                            Deleting…
+                          </Badge>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden align-top text-muted-foreground md:table-cell">
                       {t.registrationCompletedAt ? formatDateTime(t.registrationCompletedAt) : "—"}

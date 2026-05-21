@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2 } from "lucide-react";
 
 import TenantCreateWizard from "@/components/tenant-create-wizard";
 import { TenantList, type TenantSortOrder } from "@/components/tenant-list";
@@ -102,6 +102,7 @@ function TenantsPageContent() {
   const [stoppingProvision, setStoppingProvision] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteProgressMessage, setDeleteProgressMessage] = useState<string | null>(null);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -192,6 +193,11 @@ function TenantsPageContent() {
   const executeTenantDelete = useCallback(
     async (tenantId: string, slug: string, wipeVolumes: boolean) => {
       setDeletingId(tenantId);
+      setDeleteProgressMessage(
+        wipeVolumes
+          ? "Deleting tenant and Docker volumes…"
+          : "Deleting tenant (keeping volumes)…",
+      );
       setError(null);
       try {
         const q = wipeVolumes ? "?volumes=true" : "";
@@ -208,11 +214,17 @@ function TenantsPageContent() {
           return { res, data };
         };
 
+        setDeleteProgressMessage("Removing deployment…");
         let { res, data } = await deleteOnce();
         if (!res.ok && res.status === 409 && data.error === "tenant_busy") {
           const provisioningBusy =
             data.tenantStatus === "provisioning" ||
             data.deploymentStatus === "provisioning";
+          setDeleteProgressMessage(
+            provisioningBusy
+              ? "Stopping provisioning…"
+              : "Suspending tenant before delete…",
+          );
           const transitionPath = provisioningBusy
             ? `/api/tenants/${tenantId}/provision-stop`
             : `/api/tenants/${tenantId}/suspend`;
@@ -237,7 +249,11 @@ function TenantsPageContent() {
           }
 
           for (let i = 0; i < 15; i += 1) {
+            setDeleteProgressMessage(
+              `Waiting for tenant to stop… (${i + 1}/15)`,
+            );
             await new Promise((r) => setTimeout(r, 2000));
+            setDeleteProgressMessage("Removing deployment…");
             const attempt = await deleteOnce();
             res = attempt.res;
             data = attempt.data;
@@ -264,6 +280,7 @@ function TenantsPageContent() {
         setError(message);
       } finally {
         setDeletingId(null);
+        setDeleteProgressMessage(null);
         setDeleteConfirmOpen(false);
         setDeleteVolumesOpen(false);
         setDeleteTarget(null);
@@ -272,6 +289,9 @@ function TenantsPageContent() {
     },
     [load],
   );
+
+  const isDeletingTenant =
+    deleteTarget != null && deletingId === deleteTarget.tenantId;
 
   const handleSuspend = useCallback(
     async (tenantId: string, slug: string): Promise<boolean> => {
@@ -955,6 +975,7 @@ function TenantsPageContent() {
       <Dialog
         open={deleteVolumesOpen}
         onOpenChange={(open) => {
+          if (!open && isDeletingTenant) return;
           setDeleteVolumesOpen(open);
           if (!open) {
             setDeleteTarget(null);
@@ -962,36 +983,56 @@ function TenantsPageContent() {
           }
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Also delete Docker volumes?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Delete volumes removes MySQL / Mongo / Redis data for this stack. Keep volumes if you may need the data
-            later (containers are still removed).
-          </p>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              disabled={!deleteTarget || deletingId === deleteTarget.tenantId}
-              onClick={() => {
-                if (!deleteTarget) return;
-                void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, false);
-              }}
-            >
-              Keep volumes
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={!deleteTarget || deletingId === deleteTarget.tenantId}
-              onClick={() => {
-                if (!deleteTarget) return;
-                void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, true);
-              }}
-            >
-              {deletingId === deleteTarget?.tenantId ? "Deleting…" : "Delete volumes"}
-            </Button>
-          </DialogFooter>
+        <DialogContent showCloseButton={!isDeletingTenant}>
+          {isDeletingTenant ? (
+            <div className="flex flex-col items-center gap-4 py-6 text-center">
+              <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
+              <DialogHeader className="space-y-2 text-center sm:text-center">
+                <DialogTitle>Deleting tenant</DialogTitle>
+              </DialogHeader>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                {deleteProgressMessage ?? "Removing deployment…"}
+              </p>
+              {deleteTarget ? (
+                <p className="font-mono text-xs text-muted-foreground">{deleteTarget.slug}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Do not close this window. This can take up to a minute if the tenant was still running.
+              </p>
+            </div>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Also delete Docker volumes?</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Delete volumes removes MySQL / Mongo / Redis data for this stack. Keep volumes if you may need the data
+                later (containers are still removed).
+              </p>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  disabled={!deleteTarget}
+                  onClick={() => {
+                    if (!deleteTarget) return;
+                    void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, false);
+                  }}
+                >
+                  Keep volumes
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!deleteTarget}
+                  onClick={() => {
+                    if (!deleteTarget) return;
+                    void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, true);
+                  }}
+                >
+                  Delete volumes
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
