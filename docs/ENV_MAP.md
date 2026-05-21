@@ -1,91 +1,77 @@
 # Environment Files Map
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 ## Overview
 
-| File | Purpose | Loaded By | Committed? | Status |
-|------|---------|-----------|------------|--------|
-| `.env` | Local dev — API, Dashboard, worker (canonical) | `@repo/config` (`packages/config`) | ❌ gitignored | ✅ Complete (96 keys, 0 placeholders) |
-| `.env.example` | Template for root `.env` | Documentation / `pnpm bootstrap:env` | ✅ committed | ✅ Complete |
-| `.env.local` | Machine-specific overrides (optional) | `@repo/config` (overrides `.env`) | ❌ gitignored | ⚪ Not present (optional) |
-| `infra/prod/.env` | Production `docker compose` stack | `docker compose --env-file infra/prod/.env` | ❌ gitignored | ⚠️ Partial — secrets set; manual fields empty |
-| `infra/prod/.env.example` | Minimal prod template (22 keys) | Documentation | ✅ committed | ✅ Template only |
-| `apps/api/.env` | Legacy per-app copy | **Not loaded** by API runtime | N/A | ❌ Does not exist |
-| `apps/api/.env.example` | API env hints | Documentation | ✅ committed | Template only |
-| `apps/dashboard/.env` | Legacy per-app copy | **Not loaded** (use root) | N/A | ❌ Does not exist |
-| `apps/dashboard/.env.example` | Dashboard hints | Documentation | ✅ committed | Template only |
-| `services/stockix-finance/.env` | Finance monorepo local dev | Finance `docker-compose` / manual `pnpm dev` | ❌ gitignored | ⚠️ Separate stack (MariaDB keys); not root canonical |
-| `services/stockix-finance/.env.example` | Finance template | Documentation | ✅ committed | Template |
-| `services/stockix-finance/packages/server/.env` | Legacy server-only dev | `packages/server` when run in isolation | ❌ gitignored | ⚠️ Outdated defaults (`bigcapital_*`); use finance root `.env` |
-| `services/stockix-finance/packages/server/.env.example` | Server template | Documentation | ✅ committed | Template |
-| `services/stockix-finance/packages/webapp/.env.example` | Webapp Vite template | Vite (if present) | ✅ committed | Template |
-| `~/.stockix/tenants/{slug}/.env` | Per-tenant provisioned stack | Tenant Docker compose (worker) | ❌ not in repo | Created at provision time |
+| File | Purpose | Loaded by | Committed? |
+|------|---------|-----------|------------|
+| `.env` | **Local dev** — API, dashboard, worker on your machine | `@repo/config` (repo root) | No (gitignored) |
+| `.env.local` | Machine overrides (optional) | `@repo/config` (overrides `.env`) | No |
+| `.env.example` | Dev template + glossary | Documentation / `pnpm bootstrap:env` | Yes |
+| `infra/prod/.env` | **Production** — `docker compose --env-file` | Compose + sync to root on server | No |
+| `infra/prod/.env.example` | Full prod template | Documentation | Yes |
+| `infra/prod/README.md` | Prod deploy checklist | Documentation | Yes |
+| `~/.stockix/tenants/{slug}/.env` | Per-tenant finance stack | Tenant Docker Compose | Created at provision |
 
-## Variable Ownership
+**Rule:** Dev and prod use the **same variable names**, **different values**, and **different secrets**. Never copy prod secrets into dev.
 
-| Variable Group | Dev (`.env`) | Prod (`infra/prod/.env`) | Notes |
-|---|---|---|---|
-| `DATABASE_URL` | `127.0.0.1:54330` / `postgres:postgres` | `postgres:5432` (Docker service) | Different host; prod password is hex-only (URL-safe) |
-| `SESSION_SECRET` | Dev-generated (64-byte hex) | Prod-generated (different) | Must differ ✅ |
-| `AUTH_TOKEN_SECRET` | Dev-generated | Prod-generated (different) | Must differ ✅ |
-| `PLATFORM_API_SECRET` | Dev-generated | Prod-generated (different) | Must differ ✅ |
-| `WORKER_SECRET` | Dev-generated | Prod-generated (different) | Must differ ✅ |
-| `SIGNUP_DISABLED` | `true` | `true` | Always true |
-| `NODE_ENV` | `development` | `production` | |
-| `ROOT_DOMAIN` | `localhost` | `stockix.cloud` | |
-| `MAIL_*` | Empty (use Mailpit locally) | `smtp.resend.com` | `MAIL_PASSWORD` ⚠️ manual |
-| `CF_DNS_API_TOKEN` | Empty | Empty | ⚠️ manual — Cloudflare DNS for Traefik ACME |
-| `ACME_EMAIL` | `ops@example.com` | `jad.haidar.ahmad315@gmail.com` | SSL cert contact |
-| `STOCKIX_REPO` | `/opt/stockix/stockixnew` | `/opt/stockix/stockixnew` | Host path on deploy server |
-| `S3_*` / `POSTHOG_*` | Empty in root | Empty in prod | Finance tenant `.env` may set these |
+## Production deploy flow
 
-## Docker Compose Env References
+```bash
+# On the server only
+cp infra/prod/.env.example infra/prod/.env   # first time
+# Edit infra/prod/.env (secrets, CF_DNS_API_TOKEN, MAIL_PASSWORD, …)
 
-| Compose file | `env_file` | Inline `${VAR}` from host env | Secrets in compose? |
-|---|---|---|---|
-| `infra/dev/docker-compose.yml` | None | Hardcoded `postgres/postgres` for Postgres only | No |
-| `infra/prod/docker-compose.yml` | `--env-file .env` (operator) | `${POSTGRES_PASSWORD}`, `${SESSION_SECRET}`, `${CF_DNS_API_TOKEN}`, etc. | No hardcoded secrets |
-| `infra/tenant-stack/docker-compose.yml` | Per-tenant `.env` | Tenant vars | No |
-| `services/stockix-finance/docker-compose.yml` | Implicit `.env` in finance dir | MySQL/Mongo vars | Dev passwords in comments only |
+pnpm env:sync-prod                              # infra/prod/.env → repo root .env
 
-## Secrets That Need Manual Input Before Production Deploy
+cd infra/prod
+docker compose --env-file .env up -d --build
+```
 
-| Variable | File | Why Manual |
-|---|---|---|
-| `CF_DNS_API_TOKEN` | `infra/prod/.env` | Cloudflare account-specific DNS API token |
-| `MAIL_PASSWORD` | `infra/prod/.env` | Resend API key (SMTP password) |
-| `S3_ACCESS_KEY_ID` | `infra/prod/.env` | Backblaze B2 credentials |
-| `S3_SECRET_ACCESS_KEY` | `infra/prod/.env` | Backblaze B2 credentials |
-| `POSTHOG_API_KEY` | `infra/prod/.env` | Optional analytics |
+`docker compose.yml` injects mail, `INTERNAL_API_SECRET`, S3, and provisioning vars into **api** and **infra-worker**. Containers set `STOCKIX_LOAD_ROOT_ENV=0` so a stray dev `.env` on the mount cannot override Compose.
 
-`ACME_EMAIL` and `STOCKIX_REPO` are set to operator values; confirm on the server before deploy.
+## Variable ownership (dev vs prod)
 
-## Git History — Secrets Exposure
+| Variable group | Dev (`.env`) | Prod (`infra/prod/.env`) |
+|----------------|--------------|---------------------------|
+| `NODE_ENV` | `development` | `production` |
+| `ROOT_DOMAIN` | `localhost` | `stockix.cloud` |
+| `DATABASE_URL` | `127.0.0.1:54330` | `postgres:5432` in Docker network |
+| `MAIL_*` | Resend or Mailpit | Resend SMTP (`smtp.resend.com`) |
+| `INTERNAL_API_SECRET` | Set (may equal `WORKER_SECRET` in dev) | **Required** — finance internal API |
+| `PLATFORM_*` / `WORKER_*` secrets | Dev-generated | **Separate** prod-generated |
+| `CF_DNS_API_TOKEN` | Often empty locally | **Required** for Traefik ACME |
+| `S3_*` | Optional / empty | Set when tenant uploads enabled |
+| `SIGNUP_DISABLED` | `true` | `true` |
 
-| Commit | File | Finding |
-|---|---|---|
-| `09a7152d` | Root `.env` (deleted) | **Contained real secrets** in git history: `PLATFORM_API_SECRET`, `SESSION_SECRET`, `PLATFORM_ADMIN_PASSWORD`. Rotate any credentials that were ever used in production. |
+## Docker Compose references
 
-`infra/prod/.env` was **not** found in `git ls-files` or commit history (gitignored).
+| Compose file | Env source |
+|--------------|------------|
+| `infra/dev/docker-compose.yml` | Postgres only (hardcoded dev password) |
+| `infra/prod/docker-compose.yml` | `--env-file infra/prod/.env` + explicit service `environment:` blocks |
+| `infra/tenant-stack/docker-compose.yml` | Per-tenant `.env` from worker |
 
-Current dev `.env` uses **new** generated secrets (not the leaked stub values).
+## Manual fields before production go-live
 
-## How To Set Up Locally
+| Variable | Why |
+|----------|-----|
+| `CF_DNS_API_TOKEN` | Cloudflare DNS for TLS certificates |
+| `MAIL_PASSWORD` | Resend API key (SMTP password) |
+| `MAIL_FROM_ADDRESS` | Must be on a verified Resend domain |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_BUCKET` | Tenant file storage (optional until needed) |
+
+## Local setup
 
 1. `cp .env.example .env`
-2. `node scripts/generate-env-secrets.js`
-3. Copy output into `.env` secret fields
-4. Set `PLATFORM_ADMIN_EMAIL` to your email
-5. `docker compose -f infra/dev/docker-compose.yml up -d` (Postgres)
-6. `pnpm dev`
+2. `node scripts/generate-env-secrets.js` → paste into `.env`
+3. Set `INTERNAL_API_SECRET` (dev: can match `WORKER_SECRET`)
+4. `pnpm setup:local` or `pnpm dev`
 
-See also: [LOCAL_SETUP.md](./LOCAL_SETUP.md)
+See [LOCAL_SETUP.md](./LOCAL_SETUP.md).
 
-## How To Set Up Production
+## Related
 
-1. SSH into server; clone repo to `/opt/stockix/stockixnew`
-2. `cp infra/prod/.env.example infra/prod/.env` (or use existing `infra/prod/.env`)
-3. `node scripts/generate-env-secrets.js` — paste **new** values (never reuse dev secrets)
-4. Fill all ⚠️ `FILL MANUALLY` fields in `infra/prod/.env`
-5. `cd infra/prod && docker compose --env-file .env up -d --build`
+- [infra/prod/README.md](../infra/prod/README.md) — production checklist
+- [envexplanation.md](./envexplanation.md) — extended glossary (if present)

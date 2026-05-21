@@ -1,13 +1,71 @@
 # Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
-# Run from repo root context on the server (adjust path — e.g. /opt/stockix/stockixnew):
-#   cd /opt/stockix/stockixnew/infra/prod && docker compose --env-file .env up -d --build
+# Run from repo root on the server (e.g. /opt/stockix/stockixnew):
+#   cd infra/prod && docker compose --env-file .env up -d --build
 #
-# Prerequisites: `.env` (see `.env.example`), repo cloned at STOCKIX_REPO (default ../..).
+# Prerequisites:
+#   1. Copy infra/prod/.env.example → infra/prod/.env and fill secrets (never commit .env).
+#   2. On the server, sync env for worker dotenv fallback:
+#        pnpm env:sync-prod   (copies infra/prod/.env → repo root .env)
+#   3. Clone repo at STOCKIX_REPO (default /opt/stockix/stockixnew).
 #
-# Project name prefixes containers/volumes (e.g. stockix_postgres_data) so another Compose
-# stack on the same host stays separate — ports 80/443 must still not conflict (see DEPLOYMENT.md).
+# Env injection: platform variables are passed explicitly into api + infra-worker
+# (Compose wins over mounted .env; see STOCKIX_LOAD_ROOT_ENV).
 
 name: stockix
+
+# Shared runtime env for control plane (api + worker). Sourced from infra/prod/.env via compose substitution.
+x-stockix-platform-env: &stockix-platform-env
+  NODE_ENV: production
+  ROOT_DOMAIN: ${ROOT_DOMAIN}
+  PUBLIC_BASE_URL_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
+  DASHBOARD_URL: ${DASHBOARD_URL}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  STOCKIX_API_URL: ${STOCKIX_API_URL:-}
+  PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+  WORKER_SECRET: ${WORKER_SECRET}
+  INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+  SESSION_SECRET: ${SESSION_SECRET}
+  AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
+  DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
+  LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
+  JWT_SECRET: ${JWT_SECRET:-}
+  SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
+  SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
+  SIGNUP_ALLOWED_EMAILS: ${SIGNUP_ALLOWED_EMAILS:-}
+  MAIL_HOST: ${MAIL_HOST:-}
+  MAIL_PORT: ${MAIL_PORT:-587}
+  MAIL_USERNAME: ${MAIL_USERNAME:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+  MAIL_SECURE: ${MAIL_SECURE:-false}
+  MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Stockix}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+  MONGODB_DATABASE_URL: ${MONGODB_DATABASE_URL:-mongodb://mongo/stockix}
+  MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
+  WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
+  PROVISION_POLL_MS: ${PROVISION_POLL_MS:-2000}
+  PROVISION_MAX_MS: ${PROVISION_MAX_MS:-2700000}
+  METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
+  METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+  # Do not load repo-root .env inside containers (use explicit env below).
+  STOCKIX_LOAD_ROOT_ENV: "0"
+
+x-stockix-worker-env: &stockix-worker-env
+  <<: *stockix-platform-env
+  REPO_ROOT: /opt/stockix/stockixnew
+  STOCKIX_TENANT_APP_ROOT: ${STOCKIX_TENANT_APP_ROOT:-/opt/stockix/stockixnew/services/stockix-finance}
+  TENANT_ENV_ROOT: ${TENANT_ENV_ROOT:-/opt/stockix/tenants}
+  TRAEFIK_DYNAMIC_DIR: ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}
+  TRAEFIK_TENANT_UPSTREAM_HOST: ${TRAEFIK_TENANT_UPSTREAM_HOST:-host.docker.internal}
+  TENANT_INTERNAL_HOST: ${TENANT_INTERNAL_HOST:-host.docker.internal}
+  S3_REGION: ${S3_REGION:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  AGENDASH_AUTH_USER: ${AGENDASH_AUTH_USER:-agendash}
+  AGENDASH_AUTH_PASSWORD: ${AGENDASH_AUTH_PASSWORD:-}
+  DOCKER_HOST: tcp://socket-proxy:2375
 
 services:
   socket-proxy:
@@ -106,18 +164,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      <<: *stockix-platform-env
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
-      NODE_ENV: production
-      ROOT_DOMAIN: ${ROOT_DOMAIN}
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
-      PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
-      WORKER_SECRET: ${WORKER_SECRET}
-      DASHBOARD_URL: ${DASHBOARD_URL}
-      SESSION_SECRET: ${SESSION_SECRET}
-      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
-      DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
-      LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
     networks:
       - stockix_public
     read_only: true
@@ -153,17 +202,8 @@ services:
       socket-proxy:
         condition: service_started
     environment:
+      <<: *stockix-worker-env
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
-      REPO_ROOT: /opt/stockix/stockixnew
-      STOCKIX_TENANT_APP_ROOT: /opt/stockix/stockixnew/services/stockix-finance
-      TENANT_ENV_ROOT: /opt/stockix/tenants
-      TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
-      ROOT_DOMAIN: ${ROOT_DOMAIN}
-      PUBLIC_BASE_URL_SCHEME: https
-      TENANT_INTERNAL_HOST: host.docker.internal
-      DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
-      WORKER_SECRET: ${WORKER_SECRET}
-      DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
       - traefik_dynamic:/opt/stockix/traefik-dynamic
@@ -182,7 +222,7 @@ services:
       args:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
-        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: https
+        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
     restart: unless-stopped
     depends_on:
       traefik:
@@ -190,12 +230,17 @@ services:
       api:
         condition: service_healthy
     environment:
+      NODE_ENV: production
       SESSION_SECRET: ${SESSION_SECRET}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
       PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
-      NODE_ENV: production
+      SECURITY_HSTS: ${SECURITY_HSTS}
+      SECURITY_X_FRAME_OPTIONS: ${SECURITY_X_FRAME_OPTIONS}
+      SECURITY_REFERRER_POLICY: ${SECURITY_REFERRER_POLICY}
+      SECURITY_X_CONTENT_TYPE_OPTIONS: ${SECURITY_X_CONTENT_TYPE_OPTIONS}
+      SECURITY_CSP_BASE: ${SECURITY_CSP_BASE}
     networks:
       - stockix_public
     read_only: true

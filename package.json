@@ -16,6 +16,7 @@
     "infra:worker:dev": "pnpm infra:worker:build && pnpm infra:worker:run",
     "get-password": "node scripts/get-bootstrap-password.mjs",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
+    "env:sync-prod": "node scripts/sync-prod-env-to-root.mjs --confirm-server",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "debug:db": "node scripts/debug-db.mjs",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local",

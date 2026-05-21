@@ -14,8 +14,11 @@ const monorepoRoot = path.join(configDir, "..", "..", "..");
 // Set STOCKIX_LOAD_ROOT_ENV=1 to force-load anyway (e.g. debugging integration-style tests).
 const rootEnv = path.join(monorepoRoot, ".env");
 const rootEnvLocal = path.join(monorepoRoot, ".env.local");
+const loadRootEnvFlag = process.env.STOCKIX_LOAD_ROOT_ENV?.trim().toLowerCase();
 const shouldLoadRootDotenv =
-  process.env.STOCKIX_LOAD_ROOT_ENV === "1" || process.env.VITEST !== "true";
+  loadRootEnvFlag === "0" || loadRootEnvFlag === "false"
+    ? false
+    : loadRootEnvFlag === "1" || process.env.VITEST !== "true";
 if (shouldLoadRootDotenv) {
   if (existsSync(rootEnv)) {
     loadEnv({ path: rootEnv, override: false });
