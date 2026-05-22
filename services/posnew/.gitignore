@@ -1,0 +1,51 @@
+# Cursor: third-party rule packs (Flutter, Laravel, etc.) — not project source
+.cursor/rules/rules/
+
+# --- Node / monorepo (root applies repo-wide) ---
+node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# Builds & framework output
+.next/
+out/
+dist/
+build/
+.turbo/
+.nx/
+*.tsbuildinfo
+
+# Tests & E2E artifacts
+coverage/
+playwright-report/
+test-results/
+testsprite_tests/
+
+# Env & local secrets (never commit real credentials)
+.env
+**/.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Backend uploads (binary / user content)
+apps/pos-backend/uploads/*
+!apps/pos-backend/uploads/.gitkeep
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+*~
+node_modules
+
+
+#Ignore cursor AI rules
+.cursor/rules/codacy.mdc

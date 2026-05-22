@@ -1,0 +1,41 @@
+# ── Docker build context exclusions ──
+
+# Dependencies (rebuilt inside container)
+node_modules
+**/node_modules
+
+# Next.js build output
+.next
+**/.next
+out
+
+# Git / CI
+.git
+.github
+.nx
+
+# Logs & test artifacts
+*.log
+coverage
+playwright-report
+test-results
+
+# Environment files (secrets — never bake into image)
+.env
+**/.env
+.env.*
+!**/.env.example
+
+# Uploads (mounted as volume)
+apps/pos-backend/uploads/*
+!apps/pos-backend/uploads/.gitkeep
+
+# Dev / editor
+.cursor
+.codacy
+scratch
+docs
+*.md
+!README.md
+.DS_Store
+Thumbs.db

@@ -1,0 +1,423 @@
+src/app/(main)/dashboard/accounting/page.tsx:280:34 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    278 │               {isLoading ? (
+    279 │                 Array.from({ length: 8 }).map((_, i) => (
+  > 280 │                   <TableRow key={i}>
+        │                                  ^
+    281 │                     <TableCell>
+    282 │                       <Skeleton className="h-4 w-12" />
+  
+  i This is the source of the key value.
+  
+    277 │             <TableBody>
+    278 │               {isLoading ? (
+  > 279 │                 Array.from({ length: 8 }).map((_, i) => (
+        │                                                   ^
+    280 │                   <TableRow key={i}>
+    281 │                     <TableCell>
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/accounting/settings/page.tsx:465:29 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    463 │         <CardContent className="space-y-3">
+    464 │           {paymentRows.map((row, i) => (
+  > 465 │             <div key={`pm-${i}-${row.methodKey}`} className="flex flex-wrap items-end gap-2">
+        │                             ^
+    466 │               <div className="grid min-w-[140px] flex-1 gap-2">
+    467 │                 <Label>Method key</Label>
+  
+  i This is the source of the key value.
+  
+    462 │         </CardHeader>
+    463 │         <CardContent className="space-y-3">
+  > 464 │           {paymentRows.map((row, i) => (
+        │                                  ^
+    465 │             <div key={`pm-${i}-${row.methodKey}`} className="flex flex-wrap items-end gap-2">
+    466 │               <div className="grid min-w-[140px] flex-1 gap-2">
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/accounting/settings/page.tsx:538:29 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    536 │           {taxRows.length === 0 ? <p className="text-muted-foreground text-sm">No tax rates configured.</p> : null}
+    537 │           {taxRows.map((row, i) => (
+  > 538 │             <div key={`tx-${i}-${row.code}`} className="flex flex-wrap items-end gap-2 border-b pb-3">
+        │                             ^
+    539 │               <div className="grid min-w-[100px] gap-2">
+    540 │                 <Label>Code</Label>
+  
+  i This is the source of the key value.
+  
+    535 │         <CardContent className="space-y-3">
+    536 │           {taxRows.length === 0 ? <p className="text-muted-foreground text-sm">No tax rates configured.</p> : null}
+  > 537 │           {taxRows.map((row, i) => (
+        │                              ^
+    538 │             <div key={`tx-${i}-${row.code}`} className="flex flex-wrap items-end gap-2 border-b pb-3">
+    539 │               <div className="grid min-w-[100px] gap-2">
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/categories/page.tsx:52:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    50 │       handleCloseDialog();
+    51 │     },
+  > 52 │     onError: (err: any) => toast.error(err.message || "Failed to create category."),
+       │                    ^^^
+    53 │   });
+    54 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/categories/page.tsx:62:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    60 │       handleCloseDialog();
+    61 │     },
+  > 62 │     onError: (err: any) => toast.error(err.message || "Failed to update category."),
+       │                    ^^^
+    63 │   });
+    64 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/categories/page.tsx:71:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    69 │       toast.success("Category deleted successfully.");
+    70 │     },
+  > 71 │     onError: (err: any) => toast.error(err.message || "Failed to delete category."),
+       │                    ^^^
+    72 │   });
+    73 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/categories/page.tsx:142:32 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    140 │             {isLoading ? (
+    141 │               Array.from({ length: 5 }).map((_, i) => (
+  > 142 │                 <TableRow key={i}>
+        │                                ^
+    143 │                   <TableCell>
+    144 │                     <Skeleton className="h-4 w-4" />
+  
+  i This is the source of the key value.
+  
+    139 │           <TableBody>
+    140 │             {isLoading ? (
+  > 141 │               Array.from({ length: 5 }).map((_, i) => (
+        │                                                 ^
+    142 │                 <TableRow key={i}>
+    143 │                   <TableCell>
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/customers/page.tsx:71:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    69 │       handleCloseDialog();
+    70 │     },
+  > 71 │     onError: (err: any) => toast.error(err.message || "Failed to create customer."),
+       │                    ^^^
+    72 │   });
+    73 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/customers/page.tsx:81:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    79 │       handleCloseDialog();
+    80 │     },
+  > 81 │     onError: (err: any) => toast.error(err.message || "Failed to update customer."),
+       │                    ^^^
+    82 │   });
+    83 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/customers/page.tsx:90:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    88 │       toast.success("Customer profile removed.");
+    89 │     },
+  > 90 │     onError: (err: any) => toast.error(err.message || "Failed to remove customer."),
+       │                    ^^^
+    91 │   });
+    92 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/customers/page.tsx:168:32 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    166 │             {isLoading ? (
+    167 │               Array.from({ length: 5 }).map((_, i) => (
+  > 168 │                 <TableRow key={i}>
+        │                                ^
+    169 │                   <TableCell>
+    170 │                     <div className="flex items-center gap-3">
+  
+  i This is the source of the key value.
+  
+    165 │           <TableBody>
+    166 │             {isLoading ? (
+  > 167 │               Array.from({ length: 5 }).map((_, i) => (
+        │                                                 ^
+    168 │                 <TableRow key={i}>
+    169 │                   <TableCell>
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/discounts/page.tsx:48:20 lint/suspicious/noExplicitAny ━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    46 │       toast.success("Loyalty program updated.");
+    47 │     },
+  > 48 │     onError: (err: any) => toast.error(err.message || "Failed to update loyalty."),
+       │                    ^^^
+    49 │   });
+    50 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src/app/(main)/dashboard/goods-receipt-notes/_components/goods-receipt-notes-page-client.tsx:226:32 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    224 │             {listQuery.isLoading ? (
+    225 │               Array.from({ length: 6 }).map((_, i) => (
+  > 226 │                 <TableRow key={i}>
+        │                                ^
+    227 │                   {Array.from({ length: 7 }).map((__, j) => (
+    228 │                     <TableCell key={j}>
+  
+  i This is the source of the key value.
+  
+    223 │           <TableBody>
+    224 │             {listQuery.isLoading ? (
+  > 225 │               Array.from({ length: 6 }).map((_, i) => (
+        │                                                 ^
+    226 │                 <TableRow key={i}>
+    227 │                   {Array.from({ length: 7 }).map((__, j) => (
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/goods-receipt-notes/_components/goods-receipt-notes-page-client.tsx:228:37 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    226 │                 <TableRow key={i}>
+    227 │                   {Array.from({ length: 7 }).map((__, j) => (
+  > 228 │                     <TableCell key={j}>
+        │                                     ^
+    229 │                       <Skeleton className="h-4 w-full max-w-[120px]" />
+    230 │                     </TableCell>
+  
+  i This is the source of the key value.
+  
+    225 │               Array.from({ length: 6 }).map((_, i) => (
+    226 │                 <TableRow key={i}>
+  > 227 │                   {Array.from({ length: 7 }).map((__, j) => (
+        │                                                       ^
+    228 │                     <TableCell key={j}>
+    229 │                       <Skeleton className="h-4 w-full max-w-[120px]" />
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/guest-menu/page.tsx:304:17 lint/performance/noImgElement ━━━━━━━━━━
+
+  ! Don't use <img> element.
+  
+    302 │             {qrSrc ? (
+    303 │               <div className="space-y-2 text-center">
+  > 304 │                 <img src={qrSrc} alt="Table QR code" className="mx-auto rounded-md border bg-white p-2" />
+        │                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    305 │                 <Badge variant="outline">{table ? `Table ${table.tableNo ?? "-"}` : "Table"}</Badge>
+    306 │               </div>
+  
+  i Using the <img> can lead to slower LCP and higher bandwidth. Consider using <Image /> from next/image to automatically optimize images.
+  
+
+src/app/(main)/dashboard/ingredient-categories/page.tsx:198:32 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    196 │             {isLoading ? (
+    197 │               Array.from({ length: 5 }).map((_, i) => (
+  > 198 │                 <TableRow key={i}>
+        │                                ^
+    199 │                   {Array.from({ length: 4 }).map((__, j) => (
+    200 │                     <TableCell key={j}>
+  
+  i This is the source of the key value.
+  
+    195 │           <TableBody>
+    196 │             {isLoading ? (
+  > 197 │               Array.from({ length: 5 }).map((_, i) => (
+        │                                                 ^
+    198 │                 <TableRow key={i}>
+    199 │                   {Array.from({ length: 4 }).map((__, j) => (
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/ingredient-categories/page.tsx:200:37 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    198 │                 <TableRow key={i}>
+    199 │                   {Array.from({ length: 4 }).map((__, j) => (
+  > 200 │                     <TableCell key={j}>
+        │                                     ^
+    201 │                       <Skeleton className="h-4 w-full" />
+    202 │                     </TableCell>
+  
+  i This is the source of the key value.
+  
+    197 │               Array.from({ length: 5 }).map((_, i) => (
+    198 │                 <TableRow key={i}>
+  > 199 │                   {Array.from({ length: 4 }).map((__, j) => (
+        │                                                       ^
+    200 │                     <TableCell key={j}>
+    201 │                       <Skeleton className="h-4 w-full" />
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/ingredients/page.tsx:308:32 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    306 │             {isLoading ? (
+    307 │               Array.from({ length: 6 }).map((_, i) => (
+  > 308 │                 <TableRow key={i}>
+        │                                ^
+    309 │                   {Array.from({ length: 8 }).map((__, j) => (
+    310 │                     <TableCell key={j}>
+  
+  i This is the source of the key value.
+  
+    305 │           <TableBody>
+    306 │             {isLoading ? (
+  > 307 │               Array.from({ length: 6 }).map((_, i) => (
+        │                                                 ^
+    308 │                 <TableRow key={i}>
+    309 │                   {Array.from({ length: 8 }).map((__, j) => (
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/inventory/barcode-lookup/page.tsx:132:36 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+    130 │                       {(result.balances as Array<{ quantity?: number; location?: { name?: string } | null }>).map(
+    131 │                         (b, i) => (
+  > 132 │                           <li key={i} className="flex justify-between gap-2 tabular-nums">
+        │                                    ^
+    133 │                             <span className="truncate text-muted-foreground">{b.location?.name ?? "Location"}</span>
+    134 │                             <span>{Number(b.quantity) || 0}</span>
+  
+  i This is the source of the key value.
+  
+    129 │                     <ul className="space-y-1 rounded-md border bg-background/80 p-2 text-xs">
+    130 │                       {(result.balances as Array<{ quantity?: number; location?: { name?: string } | null }>).map(
+  > 131 │                         (b, i) => (
+        │                             ^
+    132 │                           <li key={i} className="flex justify-between gap-2 tabular-nums">
+    133 │                             <span className="truncate text-muted-foreground">{b.location?.name ?? "Location"}</span>
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+src/app/(main)/dashboard/inventory/menu-availability/page.tsx:101:32 lint/suspicious/noArrayIndexKey ━━━━━━━━━━
+
+  ! Avoid using the index of an array as key property in an element.
+  
+     99 │             <div className="space-y-2 p-4">
+    100 │               {Array.from({ length: 6 }).map((_, i) => (
+  > 101 │                 <Skeleton key={i} className="h-10 w-full" />
+        │                                ^
+    102 │               ))}
+    103 │             </div>
+  
+  i This is the source of the key value.
+  
+     98 │           {availabilityQuery.isLoading ? (
+     99 │             <div className="space-y-2 p-4">
+  > 100 │               {Array.from({ length: 6 }).map((_, i) => (
+        │                                                  ^
+    101 │                 <Skeleton key={i} className="h-10 w-full" />
+    102 │               ))}
+  
+  i The order of the items may change, and this also affects performances and component state.
+  
+  i Check the React documentation. 
+  
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 72.
+Checked 232 files in 164ms. No fixes applied.
+Found 4 errors.
+Found 84 warnings.
+Found 4 infos.
+lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+

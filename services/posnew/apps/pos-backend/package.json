@@ -1,0 +1,120 @@
+{
+  "name": "pos-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "nx": {
+    "tags": [
+      "type:backend",
+      "scope:pos"
+    ],
+    "targets": {
+      "test": {
+        "executor": "nx:run-script",
+        "options": {
+          "script": "test"
+        }
+      },
+      "test-saas": {
+        "executor": "nx:run-script",
+        "options": {
+          "script": "test:saas-integration"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "dev": "nodemon app.js",
+    "start": "node app.js",
+    "worker:platform": "node workers/platformWorker.js",
+    "worker:print": "node workers/printWorker.js",
+    "migrate:single-tenant-org": "node scripts/migrate-single-tenant-org.js",
+    "migrate:rbac-accounting-permissions": "node scripts/migrate-rbac-accounting-catalog-permissions.js",
+    "migrate:schema": "node scripts/run-schema-migrations.js",
+    "migrate:users-multi-branch": "node scripts/migrate-users-multi-branch.js",
+    "migrate:table-floor-fields": "node scripts/migrate-table-floor-fields.js",
+    "seed:platform-owner": "node scripts/seedPlatformOwner.js",
+    "seed:platform-fixtures": "node scripts/seedPlatformDashboardFixtures.js",
+    "seed:platform-support-read": "node scripts/seedPlatformSupportRead.js",
+    "test": "node --test \"tests/unit/*.test.js\" tests/openapi-contract.test.js tests/tenant-openapi-contract.test.js",
+    "test:staff-entitlements": "RUN_STAFF_ENTITLEMENTS_SELFTEST=1 node scripts/staff-entitlements-selftest.js",
+    "test:isolation": "node --test --test-concurrency=1 tests/isolation.test.js",
+    "test:openapi": "node --test tests/openapi-contract.test.js",
+    "test:platform": "node scripts/platform-api-selftest.js",
+    "test:subdomain-org": "node scripts/subdomain-org-selftest.js",
+    "test:org-tenant-url": "node scripts/organization-tenant-url-selftest.js",
+    "test:saas-owner-dashboard": "node scripts/saas-owner-dashboard-api-test.js",
+    "test:saas-integration": "node scripts/saas-integration-selftest.js",
+    "seed:admin": "node scripts/seedAdmin.js",
+    "seed:dev": "node scripts/seedDevStaff.js",
+    "seed:inventory-ui": "node scripts/seedInventoryUiShowcase.js",
+    "seed:inventory:professional": "node scripts/seedInventoryProfessionalScenario.js",
+    "seed:menu": "node scripts/seedMenu.js",
+    "seed:menu:professional": "node scripts/seedProfessionalMenu.js",
+    "test:phase1": "bash scripts/phase1-check.sh",
+    "test:phase1:tokens": "JWT_SECRET=testsecret_min_32_characters_long node scripts/phase1-tokens-selftest.js",
+    "test:rbac": "node scripts/rbac-smoke-test.js",
+    "test:rbac:matrix": "node scripts/rbac-permissions-matrix-test.js",
+    "test:rbac:defaults": "node scripts/rbac-default-roles-test.js",
+    "test:table-floor": "node scripts/table-floor-phase1-selftest.js",
+    "test:floor-full": "node scripts/floor-feature-full-selftest.js",
+    "seed:floor-plan": "node scripts/seed-floor-plan-showcase.js",
+    "seed:accounting": "node scripts/seedAccounting.js",
+    "seed:accounting:full": "node scripts/seedAccountingFull.js",
+    "seed:finance-showcase": "node scripts/seedFinanceShowcase.js",
+    "test:accounting": "node scripts/accounting-api-check.js && node scripts/accounting-bank-import.js",
+    "test:accounting:studio": "node scripts/accounting-studio-verification.js",
+    "test:accounting:pdf": "node scripts/accounting-pdf-selftest.js",
+    "test:accounting:bank-import": "node scripts/accounting-bank-import.js",
+    "test:accounting:mandatory": "node scripts/accounting-mandatory-automated.js",
+    "test:inventory": "node scripts/inventory-deduct-selftest.js",
+    "test:inventory:http-smoke": "node scripts/inventory-http-smoke.js",
+    "test:inventory:integration": "node scripts/inventory-integration-seed-test.js",
+    "test:socket-redis": "node scripts/socket-redis-adapter-selftest.js",
+    "test:print:live": "node scripts/print-order-live-test.js",
+    "test:api-surface": "node scripts/full-api-surface-test.js",
+    "docs:rbac": "node scripts/generate-rbac-docs.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1034.0",
+    "@node-escpos/core": "^0.6.0",
+    "@node-escpos/usb-adapter": "^0.3.1",
+    "@rbac/rbac": "^2.1.3",
+    "@restaurant-pos/domain-access": "*",
+    "@sentry/node": "^8.40.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^5.40.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.3.2",
+    "http-errors": "^2.0.0",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "node-cron": "^3.0.3",
+    "node-thermal-printer": "^4.6.0",
+    "pdfkit": "^0.18.0",
+    "qrcode": "^1.5.4",
+    "rate-limit-redis": "^4.3.1",
+    "razorpay": "^2.9.5",
+    "redis": "^4.7.1",
+    "resend": "^4.0.1",
+    "socket.io": "^4.8.3",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "ajv": "^8.18.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.0.0"
+  }
+}

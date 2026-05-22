@@ -47,3 +47,14 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Services — build artifacts (nested repos removed; tracked by root)
+services/posnew/node_modules/
+services/posnew/apps/pos-backend/dist/
+services/pmsfull/pesan-pms/.next/
+services/pmsfull/RentTools.io/.next/
+services/chatlive/node_modules/
+services/stockix-finance/node_modules/
+services/stockix-finance/packages/server/dist/
+services/stockix-finance/packages/webapp/dist/
+services/pms/node_modules/

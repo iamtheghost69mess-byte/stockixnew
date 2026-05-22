@@ -1,0 +1,693 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-pos-backend-001",
+    "name": "Restaurant POS API",
+    "description": "Phase 1 auth: PIN and/or email+password. `POST /api/auth/login` (or legacy `/api/user/login`) returns `accessToken` + `refreshToken`. Use Login to set collection vars.\nProtected routes: `Bearer {{accessToken}}` or cookies.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "tableId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "orderLineId", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login PIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.accessToken) { pm.collectionVariables.set('accessToken', j.accessToken); }",
+                  "if (j.refreshToken) { pm.collectionVariables.set('refreshToken', j.refreshToken); }",
+                  "if (j.data && j.data._id) { pm.collectionVariables.set('userId', j.data._id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"1234\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login",
+            "description": "`pin` (4–6 digits) or `{ \"email\", \"password\" }`. Sets access + refresh tokens."
+          }
+        },
+        {
+          "name": "Login email (optional)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.accessToken) { pm.collectionVariables.set('accessToken', j.accessToken); }",
+                  "if (j.refreshToken) { pm.collectionVariables.set('refreshToken', j.refreshToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"change_me_8chars\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.accessToken) { pm.collectionVariables.set('accessToken', j.accessToken); }",
+                  "if (j.refreshToken) { pm.collectionVariables.set('refreshToken', j.refreshToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/refresh",
+            "description": "Send refresh JWT from login response body (or rely on cookie in browser)."
+          }
+        },
+        {
+          "name": "Register (admin only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password12\",\n  \"role\": \"waiter\",\n  \"pin\": \"5678\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register",
+            "description": "phases.md Phase 1: admin-only create with email + password; optional PIN for floor login."
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/user"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/auth/logout",
+            "description": "Clears refresh server-side and cookies (browser)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Config",
+      "item": [
+        {
+          "name": "Get tax rate",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/config/tax",
+            "description": "Returns `{ rate, ratePercent }` for POS totals."
+          }
+        },
+        {
+          "name": "Put tax rate (admin or manager)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ratePercent\": 5.25\n}"
+            },
+            "url": "{{baseUrl}}/api/config/tax",
+            "description": "Alternatively send `{ \"rate\": 0.0525 }` (decimal 0–1)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (admin or manager)",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/users"
+          }
+        },
+        {
+          "name": "Create user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data._id) { pm.collectionVariables.set('userId', j.data._id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Waiter\",\n  \"pin\": \"5678\",\n  \"role\": \"waiter\",\n  \"phone\": \"5551234567\"\n}"
+            },
+            "url": "{{baseUrl}}/api/users"
+          }
+        },
+        {
+          "name": "Get user by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/users/{{userId}}"
+          }
+        },
+        {
+          "name": "Update user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"role\": \"waiter\"\n}"
+            },
+            "url": "{{baseUrl}}/api/users/{{userId}}"
+          }
+        },
+        {
+          "name": "Delete user",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/users/{{userId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tables",
+      "item": [
+        {
+          "name": "List tables",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/table"
+          }
+        },
+        {
+          "name": "Create table",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data._id) { pm.collectionVariables.set('tableId', j.data._id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNo\": 1,\n  \"seats\": 4\n}"
+            },
+            "url": "{{baseUrl}}/api/table/"
+          }
+        },
+        {
+          "name": "Update table",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Available\",\n  \"orderId\": null\n}"
+            },
+            "url": "{{baseUrl}}/api/table/{{tableId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "List orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/order"
+          }
+        },
+        {
+          "name": "Create order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data._id) { pm.collectionVariables.set('orderId', j.data._id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerDetails\": { \"name\": \"Walk-in\", \"phone\": \"5550001111\", \"guests\": 2 },\n  \"orderStatus\": \"pending\",\n  \"bills\": { \"total\": 100, \"tax\": 10, \"totalWithTax\": 110 },\n  \"items\": [],\n  \"table\": \"{{tableId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/order/"
+          }
+        },
+        {
+          "name": "Get order by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/order/{{orderId}}"
+          }
+        },
+        {
+          "name": "Patch line item status (kitchen)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ready\"\n}"
+            },
+            "url": "{{baseUrl}}/api/order/{{orderId}}/items/{{orderLineId}}/status",
+            "description": "Body: `status` or `itemStatus` — one of pending, sent, ready, served. Set `orderLineId` from `GET /api/order/:id` → `items[i]._id`."
+          }
+        },
+        {
+          "name": "Update order status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderStatus\": \"paid\"\n}"
+            },
+            "url": "{{baseUrl}}/api/order/{{orderId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments (Razorpay)",
+      "item": [
+        {
+          "name": "Create Razorpay order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100\n}"
+            },
+            "url": "{{baseUrl}}/api/payment/create-order"
+          }
+        },
+        {
+          "name": "Verify payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"\",\n  \"razorpay_payment_id\": \"\",\n  \"razorpay_signature\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/api/payment/verify-payment"
+          }
+        },
+        {
+          "name": "Webhook verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-razorpay-signature", "value": "" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/payment/webhook-verification",
+            "description": "Requires valid Razorpay webhook signature and raw body as configured in Razorpay dashboard."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Accounting (GL)",
+      "description": "Admin/manager + `backoffice.*`. Run `npm run seed:accounting` once. Uses Bearer {{accessToken}}.",
+      "item": [
+        {
+          "name": "Ensure defaults",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/accounting/ensure-defaults"
+          }
+        },
+        {
+          "name": "List accounts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/accounts"
+          }
+        },
+        {
+          "name": "Get config",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/config"
+          }
+        },
+        {
+          "name": "Trial balance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/trial-balance"
+          }
+        },
+        {
+          "name": "Journal entries",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/journal-entries"
+          }
+        },
+        {
+          "name": "Post order to ledger (idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/accounting/post-order/{{orderId}}"
+          }
+        },
+        {
+          "name": "List sessions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/sessions"
+          }
+        },
+        {
+          "name": "Open session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"openingFloat\": 200\n}"
+            },
+            "url": "{{baseUrl}}/api/accounting/sessions/open"
+          }
+        },
+        {
+          "name": "P&L report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/reports/pnl"
+          }
+        },
+        {
+          "name": "Balance sheet",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/reports/balance-sheet?asOf=2026-01-01"
+          }
+        },
+        {
+          "name": "Export journals CSV",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/export/journals.csv"
+          }
+        },
+        {
+          "name": "Export integration JSON",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/export/integration.json"
+          }
+        },
+        {
+          "name": "Audit log",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/audit-log?limit=20"
+          }
+        },
+        {
+          "name": "Sync batch ack",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchId\": \"offline-1\",\n  \"orderIds\": [],\n  \"note\": \"optional\"\n}"
+            },
+            "url": "{{baseUrl}}/api/accounting/sync/ack"
+          }
+        },
+        {
+          "name": "Partial refund",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "refund-{{orderId}}-1" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10\n}"
+            },
+            "url": "{{baseUrl}}/api/accounting/refunds/{{orderId}}"
+          }
+        },
+        {
+          "name": "AR payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"\",\n  \"amount\": 25\n}"
+            },
+            "url": "{{baseUrl}}/api/accounting/ar/payments"
+          }
+        },
+        {
+          "name": "List FX rates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/fx/rates"
+          }
+        },
+        {
+          "name": "Create FX rate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromCurrency\": \"EUR\",\n  \"toCurrency\": \"USD\",\n  \"rate\": 1.08,\n  \"effectiveDate\": \"2025-01-15T00:00:00.000Z\"\n}"
+            },
+            "url": "{{baseUrl}}/api/accounting/fx/rates"
+          }
+        },
+        {
+          "name": "Resolve FX",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/fx/resolve?from=EUR&to=USD"
+          }
+        },
+        {
+          "name": "Bootstrap inventory cost layers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/inventory/bootstrap-cost-layers"
+          }
+        },
+        {
+          "name": "List accounting periods",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/periods"
+          }
+        },
+        {
+          "name": "AR aging report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/reports/ar-aging"
+          }
+        },
+        {
+          "name": "List invoices",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/accounting/invoices"
+          }
+        }
+      ]
+    }
+  ]
+}

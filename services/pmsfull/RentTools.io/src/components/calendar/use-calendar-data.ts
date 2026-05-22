@@ -1,0 +1,660 @@
+import { useMemo } from "react";
+import type { Property, CalendarLink, DateOverride, Reservation } from "@/lib/types";
+import { bookingWindowCutoff } from "@/lib/types";
+import { toDateStr, addDaysStr } from "./utils";
+import type { CalendarEvent, CalendarBar, ConflictInfo } from "./types";
+
+export interface CalendarData {
+  airbnbDates: Set<string>;
+  bookingDates: Set<string>;
+  bufferDates: Set<string>;
+  potentialDates: Set<string>;
+  unbookableDates: Set<string>;
+  sameDayCleaningDates: Set<string>;
+  conflictDates: Set<string>;
+  conflicts: ConflictInfo[];
+  bars: CalendarBar[];
+  openOverrides: Set<string>;
+  closedOverrides: Set<string>;
+  /** Dates where the host has manually scheduled a cleaning. Behaves
+   *  like a closed override (no bookings) but renders a distinct
+   *  "Manual cleaning" chip so the host can tell their own scheduled
+   *  cleanings apart from generic blocks or auto-detected buffers. */
+  cleaningOverrides: Set<string>;
+  dateToReservation: Map<string, Reservation>;
+}
+
+export function useCalendarData(
+  property: Property,
+  syncedEvents: CalendarEvent[],
+  links: CalendarLink[],
+  overrides: DateOverride[]
+): CalendarData {
+  const { openOverrides, closedOverrides, cleaningOverrides } = useMemo(() => {
+    const open = new Set<string>();
+    const closed = new Set<string>();
+    const cleaning = new Set<string>();
+    for (const o of overrides) {
+      if (o.type === "open") open.add(o.date);
+      else if (o.type === "closed") closed.add(o.date);
+      else if (o.type === "cleaning") cleaning.add(o.date);
+    }
+    return { openOverrides: open, closedOverrides: closed, cleaningOverrides: cleaning };
+  }, [overrides]);
+
+  const computed = useMemo(() => {
+    const airbnb = new Set<string>();
+    const booking = new Set<string>();
+    const buffer = new Set<string>();
+    const sameDayCleaning = new Set<string>();
+    const potential = new Set<string>();
+    const unbookable = new Set<string>();
+    const conflictSet = new Set<string>();
+    const evMap = new Map<string, { name: string; platform: string; startDate: string; endDate: string; reservationId?: number; eventUid?: string; linkedEventUid?: string }>();
+    const resMap = new Map<string, Reservation>();
+    const allBooked = new Set<string>();
+    const airbnbStay = new Set<string>();
+    const bookingStay = new Set<string>();
+
+    const allBookings: { start: string; end: string; platform: string; name: string }[] = [];
+    const cutoff = bookingWindowCutoff(property.bookingWindow || 365);
+
+    for (const ev of syncedEvents) {
+      if (ev.startDate >= cutoff) continue;
+      const platform = ev.platform;
+      const dates = platform === "airbnb" ? airbnb : booking;
+      const stayDates = platform === "airbnb" ? airbnbStay : bookingStay;
+      let d = ev.startDate;
+      while (d <= ev.endDate) {
+        dates.add(d);
+        allBooked.add(d);
+        d = addDaysStr(d, 1);
+      }
+      d = ev.startDate;
+      while (d < ev.endDate) {
+        stayDates.add(d);
+        d = addDaysStr(d, 1);
+      }
+      // evMap key is `<startDate>|<platform>` so cross-platform events on
+      // the same start day coexist. The old key was just startDate, which
+      // silently dropped every second event with a same-day twin from a
+      // different platform — symptom reported via the in-product feedback
+      // form: Booking Jun 1-10 + Airbnb Jun 1 rendered as a single one-day
+      // bar, because Airbnb's event won the map slot and Booking's 10-day
+      // range disappeared. Composite key fixes that without changing
+      // render order (startDate is still the first sort segment).
+      const evKey = `${ev.startDate}|${platform}`;
+      if (!evMap.has(evKey)) {
+        evMap.set(evKey, {
+          name: ev.summary || "Reserved",
+          platform,
+          startDate: ev.startDate,
+          endDate: ev.endDate,
+          eventUid: ev.uid,
+        });
+      }
+      const isAirbnbBlock = platform === "airbnb" && (
+        ev.summary.includes("Not available") || ev.summary.includes("Blocked")
+      );
+      if (!isAirbnbBlock) {
+        allBookings.push({ start: ev.startDate, end: ev.endDate, platform, name: ev.summary });
+      }
+    }
+
+    for (const res of property.reservations) {
+      const start = toDateStr(new Date(res.checkIn));
+      const end = toDateStr(new Date(res.checkOut));
+      const platform = res.platform || "airbnb";
+
+      let matchingEventStart: string | null = null;
+      for (const [evStart, ev] of evMap) {
+        if (ev.platform !== platform) continue;
+        if (ev.startDate < end && ev.endDate > start) {
+          matchingEventStart = evStart;
+          break;
+        }
+      }
+
+      if (matchingEventStart) {
+        const ev = evMap.get(matchingEventStart)!;
+        // Was this Reservation attached to an airbnb host-block event
+        // (Airbnb (Not available) / Blocked)? Those events get
+        // filtered out of allBookings up in the syncedEvents loop
+        // because most of the time they're pure host blocks (no real
+        // guest, no buffer needed). But when the user has named the
+        // block via the bar-claim popover and a real Reservation is
+        // attached to it, the dates DO represent a real stay and have
+        // to participate in the cleaning-gap math — otherwise the
+        // gap detection sees a phantom hole between the previous and
+        // next stays and surfaces "Cleaning?" on the next checkin
+        // (Квартира 68 May 14 case: Iain May 3-9 → Ольга May 9-14
+        // (block + named reservation) → Booking May 14-28; without
+        // this push, allBookings was [Iain, Booking] with a 4-day
+        // phantom gap and May 14 wrongly read as potential).
+        const matchedAirbnbBlock = ev.platform === "airbnb" && (
+          (ev.name || "").includes("Not available") || (ev.name || "").includes("Blocked")
+        );
+        evMap.set(matchingEventStart, {
+          ...ev,
+          name: res.name,
+          reservationId: res.id,
+        });
+        let d = ev.startDate;
+        while (d <= ev.endDate) {
+          resMap.set(d, res);
+          d = addDaysStr(d, 1);
+        }
+        if (matchedAirbnbBlock) {
+          allBookings.push({ start, end, platform, name: res.name });
+        }
+      } else {
+        const dates = platform === "airbnb" ? airbnb : platform === "booking" ? booking : airbnb;
+        const stayDates = platform === "airbnb" ? airbnbStay : bookingStay;
+        let d = start;
+        while (d <= end) {
+          dates.add(d);
+          allBooked.add(d);
+          resMap.set(d, res);
+          d = addDaysStr(d, 1);
+        }
+        d = start;
+        while (d < end) {
+          stayDates.add(d);
+          d = addDaysStr(d, 1);
+        }
+        // Same composite key as the iCal write path above — keeps the
+        // Map's key format consistent so the sort + iterate downstream
+        // (bars memo at L411 onward) sees one homogeneous keyspace.
+        evMap.set(`${start}|${platform}`, {
+          name: res.name,
+          platform,
+          startDate: start,
+          endDate: end,
+          reservationId: res.id,
+          // Carry linkedEventUid through so the bars step can pair this
+          // standalone reservation with the iCal event it extends. Set
+          // when the user used "Extend booking" / "Add as extension"
+          // in the popover.
+          linkedEventUid: res.linkedEventUid ?? undefined,
+        });
+        allBookings.push({ start, end, platform, name: res.name });
+      }
+    }
+
+    const conflictList: ConflictInfo[] = [];
+    for (const d of airbnbStay) {
+      if (bookingStay.has(d)) {
+        conflictSet.add(d);
+      }
+    }
+
+    if (conflictSet.size > 0) {
+      for (const d of conflictSet) {
+        const abEvent = syncedEvents.find(e => e.platform === "airbnb" && d >= e.startDate && d < e.endDate);
+        const bkEvent = syncedEvents.find(e => e.platform === "booking" && d >= e.startDate && d < e.endDate);
+        conflictList.push({
+          date: d,
+          airbnbName: abEvent?.summary || "Airbnb booking",
+          bookingName: bkEvent?.summary || "Booking reservation",
+        });
+      }
+    }
+
+    // RT-25.3 — when the per-property cleaning master toggle is off,
+    // skip all cleaning-derived computations (buffer, potential,
+    // sameDayCleaning, unbookable). Conflict detection above and the
+    // bars step below still run. linkedBoundaryDates / closedOverrides
+    // / openOverrides only feed cleaning math, so we early-return
+    // before any of that runs.
+    if (property.cleaningEnabled === false) {
+      return {
+        airbnbDates: airbnb,
+        bookingDates: booking,
+        bufferDates: buffer,
+        potentialDates: potential,
+        unbookableDates: unbookable,
+        sameDayCleaningDates: sameDayCleaning,
+        conflictDates: conflictSet,
+        dateToEvent: evMap,
+        dateToReservation: resMap,
+        conflicts: conflictList,
+      };
+    }
+
+    allBookings.sort((a, b) => a.start.localeCompare(b.start));
+    const dedupedBookings: typeof allBookings = [];
+    for (const b of allBookings) {
+      const last = dedupedBookings[dedupedBookings.length - 1];
+      if (last && b.start < last.end) {
+        if (b.end > last.end) last.end = b.end;
+      } else {
+        dedupedBookings.push({ ...b });
+      }
+    }
+
+    const minStay = property.minNights || 3;
+    const skipBeforeFor = new Set<number>();
+    const maxBefore = Math.max(0, ...links.map(l => l.bufferBefore));
+    const maxAfter = Math.max(0, ...links.map(l => l.bufferAfter));
+
+    for (let bi = 0; bi < dedupedBookings.length - 1; bi++) {
+      const b = dedupedBookings[bi];
+      const next = dedupedBookings[bi + 1];
+
+      const gapStart = addDaysStr(b.end, 1);
+      const gapDays = Math.max(0, Math.ceil(
+        (new Date(next.start + "T12:00:00Z").getTime() - new Date(gapStart + "T12:00:00Z").getTime()) / (1000 * 60 * 60 * 24)
+      ));
+      const neededForBooking = maxAfter + minStay + maxBefore;
+
+      if (gapDays < neededForBooking) {
+        skipBeforeFor.add(bi + 1);
+      }
+    }
+
+    for (let bi = 0; bi < dedupedBookings.length; bi++) {
+      const b = dedupedBookings[bi];
+      const prev = bi > 0 ? dedupedBookings[bi - 1] : null;
+      const next = dedupedBookings[bi + 1];
+
+      if (skipBeforeFor.has(bi)) {
+        // gap too small
+      } else if (bi === 0 || !prev) {
+        for (let i = 1; i <= maxBefore; i++) {
+          const d = addDaysStr(b.start, -i);
+          if (!allBooked.has(d)) buffer.add(d);
+        }
+      } else {
+        const gapStart = addDaysStr(prev.end, 1);
+        let gapHasBooking = false;
+        let d = addDaysStr(gapStart, maxAfter);
+        while (d < addDaysStr(b.start, -maxBefore)) {
+          if (allBooked.has(d)) { gapHasBooking = true; break; }
+          d = addDaysStr(d, 1);
+        }
+
+        if (gapHasBooking) {
+          for (let i = 1; i <= maxBefore; i++) {
+            const dd = addDaysStr(b.start, -i);
+            if (!allBooked.has(dd)) buffer.add(dd);
+          }
+        } else {
+          for (let i = 1; i <= maxBefore; i++) {
+            const dd = addDaysStr(b.start, -i);
+            if (!allBooked.has(dd)) potential.add(dd);
+          }
+        }
+      }
+
+      for (let i = 1; i <= maxAfter; i++) {
+        const d = addDaysStr(b.end, i);
+        if (!allBooked.has(d)) buffer.add(d);
+      }
+
+      if (next && skipBeforeFor.has(bi + 1)) {
+        const cleanEnd = addDaysStr(b.end, maxAfter + 1);
+        let d = cleanEnd;
+        while (d < next.start) {
+          if (!allBooked.has(d) && !buffer.has(d)) unbookable.add(d);
+          d = addDaysStr(d, 1);
+        }
+      }
+    }
+
+    // Linked-extension boundary dates: when a manual reservation has
+    // linkedEventUid pointing to an adjacent iCal event, the boundary
+    // day between them is for the SAME guest, so it must NOT show a
+    // "needs cleaning" chip — the cleaning warning is only valid for
+    // turnovers between different guests.
+    const linkedBoundaryDates = new Set<string>();
+    for (const res of property.reservations) {
+      if (!res.linkedEventUid) continue;
+      const ev = syncedEvents.find((e) => e.uid === res.linkedEventUid);
+      if (!ev) continue;
+      const resStart = toDateStr(new Date(res.checkIn));
+      const resEnd = toDateStr(new Date(res.checkOut));
+      // If the reservation's range overlaps the event's range it's a
+      // "claim" of the event itself — the boundary is implicit and
+      // there is no transition day to suppress.
+      if (resStart < ev.endDate && resEnd > ev.startDate) continue;
+      // Adjacent extensions abut at exactly one date.
+      if (resEnd === ev.startDate) linkedBoundaryDates.add(resEnd);
+      else if (resStart === ev.endDate) linkedBoundaryDates.add(resStart);
+    }
+
+    if (maxBefore === 0 && maxAfter === 0) {
+      // Pre-compute: dates that are abutted on the START side by an
+      // airbnb host-block (an "Airbnb (Not available)" / "Blocked"
+      // event whose endDate equals this date). When such a block sits
+      // immediately before a Reserved event, it visually owns the
+      // prep slot — there's no real free-floating gap that the
+      // cleaning could happen anywhere in. Without this guard,
+      // Квартира 68 May 3 (Iain checks in immediately after the
+      // May 1-3 host block) reads as dashed "Cleaning?" because the
+      // algorithm sees a 13-day gap back to the previous booking on
+      // Apr 19, ignoring that 2 of those days are blocked.
+      const datesAbuttedByAirbnbBlockEnd = new Set<string>();
+      for (const ev of syncedEvents) {
+        const isAirbnbBlock = ev.platform === "airbnb" && (
+          ev.summary.includes("Not available") || ev.summary.includes("Blocked")
+        );
+        if (isAirbnbBlock) datesAbuttedByAirbnbBlockEnd.add(ev.endDate);
+      }
+
+      for (let bi = 0; bi < dedupedBookings.length; bi++) {
+        const b = dedupedBookings[bi];
+        const next = dedupedBookings[bi + 1];
+        // After-checkout: cleaning is implied for the same day the
+        // guest leaves, so b.end is a definite same-day cleaning slot.
+        if (!linkedBoundaryDates.has(b.end)) {
+          sameDayCleaning.add(b.end);
+        }
+
+        if (next) {
+          const gapStart = addDaysStr(b.end, 1);
+          const gapDays = Math.max(0, Math.ceil(
+            (new Date(next.start + "T12:00:00Z").getTime() - new Date(gapStart + "T12:00:00Z").getTime()) / (1000 * 60 * 60 * 24)
+          ));
+          // Pre-checkin slot. We only surface a "Cleaning?" chip on
+          // next.start when there's actually flexibility — i.e.
+          //
+          //   * gapDays >= 1   (at least one full empty day between
+          //                     the two stays — without this, a same
+          //                     day turnover or a back-to-back day
+          //                     would get marked potential too,
+          //                     which the user explicitly flagged as
+          //                     wrong: "May 14 has 2 bookings, 1
+          //                     ends and 1 starts, system put
+          //                     potential cleaning there not just
+          //                     cleaning"); and
+          //   * gapDays >= minStay  (gap is big enough that the
+          //                          cleaner could've cleaned on
+          //                          ANY day in it — for shorter
+          //                          gaps the cleaning is implicitly
+          //                          on b.end and next.start doesn't
+          //                          add information).
+          //
+          // The first guard is the load-bearing one for the
+          // user-reported bug: it prevents the same-day case from
+          // getting marked potential even if minStay is 0 or 1.
+          if (
+            gapDays >= 1 &&
+            gapDays >= minStay &&
+            !linkedBoundaryDates.has(next.start) &&
+            !datesAbuttedByAirbnbBlockEnd.has(next.start)
+          ) {
+            sameDayCleaning.add(next.start);
+            potential.add(next.start);
+          }
+        }
+      }
+    }
+
+    for (const d of openOverrides) {
+      buffer.delete(d);
+      potential.delete(d);
+      unbookable.delete(d);
+      sameDayCleaning.delete(d);
+    }
+    for (const d of closedOverrides) {
+      if (!allBooked.has(d)) {
+        buffer.add(d);
+      }
+    }
+    // cleaningOverrides aren't pushed into `buffer` — they get their
+    // own dedicated chip via the cleaningOverrides Set, so the host
+    // can visually tell their own scheduled cleanings apart from auto
+    // buffer days or generic blocks.
+
+    return {
+      airbnbDates: airbnb,
+      bookingDates: booking,
+      bufferDates: buffer,
+      potentialDates: potential,
+      unbookableDates: unbookable,
+      sameDayCleaningDates: sameDayCleaning,
+      conflictDates: conflictSet,
+      dateToEvent: evMap,
+      dateToReservation: resMap,
+      conflicts: conflictList,
+    };
+  }, [syncedEvents, property.reservations, links, property.minNights, property.bookingWindow, property.cleaningEnabled, openOverrides, closedOverrides]);
+
+  const bars = useMemo(() => {
+    const result: CalendarBar[] = [];
+    const processed = new Set<string>();
+
+    const allStarts = Array.from(computed.dateToEvent.keys()).sort();
+
+    for (const start of allStarts) {
+      if (processed.has(start)) continue;
+      const ev = computed.dateToEvent.get(start)!;
+      processed.add(start);
+
+      let label = ev.name;
+      let resId = ev.reservationId;
+      const matchingResForExt = resId ? property.reservations.find(r => r.id === resId) : undefined;
+      // A "claim" (reservation that overlaps the iCal event the user
+      // just named) gets merged into the event's evMap entry — which
+      // KEEPS the event's eventUid. A real extension (separate
+      // reservation abutting the event for the same guest) lives in
+      // its OWN evMap entry with no eventUid. We only want the
+      // hatched / striped extension styling on the latter — naming
+      // an existing iCal stay shouldn't make the bar look manually
+      // added.
+      const isExtension = !!matchingResForExt?.linkedEventUid && !ev.eventUid;
+
+      // Generic-iCal-summary detection. Different platforms send
+      // different "this is a block, not a guest name" strings:
+      //   Airbnb        — "Reserved", "Not available", "Blocked"
+      //   Booking.com   — "CLOSED - Not available"
+      //   Trip.com/Ctrip — "RoomStatus Fully booked"
+      //   Agoda         — often empty summary or "Booked"
+      // Substring match covers all of them (lowercase compare so we
+      // don't have to enumerate capitalisation variants).
+      const labelLower = label.toLowerCase();
+      const isGenericSummary =
+        !label ||
+        labelLower.includes("reserved") ||
+        labelLower.includes("closed") ||
+        labelLower.includes("not available") ||
+        labelLower.includes("blocked") ||
+        labelLower.includes("fully booked") ||
+        labelLower.includes("roomstatus") ||
+        labelLower === "booked";
+      if (isGenericSummary) {
+        const matchingRes = property.reservations.find(r => {
+          const rStart = toDateStr(new Date(r.checkIn));
+          const rEnd = toDateStr(new Date(r.checkOut));
+          return rStart < ev.endDate && rEnd > ev.startDate;
+        });
+        if (matchingRes) {
+          label = matchingRes.name;
+          resId = matchingRes.id;
+        } else {
+          // Fall back to the platform brand — "Airbnb", "Booking",
+          // "Trip.com", "Agoda", etc. Hardcoded brand names where
+          // there's a canonical capitalisation; capitalize-first
+          // for anything else. Previously this was hardcoded to
+          // "Airbnb" vs "Booking" only, so Trip.com and Agoda bars
+          // fell through to "Booking" (wrong) when their summary
+          // matched the substring filter.
+          const brandLabels: Record<string, string> = {
+            airbnb: "Airbnb",
+            booking: "Booking",
+            vrbo: "Vrbo",
+            "trip-com": "Trip.com",
+            agoda: "Agoda",
+            expedia: "Expedia",
+            hostaway: "Hostaway",
+            lodgify: "Lodgify",
+          };
+          label = brandLabels[ev.platform] ?? (
+            ev.platform
+              ? ev.platform.charAt(0).toUpperCase() + ev.platform.slice(1)
+              : "Booked"
+          );
+        }
+      }
+
+      result.push({
+        startDate: ev.startDate,
+        endDate: ev.endDate,
+        name: label,
+        platform: ev.platform,
+        reservationId: resId,
+        eventUid: ev.eventUid,
+        linkedEventUid: ev.linkedEventUid,
+        isExtension,
+      });
+    }
+
+    const deduped: CalendarBar[] = [];
+    for (const bar of result) {
+      const existing = deduped.find(
+        b => b.platform === bar.platform && b.startDate < bar.endDate && b.endDate > bar.startDate
+      );
+      if (existing) {
+        if (bar.startDate < existing.startDate) existing.startDate = bar.startDate;
+        if (bar.endDate > existing.endDate) existing.endDate = bar.endDate;
+        if (bar.reservationId && !existing.reservationId) {
+          existing.name = bar.name;
+          existing.reservationId = bar.reservationId;
+        }
+        if (bar.eventUid && !existing.eventUid) {
+          existing.eventUid = bar.eventUid;
+        }
+        if (bar.linkedEventUid && !existing.linkedEventUid) {
+          existing.linkedEventUid = bar.linkedEventUid;
+        }
+      } else {
+        deduped.push({ ...bar });
+      }
+    }
+
+    // Pair linked bars: a manual reservation that has linkedEventUid
+    // pointing to an iCal event becomes a separate bar (no overlap), so
+    // here we cross-reference to mark which side of each abuts a
+    // linked partner. The renderer uses these flags to drop the inner
+    // rounding + 2 px gap between the pair so it reads as one stay.
+    const eventUidToBar = new Map<string, CalendarBar>();
+    for (const bar of deduped) {
+      if (bar.eventUid) eventUidToBar.set(bar.eventUid, bar);
+    }
+    for (const bar of deduped) {
+      if (!bar.linkedEventUid) continue;
+      const partner = eventUidToBar.get(bar.linkedEventUid);
+      if (!partner || partner === bar) continue;
+      if (bar.endDate === partner.startDate) {
+        // bar abuts before partner
+        bar.linkedAfter = true;
+        partner.linkedBefore = true;
+      } else if (bar.startDate === partner.endDate) {
+        // bar abuts after partner
+        bar.linkedBefore = true;
+        partner.linkedAfter = true;
+      }
+    }
+
+    // Vertical stacking — interval-graph coloring. When two bars cover
+    // the same date (different platforms — see the bar dedup above
+    // which only merges same-platform overlap), they need to render at
+    // different Y positions in the calendar cell or the second one is
+    // invisible (covered by the first). Without this pass every bar
+    // landed at the same top-7 sm:top-9 offset and a cross-platform
+    // overlap like Booking + Trip.com mid-stay only showed Booking;
+    // surfaced via in-product feedback from a multi-platform host.
+    //
+    // Greedy assignment: sort by startDate, then for each bar pick the
+    // lowest row index where the previously-assigned bar in that row
+    // has already ended (endDate < this bar's startDate). New row only
+    // when no existing row is free.
+    //
+    // Linked pairs (manual extension before/after an iCal event) MUST
+    // share a row index so the visual continuation stays on one
+    // horizontal line. We handle that by treating already-paired bars
+    // as a unit when assigning — the second bar in the pair inherits
+    // the first's rowIdx instead of being checked independently.
+    const sortedForRows = [...deduped].sort((a, b) => {
+      // Sort by startDate first; on ties, by endDate descending so
+      // longer bars get the top row (cosmetic — keeps the primary
+      // booking visible at the natural Y on overlap cells).
+      const c1 = a.startDate.localeCompare(b.startDate);
+      if (c1 !== 0) return c1;
+      return b.endDate.localeCompare(a.endDate);
+    });
+    const rowEnds: string[] = []; // endDate of the latest bar in each row
+    const assigned = new Map<CalendarBar, number>();
+    for (const bar of sortedForRows) {
+      // Linked-partner: inherit row from the partner that's already
+      // been assigned (the earlier-starting one of the pair).
+      let inheritedIdx: number | undefined;
+      if (bar.linkedEventUid) {
+        for (const other of sortedForRows) {
+          if (other === bar) continue;
+          if (other.eventUid && other.eventUid === bar.linkedEventUid && assigned.has(other)) {
+            inheritedIdx = assigned.get(other);
+            break;
+          }
+        }
+      }
+      let idx: number;
+      if (inheritedIdx !== undefined) {
+        idx = inheritedIdx;
+        // Extend the row's tracked endDate so subsequent bars know
+        // this row is now occupied through bar.endDate.
+        if (rowEnds[idx] === undefined || rowEnds[idx] < bar.endDate) {
+          rowEnds[idx] = bar.endDate;
+        }
+      } else {
+        // Find the first row whose latest bar's endDate is <= this
+        // bar's startDate. The <= (not strict <) is deliberate: a
+        // booking that ends on day X (checkout, guest leaves morning
+        // of X) and a booking that starts on day X (checkin, guest
+        // arrives afternoon of X) are a turnover, not a conflict —
+        // the calendar already handles them visually via per-cell
+        // checkInPct / checkOutPct timing so they meet in the middle
+        // of the cell without overlap. Using strict `<` here would
+        // force the second booking into row 1, expanding the entire
+        // week's cell height even though there's no real double-
+        // booking. Strict `<` belongs in conflict detection (the
+        // conflictSet at L173+, which already uses `<`); the row
+        // assignment is about visual stacking.
+        idx = rowEnds.findIndex((end) => end <= bar.startDate);
+        if (idx === -1) {
+          idx = rowEnds.length;
+          rowEnds.push(bar.endDate);
+        } else {
+          rowEnds[idx] = bar.endDate;
+        }
+      }
+      assigned.set(bar, idx);
+      bar.rowIdx = idx;
+    }
+
+    return deduped;
+  }, [computed.dateToEvent, property.reservations]);
+
+  // RT-25.3 — when the toggle is off, suppress manual cleaning chips
+  // too so the calendar reads as "bookings only". Data is preserved
+  // (cleaningOverrides survive in the date-overrides table); the chips
+  // come back when the toggle is flipped on.
+  const visibleCleaningOverrides =
+    property.cleaningEnabled === false ? new Set<string>() : cleaningOverrides;
+
+  return {
+    airbnbDates: computed.airbnbDates,
+    bookingDates: computed.bookingDates,
+    bufferDates: computed.bufferDates,
+    potentialDates: computed.potentialDates,
+    unbookableDates: computed.unbookableDates,
+    sameDayCleaningDates: computed.sameDayCleaningDates,
+    cleaningOverrides: visibleCleaningOverrides,
+    conflictDates: computed.conflictDates,
+    conflicts: computed.conflicts,
+    bars,
+    openOverrides,
+    closedOverrides,
+    dateToReservation: computed.dateToReservation,
+  };
+}

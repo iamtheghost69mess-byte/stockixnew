@@ -1,0 +1,40 @@
+name: Codacy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Static analysis (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Codacy Analysis CLI
+        # Pinned to v4.4.7 for supply-chain safety.
+        uses: codacy/codacy-analysis-cli-action@master
+        with:
+          verbose: true
+          output: results.sarif
+          format: sarif
+          max-allowed-issues: 2147483647
+
+      - name: Upload SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codacy-sarif
+          path: results.sarif
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,1029 @@
+openapi: 3.1.0
+info:
+  title: Restaurant POS — Platform Control Plane API
+  description: |
+    Version **v1** of the multi-tenant SaaS **platform** API (owners, support, operations).
+    This surface is separate from tenant (POS) JWTs: platform tokens must use `aud: platform`
+    and `PLATFORM_JWT_SECRET`.
+    These support/control-plane routes remain accessible even when tenant runtime is blocked by license window policy.
+
+    **Correlation:** send `X-Request-Id` and optional W3C **`traceparent`**; responses echo `X-Request-Id`.
+
+    **Health (not under this prefix):** `GET /health`, `GET /ready`.
+
+    **Documentation UI:** `GET /api-docs/platform` (Swagger UI). **Tenant POS API** (stores, RBAC, orders): `GET /api-docs/pos`.
+  version: 1.0.0
+  contact:
+    name: API support
+servers:
+  - url: /api/platform/v1
+    description: Relative to backend host (e.g. http://localhost:8010)
+tags:
+  - name: Auth
+  - name: Organizations
+  - name: Bootstrap
+  - name: Metrics
+  - name: Jobs
+  - name: Webhooks
+  - name: Compliance
+  - name: Invitations
+  - name: FeatureFlags
+  - name: Impersonation
+  - name: Audit
+  - name: Notifications
+  - name: Schema
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Platform user login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformLoginResponse"
+        "401": { description: Invalid credentials }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current platform user (JWT only; not API key)
+      security: [{ PlatformBearer: [] }]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformMeResponse"
+        "403": { description: API key cannot access this route }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate platform access token using refresh token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessTokenPair"
+  /auth/api-keys:
+    post:
+      tags: [Auth]
+      summary: Create platform API key (JWT only; returns secret once)
+      security: [{ PlatformBearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string }
+                scopes:
+                  type: array
+                  items: { type: string }
+                  description: e.g. org:read, org:write, "*"
+      responses:
+        "201": { description: API key created }
+    get:
+      tags: [Auth]
+      summary: List API key metadata (no secrets)
+      security: [{ PlatformBearer: [] }]
+      responses:
+        "200": { description: OK }
+  /auth/api-keys/{id}/revoke:
+    post:
+      tags: [Auth]
+      summary: Revoke a platform API key (JWT only)
+      security: [{ PlatformBearer: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Revoked }
+        "404": { description: Not found }
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: Search / list organizations
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Filter by name or slug
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Page size (cursor pagination)
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: Opaque cursor from the previous response `nextCursor` (base64url of last `_id`)
+      responses:
+        "200":
+          description: Organization array
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessOrgList"
+    post:
+      tags: [Organizations]
+      summary: Create organization (idempotent with Idempotency-Key)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationCreate"
+      responses:
+        "201":
+          description: >
+            Created. `bootstrapMode` is `queue` or `sync_fallback`. When `queue`, `data` omits `defaultCredentials`
+            until async bootstrap finishes—poll GET `/organizations/{id}/provisioning-status`, then GET the organization.
+            When `sync_fallback`, `data` includes `defaultCredentials` after inline bootstrap.
+        "409": { description: Slug conflict }
+  /organizations/health-summary:
+    get:
+      tags: [Organizations]
+      summary: Batch tenant health rollup for organization list views
+      description: >
+        Returns per-organization user counts and tenant HTTP request totals for the current UTC day bucket
+        (same window as single-org observability `last24h`), plus a coarse health level from 4xx/5xx share.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated organization ObjectIds (max 100).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        organizationId: { type: string }
+                        usersCount: { type: integer }
+                        totalRequests24h: { type: integer }
+                        failedRequests24h: { type: integer }
+                        healthLevel:
+                          type: string
+                          enum: [ok, degraded, down]
+                        byStatusFamily:
+                          type: object
+                          additionalProperties: { type: integer }
+  /organizations/{id}:
+    get:
+      tags: [Organizations]
+      summary: Get organization by id
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+  /organizations/{id}/provisioning-status:
+    get:
+      tags: [Organizations]
+      summary: Provisioning readiness (poll after create when bootstrap is queued)
+      description: >
+        Returns whether `org_bootstrap` has finished (`isBootstrapped`), whether an admin user exists,
+        and `readyForPinLogin` (lifecycle active + bootstrapped + admin present). After `POST /organizations`
+        with `bootstrapMode: queue`, poll this until `readyForPinLogin` is true before tenant PIN login.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid organization id }
+        "404": { description: Not found }
+  /organizations/{id}/observability:
+    get:
+      tags: [Organizations]
+      summary: Tenant HTTP usage and approximate storage footprint
+      description: >
+        Aggregates tenant-scoped HTTP request counts (UTC day buckets), plan usage counters, BSON-size
+        approximations for key collections, and entity counts. Requires `org:read`.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid organization id }
+        "404": { description: Not found }
+  /organizations/{id}/credentials/{role}/reset-pin:
+    patch:
+      tags: [Organizations]
+      summary: Reset default staff PIN for bootstrap role
+      description: >
+        Targets the user whose `name` and `role` match the path role (bootstrap convention). Updates that user's PIN
+        and the matching row in `organization.defaultCredentials`.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: role
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, manager, waiter, cashier, kitchen]
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid role or organization id }
+        "404": { description: Organization or default user not found }
+        "409": { description: PIN collision — retry }
+  /organizations/{id}/lifecycle:
+    patch:
+      tags: [Organizations]
+      summary: Update lifecycle FSM (suspend, activate, …)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lifecycle:
+                  type: string
+                  enum: [draft, active, suspended, pending_closure, deleted]
+                lifecycleReasonCode: { type: string }
+                lifecycleNote: { type: string }
+                supportTicketId:
+                  type: string
+                  description: Internal support ticket reference (audit metadata)
+      responses:
+        "200": { description: Updated }
+  /organizations/{id}/license:
+    patch:
+      tags: [Organizations]
+      summary: Update tenant license window (start / end)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationLicensePatch"
+      responses:
+        "200": { description: Updated }
+        "400": { description: Invalid date }
+        "404": { description: Not found }
+  /organizations/{id}/support/location:
+    patch:
+      tags: [Organizations]
+      summary: Support-only correction of organization location fields
+      description: >
+        Allows platform support roles to correct organization `country`, `city`, and `timezone`.
+        This endpoint is intended for support operations and is audited.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                country: { type: string }
+                city: { type: string }
+                timezone:
+                  type: string
+                  description: IANA timezone identifier (e.g. Asia/Beirut)
+      responses:
+        "200": { description: Updated }
+        "400": { description: Invalid payload }
+        "403": { description: Forbidden }
+        "404": { description: Not found }
+  /organizations/{id}/entitlements:
+    patch:
+      tags: [Organizations]
+      summary: Patch entitlements JSON and schema version
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entitlements: { type: object }
+                entitlementsSchemaVersion: { type: integer }
+      responses:
+        "200": { description: Updated }
+  /bootstrap:
+    post:
+      tags: [Bootstrap]
+      summary: Enqueue async provisioning / seed job for an organization
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: { type: string }
+      responses:
+        "200": { description: Job queued }
+  /metrics/summary:
+    get:
+      tags: [Metrics]
+      summary: High-level counts and SLO stub fields
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      responses:
+        "200":
+          description: Summary metrics
+          content:
+            application/json:
+              schema:
+                type: object
+  /metrics/kpis:
+    get:
+      tags: [Metrics]
+      summary: Owner KPIs — control-plane activity and engagement
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - name: windowDays
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+          description: |
+            Rolling window ending **now** (ignored when `from`+`to` are set). Used for aggregates
+            when no explicit calendar range is provided.
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Start of range (UTC). Use with `to` to override `windowDays` (max span 366 days).
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: End of range (UTC), inclusive when date-only.
+        - name: since
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Alias for `from`.
+        - name: until
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Alias for `to`.
+      responses:
+        "200":
+          description: KPI payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    additionalProperties: true
+        "400":
+          description: Invalid date range
+  /metrics/analytics:
+    get:
+      tags: [Metrics]
+      summary: Daily product-event totals from rollups between two UTC calendar days
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          description: Inclusive start day (YYYY-MM-DD, UTC).
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          description: Inclusive end day (YYYY-MM-DD, UTC).
+      responses:
+        "200":
+          description: Rollup-backed series
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: Missing or invalid from/to
+  /stream:
+    get:
+      tags: [Realtime]
+      summary: SSE — audits tail and ping (platform control plane)
+      description: |
+        `text/event-stream` after platform auth (`AUDIT_READ`). Events:
+        - `ready` — connection metadata.
+        - `ping` — keep-alive.
+        - `audit` — new `PlatformAuditLog` rows since the per-connection watermark (poll interval `PLATFORM_SSE_POLL_MS`, default 15s).
+        - periodic control-plane heartbeat events.
+        - `notice` — e.g. `sse_backpressure` when the response buffer exceeds `PLATFORM_SSE_MAX_PENDING_BYTES` (audit tail pauses briefly).
+        - `error` — non-fatal poll failures.
+        Set `PLATFORM_SSE_AUDITS=0` to disable audit polling. Jobs are still polled via REST until a job stream exists.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      responses:
+        "200":
+          description: Open SSE connection
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /jobs/{queue}/{id}:
+    get:
+      tags: [Jobs]
+      summary: BullMQ job status (requires queue:admin permission)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - name: queue
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [provisioning, webhooks_out, email, exports, compliance, analytics_rollups, fraud_review]
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Job state }
+        "404": { description: Not found or Redis disabled }
+  /jobs/{queue}/{id}/retry:
+    post:
+      tags: [Jobs]
+      summary: Retry a failed BullMQ job (queue admin; audited)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - name: queue
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [provisioning, webhooks_out, email, exports, compliance, analytics_rollups, fraud_review]
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Job re-queued }
+        "400": { description: Job cannot be retried }
+        "404": { description: Not found }
+        "503": { description: Redis / queue unavailable }
+  /webhooks/endpoints:
+    post:
+      tags: [Webhooks]
+      summary: Register customer webhook endpoint (returns signing secret once)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, url]
+              properties:
+                organizationId: { type: string }
+                url: { type: string, format: uri }
+                description: { type: string }
+                eventTypes:
+                  type: array
+                  items: { type: string }
+      responses:
+        "201": { description: Created }
+    get:
+      tags: [Webhooks]
+      summary: List webhook endpoints
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - in: query
+          name: organizationId
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /webhooks/endpoints/{id}:
+    delete:
+      tags: [Webhooks]
+      summary: Revoke webhook endpoint (sets disabled)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/WebhookEndpointId"
+      responses:
+        "200": { description: Endpoint disabled }
+        "404": { description: Not found }
+  /webhooks/outbox:
+    get:
+      tags: [Webhooks]
+      summary: List recent webhook outbox / delivery rows
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - in: query
+          name: organizationId
+          schema: { type: string }
+        - in: query
+          name: endpointId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, delivered, failed]
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200": { description: Rows with payload preview }
+    post:
+      tags: [Webhooks]
+      summary: Enqueue outbound webhook delivery (HMAC-signed in worker)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, endpointId, eventType, payload]
+              properties:
+                organizationId: { type: string }
+                endpointId: { type: string }
+                eventType: { type: string }
+                payload: { type: object }
+                idempotencyKey: { type: string }
+      responses:
+        "201": { description: Outbox row created }
+        "409": { description: Duplicate idempotency key }
+  /compliance/export:
+    post:
+      tags: [Compliance]
+      summary: Request async org export (ZIP job)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: { type: string }
+      responses:
+        "200":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceJobQueued"
+  /compliance/deletion:
+    post:
+      tags: [Compliance]
+      summary: Schedule org erasure after cooldown
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: { type: string }
+                cooldownHours: { type: number, default: 72 }
+      responses:
+        "200":
+          description: Scheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceDeletionQueued"
+  /invitations:
+    post:
+      tags: [Invitations]
+      summary: Create staff invitation (email job)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, email]
+              properties:
+                organizationId: { type: string }
+                email: { type: string, format: email }
+                roleHint: { type: string }
+      responses:
+        "201": { description: Created; token returned for testing }
+  /flags:
+    put:
+      tags: [FeatureFlags]
+      summary: Upsert feature flag (rollout %, kill switch, org overrides)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string }
+                description: { type: string }
+                defaultEnabled: { type: boolean }
+                rolloutPercent: { type: number, minimum: 0, maximum: 100 }
+                killSwitch: { type: boolean }
+                orgOverrides:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      organization: { type: string }
+                      enabled: { type: boolean }
+      responses:
+        "200": { description: Saved }
+  /flags/evaluate:
+    get:
+      tags: [FeatureFlags]
+      summary: Evaluate a flag for an optional organization
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - in: query
+          name: key
+          required: true
+          schema: { type: string }
+        - in: query
+          name: organizationId
+          schema: { type: string }
+      responses:
+        "200": { description: Boolean result }
+  /impersonation/session:
+    post:
+      tags: [Impersonation]
+      summary: Issue short-lived POS JWT for support (gated by env + RBAC)
+      security: [{ PlatformBearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string }
+      responses:
+        "200":
+          description: POS access token + banner contract
+        "403": { description: Disabled or forbidden }
+  /audits:
+    get:
+      tags: [Audit]
+      summary: List platform audit entries (PII-minimized)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - in: query
+          name: organizationId
+          schema: { type: string }
+        - in: query
+          name: action
+          schema: { type: string }
+          description: Case-insensitive substring match on action
+        - in: query
+          name: userId
+          schema: { type: string }
+          description: Filter by actor platform user ObjectId
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200": { description: Audit rows }
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List platform notifications for the signed-in platform user
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - in: query
+          name: unread
+          required: false
+          schema: { type: boolean, default: false }
+          description: Return unread notifications only when true
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Notification rows ordered by newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PlatformNotificationListItem"
+  /notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Count unread notifications for the signed-in platform user
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  count: { type: integer, minimum: 0 }
+  /notifications/all/read:
+    post:
+      tags: [Notifications]
+      summary: Mark all notifications as read for the signed-in platform user
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      responses:
+        "200":
+          description: Read-state updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessWrapper"
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Mark one notification as read for the signed-in platform user
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Read-state updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      isRead: { type: boolean }
+        "400": { description: Invalid id }
+        "404": { description: Notification not found }
+  /system-settings:
+    get:
+      tags: [Platform]
+      summary: Platform-wide defaults (currencies, tax templates, accounting templates)
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      responses:
+        "200": { description: Settings document }
+    patch:
+      tags: [Platform]
+      summary: Update platform-wide defaults
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Updated settings }
+  /openapi.json:
+    get:
+      tags: [Schema]
+      summary: OpenAPI document as JSON (derived from this YAML)
+      responses:
+        "200":
+          description: OpenAPI object
+          content:
+            application/json:
+              schema: { type: object }
+components:
+  parameters:
+    OrgId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string }
+    WebhookEndpointId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: WebhookEndpoint document id
+  securitySchemes:
+    PlatformBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Platform access token (`aud` must be `platform`)
+    PlatformApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  schemas:
+    SuccessWrapper:
+      type: object
+      properties:
+        success: { type: boolean }
+    SuccessTokenPair:
+      allOf:
+        - $ref: "#/components/schemas/SuccessWrapper"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                accessToken: { type: string }
+                refreshToken: { type: string }
+    PlatformLoginResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessWrapper"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                user: { type: object }
+                accessToken: { type: string }
+                refreshToken: { type: string }
+    PlatformMeResponse:
+      allOf:
+        - $ref: "#/components/schemas/SuccessWrapper"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                user: { type: object }
+    ComplianceJobQueued:
+      type: object
+      properties:
+        success: { type: boolean }
+        queued: { type: boolean }
+        jobId: { type: string, nullable: true }
+        queue: { type: string }
+        reason: { type: string }
+    ComplianceDeletionQueued:
+      allOf:
+        - $ref: "#/components/schemas/ComplianceJobQueued"
+        - type: object
+          properties:
+            data: { type: object }
+    OrganizationCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{1,62}$'
+        planKey: { type: string }
+        ownerEmail: { type: string, format: email }
+        ownerName: { type: string }
+        country: { type: string }
+        city: { type: string }
+        timezone:
+          type: string
+          description: IANA timezone identifier; defaults to Asia/Beirut when omitted
+        licenseStartDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Canonical license window start
+        licenseEndDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Canonical license window end
+        licenseStartsAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Legacy alias for licenseStartDate
+        licenseEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Legacy alias for licenseEndDate
+        entitlements:
+          type: object
+          description: Shallow-merged with tenant defaults (e.g. maxUsers, maxLocations, modules)
+          additionalProperties: true
+    OrganizationLicensePatch:
+      type: object
+      properties:
+        licenseStartDate:
+          type: string
+          format: date-time
+          nullable: true
+        licenseEndDate:
+          type: string
+          format: date-time
+          nullable: true
+        licenseStartsAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Legacy alias for licenseStartDate
+        licenseEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Legacy alias for licenseEndDate
+    SuccessOrgList:
+      allOf:
+        - $ref: "#/components/schemas/SuccessWrapper"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { type: object }
+            nextCursor:
+              type: string
+              nullable: true
+              description: Pass as `cursor` query parameter for the next page (sorted by `_id` descending)
+    PlatformNotificationListItem:
+      type: object
+      properties:
+        id: { type: string }
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        title: { type: string }
+        body: { type: string, nullable: true }
+        href: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        isRead: { type: boolean }
