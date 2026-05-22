@@ -16,7 +16,7 @@ function readComponent(rel: string) {
 describe("dashboard auth pages stay HTTP-only", () => {
   it("login form only uses dashboard relay endpoint", () => {
     const src = readComponent("login-form.tsx");
-    expect(src).toContain('fetch("/api/session/login"');
+    expect(src).toContain('fetch("/api/auth/login"');
     expect(src).not.toMatch(/fetch\(\s*["']\/auth\//);
     expect(src).not.toContain("sessionToken");
     expect(src).not.toContain("mfaToken");
@@ -24,13 +24,13 @@ describe("dashboard auth pages stay HTTP-only", () => {
 
   it("forgot-password page only uses dashboard relay endpoint", () => {
     const src = readApp("(auth)/forgot-password/page.tsx");
-    expect(src).toContain('fetch("/api/session/password/forgot"');
+    expect(src).toContain('fetch("/api/auth/password/forgot"');
     expect(src).not.toMatch(/fetch\(\s*["']\/auth\//);
   });
 
   it("reset-password page only uses dashboard relay endpoint", () => {
     const src = readApp("(auth)/reset-password/page.tsx");
-    expect(src).toContain('fetch("/api/session/password/reset"');
+    expect(src).toContain('fetch("/api/auth/password/reset"');
     expect(src).not.toMatch(/fetch\(\s*["']\/auth\//);
   });
 
