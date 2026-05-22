@@ -40,11 +40,16 @@ async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void>
       ),
     );
 }
-const apiBaseUrl = `http://localhost:${apiConfig.port}`;
+/** Prefer 127.0.0.1 on Windows to avoid localhost → ::1 while API listens on IPv4. */
+const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
+const apiBaseUrl = `http://${apiHost}:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
 const jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
 const heartbeatIntervalMs = 15_000;
+const apiReadyMaxWaitMs = 180_000;
+const apiUnreachableLogIntervalMs = 30_000;
 let shuttingDown = false;
+let lastApiUnreachableLogMs = 0;
 const runtimeFingerprint = {
   workerId,
   startedAt: new Date().toISOString(),
@@ -54,6 +59,52 @@ const runtimeFingerprint = {
 
 function timeoutSignal(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
+}
+
+function isApiConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message === "fetch failed") return true;
+  const cause = error.cause;
+  if (cause instanceof Error) {
+    const code = (cause as NodeJS.ErrnoException).code;
+    return code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "EAI_AGAIN";
+  }
+  return false;
+}
+
+async function waitForApiReady(): Promise<void> {
+  const healthUrl = `${apiBaseUrl}/health`;
+  const started = Date.now();
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "worker_waiting_for_api",
+      healthUrl,
+      maxWaitMs: apiReadyMaxWaitMs,
+    }),
+  );
+  while (!shuttingDown && Date.now() - started < apiReadyMaxWaitMs) {
+    try {
+      const res = await fetch(healthUrl, { signal: timeoutSignal(5_000) });
+      if (res.ok) {
+        console.log(JSON.stringify({ level: "info", type: "worker_api_ready", healthUrl }));
+        return;
+      }
+    } catch {
+      // API still starting (tsx watch) or temporarily down
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+  throw new Error(`api_not_ready:${healthUrl}`);
+}
+
+function logApiUnreachable(): void {
+  const now = Date.now();
+  if (now - lastApiUnreachableLogMs < apiUnreachableLogIntervalMs) return;
+  lastApiUnreachableLogMs = now;
+  console.warn(
+    `[worker] API unreachable at ${apiBaseUrl} (is \`api\` dev running?). Will retry job claims.`,
+  );
 }
 
 async function withExecutionTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -428,11 +479,22 @@ async function loop() {
       level: "info",
       type: "worker_start",
       jobExecutionTimeoutMs,
+      apiBaseUrl,
       ...runtimeFingerprint,
     }),
   );
+  await waitForApiReady().catch((error) => {
+    console.error(
+      `[worker] ${error instanceof Error ? error.message : String(error)} — start the API (pnpm dev apps) then restart the worker.`,
+    );
+    process.exit(1);
+  });
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {
+      if (isApiConnectionError(error)) {
+        logApiUnreachable();
+        return null;
+      }
       console.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     });
