@@ -69,6 +69,11 @@ try {
 
   const db = drizzle(sql);
   await migrate(db, { migrationsFolder });
+  const { ensureDefaultPlans } = await import("./ensure-default-plans.js");
+  const planInserted = await ensureDefaultPlans(sql);
+  if (planInserted > 0) {
+    console.log(`Seeded ${planInserted} default plan(s).`);
+  }
   console.log("Migrations up to date.");
 } catch (error) {
   console.error(error);

@@ -251,12 +251,16 @@ export async function executeProvisionRuntime(
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
-    // Attachments module requires S3 config at startup; provide local defaults for tenant stacks.
-    const s3Region = process.env.S3_REGION ?? "us-east-1";
-    const s3AccessKeyId = process.env.S3_ACCESS_KEY_ID ?? "local";
-    const s3SecretAccessKey = process.env.S3_SECRET_ACCESS_KEY ?? "local";
-    const s3Endpoint = process.env.S3_ENDPOINT ?? "http://localhost:9000";
-    const s3Bucket = process.env.S3_BUCKET ?? "stockix-local";
+    // Attachments module requires S3 config at startup (Backblaze B2 or MinIO).
+    const envOr = (name: string, fallback: string) => {
+      const v = process.env[name]?.trim();
+      return v && v.length > 0 ? v : fallback;
+    };
+    const s3Region = envOr("S3_REGION", "us-east-1");
+    const s3AccessKeyId = envOr("S3_ACCESS_KEY_ID", "local");
+    const s3SecretAccessKey = envOr("S3_SECRET_ACCESS_KEY", "local");
+    const s3Endpoint = envOr("S3_ENDPOINT", "http://localhost:9000");
+    const s3Bucket = envOr("S3_BUCKET", "stockix-local");
     await assertRequiredRuntimeEnv([
       { key: "S3_REGION", value: s3Region },
       { key: "S3_ACCESS_KEY_ID", value: s3AccessKeyId },

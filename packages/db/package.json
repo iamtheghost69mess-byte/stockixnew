@@ -12,6 +12,7 @@
     "db:migrate": "pnpm exec tsx scripts/ensure-migrations.ts",
     "db:wait": "pnpm exec tsx scripts/wait-local-postgres.ts",
     "db:seed:local": "pnpm exec tsx scripts/seed-local-owner.ts",
+    "db:seed:plans": "pnpm exec tsx scripts/ensure-default-plans.ts",
     "verify-schema": "tsx scripts/verify-schema.ts",
     "db:studio": "drizzle-kit studio",
     "check-types": "tsc --noEmit",
