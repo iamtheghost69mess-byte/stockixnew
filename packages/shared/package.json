@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./roles": "./src/roles.ts"
+    "./roles": "./src/roles.ts",
+    "./audit-log": "./src/audit-log.ts"
   }
 }

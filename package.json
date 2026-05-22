@@ -11,6 +11,7 @@
     "db:wait": "pnpm --filter @repo/db db:wait",
     "db:migrate": "pnpm --filter @repo/db db:migrate",
     "db:seed:local": "pnpm --filter @repo/db db:seed:local",
+    "sync:platform-admin": "pnpm --filter api exec tsx src/scripts/sync-platform-admin.ts",
     "infra:worker:build": "pnpm --filter api exec tsup --config tsup.worker.config.ts",
     "infra:worker:run": "node infra/worker-service/.runtime/worker.js",
     "infra:worker:dev": "pnpm infra:worker:build && pnpm infra:worker:run",

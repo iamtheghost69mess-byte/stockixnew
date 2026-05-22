@@ -343,19 +343,21 @@ export default function LicenseGenerateDialog({
                     <FormItem>
                       <FormLabel>Expiry date</FormLabel>
                       <Popover>
-                        <PopoverTrigger>
-                          <FormControl>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full justify-start font-normal"
-                            >
-                              {field.value
-                                ? format(new Date(field.value), "PPP")
-                                : "Pick expiry date"}
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
+                        <FormControl>
+                          <PopoverTrigger
+                            render={
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full justify-start font-normal"
+                              >
+                                {field.value
+                                  ? format(new Date(field.value), "PPP")
+                                  : "Pick expiry date"}
+                              </Button>
+                            }
+                          />
+                        </FormControl>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
@@ -384,19 +386,21 @@ export default function LicenseGenerateDialog({
                       or generated with a tenant.
                     </FormDescription>
                     <Popover>
-                      <PopoverTrigger>
-                        <FormControl>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="mt-1 w-full justify-start font-normal"
-                          >
-                            {field.value
-                              ? format(new Date(field.value), "PPP")
-                              : "Default (now / assignment time)"}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
+                      <FormControl>
+                        <PopoverTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="mt-1 w-full justify-start font-normal"
+                            >
+                              {field.value
+                                ? format(new Date(field.value), "PPP")
+                                : "Default (now / assignment time)"}
+                            </Button>
+                          }
+                        />
+                      </FormControl>
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"

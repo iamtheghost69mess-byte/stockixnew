@@ -572,11 +572,17 @@ export default function LicenseDetailPage() {
               <div className="space-y-2">
                 <Label>New expiry date</Label>
                 <Popover>
-                  <PopoverTrigger>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal")}>
-                      {extendExpires ? format(extendExpires, "PPP") : "Pick a date"}
-                    </Button>
-                  </PopoverTrigger>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn("w-full justify-start text-left font-normal")}
+                      >
+                        {extendExpires ? format(extendExpires, "PPP") : "Pick a date"}
+                      </Button>
+                    }
+                  />
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" selected={extendExpires} onSelect={setExtendExpires} />
                   </PopoverContent>

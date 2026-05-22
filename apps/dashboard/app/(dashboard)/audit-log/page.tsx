@@ -1,11 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { AlertCircle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -43,27 +43,6 @@ import {
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
 import type { AuditLogEntry } from "@/types/audit-log";
-
-function actionVariant(action: string): "destructive" | "default" | "secondary" {
-  const a = action.toLowerCase();
-  if (
-    a.includes("delete")
-    || a.includes("revoke")
-    || a.includes("suspend")
-    || a.includes("blacklist")
-  ) {
-    return "destructive";
-  }
-  if (
-    a.includes("create")
-    || a.includes("provision")
-    || a.includes("reactivate")
-    || a.includes("extend")
-  ) {
-    return "default";
-  }
-  return "secondary";
-}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -123,8 +102,9 @@ function parseEntries(body: unknown): AuditLogEntry[] {
     return (
       typeof row.id === "string"
       && typeof row.action === "string"
+      && typeof row.actionLabel === "string"
       && typeof row.actorId === "string"
-      && typeof row.actorName === "string"
+      && typeof row.actorLabel === "string"
       && typeof row.createdAt === "string"
     );
   });
@@ -146,8 +126,8 @@ export default function AuditLogPage() {
 
   const [actionInput, setActionInput] = useState("");
   const [actionFilter, setActionFilter] = useState("");
-  const [actorId, setActorId] = useState("");
-  const [tenantId, setTenantId] = useState("");
+  const [actorSearch, setActorSearch] = useState("");
+  const [tenantSearch, setTenantSearch] = useState("");
 
   useEffect(() => {
     const id = window.setTimeout(() => setActionFilter(actionInput.trim()), 300);
@@ -156,17 +136,17 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [actionFilter, actorId, tenantId]);
+  }, [actionFilter, actorSearch, tenantSearch]);
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
     p.set("page", String(page));
     p.set("pageSize", String(pageSize));
     if (actionFilter) p.set("action", actionFilter);
-    if (actorId.trim()) p.set("actorId", actorId.trim());
-    if (tenantId.trim()) p.set("tenantId", tenantId.trim());
+    if (actorSearch.trim()) p.set("actor", actorSearch.trim());
+    if (tenantSearch.trim()) p.set("tenant", tenantSearch.trim());
     return p.toString();
-  }, [page, pageSize, actionFilter, actorId, tenantId]);
+  }, [page, pageSize, actionFilter, actorSearch, tenantSearch]);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -275,32 +255,35 @@ export default function AuditLogPage() {
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="audit-action">Action contains</Label>
+              <Label htmlFor="audit-action">Action</Label>
               <Input
                 id="audit-action"
                 value={actionInput}
                 onChange={(e) => setActionInput(e.target.value)}
-                placeholder="e.g. license, impersonate"
+                placeholder="e.g. tenant.suspend, license"
                 autoComplete="off"
               />
+              <p className="text-xs text-muted-foreground">
+                Matches the event code (dot-separated), not the friendly label.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="audit-actor">Actor ID</Label>
+              <Label htmlFor="audit-actor">Actor</Label>
               <Input
                 id="audit-actor"
-                value={actorId}
-                onChange={(e) => setActorId(e.target.value)}
-                placeholder="UUID"
+                value={actorSearch}
+                onChange={(e) => setActorSearch(e.target.value)}
+                placeholder="Name or email"
                 autoComplete="off"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="audit-tenant">Target tenant ID</Label>
+              <Label htmlFor="audit-tenant">Target tenant</Label>
               <Input
                 id="audit-tenant"
-                value={tenantId}
-                onChange={(e) => setTenantId(e.target.value)}
-                placeholder="UUID"
+                value={tenantSearch}
+                onChange={(e) => setTenantSearch(e.target.value)}
+                placeholder="Name or slug"
                 autoComplete="off"
               />
             </div>
@@ -312,8 +295,8 @@ export default function AuditLogPage() {
                 onClick={() => {
                   setActionInput("");
                   setActionFilter("");
-                  setActorId("");
-                  setTenantId("");
+                  setActorSearch("");
+                  setTenantSearch("");
                   setPage(1);
                 }}
               >
@@ -332,19 +315,21 @@ export default function AuditLogPage() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="relative w-full overflow-x-auto">
-              <Table className="w-full min-w-[800px] table-fixed">
+              <Table className="w-full min-w-[960px] table-fixed">
                 <colgroup>
-                  <col style={{ width: "11%" }} />
-                  <col style={{ width: "15%" }} />
-                  <col style={{ width: "20%" }} />
-                  <col style={{ width: "42%" }} />
-                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "18%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "32%" }} />
+                  <col style={{ width: "8%" }} />
                 </colgroup>
                 <TableHeader>
                   <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
                     <TableHead className="whitespace-nowrap font-medium">When</TableHead>
                     <TableHead className="whitespace-nowrap font-medium">Action</TableHead>
                     <TableHead className="whitespace-nowrap font-medium">Actor</TableHead>
+                    <TableHead className="whitespace-nowrap font-medium">Target</TableHead>
                     <TableHead className="whitespace-normal font-medium">Details</TableHead>
                     <TableHead className="hidden whitespace-nowrap font-medium lg:table-cell">IP</TableHead>
                   </TableRow>
@@ -363,6 +348,9 @@ export default function AuditLogPage() {
                             <Skeleton className="h-4 w-40" />
                           </TableCell>
                           <TableCell>
+                            <Skeleton className="h-4 w-32" />
+                          </TableCell>
+                          <TableCell>
                             <Skeleton className="h-4 w-full max-w-xs" />
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
@@ -373,7 +361,7 @@ export default function AuditLogPage() {
                     : null}
                   {!listLoading && entries.length === 0 ? (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={5} className="h-40 text-center align-middle">
+                      <TableCell colSpan={6} className="h-40 text-center align-middle">
                         <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
                           <FileText className="h-10 w-10 opacity-40" aria-hidden />
                           <p className="text-sm font-medium text-foreground">No matching entries</p>
@@ -406,13 +394,56 @@ export default function AuditLogPage() {
                           </Tooltip>
                         </TableCell>
                         <TableCell className="align-top whitespace-normal wrap-break-word">
-                          <Badge variant={actionVariant(row.action)} className="font-mono text-xs font-normal">
-                            {row.action}
-                          </Badge>
+                          <div className="text-sm font-medium leading-snug">{row.actionLabel}</div>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="mt-0.5 cursor-default border-0 bg-transparent p-0 text-left font-mono text-[11px] text-muted-foreground"
+                                >
+                                  {row.action}
+                                </button>
+                              }
+                            />
+                            <TooltipContent side="top" className="font-mono text-xs">
+                              Event code
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell className="align-top whitespace-normal wrap-break-word">
-                          <div className="text-sm font-medium leading-snug">{row.actorName}</div>
-                          <div className="mt-0.5 font-mono text-xs text-muted-foreground">{row.actorId}</div>
+                          <div className="text-sm font-medium leading-snug">{row.actorLabel}</div>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="mt-0.5 cursor-default border-0 bg-transparent p-0 text-left font-mono text-[11px] text-muted-foreground"
+                                >
+                                  {row.actorId.slice(0, 8)}…
+                                </button>
+                              }
+                            />
+                            <TooltipContent side="top" className="font-mono text-xs">
+                              {row.actorId}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell className="align-top whitespace-normal wrap-break-word text-sm">
+                          {row.targetLabel ? (
+                            row.targetTenantId ? (
+                              <Link
+                                href={`/tenants/${row.targetTenantId}`}
+                                className="font-medium text-primary underline-offset-4 hover:underline"
+                              >
+                                {row.targetLabel}
+                              </Link>
+                            ) : (
+                              <span className="font-medium">{row.targetLabel}</span>
+                            )
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="min-w-0 align-top whitespace-normal py-2.5 text-sm">
                           <AuditMetadataCell action={row.action} metadata={row.metadata} />
