@@ -107,8 +107,8 @@ export async function syncFinanceLicenseForStockixTenant(
     validFrom: (license?.validFrom ?? new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    maxUsers: plan?.maxActivations ?? 10,
-    maxOrganizations: plan?.maxOrganizations ?? 1,
+    maxUsers: license?.maxActivations ?? plan?.maxActivations ?? 10,
+    maxOrganizations: license?.maxOrganizations ?? plan?.maxOrganizations ?? 1,
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,
   };

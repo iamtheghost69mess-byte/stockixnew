@@ -25,7 +25,12 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { z } from "zod";
 import { logAudit } from "./audit.js";
-import { generateLicenseKey, signOfflineToken, verifyOfflineToken } from "./license-utils.js";
+import {
+  generateLicenseKey,
+  getPlanLimits,
+  signOfflineToken,
+  verifyOfflineToken,
+} from "./license-utils.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 
 type ApiEnv = {
@@ -233,12 +238,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
 
   app.post("/licenses/generate", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
-    let body: z.infer<typeof generateBody>;
-    try {
-      body = generateBody.parse(await c.req.json());
-    } catch (e) {
-      return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
+    const raw = await c.req.json().catch(() => null);
+    const parsed = generateBody.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_body", detail: parsed.error.flatten() }, 400);
     }
+    const body = parsed.data;
     const [planRow] = await db
       .select({ id: plans.id })
       .from(plans)
@@ -255,6 +260,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     const expiresAtDate = body.expiresAt ? new Date(body.expiresAt) : null;
     const validFromDate = body.validFrom ? new Date(body.validFrom) : null;
     const now = new Date();
+    const planLimits = await getPlanLimits(db, body.planSlug);
+    const maxActivationsOverride =
+      raw !== null && typeof raw === "object" && "maxActivations" in raw;
+    const maxActivations = maxActivationsOverride
+      ? body.maxActivations
+      : planLimits.maxActivations;
 
     const created = await db.transaction(async (tx) => {
       const out: { id: string; licenseKey: string; product: string; planSlug: string; status: string }[] = [];
@@ -284,7 +295,8 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             validFrom: effectiveStart ?? null,
             expiresAt: body.isPerpetual ? null : expiresAtDate,
             isPerpetual: body.isPerpetual,
-            maxActivations: body.maxActivations,
+            maxOrganizations: planLimits.maxOrganizations,
+            maxActivations,
             activationCount: 0,
             gracePeriodDays: body.gracePeriodDays,
             notes: body.notes ?? null,
@@ -989,15 +1001,31 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
 
     const assignAt = new Date();
     const startAt = body.validFrom ? new Date(body.validFrom) : (lic.validFrom ?? assignAt);
+    const planLimits = await getPlanLimits(db, lic.planSlug);
+    const assignSet: {
+      tenantId: string;
+      status: string;
+      activatedAt: Date;
+      validFrom: Date;
+      updatedAt: Date;
+      maxOrganizations?: number;
+      maxActivations?: number;
+    } = {
+      tenantId: body.tenantId,
+      status: "active",
+      activatedAt: assignAt,
+      validFrom: startAt,
+      updatedAt: assignAt,
+    };
+    if (lic.maxOrganizations === 1) {
+      assignSet.maxOrganizations = planLimits.maxOrganizations;
+    }
+    if (lic.maxActivations === 1) {
+      assignSet.maxActivations = planLimits.maxActivations;
+    }
     const [upd] = await db
       .update(licenses)
-      .set({
-        tenantId: body.tenantId,
-        status: "active",
-        activatedAt: assignAt,
-        validFrom: startAt,
-        updatedAt: assignAt,
-      })
+      .set(assignSet)
       .where(eq(licenses.id, lic.id))
       .returning();
     await db.update(tenants).set({ planSlug: lic.planSlug }).where(eq(tenants.id, body.tenantId));

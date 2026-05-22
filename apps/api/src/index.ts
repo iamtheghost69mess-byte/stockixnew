@@ -59,7 +59,7 @@ import { z } from "zod";
 import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
-import { generateLicenseKey } from "./license-utils.js";
+import { generateLicenseKey, getPlanLimits } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
@@ -1224,6 +1224,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           typeof payload.assignExistingLicenseId === "string" ? payload.assignExistingLicenseId : null;
         const provisionRequestedById =
           typeof payload.provisionRequestedById === "string" ? payload.provisionRequestedById : null;
+        const planLimits = await getPlanLimits(db, planSlug);
 
         if (assignExistingLicenseId) {
           const [lic] = await db
@@ -1232,16 +1233,32 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             .where(eq(licenses.id, assignExistingLicenseId))
             .limit(1);
           if (lic?.status === "unassigned") {
+            const assignSet: {
+              tenantId: string;
+              status: string;
+              activatedAt: Date;
+              validFrom: Date;
+              updatedAt: Date;
+              planSlug: string;
+              maxOrganizations?: number;
+              maxActivations?: number;
+            } = {
+              tenantId: targetTenantId,
+              status: "active",
+              activatedAt: new Date(),
+              validFrom: lic.validFrom ?? new Date(),
+              updatedAt: new Date(),
+              planSlug,
+            };
+            if (lic.maxOrganizations === 1) {
+              assignSet.maxOrganizations = planLimits.maxOrganizations;
+            }
+            if (lic.maxActivations === 1) {
+              assignSet.maxActivations = planLimits.maxActivations;
+            }
             await db
               .update(licenses)
-              .set({
-                tenantId: targetTenantId,
-                status: "active",
-                activatedAt: new Date(),
-                validFrom: lic.validFrom ?? new Date(),
-                updatedAt: new Date(),
-                planSlug,
-              })
+              .set(assignSet)
               .where(eq(licenses.id, lic.id));
             await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
           }
@@ -1265,7 +1282,8 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             activatedAt: new Date(),
             validFrom: new Date(),
             isPerpetual: true,
-            maxActivations: 1,
+            maxOrganizations: planLimits.maxOrganizations,
+            maxActivations: planLimits.maxActivations,
             activationCount: 0,
             gracePeriodDays: 7,
             createdById: provisionRequestedById ?? null,

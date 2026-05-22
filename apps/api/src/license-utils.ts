@@ -1,6 +1,40 @@
 import { randomBytes } from "node:crypto";
 import { apiConfig } from "@repo/config";
+import { plans } from "@repo/db/schema";
+import { eq } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "@repo/db/schema";
 import { SignJWT, jwtVerify } from "jose";
+
+export type PlanLimitsDb = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Fetches maxOrganizations and maxActivations from the plans table
+ * for a given planSlug. Returns safe defaults on miss.
+ */
+export async function getPlanLimits(
+  db: PlanLimitsDb,
+  planSlug: string,
+): Promise<{ maxOrganizations: number; maxActivations: number }> {
+  const row = await db
+    .select({
+      maxOrganizations: plans.maxOrganizations,
+      maxActivations: plans.maxActivations,
+    })
+    .from(plans)
+    .where(eq(plans.slug, planSlug))
+    .limit(1);
+
+  if (!row[0]) {
+    console.warn(`[getPlanLimits] Plan slug "${planSlug}" not found. Using defaults.`);
+    return { maxOrganizations: 1, maxActivations: 1 };
+  }
+
+  return {
+    maxOrganizations: row[0].maxOrganizations,
+    maxActivations: row[0].maxActivations,
+  };
+}
 
 const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
