@@ -27,6 +27,7 @@ import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/typ
 import { provisionChatwootAccount } from "./chatwoot-provision.js";
 import {
   isModuleGatingEnabled,
+  shouldProvisionFinanceStack,
   provisionPmsStack,
   provisionPosStack,
   resolveTenantModules,
@@ -310,7 +311,7 @@ export async function executeProvisionRuntime(
 
     const licensedModules = resolveTenantModules(input.modules);
     const moduleGating = isModuleGatingEnabled();
-    if (moduleGating && !licensedModules.includes("accounting")) {
+    if (moduleGating && !shouldProvisionFinanceStack(licensedModules)) {
       log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
       if (licensedModules.includes("pos") && tenantId) {
         await provisionPosStack({ slug: input.slug, tenantId, log });

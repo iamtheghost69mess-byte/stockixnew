@@ -15,6 +15,11 @@ export function isModuleGatingEnabled(): boolean {
   return process.env.PROVISION_MODULE_GATING === "1";
 }
 
+/** Finance stack (`infra/tenant-stack`) runs when tenant modules include `accounting`. */
+export function shouldProvisionFinanceStack(modules?: string[]): boolean {
+  return resolveTenantModules(modules).includes("accounting");
+}
+
 export async function provisionPosStack(opts: {
   slug: string;
   tenantId: string;

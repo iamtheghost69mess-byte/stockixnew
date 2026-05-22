@@ -6,7 +6,7 @@ var __export = (target, all) => {
 
 // ../../infra/worker-service/src/worker.ts
 import { randomUUID } from "crypto";
-import { execa as execa3 } from "execa";
+import { execa as execa4 } from "execa";
 
 // ../../packages/config/src/index.ts
 import path from "path";
@@ -2491,6 +2491,14 @@ __export(schema_exports, {
   ownerOrganizationAccess: () => ownerOrganizationAccess,
   owners: () => owners,
   plans: () => plans,
+  pmsBookings: () => pmsBookings,
+  pmsCleaningTasks: () => pmsCleaningTasks,
+  pmsGuests: () => pmsGuests,
+  pmsIcalChannels: () => pmsIcalChannels,
+  pmsMessageTemplates: () => pmsMessageTemplates,
+  pmsProperties: () => pmsProperties,
+  pmsRooms: () => pmsRooms,
+  pmsStaff: () => pmsStaff,
   tenantConfig: () => tenantConfig,
   tenantDeployments: () => tenantDeployments,
   tenantLifecycleJobs: () => tenantLifecycleJobs,
@@ -2551,6 +2559,10 @@ var tenants = pgTable(
     adminLastName: text("admin_last_name").notNull(),
     status: text("status").notNull().default("active"),
     planSlug: text("plan_slug").notNull().default("starter"),
+    /** JSON array of licensed product modules, e.g. ["accounting","pos"]. */
+    modules: text("modules").notNull().default('["accounting"]'),
+    /** Chatwoot account id when chat module is provisioned. */
+    chatwootAccountId: text("chatwoot_account_id"),
     /** Human-readable org identifier (ORG-00001). */
     organizationNumber: varchar("organization_number", { length: 20 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
@@ -2764,6 +2776,8 @@ var licenses = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     licenseKey: text("license_key").notNull(),
     product: text("product").notNull().default("platform"),
+    /** JSON array of product modules this license grants. */
+    modules: text("modules").notNull().default('["accounting"]'),
     planSlug: text("plan_slug").notNull().default("starter"),
     tenantId: uuid("tenant_id").references(() => tenants.id, {
       onDelete: "set null"
@@ -2863,6 +2877,132 @@ var blacklistedFingerprints = pgTable(
   },
   (t) => [uniqueIndex("blacklisted_fp_unique").on(t.hardwareFingerprint)]
 );
+var pmsProperties = pgTable(
+  "pms_properties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: text("type").notNull().default("hotel"),
+    address: text("address"),
+    city: text("city"),
+    country: text("country"),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [index("pms_properties_tenant_idx").on(t.tenantId)]
+);
+var pmsRooms = pgTable(
+  "pms_rooms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").notNull().references(() => pmsProperties.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: text("type").notNull().default("standard"),
+    capacity: integer("capacity").notNull().default(2),
+    rateCents: integer("rate_cents").notNull().default(0),
+    status: text("status").notNull().default("available"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("pms_rooms_tenant_idx").on(t.tenantId),
+    index("pms_rooms_property_idx").on(t.propertyId)
+  ]
+);
+var pmsGuests = pgTable(
+  "pms_guests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [index("pms_guests_tenant_idx").on(t.tenantId)]
+);
+var pmsBookings = pgTable(
+  "pms_bookings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").notNull().references(() => pmsProperties.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id").notNull().references(() => pmsRooms.id, { onDelete: "cascade" }),
+    guestId: uuid("guest_id").notNull().references(() => pmsGuests.id, { onDelete: "cascade" }),
+    checkIn: text("check_in").notNull(),
+    checkOut: text("check_out").notNull(),
+    totalAmountCents: integer("total_amount_cents").notNull().default(0),
+    bookingStatus: text("booking_status").notNull().default("confirmed"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("pms_bookings_tenant_idx").on(t.tenantId),
+    index("pms_bookings_property_idx").on(t.propertyId)
+  ]
+);
+var pmsIcalChannels = pgTable(
+  "pms_ical_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").notNull().references(() => pmsProperties.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    importUrl: text("import_url"),
+    exportToken: text("export_token").notNull(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("pms_ical_channels_tenant_idx").on(t.tenantId),
+    uniqueIndex("pms_ical_export_token_unique").on(t.exportToken)
+  ]
+);
+var pmsStaff = pgTable(
+  "pms_staff",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    role: text("role").notNull().default("receptionist"),
+    email: text("email"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [index("pms_staff_tenant_idx").on(t.tenantId)]
+);
+var pmsCleaningTasks = pgTable(
+  "pms_cleaning_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id").notNull().references(() => pmsRooms.id, { onDelete: "cascade" }),
+    scheduledDate: text("scheduled_date").notNull(),
+    status: text("status").notNull().default("pending"),
+    assigneeId: uuid("assignee_id").references(() => pmsStaff.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [index("pms_cleaning_tasks_tenant_idx").on(t.tenantId)]
+);
+var pmsMessageTemplates = pgTable(
+  "pms_message_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    channel: text("channel").notNull().default("email"),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [index("pms_message_templates_tenant_idx").on(t.tenantId)]
+);
 
 // ../../packages/db/src/allocate-tenant-port.ts
 import { sql } from "drizzle-orm";
@@ -2909,7 +3049,7 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { and as and3, eq as eq8, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
+import { and as and3, eq as eq9, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
 
 // src/license-expire-followup.ts
 import { and as and2, eq as eq5, gte, isNotNull } from "drizzle-orm";
@@ -3460,8 +3600,8 @@ import { z as z2 } from "zod";
 
 // ../../infra/worker-service/domain/provisioner.ts
 import { rm, stat } from "fs/promises";
-import { join as join7 } from "path";
-import { eq as eq7 } from "drizzle-orm";
+import { join as join8 } from "path";
+import { eq as eq8 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/env-paths.ts
 import { homedir } from "os";
@@ -3495,12 +3635,12 @@ function getRepoRoot() {
 
 // ../../infra/worker-service/domain/provision-paths.ts
 function getTenantStackPaths() {
-  const repoRoot = getRepoRoot();
-  const stockixFinanceRoot = apiConfig.stockixTenantAppRoot || join3(repoRoot, "services/stockix-finance");
+  const repoRoot2 = getRepoRoot();
+  const stockixFinanceRoot = apiConfig.stockixTenantAppRoot || join3(repoRoot2, "services/stockix-finance");
   return {
-    repoRoot,
+    repoRoot: repoRoot2,
     stockixFinanceRoot,
-    tenantComposeFile: join3(repoRoot, "infra/tenant-stack/docker-compose.yml")
+    tenantComposeFile: join3(repoRoot2, "infra/tenant-stack/docker-compose.yml")
   };
 }
 
@@ -3514,10 +3654,10 @@ function tenantMysqlVolumeName(slug) {
 
 // ../../infra/worker-service/src/provision-runtime.ts
 import { mkdir as mkdir2 } from "fs/promises";
-import { join as join5 } from "path";
-import { createCipheriv, randomBytes as randomBytes2 } from "crypto";
-import { execa } from "execa";
-import { asc, eq as eq6 } from "drizzle-orm";
+import { join as join6 } from "path";
+import { createCipheriv, randomBytes as randomBytes3 } from "crypto";
+import { execa as execa2 } from "execa";
+import { asc, eq as eq7 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/provision-trace.ts
 function createProvisionTracer(db, correlationId, getContext, log) {
@@ -3807,10 +3947,136 @@ async function composeDownBestEffort(runner, ctx) {
   return result;
 }
 
+// ../../infra/worker-service/src/chatwoot-provision.ts
+import { randomBytes as randomBytes2 } from "crypto";
+import { eq as eq6 } from "drizzle-orm";
+function generateSecurePassword() {
+  return randomBytes2(18).toString("base64url");
+}
+async function provisionChatwootAccount(opts) {
+  const { db, tenantId, tenantName, adminEmail, chatwootBaseUrl, chatwootApiKey, log } = opts;
+  if (!chatwootBaseUrl || !chatwootApiKey) {
+    log("[chatwoot] CHATWOOT_BASE_URL or CHATWOOT_API_ACCESS_TOKEN not set; skipping");
+    return { accountId: null };
+  }
+  const password = generateSecurePassword();
+  const base = chatwootBaseUrl.replace(/\/$/, "");
+  try {
+    const accountRes = await fetch(`${base}/platform/api/v1/accounts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        api_access_token: chatwootApiKey
+      },
+      body: JSON.stringify({
+        name: tenantName
+      })
+    });
+    let accountId = null;
+    if (accountRes.ok) {
+      const accountJson = await accountRes.json();
+      accountId = String(accountJson.id ?? accountJson.payload?.account?.id ?? "");
+    } else {
+      log(
+        `[chatwoot] platform account create failed HTTP ${accountRes.status}; trying sign_up fallback`
+      );
+      const signUpRes = await fetch(`${base}/auth/sign_up`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          api_access_token: chatwootApiKey
+        },
+        body: JSON.stringify({
+          account_name: tenantName,
+          email: adminEmail,
+          password,
+          confirm_password: password
+        })
+      });
+      if (!signUpRes.ok) {
+        const text2 = await signUpRes.text();
+        log(`[chatwoot] sign_up failed: HTTP ${signUpRes.status} ${text2.slice(0, 200)}`);
+        return { accountId: null };
+      }
+      const signUpJson = await signUpRes.json();
+      accountId = signUpJson.data?.account_id ? String(signUpJson.data.account_id) : null;
+    }
+    if (accountId) {
+      await db.update(tenants).set({ chatwootAccountId: accountId }).where(eq6(tenants.id, tenantId));
+      log(`[chatwoot] account ${accountId} linked to tenant ${tenantId}`);
+    }
+    return { accountId };
+  } catch (error) {
+    log(
+      `[chatwoot] provision error: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return { accountId: null };
+  }
+}
+
+// ../../infra/worker-service/src/module-stacks.ts
+import { join as join5 } from "path";
+import { execa } from "execa";
+function repoRoot() {
+  return apiConfig.repoRoot ?? process.cwd();
+}
+function resolveTenantModules(inputModules) {
+  if (inputModules && inputModules.length > 0) return inputModules;
+  return ["accounting"];
+}
+function isModuleGatingEnabled() {
+  return process.env.PROVISION_MODULE_GATING === "1";
+}
+function shouldProvisionFinanceStack(modules) {
+  return resolveTenantModules(modules).includes("accounting");
+}
+async function provisionPosStack(opts) {
+  const composeFile = join5(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
+  const project = `stockix-pos-${opts.slug}`;
+  const posAppRoot = process.env.POS_APP_ROOT ?? join5(repoRoot(), "services", "posnew");
+  opts.log(`[provision][pos] compose up project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+    {
+      env: {
+        ...process.env,
+        COMPOSE_PROJECT_NAME: project,
+        POS_APP_ROOT: posAppRoot,
+        TENANT_ID: opts.tenantId,
+        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? ""
+      },
+      stdio: "inherit"
+    }
+  );
+}
+async function provisionPmsStack(opts) {
+  const composeFile = join5(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
+  const project = `stockix-pms-${opts.slug}`;
+  const pmsAppRoot = process.env.PMS_APP_ROOT ?? join5(repoRoot(), "services", "pms");
+  opts.log(`[provision][pms] compose up project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+    {
+      env: {
+        ...process.env,
+        COMPOSE_PROJECT_NAME: project,
+        PMS_APP_ROOT: pmsAppRoot,
+        TENANT_ID: opts.tenantId,
+        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+        PLATFORM_API_SECRET: apiConfig.platformApiSecret ?? "",
+        DATABASE_URL: process.env.DATABASE_URL ?? ""
+      },
+      stdio: "inherit"
+    }
+  );
+}
+
 // ../../infra/worker-service/src/provision-runtime.ts
 function encryptDeploymentSecret(plaintext) {
   const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-  const iv = randomBytes2(12);
+  const iv = randomBytes3(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
@@ -3820,7 +4086,7 @@ async function loadProvisionJournal(db, correlationId) {
   const rows = await db.select({
     phase: tenantProvisionEvents.phase,
     meta: tenantProvisionEvents.meta
-  }).from(tenantProvisionEvents).where(eq6(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
+  }).from(tenantProvisionEvents).where(eq7(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
   const journal = /* @__PURE__ */ new Set();
   for (const row of rows) {
     if (row.phase !== "journal") continue;
@@ -3833,7 +4099,7 @@ async function loadProvisionJournal(db, correlationId) {
 }
 async function resolveServerInternalUrl(params) {
   try {
-    const { stdout } = await execa(
+    const { stdout } = await execa2(
       "docker",
       [
         "compose",
@@ -3968,8 +4234,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   try {
     log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
     await checkNotCancelled();
-    await mkdir2(join5(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
-    await mkdir2(join5(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
+    await mkdir2(join6(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
+    await mkdir2(join6(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
     const { secrets } = deps;
     const bootstrapPasswordKey = input.parentTenantSlug?.trim() || input.slug.trim();
     oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
@@ -3991,7 +4257,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       { key: "S3_ENDPOINT", value: s3Endpoint },
       { key: "S3_BUCKET", value: s3Bucket }
     ]);
-    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq6(tenants.slug, input.slug)).limit(1);
+    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq7(tenants.slug, input.slug)).limit(1);
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
     }
@@ -3999,6 +4265,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     await db.transaction(async (tx) => {
       const allocated = await allocateTenantPort(tx, maxPort);
       port = allocated;
+      const moduleList = input.modules && input.modules.length > 0 ? input.modules : ["accounting"];
       const [tRow] = await tx.insert(tenants).values({
         slug: input.slug,
         name: input.name,
@@ -4007,6 +4274,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         adminFirstName: input.adminFirstName,
         adminLastName: input.adminLastName,
         status: "provisioning",
+        planSlug: input.planSlug ?? "starter",
+        modules: JSON.stringify(moduleList),
         organizationNumber
       }).returning({ id: tenants.id });
       tenantId = tRow.id;
@@ -4026,6 +4295,41 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       throw new Error("provision_internal: expected allocated port after transaction");
     }
     await checkNotCancelled();
+    const licensedModules = resolveTenantModules(input.modules);
+    const moduleGating = isModuleGatingEnabled();
+    if (moduleGating && !shouldProvisionFinanceStack(licensedModules)) {
+      log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
+      if (licensedModules.includes("pos") && tenantId) {
+        await provisionPosStack({ slug: input.slug, tenantId, log });
+      }
+      if (licensedModules.includes("pms") && tenantId) {
+        await provisionPmsStack({ slug: input.slug, tenantId, log });
+      }
+      if (licensedModules.includes("chat") && tenantId) {
+        await provisionChatwootAccount({
+          db,
+          tenantId,
+          tenantName: input.name,
+          adminEmail: input.adminEmail,
+          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          log
+        });
+      }
+      await db.update(tenants).set({ status: "active" }).where(eq7(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(tenantDeployments.tenantId, tenantId));
+      return {
+        ok: true,
+        tenantId,
+        deploymentId,
+        composeProjectName: project,
+        internalPort: port,
+        baseUrl,
+        oneTimeAdminPassword: oneTimeAdminPassword ?? randomBytes3(12).toString("base64url"),
+        financeOrganizationId,
+        financeTenantId
+      };
+    }
     const tenantEnvMap = buildTenantEnvMap({
       mysqlVolumeName,
       stockixFinanceRoot,
@@ -4046,7 +4350,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret
     });
-    const envPath = await writeTenantEnvFileAtomic(join5(tenantEnvRoot, input.slug), tenantEnvMap);
+    const envPath = await writeTenantEnvFileAtomic(join6(tenantEnvRoot, input.slug), tenantEnvMap);
     const composeEnv = {
       ...tenantEnvMap,
       COMPOSE_PROJECT_NAME: project
@@ -4054,7 +4358,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
     await checkNotCancelled();
-    const staleContainersRaw = await execa(
+    const staleContainersRaw = await execa2(
       "docker",
       ["ps", "-a", "--filter", `name=${project}`, "--format", "{{.Names}}"],
       { stdio: "pipe" }
@@ -4413,6 +4717,35 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         log
       );
     }
+    if (licensedModules.includes("pos") && tenantId) {
+      try {
+        await provisionPosStack({ slug: input.slug, tenantId, log });
+      } catch (posErr) {
+        log(
+          `[provision][pos] non-fatal: ${posErr instanceof Error ? posErr.message : String(posErr)}`
+        );
+      }
+    }
+    if (licensedModules.includes("pms") && tenantId) {
+      try {
+        await provisionPmsStack({ slug: input.slug, tenantId, log });
+      } catch (pmsErr) {
+        log(
+          `[provision][pms] non-fatal: ${pmsErr instanceof Error ? pmsErr.message : String(pmsErr)}`
+        );
+      }
+    }
+    if (licensedModules.includes("chat") && tenantId) {
+      await provisionChatwootAccount({
+        db,
+        tenantId,
+        tenantName: input.name,
+        adminEmail: input.adminEmail,
+        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+        log
+      });
+    }
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
     return {
       ok: true,
@@ -4428,10 +4761,10 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (tenantId) {
-      await db.update(tenants).set({ status: "failed" }).where(eq6(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
+      await db.update(tenants).set({ status: "failed" }).where(eq7(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
     }
     if (deploymentId) {
-      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
+      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
     }
     if (sideEffectsStarted && composeCtx) {
       await trace.event("cleanup", "Attempting best-effort compose rollback", {
@@ -4440,7 +4773,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       }).catch((error) => recordCleanupError("cleanup_event_before_rollback", error));
       const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
       if (rolledBack && tenantId) {
-        await db.delete(tenants).where(eq6(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
+        await db.delete(tenants).where(eq7(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
         await trace.event("cleanup", "Compose rollback completed and tenant records removed", {
           level: "info",
           meta: { composeProjectName: composeCtx.project, tenantId }
@@ -4470,13 +4803,13 @@ var TenantProvisionService = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/crypto-tenant-secret-generator.ts
-import { createHmac, randomBytes as randomBytes3 } from "crypto";
+import { createHmac, randomBytes as randomBytes4 } from "crypto";
 var CryptoTenantSecretGenerator = class {
   persistSecret(plaintext) {
     return plaintext;
   }
   randomHex(bytes = 32) {
-    return randomBytes3(bytes).toString("hex");
+    return randomBytes4(bytes).toString("hex");
   }
   bootstrapAdminPassword(tenantKey) {
     const key = tenantKey.trim();
@@ -4490,7 +4823,7 @@ var CryptoTenantSecretGenerator = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/execa-docker-compose-runner.ts
-import { execa as execa2 } from "execa";
+import { execa as execa3 } from "execa";
 var ExecaDockerComposeRunner = class {
   async run(composeFile, project, envFile, composeEnv, args, options) {
     const execaOptions = {
@@ -4500,7 +4833,7 @@ var ExecaDockerComposeRunner = class {
       forceKillAfterDelay: 500,
       timeout: options?.timeoutMs
     };
-    const subprocess = execa2(
+    const subprocess = execa3(
       "docker",
       ["compose", "-f", composeFile, "-p", project, "--env-file", envFile, ...args],
       execaOptions
@@ -4510,7 +4843,7 @@ var ExecaDockerComposeRunner = class {
     if (cancelSignal) {
       abortHandler = () => {
         if (process.platform === "win32" && typeof subprocess.pid === "number") {
-          void execa2("taskkill", ["/PID", String(subprocess.pid), "/T", "/F"]).catch(() => void 0);
+          void execa3("taskkill", ["/PID", String(subprocess.pid), "/T", "/F"]).catch(() => void 0);
           return;
         }
         subprocess.kill("SIGKILL");
@@ -4848,7 +5181,7 @@ var FetchStockixFinanceBootstrap = class {
 
 // ../../infra/worker-service/domain/traefik-config.ts
 import { mkdir as mkdir3, unlink, writeFile as writeFile2 } from "fs/promises";
-import { join as join6 } from "path";
+import { join as join7 } from "path";
 function traefikDir() {
   return apiConfig.traefikDynamicDir;
 }
@@ -4873,11 +5206,11 @@ async function writeTenantTraefikConfig(slug, port, domain) {
         servers:
           - url: "http://${tenantUpstreamHost()}:${port}"
 `;
-  await writeFile2(join6(dir, `tenant-${slug}.yml`), config, "utf8");
+  await writeFile2(join7(dir, `tenant-${slug}.yml`), config, "utf8");
 }
 async function removeTenantTraefikConfig(slug) {
   try {
-    await unlink(join6(traefikDir(), `tenant-${slug}.yml`));
+    await unlink(join7(traefikDir(), `tenant-${slug}.yml`));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.toLowerCase().includes("no such file")) {
@@ -4910,12 +5243,12 @@ async function provisionTenant(db, input, log, correlationId, assertNotCancelled
 }
 async function deprovisionTenant(db, tenantId, options = {}) {
   const log = options.log ?? (() => void 0);
-  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq7(tenantDeployments.tenantId, tenants.id)).where(eq7(tenants.id, tenantId)).limit(1);
+  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq8(tenantDeployments.tenantId, tenants.id)).where(eq8(tenants.id, tenantId)).limit(1);
   const row = found[0];
   if (!row) return { ok: false, message: "Tenant not found" };
   const project = row.composeProject ?? composeProjectName(row.slug);
   const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
-  const envPath = join7(defaultTenantEnvRoot(), row.slug, ".env");
+  const envPath = join8(defaultTenantEnvRoot(), row.slug, ".env");
   const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot, COMPOSE_PROJECT_NAME: project };
   let dockerStatus = "skipped";
   try {
@@ -4936,11 +5269,11 @@ async function deprovisionTenant(db, tenantId, options = {}) {
     const message = error instanceof Error ? error.message : String(error);
     log(`edge unpublish failed for ${row.slug}: ${message}`);
   });
-  await db.delete(tenantProvisionEvents).where(eq7(tenantProvisionEvents.tenantId, tenantId));
-  await db.delete(adminAuditLog).where(eq7(adminAuditLog.targetTenantId, tenantId));
-  await db.delete(tenantDeployments).where(eq7(tenantDeployments.tenantId, tenantId));
-  await db.delete(tenants).where(eq7(tenants.id, tenantId));
-  await rm(join7(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => void 0);
+  await db.delete(tenantProvisionEvents).where(eq8(tenantProvisionEvents.tenantId, tenantId));
+  await db.delete(adminAuditLog).where(eq8(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq8(tenantDeployments.tenantId, tenantId));
+  await db.delete(tenants).where(eq8(tenants.id, tenantId));
+  await rm(join8(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => void 0);
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }
@@ -5243,8 +5576,8 @@ async function expireDueLicenses(db) {
   const now = /* @__PURE__ */ new Date();
   const justExpired = await db.update(licenses).set({ status: "expired", updatedAt: now }).where(
     and3(
-      eq8(licenses.status, "active"),
-      eq8(licenses.isPerpetual, false),
+      eq9(licenses.status, "active"),
+      eq9(licenses.isPerpetual, false),
       isNotNull2(licenses.expiresAt),
       lte(licenses.expiresAt, now)
     )
@@ -5466,6 +5799,8 @@ var provisionPayloadSchema = z2.object({
   adminEmail: z2.string().email(),
   adminFirstName: z2.string().min(1),
   adminLastName: z2.string().min(1),
+  planSlug: z2.string().optional(),
+  modules: z2.array(z2.enum(["accounting", "pos", "pms", "chat"])).optional(),
   organizationId: z2.string().uuid().optional(),
   stockixTenantId: z2.string().uuid().optional(),
   stockixApiUrl: z2.string().optional(),
@@ -5498,6 +5833,8 @@ async function runProvisionJob(db, job) {
       adminEmail: payload.adminEmail,
       adminFirstName: payload.adminFirstName,
       adminLastName: payload.adminLastName,
+      planSlug: payload.planSlug,
+      modules: payload.modules,
       stockixTenantId: payload.stockixTenantId,
       stockixApiUrl: payload.stockixApiUrl,
       parentTenantSlug: payload.parentTenantSlug,
@@ -5583,12 +5920,12 @@ async function runTenantLifecycleCommand(db, job, command) {
     tenantId: tenants.id,
     slug: tenants.slug,
     composeProjectName: tenantDeployments.composeProjectName
-  }).from(tenants).leftJoin(tenantDeployments, eq8(tenantDeployments.tenantId, tenants.id)).where(eq8(tenants.id, job.tenantId)).limit(1);
+  }).from(tenants).leftJoin(tenantDeployments, eq9(tenantDeployments.tenantId, tenants.id)).where(eq9(tenants.id, job.tenantId)).limit(1);
   const row = rows[0];
   if (!row || !row.composeProjectName) {
     throw new Error("tenant_not_found");
   }
-  await execa3("docker", ["compose", "-p", row.composeProjectName, command], {
+  await execa4("docker", ["compose", "-p", row.composeProjectName, command], {
     timeout: 6e4
   });
 }
@@ -5712,14 +6049,14 @@ async function loop() {
             updatedAt: /* @__PURE__ */ new Date(),
             completedAt: fallbackNoRetry ? /* @__PURE__ */ new Date() : null,
             attempts: sql2`${tenantLifecycleJobs.attempts} + 1`
-          }).where(eq8(tenantLifecycleJobs.id, job.id));
+          }).where(eq9(tenantLifecycleJobs.id, job.id));
           if (job.type === "tenant.provision" && job.tenantId) {
-            await tx.update(tenants).set({ status: "failed" }).where(eq8(tenants.id, job.tenantId));
+            await tx.update(tenants).set({ status: "failed" }).where(eq9(tenants.id, job.tenantId));
             await tx.update(tenantDeployments).set({
               status: "failed",
               lastError: `worker_fallback_failure_persist:${message}`,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq8(tenantDeployments.tenantId, job.tenantId));
+            }).where(eq9(tenantDeployments.tenantId, job.tenantId));
           }
         }).catch((fallbackError) => {
           console.error(

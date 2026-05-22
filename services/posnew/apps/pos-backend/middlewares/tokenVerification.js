@@ -24,14 +24,18 @@ const isVerifiedUser = async (req, res, next) => {
     try {
       const { verifyStockixToken, hasModule } = require("@repo/auth");
       const payload = await verifyStockixToken(token, AUTH_TOKEN_SECRET);
-      if (hasModule(payload, "pos")) {
-        req.stockix = payload;
-        req.tenantId = payload.tenantId;
-        req.organizationIdFromToken = payload.organizationId;
-        return next();
+      if (!hasModule(payload, "pos")) {
+        return res.status(403).json({
+          error: "module_not_licensed",
+          message: "POS module not included in this license",
+        });
       }
+      req.stockix = payload;
+      req.tenantId = payload.tenantId;
+      req.organizationIdFromToken = payload.organizationId;
+      return next();
     } catch {
-      // Fall through to legacy POS JWT
+      // Fall through to legacy POS JWT when not a Stockix token
     }
   }
 

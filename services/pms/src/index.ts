@@ -13,7 +13,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "./db.js";
-import { buildIcalFeed, generateExportToken, runIcalSyncAllTenants } from "./ical/sync.js";
+import { buildIcalFeed, generateExportToken } from "./ical/sync.js";
+import { startIcalSyncJob } from "./jobs/ical-sync.js";
 
 type PmsEnv = {
   Variables: {
@@ -358,14 +359,7 @@ app.get("/api/reports/occupancy", async (c) => {
 const port = parseInt(process.env.PMS_PORT ?? "3003", 10);
 
 if (db) {
-  const database = db;
-  const intervalMs = 10 * 60 * 1000;
-  setInterval(() => {
-    void runIcalSyncAllTenants(database).catch((err) => {
-      console.error("[pms][ical-sync]", err instanceof Error ? err.message : String(err));
-    });
-  }, intervalMs);
-  console.log(`[pms] iCal sync scheduled every ${intervalMs / 60000} minutes`);
+  startIcalSyncJob(db);
 }
 
 serve({ fetch: app.fetch, port });

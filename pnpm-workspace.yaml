@@ -2,3 +2,4 @@ packages:
   - "apps/*"
   - "packages/*"
   - "services/pms"
+  - "services/pms/frontend"
