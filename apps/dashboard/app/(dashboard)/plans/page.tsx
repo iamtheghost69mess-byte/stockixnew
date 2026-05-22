@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormReturn } from "react-hook-form";
 import { CheckCircle2, Circle, MoreHorizontal, Pencil, Plus, Power } from "lucide-react";
 
 import {
@@ -59,6 +59,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
@@ -74,6 +81,14 @@ export type PlanRow = {
   isActive: boolean;
   sortOrder: number;
   activeLicenseCount: number;
+  priceMonthly: number | null;
+  priceAnnually: number | null;
+  currency: string | null;
+  billingInterval: string | null;
+  isPublic: boolean;
+  features: string[];
+  priceMonthlyDisplay: string | null;
+  priceAnnuallyDisplay: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -109,6 +124,9 @@ function parsePlansPayload(body: unknown): PlanRow[] {
     ) {
       continue;
     }
+    const features = Array.isArray(row.features)
+      ? row.features.filter((f): f is string => typeof f === "string")
+      : [];
     out.push({
       id: row.id,
       name: row.name,
@@ -119,6 +137,16 @@ function parsePlansPayload(body: unknown): PlanRow[] {
       isActive: row.isActive,
       sortOrder: row.sortOrder,
       activeLicenseCount: typeof row.activeLicenseCount === "number" ? row.activeLicenseCount : 0,
+      priceMonthly: typeof row.priceMonthly === "number" ? row.priceMonthly : null,
+      priceAnnually: typeof row.priceAnnually === "number" ? row.priceAnnually : null,
+      currency: typeof row.currency === "string" ? row.currency : null,
+      billingInterval: typeof row.billingInterval === "string" ? row.billingInterval : null,
+      isPublic: row.isPublic === true,
+      features,
+      priceMonthlyDisplay:
+        typeof row.priceMonthlyDisplay === "string" ? row.priceMonthlyDisplay : null,
+      priceAnnuallyDisplay:
+        typeof row.priceAnnuallyDisplay === "string" ? row.priceAnnuallyDisplay : null,
       createdAt: typeof row.createdAt === "string" ? row.createdAt : "",
       updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : "",
     });
@@ -134,7 +162,157 @@ const defaultCreateValues: PlanValues = {
   maxActivations: 1,
   isActive: true,
   sortOrder: 0,
+  currency: "USD",
+  isPublic: false,
+  featuresText: "",
 };
+
+function planPriceLabel(row: PlanRow): string {
+  if (row.priceMonthly == null && row.priceAnnually == null) return "Custom";
+  const label = row.priceMonthlyDisplay ?? row.priceAnnuallyDisplay ?? "";
+  return row.billingInterval ? `${label} / ${row.billingInterval}` : label;
+}
+
+function planBillingApiBody(
+  values: Pick<
+    PlanValues,
+    | "priceMonthly"
+    | "priceAnnually"
+    | "currency"
+    | "billingInterval"
+    | "isPublic"
+    | "featuresText"
+  >,
+) {
+  const features = values.featuresText
+    ?.split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return {
+    priceMonthly: values.priceMonthly ?? null,
+    priceAnnually: values.priceAnnually ?? null,
+    currency: values.currency ?? "USD",
+    billingInterval: values.billingInterval ?? null,
+    isPublic: values.isPublic ?? false,
+    features: features?.length ? features : null,
+  };
+}
+
+function PlanPricingFields({ form }: { form: UseFormReturn<PlanValues> }) {
+  return (
+    <div className="space-y-4 rounded-lg border border-border/80 p-4">
+      <p className="text-sm font-medium">Pricing (optional)</p>
+      <FormField
+        control={form.control}
+        name="priceMonthly"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Monthly price (cents, e.g. 2900 = $29.00)</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                min={0}
+                className="w-full max-w-xs"
+                value={field.value ?? ""}
+                onChange={(e) =>
+                  field.onChange(e.target.value === "" ? undefined : Number(e.target.value))
+                }
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="priceAnnually"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Annual price (cents)</FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                min={0}
+                className="w-full max-w-xs"
+                value={field.value ?? ""}
+                onChange={(e) =>
+                  field.onChange(e.target.value === "" ? undefined : Number(e.target.value))
+                }
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="currency"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Currency (ISO 4217)</FormLabel>
+            <FormControl>
+              <Input {...field} value={field.value ?? "USD"} maxLength={3} className="w-28 font-mono uppercase" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="billingInterval"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Billing interval</FormLabel>
+            <Select
+              value={field.value ?? "none"}
+              onValueChange={(v) => field.onChange(v === "none" ? undefined : v)}
+            >
+              <FormControl>
+                <SelectTrigger className="w-full max-w-xs">
+                  <SelectValue placeholder="— not set —" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="none">— not set —</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+                <SelectItem value="annually">Annually</SelectItem>
+                <SelectItem value="one_time">One time</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="featuresText"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Features (one per line)</FormLabel>
+            <FormControl>
+              <Textarea {...field} value={field.value ?? ""} rows={4} className="resize-none" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="isPublic"
+        render={({ field }) => (
+          <FormItem className="flex flex-row items-center gap-2 space-y-0">
+            <FormControl>
+              <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} />
+            </FormControl>
+            <FormLabel className="mt-0! font-normal">Show on public pricing page</FormLabel>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  );
+}
 
 export default function PlansPage() {
   const me = useMe();
@@ -165,6 +343,9 @@ export default function PlansPage() {
       maxActivations: 1,
       isActive: true,
       sortOrder: 0,
+      currency: "USD",
+      isPublic: false,
+      featuresText: "",
     },
   });
 
@@ -209,6 +390,12 @@ export default function PlansPage() {
       maxActivations: row.maxActivations,
       isActive: row.isActive,
       sortOrder: row.sortOrder,
+      priceMonthly: row.priceMonthly ?? undefined,
+      priceAnnually: row.priceAnnually ?? undefined,
+      currency: row.currency ?? "USD",
+      billingInterval: row.billingInterval as PlanEditValues["billingInterval"] | undefined,
+      isPublic: row.isPublic,
+      featuresText: row.features.join("\n"),
     });
     setDialogMode("edit");
   };
@@ -232,6 +419,7 @@ export default function PlansPage() {
           maxActivations: values.maxActivations,
           isActive: values.isActive,
           sortOrder: values.sortOrder,
+          ...planBillingApiBody(values),
         }),
       });
       const data: unknown = await res.json().catch(() => ({}));
@@ -260,6 +448,7 @@ export default function PlansPage() {
           maxActivations: values.maxActivations,
           isActive: values.isActive,
           sortOrder: values.sortOrder,
+          ...planBillingApiBody(values),
         }),
       });
       const data: unknown = await res.json().catch(() => ({}));
@@ -353,6 +542,7 @@ export default function PlansPage() {
                 <TableHead className="w-[100px]">Sort</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="min-w-[120px]">Slug</TableHead>
+                <TableHead>Price</TableHead>
                 <TableHead className="text-right">Max orgs</TableHead>
                 <TableHead className="text-right">Activations</TableHead>
                 <TableHead>Status</TableHead>
@@ -362,14 +552,14 @@ export default function PlansPage() {
             <TableBody>
               {listLoading && plans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : null}
               {!listLoading && plans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     No plans yet. Create a plan to use it in license and tenant flows.
                   </TableCell>
                 </TableRow>
@@ -379,6 +569,7 @@ export default function PlansPage() {
                   <TableCell className="text-muted-foreground">{row.sortOrder}</TableCell>
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell className="font-mono text-sm">{row.slug}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{planPriceLabel(row)}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {row.maxOrganizations === -1 ? "Unlimited" : row.maxOrganizations}
                   </TableCell>
@@ -506,6 +697,7 @@ export default function PlansPage() {
                       </FormItem>
                     )}
                   />
+                  <PlanPricingFields form={createForm} />
                   <div className="flex flex-wrap items-center gap-4">
                     <FormField
                       control={createForm.control}
@@ -657,6 +849,7 @@ export default function PlansPage() {
                       </FormItem>
                     )}
                   />
+                  <PlanPricingFields form={editForm as unknown as UseFormReturn<PlanValues>} />
                   <div className="flex flex-wrap items-center gap-4">
                     <FormField
                       control={editForm.control}

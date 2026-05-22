@@ -102,6 +102,8 @@ export const generateLicenseSchema = z
   });
 export type GenerateLicenseValues = z.infer<typeof generateLicenseSchema>;
 
+const planBillingInterval = z.enum(["monthly", "annually", "one_time", "custom"]);
+
 export const planSchema = z.object({
   name: z
     .string()
@@ -120,6 +122,12 @@ export const planSchema = z.object({
   maxActivations: z.coerce.number().int().min(1, "Must allow at least 1 activation").max(9999),
   isActive: z.boolean(),
   sortOrder: z.coerce.number().int().min(0).max(9999),
+  priceMonthly: z.coerce.number().int().min(0).optional(),
+  priceAnnually: z.coerce.number().int().min(0).optional(),
+  currency: z.string().length(3, "Use a 3-letter ISO 4217 code"),
+  billingInterval: planBillingInterval.optional(),
+  isPublic: z.boolean(),
+  featuresText: z.string().max(5000).optional(),
 });
 export type PlanValues = z.infer<typeof planSchema>;
 

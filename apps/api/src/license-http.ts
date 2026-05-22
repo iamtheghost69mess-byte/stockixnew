@@ -58,6 +58,86 @@ function clientIp(c: { req: { header: (n: string) => string | undefined } }): st
   return c.req.header("x-real-ip") ?? null;
 }
 
+const billingIntervalSchema = z.enum(["monthly", "annually", "one_time", "custom"]);
+
+type PlanDbRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  maxOrganizations: number;
+  maxActivations: number;
+  isActive: boolean;
+  sortOrder: number;
+  priceMonthly: number | null;
+  priceAnnually: number | null;
+  currency: string | null;
+  billingInterval: string | null;
+  isPublic: boolean;
+  features: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export function parsePlanFeatures(features: string | null): string[] {
+  if (!features) return [];
+  try {
+    const parsed: unknown = JSON.parse(features);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
+function formatPlanPrice(cents: number | null, currency: string | null): string | null {
+  if (cents == null) return null;
+  return `${(cents / 100).toFixed(2)} ${currency ?? "USD"}`;
+}
+
+export function serializePlanRow(p: PlanDbRow, activeLicenseCount = 0) {
+  const currency = p.currency ?? "USD";
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    maxOrganizations: p.maxOrganizations,
+    maxActivations: p.maxActivations,
+    isActive: p.isActive,
+    sortOrder: p.sortOrder,
+    priceMonthly: p.priceMonthly,
+    priceAnnually: p.priceAnnually,
+    currency: p.currency,
+    billingInterval: p.billingInterval,
+    isPublic: p.isPublic,
+    features: parsePlanFeatures(p.features),
+    priceMonthlyDisplay: formatPlanPrice(p.priceMonthly, currency),
+    priceAnnuallyDisplay: formatPlanPrice(p.priceAnnually, currency),
+    activeLicenseCount,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
+function planBillingInsertValues(data: {
+  priceMonthly?: number | null;
+  priceAnnually?: number | null;
+  currency?: string;
+  billingInterval?: string | null;
+  isPublic?: boolean;
+  features?: string[] | null;
+}) {
+  return {
+    priceMonthly: data.priceMonthly ?? null,
+    priceAnnually: data.priceAnnually ?? null,
+    currency: data.currency ?? "USD",
+    billingInterval: data.billingInterval ?? null,
+    isPublic: data.isPublic ?? false,
+    features: data.features?.length ? JSON.stringify(data.features) : null,
+  };
+}
+
 export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
   app.get("/plans", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -69,19 +149,9 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       .groupBy(licenses.planSlug);
     const activeBySlug = new Map(activeCounts.map((r) => [r.planSlug, Number(r.c ?? 0)]));
     return c.json({
-      plans: rows.map((p) => ({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        description: p.description,
-        maxOrganizations: p.maxOrganizations,
-        maxActivations: p.maxActivations,
-        isActive: p.isActive,
-        sortOrder: p.sortOrder,
-        activeLicenseCount: activeBySlug.get(p.slug) ?? 0,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      })),
+      plans: rows.map((p) =>
+        serializePlanRow(p, activeBySlug.get(p.slug) ?? 0),
+      ),
     });
   });
 
@@ -97,6 +167,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     maxActivations: z.number().int().min(1).max(9999).default(1),
     isActive: z.boolean().default(true),
     sortOrder: z.number().int().min(0).max(9999).default(0),
+    priceMonthly: z.number().int().min(0).optional().nullable(),
+    priceAnnually: z.number().int().min(0).optional().nullable(),
+    currency: z.string().length(3).optional(),
+    billingInterval: billingIntervalSchema.optional().nullable(),
+    isPublic: z.boolean().default(false),
+    features: z.array(z.string()).optional().nullable(),
   });
 
   app.post("/plans", async (c) => {
@@ -124,6 +200,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         maxActivations: parsed.data.maxActivations,
         isActive: parsed.data.isActive,
         sortOrder: parsed.data.sortOrder,
+        ...planBillingInsertValues(parsed.data),
       })
       .returning();
     if (!created) return c.json({ error: "create_failed" }, 500);
@@ -134,7 +211,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       userAgent: c.req.header("user-agent") ?? null,
       metadata: { planSlug: parsed.data.slug },
     });
-    return c.json({ plan: created }, 201);
+    return c.json({ plan: serializePlanRow(created) }, 201);
   });
 
   const patchPlanBody = z
@@ -145,6 +222,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       maxActivations: z.number().int().min(1).max(9999).optional(),
       isActive: z.boolean().optional(),
       sortOrder: z.number().int().min(0).max(9999).optional(),
+      priceMonthly: z.number().int().min(0).optional().nullable(),
+      priceAnnually: z.number().int().min(0).optional().nullable(),
+      currency: z.string().length(3).optional(),
+      billingInterval: billingIntervalSchema.optional().nullable(),
+      isPublic: z.boolean().optional(),
+      features: z.array(z.string()).optional().nullable(),
     })
     .strict();
 
@@ -170,6 +253,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       maxActivations?: number;
       isActive?: boolean;
       sortOrder?: number;
+      priceMonthly?: number | null;
+      priceAnnually?: number | null;
+      currency?: string;
+      billingInterval?: string | null;
+      isPublic?: boolean;
+      features?: string | null;
     } = { updatedAt: new Date() };
     if (parsed.data.name !== undefined) setVals.name = parsed.data.name;
     if (parsed.data.description !== undefined) setVals.description = parsed.data.description;
@@ -177,6 +266,16 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (parsed.data.maxActivations !== undefined) setVals.maxActivations = parsed.data.maxActivations;
     if (parsed.data.isActive !== undefined) setVals.isActive = parsed.data.isActive;
     if (parsed.data.sortOrder !== undefined) setVals.sortOrder = parsed.data.sortOrder;
+    if (parsed.data.priceMonthly !== undefined) setVals.priceMonthly = parsed.data.priceMonthly;
+    if (parsed.data.priceAnnually !== undefined) setVals.priceAnnually = parsed.data.priceAnnually;
+    if (parsed.data.currency !== undefined) setVals.currency = parsed.data.currency;
+    if (parsed.data.billingInterval !== undefined) setVals.billingInterval = parsed.data.billingInterval;
+    if (parsed.data.isPublic !== undefined) setVals.isPublic = parsed.data.isPublic;
+    if (parsed.data.features !== undefined) {
+      setVals.features = parsed.data.features?.length
+        ? JSON.stringify(parsed.data.features)
+        : null;
+    }
     const [updated] = await db
       .update(plans)
       .set(setVals)
@@ -190,7 +289,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       userAgent: c.req.header("user-agent") ?? null,
       metadata: { planId: updated.id, planSlug: updated.slug },
     });
-    return c.json({ plan: updated });
+    return c.json({ plan: serializePlanRow(updated) });
   });
 
   app.delete("/plans/:planId", async (c) => {

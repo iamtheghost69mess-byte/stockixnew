@@ -311,6 +311,14 @@ export const plans = pgTable(
     maxActivations: integer("max_activations").notNull().default(1),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** Price in smallest currency unit (e.g. cents). Null = custom / not set. */
+    priceMonthly: integer("price_monthly"),
+    priceAnnually: integer("price_annually"),
+    currency: text("currency").default("USD"),
+    billingInterval: text("billing_interval"),
+    isPublic: boolean("is_public").notNull().default(false),
+    /** JSON array of feature strings for display. */
+    features: text("features"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
