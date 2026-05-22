@@ -105,6 +105,7 @@ function LicensesPageContent() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
   const [planFilter, setPlanFilter] = useState<string>("all");
+  const [planOptions, setPlanOptions] = useState<Array<{ slug: string; name: string }>>([]);
   const [expiring30, setExpiring30] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [assignLicense, setAssignLicense] = useState<LicenseRow | null>(null);
@@ -174,6 +175,22 @@ function LicensesPageContent() {
       setListLoading(false);
     }
   }, [queryString]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/plans");
+      const data = (await res.json().catch(() => ({}))) as {
+        plans?: Array<{ slug: string; name: string; isActive?: boolean }>;
+      };
+      if (res.ok && data.plans?.length) {
+        setPlanOptions(
+          data.plans
+            .filter((p) => p.isActive !== false)
+            .map((p) => ({ slug: p.slug, name: p.name })),
+        );
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     void loadAnalytics();
@@ -351,10 +368,11 @@ function LicensesPageContent() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All plans</SelectItem>
-              <SelectItem value="starter">Starter</SelectItem>
-              <SelectItem value="growth">Growth</SelectItem>
-              <SelectItem value="pro">Pro</SelectItem>
-              <SelectItem value="enterprise">Enterprise</SelectItem>
+              {planOptions.map((p) => (
+                <SelectItem key={p.slug} value={p.slug}>
+                  {p.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button

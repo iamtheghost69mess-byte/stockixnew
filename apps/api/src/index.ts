@@ -570,10 +570,6 @@ app.use("/*", async (c, next) => {
     await next();
     return;
   }
-  if (pubMethod === "GET" && pubPath === "/plans") {
-    await next();
-    return;
-  }
   if (pubMethod === "GET" && pubPath.startsWith("/public/tenant-orgs/")) {
     await next();
     return;
