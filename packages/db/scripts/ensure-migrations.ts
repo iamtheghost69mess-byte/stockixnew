@@ -74,6 +74,10 @@ try {
   if (planInserted > 0) {
     console.log(`Seeded ${planInserted} default plan(s).`);
   }
+  const { ensureTenantPortSeq } = await import("./ensure-tenant-port-seq.js");
+  if (await ensureTenantPortSeq(sql)) {
+    console.log("Created tenant_port_seq.");
+  }
   console.log("Migrations up to date.");
 } catch (error) {
   console.error(error);
