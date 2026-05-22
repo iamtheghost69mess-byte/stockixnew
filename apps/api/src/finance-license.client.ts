@@ -19,18 +19,44 @@ export type FinanceLicenseSyncPayload = {
   featureFlags: Record<string, boolean> | null;
 };
 
+type LicenseStatusInput = {
+  status: string;
+  isPerpetual: boolean;
+  expiresAt: Date | null;
+  gracePeriodDays: number;
+};
+
 function mapStockixLicenseStatus(
-  status: string,
+  license: LicenseStatusInput | null | undefined,
   tenantStatus?: string,
 ): FinanceLicenseSyncPayload["status"] {
   if (tenantStatus === "suspended") {
     return "suspended";
   }
-  if (status === "expired") {
-    return "expired";
+  if (!license) {
+    return "active";
   }
-  if (status === "revoked") {
+  if (license.status === "revoked") {
     return "suspended";
+  }
+  if (license.isPerpetual) {
+    return "active";
+  }
+  if (license.expiresAt) {
+    const now = new Date();
+    const graceEnd = new Date(license.expiresAt);
+    graceEnd.setDate(graceEnd.getDate() + (license.gracePeriodDays ?? 7));
+
+    const pastExpiry = license.expiresAt <= now;
+    if (pastExpiry && now <= graceEnd) {
+      return "grace";
+    }
+    if (pastExpiry) {
+      return "expired";
+    }
+  }
+  if (license.status === "expired") {
+    return "expired";
   }
   return "active";
 }
@@ -101,7 +127,14 @@ export async function syncFinanceLicenseForStockixTenant(
     tenantId: params.financeTenantId,
     planSlug,
     status: mapStockixLicenseStatus(
-      license?.status ?? "active",
+      license
+        ? {
+            status: license.status,
+            isPerpetual: license.isPerpetual,
+            expiresAt: license.expiresAt,
+            gracePeriodDays: license.gracePeriodDays,
+          }
+        : null,
       tenantRow?.status,
     ),
     validFrom: (license?.validFrom ?? new Date()).toISOString(),

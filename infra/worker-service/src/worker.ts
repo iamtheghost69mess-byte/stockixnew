@@ -13,6 +13,7 @@ import {
   licenses,
 } from "@repo/db/schema";
 import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
+import { processLicenseExpiryFollowUp } from "../../../apps/api/src/license-expire-followup.js";
 import { z } from "zod";
 import {
   deprovisionTenant,
@@ -28,7 +29,7 @@ let lastLicenseExpireScanMs = 0;
 
 async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void> {
   const now = new Date();
-  await db
+  const justExpired = await db
     .update(licenses)
     .set({ status: "expired", updatedAt: now })
     .where(
@@ -38,7 +39,19 @@ async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void>
         isNotNull(licenses.expiresAt),
         lte(licenses.expiresAt, now),
       ),
-    );
+    )
+    .returning({
+      id: licenses.id,
+      tenantId: licenses.tenantId,
+      expiresAt: licenses.expiresAt,
+      gracePeriodDays: licenses.gracePeriodDays,
+    });
+
+  await processLicenseExpiryFollowUp(db, {
+    justExpired,
+    now,
+    log: (message) => console.log(message),
+  });
 }
 /** Prefer 127.0.0.1 on Windows to avoid localhost → ::1 while API listens on IPv4. */
 const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
