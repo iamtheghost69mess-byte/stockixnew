@@ -351,6 +351,46 @@ var apiConfig = {
     validateRequiredEnvForProfile(env.NODE_ENV);
   }
 };
+var posConfig = {
+  /** Base URL for POS platform API — used by apps/api proxy routes */
+  platformBaseUrl: process.env.POS_PLATFORM_BASE_URL ?? "http://localhost:8010",
+  /** Service API key for Stockix → POS server-to-server calls */
+  platformApiKey: process.env.POS_PLATFORM_API_KEY ?? "",
+  /** Absolute path to POS app root for worker provisioning */
+  appRoot: process.env.POS_APP_ROOT ?? "services/posnew"
+};
+var pmsConfig = {
+  /** Port the PMS Hono service listens on */
+  port: parseInt(process.env.PMS_PORT ?? "3003", 10),
+  /** Base URL for PMS API — used by apps/api proxy routes */
+  baseUrl: process.env.PMS_BASE_URL ?? "http://localhost:3003",
+  /** Absolute path to PMS app root for worker provisioning */
+  appRoot: process.env.PMS_APP_ROOT ?? "services/pms",
+  /** How often iCal feeds are synced in milliseconds */
+  icalSyncIntervalMs: parseInt(process.env.PMS_ICAL_SYNC_INTERVAL_MS ?? "600000", 10),
+  /** Google Gemini API key for passport OCR (optional) */
+  geminiApiKey: process.env.GEMINI_API_KEY ?? ""
+};
+var chatwootConfig = {
+  /** Public URL of the shared Chatwoot instance */
+  baseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+  /** Super admin API token for account provisioning */
+  apiAccessToken: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+  /** Rails SECRET_KEY_BASE */
+  secretKeyBase: process.env.CHATWOOT_SECRET_KEY_BASE ?? "",
+  /** Brand name shown in Chatwoot UI */
+  brandName: process.env.CHATWOOT_BRAND_NAME ?? "Stockix",
+  /** Installation name for Chatwoot telemetry */
+  installationName: process.env.CHATWOOT_INSTALLATION_NAME ?? "Stockix"
+};
+var moduleGatingConfig = {
+  /**
+   * When true, worker provisions only the Docker stacks matching
+   * the tenant's modules[] array.
+   * When false (default), Finance stack always provisioned (safe default).
+   */
+  enabled: process.env.PROVISION_MODULE_GATING === "1"
+};
 
 // ../../packages/db/src/index.ts
 import { drizzle } from "drizzle-orm/postgres-js";
