@@ -61,6 +61,10 @@ export const tenants = pgTable(
     adminLastName: text("admin_last_name").notNull(),
     status: text("status").notNull().default("active"),
     planSlug: text("plan_slug").notNull().default("starter"),
+    /** JSON array of licensed product modules, e.g. ["accounting","pos"]. */
+    modules: text("modules").notNull().default('["accounting"]'),
+    /** Chatwoot account id when chat module is provisioned. */
+    chatwootAccountId: text("chatwoot_account_id"),
     /** Human-readable org identifier (ORG-00001). */
     organizationNumber: varchar("organization_number", { length: 20 }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -335,6 +339,8 @@ export const licenses = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     licenseKey: text("license_key").notNull(),
     product: text("product").notNull().default("platform"),
+    /** JSON array of product modules this license grants. */
+    modules: text("modules").notNull().default('["accounting"]'),
     planSlug: text("plan_slug").notNull().default("starter"),
     tenantId: uuid("tenant_id").references(() => tenants.id, {
       onDelete: "set null",
@@ -452,4 +458,166 @@ export const blacklistedFingerprints = pgTable(
       .defaultNow(),
   },
   (t) => [uniqueIndex("blacklisted_fp_unique").on(t.hardwareFingerprint)],
+);
+
+export const pmsProperties = pgTable(
+  "pms_properties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: text("type").notNull().default("hotel"),
+    address: text("address"),
+    city: text("city"),
+    country: text("country"),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pms_properties_tenant_idx").on(t.tenantId)],
+);
+
+export const pmsRooms = pgTable(
+  "pms_rooms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => pmsProperties.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: text("type").notNull().default("standard"),
+    capacity: integer("capacity").notNull().default(2),
+    rateCents: integer("rate_cents").notNull().default(0),
+    status: text("status").notNull().default("available"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_rooms_tenant_idx").on(t.tenantId),
+    index("pms_rooms_property_idx").on(t.propertyId),
+  ],
+);
+
+export const pmsGuests = pgTable(
+  "pms_guests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pms_guests_tenant_idx").on(t.tenantId)],
+);
+
+export const pmsBookings = pgTable(
+  "pms_bookings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => pmsProperties.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => pmsRooms.id, { onDelete: "cascade" }),
+    guestId: uuid("guest_id")
+      .notNull()
+      .references(() => pmsGuests.id, { onDelete: "cascade" }),
+    checkIn: text("check_in").notNull(),
+    checkOut: text("check_out").notNull(),
+    totalAmountCents: integer("total_amount_cents").notNull().default(0),
+    bookingStatus: text("booking_status").notNull().default("confirmed"),
+    paymentStatus: text("payment_status").notNull().default("pending"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_bookings_tenant_idx").on(t.tenantId),
+    index("pms_bookings_property_idx").on(t.propertyId),
+  ],
+);
+
+export const pmsIcalChannels = pgTable(
+  "pms_ical_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => pmsProperties.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    importUrl: text("import_url"),
+    exportToken: text("export_token").notNull(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_ical_channels_tenant_idx").on(t.tenantId),
+    uniqueIndex("pms_ical_export_token_unique").on(t.exportToken),
+  ],
+);
+
+export const pmsStaff = pgTable(
+  "pms_staff",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    role: text("role").notNull().default("receptionist"),
+    email: text("email"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pms_staff_tenant_idx").on(t.tenantId)],
+);
+
+export const pmsCleaningTasks = pgTable(
+  "pms_cleaning_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => pmsRooms.id, { onDelete: "cascade" }),
+    scheduledDate: text("scheduled_date").notNull(),
+    status: text("status").notNull().default("pending"),
+    assigneeId: uuid("assignee_id").references(() => pmsStaff.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pms_cleaning_tasks_tenant_idx").on(t.tenantId)],
+);
+
+export const pmsMessageTemplates = pgTable(
+  "pms_message_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    channel: text("channel").notNull().default("email"),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pms_message_templates_tenant_idx").on(t.tenantId)],
 );

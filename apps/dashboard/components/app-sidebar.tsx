@@ -10,6 +10,7 @@ import {
   LayoutListIcon,
   ScrollTextIcon,
   Settings2Icon,
+  ShoppingCartIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ import { NavMain, type NavMainItem } from "@/components/nav-main";
 import { NavSecondary, type NavSecondaryItem } from "@/components/nav-secondary";
 import { NavUser, type NavUserAccount } from "@/components/nav-user";
 import { useMe } from "@/hooks/use-me";
+import { usePosNavVisible } from "@/hooks/use-pos-nav";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
   Sidebar,
@@ -32,6 +34,7 @@ import {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const me = useMe();
+  const posNavVisible = usePosNavVisible();
 
   const navMain = React.useMemo((): NavMainItem[] => {
     const items: NavMainItem[] = [
@@ -49,6 +52,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         title: "Licenses",
         url: "/licenses",
         icon: <KeyRoundIcon />,
+      },
+      ...(posNavVisible
+        ? [
+            {
+              title: "POS",
+              url: "/pos",
+              icon: <ShoppingCartIcon />,
+            },
+          ]
+        : []),
+      {
+        title: "PMS",
+        url: "/pms",
+        icon: <Building2Icon />,
       },
       ...(me?.capabilities.canAccessSettings
         ? [
@@ -83,7 +100,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       });
     }
     return items;
-  }, [me?.capabilities.canAccessSettings]);
+  }, [me?.capabilities.canAccessSettings, posNavVisible]);
 
   const documents = React.useMemo((): NavDocumentItem[] => {
     return [

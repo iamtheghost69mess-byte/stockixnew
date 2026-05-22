@@ -24,6 +24,13 @@ import {
 import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
+import { provisionChatwootAccount } from "./chatwoot-provision.js";
+import {
+  isModuleGatingEnabled,
+  provisionPmsStack,
+  provisionPosStack,
+  resolveTenantModules,
+} from "./module-stacks.js";
 
 function encryptDeploymentSecret(plaintext: string): string {
   const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
@@ -269,6 +276,8 @@ export async function executeProvisionRuntime(
     await db.transaction(async (tx) => {
       const allocated = await allocateTenantPort(tx, maxPort);
       port = allocated;
+      const moduleList =
+        input.modules && input.modules.length > 0 ? input.modules : ["accounting"];
       const [tRow] = await tx.insert(tenants).values({
         slug: input.slug,
         name: input.name,
@@ -277,6 +286,8 @@ export async function executeProvisionRuntime(
         adminFirstName: input.adminFirstName,
         adminLastName: input.adminLastName,
         status: "provisioning",
+        planSlug: input.planSlug ?? "starter",
+        modules: JSON.stringify(moduleList),
         organizationNumber,
       }).returning({ id: tenants.id });
       tenantId = tRow!.id;
@@ -296,6 +307,46 @@ export async function executeProvisionRuntime(
       throw new Error("provision_internal: expected allocated port after transaction");
     }
     await checkNotCancelled();
+
+    const licensedModules = resolveTenantModules(input.modules);
+    const moduleGating = isModuleGatingEnabled();
+    if (moduleGating && !licensedModules.includes("accounting")) {
+      log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
+      if (licensedModules.includes("pos") && tenantId) {
+        await provisionPosStack({ slug: input.slug, tenantId, log });
+      }
+      if (licensedModules.includes("pms") && tenantId) {
+        await provisionPmsStack({ slug: input.slug, tenantId, log });
+      }
+      if (licensedModules.includes("chat") && tenantId) {
+        await provisionChatwootAccount({
+          db,
+          tenantId,
+          tenantName: input.name,
+          adminEmail: input.adminEmail,
+          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          log,
+        });
+      }
+      await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId!));
+      await db
+        .update(tenantDeployments)
+        .set({ status: "active", lastError: null, updatedAt: new Date() })
+        .where(eq(tenantDeployments.tenantId, tenantId!));
+      return {
+        ok: true,
+        tenantId: tenantId!,
+        deploymentId: deploymentId!,
+        composeProjectName: project,
+        internalPort: port,
+        baseUrl,
+        oneTimeAdminPassword: oneTimeAdminPassword ?? randomBytes(12).toString("base64url"),
+        financeOrganizationId,
+        financeTenantId,
+      };
+    }
+
     const tenantEnvMap = buildTenantEnvMap({
       mysqlVolumeName,
       stockixFinanceRoot,
@@ -702,6 +753,36 @@ export async function executeProvisionRuntime(
         { tenantId: financeTenantId, status: "active", isPerpetual: true },
         log,
       );
+    }
+
+    if (licensedModules.includes("pos") && tenantId) {
+      try {
+        await provisionPosStack({ slug: input.slug, tenantId, log });
+      } catch (posErr) {
+        log(
+          `[provision][pos] non-fatal: ${posErr instanceof Error ? posErr.message : String(posErr)}`,
+        );
+      }
+    }
+    if (licensedModules.includes("pms") && tenantId) {
+      try {
+        await provisionPmsStack({ slug: input.slug, tenantId, log });
+      } catch (pmsErr) {
+        log(
+          `[provision][pms] non-fatal: ${pmsErr instanceof Error ? pmsErr.message : String(pmsErr)}`,
+        );
+      }
+    }
+    if (licensedModules.includes("chat") && tenantId) {
+      await provisionChatwootAccount({
+        db,
+        tenantId,
+        tenantName: input.name,
+        adminEmail: input.adminEmail,
+        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+        log,
+      });
     }
 
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);

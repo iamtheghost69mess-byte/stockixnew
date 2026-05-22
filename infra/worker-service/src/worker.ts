@@ -293,6 +293,10 @@ const provisionPayloadSchema = z.object({
   adminEmail: z.string().email(),
   adminFirstName: z.string().min(1),
   adminLastName: z.string().min(1),
+  planSlug: z.string().optional(),
+  modules: z
+    .array(z.enum(["accounting", "pos", "pms", "chat"]))
+    .optional(),
   organizationId: z.string().uuid().optional(),
   stockixTenantId: z.string().uuid().optional(),
   stockixApiUrl: z.string().optional(),
@@ -331,6 +335,8 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
       adminEmail: payload.adminEmail,
       adminFirstName: payload.adminFirstName,
       adminLastName: payload.adminLastName,
+      planSlug: payload.planSlug,
+      modules: payload.modules,
       stockixTenantId: payload.stockixTenantId,
       stockixApiUrl: payload.stockixApiUrl,
       parentTenantSlug: payload.parentTenantSlug,

@@ -2,6 +2,7 @@
 const posApiOrigin = (process.env.NEXT_PUBLIC_POS_API_ORIGIN || "http://localhost:8010").replace(/\/$/, "");
 
 const nextConfig = {
+  output: "standalone",
   experimental: {
     externalDir: true,
   },

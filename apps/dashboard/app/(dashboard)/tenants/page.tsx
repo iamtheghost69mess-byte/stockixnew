@@ -577,6 +577,7 @@ function TenantsPageContent() {
     adminFirstName: string;
     adminLastName: string;
     planSlug: string;
+    modules: ("accounting" | "pos" | "pms" | "chat")[];
     assignExistingLicenseId: string | null;
   }) => {
     const nextSlug = payload?.slug ?? slug;
@@ -604,6 +605,7 @@ function TenantsPageContent() {
           admin_first_name: nextAdminFirstName,
           admin_last_name: nextAdminLastName,
           plan_slug: payload?.planSlug ?? "starter",
+          modules: payload?.modules ?? ["accounting"],
           assign_existing_license_id: payload?.assignExistingLicenseId ?? undefined,
         }),
       });

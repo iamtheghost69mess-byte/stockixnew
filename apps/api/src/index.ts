@@ -62,6 +62,8 @@ import { handleAuditLogList } from "./routes/audit-log.js";
 import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
+import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
+import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 import { sendTenantWelcomeEmail } from "./mail/send.js";
 
@@ -78,6 +80,13 @@ import {
 } from "./org-access-scope.js";
 import { canCreateOrganization, getTenantLicenseEligibility } from "./plan-limits.js";
 import { insertTenantJob, listTenantJobs } from "./services/tenant-jobs.js";
+import {
+  parseTenantModules,
+  serializeTenantModules,
+  type StockixModule,
+} from "./services/auth/stockix-product-token.js";
+
+const stockixModuleZod = z.enum(["accounting", "pos", "pms", "chat"]);
 import { validateOwnerSession } from "./services/auth/session-validation.js";
 import { verifySessionToken } from "./services/auth/tokens.js";
 import {
@@ -1216,11 +1225,26 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           typeof payload.planSlug === "string" && payload.planSlug.length > 0
             ? payload.planSlug
             : "starter";
+        const provisionModules: StockixModule[] = Array.isArray(payload.modules)
+          ? payload.modules.filter(
+              (m): m is StockixModule =>
+                typeof m === "string"
+                && (["accounting", "pos", "pms", "chat"] as const).includes(m as StockixModule),
+            )
+          : ["accounting"];
+        const modulesSerialized = serializeTenantModules(
+          provisionModules.length > 0 ? provisionModules : ["accounting"],
+        );
         const assignExistingLicenseId =
           typeof payload.assignExistingLicenseId === "string" ? payload.assignExistingLicenseId : null;
         const provisionRequestedById =
           typeof payload.provisionRequestedById === "string" ? payload.provisionRequestedById : null;
         const planLimits = await getPlanLimits(db, planSlug);
+
+        await db
+          .update(tenants)
+          .set({ planSlug, modules: modulesSerialized })
+          .where(eq(tenants.id, targetTenantId));
 
         if (assignExistingLicenseId) {
           const [lic] = await db
@@ -1236,6 +1260,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               validFrom: Date;
               updatedAt: Date;
               planSlug: string;
+              modules: string;
               maxOrganizations?: number;
               maxActivations?: number;
             } = {
@@ -1245,6 +1270,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               validFrom: lic.validFrom ?? new Date(),
               updatedAt: new Date(),
               planSlug,
+              modules: modulesSerialized,
             };
             if (lic.maxOrganizations === 1) {
               assignSet.maxOrganizations = planLimits.maxOrganizations;
@@ -1256,7 +1282,6 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               .update(licenses)
               .set(assignSet)
               .where(eq(licenses.id, lic.id));
-            await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
           }
         } else {
           const existingLicense = await getActiveLicenseForTenant(db, targetTenantId);
@@ -1274,6 +1299,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             await db.insert(licenses).values({
               licenseKey,
               product: "platform",
+              modules: modulesSerialized,
               planSlug,
               tenantId: targetTenantId,
               status: "active",
@@ -1286,7 +1312,6 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               gracePeriodDays: 7,
               createdById: provisionRequestedById ?? null,
             });
-            await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
           }
         }
 
@@ -2225,6 +2250,7 @@ app.get("/tenants", async (c) => {
       name: tenants.name,
       adminEmail: tenants.adminEmail,
       planSlug: tenants.planSlug,
+      modules: tenants.modules,
       deploymentStatus: tenantDeployments.status,
       internalPort: tenantDeployments.internalPort,
       composeProject: tenantDeployments.composeProjectName,
@@ -2626,6 +2652,7 @@ const provisionBody = z.object({
   admin_first_name: z.string().min(1),
   admin_last_name: z.string().min(1),
   plan_slug: z.string().default("starter"),
+  modules: z.array(stockixModuleZod).default(["accounting"]),
   assign_existing_license_id: z.string().uuid().optional(),
 });
 
@@ -2764,6 +2791,7 @@ app.post("/tenants", async (c) => {
       adminFirstName: body.admin_first_name,
       adminLastName: body.admin_last_name,
       planSlug: body.plan_slug,
+      modules: body.modules,
       assignExistingLicenseId: body.assign_existing_license_id ?? null,
       provisionRequestedById: c.get("actorId") as string,
     },
@@ -3971,6 +3999,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       adminFirstName: tenants.adminFirstName,
       adminLastName: tenants.adminLastName,
       planSlug: tenants.planSlug,
+      modules: tenants.modules,
       deploymentStatus: tenantDeployments.status,
     })
     .from(tenants)
@@ -4019,6 +4048,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       adminFirstName: row.adminFirstName,
       adminLastName: row.adminLastName,
       planSlug: row.planSlug,
+      modules: parseTenantModules(row.modules),
       stockixTenantId: row.id,
       provisionRequestedById: c.get("actorId") as string,
     },
@@ -4680,6 +4710,8 @@ function startReadinessReconciler() {
 
 registerLicenseApi(app, db);
 registerTenantFinanceUsersApi(app, db);
+registerPosProxyRoutes(app);
+registerPmsProxyRoutes(app);
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error(

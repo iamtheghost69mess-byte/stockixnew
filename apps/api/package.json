@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
+    "@repo/auth": "workspace:*",
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",

@@ -34,6 +34,35 @@ export type TenantCreateDialogControl = {
 
 type PlanOpt = { slug: string; name: string; description: string | null };
 
+export type StockixModuleId = "accounting" | "pos" | "pms" | "chat";
+
+const AVAILABLE_MODULES: {
+  id: StockixModuleId;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "accounting",
+    label: "Accounting (Finance)",
+    description: "Full double-entry GL, invoicing, reporting",
+  },
+  {
+    id: "pos",
+    label: "Point of Sale",
+    description: "Restaurant POS, tables, kitchen, orders",
+  },
+  {
+    id: "pms",
+    label: "Property Management",
+    description: "Hotel/villa bookings, rooms, guests",
+  },
+  {
+    id: "chat",
+    label: "Messaging (Chatwoot)",
+    description: "WhatsApp, Instagram, unified inbox",
+  },
+];
+
 type Props = {
   loading: boolean;
   provisionLog: ProvisionEventRow[];
@@ -47,6 +76,7 @@ type Props = {
     adminFirstName: string;
     adminLastName: string;
     planSlug: string;
+    modules: StockixModuleId[];
     assignExistingLicenseId: string | null;
   }) => Promise<void>;
   onReset: () => void;
@@ -92,6 +122,7 @@ export default function TenantCreateWizard(props: Props) {
   const [licenseMode, setLicenseMode] = useState<"auto" | "existing">("auto");
   const [unassignedLicenses, setUnassignedLicenses] = useState<LicenseRow[]>([]);
   const [existingLicenseId, setExistingLicenseId] = useState<string>("");
+  const [selectedModules, setSelectedModules] = useState<StockixModuleId[]>(["accounting"]);
   const rootDomain = publicConfig.stockixRootDomain;
   const prevDialogOpen = useRef(false);
 
@@ -142,6 +173,7 @@ export default function TenantCreateWizard(props: Props) {
       setPlanSlug(plans[0]?.slug ?? "starter");
       setLicenseMode("auto");
       setExistingLicenseId("");
+      setSelectedModules(["accounting"]);
     }
     prevDialogOpen.current = dialog.open;
   }, [dialog, plans]);
@@ -157,6 +189,7 @@ export default function TenantCreateWizard(props: Props) {
   const selectedPlanName = plans.find((p) => p.slug === planSlug)?.name ?? planSlug;
   const step3Valid =
     planSlug.length > 0
+    && selectedModules.length > 0
     && (licenseMode === "auto" || (licenseMode === "existing" && existingLicenseId.length > 0));
 
   const submit = async () => {
@@ -169,6 +202,7 @@ export default function TenantCreateWizard(props: Props) {
         adminFirstName: adminFirstName.trim(),
         adminLastName: adminLastName.trim(),
         planSlug,
+        modules: selectedModules,
         assignExistingLicenseId: licenseMode === "existing" ? existingLicenseId : null,
       });
     } catch (e) {
@@ -188,6 +222,17 @@ export default function TenantCreateWizard(props: Props) {
     setPlanSlug(plans[0]?.slug ?? "starter");
     setLicenseMode("auto");
     setExistingLicenseId("");
+    setSelectedModules(["accounting"]);
+  };
+
+  const toggleModule = (id: StockixModuleId) => {
+    setSelectedModules((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((m) => m !== id);
+        return next.length > 0 ? next : ["accounting"];
+      }
+      return [...prev, id];
+    });
   };
 
   const wizardBody = (
@@ -277,6 +322,31 @@ export default function TenantCreateWizard(props: Props) {
               </ToggleGroup>
             </div>
             <div className="min-w-0 space-y-2">
+              <Label>Products</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {AVAILABLE_MODULES.map((mod) => {
+                  const checked = selectedModules.includes(mod.id);
+                  return (
+                    <label
+                      key={mod.id}
+                      className="flex cursor-pointer gap-3 rounded-lg border p-3 has-[:checked]:border-primary"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={checked}
+                        onChange={() => toggleModule(mod.id)}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{mod.label}</span>
+                        <span className="block text-xs text-muted-foreground">{mod.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="min-w-0 space-y-2">
               <Label>License</Label>
               <ToggleGroup
                 multiple={false}
@@ -360,6 +430,12 @@ export default function TenantCreateWizard(props: Props) {
                 Admin name: {adminFirstName} {adminLastName}
               </p>
               <p>Plan: {selectedPlanName}</p>
+              <p>
+                Products:{" "}
+                {selectedModules
+                  .map((id) => AVAILABLE_MODULES.find((m) => m.id === id)?.label ?? id)
+                  .join(", ")}
+              </p>
               <p>
                 License:{" "}
                 {licenseMode === "auto"

@@ -345,6 +345,9 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
 
   const generateBody = z.object({
     product: z.enum(["platform", "pos_desktop", "bundle"]),
+    modules: z
+      .array(z.enum(["accounting", "pos", "pms", "chat"]))
+      .default(["accounting"]),
     planSlug: z.string().min(1),
     count: z.number().int().min(1).max(100).default(1),
     isPerpetual: z.boolean().default(true),
@@ -408,6 +411,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           .values({
             licenseKey,
             product: body.product,
+            modules: JSON.stringify(body.modules),
             planSlug: body.planSlug,
             tenantId: body.tenantId ?? null,
             status,

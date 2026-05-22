@@ -1,59 +1,51 @@
-# Production Deploy Checklist
+# Production checklist — multi-product platform
 
-Complete every item before going live. Check each box manually.
+## Control plane
 
-## Before First Deploy
+- [ ] `packages/auth` deployed; `AUTH_TOKEN_SECRET` shared with POS/PMS tenant stacks
+- [ ] Postgres migrations through `0030_chatwoot_account_id.sql` applied
+- [ ] Owner dashboard at `apps/dashboard`; API at `apps/api`
+- [ ] Tenant provision form persists `modules` JSON on tenants and job payload
 
-### Secrets
-- [ ] Generated fresh secrets with `node scripts/generate-env-secrets.js`
-- [ ] `infra/prod/.env` has values different from `.env` (dev)
-- [ ] Rotated leaked secrets from commit `09a7152d` if ever used in prod
-- [ ] `SESSION_SECRET` is 64+ char hex
-- [ ] `AUTH_TOKEN_SECRET` is 64+ char hex
-- [ ] `LICENSE_SIGNING_SECRET` is 32+ char hex
+## Finance (default)
 
-### Manual Fields (required)
-- [ ] `CF_DNS_API_TOKEN` — Cloudflare DNS API token set
-- [ ] `MAIL_PASSWORD` — Resend API key set
-- [ ] `ACME_EMAIL` — Real email for Let's Encrypt set
-- [ ] `STOCKIX_REPO` — Correct server path set (`/opt/stockix/stockixnew`)
+- [ ] `modules` includes `accounting` (default) — existing `infra/tenant-stack` provision unchanged
+- [ ] `PROVISION_MODULE_GATING` unset or `0` until non-Finance tenants are tested
 
-### Manual Fields (optional but recommended)
-- [ ] `S3_ACCESS_KEY_ID` — Backblaze B2 key set (for file uploads)
-- [ ] `S3_SECRET_ACCESS_KEY` — Backblaze B2 secret set
-- [ ] `S3_BUCKET` — Bucket name set
+## POS
 
-### Domain & Network
-- [ ] DNS A record points to server IP
-- [ ] `ROOT_DOMAIN` in `infra/prod/.env` matches actual domain
-- [ ] `DASHBOARD_URL` set to `https://[your-domain]`
-- [ ] `PUBLIC_BASE_URL_SCHEME=https`
-- [ ] Ports 80 and 443 open on server firewall
-- [ ] Traefik can reach Cloudflare DNS API
+- [ ] `POS_PLATFORM_BASE_URL` and `POS_PLATFORM_API_KEY` set on control-plane API
+- [ ] POS sections in dashboard load via `/api/pos/*` proxy
+- [ ] POS backend validates Stockix JWT with `pos` module (`@repo/auth`)
+- [ ] `saas-dash` removed; operators use main dashboard only
 
-### Database
-- [ ] `POSTGRES_PASSWORD` is strong (not `postgres`)
-- [ ] `DATABASE_URL` uses Docker service name `postgres` not `127.0.0.1`
-- [ ] Migrations run on production DB before starting app
+## PMS
 
-### Security
-- [ ] `SIGNUP_DISABLED=true`
-- [ ] `NODE_ENV=production`
-- [ ] `ALLOW_BOOTSTRAP_LOGIN=false`
-- [ ] No `.env` files committed to git
-- [ ] Git history reviewed for leaked secrets
+- [ ] `PMS_BASE_URL` / `PMS_PORT=3003` for API proxy and service
+- [ ] `@stockix/pms` service running with `DATABASE_URL`
+- [ ] iCal sync interval active (10 minutes)
+- [ ] Dashboard PMS pages use `tenantId` query when proxying
 
-### Deploy
-- [ ] `pnpm infra:worker:build` run on server
-- [ ] `docker compose --env-file infra/prod/.env up -d --build`
-- [ ] `GET /health` returns `{"status":"ok"}`
-- [ ] Dashboard loads at `https://[your-domain]`
-- [ ] Login works with `PLATFORM_ADMIN_EMAIL` + `PLATFORM_ADMIN_PASSWORD`
-- [ ] Provision a test tenant end to end
-- [ ] Signup returns 403 on `POST /api/auth/register`
+## Chatwoot
 
-## After Deploy
+- [ ] Shared `chatwoot` stack in `infra/prod/docker-compose.yml`
+- [ ] `CHATWOOT_*` env vars set
+- [ ] Tenants with `chat` module receive `chatwoot_account_id` after provision
 
-- [ ] SSL certificate issued by Let's Encrypt (green padlock)
-- [ ] Email sends correctly (test with a real email)
-- [ ] Backups configured for Postgres volume
+## Module-gated provisioning (optional)
+
+- [ ] Set `PROVISION_MODULE_GATING=1` only after validating:
+  - `accounting` only → Finance stack only
+  - `pos` only → POS stack (`infra/pos-tenant-stack`)
+  - `pms` only → PMS stack (`infra/pms-tenant-stack`)
+
+## Verification commands
+
+```bash
+pnpm --filter @repo/auth check-types
+pnpm --filter api check-types
+pnpm --filter dashboard check-types
+pnpm --filter @stockix/pms check-types
+pnpm --filter api test
+pnpm db:migrate
+```
