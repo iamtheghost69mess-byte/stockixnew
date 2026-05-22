@@ -41,10 +41,15 @@ export class SyncLicenseDto {
   @Min(0)
   gracePeriodDays: number;
 
-  @ApiProperty({ example: 10 })
+  @ApiProperty({ example: 999, description: 'Staff user limit in the finance app' })
   @IsInt()
   @Min(1)
   maxUsers: number;
+
+  @ApiProperty({ example: 3, description: 'POS device activation limit (reference only in finance)' })
+  @IsInt()
+  @Min(1)
+  maxActivations: number;
 
   @ApiProperty({ example: 1 })
   @IsInt()

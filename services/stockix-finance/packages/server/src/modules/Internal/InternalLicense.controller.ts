@@ -37,7 +37,8 @@ export class InternalLicenseController {
             ? String(body.expiresAt ?? body.expires_at)
             : null,
       gracePeriodDays: Number(body.gracePeriodDays ?? body.grace_period_days ?? 30),
-      maxUsers: Number(body.maxUsers ?? body.max_users ?? 10),
+      maxUsers: Number(body.maxUsers ?? body.max_users ?? 999),
+      maxActivations: Number(body.maxActivations ?? body.max_activations ?? 1),
       maxOrganizations: Number(
         body.maxOrganizations ?? body.max_organizations ?? 1,
       ),

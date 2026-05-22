@@ -17,6 +17,8 @@ export class TenantLicense extends BaseModel {
   public readonly expiresAt!: string | null;
   public readonly gracePeriodDays!: number;
   public readonly maxUsers!: number;
+  /** POS desktop/device activation limit (synced from Stockix license.maxActivations). */
+  public readonly maxActivations!: number;
   public readonly maxOrganizations!: number;
   public readonly isPerpetual!: boolean;
   public readonly featureFlags!: Record<string, boolean> | null;

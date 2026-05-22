@@ -18,10 +18,39 @@ export type FinanceLicenseSyncPayload = {
   expiresAt: string | null;
   gracePeriodDays: number;
   maxUsers: number;
+  maxActivations: number;
   maxOrganizations: number;
   isPerpetual: boolean;
   featureFlags: Record<string, boolean> | null;
 };
+
+/** Staff user cap in finance when Stockix licenses do not track maxUsers separately. */
+export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
+
+/**
+ * Field mapping — Stockix control plane → Finance tenant_licenses
+ *
+ * maxUsers:       How many staff users (accountants, managers) can be
+ *                 created in the finance app. Not tracked on Stockix licenses —
+ *                 defaults to FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS.
+ *
+ * maxActivations: How many POS desktop/device activations are allowed.
+ *                 Maps to license.maxActivations on Stockix control plane.
+ *                 Enforced at control plane via POST /licenses/activate.
+ *                 Stored in finance for reference only — not enforced there.
+ *
+ * maxOrganizations: How many sub-organizations a tenant can create in finance.
+ *                   Maps to license.maxOrganizations; enforced in plan-limits.ts.
+ */
+export function buildFinanceLicenseLimitFields(
+  license: { maxActivations?: number; maxOrganizations?: number } | null | undefined,
+): Pick<FinanceLicenseSyncPayload, "maxUsers" | "maxActivations" | "maxOrganizations"> {
+  return {
+    maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxActivations: license?.maxActivations ?? 1,
+    maxOrganizations: license?.maxOrganizations ?? 1,
+  };
+}
 
 type LicenseStatusInput = {
   status: string;
@@ -143,8 +172,7 @@ export async function syncFinanceLicenseForStockixTenant(
     validFrom: (license?.validFrom ?? new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    maxUsers: license?.maxActivations ?? 10,
-    maxOrganizations: license?.maxOrganizations ?? 1,
+    ...buildFinanceLicenseLimitFields(license),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,
   };

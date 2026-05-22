@@ -13,7 +13,7 @@ export class SyncLicenseService {
    * curl -X POST http://localhost:3000/api/internal/license/sync \
    *   -H "Content-Type: application/json" \
    *   -H "x-internal-secret: $INTERNAL_API_SECRET" \
-   *   -d '{"tenantId":1,"planSlug":"starter","status":"active","validFrom":"2024-01-01T00:00:00.000Z","expiresAt":null,"gracePeriodDays":30,"maxUsers":10,"maxOrganizations":1,"isPerpetual":true,"featureFlags":null}'
+   *   -d '{"tenantId":1,"planSlug":"starter","status":"active","validFrom":"2024-01-01T00:00:00.000Z","expiresAt":null,"gracePeriodDays":30,"maxUsers":999,"maxActivations":3,"maxOrganizations":1,"isPerpetual":true,"featureFlags":null}'
    */
   async sync(dto: SyncLicenseDto): Promise<{ success: true; tenantId: number }> {
     const payload = {
@@ -24,6 +24,7 @@ export class SyncLicenseService {
       expiresAt: dto.expiresAt,
       gracePeriodDays: dto.gracePeriodDays,
       maxUsers: dto.maxUsers,
+      maxActivations: dto.maxActivations,
       maxOrganizations: dto.maxOrganizations,
       isPerpetual: dto.isPerpetual,
       featureFlags: dto.featureFlags,

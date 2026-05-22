@@ -33,6 +33,7 @@ import {
   signOfflineToken,
   verifyOfflineToken,
 } from "./license-utils.js";
+import { buildFinanceLicenseLimitFields } from "./finance-license.client.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 
 type ApiEnv = {
@@ -942,10 +943,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         maxActivations: planLimits.maxActivations,
       },
       isConsistentWithPlan: isConsistent,
-      syncPayloadWouldSend: {
-        maxOrganizations: license.maxOrganizations,
-        maxUsers: license.maxActivations,
-      },
+      syncPayloadWouldSend: buildFinanceLicenseLimitFields(license),
     });
   });
 
