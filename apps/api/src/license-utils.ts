@@ -1,12 +1,70 @@
 import { randomBytes } from "node:crypto";
 import { apiConfig } from "@repo/config";
-import { plans } from "@repo/db/schema";
-import { eq } from "drizzle-orm";
+import { licenses, plans } from "@repo/db/schema";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import type { InferSelectModel } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { SignJWT, jwtVerify } from "jose";
 
 export type PlanLimitsDb = PostgresJsDatabase<typeof schema>;
+export type TenantLicenseRow = InferSelectModel<typeof licenses>;
+
+/**
+ * Returns the single canonical license for a tenant.
+ *
+ * Priority (do not reorder without documenting why):
+ * 1. Active perpetual (latest activatedAt)
+ * 2. Active non-perpetual, not past expiresAt (latest expiresAt)
+ * 3. Most recent expired (grace-period fallback)
+ */
+export async function getActiveLicenseForTenant(
+  db: PlanLimitsDb,
+  tenantId: string,
+): Promise<TenantLicenseRow | null> {
+  const perpetual = await db
+    .select()
+    .from(licenses)
+    .where(
+      and(
+        eq(licenses.tenantId, tenantId),
+        eq(licenses.status, "active"),
+        eq(licenses.isPerpetual, true),
+      ),
+    )
+    .orderBy(desc(licenses.activatedAt))
+    .limit(1);
+
+  if (perpetual[0]) return perpetual[0];
+
+  const now = new Date();
+  const active = await db
+    .select()
+    .from(licenses)
+    .where(
+      and(
+        eq(licenses.tenantId, tenantId),
+        eq(licenses.status, "active"),
+        eq(licenses.isPerpetual, false),
+        or(isNull(licenses.expiresAt), gt(licenses.expiresAt, now)),
+      ),
+    )
+    .orderBy(desc(licenses.expiresAt))
+    .limit(1);
+
+  if (active[0]) return active[0];
+
+  const expired = await db
+    .select()
+    .from(licenses)
+    .where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "expired")))
+    .orderBy(desc(licenses.expiresAt))
+    .limit(1);
+
+  if (expired[0]) return expired[0];
+
+  return null;
+}
 
 /**
  * Fetches maxOrganizations and maxActivations from the plans table

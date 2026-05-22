@@ -1,7 +1,8 @@
-import { licenses, tenants } from "@repo/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { tenants } from "@repo/db/schema";
+import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { getActiveLicenseForTenant } from "../license-utils.js";
 import { sendMail } from "./mailer.js";
 import { renderTenantWelcome } from "./templates/tenant-welcome.js";
 import { renderLicenseExpiring } from "./templates/license-expiring.js";
@@ -68,12 +69,7 @@ export async function sendLicenseExpiredEmailForTenant(
     return;
   }
 
-  const [license] = await db
-    .select({ expiresAt: licenses.expiresAt })
-    .from(licenses)
-    .where(eq(licenses.tenantId, tenantId))
-    .orderBy(desc(licenses.updatedAt))
-    .limit(1);
+  const license = await getActiveLicenseForTenant(db, tenantId);
 
   await sendLicenseExpiredEmail({
     to: tenant.adminEmail,

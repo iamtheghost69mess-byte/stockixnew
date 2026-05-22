@@ -27,6 +27,7 @@ import { z } from "zod";
 import { logAudit } from "./audit.js";
 import {
   generateLicenseKey,
+  getActiveLicenseForTenant,
   getPlanLimits,
   signOfflineToken,
   verifyOfflineToken,
@@ -503,11 +504,54 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     const product = q.product?.trim();
     const planSlug = q.planSlug?.trim();
     const tenantId = q.tenantId?.trim();
+    const primaryOnly =
+      Boolean(tenantId)
+      && (q.primary === "1" || q.primary === "true" || q.canonical === "1" || q.canonical === "true");
     const expiringInDays = q.expiringInDays ? Number(q.expiringInDays) : null;
     const search = q.search?.trim();
     const page = Math.max(1, Number(q.page ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(q.pageSize ?? 20) || 20));
     const offset = (page - 1) * pageSize;
+
+    if (primaryOnly) {
+      const lic = await getActiveLicenseForTenant(db, tenantId!);
+      if (!lic) {
+        return c.json({ licenses: [], total: 0, page: 1, pageSize: 1 });
+      }
+      const [tenantRow] = await db
+        .select({ name: tenants.name, slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId!))
+        .limit(1);
+      return c.json({
+        licenses: [
+          {
+            id: lic.id,
+            licenseKey: lic.licenseKey,
+            product: lic.product,
+            planSlug: lic.planSlug,
+            status: lic.status,
+            tenantId: lic.tenantId,
+            tenantName: tenantRow?.name ?? null,
+            tenantSlug: tenantRow?.slug ?? null,
+            isPerpetual: lic.isPerpetual,
+            activatedAt: lic.activatedAt?.toISOString() ?? null,
+            validFrom: lic.validFrom?.toISOString() ?? null,
+            expiresAt: lic.expiresAt?.toISOString() ?? null,
+            maxActivations: lic.maxActivations,
+            activationCount: lic.activationCount,
+            gracePeriodDays: lic.gracePeriodDays,
+            revokedAt: lic.revokedAt?.toISOString() ?? null,
+            revokeReason: lic.revokeReason ?? null,
+            notes: lic.notes ?? null,
+            createdAt: lic.createdAt.toISOString(),
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 1,
+      });
+    }
 
     const conditions: ReturnType<typeof eq>[] = [];
     if (status) conditions.push(eq(licenses.status, status));

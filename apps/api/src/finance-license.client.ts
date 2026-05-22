@@ -1,8 +1,9 @@
 import { apiConfig } from "@repo/config";
-import { licenses, plans, tenantDeployments } from "@repo/db/schema";
+import { plans, tenantDeployments } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { getActiveLicenseForTenant } from "./license-utils.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -103,11 +104,7 @@ export async function syncFinanceLicenseForStockixTenant(
     return;
   }
 
-  const [license] = await db
-    .select()
-    .from(licenses)
-    .where(eq(licenses.tenantId, params.stockixTenantId))
-    .limit(1);
+  const license = await getActiveLicenseForTenant(db, params.stockixTenantId);
 
   const [tenantRow] = await db
     .select({ status: schema.tenants.status, planSlug: schema.tenants.planSlug })

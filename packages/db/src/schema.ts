@@ -360,6 +360,7 @@ export const licenses = pgTable(
   (t) => [
     uniqueIndex("licenses_key_unique").on(t.licenseKey),
     index("licenses_tenant_id_idx").on(t.tenantId),
+    index("licenses_tenant_status_idx").on(t.tenantId, t.status),
     index("licenses_status_idx").on(t.status),
     index("licenses_product_idx").on(t.product),
     index("licenses_expires_at_idx").on(t.expiresAt),

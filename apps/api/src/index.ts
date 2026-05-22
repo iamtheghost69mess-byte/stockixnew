@@ -59,7 +59,7 @@ import { z } from "zod";
 import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
-import { generateLicenseKey, getPlanLimits } from "./license-utils.js";
+import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
@@ -1263,32 +1263,35 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
           }
         } else {
-          let licenseKey = generateLicenseKey();
-          for (let attempt = 0; attempt < 3; attempt++) {
-            const clash = await db
-              .select({ id: licenses.id })
-              .from(licenses)
-              .where(eq(licenses.licenseKey, licenseKey))
-              .limit(1);
-            if (clash.length === 0) break;
-            licenseKey = generateLicenseKey();
+          const existingLicense = await getActiveLicenseForTenant(db, targetTenantId);
+          if (!existingLicense) {
+            let licenseKey = generateLicenseKey();
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const clash = await db
+                .select({ id: licenses.id })
+                .from(licenses)
+                .where(eq(licenses.licenseKey, licenseKey))
+                .limit(1);
+              if (clash.length === 0) break;
+              licenseKey = generateLicenseKey();
+            }
+            await db.insert(licenses).values({
+              licenseKey,
+              product: "platform",
+              planSlug,
+              tenantId: targetTenantId,
+              status: "active",
+              activatedAt: new Date(),
+              validFrom: new Date(),
+              isPerpetual: true,
+              maxOrganizations: planLimits.maxOrganizations,
+              maxActivations: planLimits.maxActivations,
+              activationCount: 0,
+              gracePeriodDays: 7,
+              createdById: provisionRequestedById ?? null,
+            });
+            await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
           }
-          await db.insert(licenses).values({
-            licenseKey,
-            product: "platform",
-            planSlug,
-            tenantId: targetTenantId,
-            status: "active",
-            activatedAt: new Date(),
-            validFrom: new Date(),
-            isPerpetual: true,
-            maxOrganizations: planLimits.maxOrganizations,
-            maxActivations: planLimits.maxActivations,
-            activationCount: 0,
-            gracePeriodDays: 7,
-            createdById: provisionRequestedById ?? null,
-          });
-          await db.update(tenants).set({ planSlug }).where(eq(tenants.id, targetTenantId));
         }
 
         if (provisionRequestedById && z.string().uuid().safeParse(provisionRequestedById).success) {

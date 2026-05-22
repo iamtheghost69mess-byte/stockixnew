@@ -1,8 +1,9 @@
-import { tenantDeployments, tenants, licenses } from "@repo/db/schema";
+import { tenantDeployments, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
+import { getActiveLicenseForTenant } from "./license-utils.js";
 import { sendLicenseExpiringEmail } from "./mail/send.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -46,11 +47,7 @@ async function maybeSendLicenseGraceWarningEmail(
   stockixTenantId: string,
   log: (message: string) => void,
 ): Promise<void> {
-  const [license] = await db
-    .select()
-    .from(licenses)
-    .where(eq(licenses.tenantId, stockixTenantId))
-    .limit(1);
+  const license = await getActiveLicenseForTenant(db, stockixTenantId);
 
   if (!license?.expiresAt || license.isPerpetual) {
     return;

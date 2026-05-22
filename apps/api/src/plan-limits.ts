@@ -1,21 +1,33 @@
-import { licenses, organizations } from "@repo/db/schema";
-import { and, count, desc, eq, gt, isNull, lte, ne, or } from "drizzle-orm";
+import { organizations } from "@repo/db/schema";
+import { and, count, eq, ne } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { getActiveLicenseForTenant } from "./license-utils.js";
 
 export type PlanLimitsDb = PostgresJsDatabase<typeof schema>;
 
-function nonExpiredActiveLicenseCondition(now: Date) {
-  return and(
-    eq(licenses.status, "active"),
-    or(isNull(licenses.validFrom), lte(licenses.validFrom, now)),
-    or(isNull(licenses.activatedAt), lte(licenses.activatedAt, now)),
-    or(
-      eq(licenses.isPerpetual, true),
-      isNull(licenses.expiresAt),
-      gt(licenses.expiresAt, now),
-    ),
-  );
+function isLicenseDateValid(
+  license: {
+    isPerpetual: boolean;
+    expiresAt: Date | null;
+    validFrom: Date | null;
+    activatedAt: Date | null;
+    status: string;
+    gracePeriodDays: number;
+  },
+  now: Date,
+): boolean {
+  const start = license.validFrom ?? license.activatedAt;
+  if (start && start > now) return false;
+  if (license.status === "active") {
+    return license.isPerpetual || license.expiresAt == null || license.expiresAt > now;
+  }
+  if (license.status === "expired" && license.expiresAt) {
+    const graceEnd = new Date(license.expiresAt);
+    graceEnd.setDate(graceEnd.getDate() + (license.gracePeriodDays ?? 7));
+    return now <= graceEnd;
+  }
+  return false;
 }
 
 /** A tenant must have at least one active license that is not past expiresAt (unless perpetual). */
@@ -24,24 +36,10 @@ export async function getTenantLicenseEligibility(
   tenantId: string,
 ): Promise<"ok" | "no_active_license" | "license_expired"> {
   if (!db) return "no_active_license";
+  const license = await getActiveLicenseForTenant(db, tenantId);
+  if (!license) return "no_active_license";
   const now = new Date();
-  const activeRows = await db
-    .select({
-      isPerpetual: licenses.isPerpetual,
-      expiresAt: licenses.expiresAt,
-      validFrom: licenses.validFrom,
-      activatedAt: licenses.activatedAt,
-    })
-    .from(licenses)
-    .where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "active")));
-
-  if (activeRows.length === 0) return "no_active_license";
-  const hasValid = activeRows.some((r) => {
-    const start = r.validFrom ?? r.activatedAt;
-    if (start && start > now) return false;
-    return r.isPerpetual || r.expiresAt == null || r.expiresAt > now;
-  });
-  if (hasValid) return "ok";
+  if (isLicenseDateValid(license, now)) return "ok";
   return "license_expired";
 }
 
@@ -55,17 +53,10 @@ export async function getMaxOrganizations(
   tenantId: string,
 ): Promise<number> {
   if (!db) return 0;
-  const now = new Date();
-  const row = await db
-    .select({ maxOrganizations: licenses.maxOrganizations })
-    .from(licenses)
-    .where(and(eq(licenses.tenantId, tenantId), nonExpiredActiveLicenseCondition(now)))
-    .orderBy(desc(licenses.updatedAt))
-    .limit(1)
-    .then((r) => r[0] ?? null);
-
-  if (!row) return 0;
-  return row.maxOrganizations;
+  const license = await getActiveLicenseForTenant(db, tenantId);
+  if (!license) return 0;
+  if (!isLicenseDateValid(license, new Date())) return 0;
+  return license.maxOrganizations;
 }
 
 /**

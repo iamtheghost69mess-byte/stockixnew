@@ -137,7 +137,9 @@ export default function TenantDetailPage() {
   const loadLicense = async () => {
     setLicenseLoading(true);
     try {
-      const res = await fetch(`/api/licenses?tenantId=${encodeURIComponent(id)}&pageSize=1`);
+      const res = await fetch(
+        `/api/licenses?tenantId=${encodeURIComponent(id)}&pageSize=1&primary=1`,
+      );
       const data = (await readJson(res)) as { licenses?: LicenseRow[] };
       if (res.ok && data.licenses?.[0]) setTenantLicense(data.licenses[0]!);
       else setTenantLicense(null);
