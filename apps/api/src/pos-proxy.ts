@@ -32,7 +32,21 @@ export async function posProxyJson(
   body?: unknown,
   query?: Record<string, string | undefined>,
 ): Promise<{ data: unknown; status: number }> {
-  const res = await posProxy(path, method, body, query);
+  let res: Response;
+  try {
+    res = await posProxy(path, method, body, query);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "POS platform unreachable";
+    return {
+      data: {
+        error: "pos_unavailable",
+        message,
+        hint: `Start POS backend at ${POS_PLATFORM_BASE} or unset POS pages until it is running.`,
+      },
+      status: 503,
+    };
+  }
   const text = await res.text();
   let data: unknown = {};
   if (text) {

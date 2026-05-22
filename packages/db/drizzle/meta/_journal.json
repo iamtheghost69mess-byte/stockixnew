@@ -183,6 +183,34 @@
       "when": 1779600000000,
       "tag": "0026_license_history",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0027_tenant_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0028_license_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0029_pms_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0030_chatwoot_account_id",
+      "breakpoints": true
     }
   ]
 }

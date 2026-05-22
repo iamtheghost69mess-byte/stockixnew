@@ -3097,7 +3097,6 @@ import { and as and2, eq as eq5, gte, isNotNull } from "drizzle-orm";
 // src/license-utils.ts
 import { randomBytes } from "crypto";
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
-import { SignJWT, jwtVerify } from "jose";
 async function getActiveLicenseForTenant(db, tenantId) {
   const perpetual = await db.select().from(licenses).where(
     and(

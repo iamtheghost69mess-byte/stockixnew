@@ -12,7 +12,8 @@ export default defineConfig({
   bundle: true,
   sourcemap: true,
   clean: true,
-  noExternal: [/^@repo\//],
+  // Bundle jose (not hoisted to repo root). nodemailer stays external — listed in root package.json for worker runtime.
+  noExternal: [/^@repo\//, "jose"],
   esbuildOptions(options) {
     options.alias = {
       "@repo/config": path.resolve(dirname, "../../packages/config/src/index.ts"),
