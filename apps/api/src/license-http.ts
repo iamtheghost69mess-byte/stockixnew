@@ -617,6 +617,24 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (!lic) return c.json({ error: "not_found" }, 404);
     if (lic.status === "revoked") return c.json({ error: "license_revoked" }, 403);
     if (lic.status === "expired") return c.json({ error: "license_expired" }, 403);
+    if (lic.status !== "active") {
+      return c.json(
+        {
+          error: "license_not_active",
+          message: "This license is not active and cannot be used for activation.",
+        },
+        403,
+      );
+    }
+    if (!lic.tenantId) {
+      return c.json(
+        {
+          error: "license_not_assigned",
+          message: "This license has not been assigned to an organization.",
+        },
+        403,
+      );
+    }
     const effectiveStart = lic.validFrom ?? lic.activatedAt;
     if (effectiveStart && effectiveStart > new Date()) {
       return c.json({ error: "license_not_yet_valid" }, 403);
@@ -809,6 +827,41 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       .where(eq(blacklistedFingerprints.hardwareFingerprint, body.hardwareFingerprint.trim()))
       .limit(1);
     if (bl) return c.json({ error: "device_blacklisted" }, 403);
+
+    const [lic] = await db
+      .select()
+      .from(licenses)
+      .where(eq(licenses.id, payload.licenseId))
+      .limit(1);
+    if (!lic) return c.json({ error: "not_found" }, 404);
+    if (lic.status === "revoked") return c.json({ error: "license_revoked" }, 403);
+    if (lic.status === "expired") return c.json({ error: "license_expired" }, 403);
+    if (lic.status !== "active") {
+      return c.json(
+        {
+          error: "license_not_active",
+          message: "This license is not active and cannot be used for activation.",
+        },
+        403,
+      );
+    }
+    if (!lic.tenantId) {
+      return c.json(
+        {
+          error: "license_not_assigned",
+          message: "This license has not been assigned to an organization.",
+        },
+        403,
+      );
+    }
+    const effectiveStart = lic.validFrom ?? lic.activatedAt;
+    if (effectiveStart && effectiveStart > new Date()) {
+      return c.json({ error: "license_not_yet_valid" }, 403);
+    }
+    if (!lic.isPerpetual && lic.expiresAt && lic.expiresAt < new Date()) {
+      return c.json({ error: "license_expired" }, 403);
+    }
+
     return c.json({ valid: true, license: payload });
   });
 
