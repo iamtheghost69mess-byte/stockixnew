@@ -1,4 +1,7 @@
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  if (!(await knex.schema.hasTable('tenant_licenses'))) {
+    return;
+  }
   return knex.raw(
     "ALTER TABLE tenant_licenses MODIFY COLUMN status " +
       "ENUM('active', 'expired', 'suspended', 'grace', 'revoked') " +

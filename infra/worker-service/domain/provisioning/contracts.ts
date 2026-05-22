@@ -12,6 +12,8 @@ export interface IDockerComposeRunner {
     options?: {
       cancelSignal?: AbortSignal;
       timeoutMs?: number;
+      /** Raw stdout/stderr chunks from docker compose (for live provision trace). */
+      onOutput?: (chunk: string) => void;
     },
   ): Promise<void>;
 }

@@ -14,13 +14,15 @@ class WidgetsController < ActionController::Base
   private
 
   def set_global_config
-    @global_config = GlobalConfig.get(
-      'LOGO_THUMBNAIL',
-      'BRAND_NAME',
-      'WIDGET_BRAND_URL',
-      'DIRECT_UPLOADS_ENABLED',
-      'MAXIMUM_FILE_UPLOAD_SIZE',
-      'INSTALLATION_NAME'
+    @global_config = BrandingEnvOverrides.apply!(
+      GlobalConfig.get(
+        'LOGO_THUMBNAIL',
+        'BRAND_NAME',
+        'WIDGET_BRAND_URL',
+        'DIRECT_UPLOADS_ENABLED',
+        'MAXIMUM_FILE_UPLOAD_SIZE',
+        'INSTALLATION_NAME'
+      )
     )
   end
 

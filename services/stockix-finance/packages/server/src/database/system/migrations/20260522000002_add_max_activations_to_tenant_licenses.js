@@ -1,4 +1,14 @@
 exports.up = async function (knex) {
+  if (!(await knex.schema.hasTable('tenant_licenses'))) {
+    return;
+  }
+  const hasMaxActivations = await knex.schema.hasColumn(
+    'tenant_licenses',
+    'max_activations',
+  );
+  if (hasMaxActivations) {
+    return;
+  }
   await knex.schema.table('tenant_licenses', (table) => {
     table.integer('max_activations').notNullable().defaultTo(1);
   });

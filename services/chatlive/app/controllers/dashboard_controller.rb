@@ -44,7 +44,9 @@ class DashboardController < ActionController::Base
   end
 
   def set_global_config
-    @global_config = GlobalConfig.get(*GLOBAL_CONFIG_KEYS).merge(app_config)
+    @global_config = BrandingEnvOverrides.apply!(
+      GlobalConfig.get(*GLOBAL_CONFIG_KEYS).merge(app_config)
+    )
   end
 
   def set_dashboard_scripts

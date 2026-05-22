@@ -1,5 +1,24 @@
 # Production checklist — multi-product platform
 
+## Docker image pre-build (required before first tenant provision)
+
+- [ ] Run: `pnpm docker:prebuild`
+- [ ] Verify: `pnpm docker:check` shows all four Finance images
+- [ ] Set `WORKER_JOB_EXECUTION_TIMEOUT_MS=2700000` in root `.env`
+- [ ] Rebuild worker after worker changes: `pnpm infra:worker:build`
+- [ ] After Finance code changes: `pnpm docker:prebuild:force`
+
+### Images required
+
+| Image | Built from |
+|-------|------------|
+| `stockix-webapp:local` | `services/stockix-finance/packages/webapp/Dockerfile` |
+| `stockix-server:local` | `services/stockix-finance/packages/server/Dockerfile` (target: `app`) |
+| `stockix-database-migration:local` | `services/stockix-finance/packages/server/Dockerfile` (target: `migration`) |
+| `stockix-nginx:local` | `services/stockix-finance/docker/nginx/` |
+
+Provisioning uses cached images (`docker compose up` without `--build`) except `database_migration`, which may rebuild when migrations change.
+
 ## Control plane
 
 - [ ] `packages/auth` deployed; `AUTH_TOKEN_SECRET` shared with POS/PMS tenant stacks

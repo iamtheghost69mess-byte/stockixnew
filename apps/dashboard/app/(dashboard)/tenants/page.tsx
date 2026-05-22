@@ -439,7 +439,14 @@ function TenantsPageContent() {
       }
     };
     es.addEventListener("provision", onProvision);
+    es.addEventListener("done", () => {
+      es.close();
+    });
+    es.addEventListener("ping", () => {
+      /* keep-alive; ignore payload */
+    });
     es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED) return;
       es.close();
     };
     return () => {

@@ -15,3 +15,5 @@ export const withCurrentOrganization = (mapState) => {
   };
   return connect(mapStateToProps);
 };
+
+export default withCurrentOrganization;

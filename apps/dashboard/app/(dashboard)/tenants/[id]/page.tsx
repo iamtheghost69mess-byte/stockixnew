@@ -548,6 +548,8 @@ export default function TenantDetailPage() {
         <TenantUsersPanel
           tenantId={tenant.id}
           financeLinked={
+            !isProvisioning &&
+            (tenant.deployment?.status ?? "").toLowerCase() === "active" &&
             tenant.deployment != null &&
             Number(tenant.deployment.internalPort) > 0
           }

@@ -24,10 +24,19 @@ const migrationsFolder = join(
 const sql = postgres(url, { max: 1, onnotice: () => {} });
 
 async function appliedHashes(): Promise<Set<string>> {
-  const rows = await sql<{ hash: string }[]>`
-    SELECT hash FROM drizzle.__drizzle_migrations
-  `;
-  return new Set(rows.map((r) => r.hash));
+  try {
+    const rows = await sql<{ hash: string }[]>`
+      SELECT hash FROM drizzle.__drizzle_migrations
+    `;
+    return new Set(rows.map((r) => r.hash));
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code: string }).code)
+        : "";
+    if (code === "42P01") return new Set();
+    throw error;
+  }
 }
 
 /** Mark journal entries applied when schema drift repair already created their objects. */

@@ -1,3 +1,8 @@
+/**
+ * Repairs partial migration state: knex may record later migrations while
+ * tenant_licenses was never created (e.g. after a failed provision + volume reuse).
+ */
+
 async function tenantLicensesTableExists(knex) {
   if (await knex.schema.hasTable('tenant_licenses')) {
     return true;
@@ -11,6 +16,7 @@ exports.up = async function (knex) {
   if (await tenantLicensesTableExists(knex)) {
     return;
   }
+
   try {
     await knex.schema.createTable('tenant_licenses', (table) => {
     table.increments('id').primary();
@@ -47,6 +53,6 @@ exports.up = async function (knex) {
   }
 };
 
-exports.down = function (knex) {
-  return knex.schema.dropTableIfExists('tenant_licenses');
+exports.down = function () {
+  return Promise.resolve();
 };

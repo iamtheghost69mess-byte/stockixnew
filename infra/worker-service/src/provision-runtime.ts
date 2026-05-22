@@ -14,7 +14,11 @@ import { defaultTenantEnvRoot } from "../domain/env-paths.js";
 import { getTenantStackPaths } from "../domain/provision-paths.js";
 import { createProvisionTracer } from "../domain/provision-trace.js";
 import { composeProjectName, tenantMysqlVolumeName } from "../domain/provisioning/compose-project-name.js";
-import { STOCKIX_FINANCE_HEALTH_TIMEOUT_MS } from "../domain/provisioning/constants.js";
+import {
+  COMPOSE_DOWN_TIMEOUT_MS,
+  resolveComposeStepTimeoutMs,
+  STOCKIX_FINANCE_HEALTH_TIMEOUT_MS,
+} from "../domain/provisioning/constants.js";
 import { MENA_DEFAULTS, type OrgBuildSettings } from "../domain/provisioning/adapters/fetch-stockix-finance-org-settings.js";
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
 import {
@@ -164,19 +168,31 @@ export async function executeProvisionRuntime(
       });
     }, 1000);
     try {
-      const timeoutMs =
-        args[0] === "run"
-          ? 10 * 60 * 1000
-          : args.includes("mysql") || args.includes("mongo") || args.includes("redis")
-            ? 5 * 60 * 1000
-            : 5 * 60 * 1000;
+      const timeoutMs = resolveComposeStepTimeoutMs(args);
+      let lastComposeTraceAt = 0;
       await deps.docker.run(
         composeCtx!.composeFile,
         composeCtx!.project,
         composeCtx!.envPath,
         composeCtx!.composeEnv,
         args,
-        { cancelSignal: controller.signal, timeoutMs },
+        {
+          cancelSignal: controller.signal,
+          timeoutMs,
+          onOutput: (chunk) => {
+            const now = Date.now();
+            if (now - lastComposeTraceAt < 4_000) return;
+            const line = chunk
+              .split(/\r?\n/)
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+              .pop();
+            if (!line) return;
+            if (!/pull|download|build|creating|starting|started|healthy/i.test(line)) return;
+            lastComposeTraceAt = now;
+            void trace.event("compose", line.slice(0, 240), { level: "info" });
+          },
+        },
       );
       log(`[compose] completed: docker compose ${args.join(" ")}`);
       await checkNotCancelled();
@@ -221,18 +237,6 @@ export async function executeProvisionRuntime(
       console.error(`[provision][${correlationId}] cleanup log failure step=${step}: ${msg}`);
     }
   };
-  const assertRequiredRuntimeEnv = async (pairs: Array<{ key: string; value: string }>) => {
-    const missing = pairs
-      .filter(({ value }) => value.trim().length === 0)
-      .map(({ key }) => key);
-    if (missing.length === 0) return;
-    await trace.event("preflight.validation", "Missing required runtime env for tenant provisioning", {
-      level: "error",
-      meta: { missing },
-    });
-    throw new Error(`provision_missing_runtime_env:${missing.join(",")}`);
-  };
-
   try {
     log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
     await checkNotCancelled();
@@ -251,23 +255,22 @@ export async function executeProvisionRuntime(
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
-    // Attachments module requires S3 config at startup (Backblaze B2 or MinIO).
-    const envOr = (name: string, fallback: string) => {
-      const v = process.env[name]?.trim();
-      return v && v.length > 0 ? v : fallback;
-    };
-    const s3Region = envOr("S3_REGION", "us-east-1");
-    const s3AccessKeyId = envOr("S3_ACCESS_KEY_ID", "local");
-    const s3SecretAccessKey = envOr("S3_SECRET_ACCESS_KEY", "local");
-    const s3Endpoint = envOr("S3_ENDPOINT", "http://localhost:9000");
-    const s3Bucket = envOr("S3_BUCKET", "stockix-local");
-    await assertRequiredRuntimeEnv([
-      { key: "S3_REGION", value: s3Region },
-      { key: "S3_ACCESS_KEY_ID", value: s3AccessKeyId },
-      { key: "S3_SECRET_ACCESS_KEY", value: s3SecretAccessKey },
-      { key: "S3_ENDPOINT", value: s3Endpoint },
-      { key: "S3_BUCKET", value: s3Bucket },
-    ]);
+    // S3 (Backblaze B2 / MinIO) is optional — empty values skip object storage; attachments need B2 in tenant .env.
+    const optionalEnv = (name: string) => process.env[name]?.trim() ?? "";
+    const s3Region = optionalEnv("S3_REGION") || "us-east-1";
+    const s3AccessKeyId = optionalEnv("S3_ACCESS_KEY_ID");
+    const s3SecretAccessKey = optionalEnv("S3_SECRET_ACCESS_KEY");
+    const s3Endpoint = optionalEnv("S3_ENDPOINT");
+    const s3Bucket = optionalEnv("S3_BUCKET");
+    const s3ForcePathStyle = optionalEnv("S3_FORCE_PATH_STYLE") || "true";
+    const s3Configured =
+      s3AccessKeyId.length > 0 &&
+      s3SecretAccessKey.length > 0 &&
+      s3Endpoint.length > 0 &&
+      s3Bucket.length > 0;
+    if (!s3Configured) {
+      log("[provision] S3 not configured — provisioning without object storage (attachments disabled).");
+    }
     const existingSlug = await db
       .select({ id: tenants.id })
       .from(tenants)
@@ -368,6 +371,7 @@ export async function executeProvisionRuntime(
       s3SecretAccessKey,
       s3Endpoint,
       s3Bucket,
+      s3ForcePathStyle,
       stockixTenantId: input.stockixTenantId,
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret,
@@ -404,7 +408,7 @@ export async function executeProvisionRuntime(
         composeCtx.envPath,
         composeCtx.composeEnv,
         ["down", "--remove-orphans", "-v", "--timeout", "10"],
-        { timeoutMs: 2 * 60 * 1000 },
+        { timeoutMs: COMPOSE_DOWN_TIMEOUT_MS },
       )
       .catch(() => undefined);
     await trace.event("preflight.cleanup", "completed", {
@@ -419,7 +423,6 @@ export async function executeProvisionRuntime(
         "-d",
         "--no-deps",
         "--remove-orphans",
-        "--build",
         "mysql",
         "mongo",
         "redis",
@@ -457,13 +460,11 @@ export async function executeProvisionRuntime(
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() },
       });
-      await runComposeWithCancellation(["build", "webapp"]);
       await runComposeWithCancellation([
         "up",
         "-d",
         "--remove-orphans",
         "--force-recreate",
-        "--build",
         "webapp",
         "nginx",
         "server",

@@ -3279,6 +3279,10 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     );
   }
 
+  const TERMINAL_JOB_STATUSES = new Set(["completed", "dead", "failed"]);
+  const STREAM_POLL_MS = 1500;
+  const STREAM_PING_MS = 12_000;
+
   return streamSSE(c, async (stream) => {
     const sent = new Set<string>();
     const forward = async (payload: ProvisionEventPayload) => {
@@ -3293,6 +3297,7 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     stream.onAbort(() => {
       closed = true;
     });
+    let lastPingAt = 0;
 
     while (!closed) {
       const rows = await db
@@ -3305,7 +3310,33 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
         await forward(rowToProvisionPayload(row));
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const streamJobs = await listTenantJobs(db, correlationId);
+      const lastJob = streamJobs[streamJobs.length - 1] ?? null;
+      const lastEvent = rows[rows.length - 1];
+      const terminalFromJob =
+        lastJob !== null && TERMINAL_JOB_STATUSES.has(lastJob.status);
+      const terminalFromEvent =
+        lastEvent?.phase === "complete" || lastEvent?.phase === "failed";
+
+      if (terminalFromJob || (terminalFromEvent && streamJobs.length === 0)) {
+        const status =
+          lastJob?.status === "completed" || lastEvent?.phase === "complete"
+            ? "complete"
+            : "failed";
+        await stream.writeSSE({
+          event: "done",
+          data: JSON.stringify({ status, correlationId }),
+        });
+        break;
+      }
+
+      const now = Date.now();
+      if (now - lastPingAt >= STREAM_PING_MS) {
+        await stream.writeSSE({ event: "ping", data: String(now) });
+        lastPingAt = now;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_MS));
     }
   });
 });

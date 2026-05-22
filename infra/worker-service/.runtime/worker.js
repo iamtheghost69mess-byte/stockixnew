@@ -6,7 +6,7 @@ var __export = (target, all) => {
 
 // ../../infra/worker-service/src/worker.ts
 import { randomUUID } from "crypto";
-import { execa as execa4 } from "execa";
+import { execa as execa5 } from "execa";
 
 // ../../packages/config/src/index.ts
 import path from "path";
@@ -176,6 +176,12 @@ var env = {
   INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
   /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
   WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1e3),
+  /** Max time (ms) for docker compose up/build/pull (first image pull can exceed 5m). */
+  DOCKER_COMPOSE_UP_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_UP_TIMEOUT_MS", 30 * 60 * 1e3),
+  /** Max time (ms) for docker compose run (migrations). */
+  DOCKER_COMPOSE_RUN_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_RUN_TIMEOUT_MS", 15 * 60 * 1e3),
+  /** Max time (ms) for other compose subcommands (down uses a fixed 2m in code). */
+  DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS", 10 * 60 * 1e3),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
   DB_CLIENT: readOptionalString("DB_CLIENT"),
   DB_HOST: readOptionalString("DB_HOST"),
@@ -330,6 +336,15 @@ var apiConfig = {
   },
   get workerJobExecutionTimeoutMs() {
     return env.WORKER_JOB_EXECUTION_TIMEOUT_MS;
+  },
+  get dockerComposeUpTimeoutMs() {
+    return env.DOCKER_COMPOSE_UP_TIMEOUT_MS;
+  },
+  get dockerComposeRunTimeoutMs() {
+    return env.DOCKER_COMPOSE_RUN_TIMEOUT_MS;
+  },
+  get dockerComposeDefaultTimeoutMs() {
+    return env.DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS;
   },
   get metricsEndpoint() {
     return env.METRICS_ENDPOINT;
@@ -3637,6 +3652,45 @@ async function processExpiringSoonWarnings(db, now) {
 // ../../infra/worker-service/src/worker.ts
 import { z as z2 } from "zod";
 
+// ../../infra/worker-service/domain/provisioning/check-tenant-images.ts
+import { execa } from "execa";
+
+// ../../infra/worker-service/domain/provisioning/required-tenant-images.ts
+var REQUIRED_STOCKIX_TENANT_IMAGES = [
+  "stockix-webapp:local",
+  "stockix-server:local",
+  "stockix-database-migration:local",
+  "stockix-nginx:local"
+];
+
+// ../../infra/worker-service/domain/provisioning/check-tenant-images.ts
+async function imageExists(tag) {
+  try {
+    await execa("docker", ["image", "inspect", tag], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function checkRequiredTenantImages() {
+  const missing = [];
+  for (const image of REQUIRED_STOCKIX_TENANT_IMAGES) {
+    if (!await imageExists(image)) {
+      missing.push(image);
+    }
+  }
+  if (missing.length > 0) {
+    console.warn("[worker] WARNING: Required tenant images not found:");
+    for (const img of missing) {
+      console.warn(`[worker]   - ${img}`);
+    }
+    console.warn("[worker] Run: pnpm docker:prebuild");
+    console.warn("[worker] Provisioning may build images during the job and time out.");
+    return;
+  }
+  console.log("[worker] All tenant images pre-built and ready.");
+}
+
 // ../../infra/worker-service/domain/provisioner.ts
 import { rm, stat } from "fs/promises";
 import { join as join8 } from "path";
@@ -3695,7 +3749,7 @@ function tenantMysqlVolumeName(slug) {
 import { mkdir as mkdir2 } from "fs/promises";
 import { join as join6 } from "path";
 import { createCipheriv, randomBytes as randomBytes3 } from "crypto";
-import { execa as execa2 } from "execa";
+import { execa as execa3 } from "execa";
 import { asc, eq as eq7 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/provision-trace.ts
@@ -3729,6 +3783,16 @@ function createProvisionTracer(db, correlationId, getContext, log) {
 // ../../infra/worker-service/domain/provisioning/constants.ts
 var STOCKIX_FINANCE_HEALTH_TIMEOUT_MS = 18e4;
 var STOCKIX_FINANCE_HEALTH_POLL_MS = 2e3;
+var COMPOSE_DOWN_TIMEOUT_MS = 2 * 60 * 1e3;
+function resolveComposeStepTimeoutMs(args) {
+  const subcommand = args[0];
+  if (subcommand === "down") return COMPOSE_DOWN_TIMEOUT_MS;
+  if (subcommand === "run") return apiConfig.dockerComposeRunTimeoutMs;
+  if (subcommand === "up" || subcommand === "build" || subcommand === "pull") {
+    return apiConfig.dockerComposeUpTimeoutMs;
+  }
+  return apiConfig.dockerComposeDefaultTimeoutMs;
+}
 
 // ../../infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-org-settings.ts
 var MENA_DEFAULTS = {
@@ -3907,7 +3971,7 @@ function buildTenantEnvMap(params) {
     S3_SECRET_ACCESS_KEY: params.s3SecretAccessKey,
     S3_ENDPOINT: params.s3Endpoint,
     S3_BUCKET: params.s3Bucket,
-    S3_FORCE_PATH_STYLE: "false",
+    S3_FORCE_PATH_STYLE: params.s3ForcePathStyle,
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
@@ -4055,7 +4119,7 @@ async function provisionChatwootAccount(opts) {
 
 // ../../infra/worker-service/src/module-stacks.ts
 import { join as join5 } from "path";
-import { execa } from "execa";
+import { execa as execa2 } from "execa";
 function repoRoot() {
   return apiConfig.repoRoot ?? process.cwd();
 }
@@ -4074,7 +4138,7 @@ async function provisionPosStack(opts) {
   const project = `stockix-pos-${opts.slug}`;
   const posAppRoot = process.env.POS_APP_ROOT ?? join5(repoRoot(), "services", "posnew");
   opts.log(`[provision][pos] compose up project=${project}`);
-  await execa(
+  await execa2(
     "docker",
     ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
     {
@@ -4094,7 +4158,7 @@ async function provisionPmsStack(opts) {
   const project = `stockix-pms-${opts.slug}`;
   const pmsAppRoot = process.env.PMS_APP_ROOT ?? join5(repoRoot(), "services", "pms");
   opts.log(`[provision][pms] compose up project=${project}`);
-  await execa(
+  await execa2(
     "docker",
     ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
     {
@@ -4138,7 +4202,7 @@ async function loadProvisionJournal(db, correlationId) {
 }
 async function resolveServerInternalUrl(params) {
   try {
-    const { stdout } = await execa2(
+    const { stdout } = await execa3(
       "docker",
       [
         "compose",
@@ -4212,14 +4276,27 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       });
     }, 1e3);
     try {
-      const timeoutMs = args[0] === "run" ? 10 * 60 * 1e3 : args.includes("mysql") || args.includes("mongo") || args.includes("redis") ? 5 * 60 * 1e3 : 5 * 60 * 1e3;
+      const timeoutMs = resolveComposeStepTimeoutMs(args);
+      let lastComposeTraceAt = 0;
       await deps.docker.run(
         composeCtx.composeFile,
         composeCtx.project,
         composeCtx.envPath,
         composeCtx.composeEnv,
         args,
-        { cancelSignal: controller.signal, timeoutMs }
+        {
+          cancelSignal: controller.signal,
+          timeoutMs,
+          onOutput: (chunk) => {
+            const now = Date.now();
+            if (now - lastComposeTraceAt < 4e3) return;
+            const line = chunk.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0).pop();
+            if (!line) return;
+            if (!/pull|download|build|creating|starting|started|healthy/i.test(line)) return;
+            lastComposeTraceAt = now;
+            void trace.event("compose", line.slice(0, 240), { level: "info" });
+          }
+        }
       );
       log(`[compose] completed: docker compose ${args.join(" ")}`);
       await checkNotCancelled();
@@ -4261,15 +4338,6 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       console.error(`[provision][${correlationId}] cleanup log failure step=${step}: ${msg}`);
     }
   };
-  const assertRequiredRuntimeEnv = async (pairs) => {
-    const missing = pairs.filter(({ value }) => value.trim().length === 0).map(({ key }) => key);
-    if (missing.length === 0) return;
-    await trace.event("preflight.validation", "Missing required runtime env for tenant provisioning", {
-      level: "error",
-      meta: { missing }
-    });
-    throw new Error(`provision_missing_runtime_env:${missing.join(",")}`);
-  };
   try {
     log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
     await checkNotCancelled();
@@ -4284,22 +4352,17 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
-    const envOr = (name, fallback) => {
-      const v = process.env[name]?.trim();
-      return v && v.length > 0 ? v : fallback;
-    };
-    const s3Region = envOr("S3_REGION", "us-east-1");
-    const s3AccessKeyId = envOr("S3_ACCESS_KEY_ID", "local");
-    const s3SecretAccessKey = envOr("S3_SECRET_ACCESS_KEY", "local");
-    const s3Endpoint = envOr("S3_ENDPOINT", "http://localhost:9000");
-    const s3Bucket = envOr("S3_BUCKET", "stockix-local");
-    await assertRequiredRuntimeEnv([
-      { key: "S3_REGION", value: s3Region },
-      { key: "S3_ACCESS_KEY_ID", value: s3AccessKeyId },
-      { key: "S3_SECRET_ACCESS_KEY", value: s3SecretAccessKey },
-      { key: "S3_ENDPOINT", value: s3Endpoint },
-      { key: "S3_BUCKET", value: s3Bucket }
-    ]);
+    const optionalEnv = (name) => process.env[name]?.trim() ?? "";
+    const s3Region = optionalEnv("S3_REGION") || "us-east-1";
+    const s3AccessKeyId = optionalEnv("S3_ACCESS_KEY_ID");
+    const s3SecretAccessKey = optionalEnv("S3_SECRET_ACCESS_KEY");
+    const s3Endpoint = optionalEnv("S3_ENDPOINT");
+    const s3Bucket = optionalEnv("S3_BUCKET");
+    const s3ForcePathStyle = optionalEnv("S3_FORCE_PATH_STYLE") || "true";
+    const s3Configured = s3AccessKeyId.length > 0 && s3SecretAccessKey.length > 0 && s3Endpoint.length > 0 && s3Bucket.length > 0;
+    if (!s3Configured) {
+      log("[provision] S3 not configured \u2014 provisioning without object storage (attachments disabled).");
+    }
     const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq7(tenants.slug, input.slug)).limit(1);
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
@@ -4389,6 +4452,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       s3SecretAccessKey,
       s3Endpoint,
       s3Bucket,
+      s3ForcePathStyle,
       stockixTenantId: input.stockixTenantId,
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret
@@ -4401,7 +4465,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
     await checkNotCancelled();
-    const staleContainersRaw = await execa2(
+    const staleContainersRaw = await execa3(
       "docker",
       ["ps", "-a", "--filter", `name=${project}`, "--format", "{{.Names}}"],
       { stdio: "pipe" }
@@ -4419,7 +4483,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       composeCtx.envPath,
       composeCtx.composeEnv,
       ["down", "--remove-orphans", "-v", "--timeout", "10"],
-      { timeoutMs: 2 * 60 * 1e3 }
+      { timeoutMs: COMPOSE_DOWN_TIMEOUT_MS }
     ).catch(() => void 0);
     await trace.event("preflight.cleanup", "completed", {
       meta: { composeProjectName: project }
@@ -4433,7 +4497,6 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         "-d",
         "--no-deps",
         "--remove-orphans",
-        "--build",
         "mysql",
         "mongo",
         "redis"
@@ -4471,13 +4534,11 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() }
       });
-      await runComposeWithCancellation(["build", "webapp"]);
       await runComposeWithCancellation([
         "up",
         "-d",
         "--remove-orphans",
         "--force-recreate",
-        "--build",
         "webapp",
         "nginx",
         "server"
@@ -4866,7 +4927,7 @@ var CryptoTenantSecretGenerator = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/execa-docker-compose-runner.ts
-import { execa as execa3 } from "execa";
+import { execa as execa4 } from "execa";
 var ExecaDockerComposeRunner = class {
   async run(composeFile, project, envFile, composeEnv, args, options) {
     const execaOptions = {
@@ -4876,7 +4937,7 @@ var ExecaDockerComposeRunner = class {
       forceKillAfterDelay: 500,
       timeout: options?.timeoutMs
     };
-    const subprocess = execa3(
+    const subprocess = execa4(
       "docker",
       ["compose", "-f", composeFile, "-p", project, "--env-file", envFile, ...args],
       execaOptions
@@ -4886,7 +4947,7 @@ var ExecaDockerComposeRunner = class {
     if (cancelSignal) {
       abortHandler = () => {
         if (process.platform === "win32" && typeof subprocess.pid === "number") {
-          void execa3("taskkill", ["/PID", String(subprocess.pid), "/T", "/F"]).catch(() => void 0);
+          void execa4("taskkill", ["/PID", String(subprocess.pid), "/T", "/F"]).catch(() => void 0);
           return;
         }
         subprocess.kill("SIGKILL");
@@ -4896,6 +4957,17 @@ var ExecaDockerComposeRunner = class {
       } else {
         cancelSignal.addEventListener("abort", abortHandler, { once: true });
       }
+    }
+    const onOutput = options?.onOutput;
+    if (onOutput && subprocess.stdout) {
+      subprocess.stdout.on("data", (chunk) => {
+        onOutput(chunk.toString("utf8"));
+      });
+    }
+    if (onOutput && subprocess.stderr) {
+      subprocess.stderr.on("data", (chunk) => {
+        onOutput(chunk.toString("utf8"));
+      });
     }
     try {
       await subprocess;
@@ -5968,7 +6040,7 @@ async function runTenantLifecycleCommand(db, job, command) {
   if (!row || !row.composeProjectName) {
     throw new Error("tenant_not_found");
   }
-  await execa4("docker", ["compose", "-p", row.composeProjectName, command], {
+  await execa5("docker", ["compose", "-p", row.composeProjectName, command], {
     timeout: 6e4
   });
 }
@@ -6009,6 +6081,11 @@ async function loop() {
       `[worker] ${error instanceof Error ? error.message : String(error)} \u2014 start the API (pnpm dev apps) then restart the worker.`
     );
     process.exit(1);
+  });
+  await checkRequiredTenantImages().catch((error) => {
+    console.warn(
+      `[worker] image pre-check failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   });
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {

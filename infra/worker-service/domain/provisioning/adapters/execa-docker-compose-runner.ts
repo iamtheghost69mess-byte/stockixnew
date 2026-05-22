@@ -43,6 +43,17 @@ export class ExecaDockerComposeRunner implements IDockerComposeRunner {
         cancelSignal.addEventListener("abort", abortHandler, { once: true });
       }
     }
+    const onOutput = options?.onOutput;
+    if (onOutput && subprocess.stdout) {
+      subprocess.stdout.on("data", (chunk: Buffer) => {
+        onOutput(chunk.toString("utf8"));
+      });
+    }
+    if (onOutput && subprocess.stderr) {
+      subprocess.stderr.on("data", (chunk: Buffer) => {
+        onOutput(chunk.toString("utf8"));
+      });
+    }
     try {
       await subprocess;
     } finally {

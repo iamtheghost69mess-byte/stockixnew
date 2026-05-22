@@ -1,6 +1,6 @@
-@import './normalize.scss';
+@import './normalize';
 
-@import './Base.scss';
+@import './_base.scss';
 
 // Blueprint framework.
 @import '@blueprintjs/core/src/blueprint.scss';
@@ -14,7 +14,7 @@
 @import 'objects/switch';
 @import 'objects/typography';
 @import 'objects/buttons';
-@import 'objects/Stockix';
+@import 'objects/Bigcapital';
 
 // Components
 @import 'components/CustomScrollbar';
@@ -29,7 +29,6 @@
 @import 'components/Overlay';
 @import 'components/Menu';
 @import 'components/SidebarOverlay';
-@import 'components/UniversalSearch';
 
 // Pages
 @import 'pages/view-form';

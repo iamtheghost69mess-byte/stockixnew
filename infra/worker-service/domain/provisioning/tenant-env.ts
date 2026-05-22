@@ -18,6 +18,7 @@ export type TenantEnvFileParams = {
   s3SecretAccessKey: string;
   s3Endpoint: string;
   s3Bucket: string;
+  s3ForcePathStyle: string;
   stockixTenantId?: string;
   stockixApiUrl?: string;
   internalApiSecret?: string;
@@ -83,7 +84,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     S3_SECRET_ACCESS_KEY: params.s3SecretAccessKey,
     S3_ENDPOINT: params.s3Endpoint,
     S3_BUCKET: params.s3Bucket,
-    S3_FORCE_PATH_STYLE: "false",
+    S3_FORCE_PATH_STYLE: params.s3ForcePathStyle,
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",

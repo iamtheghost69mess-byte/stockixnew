@@ -15,6 +15,7 @@ import {
 import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
 import { processLicenseExpiryFollowUp } from "../../../apps/api/src/license-expire-followup.js";
 import { z } from "zod";
+import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import {
   deprovisionTenant,
   provisionTenant,
@@ -507,6 +508,11 @@ async function loop() {
       `[worker] ${error instanceof Error ? error.message : String(error)} — start the API (pnpm dev apps) then restart the worker.`,
     );
     process.exit(1);
+  });
+  await checkRequiredTenantImages().catch((error) => {
+    console.warn(
+      `[worker] image pre-check failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   });
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {

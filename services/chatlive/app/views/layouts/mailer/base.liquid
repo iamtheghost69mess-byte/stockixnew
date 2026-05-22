@@ -91,8 +91,11 @@
   </head>
 
   {% assign brand_name = global_config['BRAND_NAME'] %}
-  {% if brand_name == nil %}
-    {% assign brand_name = 'Chatwoot' %}
+  {% if brand_name == nil or brand_name == '' %}
+    {% assign brand_name = global_config['INSTALLATION_NAME'] %}
+  {% endif %}
+  {% if brand_name == nil or brand_name == '' %}
+    {% assign brand_name = 'Stockix' %}
   {% endif %}
   {% assign brand_url = global_config['BRAND_URL'] %}
 

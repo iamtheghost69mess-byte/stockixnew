@@ -192,6 +192,12 @@ export const env = {
   INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
   /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
   WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1000),
+  /** Max time (ms) for docker compose up/build/pull (first image pull can exceed 5m). */
+  DOCKER_COMPOSE_UP_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_UP_TIMEOUT_MS", 30 * 60 * 1000),
+  /** Max time (ms) for docker compose run (migrations). */
+  DOCKER_COMPOSE_RUN_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_RUN_TIMEOUT_MS", 15 * 60 * 1000),
+  /** Max time (ms) for other compose subcommands (down uses a fixed 2m in code). */
+  DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS", 10 * 60 * 1000),
   WORKER_JOB_ID: readOptionalString("WORKER_JOB_ID"),
   DB_CLIENT: readOptionalString("DB_CLIENT"),
   DB_HOST: readOptionalString("DB_HOST"),
@@ -349,6 +355,15 @@ export const apiConfig = {
   },
   get workerJobExecutionTimeoutMs() {
     return env.WORKER_JOB_EXECUTION_TIMEOUT_MS;
+  },
+  get dockerComposeUpTimeoutMs() {
+    return env.DOCKER_COMPOSE_UP_TIMEOUT_MS;
+  },
+  get dockerComposeRunTimeoutMs() {
+    return env.DOCKER_COMPOSE_RUN_TIMEOUT_MS;
+  },
+  get dockerComposeDefaultTimeoutMs() {
+    return env.DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS;
   },
   get metricsEndpoint() {
     return env.METRICS_ENDPOINT;
