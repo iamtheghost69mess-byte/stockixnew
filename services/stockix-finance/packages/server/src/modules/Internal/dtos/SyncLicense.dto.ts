@@ -22,8 +22,8 @@ export class SyncLicenseDto {
   @IsNotEmpty()
   planSlug: string;
 
-  @ApiProperty({ enum: ['active', 'expired', 'suspended', 'grace'] })
-  @IsEnum(['active', 'expired', 'suspended', 'grace'])
+  @ApiProperty({ enum: ['active', 'expired', 'suspended', 'grace', 'revoked'] })
+  @IsEnum(['active', 'expired', 'suspended', 'grace', 'revoked'])
   status: TenantLicenseStatus;
 
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })

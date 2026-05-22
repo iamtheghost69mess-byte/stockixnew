@@ -18,6 +18,9 @@ export class LicenseService {
     if (license.isPerpetual) {
       return 'active';
     }
+    if (license.status === 'revoked') {
+      return 'revoked';
+    }
     if (license.status === 'suspended') {
       return 'suspended';
     }

@@ -13,7 +13,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 export type FinanceLicenseSyncPayload = {
   tenantId: number;
   planSlug: string;
-  status: "active" | "expired" | "suspended" | "grace";
+  status: "active" | "expired" | "suspended" | "grace" | "revoked";
   validFrom: string;
   expiresAt: string | null;
   gracePeriodDays: number;
@@ -30,7 +30,7 @@ type LicenseStatusInput = {
   gracePeriodDays: number;
 };
 
-function mapStockixLicenseStatus(
+export function mapStockixLicenseStatus(
   license: LicenseStatusInput | null | undefined,
   tenantStatus?: string,
 ): FinanceLicenseSyncPayload["status"] {
@@ -41,7 +41,7 @@ function mapStockixLicenseStatus(
     return "active";
   }
   if (license.status === "revoked") {
-    return "suspended";
+    return "revoked";
   }
   if (license.isPerpetual) {
     return "active";

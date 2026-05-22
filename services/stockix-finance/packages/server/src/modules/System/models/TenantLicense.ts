@@ -1,7 +1,12 @@
 import { BaseModel } from '@/models/Model';
 import { Model } from 'objection';
 
-export type TenantLicenseStatus = 'active' | 'expired' | 'suspended' | 'grace';
+export type TenantLicenseStatus =
+  | 'active'
+  | 'expired'
+  | 'suspended'
+  | 'grace'
+  | 'revoked';
 
 export class TenantLicense extends BaseModel {
   public readonly id!: number;

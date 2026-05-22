@@ -6,9 +6,11 @@ export default function SuspendedOverlay() {
   const { data } = useDashboardMeta({ enabled: true });
   const status = data?.licenseStatus ?? data?.license_status;
 
-  if (status !== 'suspended') {
+  if (status !== 'suspended' && status !== 'revoked') {
     return null;
   }
+
+  const isRevoked = status === 'revoked';
 
   return (
     <div
@@ -26,10 +28,13 @@ export default function SuspendedOverlay() {
       }}
     >
       <div>
-        <h2 style={{ marginBottom: '1rem' }}>Account suspended</h2>
+        <h2 style={{ marginBottom: '1rem' }}>
+          {isRevoked ? 'License revoked' : 'Account suspended'}
+        </h2>
         <p>
-          Your account has been suspended. Contact your provider to restore
-          access.
+          {isRevoked
+            ? 'Your license has been permanently revoked. Please contact your provider.'
+            : 'Your account has been suspended. Contact your provider to restore access.'}
         </p>
       </div>
     </div>

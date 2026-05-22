@@ -53,7 +53,8 @@ export class InternalLicenseController {
     if (
       status === 'expired' ||
       status === 'suspended' ||
-      status === 'grace'
+      status === 'grace' ||
+      status === 'revoked'
     ) {
       return status;
     }

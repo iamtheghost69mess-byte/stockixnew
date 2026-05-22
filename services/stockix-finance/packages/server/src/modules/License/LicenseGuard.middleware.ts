@@ -74,6 +74,15 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       return next();
     }
 
+    if (effectiveStatus === 'revoked') {
+      res.status(HttpStatus.PAYMENT_REQUIRED).json({
+        error: 'LICENSE_REVOKED',
+        message: 'License permanently revoked. Contact your provider.',
+        statusCode: HttpStatus.PAYMENT_REQUIRED,
+      });
+      return;
+    }
+
     if (effectiveStatus === 'suspended') {
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
         error: 'LICENSE_SUSPENDED',
