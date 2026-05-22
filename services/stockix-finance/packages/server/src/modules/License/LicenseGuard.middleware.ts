@@ -8,8 +8,27 @@ import { ClsService } from 'nestjs-cls';
 import { LicenseService } from './License.service';
 import { TenantModel } from '@/modules/System/models/TenantModel';
 import { Inject } from '@nestjs/common';
+import { LicenseStatus } from './License.types';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+const LICENSE_CACHE_TTL_MS = 60_000;
+
+type LicenseCacheEntry = {
+  effectiveStatus: LicenseStatus | null;
+  cachedAt: number;
+};
+
+/** In-memory license status cache per tenant (hot path — avoids DB hit every request). */
+const licenseCache = new Map<number, LicenseCacheEntry>();
+
+const PUBLIC_PATH_PREFIXES = [
+  '/api/internal',
+  '/api/auth',
+  '/api/ping',
+  '/api/health',
+  '/swagger',
+];
 
 @Injectable()
 export class LicenseGuardMiddleware implements NestMiddleware {
@@ -23,11 +42,7 @@ export class LicenseGuardMiddleware implements NestMiddleware {
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     const path = req.originalUrl ?? req.url ?? '';
 
-    if (
-      path.includes('/api/internal') ||
-      path.includes('/api/auth') ||
-      path.includes('/api/ping')
-    ) {
+    if (PUBLIC_PATH_PREFIXES.some((prefix) => path.includes(prefix))) {
       return next();
     }
 
@@ -47,13 +62,13 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       return next();
     }
 
-    const license = await this.licenseService.findByTenantId(tenant.id);
-    if (!license) {
+    const effectiveStatus = await this.resolveEffectiveStatusCached(tenant.id);
+    if (!effectiveStatus) {
       return next();
     }
 
-    const effectiveStatus = this.licenseService.resolveEffectiveStatus(license);
-    (req as Request & { licenseStatus?: string }).licenseStatus = effectiveStatus;
+    (req as Request & { licenseStatus?: string }).licenseStatus =
+      effectiveStatus;
 
     if (effectiveStatus === 'active') {
       return next();
@@ -63,6 +78,7 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
         error: 'LICENSE_SUSPENDED',
         message: 'Account suspended. Contact your provider.',
+        statusCode: HttpStatus.PAYMENT_REQUIRED,
       });
       return;
     }
@@ -71,6 +87,7 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
         error: 'LICENSE_EXPIRED',
         message: 'License expired. Contact your provider.',
+        statusCode: HttpStatus.PAYMENT_REQUIRED,
       });
       return;
     }
@@ -83,10 +100,37 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
         error: 'LICENSE_GRACE',
         message: 'License in grace period. Upgrade to continue editing.',
+        statusCode: HttpStatus.PAYMENT_REQUIRED,
       });
       return;
     }
 
     return next();
+  }
+
+  private async resolveEffectiveStatusCached(
+    tenantId: number,
+  ): Promise<LicenseStatus | null> {
+    const cached = licenseCache.get(tenantId);
+    if (cached && Date.now() - cached.cachedAt < LICENSE_CACHE_TTL_MS) {
+      return cached.effectiveStatus;
+    }
+
+    const license = await this.licenseService.findByTenantId(tenantId);
+    if (!license) {
+      licenseCache.set(tenantId, {
+        effectiveStatus: null,
+        cachedAt: Date.now(),
+      });
+      return null;
+    }
+
+    const effectiveStatus =
+      this.licenseService.resolveEffectiveStatus(license);
+    licenseCache.set(tenantId, {
+      effectiveStatus,
+      cachedAt: Date.now(),
+    });
+    return effectiveStatus;
   }
 }

@@ -34,9 +34,9 @@ jobs:
         image: mariadb:10.6
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: bigcapital_system
-          MYSQL_USER: bigcapital
-          MYSQL_PASSWORD: bigcapital
+          MYSQL_DATABASE: stockix_system
+          MYSQL_USER: stockix
+          MYSQL_PASSWORD: stockix
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
@@ -83,16 +83,16 @@ jobs:
           cat > packages/server/.env << EOF
           # Database
           DB_HOST=127.0.0.1
-          DB_USER=bigcapital
-          DB_PASSWORD=bigcapital
+          DB_USER=stockix
+          DB_PASSWORD=stockix
           DB_ROOT_PASSWORD=root
           DB_CHARSET=utf8
 
           # System database
-          SYSTEM_DB_NAME=bigcapital_system
+          SYSTEM_DB_NAME=stockix_system
 
           # Tenant databases
-          TENANT_DB_NAME_PERFIX=bigcapital_tenant_
+          TENANT_DB_NAME_PERFIX=stockix_tenant_
 
           # Application
           BASE_URL=http://localhost:3000
@@ -119,8 +119,8 @@ jobs:
           # Mail (placeholder values for E2E tests)
           MAIL_HOST=localhost
           MAIL_PORT=1025
-          MAIL_FROM_NAME=Bigcapital
-          MAIL_FROM_ADDRESS=test@bigcapital.app
+          MAIL_FROM_NAME=Stockix
+          MAIL_FROM_ADDRESS=test@stockix.cloud
           EOF
 
       - name: Run database migrations

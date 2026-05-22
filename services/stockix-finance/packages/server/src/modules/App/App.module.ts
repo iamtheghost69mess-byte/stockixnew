@@ -42,6 +42,7 @@ import { SerializeInterceptor } from '@/common/interceptors/serialize.intercepto
 import { ToJsonInterceptor } from '@/common/interceptors/to-json.interceptor';
 import { ValidationPipe } from '@/common/pipes/ClassValidation.pipe';
 import { ServiceErrorFilter } from '@/common/filters/service-error.filter';
+import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter';
 import { ModelHasRelationsFilter } from '@/common/filters/model-has-relations.filter';
 import { ChromiumlyTenancyModule } from '../ChromiumlyTenancy/ChromiumlyTenancy.module';
 import { CustomersModule } from '../Customers/Customers.module';
@@ -289,6 +290,10 @@ import { AppThrottleModule } from './AppThrottle.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: ExcludeNullInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
     },
     {
       provide: APP_FILTER,

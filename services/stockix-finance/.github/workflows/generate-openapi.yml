@@ -22,8 +22,8 @@ env:
   DB_USER: root
   DB_PASSWORD: root
   DB_CHARSET: utf8
-  SYSTEM_DB_NAME: bigcapital_system
-  TENANT_DB_NAME_PERFIX: bigcapital_tenant_
+  SYSTEM_DB_NAME: stockix_system
+  TENANT_DB_NAME_PERFIX: stockix_tenant_
   # Redis configuration
   REDIS_HOST: 127.0.0.1
   REDIS_PORT: 6379
@@ -71,7 +71,7 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: bigcapital_system
+          MYSQL_DATABASE: stockix_system
         ports:
           - 3306:3306
         options: >-

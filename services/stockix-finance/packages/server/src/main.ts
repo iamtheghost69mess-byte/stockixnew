@@ -11,6 +11,29 @@ global.__static_dirname = path.join(__dirname, '../static');
 global.__views_dirname = path.join(global.__static_dirname, '/views');
 global.__images_dirname = path.join(global.__static_dirname, '/images');
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      type: 'unhandled_rejection',
+      reason: reason instanceof Error ? reason.message : String(reason),
+      promise: String(promise),
+    }),
+  );
+});
+
+process.on('uncaughtException', (error) => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      type: 'uncaught_exception',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    }),
+  );
+  process.exit(1);
+});
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,

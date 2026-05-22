@@ -29,7 +29,13 @@ const providers = [
       seeds: {
         directory: configService.get('systemDatabase.seedsDir'),
       },
-      pool: { min: 0, max: 7 },
+      pool: {
+        min: 0,
+        max: 7,
+        acquireTimeoutMillis: 30_000,
+        createTimeoutMillis: 10_000,
+        idleTimeoutMillis: 30_000,
+      },
       ...knexSnakeCaseMappers({ upperCase: true }),
     }),
   },

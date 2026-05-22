@@ -45,9 +45,9 @@ services:
 volumes:
   mysql:
     # Override with MYSQL_VOLUME_NAME in .env to isolate dev stacks from other Compose projects.
-    name: ${MYSQL_VOLUME_NAME:-bigcapital_dev_mysql}
+    name: ${MYSQL_VOLUME_NAME:-stockix_dev_mysql}
     driver: local
 
   redis:
-    name: bigcapital_dev_redis
+    name: stockix_dev_redis
     driver: local

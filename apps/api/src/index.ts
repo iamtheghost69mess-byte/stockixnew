@@ -88,6 +88,7 @@ import {
   getTenantReadiness,
   invalidateTenantReadinessCache,
 } from "./provisioning/readiness-engine.js";
+import { securityHeadersMiddleware } from "./middleware/security-headers.js";
 
 const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
@@ -527,6 +528,8 @@ app.use(
     allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
   }),
 );
+
+app.use("/*", securityHeadersMiddleware);
 
 app.use("/*", async (c, next) => {
   const requestId = c.req.header("x-request-id")
@@ -4737,6 +4740,29 @@ function startReadinessReconciler() {
 
 registerLicenseApi(app, db);
 registerTenantFinanceUsersApi(app, db);
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error(
+    JSON.stringify({
+      level: "error",
+      type: "unhandled_rejection",
+      reason: reason instanceof Error ? reason.message : String(reason),
+      promise: String(promise),
+    }),
+  );
+});
+
+process.on("uncaughtException", (error) => {
+  console.error(
+    JSON.stringify({
+      level: "error",
+      type: "uncaught_exception",
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    }),
+  );
+  process.exit(1);
+});
 
 const port = apiConfig.port;
 startReadinessReconciler();

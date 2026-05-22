@@ -19,7 +19,8 @@ var configDir = path.dirname(fileURLToPath(import.meta.url));
 var monorepoRoot = path.join(configDir, "..", "..", "..");
 var rootEnv = path.join(monorepoRoot, ".env");
 var rootEnvLocal = path.join(monorepoRoot, ".env.local");
-var shouldLoadRootDotenv = process.env.STOCKIX_LOAD_ROOT_ENV === "1" || process.env.VITEST !== "true";
+var loadRootEnvFlag = process.env.STOCKIX_LOAD_ROOT_ENV?.trim().toLowerCase();
+var shouldLoadRootDotenv = loadRootEnvFlag === "0" || loadRootEnvFlag === "false" ? false : loadRootEnvFlag === "1" || process.env.VITEST !== "true";
 if (shouldLoadRootDotenv) {
   if (existsSync(rootEnv)) {
     loadEnv({ path: rootEnv, override: false });
@@ -213,6 +214,15 @@ var env = {
   BASE_URL: readOptionalString("BASE_URL"),
   npm_package_json: readOptionalString("npm_package_json"),
   npm_package_type: readOptionalString("npm_package_type")
+};
+var mailConfig = {
+  host: env.MAIL_HOST ?? "",
+  port: parseInt(env.MAIL_PORT ?? "587", 10),
+  username: env.MAIL_USERNAME ?? "",
+  password: env.MAIL_PASSWORD ?? "",
+  secure: env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1",
+  fromName: env.MAIL_FROM_NAME ?? "Stockix",
+  fromAddress: env.MAIL_FROM_ADDRESS ?? ""
 };
 var apiConfig = {
   get databaseUrl() {
