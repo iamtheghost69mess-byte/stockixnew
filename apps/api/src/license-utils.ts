@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { apiConfig } from "@repo/config";
-import { licenses, plans } from "@repo/db/schema";
+import { licenseHistory, licenses, plans } from "@repo/db/schema";
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -107,6 +107,96 @@ export async function isLicenseLimitsConsistentWithPlan(
     license.maxOrganizations === planLimits.maxOrganizations
     && license.maxActivations === planLimits.maxActivations
   );
+}
+
+export type LicenseHistoryAction =
+  | "generated"
+  | "assigned"
+  | "revoked"
+  | "extended"
+  | "activated"
+  | "deactivated"
+  | "plan_changed"
+  | "limits_changed"
+  | "synced_to_finance"
+  | "expired_by_worker"
+  | "notes_updated";
+
+export interface LicenseHistoryEntry {
+  licenseId: string;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  action: LicenseHistoryAction;
+  previousValues?: Record<string, unknown> | null;
+  newValues?: Record<string, unknown> | null;
+  notes?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
+
+export function parseLicenseHistoryJson(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function licenseHistorySnapshot(license: {
+  product?: string;
+  planSlug?: string;
+  status?: string;
+  tenantId?: string | null;
+  isPerpetual?: boolean;
+  expiresAt?: Date | null;
+  maxOrganizations?: number;
+  maxActivations?: number;
+  activationCount?: number;
+  notes?: string | null;
+}): Record<string, unknown> {
+  return {
+    product: license.product,
+    planSlug: license.planSlug,
+    status: license.status,
+    tenantId: license.tenantId ?? null,
+    isPerpetual: license.isPerpetual,
+    expiresAt: license.expiresAt?.toISOString() ?? null,
+    maxOrganizations: license.maxOrganizations,
+    maxActivations: license.maxActivations,
+    activationCount: license.activationCount,
+    notes: license.notes ?? null,
+  };
+}
+
+/**
+ * Inserts a license history record. Never throws — history loss must not block main ops.
+ */
+export async function insertLicenseHistory(
+  db: PlanLimitsDb,
+  entry: LicenseHistoryEntry,
+): Promise<void> {
+  try {
+    await db.insert(licenseHistory).values({
+      licenseId: entry.licenseId,
+      actorId: entry.actorId ?? null,
+      actorEmail: entry.actorEmail ?? null,
+      action: entry.action,
+      previousValues: entry.previousValues
+        ? JSON.stringify(entry.previousValues)
+        : null,
+      newValues: entry.newValues ? JSON.stringify(entry.newValues) : null,
+      notes: entry.notes ?? null,
+      ipAddress: entry.ipAddress ?? null,
+      userAgent: entry.userAgent ?? null,
+    });
+  } catch (err) {
+    console.error("[LicenseHistory] Failed to insert:", err);
+  }
 }
 
 const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

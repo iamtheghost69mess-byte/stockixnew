@@ -2,6 +2,7 @@ import { licenses } from "@repo/db/schema";
 import { and, eq, gte, isNotNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { insertLicenseHistory } from "./license-utils.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 import {
   sendLicenseExpiredEmailForTenant,
@@ -32,6 +33,14 @@ export async function processLicenseExpiryFollowUp(
   const now = opts.now ?? new Date();
 
   for (const license of opts.justExpired) {
+    await insertLicenseHistory(db, {
+      licenseId: license.id,
+      action: "expired_by_worker",
+      previousValues: { status: "active" },
+      newValues: { status: "expired" },
+      notes: "Automatically expired by worker cron",
+    });
+
     if (!license.tenantId) continue;
 
     try {

@@ -5,6 +5,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import {
   getActiveLicenseForTenant,
+  insertLicenseHistory,
   isLicenseLimitsConsistentWithPlan,
 } from "./license-utils.js";
 
@@ -199,6 +200,20 @@ export async function syncFinanceLicenseForStockixTenant(
     }
 
     log(`[finance-license] Synced license for finance tenant ${params.financeTenantId}`);
+
+    if (license) {
+      await insertLicenseHistory(db, {
+        licenseId: license.id,
+        action: "synced_to_finance",
+        newValues: {
+          syncedStatus: payload.status,
+          maxOrganizations: payload.maxOrganizations,
+          maxUsers: payload.maxUsers,
+          maxActivations: payload.maxActivations,
+          planSlug: payload.planSlug,
+        },
+      });
+    }
   } catch (error) {
     log(
       `[finance-license] Sync error: ${

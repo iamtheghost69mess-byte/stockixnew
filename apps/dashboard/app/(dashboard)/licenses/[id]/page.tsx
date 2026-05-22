@@ -65,6 +65,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,31 @@ function productLabel(p: string): string {
   if (p === "pos_desktop") return "POS Desktop";
   if (p === "bundle") return "Bundle";
   return "Platform";
+}
+
+type LicenseHistoryEntry = {
+  id: string;
+  licenseId: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  action: string;
+  previousValues: Record<string, unknown> | null;
+  newValues: Record<string, unknown> | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+function getActionVariant(
+  action: string,
+): "default" | "secondary" | "destructive" | "outline" {
+  if (action === "revoked" || action === "expired_by_worker") return "destructive";
+  if (action === "generated" || action === "assigned") return "default";
+  if (action === "extended") return "secondary";
+  return "outline";
+}
+
+function formatHistoryAction(action: string): string {
+  return action.replace(/_/g, " ");
 }
 
 export default function LicenseDetailPage() {
@@ -103,6 +129,9 @@ export default function LicenseDetailPage() {
   const [extendPerpetual, setExtendPerpetual] = useState(false);
   const [extendExpires, setExtendExpires] = useState<Date | undefined>(undefined);
   const [extendSaving, setExtendSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [history, setHistory] = useState<LicenseHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = useCallback((): Promise<void> => {
     return (async () => {
@@ -136,6 +165,28 @@ export default function LicenseDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (activeTab !== "history" || !id) return;
+    void (async () => {
+      setHistoryLoading(true);
+      try {
+        const res = await fetch(`/api/licenses/${id}/history?pageSize=100`);
+        const json = (await res.json().catch(() => ({}))) as {
+          history?: LicenseHistoryEntry[];
+        };
+        if (res.ok && Array.isArray(json.history)) {
+          setHistory(json.history);
+        } else {
+          setHistory([]);
+        }
+      } catch {
+        setHistory([]);
+      } finally {
+        setHistoryLoading(false);
+      }
+    })();
+  }, [activeTab, id]);
 
   const saveNotes = async () => {
     if (!data || !canExtendOrEditNotes) return;
@@ -269,6 +320,14 @@ export default function LicenseDetailPage() {
         </div>
       </div>
 
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="activations">Activations</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4">
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader>
@@ -417,7 +476,9 @@ export default function LicenseDetailPage() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
 
+        <TabsContent value="activations" className="mt-4">
       <Card>
         <CardHeader>
           <CardTitle>POS terminal activations</CardTitle>
@@ -539,6 +600,51 @@ export default function LicenseDetailPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>License history</CardTitle>
+              <CardDescription>Append-only audit trail for this license</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {historyLoading ? (
+                <p className="text-sm text-muted-foreground">Loading history…</p>
+              ) : history.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No history recorded yet.</p>
+              ) : (
+                history.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex flex-col gap-2 border-b border-border/60 pb-4 last:border-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <Badge variant={getActionVariant(entry.action)} className="capitalize">
+                        {formatHistoryAction(entry.action)}
+                      </Badge>
+                      {entry.actorEmail ? (
+                        <p className="text-sm text-muted-foreground">by {entry.actorEmail}</p>
+                      ) : null}
+                      {entry.notes ? (
+                        <p className="text-sm">{entry.notes}</p>
+                      ) : null}
+                      {entry.newValues ? (
+                        <pre className="max-h-40 overflow-auto rounded-md bg-muted/50 p-2 text-xs">
+                          {JSON.stringify(entry.newValues, null, 2)}
+                        </pre>
+                      ) : null}
+                    </div>
+                    <p className="shrink-0 text-xs text-muted-foreground sm:text-sm">
+                      {format(new Date(entry.createdAt), "PPp")}
+                    </p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <div>
         <Link href="/licenses" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">

@@ -375,6 +375,31 @@ export const licenses = pgTable(
   ],
 );
 
+export const licenseHistory = pgTable(
+  "license_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    licenseId: uuid("license_id")
+      .notNull()
+      .references(() => licenses.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id"),
+    actorEmail: text("actor_email"),
+    action: text("action").notNull(),
+    previousValues: text("previous_values"),
+    newValues: text("new_values"),
+    notes: text("notes"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("license_history_license_id_idx").on(t.licenseId),
+    index("license_history_created_at_idx").on(t.createdAt),
+  ],
+);
+
 export const licenseActivations = pgTable(
   "license_activations",
   {

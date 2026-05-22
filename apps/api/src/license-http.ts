@@ -2,6 +2,7 @@ import { apiConfig } from "@repo/config";
 import {
   blacklistedFingerprints,
   licenseActivations,
+  licenseHistory,
   licenses,
   owners,
   plans,
@@ -29,7 +30,10 @@ import {
   generateLicenseKey,
   getActiveLicenseForTenant,
   getPlanLimits,
+  insertLicenseHistory,
   isLicenseLimitsConsistentWithPlan,
+  licenseHistorySnapshot,
+  parseLicenseHistoryJson,
   signOfflineToken,
   verifyOfflineToken,
 } from "./license-utils.js";
@@ -56,6 +60,20 @@ function clientIp(c: { req: { header: (n: string) => string | undefined } }): st
   const xf = c.req.header("x-forwarded-for");
   if (xf) return xf.split(",")[0]!.trim();
   return c.req.header("x-real-ip") ?? null;
+}
+
+async function resolveLicenseHistoryActor(
+  db: Db,
+  c: { get: (k: "actorId") => string },
+): Promise<{ actorId?: string; actorEmail?: string | null }> {
+  const actorId = c.get("actorId");
+  if (!actorId) return {};
+  const [owner] = await db
+    .select({ email: owners.email })
+    .from(owners)
+    .where(eq(owners.id, actorId))
+    .limit(1);
+  return { actorId, actorEmail: owner?.email ?? null };
 }
 
 const billingIntervalSchema = z.enum(["monthly", "annually", "one_time", "custom"]);
@@ -370,7 +388,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       : planLimits.maxActivations;
 
     const created = await db.transaction(async (tx) => {
-      const out: { id: string; licenseKey: string; product: string; planSlug: string; status: string }[] = [];
+      const out: (typeof licenses.$inferSelect)[] = [];
       for (let i = 0; i < body.count; i++) {
         let licenseKey = generateLicenseKey();
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -404,13 +422,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             notes: body.notes ?? null,
             createdById: actorId,
           })
-          .returning({
-            id: licenses.id,
-            licenseKey: licenses.licenseKey,
-            product: licenses.product,
-            planSlug: licenses.planSlug,
-            status: licenses.status,
-          });
+          .returning();
         if (row) out.push(row);
       }
       if (body.tenantId) {
@@ -423,12 +435,32 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       actorId,
       action: "license.generated",
       targetTenantId: body.tenantId ?? undefined,
-      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      ipAddress: clientIp(c),
       userAgent: c.req.header("user-agent") ?? null,
       metadata: { count: created.length, product: body.product, planSlug: body.planSlug },
     });
 
-    return c.json({ licenses: created }, 201);
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    for (const license of created) {
+      await insertLicenseHistory(db, {
+        licenseId: license.id,
+        ...historyActor,
+        action: "generated",
+        newValues: licenseHistorySnapshot(license),
+        ipAddress: clientIp(c),
+        userAgent: c.req.header("user-agent") ?? null,
+      });
+    }
+
+    return c.json({
+      licenses: created.map((row) => ({
+        id: row.id,
+        licenseKey: row.licenseKey,
+        product: row.product,
+        planSlug: row.planSlug,
+        status: row.status,
+      })),
+    }, 201);
   });
 
   app.get("/licenses/analytics", async (c) => {
@@ -861,6 +893,17 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           })
           .where(eq(licenses.id, lic.id));
         const refreshed = { ...licNow, activationCount: licNow.activationCount + 1 };
+        await insertLicenseHistory(db, {
+          licenseId: lic.id,
+          action: "activated",
+          newValues: {
+            hardwareFingerprint: fp,
+            machineName: body.machineName ?? null,
+            activationCount: refreshed.activationCount,
+          },
+          ipAddress: ip,
+          userAgent: c.req.header("user-agent") ?? null,
+        });
         const { token, expiresAt } = await signOfflineToken(
           {
             licenseId: refreshed.id,
@@ -917,6 +960,17 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       .where(eq(licenses.id, lic.id));
 
     const nextCount = lic.activationCount + 1;
+    await insertLicenseHistory(db, {
+      licenseId: lic.id,
+      action: "activated",
+      newValues: {
+        hardwareFingerprint: fp,
+        machineName: body.machineName ?? null,
+        activationCount: nextCount,
+      },
+      ipAddress: ip,
+      userAgent: c.req.header("user-agent") ?? null,
+    });
     const { token, expiresAt } = await signOfflineToken(
       {
         licenseId: lic.id,
@@ -1046,6 +1100,60 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     });
   });
 
+  app.get("/licenses/:licenseId/history", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const idParsed = z.string().uuid().safeParse(c.req.param("licenseId"));
+    if (!idParsed.success) return c.json({ error: "invalid_license_id" }, 400);
+
+    const page = Math.max(1, Number(c.req.query("page") ?? "1") || 1);
+    const pageSize = Math.min(Math.max(1, Number(c.req.query("pageSize") ?? "50") || 50), 100);
+    const offset = (page - 1) * pageSize;
+
+    const [licenseRow] = await db
+      .select({ id: licenses.id })
+      .from(licenses)
+      .where(eq(licenses.id, idParsed.data))
+      .limit(1);
+    if (!licenseRow) return c.json({ error: "not_found" }, 404);
+
+    const [rows, [countRow]] = await Promise.all([
+      db
+        .select()
+        .from(licenseHistory)
+        .where(eq(licenseHistory.licenseId, idParsed.data))
+        .orderBy(desc(licenseHistory.createdAt))
+        .limit(pageSize)
+        .offset(offset),
+      db
+        .select({ c: count() })
+        .from(licenseHistory)
+        .where(eq(licenseHistory.licenseId, idParsed.data)),
+    ]);
+
+    const total = Number(countRow?.c ?? 0);
+    return c.json({
+      history: rows.map((h) => ({
+        id: h.id,
+        licenseId: h.licenseId,
+        actorId: h.actorId,
+        actorEmail: h.actorEmail,
+        action: h.action,
+        previousValues: parseLicenseHistoryJson(h.previousValues),
+        newValues: parseLicenseHistoryJson(h.newValues),
+        notes: h.notes,
+        ipAddress: h.ipAddress,
+        userAgent: h.userAgent,
+        createdAt: h.createdAt.toISOString(),
+      })),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize) || 0,
+      },
+    });
+  });
+
   app.get("/licenses/:licenseId", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
     const idParsed = z.string().uuid().safeParse(c.req.param("licenseId"));
@@ -1128,12 +1236,28 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
     }
     if (Object.keys(body).length === 0) return c.json({ error: "no_fields_to_update" }, 400);
+    const [previous] = await db
+      .select({ notes: licenses.notes })
+      .from(licenses)
+      .where(eq(licenses.id, idParsed.data))
+      .limit(1);
+    if (!previous) return c.json({ error: "not_found" }, 404);
     const [updated] = await db
       .update(licenses)
       .set({ notes: body.notes ?? null, updatedAt: new Date() })
       .where(eq(licenses.id, idParsed.data))
       .returning();
     if (!updated) return c.json({ error: "not_found" }, 404);
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: idParsed.data,
+      ...historyActor,
+      action: "notes_updated",
+      previousValues: { notes: previous.notes },
+      newValues: { notes: updated.notes },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
     return c.json({ ok: true, license: { id: updated.id, notes: updated.notes } });
   });
 
@@ -1182,6 +1306,24 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     }
     const [updated] = await db.update(licenses).set(setVals).where(eq(licenses.id, lic.id)).returning();
     if (!updated) return c.json({ error: "not_found" }, 404);
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: lic.id,
+      ...historyActor,
+      action: "extended",
+      previousValues: {
+        expiresAt: lic.expiresAt?.toISOString() ?? null,
+        isPerpetual: lic.isPerpetual,
+        status: lic.status,
+      },
+      newValues: {
+        expiresAt: updated.expiresAt?.toISOString() ?? null,
+        isPerpetual: updated.isPerpetual,
+        status: updated.status,
+      },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
     await logAudit(db, {
       actorId: c.get("actorId") as string,
       action: "license.extended",
@@ -1262,7 +1404,29 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       .set(assignSet)
       .where(eq(licenses.id, lic.id))
       .returning();
+    if (!upd) return c.json({ error: "assign_failed" }, 500);
     await db.update(tenants).set({ planSlug: lic.planSlug }).where(eq(tenants.id, body.tenantId));
+
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: lic.id,
+      ...historyActor,
+      action: "assigned",
+      previousValues: {
+        status: lic.status,
+        tenantId: lic.tenantId,
+        maxOrganizations: lic.maxOrganizations,
+        maxActivations: lic.maxActivations,
+      },
+      newValues: {
+        status: upd.status,
+        tenantId: upd.tenantId,
+        maxOrganizations: upd.maxOrganizations,
+        maxActivations: upd.maxActivations,
+      },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
 
     await logAudit(db, {
       actorId: c.get("actorId") as string,
@@ -1342,6 +1506,19 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         and(eq(licenseActivations.licenseId, lic.id), eq(licenseActivations.activationStatus, "active")),
       );
 
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: lic.id,
+      actorId,
+      actorEmail: historyActor.actorEmail,
+      action: "revoked",
+      previousValues: { status: lic.status },
+      newValues: { status: "revoked", activationCount: nextActivationCount },
+      notes: body.reason ?? null,
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
+
     await logAudit(db, {
       actorId,
       action: "license.revoked",
@@ -1397,6 +1574,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         updatedAt: now,
       })
       .where(eq(licenses.id, licId.data));
+
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: licId.data,
+      ...historyActor,
+      action: "deactivated",
+      newValues: {
+        activationId: act.id,
+        hardwareFingerprint: act.hardwareFingerprint,
+        activationCount: nextCount,
+      },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
 
     await logAudit(db, {
       actorId,
