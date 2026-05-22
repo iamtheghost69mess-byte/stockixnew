@@ -169,6 +169,20 @@
       "when": 1779400000000,
       "tag": "0024_license_tenant_status_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779500000000,
+      "tag": "0025_plans_billing_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779600000000,
+      "tag": "0026_license_history",
+      "breakpoints": true
     }
   ]
 }

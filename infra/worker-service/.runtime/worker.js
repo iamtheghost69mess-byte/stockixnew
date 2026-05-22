@@ -2485,6 +2485,7 @@ __export(schema_exports, {
   apiKeys: () => apiKeys,
   blacklistedFingerprints: () => blacklistedFingerprints,
   licenseActivations: () => licenseActivations,
+  licenseHistory: () => licenseHistory,
   licenses: () => licenses,
   organizations: () => organizations,
   ownerOrganizationAccess: () => ownerOrganizationAccess,
@@ -2744,6 +2745,14 @@ var plans = pgTable(
     maxActivations: integer("max_activations").notNull().default(1),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** Price in smallest currency unit (e.g. cents). Null = custom / not set. */
+    priceMonthly: integer("price_monthly"),
+    priceAnnually: integer("price_annually"),
+    currency: text("currency").default("USD"),
+    billingInterval: text("billing_interval"),
+    isPublic: boolean("is_public").notNull().default(false),
+    /** JSON array of feature strings for display. */
+    features: text("features"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
@@ -2788,6 +2797,26 @@ var licenses = pgTable(
     index("licenses_status_idx").on(t.status),
     index("licenses_product_idx").on(t.product),
     index("licenses_expires_at_idx").on(t.expiresAt)
+  ]
+);
+var licenseHistory = pgTable(
+  "license_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    licenseId: uuid("license_id").notNull().references(() => licenses.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id"),
+    actorEmail: text("actor_email"),
+    action: text("action").notNull(),
+    previousValues: text("previous_values"),
+    newValues: text("new_values"),
+    notes: text("notes"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("license_history_license_id_idx").on(t.licenseId),
+    index("license_history_created_at_idx").on(t.createdAt)
   ]
 );
 var licenseActivations = pgTable(
@@ -2885,12 +2914,6 @@ import { and as and3, eq as eq8, sql as sql2, isNotNull as isNotNull2, lte } fro
 // src/license-expire-followup.ts
 import { and as and2, eq as eq5, gte, isNotNull } from "drizzle-orm";
 
-// src/license-finance-sync.ts
-import { eq as eq4 } from "drizzle-orm";
-
-// src/finance-license.client.ts
-import { eq as eq2 } from "drizzle-orm";
-
 // src/license-utils.ts
 import { randomBytes } from "crypto";
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
@@ -2936,8 +2959,37 @@ async function isLicenseLimitsConsistentWithPlan(db, license) {
   const planLimits = await getPlanLimits(db, license.planSlug);
   return license.maxOrganizations === planLimits.maxOrganizations && license.maxActivations === planLimits.maxActivations;
 }
+async function insertLicenseHistory(db, entry) {
+  try {
+    await db.insert(licenseHistory).values({
+      licenseId: entry.licenseId,
+      actorId: entry.actorId ?? null,
+      actorEmail: entry.actorEmail ?? null,
+      action: entry.action,
+      previousValues: entry.previousValues ? JSON.stringify(entry.previousValues) : null,
+      newValues: entry.newValues ? JSON.stringify(entry.newValues) : null,
+      notes: entry.notes ?? null,
+      ipAddress: entry.ipAddress ?? null,
+      userAgent: entry.userAgent ?? null
+    });
+  } catch (err) {
+    console.error("[LicenseHistory] Failed to insert:", err);
+  }
+}
+
+// src/license-finance-sync.ts
+import { eq as eq4 } from "drizzle-orm";
 
 // src/finance-license.client.ts
+import { eq as eq2 } from "drizzle-orm";
+var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
+function buildFinanceLicenseLimitFields(license) {
+  return {
+    maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxActivations: license?.maxActivations ?? 1,
+    maxOrganizations: license?.maxOrganizations ?? 1
+  };
+}
 function mapStockixLicenseStatus(license, tenantStatus) {
   if (tenantStatus === "suspended") {
     return "suspended";
@@ -2946,7 +2998,7 @@ function mapStockixLicenseStatus(license, tenantStatus) {
     return "active";
   }
   if (license.status === "revoked") {
-    return "suspended";
+    return "revoked";
   }
   if (license.isPerpetual) {
     return "active";
@@ -3014,8 +3066,7 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
     validFrom: (license?.validFrom ?? /* @__PURE__ */ new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    maxUsers: license?.maxActivations ?? 10,
-    maxOrganizations: license?.maxOrganizations ?? 1,
+    ...buildFinanceLicenseLimitFields(license),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null
   };
@@ -3038,6 +3089,19 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
       return;
     }
     log(`[finance-license] Synced license for finance tenant ${params.financeTenantId}`);
+    if (license) {
+      await insertLicenseHistory(db, {
+        licenseId: license.id,
+        action: "synced_to_finance",
+        newValues: {
+          syncedStatus: payload.status,
+          maxOrganizations: payload.maxOrganizations,
+          maxUsers: payload.maxUsers,
+          maxActivations: payload.maxActivations,
+          planSlug: payload.planSlug
+        }
+      });
+    }
   } catch (error) {
     log(
       `[finance-license] Sync error: ${error instanceof Error ? error.message : String(error)}`
@@ -3327,6 +3391,13 @@ async function processLicenseExpiryFollowUp(db, opts) {
   const log = opts.log ?? ((message) => console.log(message));
   const now = opts.now ?? /* @__PURE__ */ new Date();
   for (const license of opts.justExpired) {
+    await insertLicenseHistory(db, {
+      licenseId: license.id,
+      action: "expired_by_worker",
+      previousValues: { status: "active" },
+      newValues: { status: "expired" },
+      notes: "Automatically expired by worker cron"
+    });
     if (!license.tenantId) continue;
     try {
       await triggerFinanceLicenseSync(db, license.tenantId, log);
