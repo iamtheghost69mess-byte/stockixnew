@@ -80,8 +80,8 @@ async function maybeSendLicenseGraceWarningEmail(
     await sendLicenseExpiringEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
+      tenantId: stockixTenantId,
       expiresAt,
-      gracePeriodDays: graceDays,
     });
     log(`[mail] Sent license grace warning to ${tenant.adminEmail}`);
   } catch (err) {

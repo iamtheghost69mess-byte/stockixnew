@@ -2784,6 +2784,7 @@ var licenses = pgTable(
   (t) => [
     uniqueIndex("licenses_key_unique").on(t.licenseKey),
     index("licenses_tenant_id_idx").on(t.tenantId),
+    index("licenses_tenant_status_idx").on(t.tenantId, t.status),
     index("licenses_status_idx").on(t.status),
     index("licenses_product_idx").on(t.product),
     index("licenses_expires_at_idx").on(t.expiresAt)
@@ -2879,16 +2880,64 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { and as and2, eq as eq7, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
+import { and as and3, eq as eq8, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
 
 // src/license-expire-followup.ts
-import { and, eq as eq4, gte, isNotNull } from "drizzle-orm";
+import { and as and2, eq as eq5, gte, isNotNull } from "drizzle-orm";
 
 // src/license-finance-sync.ts
-import { eq as eq3 } from "drizzle-orm";
+import { eq as eq4 } from "drizzle-orm";
 
 // src/finance-license.client.ts
-import { eq } from "drizzle-orm";
+import { eq as eq2 } from "drizzle-orm";
+
+// src/license-utils.ts
+import { randomBytes } from "crypto";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { SignJWT, jwtVerify } from "jose";
+async function getActiveLicenseForTenant(db, tenantId) {
+  const perpetual = await db.select().from(licenses).where(
+    and(
+      eq(licenses.tenantId, tenantId),
+      eq(licenses.status, "active"),
+      eq(licenses.isPerpetual, true)
+    )
+  ).orderBy(desc(licenses.activatedAt)).limit(1);
+  if (perpetual[0]) return perpetual[0];
+  const now = /* @__PURE__ */ new Date();
+  const active = await db.select().from(licenses).where(
+    and(
+      eq(licenses.tenantId, tenantId),
+      eq(licenses.status, "active"),
+      eq(licenses.isPerpetual, false),
+      or(isNull(licenses.expiresAt), gt(licenses.expiresAt, now))
+    )
+  ).orderBy(desc(licenses.expiresAt)).limit(1);
+  if (active[0]) return active[0];
+  const expired = await db.select().from(licenses).where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "expired"))).orderBy(desc(licenses.expiresAt)).limit(1);
+  if (expired[0]) return expired[0];
+  return null;
+}
+async function getPlanLimits(db, planSlug) {
+  const row = await db.select({
+    maxOrganizations: plans.maxOrganizations,
+    maxActivations: plans.maxActivations
+  }).from(plans).where(eq(plans.slug, planSlug)).limit(1);
+  if (!row[0]) {
+    console.warn(`[getPlanLimits] Plan slug "${planSlug}" not found. Using defaults.`);
+    return { maxOrganizations: 1, maxActivations: 1 };
+  }
+  return {
+    maxOrganizations: row[0].maxOrganizations,
+    maxActivations: row[0].maxActivations
+  };
+}
+async function isLicenseLimitsConsistentWithPlan(db, license) {
+  const planLimits = await getPlanLimits(db, license.planSlug);
+  return license.maxOrganizations === planLimits.maxOrganizations && license.maxActivations === planLimits.maxActivations;
+}
+
+// src/finance-license.client.ts
 function mapStockixLicenseStatus(license, tenantStatus) {
   if (tenantStatus === "suspended") {
     return "suspended";
@@ -2920,7 +2969,7 @@ function mapStockixLicenseStatus(license, tenantStatus) {
   return "active";
 }
 async function resolveTenantInternalBaseUrl(db, stockixTenantId) {
-  const [deployment] = await db.select({ internalPort: tenantDeployments.internalPort }).from(tenantDeployments).where(eq(tenantDeployments.tenantId, stockixTenantId)).limit(1);
+  const [deployment] = await db.select({ internalPort: tenantDeployments.internalPort }).from(tenantDeployments).where(eq2(tenantDeployments.tenantId, stockixTenantId)).limit(1);
   if (!deployment?.internalPort) {
     return null;
   }
@@ -2939,10 +2988,17 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
     log("[finance-license] No internal base URL; skipping sync");
     return;
   }
-  const [license] = await db.select().from(licenses).where(eq(licenses.tenantId, params.stockixTenantId)).limit(1);
-  const [tenantRow] = await db.select({ status: tenants.status, planSlug: tenants.planSlug }).from(tenants).where(eq(tenants.id, params.stockixTenantId)).limit(1);
+  const license = await getActiveLicenseForTenant(db, params.stockixTenantId);
+  const [tenantRow] = await db.select({ status: tenants.status, planSlug: tenants.planSlug }).from(tenants).where(eq2(tenants.id, params.stockixTenantId)).limit(1);
   const planSlug = license?.planSlug ?? tenantRow?.planSlug ?? "owner-managed";
-  const [plan] = await db.select().from(plans).where(eq(plans.slug, planSlug)).limit(1);
+  if (license) {
+    const isConsistent = await isLicenseLimitsConsistentWithPlan(db, license);
+    if (!isConsistent) {
+      log(
+        `[LicenseSync] License limits differ from plan limits for license ${license.id}, tenant ${license.tenantId ?? "none"} \u2014 license values will be used for sync`
+      );
+    }
+  }
   const payload = {
     tenantId: params.financeTenantId,
     planSlug,
@@ -2958,8 +3014,8 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
     validFrom: (license?.validFrom ?? /* @__PURE__ */ new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    maxUsers: license?.maxActivations ?? plan?.maxActivations ?? 10,
-    maxOrganizations: license?.maxOrganizations ?? plan?.maxOrganizations ?? 1,
+    maxUsers: license?.maxActivations ?? 10,
+    maxOrganizations: license?.maxOrganizations ?? 1,
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null
   };
@@ -2990,7 +3046,7 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
 }
 
 // src/mail/send.ts
-import { desc, eq as eq2 } from "drizzle-orm";
+import { eq as eq3 } from "drizzle-orm";
 
 // src/mail/mailer.ts
 import { createTransport } from "nodemailer";
@@ -3024,91 +3080,202 @@ async function sendMail(options) {
 }
 
 // src/mail/templates/license-expiring.ts
-function renderLicenseExpiring(opts) {
-  const expiresLabel = opts.expiresAt.toLocaleDateString(void 0, {
-    dateStyle: "medium"
-  });
-  return `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-  <h1>Your Stockix license expires soon</h1>
-  <p>The license for <strong>${escapeHtml(opts.tenantName)}</strong> expired on ${escapeHtml(expiresLabel)}.</p>
-  <p>You are in a grace period of ${opts.gracePeriodDays} day(s). Renew soon to avoid service interruption.</p>
-</body>
-</html>`;
-}
 function escapeHtml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-
-// src/mail/templates/license-expired.ts
-function renderLicenseExpired(opts) {
-  const expiresLabel = opts.expiresAt ? opts.expiresAt.toLocaleDateString(void 0, { dateStyle: "medium" }) : "N/A";
+function formatDate(date) {
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
+}
+function renderLicenseExpiring(props) {
+  const expiresDate = formatDate(props.expiresAt);
+  const dayLabel = props.daysRemaining === 1 ? "day" : "days";
+  const tenantName = escapeHtml(props.tenantName);
   return `<!DOCTYPE html>
 <html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-  <h1>Your Stockix license has expired</h1>
-  <p>The license for <strong>${escapeHtml2(opts.tenantName)}</strong> is no longer active (expired ${escapeHtml2(expiresLabel)}).</p>
-  <p>Contact your platform administrator to renew.</p>
+<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
+  <h1 style="font-size: 1.25rem; margin-bottom: 1rem;">Your Stockix license expires soon</h1>
+  <p>Hi ${tenantName},</p>
+  <p>
+    Your Stockix license will expire in
+    <strong>${props.daysRemaining} ${dayLabel}</strong>
+    on <strong>${escapeHtml(expiresDate)}</strong>.
+  </p>
+  <p>
+    To avoid any interruption to your service, please renew your
+    license before the expiry date.
+  </p>
+  <p>
+    After expiry you will have a grace period during which your
+    account will be read-only. After the grace period ends your
+    account will be fully locked.
+  </p>
+  <p>Please contact your administrator to renew.</p>
+  <p style="color: #666; font-size: 0.875rem; margin-top: 2rem;">
+    This is an automated message from Stockix.
+    Please do not reply to this email.
+  </p>
 </body>
 </html>`;
 }
+
+// src/mail/templates/license-expired.ts
 function escapeHtml2(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function formatDate2(date) {
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
+}
+function renderLicenseExpired(props) {
+  const expiredDate = formatDate2(props.expiredAt);
+  const graceEndsDate = formatDate2(props.graceEndsAt);
+  const tenantName = escapeHtml2(props.tenantName);
+  return `<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
+  <h1 style="font-size: 1.25rem; margin-bottom: 1rem;">Your Stockix license has expired</h1>
+  <p>Hi ${tenantName},</p>
+  <p>Your Stockix license expired on <strong>${escapeHtml2(expiredDate)}</strong>.</p>
+  <p>
+    You are currently in <strong>read-only mode</strong> \u2014 you can view
+    your existing data but cannot create or edit records.
+  </p>
+  <p>
+    Your grace period ends on <strong>${escapeHtml2(graceEndsDate)}</strong>.
+    After this date your account will be fully locked.
+  </p>
+  <p>
+    Please contact your administrator to renew your license and
+    restore full access.
+  </p>
+  <p style="color: #666; font-size: 0.875rem; margin-top: 2rem;">
+    This is an automated message from Stockix.
+    Please do not reply to this email.
+  </p>
+</body>
+</html>`;
 }
 
 // src/mail/send.ts
 async function sendLicenseExpiringEmail(opts) {
-  return sendMail({
-    to: opts.to,
-    subject: "Your Stockix license expires soon",
-    html: renderLicenseExpiring(opts),
-    idempotencyKey: `license-expiring/${opts.to}/${opts.expiresAt.toISOString().split("T")[0]}`
-  });
+  const daysRemaining = Math.max(
+    0,
+    Math.ceil(
+      (opts.expiresAt.getTime() - Date.now()) / (1e3 * 60 * 60 * 24)
+    )
+  );
+  const expiryDay = opts.expiresAt.toISOString().split("T")[0];
+  try {
+    await sendMail({
+      to: opts.to,
+      subject: "Your Stockix license expires soon",
+      html: renderLicenseExpiring({
+        tenantName: opts.tenantName,
+        expiresAt: opts.expiresAt,
+        daysRemaining
+      }),
+      idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`
+    });
+  } catch (err) {
+    console.error(
+      "[sendLicenseExpiringEmail] Send failed",
+      opts.tenantId,
+      err instanceof Error ? err.message : err
+    );
+  }
 }
 async function sendLicenseExpiredEmail(opts) {
-  const day = opts.expiresAt?.toISOString().split("T")[0] ?? "unknown";
-  const idKey = opts.tenantId ?? opts.to;
-  return sendMail({
-    to: opts.to,
-    subject: "Your Stockix license has expired",
-    html: renderLicenseExpired(opts),
-    idempotencyKey: `license-expired/${idKey}/${day}`
-  });
+  const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  try {
+    await sendMail({
+      to: opts.to,
+      subject: "Your Stockix license has expired",
+      html: renderLicenseExpired({
+        tenantName: opts.tenantName,
+        expiredAt: opts.expiredAt,
+        gracePeriodDays: opts.gracePeriodDays,
+        graceEndsAt: opts.graceEndsAt
+      }),
+      idempotencyKey: `license-expired/${opts.tenantId}/${today}`
+    });
+  } catch (err) {
+    console.error(
+      "[sendLicenseExpiredEmail] Send failed",
+      opts.tenantId,
+      err instanceof Error ? err.message : err
+    );
+  }
 }
 async function sendLicenseExpiredEmailForTenant(db, tenantId) {
-  const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq2(tenants.id, tenantId)).limit(1);
-  if (!tenant?.adminEmail) {
-    console.warn("[sendLicenseExpiredEmail] No admin email for tenant", tenantId);
-    return;
+  try {
+    const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq3(tenants.id, tenantId)).limit(1);
+    if (!tenant) {
+      console.warn("[sendLicenseExpiredEmail] Tenant not found:", tenantId);
+      return;
+    }
+    if (!tenant.adminEmail) {
+      console.warn("[sendLicenseExpiredEmail] No admin email for tenant", tenantId);
+      return;
+    }
+    const license = await getActiveLicenseForTenant(db, tenantId);
+    const expiredAt = license?.expiresAt ?? /* @__PURE__ */ new Date();
+    const gracePeriodDays = license?.gracePeriodDays ?? 7;
+    const graceEndsAt = new Date(expiredAt);
+    graceEndsAt.setDate(graceEndsAt.getDate() + gracePeriodDays);
+    await sendLicenseExpiredEmail({
+      to: tenant.adminEmail,
+      tenantName: tenant.name,
+      tenantId,
+      expiredAt,
+      gracePeriodDays,
+      graceEndsAt
+    });
+  } catch (err) {
+    console.error(
+      "[sendLicenseExpiredEmail] Failed for tenant",
+      tenantId,
+      err instanceof Error ? err.message : err
+    );
   }
-  const [license] = await db.select({ expiresAt: licenses.expiresAt }).from(licenses).where(eq2(licenses.tenantId, tenantId)).orderBy(desc(licenses.updatedAt)).limit(1);
-  await sendLicenseExpiredEmail({
-    to: tenant.adminEmail,
-    tenantName: tenant.name,
-    expiresAt: license?.expiresAt ?? null,
-    tenantId
-  });
 }
 async function sendLicenseExpiringEmailForTenant(db, tenantId, opts) {
-  const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq2(tenants.id, tenantId)).limit(1);
-  if (!tenant?.adminEmail) {
-    console.warn("[sendLicenseExpiringEmail] No admin email for tenant", tenantId);
-    return;
+  try {
+    const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq3(tenants.id, tenantId)).limit(1);
+    if (!tenant) {
+      console.warn("[sendLicenseExpiringEmail] Tenant not found:", tenantId);
+      return;
+    }
+    if (!tenant.adminEmail) {
+      console.warn("[sendLicenseExpiringEmail] No admin email for tenant", tenantId);
+      return;
+    }
+    await sendLicenseExpiringEmail({
+      to: tenant.adminEmail,
+      tenantName: tenant.name,
+      tenantId,
+      expiresAt: opts.expiresAt
+    });
+  } catch (err) {
+    console.error(
+      "[sendLicenseExpiringEmail] Failed for tenant",
+      tenantId,
+      err instanceof Error ? err.message : err
+    );
   }
-  await sendLicenseExpiringEmail({
-    to: tenant.adminEmail,
-    tenantName: tenant.name,
-    expiresAt: opts.expiresAt,
-    gracePeriodDays: opts.gracePeriodDays
-  });
 }
 
 // src/license-finance-sync.ts
 async function triggerFinanceLicenseSync(db, stockixTenantId, log = console.log) {
   if (!stockixTenantId) return;
   await maybeSendLicenseGraceWarningEmail(db, stockixTenantId, log);
-  const [deployment] = await db.select({ financeTenantId: tenantDeployments.financeTenantId }).from(tenantDeployments).where(eq3(tenantDeployments.tenantId, stockixTenantId)).limit(1);
+  const [deployment] = await db.select({ financeTenantId: tenantDeployments.financeTenantId }).from(tenantDeployments).where(eq4(tenantDeployments.tenantId, stockixTenantId)).limit(1);
   const financeTenantId = deployment?.financeTenantId;
   if (!financeTenantId || financeTenantId <= 0) {
     log(
@@ -3123,7 +3290,7 @@ async function triggerFinanceLicenseSync(db, stockixTenantId, log = console.log)
   );
 }
 async function maybeSendLicenseGraceWarningEmail(db, stockixTenantId, log) {
-  const [license] = await db.select().from(licenses).where(eq3(licenses.tenantId, stockixTenantId)).limit(1);
+  const license = await getActiveLicenseForTenant(db, stockixTenantId);
   if (!license?.expiresAt || license.isPerpetual) {
     return;
   }
@@ -3136,7 +3303,7 @@ async function maybeSendLicenseGraceWarningEmail(db, stockixTenantId, log) {
   if (!inGrace) {
     return;
   }
-  const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq3(tenants.id, stockixTenantId)).limit(1);
+  const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq4(tenants.id, stockixTenantId)).limit(1);
   if (!tenant?.adminEmail) {
     return;
   }
@@ -3144,8 +3311,8 @@ async function maybeSendLicenseGraceWarningEmail(db, stockixTenantId, log) {
     await sendLicenseExpiringEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
-      expiresAt,
-      gracePeriodDays: graceDays
+      tenantId: stockixTenantId,
+      expiresAt
     });
     log(`[mail] Sent license grace warning to ${tenant.adminEmail}`);
   } catch (err) {
@@ -3189,9 +3356,9 @@ async function processExpiringSoonWarnings(db, now) {
     expiresAt: licenses.expiresAt,
     gracePeriodDays: licenses.gracePeriodDays
   }).from(licenses).where(
-    and(
-      eq4(licenses.status, "active"),
-      eq4(licenses.isPerpetual, false),
+    and2(
+      eq5(licenses.status, "active"),
+      eq5(licenses.isPerpetual, false),
       isNotNull(licenses.tenantId),
       isNotNull(licenses.expiresAt),
       gte(licenses.expiresAt, now)
@@ -3223,7 +3390,7 @@ import { z as z2 } from "zod";
 // ../../infra/worker-service/domain/provisioner.ts
 import { rm, stat } from "fs/promises";
 import { join as join7 } from "path";
-import { eq as eq6 } from "drizzle-orm";
+import { eq as eq7 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/env-paths.ts
 import { homedir } from "os";
@@ -3277,9 +3444,9 @@ function tenantMysqlVolumeName(slug) {
 // ../../infra/worker-service/src/provision-runtime.ts
 import { mkdir as mkdir2 } from "fs/promises";
 import { join as join5 } from "path";
-import { createCipheriv, randomBytes } from "crypto";
+import { createCipheriv, randomBytes as randomBytes2 } from "crypto";
 import { execa } from "execa";
-import { asc, eq as eq5 } from "drizzle-orm";
+import { asc, eq as eq6 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/provision-trace.ts
 function createProvisionTracer(db, correlationId, getContext, log) {
@@ -3572,7 +3739,7 @@ async function composeDownBestEffort(runner, ctx) {
 // ../../infra/worker-service/src/provision-runtime.ts
 function encryptDeploymentSecret(plaintext) {
   const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-  const iv = randomBytes(12);
+  const iv = randomBytes2(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
@@ -3582,7 +3749,7 @@ async function loadProvisionJournal(db, correlationId) {
   const rows = await db.select({
     phase: tenantProvisionEvents.phase,
     meta: tenantProvisionEvents.meta
-  }).from(tenantProvisionEvents).where(eq5(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
+  }).from(tenantProvisionEvents).where(eq6(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
   const journal = /* @__PURE__ */ new Set();
   for (const row of rows) {
     if (row.phase !== "journal") continue;
@@ -3753,7 +3920,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       { key: "S3_ENDPOINT", value: s3Endpoint },
       { key: "S3_BUCKET", value: s3Bucket }
     ]);
-    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq5(tenants.slug, input.slug)).limit(1);
+    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq6(tenants.slug, input.slug)).limit(1);
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
     }
@@ -4190,10 +4357,10 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (tenantId) {
-      await db.update(tenants).set({ status: "failed" }).where(eq5(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
+      await db.update(tenants).set({ status: "failed" }).where(eq6(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
     }
     if (deploymentId) {
-      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
+      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq6(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
     }
     if (sideEffectsStarted && composeCtx) {
       await trace.event("cleanup", "Attempting best-effort compose rollback", {
@@ -4202,7 +4369,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       }).catch((error) => recordCleanupError("cleanup_event_before_rollback", error));
       const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
       if (rolledBack && tenantId) {
-        await db.delete(tenants).where(eq5(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
+        await db.delete(tenants).where(eq6(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
         await trace.event("cleanup", "Compose rollback completed and tenant records removed", {
           level: "info",
           meta: { composeProjectName: composeCtx.project, tenantId }
@@ -4232,13 +4399,13 @@ var TenantProvisionService = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/crypto-tenant-secret-generator.ts
-import { createHmac, randomBytes as randomBytes2 } from "crypto";
+import { createHmac, randomBytes as randomBytes3 } from "crypto";
 var CryptoTenantSecretGenerator = class {
   persistSecret(plaintext) {
     return plaintext;
   }
   randomHex(bytes = 32) {
-    return randomBytes2(bytes).toString("hex");
+    return randomBytes3(bytes).toString("hex");
   }
   bootstrapAdminPassword(tenantKey) {
     const key = tenantKey.trim();
@@ -4672,7 +4839,7 @@ async function provisionTenant(db, input, log, correlationId, assertNotCancelled
 }
 async function deprovisionTenant(db, tenantId, options = {}) {
   const log = options.log ?? (() => void 0);
-  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq6(tenantDeployments.tenantId, tenants.id)).where(eq6(tenants.id, tenantId)).limit(1);
+  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq7(tenantDeployments.tenantId, tenants.id)).where(eq7(tenants.id, tenantId)).limit(1);
   const row = found[0];
   if (!row) return { ok: false, message: "Tenant not found" };
   const project = row.composeProject ?? composeProjectName(row.slug);
@@ -4698,10 +4865,10 @@ async function deprovisionTenant(db, tenantId, options = {}) {
     const message = error instanceof Error ? error.message : String(error);
     log(`edge unpublish failed for ${row.slug}: ${message}`);
   });
-  await db.delete(tenantProvisionEvents).where(eq6(tenantProvisionEvents.tenantId, tenantId));
-  await db.delete(adminAuditLog).where(eq6(adminAuditLog.targetTenantId, tenantId));
-  await db.delete(tenantDeployments).where(eq6(tenantDeployments.tenantId, tenantId));
-  await db.delete(tenants).where(eq6(tenants.id, tenantId));
+  await db.delete(tenantProvisionEvents).where(eq7(tenantProvisionEvents.tenantId, tenantId));
+  await db.delete(adminAuditLog).where(eq7(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq7(tenantDeployments.tenantId, tenantId));
+  await db.delete(tenants).where(eq7(tenants.id, tenantId));
   await rm(join7(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => void 0);
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
@@ -5004,9 +5171,9 @@ var lastLicenseExpireScanMs = 0;
 async function expireDueLicenses(db) {
   const now = /* @__PURE__ */ new Date();
   const justExpired = await db.update(licenses).set({ status: "expired", updatedAt: now }).where(
-    and2(
-      eq7(licenses.status, "active"),
-      eq7(licenses.isPerpetual, false),
+    and3(
+      eq8(licenses.status, "active"),
+      eq8(licenses.isPerpetual, false),
       isNotNull2(licenses.expiresAt),
       lte(licenses.expiresAt, now)
     )
@@ -5345,7 +5512,7 @@ async function runTenantLifecycleCommand(db, job, command) {
     tenantId: tenants.id,
     slug: tenants.slug,
     composeProjectName: tenantDeployments.composeProjectName
-  }).from(tenants).leftJoin(tenantDeployments, eq7(tenantDeployments.tenantId, tenants.id)).where(eq7(tenants.id, job.tenantId)).limit(1);
+  }).from(tenants).leftJoin(tenantDeployments, eq8(tenantDeployments.tenantId, tenants.id)).where(eq8(tenants.id, job.tenantId)).limit(1);
   const row = rows[0];
   if (!row || !row.composeProjectName) {
     throw new Error("tenant_not_found");
@@ -5474,14 +5641,14 @@ async function loop() {
             updatedAt: /* @__PURE__ */ new Date(),
             completedAt: fallbackNoRetry ? /* @__PURE__ */ new Date() : null,
             attempts: sql2`${tenantLifecycleJobs.attempts} + 1`
-          }).where(eq7(tenantLifecycleJobs.id, job.id));
+          }).where(eq8(tenantLifecycleJobs.id, job.id));
           if (job.type === "tenant.provision" && job.tenantId) {
-            await tx.update(tenants).set({ status: "failed" }).where(eq7(tenants.id, job.tenantId));
+            await tx.update(tenants).set({ status: "failed" }).where(eq8(tenants.id, job.tenantId));
             await tx.update(tenantDeployments).set({
               status: "failed",
               lastError: `worker_fallback_failure_persist:${message}`,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq7(tenantDeployments.tenantId, job.tenantId));
+            }).where(eq8(tenantDeployments.tenantId, job.tenantId));
           }
         }).catch((fallbackError) => {
           console.error(
