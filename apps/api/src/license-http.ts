@@ -29,6 +29,7 @@ import {
   generateLicenseKey,
   getActiveLicenseForTenant,
   getPlanLimits,
+  isLicenseLimitsConsistentWithPlan,
   signOfflineToken,
   verifyOfflineToken,
 } from "./license-utils.js";
@@ -907,6 +908,45 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     }
 
     return c.json({ valid: true, license: payload });
+  });
+
+  app.get("/licenses/sync-audit/:tenantId", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const tenantIdParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+    if (!tenantIdParsed.success) {
+      return c.json({ error: "invalid_tenant_id" }, 400);
+    }
+    const tenantId = tenantIdParsed.data;
+
+    const license = await getActiveLicenseForTenant(db, tenantId);
+    if (!license) {
+      return c.json({ error: "no_license", tenantId }, 404);
+    }
+
+    const planLimits = await getPlanLimits(db, license.planSlug);
+    const isConsistent = await isLicenseLimitsConsistentWithPlan(db, license);
+
+    return c.json({
+      tenantId,
+      license: {
+        id: license.id,
+        planSlug: license.planSlug,
+        status: license.status,
+        maxOrganizations: license.maxOrganizations,
+        maxActivations: license.maxActivations,
+        isPerpetual: license.isPerpetual,
+        expiresAt: license.expiresAt?.toISOString() ?? null,
+      },
+      plan: {
+        maxOrganizations: planLimits.maxOrganizations,
+        maxActivations: planLimits.maxActivations,
+      },
+      isConsistentWithPlan: isConsistent,
+      syncPayloadWouldSend: {
+        maxOrganizations: license.maxOrganizations,
+        maxUsers: license.maxActivations,
+      },
+    });
   });
 
   app.get("/licenses/:licenseId", async (c) => {

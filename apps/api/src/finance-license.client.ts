@@ -1,9 +1,12 @@
 import { apiConfig } from "@repo/config";
-import { plans, tenantDeployments } from "@repo/db/schema";
+import { tenantDeployments } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
-import { getActiveLicenseForTenant } from "./license-utils.js";
+import {
+  getActiveLicenseForTenant,
+  isLicenseLimitsConsistentWithPlan,
+} from "./license-utils.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -114,11 +117,14 @@ export async function syncFinanceLicenseForStockixTenant(
 
   const planSlug = license?.planSlug ?? tenantRow?.planSlug ?? "owner-managed";
 
-  const [plan] = await db
-    .select()
-    .from(plans)
-    .where(eq(plans.slug, planSlug))
-    .limit(1);
+  if (license) {
+    const isConsistent = await isLicenseLimitsConsistentWithPlan(db, license);
+    if (!isConsistent) {
+      log(
+        `[LicenseSync] License limits differ from plan limits for license ${license.id}, tenant ${license.tenantId ?? "none"} — license values will be used for sync`,
+      );
+    }
+  }
 
   const payload: FinanceLicenseSyncPayload = {
     tenantId: params.financeTenantId,
@@ -137,8 +143,8 @@ export async function syncFinanceLicenseForStockixTenant(
     validFrom: (license?.validFrom ?? new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    maxUsers: license?.maxActivations ?? plan?.maxActivations ?? 10,
-    maxOrganizations: license?.maxOrganizations ?? plan?.maxOrganizations ?? 1,
+    maxUsers: license?.maxActivations ?? 10,
+    maxOrganizations: license?.maxOrganizations ?? 1,
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,
   };

@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import {
   getActiveLicenseForTenant,
+  isLicenseLimitsConsistentWithPlan,
   type TenantLicenseRow,
 } from "../src/license-utils.js";
 
@@ -138,5 +139,41 @@ describe("getActiveLicenseForTenant", () => {
     const result = await getActiveLicenseForTenant(db, revoked.tenantId!);
 
     expect(result).toBeNull();
+  });
+});
+
+describe("isLicenseLimitsConsistentWithPlan", () => {
+  it("returns true when license limits match plan", async () => {
+    const license = makeLicense({ maxOrganizations: 10, maxActivations: 5 });
+    const limit = vi
+      .fn()
+      .mockResolvedValueOnce([{ maxOrganizations: 10, maxActivations: 5 }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit })),
+      })),
+    }));
+    const db = { select } as unknown as PostgresJsDatabase<typeof schema>;
+
+    const result = await isLicenseLimitsConsistentWithPlan(db, license);
+
+    expect(result).toBe(true);
+  });
+
+  it("returns false when license limits drift from plan", async () => {
+    const license = makeLicense({ maxOrganizations: 8, maxActivations: 5 });
+    const limit = vi
+      .fn()
+      .mockResolvedValueOnce([{ maxOrganizations: 10, maxActivations: 5 }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit })),
+      })),
+    }));
+    const db = { select } as unknown as PostgresJsDatabase<typeof schema>;
+
+    const result = await isLicenseLimitsConsistentWithPlan(db, license);
+
+    expect(result).toBe(false);
   });
 });

@@ -94,6 +94,21 @@ export async function getPlanLimits(
   };
 }
 
+/**
+ * Verifies that a license's limits match its plan's limits (diagnostic only).
+ * Runtime enforcement always uses the license row.
+ */
+export async function isLicenseLimitsConsistentWithPlan(
+  db: PlanLimitsDb,
+  license: TenantLicenseRow,
+): Promise<boolean> {
+  const planLimits = await getPlanLimits(db, license.planSlug);
+  return (
+    license.maxOrganizations === planLimits.maxOrganizations
+    && license.maxActivations === planLimits.maxActivations
+  );
+}
+
 const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 export function generateLicenseKey(): string {

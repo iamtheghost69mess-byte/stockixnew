@@ -45,6 +45,9 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
   if (pathname === "/search" && m === "GET") return "read_only";
 
   if (pathname.startsWith("/licenses")) {
+    if (m === "GET" && /^\/licenses\/sync-audit\/[^/]+$/.test(pathname)) {
+      return "super_admin";
+    }
     if (m === "GET") return "read_only";
     if (m === "POST" && pathname.endsWith("/extend")) return "billing_manager";
     if (m === "PATCH") return "billing_manager";
