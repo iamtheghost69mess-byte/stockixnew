@@ -4,6 +4,8 @@
  */
 import { dbConfig } from "@repo/config";
 import postgres from "postgres";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const url = dbConfig.databaseUrl;
 
@@ -43,4 +45,7 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+const entry = process.argv[1];
+if (entry && fileURLToPath(import.meta.url) === resolve(entry)) {
+  void main();
+}
