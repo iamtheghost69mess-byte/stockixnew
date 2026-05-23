@@ -28,6 +28,7 @@ export interface ISaleInvoice {
   projectId?: number;
 
   localAmount?: number;
+  localDueAmount?: number;
 
   localWrittenoffAmount?: number;
   writtenoffExpenseAccountId?: number;

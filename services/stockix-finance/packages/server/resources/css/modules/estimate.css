@@ -542,3 +542,12 @@ html[lang^=en] body {
 .estimate__conditions p, .estimate__notes p {
   margin: 0 0 20px;
 }
+.estimate__table-total table tbody tr.total-display-currency td,
+.estimate__table-total table tbody tr.balance-due-display-currency td {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  border-top: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}

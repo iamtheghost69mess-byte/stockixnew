@@ -105,6 +105,7 @@ export default function TenantsPage() {
   const [owners, setOwners] = useState<Owner[]>([]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oneTimePassword, setOneTimePassword] = useState<string | null>(null);
   const [tenantAccess, setTenantAccess] = useState<{
@@ -189,6 +190,7 @@ export default function TenantsPage() {
   );
 
   useEffect(() => {
+    setMounted(true);
     load().catch((e) => setError(String(e)));
   }, [load]);
 
@@ -541,7 +543,7 @@ export default function TenantsPage() {
         </div>
         <Button
           type="button"
-          disabled={loading || !ownerId || !slug || !name}
+          disabled={!mounted || loading || !ownerId || !slug || !name}
           onClick={() => void provision()}
         >
           {loading ? `Provisioning… ${elapsedSec}s` : "Provision tenant"}
@@ -629,7 +631,7 @@ export default function TenantsPage() {
                           </>
                         ) : null}
                       </p>
-                      {t.registrationCompletedAt ? (
+                      {mounted && t.registrationCompletedAt ? (
                         <p className="text-[11px] text-muted-foreground">
                           Registered{" "}
                           {new Date(

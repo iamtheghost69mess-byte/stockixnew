@@ -79,6 +79,7 @@ export interface IBill {
   projectId?: number;
 
   localAmount?: number;
+  localDueAmount?: number;
   locatedLandedCosts?: IBillLandedCost[];
 }
 

@@ -21,36 +21,32 @@ export interface ILedger {
   getAccountsIds(): number[];
 }
 
-export interface ILedgerEntry {
+export interface ICommonLedgerEntry {
   credit: number;
   debit: number;
   currencyCode: string;
   exchangeRate: number;
+  transactionType: string;
+  transactionId: number;
+  date: Date | string;
+  userId?: number;
+  branchId?: number;
+  transactionNumber?: string;
+  referenceNumber?: string;
+  createdAt?: Date;
+  indexGroup?: number;
+}
 
+export interface ILedgerEntry extends ICommonLedgerEntry {
   accountId?: number;
   accountNormal: string;
   contactId?: number;
-  date: Date | string;
-
-  transactionType: string;
-  transactionId: number;
-
-  transactionNumber?: string;
-
-  referenceNumber?: string;
   index: number;
-  indexGroup?: number;
-
   note?: string;
-
-  userId?: number;
   itemId?: number;
-  branchId?: number;
   projectId?: number;
-
+  itemQuantity?: number;
   entryId?: number;
-  createdAt?: Date;
-
   costable?: boolean;
 }
 

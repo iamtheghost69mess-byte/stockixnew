@@ -10,6 +10,7 @@ import { ACCOUNT_TYPE } from '@/data/AccountTypes';
 import { ServiceError } from '@/exceptions';
 import { ERRORS } from './constants';
 import I18nService from '@/services/I18n/I18nService';
+import { TenantMetadata } from '@/system/models';
 
 @Service()
 export default class CashflowAccountTransactionsService extends FinancialSheet {
@@ -72,11 +73,14 @@ export default class CashflowAccountTransactionsService extends FinancialSheet {
         parsedQuery.accountId,
         pagination
       );
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+
     // Retrieve the computed report.
     const report = new CashflowAccountTransactionsReport(
       transactions,
       openingBalance,
-      parsedQuery
+      parsedQuery,
+      tenantMeta.baseCurrency
     );
     const reportTranasctions = report.reportData();
 

@@ -16,11 +16,20 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Accounts/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class Account extends mixin(TenantModel, [
-  ModelSettings,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class Account extends mixin(TenantModel,
+  ModelSettings as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any,
+) {
+  id: number;
+  name: string;
+  code: string;
+  accountType: string;
+  parentAccountId?: number;
+  active: boolean;
+  seededAt?: Date | null;
+  currencyCode?: string;
+
   /**
    * Table name.
    */
@@ -131,10 +140,10 @@ export default class Account extends mixin(TenantModel, [
         }
       },
       viewRolesBuilder(query, conditionals, expression) {
-        buildFilterQuery(Account.tableName, conditionals, expression)(query);
+        buildFilterQuery(Account as any, conditionals, expression)(query);
       },
       sortColumnBuilder(query, columnKey, direction) {
-        buildSortColumnQuery(Account.tableName, columnKey, direction)(query);
+        buildSortColumnQuery(Account as any, columnKey, direction)(query);
       },
 
       /**

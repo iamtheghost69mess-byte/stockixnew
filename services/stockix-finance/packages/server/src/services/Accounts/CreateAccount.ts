@@ -108,7 +108,7 @@ export class CreateAccount {
     const { Account } = this.tenancy.models(tenantId);
 
     // Retrieves the given tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Authorize the account creation.
     await this.authorize(tenantId, accountDTO, tenantMeta.baseCurrency);

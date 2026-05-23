@@ -56,6 +56,11 @@ block content
           tr.payment-amount
             td #{__('payment.paper.payment_amount')}
             td #{paymentReceive.formattedAmount}
+          if displayTotals && displayTotals.length
+            each dc in displayTotals
+              tr.total-display-currency
+                td ≈ #{dc.currency}
+                td #{dc.formattedTotal}
           tr.blanace-due
             td #{__('payment.paper.balance_due')}
             td #{paymentReceive.customer.closingBalance}

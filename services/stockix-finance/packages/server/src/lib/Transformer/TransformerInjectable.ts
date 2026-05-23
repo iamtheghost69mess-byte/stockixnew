@@ -16,7 +16,7 @@ export class TransformerInjectable {
    */
   async getApplicationContext(tenantId: number) {
     const i18n = this.tenancy.i18n(tenantId);
-    const organization = await TenantMetadata.query().findOne({ tenantId });
+    const organization = await TenantMetadata.findByTenantId(tenantId);
 
     return {
       organization,

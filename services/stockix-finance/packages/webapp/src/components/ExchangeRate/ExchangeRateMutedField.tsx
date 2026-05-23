@@ -32,6 +32,12 @@ export function ExchangeRateMutedField({
     </ExchangeRateFormGroupContent>
   );
 
+  // New standard: Always show 1 Base = X Foreign
+  const displayFrom = toCurrency; 
+  const displayTo = fromCurrency;
+  
+  const displayRate = exchangeRate;
+
   return (
     <ExchangeRateFormGroup label={`As on ${date},`}>
       <Popover
@@ -47,7 +53,7 @@ export function ExchangeRateMutedField({
         target={<div />}
       >
         <ExchangeRateButton>
-          1 {fromCurrency} = {exchangeRate} {toCurrency}
+          1 {displayFrom} = {displayRate} {displayTo}
           <Button
             className={Classes.MINIMAL}
             rightIcon={<Icon icon="pen-18" iconSize={14} />}

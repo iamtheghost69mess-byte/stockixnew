@@ -41,10 +41,13 @@ export function useCurrentOrganization(props) {
       defaultData: {},
       onSuccess: (data) => {
         const organization = omit(data, ['subscriptions']);
+        // Flatten metadata into top-level so org.display_currencies,
+        // org.secondary_currency, org.base_currency etc. are accessible directly.
+        const flat = { ...organization, ...(organization.metadata ?? {}) };
 
         batch(() => {
           // Sets organizations.
-          setOrganizations([organization]);
+          setOrganizations([flat]);
         });
       },
       ...props,

@@ -15,7 +15,7 @@ export default async ({ expressApp }) => {
   Logger.info('[init] MongoDB loaded and connected!');
 
   // Initialize the system database once app started.
-  const knex = databaseLoader();
+  const knex = await databaseLoader();
 
   // Initialize the objection.js from knex instance.
   objectionLoader({ knex });

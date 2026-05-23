@@ -7,11 +7,11 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Items/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class Item extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class Item extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any,
+) {
   /**
    * Table name
    */
@@ -42,7 +42,7 @@ export default class Item extends mixin(TenantModel, [
         query.orderBy(columnSort, sortDirection);
       },
       viewRolesBuilder(query, conditions, logicExpression) {
-        buildFilterQuery(Item.tableName, conditions, logicExpression)(query);
+        buildFilterQuery(Item, conditions, logicExpression)(query);
       },
 
       /**

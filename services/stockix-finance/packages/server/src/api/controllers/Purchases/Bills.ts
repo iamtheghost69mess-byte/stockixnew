@@ -9,6 +9,12 @@ import DynamicListingService from '@/services/DynamicListing/DynamicListService'
 import { ServiceError } from '@/exceptions';
 import CheckPolicies from '@/api/middleware/CheckPolicies';
 import BillPaymentsService from '@/services/Purchases/BillPaymentsService';
+import BillPdf from '@/services/Purchases/BillPdf';
+
+const ACCEPT_TYPE = {
+  APPLICATION_JSON: 'application/json',
+  APPLICATION_PDF: 'application/pdf',
+};
 
 @Service()
 export default class BillsController extends BaseController {
@@ -20,6 +26,9 @@ export default class BillsController extends BaseController {
 
   @Inject()
   private billPayments: BillPaymentsService;
+
+  @Inject()
+  private billPdf: BillPdf;
 
   /**
    * Router constructor.
@@ -292,7 +301,19 @@ export default class BillsController extends BaseController {
     try {
       const bill = await this.billsService.getBill(tenantId, billId);
 
-      return res.status(200).send(this.transfromToResponse({ bill }));
+      res.format({
+        [ACCEPT_TYPE.APPLICATION_JSON]: () => {
+          return res.status(200).send(this.transfromToResponse({ bill }));
+        },
+        [ACCEPT_TYPE.APPLICATION_PDF]: async () => {
+          const pdfContent = await this.billPdf.billPdf(tenantId, bill);
+          res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Length': pdfContent.length,
+          });
+          res.send(pdfContent);
+        },
+      });
     } catch (error) {
       next(error);
     }

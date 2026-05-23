@@ -526,6 +526,15 @@ html[lang^=en] body {
   border-top: 3px double #666;
   font-weight: bold;
 }
+.invoice__table-total table tbody tr.total-display-currency td,
+.invoice__table-total table tbody tr.balance-due-display-currency td {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  border-top: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
 .invoice__due-amount {
   margin-bottom: 18px;
 }

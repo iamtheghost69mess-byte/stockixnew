@@ -15,6 +15,7 @@ import QuickPaymentReceiveFormDialog from '@/containers/Dialogs/QuickPaymentRece
 import QuickPaymentMadeFormDialog from '@/containers/Dialogs/QuickPaymentMadeFormDialog';
 import AllocateLandedCostDialog from '@/containers/Dialogs/AllocateLandedCostDialog';
 import InvoicePdfPreviewDialog from '@/containers/Dialogs/InvoicePdfPreviewDialog';
+import BillPdfPreviewDialog from '@/containers/Dialogs/BillPdfPreviewDialog';
 import EstimatePdfPreviewDialog from '@/containers/Dialogs/EstimatePdfPreviewDialog';
 import ReceiptPdfPreviewDialog from '@/containers/Dialogs/ReceiptPdfPreviewDialog';
 import MoneyInDialog from '@/containers/CashFlow/MoneyInDialog';
@@ -77,6 +78,7 @@ export default function DialogsContainer() {
         dialogName={DialogsName.AllocateLandedCostForm}
       />
       <InvoicePdfPreviewDialog dialogName={DialogsName.InvoicePdfForm} />
+      <BillPdfPreviewDialog dialogName={DialogsName.BillPdfForm} />
       <EstimatePdfPreviewDialog dialogName={DialogsName.EstimatePdfForm} />
       <ReceiptPdfPreviewDialog dialogName={DialogsName.ReceiptPdfForm} />
       <MoneyInDialog dialogName={DialogsName.MoneyInForm} />

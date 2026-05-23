@@ -8,7 +8,7 @@ export class BillPaymentTransformer extends Transformer {
    * @returns {Array}
    */
   public includeAttributes = (): string[] => {
-    return ['formattedPaymentDate', 'formattedAmount'];
+    return ['formattedPaymentDate', 'formattedAmount', 'formattedLocalAmount'];
   };
 
   /**
@@ -29,5 +29,14 @@ export class BillPaymentTransformer extends Transformer {
     return formatNumber(billPayment.amount, {
       currencyCode: billPayment.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted bill payment local amount.
+   * @param {IBillPayment} billPayment
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (billPayment: IBillPayment): string => {
+    return this.formatMoney(billPayment.localAmount);
   };
 }

@@ -115,7 +115,8 @@ export function useJournalSheet(query, props) {
     { method: 'get', url: '/financial_statements/journal', params: query },
     {
       select: (res) => ({
-        tableRows: journalTableRowsReducer(res.data.data),
+        // reportData() now returns { entries: [...] }; fall back to array for safety.
+        tableRows: journalTableRowsReducer(res.data.data?.entries ?? res.data.data),
         ...res.data,
       }),
       defaultData: {
@@ -468,6 +469,44 @@ export function useTransactionsByReference(query, props) {
       defaultData: {
         transactions: [],
       },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Retrieve unrealized gain or loss report.
+ */
+export function useUnrealizedGainOrLoss(query, props?) {
+  return useRequestQuery(
+    [t.FINANCIAL_REPORT, t.UNREALIZED_GAIN_OR_LOSS, query],
+    {
+      method: 'get',
+      url: '/financial_statements/unrealized-gain-loss',
+      params: query,
+    },
+    {
+      select: (res) => res.data,
+      defaultData: { entries: [], arTotal: 0, apTotal: 0, total: 0 },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Retrieve realized gain or loss report.
+ */
+export function useRealizedGainOrLoss(query, props?) {
+  return useRequestQuery(
+    [t.FINANCIAL_REPORT, t.REALIZED_GAIN_OR_LOSS, query],
+    {
+      method: 'get',
+      url: '/financial_statements/realized-gain-loss',
+      params: query,
+    },
+    {
+      select: (res) => res.data,
+      defaultData: { entries: [], arTotal: 0, apTotal: 0, total: 0 },
       ...props,
     },
   );

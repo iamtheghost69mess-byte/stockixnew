@@ -11,6 +11,8 @@ import ItemsEntriesService from '@/services/Items/ItemsEntriesService';
 import UnitOfWork from '@/services/UnitOfWork';
 import events from '@/subscribers/events';
 import BaseVendorCredit from './BaseVendorCredit';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export default class CreateVendorCredit extends BaseVendorCredit {
@@ -47,6 +49,12 @@ export default class CreateVendorCredit extends BaseVendorCredit {
       .findById(vendorCreditCreateDTO.vendorId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      vendor.currencyCode,
+      tenantMeta.baseCurrency,
+      vendorCreditCreateDTO.exchangeRate
+    );
     // Validate items should be sellable items.
     await this.itemsEntriesService.validateNonSellableEntriesItems(
       tenantId,

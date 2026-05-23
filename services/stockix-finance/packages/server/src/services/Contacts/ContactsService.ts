@@ -14,6 +14,7 @@ import {
 } from '@/interfaces';
 import JournalPoster from '../Accounting/JournalPoster';
 import { ERRORS } from './constants';
+import { TenantMetadata } from '@/system/models';
 
 type TContactService = 'customer' | 'vendor';
 
@@ -77,9 +78,9 @@ export default class ContactsService {
   /**
    * Transforms contact new DTO object to model object to insert to the storage.
    * @param {IContactNewDTO} contactDTO
+   * @param {string} baseCurrency - Tenant's base currency, used as fallback.
    */
-  private transformNewContactDTO(contactDTO: IContactNewDTO) {
-    const baseCurrency = 'USD';
+  private transformNewContactDTO(contactDTO: IContactNewDTO, baseCurrency: string) {
     const currencyCode =
       typeof contactDTO.currencyCode !== 'undefined'
         ? contactDTO.currencyCode
@@ -114,7 +115,8 @@ export default class ContactsService {
     trx?: Knex.Transaction
   ) {
     const { contactRepository } = this.tenancy.repositories(tenantId);
-    const contactObj = this.transformNewContactDTO(contactDTO);
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    const contactObj = this.transformNewContactDTO(contactDTO, tenantMeta.baseCurrency);
 
     const contact = await contactRepository.create(
       {

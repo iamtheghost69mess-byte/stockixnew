@@ -12,6 +12,8 @@ import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import events from '@/subscribers/events';
 import BaseCreditNotes from './CreditNotes';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export default class CreateCreditNote extends BaseCreditNotes {
@@ -49,6 +51,12 @@ export default class CreateCreditNote extends BaseCreditNotes {
       .findById(creditNoteDTO.customerId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      creditNoteDTO.exchangeRate
+    );
     // Validate items ids existance.
     await this.itemsEntriesService.validateItemsIdsExistance(
       tenantId,

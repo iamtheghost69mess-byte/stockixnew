@@ -14,6 +14,8 @@ import events from '@/subscribers/events';
 import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { CommandManualJournalValidators } from './CommandManualJournalValidators';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export class EditManualJournal {
@@ -38,7 +40,8 @@ export class EditManualJournal {
   private authorize = async (
     tenantId: number,
     manualJournalId: number,
-    manualJournalDTO: IManualJournalDTO
+    manualJournalDTO: IManualJournalDTO,
+    baseCurrency: string
   ) => {
     // Validates the total credit and debit to be equals.
     this.validator.valdiateCreditDebitTotalEquals(manualJournalDTO);
@@ -61,6 +64,11 @@ export class EditManualJournal {
     await this.validator.dynamicValidateAccountsWithContactType(
       tenantId,
       manualJournalDTO.entries
+    );
+    validateForeignCurrencyExchangeRate(
+      manualJournalDTO.currencyCode,
+      baseCurrency,
+      manualJournalDTO.exchangeRate
     );
   };
 
@@ -110,8 +118,15 @@ export class EditManualJournal {
       .findById(manualJournalId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+
     // Authorize manual journal editing.
-    await this.authorize(tenantId, manualJournalId, manualJournalDTO);
+    await this.authorize(
+      tenantId,
+      manualJournalId,
+      manualJournalDTO,
+      tenantMeta.baseCurrency
+    );
 
     // Transform manual journal DTO to model.
     const manualJournalObj = this.transformEditDTOToModel(

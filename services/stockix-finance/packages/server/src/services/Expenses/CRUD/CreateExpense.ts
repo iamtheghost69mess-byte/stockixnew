@@ -13,6 +13,8 @@ import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import UnitOfWork from '@/services/UnitOfWork';
 import { CommandExpenseValidator } from './CommandExpenseValidator';
 import { ExpenseDTOTransformer } from './ExpenseDTOTransformer';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export class CreateExpense {
@@ -66,6 +68,13 @@ export class CreateExpense {
 
     // Validate expenses accounts type.
     this.validator.validateExpensesAccountsType(expenseAccounts);
+
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      expenseDTO.currencyCode,
+      tenantMeta.baseCurrency,
+      expenseDTO.exchangeRate
+    );
 
     // Validate the given expense categories not equal zero.
     this.validator.validateCategoriesNotEqualZero(expenseDTO);

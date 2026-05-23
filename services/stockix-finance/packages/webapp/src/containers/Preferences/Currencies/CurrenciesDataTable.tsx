@@ -1,53 +1,59 @@
 // @ts-nocheck
 import React, { useCallback } from 'react';
+import moment from 'moment';
 import { compose } from '@/utils';
-
 import { DataTable, TableSkeletonRows } from '@/components';
-
 import { useCurrenciesContext } from './CurrenciesProvider';
-
 import { ActionMenuList, useCurrenciesTableColumns } from './components';
-
 import withDialogActions from '@/containers/Dialog/withDialogActions';
 import withAlertActions from '@/containers/Alert/withAlertActions';
 import styled from 'styled-components';
 
-/**
- * Currencies table.
- */
 function CurrenciesDataTable({
-  // #ownProps
   tableProps,
-
-  // #withDialog.
   openDialog,
-
-  // #withAlertActions
   openAlert,
 }) {
   const { currencies, isCurrenciesLoading } = useCurrenciesContext();
-
-  // Table columns.
   const columns = useCurrenciesTableColumns();
 
-  // Handle Edit Currency.
   const handleEditCurrency = useCallback(
     (currency) => {
-      openDialog('currency-form', {
+      openDialog('currency-form', { action: 'edit', currency });
+    },
+    [openDialog],
+  );
+
+  const handleDeleteCurrency = ({ currency_code }) => {
+    openAlert('currency-delete', { currency_code });
+  };
+
+  // Opens the exchange rate dialog in new mode with currency pre-filled.
+  const handleSetRate = useCallback(
+    (currency) => {
+      openDialog('exchangeRate-form', { currencyCode: currency.currency_code });
+    },
+    [openDialog],
+  );
+
+  // Opens the exchange rate dialog in edit mode for the currency's latest rate.
+  const handleEditRate = useCallback(
+    (currency) => {
+      openDialog('exchangeRate-form', {
         action: 'edit',
-        currency: currency,
+        exchangeRate: {
+          id: currency.latest_exchange_rate_id,
+          currency_code: currency.currency_code,
+          exchange_rate: currency.latest_exchange_rate,
+          date: moment(currency.latest_exchange_rate_date).format('YYYY-MM-DD'),
+        },
       });
     },
     [openDialog],
   );
 
-  // Handle delete currency.
-  const handleDeleteCurrency = ({ currency_code }) => {
-    openAlert('currency-delete', { currency_code: currency_code });
-  };
-
   return (
-    <CurrencieDataTable
+    <CurrenciesTable
       columns={columns}
       data={currencies}
       loading={isCurrenciesLoading}
@@ -58,6 +64,8 @@ function CurrenciesDataTable({
       payload={{
         onDeleteCurrency: handleDeleteCurrency,
         onEditCurrency: handleEditCurrency,
+        onSetRate: handleSetRate,
+        onEditRate: handleEditRate,
       }}
       rowContextMenu={ActionMenuList}
       {...tableProps}
@@ -70,10 +78,13 @@ export default compose(
   withAlertActions,
 )(CurrenciesDataTable);
 
-const CurrencieDataTable = styled(DataTable)`
+const CurrenciesTable = styled(DataTable)`
   .table .th,
   .table .td {
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+  .table .td.current-rate {
+    font-variant-numeric: tabular-nums;
   }
 `;

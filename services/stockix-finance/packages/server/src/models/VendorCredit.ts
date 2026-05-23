@@ -7,11 +7,25 @@ import { DEFAULT_VIEWS } from '@/services/Purchases/VendorCredits/constants';
 import ModelSearchable from './ModelSearchable';
 import VendorCreditMeta from './VendorCredit.Meta';
 
-export default class VendorCredit extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class VendorCredit extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  vendorId: number;
+  amount: number;
+  exchangeRate: number;
+  vendorCreditDate: Date | string;
+  vendorCreditNumber: string;
+  referenceNo?: string;
+  openedAt: Date | string | null;
+  refundedAmount: number;
+  invoicedAmount: number;
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -23,7 +37,15 @@ export default class VendorCredit extends mixin(TenantModel, [
    * Virtual attributes.
    */
   static get virtualAttributes() {
-    return ['localAmount'];
+    return [
+      'localAmount',
+      'localCreditsRemaining',
+      'isDraft',
+      'isPublished',
+      'isOpen',
+      'isClosed',
+      'creditsRemaining',
+    ];
   }
 
   /**
@@ -31,7 +53,17 @@ export default class VendorCredit extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.amount / this.exchangeRate;
+  }
+
+  /**
+   * Credits remaining in organization base currency.
+   * @returns {number}
+   */
+  get localCreditsRemaining() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.creditsRemaining * this.exchangeRate;
   }
 
   /**
@@ -119,9 +151,6 @@ export default class VendorCredit extends mixin(TenantModel, [
   /**
    * Virtual attributes.
    */
-  static get virtualAttributes() {
-    return ['isDraft', 'isPublished', 'isOpen', 'isClosed', 'creditsRemaining'];
-  }
 
   /**
    * Detarmines whether the vendor credit is draft.
@@ -163,12 +192,6 @@ export default class VendorCredit extends mixin(TenantModel, [
     return Math.max(this.amount - this.refundedAmount - this.invoicedAmount, 0);
   }
 
-  /**
-   * Bill model settings.
-   */
-  static get meta() {
-    return BillSettings;
-  }
 
   /**
    * Relationship mapping.

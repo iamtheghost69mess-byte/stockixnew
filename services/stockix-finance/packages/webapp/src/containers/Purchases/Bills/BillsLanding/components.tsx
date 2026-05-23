@@ -18,6 +18,7 @@ import {
   Choose,
   Money,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import {
   formattedAmount,
@@ -43,6 +44,7 @@ export function ActionsMenu({
     onConvert,
     onViewDetails,
     onAllocateLandedCost,
+    onPrint,
   },
   row: { original },
 }) {
@@ -52,6 +54,11 @@ export function ActionsMenu({
         icon={<Icon icon="reader-18" />}
         text={intl.get('view_details')}
         onClick={safeCallback(onViewDetails, original)}
+      />
+      <MenuItem
+        icon={<Icon icon={'print-16'} iconSize={16} />}
+        text={intl.get('print')}
+        onClick={safeCallback(onPrint, original)}
       />
       <Can I={BillAction.Edit} a={AbilitySubject.Bill}>
         <MenuDivider />
@@ -198,7 +205,8 @@ export function useBillsTableColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: AmountAccessor,
+        accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         className: 'amount',
         align: 'right',

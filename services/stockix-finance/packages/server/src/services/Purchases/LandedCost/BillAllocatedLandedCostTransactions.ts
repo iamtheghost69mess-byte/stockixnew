@@ -6,6 +6,7 @@ import { IBillLandedCostTransaction } from '@/interfaces';
 import HasTenancyService from '@/services/Tenancy/TenancyService';
 import { formatNumber } from 'utils';
 import I18nService from '@/services/I18n/I18nService';
+import { TenantMetadata } from '@/system/models';
 
 @Service()
 export default class BillAllocatedLandedCostTransactions {
@@ -38,32 +39,27 @@ export default class BillAllocatedLandedCostTransactions {
       .withGraphFetched('allocatedFromExpenseEntry.expenseAccount')
       .withGraphFetched('bill');
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
     const transactionsJson = this.i18nService.i18nApply(
       [[qim.$each, 'allocationMethodFormatted']],
       landedCostTransactions.map((a) => a.toJSON()),
       tenantId
     );
-    return this.transformBillLandedCostTransactions(transactionsJson);
+    return this.transformBillLandedCostTransactions(transactionsJson, tenantMeta.baseCurrency);
   };
 
-  /**
-   *
-   * @param {IBillLandedCostTransaction[]} landedCostTransactions
-   * @returns
-   */
   private transformBillLandedCostTransactions = (
-    landedCostTransactions: IBillLandedCostTransaction[]
+    landedCostTransactions: IBillLandedCostTransaction[],
+    baseCurrency: string
   ) => {
-    return landedCostTransactions.map(this.transformBillLandedCostTransaction);
+    return landedCostTransactions.map((t) =>
+      this.transformBillLandedCostTransaction(t, baseCurrency)
+    );
   };
 
-  /**
-   *
-   * @param {IBillLandedCostTransaction} transaction
-   * @returns
-   */
   private transformBillLandedCostTransaction = (
-    transaction: IBillLandedCostTransaction
+    transaction: IBillLandedCostTransaction,
+    baseCurrency: string
   ) => {
     const getTransactionName = R.curry(this.condBillLandedTransactionName)(
       transaction.fromTransactionType
@@ -83,7 +79,7 @@ export default class BillAllocatedLandedCostTransactions {
       name: getTransactionName(transaction),
       description: getTransactionDesc(transaction),
       formattedLocalAmount: formatNumber(transaction.localAmount, {
-        currencyCode: 'USD',
+        currencyCode: baseCurrency,
       }),
     };
   };

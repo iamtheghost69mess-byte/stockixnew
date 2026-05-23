@@ -5,6 +5,16 @@ import BaseModel from 'models/Model';
 import TenantMetadata from './TenantMetadata';
 
 export default class Tenant extends BaseModel {
+  readonly id: number;
+  organizationId: string;
+  seededAt: string | null;
+  initializedAt: string | null;
+  buildJobId: string | null;
+  upgradeJobId: string | null;
+
+  // Populated by withGraphFetched('metadata')
+  metadata?: TenantMetadata & Record<string, any>;
+
   /**
    * Table name.
    */
@@ -67,7 +77,7 @@ export default class Tenant extends BaseModel {
   /**
    * Creates a new tenant with random organization id.
    */
-  static createWithUniqueOrgId(uniqId) {
+  static createWithUniqueOrgId(uniqId: string) {
     const organizationId = uniqid() || uniqId;
     return this.query().insert({ organizationId });
   }
@@ -76,8 +86,8 @@ export default class Tenant extends BaseModel {
    * Mark as seeded.
    * @param {number} tenantId
    */
-  static markAsSeeded(tenantId) {
-    const seededAt = moment().toMySqlDateTime();
+  static markAsSeeded(tenantId: number) {
+    const seededAt = (moment() as any).toMySqlDateTime();
     return this.query().update({ seededAt }).where({ id: tenantId });
   }
 
@@ -85,30 +95,30 @@ export default class Tenant extends BaseModel {
    * Mark the the given organization as initialized.
    * @param {string} organizationId
    */
-  static markAsInitialized(tenantId) {
-    const initializedAt = moment().toMySqlDateTime();
+  static markAsInitialized(tenantId: number) {
+    const initializedAt = (moment() as any).toMySqlDateTime();
     return this.query().update({ initializedAt }).where({ id: tenantId });
   }
 
   /**
    * Marks the given tenant as built.
    */
-  static markAsBuilt(tenantId) {
-    const builtAt = moment().toMySqlDateTime();
+  static markAsBuilt(tenantId: number) {
+    const builtAt = (moment() as any).toMySqlDateTime();
     return this.query().update({ builtAt }).where({ id: tenantId });
   }
 
   /**
    * Marks the given tenant as built.
    */
-  static markAsBuilding(tenantId, buildJobId) {
+  static markAsBuilding(tenantId: number, buildJobId: string) {
     return this.query().update({ buildJobId }).where({ id: tenantId });
   }
 
   /**
    * Marks the given tenant as built.
    */
-  static markAsBuildCompleted(tenantId) {
+  static markAsBuildCompleted(tenantId: number) {
     return this.query().update({ buildJobId: null }).where({ id: tenantId });
   }
 
@@ -118,7 +128,7 @@ export default class Tenant extends BaseModel {
    * @param {string} upgradeJobId
    * @returns
    */
-  static markAsUpgrading(tenantId, upgradeJobId) {
+  static markAsUpgrading(tenantId: number, upgradeJobId: string) {
     return this.query().update({ upgradeJobId }).where({ id: tenantId });
   }
 
@@ -127,15 +137,15 @@ export default class Tenant extends BaseModel {
    * @param {number} tenantId
    * @returns
    */
-  static markAsUpgraded(tenantId) {
+  static markAsUpgraded(tenantId: number) {
     return this.query().update({ upgradeJobId: null }).where({ id: tenantId });
   }
 
   /**
    * Saves the metadata of the given tenant.
    */
-  static async saveMetadata(tenantId, metadata) {
-    const foundMetadata = await TenantMetadata.query().findOne({ tenantId });
+  static async saveMetadata(tenantId: number, metadata: any) {
+    const foundMetadata = await TenantMetadata.findByTenantId(tenantId);
     const updateOrInsert = foundMetadata ? 'update' : 'insert';
 
     return TenantMetadata.query()

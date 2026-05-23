@@ -1,21 +1,31 @@
-FROM node:14.15.0 as build
-
-USER root
+FROM node:14.21.3 as build
 
 WORKDIR /app
+RUN npm install -g pnpm@7
 
-# Install dependencies
-COPY package*.json ./
+# Copy lerna.json for the version injection in craco.config.js
 COPY lerna.json ./
 
-COPY ./packages/webapp/package*.json /app/packages/webapp/
+# Copy workspace configuration
+COPY pnpm-workspace.yaml pnpm-lock.yaml .npmrc package.json ./
 
-RUN npm install
-RUN npm run bootstrap
+WORKDIR /app/packages/webapp
 
-# Build webapp package
-COPY ./packages/webapp /app/packages/webapp
-RUN npm run build:webapp
+# Copy ONLY webapp package.json
+COPY ./packages/webapp/package*.json ./
+
+WORKDIR /app
+# Install ONLY webapp dependencies to avoid hoisting conflicts with server's Webpack 5
+RUN pnpm i --frozen-lockfile --filter @stockix/webapp...
+
+WORKDIR /app/packages/webapp
+
+# Copy webapp source
+COPY ./packages/webapp ./
+
+# Build the webapp isolated from the monorepo
+ENV SKIP_PREFLIGHT_CHECK=true
+RUN pnpm run build
 
 FROM nginx
 

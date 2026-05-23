@@ -18,6 +18,8 @@ import {
 import CashFlowTable from '@/services/FinancialStatements/CashFlow/CashFlowTable';
 import HasTenancyService from '@/services/Tenancy/TenancyService';
 import CheckPolicies from '@/api/middleware/CheckPolicies';
+import ExchangeRatesService from '@/services/ExchangeRates/ExchangeRatesService';
+import { TenantMetadata } from '@/system/models';
 
 @Service()
 export default class CashFlowController extends BaseFinancialReportController {
@@ -26,6 +28,9 @@ export default class CashFlowController extends BaseFinancialReportController {
 
   @Inject()
   tenancy: HasTenancyService;
+
+  @Inject()
+  exchangeRatesService: ExchangeRatesService;
 
   /**
    * Router constructor.
@@ -87,10 +92,13 @@ export default class CashFlowController extends BaseFinancialReportController {
    */
   private transformToTableRows(
     cashFlowDOO: ICashFlowStatementDOO,
-    tenantId: number
+    tenantId: number,
+    baseCurrency?: string,
+    secondaryCurrency?: string,
+    secondaryRate?: number
   ) {
     const i18n = this.tenancy.i18n(tenantId);
-    const cashFlowTable = new CashFlowTable(cashFlowDOO, i18n);
+    const cashFlowTable = new CashFlowTable(cashFlowDOO, i18n, baseCurrency, secondaryCurrency, secondaryRate);
 
     return {
       table: {
@@ -111,6 +119,7 @@ export default class CashFlowController extends BaseFinancialReportController {
    */
   async cashFlow(req: Request, res: Response, next: NextFunction) {
     const { tenantId, settings } = req;
+    const baseCurrency: string = settings.get({ group: 'organization', key: 'base_currency' }) ?? '';
     const filter = {
       ...this.matchedQueryData(req),
     };
@@ -121,11 +130,22 @@ export default class CashFlowController extends BaseFinancialReportController {
       const accept = this.accepts(req);
       const acceptType = accept.types(['json', 'application/json+table']);
 
+      const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+      const secondaryCurrency = tenantMeta?.secondaryCurrency ?? '';
+      const secondaryRateRow = secondaryCurrency
+        ? await this.exchangeRatesService.lookupRateByDate(
+            tenantId,
+            secondaryCurrency,
+            filter.toDate ?? new Date()
+          )
+        : null;
+      const secondaryRate = secondaryRateRow?.exchangeRate ?? 0;
+
       switch (acceptType) {
         case 'application/json+table':
           return res
             .status(200)
-            .send(this.transformToTableRows(cashFlow, tenantId));
+            .send(this.transformToTableRows(cashFlow, tenantId, baseCurrency, secondaryCurrency, secondaryRate));
         case 'json':
         default:
           return res.status(200).send(this.transformJsonResponse(cashFlow));

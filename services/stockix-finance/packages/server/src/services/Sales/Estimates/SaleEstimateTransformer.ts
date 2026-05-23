@@ -11,6 +11,7 @@ export default class SaleEstimateTransfromer extends Transformer {
   public includeAttributes = (): string[] => {
     return [
       'formattedAmount',
+      'formattedLocalAmount',
       'formattedEstimateDate',
       'formattedExpirationDate',
       'formattedDeliveredAtDate',
@@ -65,7 +66,7 @@ export default class SaleEstimateTransfromer extends Transformer {
   };
 
   /**
-   * Retrieve formatted invoice amount.
+   * Retrieve formatted estimate amount.
    * @param {ISaleEstimate} estimate
    * @returns {string}
    */
@@ -73,5 +74,16 @@ export default class SaleEstimateTransfromer extends Transformer {
     return formatNumber(estimate.amount, {
       currencyCode: estimate.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted estimate amount in base (local) currency.
+   * For base-currency estimates this equals formattedAmount.
+   * @param {ISaleEstimate} estimate
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (estimate: ISaleEstimate): string => {
+    if (estimate.localAmount == null) return '';
+    return this.formatMoney(estimate.localAmount);
   };
 }

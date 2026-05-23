@@ -44,10 +44,10 @@ function CurrencyForm({
   const initialValues = useMemo(
     () => ({
       ...defaultInitialValues,
-      // ...(isEditMode && pick(currency, Object.keys(defaultInitialValues))),
       ...transformToForm(currency, defaultInitialValues),
     }),
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currency],
   );
 
   // Handles the form submit.
@@ -96,6 +96,7 @@ function CurrencyForm({
       validationSchema={validationSchema}
       initialValues={initialValues}
       onSubmit={handleFormSubmit}
+      enableReinitialize
     >
       <CurrencyFormContent />
     </Formik>

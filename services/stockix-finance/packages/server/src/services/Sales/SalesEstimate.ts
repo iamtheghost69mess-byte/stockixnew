@@ -36,6 +36,8 @@ import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { WarehouseTransactionDTOTransform } from '@/services/Warehouses/Integrations/WarehouseTransactionDTOTransform';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
 import { TransformerInjectable } from '@/lib/Transformer/TransformerInjectable';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 /**
  * Sale estimate service.
@@ -250,6 +252,12 @@ export default class SaleEstimateService implements ISalesEstimatesService {
       .findById(estimateDTO.customerId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      estimateDTO.exchangeRate
+    );
     // Transform DTO object ot model object.
     const estimateObj = await this.transformDTOToModel(
       tenantId,
@@ -322,6 +330,12 @@ export default class SaleEstimateService implements ISalesEstimatesService {
       .findById(estimateDTO.customerId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      estimateDTO.exchangeRate
+    );
     // Transform DTO object ot model object.
     const estimateObj = await this.transformDTOToModel(
       tenantId,

@@ -25,13 +25,13 @@ export function MultiSelect({
 
   // Removes the given item from selected items.
   const removeSelectedItem = React.useCallback(
-    (item) => localSelected.filter((localItem) => localItem !== item),
+    (item) => (Array.isArray(localSelected) ? localSelected : []).filter((localItem) => localItem !== item),
     [localSelected],
   );
 
   // Adds the given item to selected items.
   const addSelectedItem = React.useCallback(
-    (item) => [...localSelected, item],
+    (item) => [...(Array.isArray(localSelected) ? localSelected : []), item],
     [localSelected],
   );
 

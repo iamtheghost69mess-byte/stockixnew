@@ -79,10 +79,11 @@ export default class CashFlowAccountTransactionsController extends BaseFinancial
    */
   private transformToTableRows(
     cashFlowDOO: ICashFlowStatementDOO,
-    tenantId: number
+    tenantId: number,
+    baseCurrency?: string
   ) {
     const i18n = this.tenancy.i18n(tenantId);
-    const cashFlowTable = new CashFlowTable(cashFlowDOO, i18n);
+    const cashFlowTable = new CashFlowTable(cashFlowDOO, i18n, baseCurrency);
 
     return {
       table: {
@@ -106,7 +107,8 @@ export default class CashFlowAccountTransactionsController extends BaseFinancial
     res: Response,
     next: NextFunction
   ) => {
-    const { tenantId } = req;
+    const { tenantId, settings } = req;
+    const baseCurrency: string = settings?.get?.({ group: 'organization', key: 'base_currency' }) ?? '';
     const query = this.matchedQueryData(req);
 
     try {

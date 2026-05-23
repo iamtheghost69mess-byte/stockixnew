@@ -9,6 +9,8 @@ import { AbilitySubject, ReportsAction } from '@/interfaces';
 import CheckPolicies from '@/api/middleware/CheckPolicies';
 import BalanceSheetTable from '@/services/FinancialStatements/BalanceSheet/BalanceSheetTable';
 import HasTenancyService from '@/services/Tenancy/TenancyService';
+import ExchangeRatesService from '@/services/ExchangeRates/ExchangeRatesService';
+import { TenantMetadata } from '@/system/models';
 
 @Service()
 export default class BalanceSheetStatementController extends BaseFinancialReportController {
@@ -17,6 +19,9 @@ export default class BalanceSheetStatementController extends BaseFinancialReport
 
   @Inject()
   tenancy: HasTenancyService;
+
+  @Inject()
+  exchangeRatesService: ExchangeRatesService;
 
   /**
    * Router constructor.
@@ -88,6 +93,7 @@ export default class BalanceSheetStatementController extends BaseFinancialReport
   async balanceSheet(req: Request, res: Response, next: NextFunction) {
     const { tenantId, settings } = req;
     const i18n = this.tenancy.i18n(tenantId);
+    const baseCurrency: string = settings.get({ group: 'organization', key: 'base_currency' }) ?? '';
 
     let filter = this.matchedQueryData(req);
 
@@ -103,7 +109,18 @@ export default class BalanceSheetStatementController extends BaseFinancialReport
       const accept = this.accepts(req);
       const acceptType = accept.types(['json', 'application/json+table']);
 
-      const table = new BalanceSheetTable(data, query, i18n);
+      const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+      const secondaryCurrency = tenantMeta?.secondaryCurrency ?? '';
+      const secondaryRateRow = secondaryCurrency
+        ? await this.exchangeRatesService.lookupRateByDate(
+            tenantId,
+            secondaryCurrency,
+            filter.toDate ?? new Date()
+          )
+        : null;
+      const secondaryRate = secondaryRateRow?.exchangeRate ?? 0;
+
+      const table = new BalanceSheetTable(data, query, i18n, baseCurrency, secondaryCurrency, secondaryRate);
 
       switch (acceptType) {
         case 'application/json+table':

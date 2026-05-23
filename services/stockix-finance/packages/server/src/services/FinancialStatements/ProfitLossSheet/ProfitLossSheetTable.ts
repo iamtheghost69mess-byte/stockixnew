@@ -37,13 +37,40 @@ export class ProfitLossSheetTable extends R.compose(
    * @param {} date
    * @param {IProfitLossSheetQuery} query
    */
-  constructor(data: any, query: IProfitLossSheetQuery, i18n: any) {
+  private baseCurrency: string;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
+
+  constructor(
+    data: any,
+    query: IProfitLossSheetQuery,
+    i18n: any,
+    baseCurrency?: string,
+    secondaryCurrency?: string,
+    secondaryRate?: number
+  ) {
     super();
 
     this.query = new ProfitLossSheetQuery(query);
     this.reportData = data;
     this.i18n = i18n;
+    this.baseCurrency = baseCurrency ?? '';
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
+
+  private decorateNodeSecondary = (node: any): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate || node.total?.amount == null) {
+      return node;
+    }
+    const converted = node.total.amount * this.secondaryRate;
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: this.formatTotalNumber(converted, { currencyCode: this.secondaryCurrency }),
+      },
+    };
+  };
 
   // ----------------------------------
   // # Rows
@@ -53,6 +80,11 @@ export class ProfitLossSheetTable extends R.compose(
    * @return {ITableColumnAccessor[]}
    */
   private totalColumnAccessor = (): ITableColumnAccessor[] => {
+    const primaryAccessor = [{ key: 'total', accessor: 'total.formattedAmount' }];
+    const secondaryAccessor =
+      this.secondaryCurrency && this.secondaryRate
+        ? [{ key: 'secondary_total', accessor: 'secondary.formattedAmount' }]
+        : [];
     return R.pipe(
       R.when(
         this.query.isPreviousPeriodActive,
@@ -63,7 +95,8 @@ export class ProfitLossSheetTable extends R.compose(
         R.concat(this.previousYearColumnAccessor())
       ),
       R.concat(this.percentageColumnsAccessor()),
-      R.concat([{ key: 'total', accessor: 'total.formattedAmount' }])
+      R.concat(primaryAccessor),
+      R.concat(secondaryAccessor)
     )([]);
   };
 
@@ -95,7 +128,7 @@ export class ProfitLossSheetTable extends R.compose(
       rowTypes: [ProfitLossSheetRowType.ACCOUNT],
       id: node.id,
     };
-    return tableRowMapper(node, columns, meta);
+    return tableRowMapper(this.decorateNodeSecondary(node), columns, meta);
   };
 
   /**
@@ -111,7 +144,7 @@ export class ProfitLossSheetTable extends R.compose(
       rowTypes: [ProfitLossSheetRowType.ACCOUNTS],
       id: node.id,
     };
-    return tableRowMapper(node, columns, meta);
+    return tableRowMapper(this.decorateNodeSecondary(node), columns, meta);
   };
 
   /**
@@ -128,7 +161,7 @@ export class ProfitLossSheetTable extends R.compose(
       rowTypes: [ProfitLossSheetRowType.TOTAL],
       id: node.id,
     };
-    return tableRowMapper(node, columns, meta);
+    return tableRowMapper(this.decorateNodeSecondary(node), columns, meta);
   };
 
   /**
@@ -204,13 +237,23 @@ export class ProfitLossSheetTable extends R.compose(
    * @returns {ITableColumn[]}
    */
   private totalColumn = (): ITableColumn[] => {
-    return [
+    const label = this.baseCurrency
+      ? `${this.i18n.__('profit_loss_sheet.total')} (${this.baseCurrency})`
+      : this.i18n.__('profit_loss_sheet.total');
+    const columns: ITableColumn[] = [
       {
         key: 'total',
-        label: this.i18n.__('profit_loss_sheet.total'),
+        label,
         children: this.tableColumnChildren(),
       },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({
+        key: 'secondary_total',
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.__('profit_loss_sheet.total')}`,
+      });
+    }
+    return columns;
   };
 
   /**

@@ -84,7 +84,7 @@ export class ExpenseDTOTransformer {
     const initialDTO = this.expenseDTOToModel(tenantId, expenseDTO, user);
 
     // Retrieves the tenant metadata.
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     return {
       ...initialDTO,

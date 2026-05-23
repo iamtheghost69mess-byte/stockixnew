@@ -14,12 +14,14 @@ export default function ExchangeRateFormDialogContent({
   action,
   exchangeRateId,
   dialogName,
+  currencyCode,
 }) {
   return (
     <ExchangeRateFormProvider
       dialogName={dialogName}
       exchangeRate={exchangeRateId}
       action={action}
+      currencyCode={currencyCode}
     >
       <ExchangeRateForm />
     </ExchangeRateFormProvider>

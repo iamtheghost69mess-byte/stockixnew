@@ -10,6 +10,8 @@ import UnitOfWork from '@/services/UnitOfWork';
 import events from '@/subscribers/events';
 import { Inject, Service } from 'typedi';
 import BaseCreditNotes from './CreditNotes';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service()
 export default class EditCreditNote extends BaseCreditNotes {
@@ -45,6 +47,12 @@ export default class EditCreditNote extends BaseCreditNotes {
       .findById(creditNoteEditDTO.customerId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      creditNoteEditDTO.exchangeRate
+    );
     // Validate items ids existance.
     await this.itemsEntriesService.validateItemsIdsExistance(
       tenantId,

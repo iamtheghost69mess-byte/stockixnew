@@ -17,7 +17,7 @@ import { Dictionary } from 'tsyringe/dist/typings/types';
 export default abstract class AgingSummaryReport extends AgingReport {
   protected readonly contacts: IContact[];
   protected readonly agingPeriods: IAgingPeriod[] = [];
-  protected readonly baseCurrency: string;
+  readonly baseCurrency: string;
   protected readonly query: IARAgingSummaryQuery;
   protected readonly overdueInvoicesByContactId: Dictionary<
     (ISaleInvoice | IBill)[]
@@ -47,9 +47,11 @@ export default abstract class AgingSummaryReport extends AgingReport {
 
     return unpaidInvoices.reduce(
       (agingPeriods: IAgingPeriodTotal[], unpaidInvoice) => {
+        const localDue =
+          unpaidInvoice.localDueAmount ?? unpaidInvoice.dueAmount;
         const newAgingPeriods = this.getContactAgingDueAmount(
           agingPeriods,
-          unpaidInvoice.dueAmount,
+          localDue,
           unpaidInvoice.overdueDays
         );
         return newAgingPeriods;
@@ -195,7 +197,10 @@ export default abstract class AgingSummaryReport extends AgingReport {
    */
   protected getContactCurrentTotal(contactId: number): number {
     const currentInvoices = this.getCurrentInvoicesByContactId(contactId);
-    return sumBy(currentInvoices, (invoice) => invoice.dueAmount);
+    return sumBy(
+      currentInvoices,
+      (invoice) => invoice.localDueAmount ?? invoice.dueAmount
+    );
   }
 
   /**

@@ -9,20 +9,23 @@ import {
   TotalLineTextStyle,
 } from '@/components';
 import { usePaymentMadeTotals } from './utils';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
 
 export function PaymentMadeFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = usePaymentMadeTotals();
+  const { total, formattedSubtotal, formattedTotal } = usePaymentMadeTotals();
 
   return (
     <PaymentMadeTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'payment_made_form.label.subtotal'} />}
         value={formattedSubtotal}
+        amount={total}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'payment_made_form.label.total'} />}
         value={formattedTotal}
+        amount={total}
         textStyle={TotalLineTextStyle.Bold}
       />
     </PaymentMadeTotalLines>

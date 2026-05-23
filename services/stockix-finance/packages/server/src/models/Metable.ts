@@ -1,4 +1,3 @@
-import knex from '@/database/knex';
 // import cache from 'memory-cache';
 
 // Metadata
@@ -162,6 +161,7 @@ export default {
    * Saved the modified metadata.
    */
   async saveMeta() {
+    const knex = (this as any).knex || (this.constructor as any).knex?.() || (this as any).bookshelf?.knex;
     const inserted = this.metadata.filter((m) => (m.markAsInserted === true));
     const updated = this.metadata.filter((m) => (m.markAsUpdated === true));
     const deleted = this.metadata.filter((m) => (m.markAsDeleted === true));

@@ -196,7 +196,30 @@ export default class OrganizationService {
       organizationDTO.baseCurrency,
       tenant.metadata?.baseCurrency
     );
-    await tenant.saveMetadata(organizationDTO);
+    const metadataPayload = {
+      ...organizationDTO,
+      ...(Array.isArray(organizationDTO.displayCurrencies) && {
+        displayCurrencies: JSON.stringify(organizationDTO.displayCurrencies),
+      }),
+      // Normalize empty string to null so the column is properly cleared.
+      ...(Object.prototype.hasOwnProperty.call(
+        organizationDTO,
+        'secondaryCurrency',
+      ) && {
+        secondaryCurrency: organizationDTO.secondaryCurrency
+          ? organizationDTO.secondaryCurrency
+          : null,
+      }),
+    };
+    // The secondary currency must differ from the base currency. Otherwise
+    // every "dual" rendering would be a noop — silently strip it.
+    if (
+      metadataPayload.secondaryCurrency &&
+      metadataPayload.secondaryCurrency === metadataPayload.baseCurrency
+    ) {
+      metadataPayload.secondaryCurrency = null;
+    }
+    await tenant.saveMetadata(metadataPayload);
 
     if (organizationDTO.baseCurrency !== tenant.metadata?.baseCurrency) {
       // Triggers `onOrganizationBaseCurrencyUpdated` event.
