@@ -851,6 +851,7 @@ async function postOrderCogsLedger(orderId, userId, idempotencyKey, opts = {}) {
   await assertPostingAllowedForDate(order.paidAt || new Date(), orgId);
 
   const cfgDoc = await getConfig(orgId);
+  if (cfgDoc.bigcapitalIntegrationEnabled) return null;
   if (!cfgDoc.autoPostCogsOnPaid) return null;
 
   let cost = await sumCostAmountForOrder(oid);
@@ -932,6 +933,7 @@ async function postOrderSaleLedger(orderId, userId, idempotencyKey, opts = {}) {
   if (existing) return existing;
 
   const cfgDoc = await getConfig(orgId);
+  if (cfgDoc.bigcapitalIntegrationEnabled) return null;
   if (!cfgDoc.autoPostOnPaid) return null;
 
   const cfg = await AccountingConfig.findById(cfgDoc._id)

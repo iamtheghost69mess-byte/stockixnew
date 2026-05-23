@@ -48,8 +48,17 @@ const {
   validateOrderPaymentSplitsForPay,
 } = require("../utils/orderPaymentSplits");
 const AccountingConfig = require("../models/accountingConfigModel");
+const {
+  enqueueBigcapitalSyncIfEnabled,
+} = require("../services/bigcapitalSyncEnqueue");
 
 const ACTIVE = ["pending", "in-progress", "ready"];
+
+function fireBigcapitalSync(order) {
+  enqueueBigcapitalSyncIfEnabled(order).catch((err) => {
+    console.error("[BigcapitalSync] enqueue failed:", err?.message || err);
+  });
+}
 const ORDER_LIFECYCLE_STEPS = ["draft", "sent", "billed", "paid", "closed"];
 
 /** Non-breaking GL snapshot for POS clients (persisted on order after `onOrderBecamePaid`). */
@@ -529,6 +538,7 @@ const addOrder = async (req, res, next) => {
       } finally {
         dbSession.endSession();
       }
+      fireBigcapitalSync(order);
     } else {
       await order.save();
     }
@@ -1466,6 +1476,7 @@ const patchOrderStatus = async (req, res, next) => {
       await logPosAudit(req, order, "bill_closed", {
         orderRef: String(order._id),
       });
+      fireBigcapitalSync(order);
     }
     if (
       hadServiceCharge &&
@@ -2089,6 +2100,7 @@ const syncOfflineOrders = async (req, res, next) => {
           } finally {
             dbSession.endSession();
           }
+          fireBigcapitalSync(order);
           await logPosAudit(req, order, "payment_recorded", {
             orderRef: String(order._id),
             paymentMethod: String(order.paymentMethod || ""),
@@ -2375,6 +2387,7 @@ const updateOrder = async (req, res, next) => {
       await logPosAudit(req, order, "bill_closed", {
         orderRef: String(order._id),
       });
+      fireBigcapitalSync(order);
     } else {
       await order.save();
 
@@ -2409,6 +2422,9 @@ const updateOrder = async (req, res, next) => {
       });
 
       await onOrderBecamePaid(order, prevSt, req.user._id);
+      if (newSt === "paid" && prevSt !== "paid") {
+        fireBigcapitalSync(order);
+      }
     }
 
     const newSt = normalizeOrderStatus(order.orderStatus);

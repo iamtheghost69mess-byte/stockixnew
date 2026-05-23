@@ -1,0 +1,12 @@
+class Survey::ResponsesController < ActionController::Base
+  before_action :set_global_config
+  def show; end
+
+  private
+
+  def set_global_config
+    @global_config = BrandingEnvOverrides.apply!(
+      GlobalConfig.get('LOGO_THUMBNAIL', 'BRAND_NAME', 'WIDGET_BRAND_URL', 'INSTALLATION_NAME')
+    )
+  end
+end

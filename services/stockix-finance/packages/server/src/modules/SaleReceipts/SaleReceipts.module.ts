@@ -104,5 +104,6 @@ import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
     BulkDeleteSaleReceiptsService,
     ValidateBulkDeleteSaleReceiptsService,
   ],
+  exports: [SaleReceiptApplication, DeleteSaleReceipt],
 })
 export class SaleReceiptsModule {}

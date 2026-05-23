@@ -59,6 +59,8 @@ const accountingConfigSchema = new mongoose.Schema(
     autoPostOnPaid: { type: Boolean, default: true },
     /** Post COGS + inventory relief when order is paid (recipes + unitCost) */
     autoPostCogsOnPaid: { type: Boolean, default: true },
+    /** When true, skip native GL on paid orders; Bigcapital is source of truth. */
+    bigcapitalIntegrationEnabled: { type: Boolean, default: false },
     defaultRevenueAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AccountingAccount",

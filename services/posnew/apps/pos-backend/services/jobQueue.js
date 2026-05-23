@@ -55,6 +55,7 @@ const QUEUE_NAMES = [
   "analytics_rollups",
   "fraud_review",
   "print-jobs",
+  "bigcapital_sync",
 ];
 
 function getQueue(name) {

@@ -5,6 +5,9 @@ import { InternalProvisionController } from './InternalProvision.controller';
 import { InternalLicenseController } from './InternalLicense.controller';
 import { InternalUsersController } from './InternalUsers.controller';
 import { InternalOrgController } from './InternalOrg.controller';
+import { InternalPosController } from './InternalPos.controller';
+import { InternalPosReceiptsService } from './commands/InternalPosReceipts.service';
+import { SaleReceiptsModule } from '@/modules/SaleReceipts/SaleReceipts.module';
 import { AttachUserToTenantService } from './commands/AttachUserToTenant.service';
 import { ProvisionUserService } from './commands/ProvisionUser.service';
 import { SyncLicenseService } from './commands/SyncLicense.service';
@@ -15,19 +18,21 @@ import { TenantKnexFactory } from '@/modules/Tenancy/TenantKnexFactory';
 import { CopyParentTenantSettingsService } from '@/modules/Organization/CopyParentTenantSettings.service';
 
 @Module({
-  imports: [ConfigModule, TenantDBManagerModule],
+  imports: [ConfigModule, TenantDBManagerModule, SaleReceiptsModule],
   controllers: [
     InternalController,
     InternalProvisionController,
     InternalLicenseController,
     InternalUsersController,
     InternalOrgController,
+    InternalPosController,
   ],
   providers: [
     AttachUserToTenantService,
     ProvisionUserService,
     SyncLicenseService,
     InternalUsersService,
+    InternalPosReceiptsService,
     InternalSecretGuard,
     TenantKnexFactory,
     CopyParentTenantSettingsService,
