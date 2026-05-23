@@ -2,11 +2,15 @@ export type LicenseProduct = "platform" | "pos_desktop" | "bundle";
 export type LicenseStatus = "active" | "expired" | "revoked" | "unassigned";
 export type ActivationStatus = "active" | "deactivated" | "blacklisted";
 
+export type LicenseModuleId = "accounting" | "pos" | "pms" | "chat";
+
 export type LicenseRow = {
   id: string;
   licenseKey: string;
   product: LicenseProduct;
   planSlug: string;
+  /** Licensed product modules granted by this key. */
+  modules?: LicenseModuleId[];
   status: LicenseStatus;
   tenantId: string | null;
   tenantName: string | null;

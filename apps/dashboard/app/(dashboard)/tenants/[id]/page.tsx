@@ -54,23 +54,9 @@ import { formatDate, formatDateTime, formatTime } from "@/lib/date-format";
 import { tenantProfileSchema, type TenantProfileValues } from "@/lib/schemas";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { cn } from "@/lib/utils";
+import { moduleLabel } from "@/lib/tenant-modules";
 import type { LicenseRow, LicenseStatus } from "@/types/license";
 import type { ProvisionEventRow, TenantDetail } from "@/types/tenant";
-
-function moduleLabel(mod: string): string {
-  switch (mod) {
-    case "accounting":
-      return "Accounting";
-    case "pos":
-      return "POS";
-    case "pms":
-      return "PMS";
-    case "chat":
-      return "Chat";
-    default:
-      return mod;
-  }
-}
 
 function moduleBadgeVariant(
   mod: string,

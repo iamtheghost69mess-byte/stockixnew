@@ -10,6 +10,25 @@ import { SignJWT, jwtVerify } from "jose";
 export type PlanLimitsDb = PostgresJsDatabase<typeof schema>;
 export type TenantLicenseRow = InferSelectModel<typeof licenses>;
 
+const LICENSE_MODULE_IDS = ["accounting", "pos", "pms", "chat"] as const;
+export type LicenseModuleId = (typeof LICENSE_MODULE_IDS)[number];
+
+/** Parse `licenses.modules` JSON text into a stable module list. */
+export function parseLicenseModulesJson(raw: string | null | undefined): LicenseModuleId[] {
+  if (!raw?.trim()) return ["accounting"];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return ["accounting"];
+    const filtered = parsed.filter(
+      (m): m is LicenseModuleId =>
+        typeof m === "string" && (LICENSE_MODULE_IDS as readonly string[]).includes(m),
+    );
+    return filtered.length > 0 ? filtered : ["accounting"];
+  } catch {
+    return ["accounting"];
+  }
+}
+
 /**
  * Returns the single canonical license for a tenant.
  *

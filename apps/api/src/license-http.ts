@@ -34,6 +34,7 @@ import {
   isLicenseLimitsConsistentWithPlan,
   licenseHistorySnapshot,
   parseLicenseHistoryJson,
+  parseLicenseModulesJson,
   signOfflineToken,
   verifyOfflineToken,
 } from "./license-utils.js";
@@ -682,6 +683,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             revokeReason: lic.revokeReason ?? null,
             notes: lic.notes ?? null,
             createdAt: lic.createdAt.toISOString(),
+            modules: parseLicenseModulesJson(lic.modules),
           },
         ],
         total: 1,
@@ -765,6 +767,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         revokeReason: L.revokeReason ?? null,
         notes: L.notes ?? null,
         createdAt: L.createdAt.toISOString(),
+        modules: parseLicenseModulesJson(L.modules),
       };
     });
 
@@ -1210,6 +1213,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         revokeReason: L.revokeReason ?? null,
         notes: L.notes ?? null,
         createdAt: L.createdAt.toISOString(),
+        modules: parseLicenseModulesJson(L.modules),
         createdByName: creator?.name ?? null,
         revokedByName: revoker?.name ?? null,
         activations: acts.map((a) => ({
