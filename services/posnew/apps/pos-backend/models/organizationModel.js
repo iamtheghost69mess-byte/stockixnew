@@ -19,6 +19,13 @@ const organizationSchema = new mongoose.Schema(
       match: /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
     },
     externalRef: { type: String, trim: true, default: "" },
+    /** Stockix control-plane tenant UUID (provision worker / TENANT_ID env). */
+    stockixTenantId: {
+      type: String,
+      trim: true,
+      default: "",
+      index: { sparse: true },
+    },
     ownerEmail: { type: String, trim: true, lowercase: true, default: "" },
     ownerName: { type: String, trim: true, default: "" },
     country: { type: String, trim: true, default: "" },

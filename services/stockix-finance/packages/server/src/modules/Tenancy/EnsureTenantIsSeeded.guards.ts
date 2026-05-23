@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   CanActivate,
   ExecutionContext,
   Inject,
@@ -54,7 +55,7 @@ export class EnsureTenantIsSeededGuard implements CanActivate {
       });
     }
     if (!tenant.seededAt) {
-      throw new UnauthorizedException({
+      throw new BadRequestException({
         message: 'Tenant database is not seeded with initial data yet.',
         errors: [{ type: 'TENANT.DATABASE.NOT.SEED' }],
       });

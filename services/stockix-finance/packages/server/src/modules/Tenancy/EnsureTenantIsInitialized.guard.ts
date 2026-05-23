@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   CanActivate,
   ExecutionContext,
   Injectable,
@@ -53,9 +54,7 @@ export class EnsureTenantIsInitializedGuard implements CanActivate {
       });
     }
     if (!tenant?.initializedAt) {
-      throw new UnauthorizedException({
-        statusCode: 400,
-        error: 'Bad Request',
+      throw new BadRequestException({
         message: 'Tenant database is not migrated with application schema yet.',
         errors: [{ type: 'TENANT.DATABASE.NOT.INITALIZED' }],
       });

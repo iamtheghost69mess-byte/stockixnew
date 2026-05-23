@@ -1,5 +1,6 @@
 export type TenantStatus =
   | "active"
+  | "partial"
   | "suspended"
   | "provisioning"
   | "pending"
@@ -38,11 +39,22 @@ export type TenantDetail = {
   adminLastName: string;
   ownerId: string;
   planSlug: string;
+  modules: string[];
+  posOrganizationId: string | null;
+  posBootstrapCredentials: {
+    adminPinMasked: string;
+    allRoles: { role: string; username: string; pinMasked: string }[];
+  } | null;
   createdAt: string;
   deployment: {
     status: string;
     composeProjectName: string;
     internalPort: number;
+    posUrl: string | null;
+    financeDefaultWarehouseId: number | null;
+    financeWalkInCustomerId: number | null;
+    financeCashAccountId: number | null;
+    financeCardAccountId: number | null;
     lastError: string | null;
     registrationCompletedAt: string | null;
     createdAt: string;

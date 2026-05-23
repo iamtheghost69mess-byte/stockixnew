@@ -188,7 +188,25 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
 
 async function markJobComplete(
   jobId: string,
-  opts?: { oneTimeAdminPassword?: string; financeOrganizationId?: string },
+  opts?: {
+    oneTimeAdminPassword?: string;
+    financeOrganizationId?: string;
+    financeTenantId?: number;
+    financeDefaultWarehouseId?: number;
+    posStatus?: string;
+    posError?: string;
+    tenantStatus?: string;
+    walkInCustomerId?: number;
+    cashAccountId?: number;
+    cardAccountId?: number;
+    posOrganizationId?: string;
+    posUrl?: string;
+    posApiUrl?: string;
+    posDefaultCredentials?: {
+      adminPin: string;
+      allRoles: { role: string; username: string; pin: string }[];
+    };
+  },
 ): Promise<void> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
   const secret = apiConfig.workerSecret;
@@ -198,8 +216,48 @@ async function markJobComplete(
   if (opts?.oneTimeAdminPassword !== undefined) {
     completionBody.oneTimeAdminPassword = opts.oneTimeAdminPassword;
   }
+  const resultPayload: Record<string, unknown> = {};
   if (opts?.financeOrganizationId) {
-    completionBody.result = { financeOrganizationId: opts.financeOrganizationId };
+    resultPayload.financeOrganizationId = opts.financeOrganizationId;
+  }
+  if (opts?.financeTenantId !== undefined) {
+    resultPayload.financeTenantId = opts.financeTenantId;
+  }
+  if (opts?.financeDefaultWarehouseId !== undefined) {
+    resultPayload.financeDefaultWarehouseId = opts.financeDefaultWarehouseId;
+  }
+  if (opts?.posStatus) {
+    resultPayload.posStatus = opts.posStatus;
+  }
+  if (opts?.posError) {
+    resultPayload.posError = opts.posError;
+  }
+  if (opts?.tenantStatus) {
+    resultPayload.tenantStatus = opts.tenantStatus;
+  }
+  if (opts?.walkInCustomerId !== undefined) {
+    resultPayload.walkInCustomerId = opts.walkInCustomerId;
+  }
+  if (opts?.cashAccountId !== undefined) {
+    resultPayload.cashAccountId = opts.cashAccountId;
+  }
+  if (opts?.cardAccountId !== undefined) {
+    resultPayload.cardAccountId = opts.cardAccountId;
+  }
+  if (opts?.posOrganizationId) {
+    resultPayload.posOrganizationId = opts.posOrganizationId;
+  }
+  if (opts?.posUrl) {
+    resultPayload.posUrl = opts.posUrl;
+  }
+  if (opts?.posApiUrl) {
+    resultPayload.posApiUrl = opts.posApiUrl;
+  }
+  if (Object.keys(resultPayload).length > 0) {
+    completionBody.result = resultPayload;
+  }
+  if (opts?.posDefaultCredentials) {
+    completionBody.posDefaultCredentials = opts.posDefaultCredentials;
   }
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
     method: "POST",
@@ -303,6 +361,7 @@ const provisionPayloadSchema = z.object({
   stockixApiUrl: z.string().optional(),
   parentTenantSlug: z.string().optional(),
   mainTenantInternalBaseUrl: z.string().optional(),
+  retryModules: z.array(z.enum(["accounting", "pos", "pms", "chat"])).optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({
@@ -321,7 +380,18 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
   correlationId: string | null;
   payload: Record<string, unknown>;
-}): Promise<{ oneTimeAdminPassword?: string; financeOrganizationId?: string }> {
+}): Promise<{
+  oneTimeAdminPassword?: string;
+  financeOrganizationId?: string;
+  financeTenantId?: number;
+  posOrganizationId?: string;
+  posUrl?: string;
+  posApiUrl?: string;
+  posDefaultCredentials?: {
+    adminPin: string;
+    allRoles: { role: string; username: string; pin: string }[];
+  };
+}> {
   const guard = async () => {
     await assertProvisionNotCancelled(job.id);
   };
@@ -343,6 +413,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
       parentTenantSlug: payload.parentTenantSlug,
       mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
       controlPlaneOrgId: payload.organizationId ?? undefined,
+      retryModules: payload.retryModules,
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
@@ -385,6 +456,18 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   return {
     oneTimeAdminPassword: result.oneTimeAdminPassword,
     financeOrganizationId: result.financeOrganizationId,
+    financeTenantId: result.financeTenantId,
+    financeDefaultWarehouseId: result.financeDefaultWarehouseId,
+    posStatus: result.posStatus,
+    posError: result.posError,
+    tenantStatus: result.tenantStatus,
+    walkInCustomerId: result.walkInCustomerId,
+    cashAccountId: result.cashAccountId,
+    cardAccountId: result.cardAccountId,
+    posOrganizationId: result.posOrganizationId,
+    posUrl: result.posUrl,
+    posApiUrl: result.posApiUrl,
+    posDefaultCredentials: result.posDefaultCredentials,
   };
 }
 
@@ -544,7 +627,27 @@ async function loop() {
       }
       // For tenant.provision jobs, capture the one-time admin password so it can be
       // forwarded to the API in-memory store without being written to the DB (CRIT-02).
-      let provisionComplete: { oneTimeAdminPassword?: string; financeOrganizationId?: string } | undefined;
+      let provisionComplete:
+        | {
+            oneTimeAdminPassword?: string;
+            financeOrganizationId?: string;
+            financeTenantId?: number;
+            financeDefaultWarehouseId?: number;
+            posStatus?: string;
+            posError?: string;
+            tenantStatus?: string;
+            walkInCustomerId?: number;
+            cashAccountId?: number;
+            cardAccountId?: number;
+            posOrganizationId?: string;
+            posUrl?: string;
+            posApiUrl?: string;
+            posDefaultCredentials?: {
+              adminPin: string;
+              allRoles: { role: string; username: string; pin: string }[];
+            };
+          }
+        | undefined;
       if (job.type === "tenant.provision") {
         provisionComplete = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
       } else {

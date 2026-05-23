@@ -23,6 +23,7 @@ const {
   logLicenseWindowUpdated,
   logAccessStateTransitionIfChanged,
 } = require("../services/accessStateAuditService");
+const config = require("../config/config");
 
 const DEFAULT_ORG_ENTITLEMENTS = {
   maxLocations: 5,
@@ -230,7 +231,13 @@ const createOrg = async (req, res, next) => {
       country,
       city,
       entitlements: entInput,
+      stockixTenantId: stockixTenantIdInput,
+      adminEmail: adminEmailInput,
     } = requestBody;
+    const ownerEmailResolved =
+      ownerEmail != null && String(ownerEmail).trim() !== ""
+        ? ownerEmail
+        : adminEmailInput;
     const licenseStartInput = readAliasedField(
       requestBody,
       "licenseStartDate",
@@ -259,9 +266,9 @@ const createOrg = async (req, res, next) => {
     if (timezoneParsed.error) {
       return next(createHttpError(400, timezoneParsed.error));
     }
-    if (ownerEmail && isDisposableEmail(ownerEmail)) {
+    if (ownerEmailResolved && isDisposableEmail(ownerEmailResolved)) {
       await maybeOpenFraudCase("disposable_email_signup", {
-        metadata: { ownerEmail },
+        metadata: { ownerEmail: ownerEmailResolved },
       });
       return next(createHttpError(400, "Email domain is not allowed."));
     }
@@ -272,12 +279,22 @@ const createOrg = async (req, res, next) => {
       });
     }
 
+    const stockixTenantIdResolved =
+      stockixTenantIdInput != null && String(stockixTenantIdInput).trim() !== ""
+        ? String(stockixTenantIdInput).trim()
+        : config.stockixTenantId
+          ? String(config.stockixTenantId).trim()
+          : "";
+
     const createPayload = {
       name: String(name).trim(),
       slug: slugNorm,
       planKey: planKey ? String(planKey) : "standard",
-      ownerEmail: ownerEmail ? String(ownerEmail).trim().toLowerCase() : "",
+      ownerEmail: ownerEmailResolved
+        ? String(ownerEmailResolved).trim().toLowerCase()
+        : "",
       ownerName: ownerName ? String(ownerName).trim() : "",
+      stockixTenantId: stockixTenantIdResolved,
       country: normalizeStringField(country),
       city: normalizeStringField(city),
       timezone: timezoneParsed.value || "Asia/Beirut",
@@ -389,7 +406,7 @@ const createOrg = async (req, res, next) => {
       actorApiKeyPrefix: req.platformAuth?.keyPrefix || "",
       organization: org._id,
       metadata: {
-        ownerEmail: ownerEmail || null,
+        ownerEmail: ownerEmailResolved || null,
         ownerName: ownerName || null,
         planKey: org.planKey,
         bootstrapQueued: bootstrapMode === "queue",
@@ -430,6 +447,25 @@ const getOrg = async (req, res, next) => {
   try {
     const org = await Organization.findById(req.params.id);
     if (!org) return next(createHttpError(404, "Organization not found."));
+    res.json({ success: true, data: withOrganizationAccessState(org) });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** Resolve POS organization by Stockix control-plane tenant UUID. */
+const getOrgByStockixTenant = async (req, res, next) => {
+  try {
+    const tenantId = String(req.params.tenantId || "").trim();
+    if (!tenantId) {
+      return next(createHttpError(400, "tenantId is required."));
+    }
+    const org = await Organization.findOne({ stockixTenantId: tenantId });
+    if (!org) {
+      return next(
+        createHttpError(404, "Organization not found for Stockix tenant."),
+      );
+    }
     res.json({ success: true, data: withOrganizationAccessState(org) });
   } catch (e) {
     next(e);
@@ -1100,6 +1136,7 @@ module.exports = {
   listOrgsHealthSummary,
   createOrg,
   getOrg,
+  getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
   patchOrgLifecycle,

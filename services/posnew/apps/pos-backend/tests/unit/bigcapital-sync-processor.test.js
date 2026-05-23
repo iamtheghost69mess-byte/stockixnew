@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const {
   buildMappedEntries,
   resolveDepositAccountId,
+  resolveLocationMapping,
   isCardMethodKey,
   buildSaleReceiptPayload,
 } = require("../../services/bigcapitalSyncProcessor");
@@ -11,6 +12,7 @@ const {
 const orgId = new mongoose.Types.ObjectId();
 const menuBurger = new mongoose.Types.ObjectId();
 const menuCustom = new mongoose.Types.ObjectId();
+const locationMain = new mongoose.Types.ObjectId();
 
 const baseCfg = {
   defaultWalkInCustomerId: 1,
@@ -95,6 +97,81 @@ test("buildSaleReceiptPayload returns null when all items unmapped", async () =>
 
   const result = await buildSaleReceiptPayload(order, { bigcapital: baseCfg });
   assert.equal(result, null);
+  findMock.mock.restore();
+});
+
+test("resolveLocationMapping uses mapping row when order location matches", () => {
+  const cfg = {
+    defaultWarehouseId: 99,
+    locationMapping: [
+      {
+        posLocationId: locationMain,
+        bigcapitalBranchId: 7,
+        bigcapitalWarehouseId: 42,
+      },
+    ],
+  };
+  const { warehouseId, branchId } = resolveLocationMapping(
+    { location: locationMain },
+    cfg
+  );
+  assert.equal(warehouseId, 42);
+  assert.equal(branchId, 7);
+});
+
+test("resolveLocationMapping falls back to defaultWarehouseId", () => {
+  const cfg = {
+    defaultWarehouseId: 99,
+    locationMapping: [
+      {
+        posLocationId: new mongoose.Types.ObjectId(),
+        bigcapitalWarehouseId: 42,
+      },
+    ],
+  };
+  const { warehouseId, branchId } = resolveLocationMapping(
+    { location: locationMain },
+    cfg
+  );
+  assert.equal(warehouseId, 99);
+  assert.equal(branchId, null);
+});
+
+test("buildSaleReceiptPayload includes warehouseId when mapping exists", async () => {
+  const IntegrationItemMapping = require("../../models/integrationItemMappingModel");
+  const findMock = mock.method(IntegrationItemMapping, "find", () => ({
+    lean: async () => [
+      { posMenuItemId: menuBurger, bigcapitalItemId: 5, bigcapitalItemName: "Burger" },
+    ],
+  }));
+
+  const orderId = new mongoose.Types.ObjectId();
+  const order = {
+    _id: orderId,
+    organization: orgId,
+    location: locationMain,
+    paymentMethod: "cash",
+    paidAt: new Date("2026-05-23T12:00:00Z"),
+    items: [
+      { menuItem: menuBurger, name: "Burger", quantity: 1, pricePerQuantity: 12 },
+    ],
+  };
+
+  const cfg = {
+    ...baseCfg,
+    locationMapping: [
+      {
+        posLocationId: locationMain,
+        bigcapitalBranchId: 3,
+        bigcapitalWarehouseId: 55,
+      },
+    ],
+  };
+
+  const payload = await buildSaleReceiptPayload(order, { bigcapital: cfg });
+  assert.ok(payload);
+  assert.equal(payload.warehouseId, 55);
+  assert.equal(payload.branchId, 3);
   findMock.mock.restore();
 });
 

@@ -32,8 +32,9 @@ export function setAuthLoginCookies(data) {
   setCookie('organization_id', data.organization_id);
   setCookie('tenant_id', data.tenant_id);
 
-  // if (data?.tenant?.metadata?.language)
-  //   setCookie('locale', data.tenant.metadata.language);
+  if (data?.tenant?.metadata?.language) {
+    setCookie('locale', data.tenant.metadata.language);
+  }
 }
 
 /**
@@ -60,11 +61,11 @@ export const useAuthLogin = (props) => {
         setTenantId(res.data.tenant_id);
         setUserId(res.data.user_id);
 
-        // if (res.data?.tenant?.metadata?.language) {
-        //   setLocale(res.data?.tenant?.metadata?.language);
-        // }
+        if (res.data?.tenant?.metadata?.language) {
+          setLocale(res.data.tenant.metadata.language);
+        }
       });
-      props?.onSuccess && props?.onSuccess(...args);
+      props?.onSuccess?.(res);
     },
     ...props,
   });

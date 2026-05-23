@@ -1,9 +1,24 @@
-import { posProxyJson } from "../pos-proxy.js";
+import { getPosOrgByStockixTenantId, posProxyJson } from "../pos-proxy.js";
 import type { registerLicenseApi } from "../license-http.js";
 
 export function registerPosProxyRoutes(
   app: Parameters<typeof registerLicenseApi>[0],
 ): void {
+  app.get("/pos/tenant-org", async (c) => {
+    const tenantId =
+      c.req.query("tenantId")?.trim()
+      || c.req.query("stockixTenantId")?.trim()
+      || "";
+    if (!tenantId) {
+      return c.json(
+        { error: "invalid_query", message: "tenantId or stockixTenantId is required" },
+        400,
+      );
+    }
+    const { data, status } = await getPosOrgByStockixTenantId(tenantId);
+    return c.json(data, status as 200);
+  });
+
   app.get("/pos/organizations", async (c) => {
     const { data, status } = await posProxyJson("/organizations", "GET", undefined, {
       page: c.req.query("page"),

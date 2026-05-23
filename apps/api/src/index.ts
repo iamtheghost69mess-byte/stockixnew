@@ -38,6 +38,7 @@ import {
   desc,
   eq,
   and,
+  desc,
   or,
   isNotNull,
   sql,
@@ -326,6 +327,14 @@ apiConfig.validateRequiredEnv();
 // via GET /tenants/provision-status/:correlationId.
 const PROVISION_PASSWORD_TTL_MS = 15 * 60 * 1000;
 const provisionPasswordCache = new Map<string, { password: string; expiresAt: number }>();
+type PosDefaultCredentialsPayload = {
+  adminPin: string;
+  allRoles: { role: string; username: string; pin: string }[];
+};
+const provisionPosCredentialsCache = new Map<
+  string,
+  { credentials: PosDefaultCredentialsPayload; expiresAt: number }
+>();
 const PROVISION_STUCK_AFTER_MS = 10 * 60 * 1000;
 const RECONCILE_INTERVAL_MS = 30 * 1000;
 
@@ -353,6 +362,43 @@ function decryptProvisionSecret(ciphertext: string): string | null {
   } catch {
     return null;
   }
+}
+
+function maskPinForDisplay(pin: string): string {
+  const trimmed = pin.trim();
+  if (trimmed.length <= 2) return "••••";
+  return `${trimmed.slice(0, 2)}${"•".repeat(Math.min(trimmed.length - 2, 8))}`;
+}
+
+async function loadLatestPosBootstrapCredentials(
+  tenantId: string,
+): Promise<PosDefaultCredentialsPayload | null> {
+  if (!db) return null;
+  const secretRows = await db
+    .select({ meta: tenantProvisionEvents.meta })
+    .from(tenantProvisionEvents)
+    .where(
+      and(
+        eq(tenantProvisionEvents.tenantId, tenantId),
+        eq(tenantProvisionEvents.phase, "secret"),
+      ),
+    )
+    .orderBy(desc(tenantProvisionEvents.createdAt))
+    .limit(30);
+  for (const secretRow of secretRows) {
+    const meta = secretRow.meta;
+    if (!meta || typeof meta !== "object" || meta.type !== "pos_bootstrap_pins") continue;
+    const cipher = meta.cipher as string | undefined;
+    if (typeof cipher !== "string") continue;
+    const decrypted = decryptProvisionSecret(cipher);
+    if (!decrypted) continue;
+    try {
+      return JSON.parse(decrypted) as PosDefaultCredentialsPayload;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function composeProjectFromSlug(slug: string): string {
@@ -408,13 +454,18 @@ async function bestEffortDockerProjectCleanup(project: string): Promise<void> {
 async function scrubTenantRuntimeArtifacts(slug: string): Promise<void> {
   const project = composeProjectFromSlug(slug);
   await bestEffortDockerProjectCleanup(project);
+  await bestEffortDockerProjectCleanup(`stockix-pos-${slug}`);
   await rm(`${apiConfig.tenantEnvRoot}/${slug}`, { recursive: true, force: true }).catch(() => undefined);
   await rm(`${apiConfig.traefikDynamicDir}/tenant-${slug}.yml`, { force: true }).catch(() => undefined);
+  await rm(`${apiConfig.traefikDynamicDir}/tenant-pos-${slug}.yml`, { force: true }).catch(
+    () => undefined,
+  );
 }
 
 function purgeProvisionCaches(correlationIds: string[]): void {
   for (const correlationId of correlationIds) {
     provisionPasswordCache.delete(correlationId);
+    provisionPosCredentialsCache.delete(correlationId);
     invalidateTenantReadinessCache(correlationId);
   }
 }
@@ -1124,6 +1175,14 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     typeof (body as { oneTimeAdminPassword?: unknown }).oneTimeAdminPassword === "string"
       ? (body as { oneTimeAdminPassword: string }).oneTimeAdminPassword
       : undefined;
+  const posDefaultCredentialsRaw = (body as { posDefaultCredentials?: unknown })
+    .posDefaultCredentials;
+  const posDefaultCredentials =
+    isRecord(posDefaultCredentialsRaw)
+    && typeof posDefaultCredentialsRaw.adminPin === "string"
+    && Array.isArray(posDefaultCredentialsRaw.allRoles)
+      ? (posDefaultCredentialsRaw as PosDefaultCredentialsPayload)
+      : undefined;
   const completeResult = isRecord(body) && isRecord(body.result) ? body.result : null;
   const financeOrganizationIdFromResult = completeResult
     ? readNonEmptyString(completeResult.financeOrganizationId)
@@ -1131,6 +1190,24 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const financeTenantIdFromResult = completeResult
     ? Number(completeResult.financeTenantId)
     : NaN;
+  const financeDefaultWarehouseIdFromResult = completeResult
+    ? Number(completeResult.financeDefaultWarehouseId)
+    : NaN;
+  const walkInCustomerIdFromResult = completeResult
+    ? Number(completeResult.walkInCustomerId)
+    : NaN;
+  const cashAccountIdFromResult = completeResult
+    ? Number(completeResult.cashAccountId)
+    : NaN;
+  const cardAccountIdFromResult = completeResult
+    ? Number(completeResult.cardAccountId)
+    : NaN;
+  const posOrganizationIdFromResult = completeResult
+    ? readNonEmptyString(completeResult.posOrganizationId)
+    : undefined;
+  const posUrlFromResult = completeResult
+    ? readNonEmptyString(completeResult.posUrl)
+    : undefined;
   const [currentJob] = await db
     .select({
       id: tenantLifecycleJobs.id,
@@ -1178,6 +1255,31 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       },
     });
   }
+  if (
+    currentJob?.type === "tenant.provision"
+    && currentJob.correlationId
+    && posDefaultCredentials
+  ) {
+    provisionPosCredentialsCache.set(currentJob.correlationId, {
+      credentials: posDefaultCredentials,
+      expiresAt: Date.now() + PROVISION_PASSWORD_TTL_MS,
+    });
+    await appendProvisionEventSafe({
+      correlationId: currentJob.correlationId,
+      phase: "secret",
+      level: "info",
+      message: "POS bootstrap PIN credentials persisted",
+      tenantId: currentJob.tenantId,
+      meta: {
+        type: "pos_bootstrap_pins",
+        cipher: encryptProvisionSecret(JSON.stringify(posDefaultCredentials)),
+        posOrganizationId:
+          completeResult && typeof completeResult.posOrganizationId === "string"
+            ? completeResult.posOrganizationId
+            : undefined,
+      },
+    });
+  }
   if (currentJob?.type === "tenant.provision" && currentJob.correlationId) {
     await appendProvisionEventSafe({
       correlationId: currentJob.correlationId,
@@ -1206,12 +1308,40 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       targetTenantId = row?.id ?? null;
     }
     if (targetTenantId) {
-      await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, targetTenantId));
+      const tenantStatusFromResult =
+        completeResult && typeof completeResult.tenantStatus === "string"
+          ? completeResult.tenantStatus
+          : null;
+      const posStatusFromResult =
+        completeResult && typeof completeResult.posStatus === "string"
+          ? completeResult.posStatus
+          : null;
+      const posErrorFromResult =
+        completeResult && typeof completeResult.posError === "string"
+          ? completeResult.posError
+          : null;
+      const finalTenantStatus =
+        tenantStatusFromResult === "partial" || tenantStatusFromResult === "active"
+          ? tenantStatusFromResult
+          : posStatusFromResult === "failed"
+            ? "partial"
+            : "active";
+      const deploymentStatus =
+        finalTenantStatus === "partial" ? "active" : finalTenantStatus;
+      const deploymentLastError =
+        finalTenantStatus === "partial"
+          ? (posErrorFromResult ?? "POS provisioning failed")
+          : null;
+
+      await db
+        .update(tenants)
+        .set({ status: finalTenantStatus })
+        .where(eq(tenants.id, targetTenantId));
       await db
         .update(tenantDeployments)
         .set({
-          status: "active",
-          lastError: null,
+          status: deploymentStatus,
+          lastError: deploymentLastError,
           registrationCompletedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -1332,6 +1462,19 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         );
       }
 
+      if (targetTenantId && (posOrganizationIdFromResult || posUrlFromResult)) {
+        await db
+          .update(tenantDeployments)
+          .set({
+            ...(posOrganizationIdFromResult
+              ? { posOrganizationId: posOrganizationIdFromResult }
+              : {}),
+            ...(posUrlFromResult ? { posUrl: posUrlFromResult } : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(tenantDeployments.tenantId, targetTenantId));
+      }
+
       if (
         targetTenantId &&
         Number.isFinite(financeTenantIdFromResult) &&
@@ -1341,6 +1484,19 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           .update(tenantDeployments)
           .set({
             financeTenantId: financeTenantIdFromResult,
+            ...(Number.isFinite(financeDefaultWarehouseIdFromResult)
+            && financeDefaultWarehouseIdFromResult > 0
+              ? { financeDefaultWarehouseId: financeDefaultWarehouseIdFromResult }
+              : {}),
+            ...(Number.isFinite(walkInCustomerIdFromResult) && walkInCustomerIdFromResult > 0
+              ? { financeWalkInCustomerId: walkInCustomerIdFromResult }
+              : {}),
+            ...(Number.isFinite(cashAccountIdFromResult) && cashAccountIdFromResult > 0
+              ? { financeCashAccountId: cashAccountIdFromResult }
+              : {}),
+            ...(Number.isFinite(cardAccountIdFromResult) && cardAccountIdFromResult > 0
+              ? { financeCardAccountId: cardAccountIdFromResult }
+              : {}),
             updatedAt: new Date(),
           })
           .where(eq(tenantDeployments.tenantId, targetTenantId));
@@ -3179,6 +3335,12 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     if (cached && cached.expiresAt <= Date.now()) {
       provisionPasswordCache.delete(correlationId);
     }
+    const cachedPos = provisionPosCredentialsCache.get(correlationId);
+    let posDefaultCredentials =
+      cachedPos && cachedPos.expiresAt > Date.now() ? cachedPos.credentials : null;
+    if (cachedPos && cachedPos.expiresAt <= Date.now()) {
+      provisionPosCredentialsCache.delete(correlationId);
+    }
     if (!oneTimeAdminPassword) {
       const consumedRows = await db
         .select({ id: tenantProvisionEvents.id })
@@ -3206,13 +3368,52 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       for (const secretEvent of secretEvents) {
         const meta = secretEvent.meta ?? null;
         const cipher = meta && typeof meta === "object" ? (meta.cipher as string | undefined) : undefined;
+        const secretType =
+          meta && typeof meta === "object" && typeof meta.type === "string"
+            ? meta.type
+            : "";
         if (typeof cipher !== "string") continue;
         const decrypted = decryptProvisionSecret(cipher);
-        if (decrypted) {
+        if (!decrypted) continue;
+        if (secretType === "pos_bootstrap_pins" && !posDefaultCredentials) {
+          try {
+            posDefaultCredentials = JSON.parse(decrypted) as PosDefaultCredentialsPayload;
+          } catch {
+            // ignore malformed payload
+          }
+          continue;
+        }
+        if (!oneTimeAdminPassword && secretType !== "pos_bootstrap_pins") {
           oneTimeAdminPassword = decrypted;
-          break;
         }
       }
+      }
+    }
+    if (!posDefaultCredentials) {
+      const secretEvents = await db
+        .select({ meta: tenantProvisionEvents.meta })
+        .from(tenantProvisionEvents)
+        .where(
+          and(
+            eq(tenantProvisionEvents.correlationId, correlationId),
+            eq(tenantProvisionEvents.phase, "secret"),
+          ),
+        )
+        .orderBy(desc(tenantProvisionEvents.createdAt))
+        .limit(10);
+      for (const secretEvent of secretEvents) {
+        const meta = secretEvent.meta ?? null;
+        if (!meta || typeof meta !== "object" || meta.type !== "pos_bootstrap_pins") continue;
+        const cipher = meta.cipher as string | undefined;
+        if (typeof cipher !== "string") continue;
+        const decrypted = decryptProvisionSecret(cipher);
+        if (!decrypted) continue;
+        try {
+          posDefaultCredentials = JSON.parse(decrypted) as PosDefaultCredentialsPayload;
+          break;
+        } catch {
+          // ignore
+        }
       }
     }
     if (oneTimeAdminPassword) {
@@ -3224,6 +3425,19 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
         message: "Bootstrap admin OTP consumed from status endpoint",
         meta: { consumedAt: new Date().toISOString() },
       });
+    }
+    const tenantIdForPos =
+      lastJob.tenantId
+      ?? (typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null);
+    let posUrl: string | null =
+      typeof eventMeta.posUrl === "string" ? eventMeta.posUrl : null;
+    if (tenantIdForPos && !posUrl) {
+      const [depRow] = await db
+        .select({ posUrl: tenantDeployments.posUrl })
+        .from(tenantDeployments)
+        .where(eq(tenantDeployments.tenantId, tenantIdForPos))
+        .limit(1);
+      posUrl = depRow?.posUrl ?? null;
     }
     return c.json({
       status: "complete",
@@ -3237,7 +3451,9 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
         typeof eventMeta.composeProjectName === "string" ? eventMeta.composeProjectName : null,
       internalPort: typeof eventMeta.internalPort === "number" ? eventMeta.internalPort : null,
       baseUrl: typeof eventMeta.baseUrl === "string" ? eventMeta.baseUrl : null,
+      posUrl,
       oneTimeAdminPassword,
+      posDefaultCredentials,
       events,
       note:
         "Stockix login API field is `crediential` (typo) if you call /api/auth/login.",
@@ -3950,10 +4166,17 @@ app.get("/tenants/:tenantId", async (c) => {
       adminLastName: tenants.adminLastName,
       ownerId: tenants.ownerId,
       planSlug: tenants.planSlug,
+      modules: tenants.modules,
       createdAt: tenants.createdAt,
       deploymentStatus: tenantDeployments.status,
       composeProjectName: tenantDeployments.composeProjectName,
       internalPort: tenantDeployments.internalPort,
+      posUrl: tenantDeployments.posUrl,
+      posOrganizationId: tenantDeployments.posOrganizationId,
+      financeDefaultWarehouseId: tenantDeployments.financeDefaultWarehouseId,
+      financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
+      financeCashAccountId: tenantDeployments.financeCashAccountId,
+      financeCardAccountId: tenantDeployments.financeCardAccountId,
       deploymentLastError: tenantDeployments.lastError,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
       deploymentCreatedAt: tenantDeployments.createdAt,
@@ -3972,6 +4195,18 @@ app.get("/tenants/:tenantId", async (c) => {
   const row = rows[0];
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
 
+  const rawPosCredentials = await loadLatestPosBootstrapCredentials(row.id);
+  const posBootstrapCredentials = rawPosCredentials
+    ? {
+        adminPinMasked: maskPinForDisplay(rawPosCredentials.adminPin),
+        allRoles: rawPosCredentials.allRoles.map((roleRow) => ({
+          role: roleRow.role,
+          username: roleRow.username,
+          pinMasked: maskPinForDisplay(roleRow.pin),
+        })),
+      }
+    : null;
+
   return c.json({
     tenant: {
       id: row.id,
@@ -3983,6 +4218,9 @@ app.get("/tenants/:tenantId", async (c) => {
       adminLastName: row.adminLastName,
       ownerId: row.ownerId,
       planSlug: row.planSlug,
+      modules: parseTenantModules(row.modules),
+      posOrganizationId: row.posOrganizationId,
+      posBootstrapCredentials,
       createdAt: row.createdAt.toISOString(),
       deployment:
         row.deploymentStatus === null
@@ -3991,6 +4229,11 @@ app.get("/tenants/:tenantId", async (c) => {
               status: row.deploymentStatus,
               composeProjectName: row.composeProjectName,
               internalPort: row.internalPort,
+              posUrl: row.posUrl,
+              financeDefaultWarehouseId: row.financeDefaultWarehouseId,
+              financeWalkInCustomerId: row.financeWalkInCustomerId,
+              financeCashAccountId: row.financeCashAccountId,
+              financeCardAccountId: row.financeCardAccountId,
               lastError: row.deploymentLastError,
               registrationCompletedAt: row.registrationCompletedAt
                 ? row.registrationCompletedAt.toISOString()
@@ -4039,9 +4282,27 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
     .limit(1);
 
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const retryPosOnly =
+    (body as { retryPosOnly?: unknown }).retryPosOnly === true
+    || (Array.isArray((body as { retryModules?: unknown }).retryModules)
+      && (body as { retryModules: string[] }).retryModules.includes("pos")
+      && (body as { retryModules: string[] }).retryModules.length === 1);
+
   const failed =
     row.status === "failed" || row.deploymentStatus === "failed" || row.deploymentStatus === null;
-  if (!failed) {
+  const partial = row.status === "partial";
+  if (retryPosOnly) {
+    if (!partial) {
+      return c.json(
+        {
+          error: "tenant_not_partial",
+          message: "POS-only retry is available when tenant status is partial (Finance active, POS failed).",
+        },
+        409,
+      );
+    }
+  } else if (!failed) {
     return c.json(
       {
         error: "tenant_not_failed",
@@ -4082,6 +4343,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       modules: parseTenantModules(row.modules),
       stockixTenantId: row.id,
       provisionRequestedById: c.get("actorId") as string,
+      ...(retryPosOnly ? { retryModules: ["pos"] as const } : {}),
     },
   });
 

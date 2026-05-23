@@ -1,3 +1,14 @@
+export type PosRoleCredential = {
+  role: string;
+  username: string;
+  pin: string;
+};
+
+export type PosDefaultCredentials = {
+  adminPin: string;
+  allRoles: PosRoleCredential[];
+};
+
 export type ProvisionInput = {
   slug: string;
   name: string;
@@ -18,6 +29,8 @@ export type ProvisionInput = {
   stockixApiUrl?: string;
   /** Control-plane organization row id (UUID); set when provisioning a sub-org stack. */
   controlPlaneOrgId?: string;
+  /** When set to `["pos"]`, only re-provision the POS stack for an existing tenant. */
+  retryModules?: string[];
 };
 
 export type ProvisionResult =
@@ -31,6 +44,19 @@ export type ProvisionResult =
       oneTimeAdminPassword: string;
       financeOrganizationId?: string;
       financeTenantId?: number;
+      /** Bigcapital primary warehouse id (code 10001) for POS defaultWarehouseId. */
+      financeDefaultWarehouseId?: number;
+      walkInCustomerId?: number;
+      cashAccountId?: number;
+      cardAccountId?: number;
+      posOrganizationId?: string;
+      posUrl?: string;
+      posApiUrl?: string;
+      posDefaultCredentials?: PosDefaultCredentials;
+      posStatus?: "ok" | "failed" | "skipped";
+      posError?: string;
+      /** Final tenant row status when Finance succeeded but POS did not (`partial`). */
+      tenantStatus?: "active" | "partial";
     }
   | { ok: false; message: string; cause?: string };
 

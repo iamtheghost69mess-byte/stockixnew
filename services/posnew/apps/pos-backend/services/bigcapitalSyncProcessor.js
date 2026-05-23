@@ -41,6 +41,25 @@ function resolveDepositAccountId(order, cfg) {
 }
 
 /**
+ * Resolve Bigcapital branch/warehouse from POS order location.
+ * @param {object} order
+ * @param {object} cfg - integrationConfig.bigcapital
+ */
+function resolveLocationMapping(order, cfg) {
+  const orderLocationId = order.location ? String(order.location) : "";
+  const locMapping = (cfg.locationMapping || []).find(
+    (m) =>
+      m.posLocationId &&
+      orderLocationId &&
+      String(m.posLocationId) === orderLocationId
+  );
+  const warehouseId =
+    locMapping?.bigcapitalWarehouseId ?? cfg.defaultWarehouseId ?? null;
+  const branchId = locMapping?.bigcapitalBranchId ?? null;
+  return { warehouseId, branchId };
+}
+
+/**
  * Build receipt line entries from order lines and mapping table.
  * @param {object} order
  * @param {Record<string, { id: number }>} itemMap
@@ -122,6 +141,10 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
   if (order.documentCurrency && fx > 0) {
     payload.exchangeRate = fx;
   }
+
+  const { warehouseId, branchId } = resolveLocationMapping(order, cfg);
+  if (warehouseId) payload.warehouseId = warehouseId;
+  if (branchId) payload.branchId = branchId;
 
   return payload;
 }
@@ -236,6 +259,7 @@ module.exports = {
   buildSaleReceiptPayload,
   buildMappedEntries,
   resolveDepositAccountId,
+  resolveLocationMapping,
   isCardMethodKey,
   postToBigcapital,
   processBigcapitalSyncJob,

@@ -74,20 +74,26 @@ export class AuthController {
     let organizationId: string | undefined;
     let tenantId: number | undefined;
 
+    const memberships = await this.userTenantModel
+      .query()
+      .where({ userId: user.id })
+      .orderBy('createdAt', 'desc');
+
     if (user.tenantId) {
       const tenant = await this.tenantModel.query().findById(user.tenantId);
-      organizationId = tenant?.organizationId;
-      tenantId = tenant?.id;
+      const primaryMembership = memberships.find(
+        (m) => m.tenantId === user.tenantId,
+      );
+      if (tenant && primaryMembership) {
+        organizationId = tenant.organizationId;
+        tenantId = tenant.id;
+      }
     }
 
-    if (!organizationId) {
-      const membership = await this.userTenantModel
-        .query()
-        .where({ userId: user.id })
-        .orderBy('createdAt', 'asc')
-        .first();
-      organizationId = membership?.organizationId;
-      tenantId = membership?.tenantId;
+    if (!organizationId && memberships.length > 0) {
+      const membership = memberships[0];
+      organizationId = membership.organizationId;
+      tenantId = membership.tenantId;
     }
 
     if (!organizationId || tenantId === undefined) {

@@ -8,19 +8,18 @@ const http = axios.create();
 
 http.interceptors.request.use((request) => {
   const state = store.getState();
-  const { token, organization } = state.authentication;
-  const locale = 'en';
+  const { token, organizationId, locale } = state.authentication;
 
   if (token) {
     request.headers.common['x-access-token'] = token;
+    request.headers.common['Authorization'] = `Bearer ${token}`;
   }
-  if (organization) {
-    request.headers.common['organization-id'] = organization;
+  if (organizationId) {
+    request.headers.common['organization-id'] = organizationId;
   }
   if (locale) {
     request.headers.common['Accept-Language'] = locale;
   }
-  request.headers.common['Accept-Language'] = 'ar';
 
   return request;
 }, (error) => {
@@ -36,6 +35,11 @@ http.interceptors.response.use((response) => response, (error) => {
     }
 
     if (status === 401) {
+      const { token } = store.getState().authentication;
+      if (!token) {
+        return Promise.reject(error);
+      }
+
       removeCookie('token');
       removeCookie('organization_id');
       removeCookie('tenant_id');

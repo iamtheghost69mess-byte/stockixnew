@@ -16,6 +16,20 @@ const integrationConfigSchema = new mongoose.Schema(
       defaultWalkInCustomerId: { type: Number },
       defaultCashDepositAccountId: { type: Number },
       defaultCardDepositAccountId: { type: Number },
+      /** Fallback Bigcapital warehouse when order location has no mapping. */
+      defaultWarehouseId: { type: Number },
+      /** POS location → Bigcapital branch/warehouse. */
+      locationMapping: [
+        {
+          posLocationId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Location",
+            required: true,
+          },
+          bigcapitalBranchId: { type: Number },
+          bigcapitalWarehouseId: { type: Number },
+        },
+      ],
       lastSyncedAt: { type: Date },
       lastSyncError: { type: String },
       syncStatus: {

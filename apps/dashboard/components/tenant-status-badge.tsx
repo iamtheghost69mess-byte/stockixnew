@@ -24,6 +24,15 @@ export default function TenantStatusBadge({ status }: { status: string }) {
     );
   }
 
+  if (normalized === "partial") {
+    return (
+      <Badge variant="outline" className="border-amber-500/60 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+        <AlertCircle className="mr-1 h-3.5 w-3.5" />
+        {label}
+      </Badge>
+    );
+  }
+
   if (normalized === "suspended") {
     return (
       <Badge variant="secondary">

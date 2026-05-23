@@ -92,12 +92,12 @@ export class ProvisionUserService {
       });
     }
 
-    if (!user.tenantId) {
-      await this.systemUserModel
-        .query()
-        .findById(user.id)
-        .patch({ tenantId: tenant.id });
-    }
+    // Always bind the provisioned tenant as the user's primary tenant (fixes sign-in
+    // when the same email exists across stacks / orgs from prior provisions).
+    await this.systemUserModel
+      .query()
+      .findById(user.id)
+      .patch({ tenantId: tenant.id });
 
     if (dto.organizationNumber) {
       const existingMetadata = await this.tenantMetadataModel

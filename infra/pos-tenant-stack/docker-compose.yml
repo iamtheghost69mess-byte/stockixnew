@@ -11,7 +11,11 @@ services:
       - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}
       - REDIS_URL=redis://pos-redis:6379
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
+      - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
       - TENANT_ID=${TENANT_ID}
+      - POS_BACKEND_URL=${POS_BACKEND_URL}
+      - POS_FRONTEND_URL=${POS_FRONTEND_URL}
+      - PUBLIC_APP_URL=${POS_FRONTEND_URL}
     depends_on:
       - pos-mongo
       - pos-redis
@@ -24,7 +28,7 @@ services:
       context: ${POS_APP_ROOT}/apps/pos-frontend2
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_POS_API_URL=${POS_API_URL:-http://localhost:8010}
+      - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}
     ports:
       - "127.0.0.1:${POS_FRONTEND_HOST_PORT:-3001}:3000"
 

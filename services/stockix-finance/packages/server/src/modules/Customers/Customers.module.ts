@@ -55,5 +55,6 @@ import { CustomerWriteGLOpeningBalanceSubscriber } from './subscribers/CustomerG
     CustomerGLEntriesStorage,
     CustomerWriteGLOpeningBalanceSubscriber,
   ],
+  exports: [CustomersApplication, CreateCustomer],
 })
 export class CustomersModule {}

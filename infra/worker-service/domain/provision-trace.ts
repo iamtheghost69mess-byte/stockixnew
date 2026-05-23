@@ -34,6 +34,10 @@ export function createProvisionTracer(
         const { oneTimeAdminPassword: _scrubbed, ...rest } = meta;
         meta = rest;
       }
+      if (meta && "posDefaultCredentials" in meta) {
+        const { posDefaultCredentials: _scrubbedPos, ...rest } = meta;
+        meta = rest;
+      }
       const ctx = getContext();
       log(`[${phase}] ${message}`);
       await db.insert(tenantProvisionEvents).values({

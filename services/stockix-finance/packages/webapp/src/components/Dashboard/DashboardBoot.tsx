@@ -54,34 +54,25 @@ export function useApplicationBoot() {
   const { isSuccess: isAuthUserSuccess, isLoading: isAuthUserLoading } =
     useAuthenticatedAccount();
 
-  // Initial locale cookie value.
-  const localeCookie = getCookie('locale');
-
   // Is the dashboard booted.
   const isBooted = React.useRef(false);
 
-  // Syns the organization language with locale cookie.
-  React.useEffect(() => {
-    if (organization?.metadata?.language) {
-      setCookie('locale', organization.metadata.language);
-    }
-  }, [organization]);
+  const orgLanguage = organization?.metadata?.language;
 
+  // Sync locale cookie with organization language (reload at most once per mismatch).
   React.useEffect(() => {
-    // Can't continue if the organization metadata is not loaded yet.
-    if (!organization?.metadata?.language) {
+    if (!orgLanguage) {
       return;
     }
-    // Can't continue if the organization is already booted.
-    if (isBooted.current) {
+    const currentLocale = getCookie('locale', 'en');
+    if (currentLocale === orgLanguage) {
       return;
     }
-    // Reboot the application in case the initial locale not equal
-    // the current organization language.
-    if (localeCookie !== organization.metadata.language) {
+    setCookie('locale', orgLanguage);
+    if (!isBooted.current) {
       window.location.reload();
     }
-  }, [localeCookie, organization]);
+  }, [orgLanguage]);
 
   const [startLoading, stopLoading] = useSplashLoading();
 
@@ -111,7 +102,7 @@ export function useApplicationBoot() {
   useWhen(
     isAuthUserSuccess &&
       isCurrentOrganizationSuccess &&
-      localeCookie === organization?.metadata?.language,
+      (!orgLanguage || getCookie('locale', 'en') === orgLanguage),
     () => {
       isBooted.current = true;
     },

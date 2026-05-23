@@ -31,6 +31,87 @@ router.get("/config", ...scoped, async (req, res, next) => {
   }
 });
 
+router.put("/config/location-mapping", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const { locationMapping, defaultWarehouseId } = req.body || {};
+    const setFields = {};
+    if (Array.isArray(locationMapping)) {
+      setFields["bigcapital.locationMapping"] = locationMapping.map((row) => ({
+        posLocationId: row.posLocationId,
+        bigcapitalBranchId: row.bigcapitalBranchId,
+        bigcapitalWarehouseId: row.bigcapitalWarehouseId,
+      }));
+    }
+    if (defaultWarehouseId !== undefined) {
+      setFields["bigcapital.defaultWarehouseId"] = defaultWarehouseId;
+    }
+    const config = await IntegrationConfig.findOneAndUpdate(
+      { organization: orgId },
+      { $set: setFields },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ success: true, data: maskIntegrationConfig(config) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/config/location-mapping", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const { posLocationId, bigcapitalBranchId, bigcapitalWarehouseId } =
+      req.body || {};
+    if (!posLocationId) {
+      return res.status(400).json({
+        success: false,
+        error: "posLocationId is required",
+      });
+    }
+    const config = await IntegrationConfig.findOne({ organization: orgId });
+    const existing = config?.bigcapital?.locationMapping || [];
+    const filtered = existing.filter(
+      (m) => String(m.posLocationId) !== String(posLocationId)
+    );
+    filtered.push({
+      posLocationId,
+      bigcapitalBranchId,
+      bigcapitalWarehouseId,
+    });
+    const updated = await IntegrationConfig.findOneAndUpdate(
+      { organization: orgId },
+      { $set: { "bigcapital.locationMapping": filtered } },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ success: true, data: maskIntegrationConfig(updated) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete(
+  "/config/location-mapping/:posLocationId",
+  ...scoped,
+  async (req, res, next) => {
+    try {
+      const orgId = assertTenantOrganization(req);
+      const config = await IntegrationConfig.findOne({ organization: orgId });
+      const existing = config?.bigcapital?.locationMapping || [];
+      const filtered = existing.filter(
+        (m) => String(m.posLocationId) !== String(req.params.posLocationId)
+      );
+      const updated = await IntegrationConfig.findOneAndUpdate(
+        { organization: orgId },
+        { $set: { "bigcapital.locationMapping": filtered } },
+        { new: true, upsert: true }
+      );
+      res.status(200).json({ success: true, data: maskIntegrationConfig(updated) });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 router.put("/config", ...scoped, async (req, res, next) => {
   try {
     const orgId = assertTenantOrganization(req);

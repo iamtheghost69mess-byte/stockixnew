@@ -58,6 +58,20 @@ export default function useApiRequest() {
           setGlobalErrors({ something_wrong: true });
         }
         if (status === 401) {
+          const errorTypes = Array.isArray(data?.errors)
+            ? data.errors.map((e) => e?.type).filter(Boolean)
+            : [];
+          const isTenantSetupError = errorTypes.some((type) =>
+            [
+              'TENANT.DATABASE.NOT.INITALIZED',
+              'TENANT.DATABASE.NOT.SEED',
+              'TENANT.NOT.FOUND',
+            ].includes(type),
+          );
+          // Unauthenticated calls (e.g. global SuspendedOverlay) must not trigger logout loops.
+          if (!token || isTenantSetupError) {
+            return Promise.reject(error);
+          }
           setGlobalErrors({ session_expired: true });
           setLogout();
         }
@@ -90,7 +104,7 @@ export default function useApiRequest() {
       },
     );
     return instance;
-  }, [token, organizationId, setGlobalErrors, setLogout]);
+  }, [token, organizationId, currentLocale, setGlobalErrors, setLogout]);
 
   return React.useMemo(
     () => ({

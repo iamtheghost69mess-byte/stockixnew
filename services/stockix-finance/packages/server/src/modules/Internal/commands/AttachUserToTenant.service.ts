@@ -50,5 +50,10 @@ export class AttachUserToTenantService {
       organizationId: tenant.organizationId,
       role: null,
     });
+
+    await this.systemUserModel
+      .query()
+      .findById(user.id)
+      .patch({ tenantId: tenant.id });
   }
 }

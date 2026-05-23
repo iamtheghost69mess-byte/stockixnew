@@ -15,6 +15,7 @@ import { CryptoTenantSecretGenerator } from "./provisioning/adapters/crypto-tena
 import { ExecaDockerComposeRunner } from "./provisioning/adapters/execa-docker-compose-runner.js";
 import { FetchStockixFinanceBootstrap } from "./provisioning/adapters/fetch-stockix-finance-bootstrap.js";
 import { TraefikEdgePublisher } from "./provisioning/adapters/traefik-edge-publisher.js";
+import { removePosTraefikConfig } from "./traefik-config.js";
 
 const dockerRunner = new ExecaDockerComposeRunner();
 const edgePublisher = new TraefikEdgePublisher();
@@ -73,6 +74,10 @@ export async function deprovisionTenant(
   await edgePublisher.unpublish(row.slug).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     log(`edge unpublish failed for ${row.slug}: ${message}`);
+  });
+  await removePosTraefikConfig(row.slug).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`pos edge unpublish failed for ${row.slug}: ${message}`);
   });
   await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
   await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));

@@ -33,6 +33,8 @@ const connectDB = async () => {
     applyMongoDnsIfNeeded(config.databaseURI);
     const conn = await mongoose.connect(config.databaseURI);
     console.log(`MongoDB Connected: ${conn.connection.host}`);
+    const { ensureProvisionPlatformApiKey } = require("../services/ensureProvisionPlatformApiKey");
+    await ensureProvisionPlatformApiKey();
     try {
       await User.syncIndexes();
       console.log("User model indexes synced");

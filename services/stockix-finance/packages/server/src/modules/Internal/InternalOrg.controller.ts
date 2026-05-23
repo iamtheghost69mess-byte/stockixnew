@@ -13,6 +13,8 @@ import { PublicRoute } from '@/modules/Auth/guards/jwt.guard';
 import { TenantAgnosticRoute } from '@/modules/Tenancy/TenancyGlobal.guard';
 import { InternalSecretGuard } from './guards/InternalSecret.guard';
 import { CopyParentTenantSettingsService } from '@/modules/Organization/CopyParentTenantSettings.service';
+import { InternalActivateWarehousesService } from './commands/InternalActivateWarehouses.service';
+import { InternalSeedPosDefaultsService } from './commands/InternalSeedPosDefaults.service';
 import { Inject } from '@nestjs/common';
 import { TenantModel } from '@/modules/System/models/TenantModel';
 
@@ -24,9 +26,23 @@ import { TenantModel } from '@/modules/System/models/TenantModel';
 export class InternalOrgController {
   constructor(
     private readonly copyParentTenantSettingsService: CopyParentTenantSettingsService,
+    private readonly internalActivateWarehousesService: InternalActivateWarehousesService,
+    private readonly internalSeedPosDefaultsService: InternalSeedPosDefaultsService,
     @Inject(TenantModel.name)
     private readonly tenantModel: typeof TenantModel,
   ) {}
+
+  @Post(':tenantId/activate-warehouses')
+  @HttpCode(HttpStatus.OK)
+  async activateWarehouses(@Param('tenantId', ParseIntPipe) tenantId: number) {
+    return this.internalActivateWarehousesService.activateForTenant(tenantId);
+  }
+
+  @Post(':tenantId/seed-pos-defaults')
+  @HttpCode(HttpStatus.OK)
+  async seedPosDefaults(@Param('tenantId', ParseIntPipe) tenantId: number) {
+    return this.internalSeedPosDefaultsService.seedForTenant(tenantId);
+  }
 
   @Post(':tenantId/copy-from/:parentTenantId')
   @HttpCode(HttpStatus.OK)

@@ -136,6 +136,10 @@ const config = Object.freeze({
       .toLowerCase();
     return mode === "shadow" ? "shadow" : "enforce";
   })(),
+  /** Stockix control-plane tenant UUID (set per tenant POS stack via `TENANT_ID`). */
+  stockixTenantId: process.env.TENANT_ID
+    ? String(process.env.TENANT_ID).trim()
+    : null,
   isWildcardPosOrigin,
 });
 

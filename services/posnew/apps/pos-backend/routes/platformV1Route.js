@@ -21,6 +21,7 @@ const {
   listOrgsHealthSummary,
   createOrg,
   getOrg,
+  getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
   patchOrgLifecycle,
@@ -136,6 +137,11 @@ router.get(
   "/organizations/health-summary",
   requirePlatformPermission(P.ORG_READ),
   listOrgsHealthSummary
+);
+router.get(
+  "/organizations/by-stockix-tenant/:tenantId",
+  requirePlatformPermission(P.ORG_READ),
+  getOrgByStockixTenant
 );
 router.get(
   "/organizations/:id/provisioning-status",

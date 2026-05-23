@@ -5,10 +5,15 @@ type Params = { params: Promise<{ tenantId: string }> };
 
 export async function POST(req: Request, { params }: Params) {
   const { tenantId } = await params;
+  const bodyText = await req.text();
   const res = await apiFetch(
     `/tenants/${tenantId}/retry-provision`,
     {
       method: "POST",
+      headers: bodyText
+        ? { "Content-Type": "application/json" }
+        : undefined,
+      body: bodyText || undefined,
     },
     req,
   );

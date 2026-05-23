@@ -2693,6 +2693,16 @@ var tenantDeployments = pgTable(
     }),
     /** Finance stack tenant id (numeric) for internal license sync. */
     financeTenantId: integer("finance_tenant_id"),
+    /** Bigcapital primary warehouse id (code 10001) for POS integration defaultWarehouseId. */
+    financeDefaultWarehouseId: integer("finance_default_warehouse_id"),
+    /** Finance walk-in customer for POS Bigcapital sync. */
+    financeWalkInCustomerId: integer("finance_walk_in_customer_id"),
+    financeCashAccountId: integer("finance_cash_account_id"),
+    financeCardAccountId: integer("finance_card_account_id"),
+    /** POS platform organization id (Mongo ObjectId string). */
+    posOrganizationId: text("pos_organization_id"),
+    /** Public POS web app URL (Traefik: https://{slug}-pos.{domain}). */
+    posUrl: text("pos_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
@@ -3108,7 +3118,7 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { and as and3, eq as eq9, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
+import { and as and3, eq as eq10, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
 
 // src/license-expire-followup.ts
 import { and as and2, eq as eq5, gte, isNotNull } from "drizzle-orm";
@@ -3698,7 +3708,7 @@ async function checkRequiredTenantImages() {
 // ../../infra/worker-service/domain/provisioner.ts
 import { rm, stat } from "fs/promises";
 import { join as join8 } from "path";
-import { eq as eq8 } from "drizzle-orm";
+import { eq as eq9 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/env-paths.ts
 import { homedir } from "os";
@@ -3750,11 +3760,11 @@ function tenantMysqlVolumeName(slug) {
 }
 
 // ../../infra/worker-service/src/provision-runtime.ts
-import { mkdir as mkdir2 } from "fs/promises";
-import { join as join6 } from "path";
+import { mkdir as mkdir3 } from "fs/promises";
+import { join as join7 } from "path";
 import { createCipheriv, randomBytes as randomBytes3 } from "crypto";
 import { execa as execa3 } from "execa";
-import { asc, eq as eq7 } from "drizzle-orm";
+import { asc, eq as eq8 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/provision-trace.ts
 function createProvisionTracer(db, correlationId, getContext, log) {
@@ -3765,6 +3775,10 @@ function createProvisionTracer(db, correlationId, getContext, log) {
       let meta = rawMeta;
       if (meta && "oneTimeAdminPassword" in meta) {
         const { oneTimeAdminPassword: _scrubbed, ...rest } = meta;
+        meta = rest;
+      }
+      if (meta && "posDefaultCredentials" in meta) {
+        const { posDefaultCredentials: _scrubbedPos, ...rest } = meta;
         meta = rest;
       }
       const ctx = getContext();
@@ -4002,6 +4016,79 @@ async function writeTenantEnvFileAtomic(tenantEnvDir, map) {
   return target;
 }
 
+// ../../infra/worker-service/domain/provisioning/adapters/activate-finance-warehouses.ts
+async function activateFinanceWarehouses(params) {
+  const base = params.internalBaseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/internal/tenants/${params.financeTenantId}/activate-warehouses`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": params.internalApiSecret,
+      ...params.correlationId ? { "x-request-id": params.correlationId } : {}
+    },
+    signal: AbortSignal.timeout(12e4)
+  });
+  const text2 = await res.text();
+  let body = {};
+  try {
+    body = text2 ? JSON.parse(text2) : {};
+  } catch {
+    body = { raw: text2 };
+  }
+  if (!res.ok) {
+    const detail = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : text2.slice(0, 300);
+    throw new Error(`activate_warehouses_failed:${res.status}:${detail}`);
+  }
+  const primaryWarehouseId = Number(body.primaryWarehouseId);
+  if (!Number.isFinite(primaryWarehouseId) || primaryWarehouseId <= 0) {
+    throw new Error("activate_warehouses_failed:missing_primaryWarehouseId");
+  }
+  params.log?.(
+    `[provision] Warehouses activated tenant=${params.financeTenantId} warehouse=${primaryWarehouseId} already=${Boolean(body.alreadyActivated)}`
+  );
+  return {
+    primaryWarehouseId,
+    alreadyActivated: Boolean(body.alreadyActivated)
+  };
+}
+
+// ../../infra/worker-service/domain/provisioning/adapters/seed-finance-pos-defaults.ts
+async function seedFinancePosDefaults(params) {
+  const base = params.internalBaseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/internal/tenants/${params.financeTenantId}/seed-pos-defaults`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-secret": params.internalApiSecret,
+      ...params.correlationId ? { "x-request-id": params.correlationId } : {}
+    },
+    signal: AbortSignal.timeout(12e4)
+  });
+  const text2 = await res.text();
+  let body = {};
+  try {
+    body = text2 ? JSON.parse(text2) : {};
+  } catch {
+    body = { raw: text2 };
+  }
+  if (!res.ok) {
+    const detail = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : text2.slice(0, 300);
+    throw new Error(`seed_pos_defaults_failed:${res.status}:${detail}`);
+  }
+  const walkInCustomerId = Number(body.walkInCustomerId);
+  const cashAccountId = Number(body.cashAccountId);
+  const cardAccountId = Number(body.cardAccountId);
+  if (!Number.isFinite(walkInCustomerId) || walkInCustomerId <= 0 || !Number.isFinite(cashAccountId) || cashAccountId <= 0 || !Number.isFinite(cardAccountId) || cardAccountId <= 0) {
+    throw new Error("seed_pos_defaults_failed:missing_ids");
+  }
+  params.log?.(
+    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}`
+  );
+  return { walkInCustomerId, cashAccountId, cardAccountId };
+}
+
 // ../../infra/worker-service/domain/provisioning/adapters/sync-finance-license.ts
 async function syncFinanceLicense(internalBaseUrl, payload, log) {
   const secret = apiConfig.internalApiSecret;
@@ -4126,14 +4213,295 @@ async function provisionChatwootAccount(opts) {
 }
 
 // ../../infra/worker-service/src/module-stacks.ts
-import { join as join5 } from "path";
+import { join as join6 } from "path";
 import { execa as execa2 } from "execa";
+import { eq as eq7 } from "drizzle-orm";
+
+// ../../infra/worker-service/domain/provisioning/adapters/bootstrap-pos-org.ts
+var BOOTSTRAP_POLL_TIMEOUT_MS = 6e4;
+var BOOTSTRAP_POLL_INTERVAL_MS = 1500;
+var POS_HEALTH_TIMEOUT_MS = 9e4;
+var POS_HEALTH_INTERVAL_MS = 2e3;
+function posApiBase(input) {
+  const port = input.posHostPort ?? Number(process.env.POS_HOST_PORT ?? 8010);
+  const fromEnv = input.posBaseUrl ?? posConfig.platformBaseUrl;
+  if (fromEnv && !fromEnv.includes("localhost:8010")) {
+    return fromEnv.replace(/\/+$/, "");
+  }
+  return `http://127.0.0.1:${port}`;
+}
+function apiKeyOrThrow() {
+  const key = posConfig.platformApiKey.trim();
+  if (key.length < 10) {
+    throw new Error(
+      "POS_PLATFORM_API_KEY is required for POS org bootstrap (min 10 characters)"
+    );
+  }
+  return key;
+}
+function parseJson(text2) {
+  if (!text2) return {};
+  try {
+    return JSON.parse(text2);
+  } catch {
+    return { raw: text2 };
+  }
+}
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readOrgId(body) {
+  if (!isRecord2(body)) return null;
+  const data = body.data;
+  if (!isRecord2(data)) return null;
+  const id = data._id ?? data.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+function normalizeCredentials(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const row of raw) {
+    if (!isRecord2(row)) continue;
+    const role = typeof row.role === "string" ? row.role : "";
+    const username = typeof row.username === "string" ? row.username : typeof row.name === "string" ? row.name : role;
+    const pin = typeof row.pin === "string" ? row.pin : "";
+    if (!role || !pin) continue;
+    out.push({ role, username, pin });
+  }
+  return out;
+}
+function toPosDefaultCredentials(creds) {
+  const admin = creds.find((c) => c.role === "admin");
+  return {
+    adminPin: admin?.pin ?? "",
+    allRoles: creds
+  };
+}
+async function sleep(ms) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+async function waitForPosBackend(base, log) {
+  const started = Date.now();
+  const paths = ["/api/ping", "/api/health"];
+  while (Date.now() - started < POS_HEALTH_TIMEOUT_MS) {
+    for (const path2 of paths) {
+      try {
+        const res = await fetch(`${base}${path2}`, {
+          signal: AbortSignal.timeout(4e3)
+        });
+        if (res.ok) {
+          log(`[provision][pos] backend ready (${path2})`);
+          return;
+        }
+      } catch {
+      }
+    }
+    await sleep(POS_HEALTH_INTERVAL_MS);
+  }
+  throw new Error(`POS backend not ready within ${POS_HEALTH_TIMEOUT_MS}ms (${base})`);
+}
+async function platformFetch(base, path2, init) {
+  const res = await fetch(`${base}${path2}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": init.apiKey,
+      ...init.headers ?? {}
+    },
+    signal: AbortSignal.timeout(3e4)
+  });
+  const text2 = await res.text();
+  return { ok: res.ok, status: res.status, json: parseJson(text2), text: text2 };
+}
+async function bootstrapPosOrganization(input) {
+  const apiKey = apiKeyOrThrow();
+  const base = posApiBase(input);
+  const log = input.log;
+  await waitForPosBackend(base, log);
+  const licenseStartsAt = (/* @__PURE__ */ new Date()).toISOString();
+  const licenseEndsAt = new Date(
+    Date.now() + 365 * 24 * 60 * 60 * 1e3
+  ).toISOString();
+  const idempotencyKey = `stockix-provision-${input.tenantId}`;
+  log(`[provision][pos] creating organization slug=${input.slug}`);
+  const createRes = await platformFetch(base, "/api/platform/v1/organizations", {
+    method: "POST",
+    apiKey,
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({
+      name: input.tenantName,
+      slug: input.slug,
+      stockixTenantId: input.tenantId,
+      ownerEmail: input.adminEmail,
+      timezone: "UTC",
+      licenseStartsAt,
+      licenseEndsAt
+    })
+  });
+  if (!createRes.ok) {
+    throw new Error(
+      `POS org create failed (${createRes.status}): ${createRes.text.slice(0, 500)}`
+    );
+  }
+  const orgId = readOrgId(createRes.json);
+  if (!orgId) {
+    throw new Error("POS org create response missing organization id");
+  }
+  const bootstrapMode = isRecord2(createRes.json) && typeof createRes.json.bootstrapMode === "string" ? createRes.json.bootstrapMode : void 0;
+  let credentials = normalizeCredentials(
+    isRecord2(createRes.json) && isRecord2(createRes.json.data) ? createRes.json.data.defaultCredentials : null
+  );
+  if (bootstrapMode !== "sync_fallback") {
+    const pollStarted = Date.now();
+    let bootstrapReady = false;
+    log(`[provision][pos] waiting for org bootstrap orgId=${orgId}`);
+    while (Date.now() - pollStarted < BOOTSTRAP_POLL_TIMEOUT_MS) {
+      const statusRes = await platformFetch(
+        base,
+        `/api/platform/v1/organizations/${orgId}/provisioning-status`,
+        { method: "GET", apiKey }
+      );
+      if (!statusRes.ok) {
+        throw new Error(
+          `POS provisioning-status failed (${statusRes.status}): ${statusRes.text.slice(0, 300)}`
+        );
+      }
+      const data = isRecord2(statusRes.json) && isRecord2(statusRes.json.data) ? statusRes.json.data : null;
+      const lifecycle = data && typeof data.lifecycle === "string" ? data.lifecycle : "";
+      const readyForPinLogin = data?.readyForPinLogin === true;
+      if (lifecycle === "active" || readyForPinLogin) {
+        bootstrapReady = true;
+        log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
+        break;
+      }
+      await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
+    }
+    if (!bootstrapReady) {
+      throw new Error(
+        `POS org bootstrap timed out after ${BOOTSTRAP_POLL_TIMEOUT_MS}ms (orgId=${orgId})`
+      );
+    }
+  }
+  const getRes = await platformFetch(base, `/api/platform/v1/organizations/${orgId}`, {
+    method: "GET",
+    apiKey
+  });
+  if (!getRes.ok) {
+    throw new Error(
+      `POS org fetch failed (${getRes.status}): ${getRes.text.slice(0, 300)}`
+    );
+  }
+  const orgData = isRecord2(getRes.json) && isRecord2(getRes.json.data) ? getRes.json.data : null;
+  if (orgData?.defaultCredentials) {
+    credentials = normalizeCredentials(orgData.defaultCredentials);
+  }
+  if (credentials.length === 0) {
+    throw new Error(
+      `POS org bootstrap finished but defaultCredentials missing for orgId=${orgId}`
+    );
+  }
+  return {
+    posOrganizationId: orgId,
+    posDefaultCredentials: toPosDefaultCredentials(credentials),
+    bootstrapMode
+  };
+}
+
+// ../../infra/worker-service/domain/traefik-config.ts
+import { mkdir as mkdir2, unlink, writeFile as writeFile2 } from "fs/promises";
+import { join as join5 } from "path";
+function traefikDir() {
+  return apiConfig.traefikDynamicDir;
+}
+function tenantUpstreamHost() {
+  return apiConfig.traefikTenantUpstreamHost;
+}
+async function writeTenantTraefikConfig(slug, port, domain) {
+  const dir = traefikDir();
+  await mkdir2(dir, { recursive: true });
+  const config = `http:
+  routers:
+    tenant-${slug}:
+      rule: "Host(\`${slug}.${domain}\`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: cloudflare
+      service: tenant-${slug}
+  services:
+    tenant-${slug}:
+      loadBalancer:
+        servers:
+          - url: "http://${tenantUpstreamHost()}:${port}"
+`;
+  await writeFile2(join5(dir, `tenant-${slug}.yml`), config, "utf8");
+}
+async function removeTenantTraefikConfig(slug) {
+  try {
+    await unlink(join5(traefikDir(), `tenant-${slug}.yml`));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes("no such file")) {
+      throw error;
+    }
+  }
+}
+async function writePosTraefikConfig(slug, backendPort, frontendPort, domain) {
+  const dir = traefikDir();
+  await mkdir2(dir, { recursive: true });
+  const host = tenantUpstreamHost();
+  const config = `http:
+  routers:
+    tenant-pos-${slug}:
+      rule: "Host(\`${slug}-pos.${domain}\`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: cloudflare
+      service: tenant-pos-${slug}-frontend
+    tenant-pos-api-${slug}:
+      rule: "Host(\`${slug}-pos-api.${domain}\`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: cloudflare
+      service: tenant-pos-${slug}-backend
+  services:
+    tenant-pos-${slug}-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://${host}:${frontendPort}"
+    tenant-pos-${slug}-backend:
+      loadBalancer:
+        servers:
+          - url: "http://${host}:${backendPort}"
+`;
+  await writeFile2(join5(dir, `tenant-pos-${slug}.yml`), config, "utf8");
+}
+async function removePosTraefikConfig(slug) {
+  try {
+    await unlink(join5(traefikDir(), `tenant-pos-${slug}.yml`));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes("no such file")) {
+      throw error;
+    }
+  }
+}
+
+// ../../infra/worker-service/src/module-stacks.ts
 function repoRoot() {
   return apiConfig.repoRoot ?? process.cwd();
 }
+var DEFAULT_MODULES = ["accounting"];
 function resolveTenantModules(inputModules) {
-  if (inputModules && inputModules.length > 0) return inputModules;
-  return ["accounting"];
+  if (!inputModules?.length) {
+    return [...DEFAULT_MODULES];
+  }
+  const filtered = inputModules.filter(
+    (m) => typeof m === "string" && m.trim().length > 0
+  );
+  return filtered.length > 0 ? filtered : [...DEFAULT_MODULES];
 }
 function isModuleGatingEnabled() {
   return process.env.PROVISION_MODULE_GATING === "1";
@@ -4141,10 +4509,52 @@ function isModuleGatingEnabled() {
 function shouldProvisionFinanceStack(modules) {
   return resolveTenantModules(modules).includes("accounting");
 }
+function hasAccountingAndPos(modules) {
+  return modules.includes("accounting") && modules.includes("pos");
+}
+function isPosOnlyModules(modules) {
+  const resolved = resolveTenantModules(modules);
+  return resolved.includes("pos") && !resolved.includes("accounting");
+}
+function defaultPosBackendPort() {
+  const raw = process.env.POS_HOST_PORT ?? "8010";
+  const port = Number(raw);
+  return Number.isFinite(port) && port > 0 ? port : 8010;
+}
+function defaultPosFrontendPort() {
+  const raw = process.env.POS_FRONTEND_HOST_PORT ?? "3001";
+  const port = Number(raw);
+  return Number.isFinite(port) && port > 0 ? port : 3001;
+}
+function buildPosPublicUrls(slug) {
+  const rootDomain = apiConfig.rootDomain || "example.com";
+  const scheme = apiConfig.publicBaseUrlScheme || "https";
+  return {
+    posUrl: `${scheme}://${slug}-pos.${rootDomain}`,
+    posApiUrl: `${scheme}://${slug}-pos-api.${rootDomain}`
+  };
+}
+async function resolvePosPorts(db, log) {
+  if (!db) {
+    return {
+      backendPort: defaultPosBackendPort(),
+      frontendPort: defaultPosFrontendPort()
+    };
+  }
+  const maxPort = apiConfig.maxTenantPort;
+  const backendPort = await allocateTenantPort(db, maxPort);
+  const frontendPort = await allocateTenantPort(db, maxPort);
+  log(`[provision][pos] allocated ports backend=${backendPort} frontend=${frontendPort}`);
+  return { backendPort, frontendPort };
+}
 async function provisionPosStack(opts) {
-  const composeFile = join5(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
+  const composeFile = join6(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
   const project = `stockix-pos-${opts.slug}`;
-  const posAppRoot = process.env.POS_APP_ROOT ?? join5(repoRoot(), "services", "posnew");
+  const posAppRoot = process.env.POS_APP_ROOT ?? join6(repoRoot(), "services", "posnew");
+  const platformApiKey = posConfig.platformApiKey.trim();
+  const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug);
+  const rootDomain = apiConfig.rootDomain || "example.com";
+  const { backendPort, frontendPort } = await resolvePosPorts(opts.db, opts.log);
   opts.log(`[provision][pos] compose up project=${project}`);
   await execa2(
     "docker",
@@ -4154,17 +4564,71 @@ async function provisionPosStack(opts) {
         ...process.env,
         COMPOSE_PROJECT_NAME: project,
         POS_APP_ROOT: posAppRoot,
+        POS_HOST_PORT: String(backendPort),
+        POS_FRONTEND_HOST_PORT: String(frontendPort),
         TENANT_ID: opts.tenantId,
-        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? ""
+        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+        POS_PLATFORM_API_KEY: platformApiKey,
+        POS_BACKEND_URL: posApiUrl,
+        POS_FRONTEND_URL: posUrl,
+        ROOT_DOMAIN: rootDomain
       },
       stdio: "inherit"
     }
   );
+  const bootstrap = await bootstrapPosOrganization({
+    slug: opts.slug,
+    tenantName: opts.tenantName,
+    tenantId: opts.tenantId,
+    adminEmail: opts.adminEmail,
+    log: opts.log,
+    posHostPort: backendPort
+  });
+  opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
+  await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
+  if (opts.db) {
+    await opts.db.update(tenantDeployments).set({
+      posOrganizationId: bootstrap.posOrganizationId,
+      posUrl,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq7(tenantDeployments.tenantId, opts.tenantId));
+    opts.log(
+      `[provision][pos] saved pos_organization_id=${bootstrap.posOrganizationId} pos_url=${posUrl}`
+    );
+  }
+  return {
+    ...bootstrap,
+    posUrl,
+    posApiUrl
+  };
+}
+async function provisionPosStackTracked(opts, trace) {
+  await trace?.event("progress", "Starting POS stack provisioning", {
+    meta: { operationKey: "pos.stack" }
+  });
+  try {
+    const result = await provisionPosStack(opts);
+    await trace?.event("pos.stack.completed", "POS stack provisioned successfully", {
+      meta: {
+        posOrganizationId: result.posOrganizationId,
+        posUrl: result.posUrl,
+        posApiUrl: result.posApiUrl
+      }
+    });
+    return result;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    await trace?.event("pos.stack.failed", `POS stack failed: ${msg}`, {
+      level: "error",
+      meta: { error: msg }
+    });
+    throw error;
+  }
 }
 async function provisionPmsStack(opts) {
-  const composeFile = join5(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
+  const composeFile = join6(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
   const project = `stockix-pms-${opts.slug}`;
-  const pmsAppRoot = process.env.PMS_APP_ROOT ?? join5(repoRoot(), "services", "pms");
+  const pmsAppRoot = process.env.PMS_APP_ROOT ?? join6(repoRoot(), "services", "pms");
   opts.log(`[provision][pms] compose up project=${project}`);
   await execa2(
     "docker",
@@ -4185,6 +4649,35 @@ async function provisionPmsStack(opts) {
 }
 
 // ../../infra/worker-service/src/provision-runtime.ts
+async function runPosProvisionStep(params) {
+  if (!params.licensedModules.includes("pos") || !params.tenantId) {
+    return { posStatus: "skipped" };
+  }
+  try {
+    const posResult = await provisionPosStackTracked(
+      {
+        slug: params.slug,
+        tenantId: params.tenantId,
+        tenantName: params.tenantName,
+        adminEmail: params.adminEmail,
+        db: params.db,
+        log: params.log
+      },
+      params.trace
+    );
+    return {
+      posStatus: "ok",
+      posOrganizationId: posResult.posOrganizationId,
+      posUrl: posResult.posUrl,
+      posApiUrl: posResult.posApiUrl,
+      posDefaultCredentials: posResult.posDefaultCredentials
+    };
+  } catch (posErr) {
+    const posError = posErr instanceof Error ? posErr.message : String(posErr);
+    params.log(`[provision][pos] failed: ${posError}`);
+    return { posStatus: "failed", posError };
+  }
+}
 function encryptDeploymentSecret(plaintext) {
   const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
   const iv = randomBytes3(12);
@@ -4197,7 +4690,7 @@ async function loadProvisionJournal(db, correlationId) {
   const rows = await db.select({
     phase: tenantProvisionEvents.phase,
     meta: tenantProvisionEvents.meta
-  }).from(tenantProvisionEvents).where(eq7(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
+  }).from(tenantProvisionEvents).where(eq8(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
   const journal = /* @__PURE__ */ new Set();
   for (const row of rows) {
     if (row.phase !== "journal") continue;
@@ -4263,6 +4756,14 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   let oneTimeAdminPassword;
   let financeOrganizationId;
   let financeTenantId;
+  let financeDefaultWarehouseId;
+  let walkInCustomerId;
+  let cashAccountId;
+  let cardAccountId;
+  let posOrganizationId;
+  let posUrl;
+  let posApiUrl;
+  let posDefaultCredentials;
   let composeCtx = null;
   let sideEffectsStarted = false;
   const completedOps = await loadProvisionJournal(db, correlationId);
@@ -4349,8 +4850,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   try {
     log(`[provision] start slug=${input.slug} correlationId=${correlationId}`);
     await checkNotCancelled();
-    await mkdir2(join6(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
-    await mkdir2(join6(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
+    await mkdir3(join7(stockixFinanceRoot, "data/logs/nginx"), { recursive: true });
+    await mkdir3(join7(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
     const { secrets } = deps;
     const bootstrapPasswordKey = input.parentTenantSlug?.trim() || input.slug.trim();
     oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
@@ -4371,7 +4872,72 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     if (!s3Configured) {
       log("[provision] S3 not configured \u2014 provisioning without object storage (attachments disabled).");
     }
-    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq7(tenants.slug, input.slug)).limit(1);
+    const licensedModulesEarly = resolveTenantModules(input.modules);
+    const posOnlyRetry = input.retryModules?.length === 1 && input.retryModules[0] === "pos";
+    if (posOnlyRetry) {
+      const [existing] = await db.select({
+        tenantId: tenants.id,
+        deploymentId: tenantDeployments.id,
+        internalPort: tenantDeployments.internalPort,
+        composeProjectName: tenantDeployments.composeProjectName
+      }).from(tenants).innerJoin(tenantDeployments, eq8(tenantDeployments.tenantId, tenants.id)).where(eq8(tenants.slug, input.slug)).limit(1);
+      if (!existing) {
+        throw new Error(`tenant_not_found:${input.slug}`);
+      }
+      tenantId = existing.tenantId;
+      deploymentId = existing.deploymentId;
+      port = existing.internalPort;
+      await checkNotCancelled();
+      const posOutcome2 = await runPosProvisionStep({
+        licensedModules: licensedModulesEarly,
+        slug: input.slug,
+        tenantId,
+        tenantName: input.name,
+        adminEmail: input.adminEmail,
+        db,
+        log,
+        trace
+      });
+      if (posOutcome2.posStatus === "ok") {
+        await db.update(tenants).set({ status: "active" }).where(eq8(tenants.id, tenantId));
+        await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
+        log(`[provision] POS-only retry success slug=${input.slug}`);
+        return {
+          ok: true,
+          tenantId,
+          deploymentId,
+          composeProjectName: existing.composeProjectName,
+          internalPort: port,
+          baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+          oneTimeAdminPassword,
+          posStatus: "ok",
+          tenantStatus: "active",
+          posOrganizationId: posOutcome2.posOrganizationId,
+          posUrl: posOutcome2.posUrl,
+          posApiUrl: posOutcome2.posApiUrl,
+          posDefaultCredentials: posOutcome2.posDefaultCredentials
+        };
+      }
+      const posError = posOutcome2.posError ?? "POS provisioning failed";
+      await db.update(tenants).set({ status: "partial" }).where(eq8(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
+      return {
+        ok: true,
+        tenantId,
+        deploymentId,
+        composeProjectName: existing.composeProjectName,
+        internalPort: port,
+        baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+        oneTimeAdminPassword,
+        posStatus: "failed",
+        posError,
+        tenantStatus: "partial",
+        posOrganizationId: posOutcome2.posOrganizationId,
+        posUrl: posOutcome2.posUrl,
+        posApiUrl: posOutcome2.posApiUrl
+      };
+    }
+    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq8(tenants.slug, input.slug)).limit(1);
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
     }
@@ -4379,7 +4945,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     await db.transaction(async (tx) => {
       const allocated = await allocateTenantPort(tx, maxPort);
       port = allocated;
-      const moduleList = input.modules && input.modules.length > 0 ? input.modules : ["accounting"];
+      const moduleList = resolveTenantModules(input.modules);
       const [tRow] = await tx.insert(tenants).values({
         slug: input.slug,
         name: input.name,
@@ -4413,8 +4979,29 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     const moduleGating = isModuleGatingEnabled();
     if (moduleGating && !shouldProvisionFinanceStack(licensedModules)) {
       log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
-      if (licensedModules.includes("pos") && tenantId) {
-        await provisionPosStack({ slug: input.slug, tenantId, log });
+      const posOutcome2 = await runPosProvisionStep({
+        licensedModules,
+        slug: input.slug,
+        tenantId,
+        tenantName: input.name,
+        adminEmail: input.adminEmail,
+        db,
+        log,
+        trace
+      });
+      if (posOutcome2.posStatus === "failed") {
+        const posError = posOutcome2.posError ?? "POS provisioning failed";
+        if (tenantId) {
+          await db.update(tenants).set({ status: "failed" }).where(eq8(tenants.id, tenantId));
+          await db.update(tenantDeployments).set({ status: "failed", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
+        }
+        return { ok: false, message: posError, cause: posError };
+      }
+      if (posOutcome2.posStatus === "ok") {
+        posOrganizationId = posOutcome2.posOrganizationId;
+        posUrl = posOutcome2.posUrl;
+        posApiUrl = posOutcome2.posApiUrl;
+        posDefaultCredentials = posOutcome2.posDefaultCredentials;
       }
       if (licensedModules.includes("pms") && tenantId) {
         await provisionPmsStack({ slug: input.slug, tenantId, log });
@@ -4430,8 +5017,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
           log
         });
       }
-      await db.update(tenants).set({ status: "active" }).where(eq7(tenants.id, tenantId));
-      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(tenantDeployments.tenantId, tenantId));
+      await db.update(tenants).set({ status: "active" }).where(eq8(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
       return {
         ok: true,
         tenantId,
@@ -4441,7 +5028,13 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         baseUrl,
         oneTimeAdminPassword: oneTimeAdminPassword ?? randomBytes3(12).toString("base64url"),
         financeOrganizationId,
-        financeTenantId
+        financeTenantId,
+        financeDefaultWarehouseId,
+        posOrganizationId,
+        posUrl,
+        posApiUrl,
+        posDefaultCredentials,
+        posStatus: posOutcome2.posStatus === "ok" ? "ok" : "skipped"
       };
     }
     const tenantEnvMap = buildTenantEnvMap({
@@ -4465,7 +5058,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret
     });
-    const envPath = await writeTenantEnvFileAtomic(join6(tenantEnvRoot, input.slug), tenantEnvMap);
+    const envPath = await writeTenantEnvFileAtomic(join7(tenantEnvRoot, input.slug), tenantEnvMap);
     const composeEnv = {
       ...tenantEnvMap,
       COMPOSE_PROJECT_NAME: project
@@ -4797,6 +5390,124 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       });
     }
     await checkNotCancelled();
+    if (!hasOp("tenant.activate_warehouses")) {
+      const internalApiSecret = apiConfig.internalApiSecret;
+      if (financeTenantId && internalUrl && internalApiSecret) {
+        log("[provision] step start: tenant.activate_warehouses");
+        await trace.event("progress", "Activating Finance primary warehouse", {
+          meta: {
+            operationKey: "tenant.activate_warehouses",
+            financeTenantId,
+            elapsedMs: elapsedMs()
+          }
+        });
+        try {
+          const warehouseResult = await activateFinanceWarehouses({
+            internalBaseUrl: internalUrl,
+            internalApiSecret,
+            financeTenantId,
+            correlationId,
+            log
+          });
+          financeDefaultWarehouseId = warehouseResult.primaryWarehouseId;
+          await markOp("tenant.activate_warehouses", "Finance warehouses activated", {
+            financeTenantId,
+            primaryWarehouseId: warehouseResult.primaryWarehouseId,
+            alreadyActivated: warehouseResult.alreadyActivated,
+            elapsedMs: elapsedMs()
+          });
+          await trace.event("warehouses.activated", "Primary warehouse ready for POS sync", {
+            meta: {
+              financeTenantId,
+              primaryWarehouseId: warehouseResult.primaryWarehouseId,
+              alreadyActivated: warehouseResult.alreadyActivated
+            }
+          });
+          log("[provision] step done: tenant.activate_warehouses");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await trace.event("warehouses.activated", `Warehouse activation failed: ${msg}`, {
+            level: "error",
+            meta: { financeTenantId, error: msg }
+          });
+          throw err;
+        }
+      } else {
+        log(
+          "[provision] Skipping warehouse activation (missing financeTenantId, internal URL, or INTERNAL_API_SECRET)"
+        );
+        await markOp("tenant.activate_warehouses", "Skipped warehouse activation", {
+          skipped: true,
+          hasFinanceTenantId: Boolean(financeTenantId)
+        });
+      }
+    } else {
+      await trace.event("resume", "Skipping warehouse activation (already journaled)", {
+        meta: { operationKey: "tenant.activate_warehouses" }
+      });
+    }
+    await checkNotCancelled();
+    if (!hasOp("tenant.seed_pos_defaults")) {
+      const internalApiSecret = apiConfig.internalApiSecret;
+      const seedPosDefaults = hasAccountingAndPos(licensedModules) && financeTenantId && internalUrl && internalApiSecret;
+      if (seedPosDefaults) {
+        log("[provision] step start: tenant.seed_pos_defaults");
+        await trace.event("progress", "Seeding Finance POS defaults (walk-in customer, deposit accounts)", {
+          meta: {
+            operationKey: "tenant.seed_pos_defaults",
+            financeTenantId,
+            elapsedMs: elapsedMs()
+          }
+        });
+        try {
+          const seeded = await seedFinancePosDefaults({
+            internalBaseUrl: internalUrl,
+            internalApiSecret,
+            financeTenantId,
+            correlationId,
+            log
+          });
+          walkInCustomerId = seeded.walkInCustomerId;
+          cashAccountId = seeded.cashAccountId;
+          cardAccountId = seeded.cardAccountId;
+          await markOp("tenant.seed_pos_defaults", "Finance POS defaults seeded", {
+            financeTenantId,
+            walkInCustomerId,
+            cashAccountId,
+            cardAccountId,
+            elapsedMs: elapsedMs()
+          });
+          await trace.event("pos_defaults_seeded", "Walk-in customer and deposit accounts ready", {
+            meta: {
+              walkInCustomerId,
+              cashAccountId,
+              cardAccountId
+            }
+          });
+          log("[provision] step done: tenant.seed_pos_defaults");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await trace.event("pos_defaults_seeded", `POS defaults seed failed: ${msg}`, {
+            level: "error",
+            meta: { financeTenantId, error: msg }
+          });
+          throw err;
+        }
+      } else {
+        log(
+          `[provision] Skipping POS defaults seed (modules=${licensedModules.join(",")}, financeTenantId=${financeTenantId ?? "n/a"})`
+        );
+        await markOp("tenant.seed_pos_defaults", "Skipped POS defaults seed", {
+          skipped: true,
+          modules: licensedModules
+        });
+      }
+    } else {
+      await trace.event("resume", "Skipping POS defaults seed (already journaled)", {
+        meta: { operationKey: "tenant.seed_pos_defaults" }
+      });
+    }
+    await checkNotCancelled();
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
       try {
@@ -4829,13 +5540,51 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         log
       );
     }
-    if (licensedModules.includes("pos") && tenantId) {
-      try {
-        await provisionPosStack({ slug: input.slug, tenantId, log });
-      } catch (posErr) {
-        log(
-          `[provision][pos] non-fatal: ${posErr instanceof Error ? posErr.message : String(posErr)}`
-        );
+    const posOutcome = await runPosProvisionStep({
+      licensedModules,
+      slug: input.slug,
+      tenantId,
+      tenantName: input.name,
+      adminEmail: input.adminEmail,
+      db,
+      log,
+      trace
+    });
+    if (posOutcome.posStatus === "ok") {
+      posOrganizationId = posOutcome.posOrganizationId;
+      posUrl = posOutcome.posUrl;
+      posApiUrl = posOutcome.posApiUrl;
+      posDefaultCredentials = posOutcome.posDefaultCredentials;
+    }
+    if (posOutcome.posStatus === "failed" && tenantId) {
+      const posError = posOutcome.posError ?? "POS provisioning failed";
+      if (hasAccountingAndPos(licensedModules)) {
+        await db.update(tenants).set({ status: "partial" }).where(eq8(tenants.id, tenantId));
+        await db.update(tenantDeployments).set({ status: "active", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
+        log(`[provision] Finance active, POS failed \u2014 tenant marked partial slug=${input.slug}`);
+        return {
+          ok: true,
+          tenantId,
+          deploymentId,
+          composeProjectName: project,
+          internalPort: port,
+          baseUrl,
+          oneTimeAdminPassword,
+          financeOrganizationId,
+          financeTenantId,
+          financeDefaultWarehouseId,
+          walkInCustomerId,
+          cashAccountId,
+          cardAccountId,
+          posStatus: "failed",
+          posError,
+          tenantStatus: "partial"
+        };
+      }
+      if (isPosOnlyModules(licensedModules)) {
+        await db.update(tenants).set({ status: "failed" }).where(eq8(tenants.id, tenantId));
+        await db.update(tenantDeployments).set({ status: "failed", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
+        return { ok: false, message: posError, cause: posError };
       }
     }
     if (licensedModules.includes("pms") && tenantId) {
@@ -4858,6 +5607,10 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         log
       });
     }
+    if (tenantId) {
+      await db.update(tenants).set({ status: "active" }).where(eq8(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.tenantId, tenantId));
+    }
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
     return {
       ok: true,
@@ -4868,15 +5621,25 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       baseUrl,
       oneTimeAdminPassword,
       financeOrganizationId,
-      financeTenantId
+      financeTenantId,
+      financeDefaultWarehouseId,
+      walkInCustomerId,
+      cashAccountId,
+      cardAccountId,
+      posOrganizationId,
+      posUrl,
+      posApiUrl,
+      posDefaultCredentials,
+      posStatus: posOutcome.posStatus,
+      tenantStatus: "active"
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (tenantId) {
-      await db.update(tenants).set({ status: "failed" }).where(eq7(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
+      await db.update(tenants).set({ status: "failed" }).where(eq8(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
     }
     if (deploymentId) {
-      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq7(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
+      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
     }
     if (sideEffectsStarted && composeCtx) {
       await trace.event("cleanup", "Attempting best-effort compose rollback", {
@@ -4885,7 +5648,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       }).catch((error) => recordCleanupError("cleanup_event_before_rollback", error));
       const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
       if (rolledBack && tenantId) {
-        await db.delete(tenants).where(eq7(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
+        await db.delete(tenants).where(eq8(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
         await trace.event("cleanup", "Compose rollback completed and tenant records removed", {
           level: "info",
           meta: { composeProjectName: composeCtx.project, tenantId }
@@ -4994,14 +5757,14 @@ var TIMEOUT_MS = 12e4;
 function financeApiBase2(internalBaseUrl) {
   return internalBaseUrl.replace(/\/+$/, "");
 }
-function isRecord2(v) {
+function isRecord3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function readString3(v) {
   return typeof v === "string" && v.length > 0 ? v : void 0;
 }
 function parseSigninToken2(body) {
-  if (!isRecord2(body)) return null;
+  if (!isRecord3(body)) return null;
   const accessToken = readString3(body.accessToken) ?? readString3(body.access_token) ?? readString3(body.token);
   const organizationId = readString3(body.organizationId) ?? readString3(body.organization_id);
   if (!accessToken || !organizationId) return null;
@@ -5009,24 +5772,24 @@ function parseSigninToken2(body) {
 }
 function isTenantAlreadyBuilt(rawText, json) {
   if (rawText.includes("TENANT_ALREADY_BUILT")) return true;
-  if (!isRecord2(json)) return false;
+  if (!isRecord3(json)) return false;
   const errors = json.errors;
   if (!Array.isArray(errors)) return false;
   const first = errors[0];
-  if (!isRecord2(first)) return false;
+  if (!isRecord3(first)) return false;
   return first.type === "TENANT_ALREADY_BUILT";
 }
 function parseBuildJobId(json) {
-  if (!isRecord2(json)) return null;
+  if (!isRecord3(json)) return null;
   const data = json.data;
-  if (!isRecord2(data)) return null;
+  if (!isRecord3(data)) return null;
   const id = data.jobId ?? data.job_id;
   if (typeof id === "string") return id;
   if (typeof id === "number") return String(id);
   return null;
 }
 function jobFinished(body) {
-  if (!isRecord2(body)) return "running";
+  if (!isRecord3(body)) return "running";
   if (body.isFailed === true || body.is_failed === true) return "failed";
   if (body.isCompleted === true || body.is_completed === true) return "completed";
   const state = readString3(body.state);
@@ -5034,7 +5797,7 @@ function jobFinished(body) {
   if (state === "completed") return "completed";
   return "running";
 }
-async function sleep(ms) {
+async function sleep2(ms) {
   await new Promise((r) => setTimeout(r, ms));
 }
 async function signin(base, email, password, correlationId) {
@@ -5076,7 +5839,7 @@ async function currentHasBuiltAt(base, accessToken, organizationId, correlationI
   } catch {
     return false;
   }
-  if (!isRecord2(json)) return false;
+  if (!isRecord3(json)) return false;
   const builtAt = json.builtAt ?? json.built_at;
   return builtAt !== null && builtAt !== void 0 && builtAt !== "";
 }
@@ -5133,7 +5896,7 @@ async function fetchBuildOrganization(input, log) {
   const deadline = Date.now() + TIMEOUT_MS;
   if (jobId) {
     log(`[build] polling organization build job id=${jobId}`);
-    await sleep(INITIAL_POLL_DELAY_MS);
+    await sleep2(INITIAL_POLL_DELAY_MS);
     while (Date.now() < deadline) {
       const jobRes = await fetch(`${base}/api/organization/build/${encodeURIComponent(jobId)}`, {
         method: "GET",
@@ -5156,16 +5919,16 @@ async function fetchBuildOrganization(input, log) {
       if (done === "completed") {
         break;
       }
-      await sleep(POLL_INTERVAL_MS);
+      await sleep2(POLL_INTERVAL_MS);
     }
   } else {
     log("[build] no job id in response; polling /organization/current for builtAt");
-    await sleep(INITIAL_POLL_DELAY_MS);
+    await sleep2(INITIAL_POLL_DELAY_MS);
     while (Date.now() < deadline) {
       if (await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
         break;
       }
-      await sleep(POLL_INTERVAL_MS);
+      await sleep2(POLL_INTERVAL_MS);
     }
   }
   if (!await currentHasBuiltAt(base, creds.accessToken, creds.organizationId, input.correlationId)) {
@@ -5302,46 +6065,6 @@ var FetchStockixFinanceBootstrap = class {
   }
 };
 
-// ../../infra/worker-service/domain/traefik-config.ts
-import { mkdir as mkdir3, unlink, writeFile as writeFile2 } from "fs/promises";
-import { join as join7 } from "path";
-function traefikDir() {
-  return apiConfig.traefikDynamicDir;
-}
-function tenantUpstreamHost() {
-  return apiConfig.traefikTenantUpstreamHost;
-}
-async function writeTenantTraefikConfig(slug, port, domain) {
-  const dir = traefikDir();
-  await mkdir3(dir, { recursive: true });
-  const config = `http:
-  routers:
-    tenant-${slug}:
-      rule: "Host(\`${slug}.${domain}\`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: cloudflare
-      service: tenant-${slug}
-  services:
-    tenant-${slug}:
-      loadBalancer:
-        servers:
-          - url: "http://${tenantUpstreamHost()}:${port}"
-`;
-  await writeFile2(join7(dir, `tenant-${slug}.yml`), config, "utf8");
-}
-async function removeTenantTraefikConfig(slug) {
-  try {
-    await unlink(join7(traefikDir(), `tenant-${slug}.yml`));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLowerCase().includes("no such file")) {
-      throw error;
-    }
-  }
-}
-
 // ../../infra/worker-service/domain/provisioning/adapters/traefik-edge-publisher.ts
 var TraefikEdgePublisher = class {
   async publish(slug, port, rootDomain) {
@@ -5366,7 +6089,7 @@ async function provisionTenant(db, input, log, correlationId, assertNotCancelled
 }
 async function deprovisionTenant(db, tenantId, options = {}) {
   const log = options.log ?? (() => void 0);
-  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq8(tenantDeployments.tenantId, tenants.id)).where(eq8(tenants.id, tenantId)).limit(1);
+  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq9(tenantDeployments.tenantId, tenants.id)).where(eq9(tenants.id, tenantId)).limit(1);
   const row = found[0];
   if (!row) return { ok: false, message: "Tenant not found" };
   const project = row.composeProject ?? composeProjectName(row.slug);
@@ -5392,10 +6115,14 @@ async function deprovisionTenant(db, tenantId, options = {}) {
     const message = error instanceof Error ? error.message : String(error);
     log(`edge unpublish failed for ${row.slug}: ${message}`);
   });
-  await db.delete(tenantProvisionEvents).where(eq8(tenantProvisionEvents.tenantId, tenantId));
-  await db.delete(adminAuditLog).where(eq8(adminAuditLog.targetTenantId, tenantId));
-  await db.delete(tenantDeployments).where(eq8(tenantDeployments.tenantId, tenantId));
-  await db.delete(tenants).where(eq8(tenants.id, tenantId));
+  await removePosTraefikConfig(row.slug).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`pos edge unpublish failed for ${row.slug}: ${message}`);
+  });
+  await db.delete(tenantProvisionEvents).where(eq9(tenantProvisionEvents.tenantId, tenantId));
+  await db.delete(adminAuditLog).where(eq9(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq9(tenantDeployments.tenantId, tenantId));
+  await db.delete(tenants).where(eq9(tenants.id, tenantId));
   await rm(join8(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => void 0);
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
@@ -5405,17 +6132,17 @@ async function deprovisionTenant(db, tenantId, options = {}) {
 function financeApiBase4(internalBaseUrl) {
   return internalBaseUrl.replace(/\/+$/, "");
 }
-function isRecord3(v) {
+function isRecord4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function readString4(v) {
   return typeof v === "string" && v.length > 0 ? v : void 0;
 }
 function parseAuthSession(body) {
-  if (!isRecord3(body)) return null;
+  if (!isRecord4(body)) return null;
   const accessToken = readString4(body.accessToken) ?? readString4(body.access_token) ?? readString4(body.token);
   const organizationId = readString4(body.organizationId) ?? readString4(body.organization_id);
-  const tenantIdRaw = isRecord3(body) ? body.tenantId ?? body.tenant_id : null;
+  const tenantIdRaw = isRecord4(body) ? body.tenantId ?? body.tenant_id : null;
   const tenantId = Number(tenantIdRaw);
   if (!accessToken || !organizationId) return null;
   return {
@@ -5425,7 +6152,7 @@ function parseAuthSession(body) {
   };
 }
 function parseSignupOrganizationId(body) {
-  if (!isRecord3(body)) return null;
+  if (!isRecord4(body)) return null;
   return readString4(body.organizationId) ?? readString4(body.organization_id) ?? null;
 }
 async function registerNewFinanceOrg(base, params) {
@@ -5458,7 +6185,7 @@ async function registerNewFinanceOrg(base, params) {
   }
   const organizationId = parseSignupOrganizationId(json);
   const tenantId = Number(
-    isRecord3(json) ? json.tenantId ?? json.tenant_id : NaN
+    isRecord4(json) ? json.tenantId ?? json.tenant_id : NaN
   );
   if (!organizationId || !tenantId) {
     throw new Error("register_missing_organization_or_tenant_id");
@@ -5639,6 +6366,17 @@ async function executeOrgProvisionRuntime(_db, input, log, assertNotCancelled) {
   await attachAdminToOrg(mainBase, input.adminEmail, financeOrganizationId, log);
   await check();
   await saveFinanceOrganizationId(input.organizationId, financeOrganizationId, log);
+  if (apiConfig.internalApiSecret) {
+    await check();
+    log("[org-provision] Activating primary warehouse");
+    await activateFinanceWarehouses({
+      internalBaseUrl: mainBase,
+      internalApiSecret: apiConfig.internalApiSecret,
+      financeTenantId: newFinanceTenantId,
+      correlationId,
+      log
+    });
+  }
   const parentFinanceTenantId = signinSession.tenantId ?? await resolveParentFinanceTenantId(
     mainBase,
     signinSession.organizationId,
@@ -5699,8 +6437,8 @@ async function expireDueLicenses(db) {
   const now = /* @__PURE__ */ new Date();
   const justExpired = await db.update(licenses).set({ status: "expired", updatedAt: now }).where(
     and3(
-      eq9(licenses.status, "active"),
-      eq9(licenses.isPerpetual, false),
+      eq10(licenses.status, "active"),
+      eq10(licenses.isPerpetual, false),
       isNotNull2(licenses.expiresAt),
       lte(licenses.expiresAt, now)
     )
@@ -5836,8 +6574,48 @@ async function markJobComplete(jobId, opts) {
   if (opts?.oneTimeAdminPassword !== void 0) {
     completionBody.oneTimeAdminPassword = opts.oneTimeAdminPassword;
   }
+  const resultPayload = {};
   if (opts?.financeOrganizationId) {
-    completionBody.result = { financeOrganizationId: opts.financeOrganizationId };
+    resultPayload.financeOrganizationId = opts.financeOrganizationId;
+  }
+  if (opts?.financeTenantId !== void 0) {
+    resultPayload.financeTenantId = opts.financeTenantId;
+  }
+  if (opts?.financeDefaultWarehouseId !== void 0) {
+    resultPayload.financeDefaultWarehouseId = opts.financeDefaultWarehouseId;
+  }
+  if (opts?.posStatus) {
+    resultPayload.posStatus = opts.posStatus;
+  }
+  if (opts?.posError) {
+    resultPayload.posError = opts.posError;
+  }
+  if (opts?.tenantStatus) {
+    resultPayload.tenantStatus = opts.tenantStatus;
+  }
+  if (opts?.walkInCustomerId !== void 0) {
+    resultPayload.walkInCustomerId = opts.walkInCustomerId;
+  }
+  if (opts?.cashAccountId !== void 0) {
+    resultPayload.cashAccountId = opts.cashAccountId;
+  }
+  if (opts?.cardAccountId !== void 0) {
+    resultPayload.cardAccountId = opts.cardAccountId;
+  }
+  if (opts?.posOrganizationId) {
+    resultPayload.posOrganizationId = opts.posOrganizationId;
+  }
+  if (opts?.posUrl) {
+    resultPayload.posUrl = opts.posUrl;
+  }
+  if (opts?.posApiUrl) {
+    resultPayload.posApiUrl = opts.posApiUrl;
+  }
+  if (Object.keys(resultPayload).length > 0) {
+    completionBody.result = resultPayload;
+  }
+  if (opts?.posDefaultCredentials) {
+    completionBody.posDefaultCredentials = opts.posDefaultCredentials;
   }
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
     method: "POST",
@@ -5928,7 +6706,8 @@ var provisionPayloadSchema = z2.object({
   stockixTenantId: z2.string().uuid().optional(),
   stockixApiUrl: z2.string().optional(),
   parentTenantSlug: z2.string().optional(),
-  mainTenantInternalBaseUrl: z2.string().optional()
+  mainTenantInternalBaseUrl: z2.string().optional(),
+  retryModules: z2.array(z2.enum(["accounting", "pos", "pms", "chat"])).optional()
 });
 var orgProvisionPayloadSchema = z2.object({
   organizationId: z2.string().uuid(),
@@ -5962,7 +6741,8 @@ async function runProvisionJob(db, job) {
       stockixApiUrl: payload.stockixApiUrl,
       parentTenantSlug: payload.parentTenantSlug,
       mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
-      controlPlaneOrgId: payload.organizationId ?? void 0
+      controlPlaneOrgId: payload.organizationId ?? void 0,
+      retryModules: payload.retryModules
     },
     (m) => console.log(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
@@ -6000,7 +6780,19 @@ async function runProvisionJob(db, job) {
   });
   return {
     oneTimeAdminPassword: result.oneTimeAdminPassword,
-    financeOrganizationId: result.financeOrganizationId
+    financeOrganizationId: result.financeOrganizationId,
+    financeTenantId: result.financeTenantId,
+    financeDefaultWarehouseId: result.financeDefaultWarehouseId,
+    posStatus: result.posStatus,
+    posError: result.posError,
+    tenantStatus: result.tenantStatus,
+    walkInCustomerId: result.walkInCustomerId,
+    cashAccountId: result.cashAccountId,
+    cardAccountId: result.cardAccountId,
+    posOrganizationId: result.posOrganizationId,
+    posUrl: result.posUrl,
+    posApiUrl: result.posApiUrl,
+    posDefaultCredentials: result.posDefaultCredentials
   };
 }
 async function runOrgProvisionJob(db, job) {
@@ -6043,7 +6835,7 @@ async function runTenantLifecycleCommand(db, job, command) {
     tenantId: tenants.id,
     slug: tenants.slug,
     composeProjectName: tenantDeployments.composeProjectName
-  }).from(tenants).leftJoin(tenantDeployments, eq9(tenantDeployments.tenantId, tenants.id)).where(eq9(tenants.id, job.tenantId)).limit(1);
+  }).from(tenants).leftJoin(tenantDeployments, eq10(tenantDeployments.tenantId, tenants.id)).where(eq10(tenants.id, job.tenantId)).limit(1);
   const row = rows[0];
   if (!row || !row.composeProjectName) {
     throw new Error("tenant_not_found");
@@ -6177,14 +6969,14 @@ async function loop() {
             updatedAt: /* @__PURE__ */ new Date(),
             completedAt: fallbackNoRetry ? /* @__PURE__ */ new Date() : null,
             attempts: sql2`${tenantLifecycleJobs.attempts} + 1`
-          }).where(eq9(tenantLifecycleJobs.id, job.id));
+          }).where(eq10(tenantLifecycleJobs.id, job.id));
           if (job.type === "tenant.provision" && job.tenantId) {
-            await tx.update(tenants).set({ status: "failed" }).where(eq9(tenants.id, job.tenantId));
+            await tx.update(tenants).set({ status: "failed" }).where(eq10(tenants.id, job.tenantId));
             await tx.update(tenantDeployments).set({
               status: "failed",
               lastError: `worker_fallback_failure_persist:${message}`,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq9(tenantDeployments.tenantId, job.tenantId));
+            }).where(eq10(tenantDeployments.tenantId, job.tenantId));
           }
         }).catch((fallbackError) => {
           console.error(

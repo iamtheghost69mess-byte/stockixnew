@@ -167,6 +167,16 @@ export const tenantDeployments = pgTable(
     }),
     /** Finance stack tenant id (numeric) for internal license sync. */
     financeTenantId: integer("finance_tenant_id"),
+    /** Bigcapital primary warehouse id (code 10001) for POS integration defaultWarehouseId. */
+    financeDefaultWarehouseId: integer("finance_default_warehouse_id"),
+    /** Finance walk-in customer for POS Bigcapital sync. */
+    financeWalkInCustomerId: integer("finance_walk_in_customer_id"),
+    financeCashAccountId: integer("finance_cash_account_id"),
+    financeCardAccountId: integer("finance_card_account_id"),
+    /** POS platform organization id (Mongo ObjectId string). */
+    posOrganizationId: text("pos_organization_id"),
+    /** Public POS web app URL (Traefik: https://{slug}-pos.{domain}). */
+    posUrl: text("pos_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

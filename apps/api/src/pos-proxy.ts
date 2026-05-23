@@ -67,3 +67,14 @@ export function isPosProxyConfigured(): boolean {
 export function getPosPlatformBaseUrl(): string {
   return POS_PLATFORM_BASE;
 }
+
+/** Resolve POS organization for a Stockix control-plane tenant UUID. */
+export async function getPosOrgByStockixTenantId(
+  stockixTenantId: string,
+): Promise<{ data: unknown; status: number }> {
+  const id = stockixTenantId.trim();
+  return posProxyJson(
+    `/organizations/by-stockix-tenant/${encodeURIComponent(id)}`,
+    "GET",
+  );
+}

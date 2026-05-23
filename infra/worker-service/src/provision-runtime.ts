@@ -25,17 +25,69 @@ import {
   buildTenantEnvMap,
   writeTenantEnvFileAtomic,
 } from "../domain/provisioning/tenant-env.js";
+import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
+import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 import { provisionChatwootAccount } from "./chatwoot-provision.js";
 import {
+  hasAccountingAndPos,
   isModuleGatingEnabled,
+  isPosOnlyModules,
   shouldProvisionFinanceStack,
   provisionPmsStack,
-  provisionPosStack,
+  provisionPosStackTracked,
   resolveTenantModules,
 } from "./module-stacks.js";
+
+type PosProvisionOutcome = {
+  posStatus: "ok" | "failed" | "skipped";
+  posError?: string;
+  posOrganizationId?: string;
+  posUrl?: string;
+  posApiUrl?: string;
+  posDefaultCredentials?: import("../domain/provisioning/types.js").PosDefaultCredentials;
+};
+
+async function runPosProvisionStep(params: {
+  licensedModules: string[];
+  slug: string;
+  tenantId: string | undefined;
+  tenantName: string;
+  adminEmail: string;
+  db: PostgresJsDatabase<typeof dbSchema>;
+  log: (m: string) => void;
+  trace: ReturnType<typeof createProvisionTracer>;
+}): Promise<PosProvisionOutcome> {
+  if (!params.licensedModules.includes("pos") || !params.tenantId) {
+    return { posStatus: "skipped" };
+  }
+  try {
+    const posResult = await provisionPosStackTracked(
+      {
+        slug: params.slug,
+        tenantId: params.tenantId,
+        tenantName: params.tenantName,
+        adminEmail: params.adminEmail,
+        db: params.db,
+        log: params.log,
+      },
+      params.trace,
+    );
+    return {
+      posStatus: "ok",
+      posOrganizationId: posResult.posOrganizationId,
+      posUrl: posResult.posUrl,
+      posApiUrl: posResult.posApiUrl,
+      posDefaultCredentials: posResult.posDefaultCredentials,
+    };
+  } catch (posErr) {
+    const posError = posErr instanceof Error ? posErr.message : String(posErr);
+    params.log(`[provision][pos] failed: ${posError}`);
+    return { posStatus: "failed", posError };
+  }
+}
 
 function encryptDeploymentSecret(plaintext: string): string {
   const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
@@ -139,8 +191,18 @@ export async function executeProvisionRuntime(
   const requestId = correlationId;
   let port: number | undefined;
   let oneTimeAdminPassword: string | undefined;
-    let financeOrganizationId: string | undefined;
-    let financeTenantId: number | undefined;
+  let financeOrganizationId: string | undefined;
+  let financeTenantId: number | undefined;
+  let financeDefaultWarehouseId: number | undefined;
+  let walkInCustomerId: number | undefined;
+  let cashAccountId: number | undefined;
+  let cardAccountId: number | undefined;
+  let posOrganizationId: string | undefined;
+  let posUrl: string | undefined;
+  let posApiUrl: string | undefined;
+  let posDefaultCredentials:
+    | import("../domain/provisioning/types.js").PosDefaultCredentials
+    | undefined;
   let composeCtx:
     | { composeFile: string; project: string; envPath: string; composeEnv: Record<string, string> }
     | null = null;
@@ -271,6 +333,85 @@ export async function executeProvisionRuntime(
     if (!s3Configured) {
       log("[provision] S3 not configured — provisioning without object storage (attachments disabled).");
     }
+    const licensedModulesEarly = resolveTenantModules(input.modules);
+    const posOnlyRetry =
+      input.retryModules?.length === 1 && input.retryModules[0] === "pos";
+
+    if (posOnlyRetry) {
+      const [existing] = await db
+        .select({
+          tenantId: tenants.id,
+          deploymentId: tenantDeployments.id,
+          internalPort: tenantDeployments.internalPort,
+          composeProjectName: tenantDeployments.composeProjectName,
+        })
+        .from(tenants)
+        .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+        .where(eq(tenants.slug, input.slug))
+        .limit(1);
+      if (!existing) {
+        throw new Error(`tenant_not_found:${input.slug}`);
+      }
+      tenantId = existing.tenantId;
+      deploymentId = existing.deploymentId;
+      port = existing.internalPort;
+      await checkNotCancelled();
+      const posOutcome = await runPosProvisionStep({
+        licensedModules: licensedModulesEarly,
+        slug: input.slug,
+        tenantId,
+        tenantName: input.name,
+        adminEmail: input.adminEmail,
+        db,
+        log,
+        trace,
+      });
+      if (posOutcome.posStatus === "ok") {
+        await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId));
+        await db
+          .update(tenantDeployments)
+          .set({ status: "active", lastError: null, updatedAt: new Date() })
+          .where(eq(tenantDeployments.tenantId, tenantId));
+        log(`[provision] POS-only retry success slug=${input.slug}`);
+        return {
+          ok: true,
+          tenantId,
+          deploymentId,
+          composeProjectName: existing.composeProjectName,
+          internalPort: port,
+          baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+          oneTimeAdminPassword: oneTimeAdminPassword!,
+          posStatus: "ok",
+          tenantStatus: "active",
+          posOrganizationId: posOutcome.posOrganizationId,
+          posUrl: posOutcome.posUrl,
+          posApiUrl: posOutcome.posApiUrl,
+          posDefaultCredentials: posOutcome.posDefaultCredentials,
+        };
+      }
+      const posError = posOutcome.posError ?? "POS provisioning failed";
+      await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
+      await db
+        .update(tenantDeployments)
+        .set({ status: "active", lastError: posError, updatedAt: new Date() })
+        .where(eq(tenantDeployments.tenantId, tenantId));
+      return {
+        ok: true,
+        tenantId,
+        deploymentId,
+        composeProjectName: existing.composeProjectName,
+        internalPort: port,
+        baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+        oneTimeAdminPassword: oneTimeAdminPassword!,
+        posStatus: "failed",
+        posError,
+        tenantStatus: "partial",
+        posOrganizationId: posOutcome.posOrganizationId,
+        posUrl: posOutcome.posUrl,
+        posApiUrl: posOutcome.posApiUrl,
+      };
+    }
+
     const existingSlug = await db
       .select({ id: tenants.id })
       .from(tenants)
@@ -284,8 +425,7 @@ export async function executeProvisionRuntime(
     await db.transaction(async (tx) => {
       const allocated = await allocateTenantPort(tx, maxPort);
       port = allocated;
-      const moduleList =
-        input.modules && input.modules.length > 0 ? input.modules : ["accounting"];
+      const moduleList = resolveTenantModules(input.modules);
       const [tRow] = await tx.insert(tenants).values({
         slug: input.slug,
         name: input.name,
@@ -320,8 +460,32 @@ export async function executeProvisionRuntime(
     const moduleGating = isModuleGatingEnabled();
     if (moduleGating && !shouldProvisionFinanceStack(licensedModules)) {
       log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
-      if (licensedModules.includes("pos") && tenantId) {
-        await provisionPosStack({ slug: input.slug, tenantId, log });
+      const posOutcome = await runPosProvisionStep({
+        licensedModules,
+        slug: input.slug,
+        tenantId,
+        tenantName: input.name,
+        adminEmail: input.adminEmail,
+        db,
+        log,
+        trace,
+      });
+      if (posOutcome.posStatus === "failed") {
+        const posError = posOutcome.posError ?? "POS provisioning failed";
+        if (tenantId) {
+          await db.update(tenants).set({ status: "failed" }).where(eq(tenants.id, tenantId));
+          await db
+            .update(tenantDeployments)
+            .set({ status: "failed", lastError: posError, updatedAt: new Date() })
+            .where(eq(tenantDeployments.tenantId, tenantId));
+        }
+        return { ok: false, message: posError, cause: posError };
+      }
+      if (posOutcome.posStatus === "ok") {
+        posOrganizationId = posOutcome.posOrganizationId;
+        posUrl = posOutcome.posUrl;
+        posApiUrl = posOutcome.posApiUrl;
+        posDefaultCredentials = posOutcome.posDefaultCredentials;
       }
       if (licensedModules.includes("pms") && tenantId) {
         await provisionPmsStack({ slug: input.slug, tenantId, log });
@@ -352,6 +516,12 @@ export async function executeProvisionRuntime(
         oneTimeAdminPassword: oneTimeAdminPassword ?? randomBytes(12).toString("base64url"),
         financeOrganizationId,
         financeTenantId,
+        financeDefaultWarehouseId,
+        posOrganizationId,
+        posUrl,
+        posApiUrl,
+        posDefaultCredentials,
+        posStatus: posOutcome.posStatus === "ok" ? "ok" : "skipped",
       };
     }
 
@@ -728,6 +898,130 @@ export async function executeProvisionRuntime(
     }
 
     await checkNotCancelled();
+    if (!hasOp("tenant.activate_warehouses")) {
+      const internalApiSecret = apiConfig.internalApiSecret;
+      if (financeTenantId && internalUrl && internalApiSecret) {
+        log("[provision] step start: tenant.activate_warehouses");
+        await trace.event("progress", "Activating Finance primary warehouse", {
+          meta: {
+            operationKey: "tenant.activate_warehouses",
+            financeTenantId,
+            elapsedMs: elapsedMs(),
+          },
+        });
+        try {
+          const warehouseResult = await activateFinanceWarehouses({
+            internalBaseUrl: internalUrl,
+            internalApiSecret,
+            financeTenantId,
+            correlationId,
+            log,
+          });
+          financeDefaultWarehouseId = warehouseResult.primaryWarehouseId;
+          await markOp("tenant.activate_warehouses", "Finance warehouses activated", {
+            financeTenantId,
+            primaryWarehouseId: warehouseResult.primaryWarehouseId,
+            alreadyActivated: warehouseResult.alreadyActivated,
+            elapsedMs: elapsedMs(),
+          });
+          await trace.event("warehouses.activated", "Primary warehouse ready for POS sync", {
+            meta: {
+              financeTenantId,
+              primaryWarehouseId: warehouseResult.primaryWarehouseId,
+              alreadyActivated: warehouseResult.alreadyActivated,
+            },
+          });
+          log("[provision] step done: tenant.activate_warehouses");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await trace.event("warehouses.activated", `Warehouse activation failed: ${msg}`, {
+            level: "error",
+            meta: { financeTenantId, error: msg },
+          });
+          throw err;
+        }
+      } else {
+        log(
+          "[provision] Skipping warehouse activation (missing financeTenantId, internal URL, or INTERNAL_API_SECRET)",
+        );
+        await markOp("tenant.activate_warehouses", "Skipped warehouse activation", {
+          skipped: true,
+          hasFinanceTenantId: Boolean(financeTenantId),
+        });
+      }
+    } else {
+      await trace.event("resume", "Skipping warehouse activation (already journaled)", {
+        meta: { operationKey: "tenant.activate_warehouses" },
+      });
+    }
+
+    await checkNotCancelled();
+    if (!hasOp("tenant.seed_pos_defaults")) {
+      const internalApiSecret = apiConfig.internalApiSecret;
+      const seedPosDefaults =
+        hasAccountingAndPos(licensedModules)
+        && financeTenantId
+        && internalUrl
+        && internalApiSecret;
+      if (seedPosDefaults) {
+        log("[provision] step start: tenant.seed_pos_defaults");
+        await trace.event("progress", "Seeding Finance POS defaults (walk-in customer, deposit accounts)", {
+          meta: {
+            operationKey: "tenant.seed_pos_defaults",
+            financeTenantId,
+            elapsedMs: elapsedMs(),
+          },
+        });
+        try {
+          const seeded = await seedFinancePosDefaults({
+            internalBaseUrl: internalUrl,
+            internalApiSecret,
+            financeTenantId,
+            correlationId,
+            log,
+          });
+          walkInCustomerId = seeded.walkInCustomerId;
+          cashAccountId = seeded.cashAccountId;
+          cardAccountId = seeded.cardAccountId;
+          await markOp("tenant.seed_pos_defaults", "Finance POS defaults seeded", {
+            financeTenantId,
+            walkInCustomerId,
+            cashAccountId,
+            cardAccountId,
+            elapsedMs: elapsedMs(),
+          });
+          await trace.event("pos_defaults_seeded", "Walk-in customer and deposit accounts ready", {
+            meta: {
+              walkInCustomerId,
+              cashAccountId,
+              cardAccountId,
+            },
+          });
+          log("[provision] step done: tenant.seed_pos_defaults");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await trace.event("pos_defaults_seeded", `POS defaults seed failed: ${msg}`, {
+            level: "error",
+            meta: { financeTenantId, error: msg },
+          });
+          throw err;
+        }
+      } else {
+        log(
+          `[provision] Skipping POS defaults seed (modules=${licensedModules.join(",")}, financeTenantId=${financeTenantId ?? "n/a"})`,
+        );
+        await markOp("tenant.seed_pos_defaults", "Skipped POS defaults seed", {
+          skipped: true,
+          modules: licensedModules,
+        });
+      }
+    } else {
+      await trace.event("resume", "Skipping POS defaults seed (already journaled)", {
+        meta: { operationKey: "tenant.seed_pos_defaults" },
+      });
+    }
+
+    await checkNotCancelled();
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
       try {
@@ -761,13 +1055,57 @@ export async function executeProvisionRuntime(
       );
     }
 
-    if (licensedModules.includes("pos") && tenantId) {
-      try {
-        await provisionPosStack({ slug: input.slug, tenantId, log });
-      } catch (posErr) {
-        log(
-          `[provision][pos] non-fatal: ${posErr instanceof Error ? posErr.message : String(posErr)}`,
-        );
+    const posOutcome = await runPosProvisionStep({
+      licensedModules,
+      slug: input.slug,
+      tenantId,
+      tenantName: input.name,
+      adminEmail: input.adminEmail,
+      db,
+      log,
+      trace,
+    });
+    if (posOutcome.posStatus === "ok") {
+      posOrganizationId = posOutcome.posOrganizationId;
+      posUrl = posOutcome.posUrl;
+      posApiUrl = posOutcome.posApiUrl;
+      posDefaultCredentials = posOutcome.posDefaultCredentials;
+    }
+    if (posOutcome.posStatus === "failed" && tenantId) {
+      const posError = posOutcome.posError ?? "POS provisioning failed";
+      if (hasAccountingAndPos(licensedModules)) {
+        await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
+        await db
+          .update(tenantDeployments)
+          .set({ status: "active", lastError: posError, updatedAt: new Date() })
+          .where(eq(tenantDeployments.tenantId, tenantId));
+        log(`[provision] Finance active, POS failed — tenant marked partial slug=${input.slug}`);
+        return {
+          ok: true,
+          tenantId: tenantId!,
+          deploymentId: deploymentId!,
+          composeProjectName: project,
+          internalPort: port,
+          baseUrl,
+          oneTimeAdminPassword: oneTimeAdminPassword!,
+          financeOrganizationId,
+          financeTenantId,
+          financeDefaultWarehouseId,
+          walkInCustomerId,
+          cashAccountId,
+          cardAccountId,
+          posStatus: "failed",
+          posError,
+          tenantStatus: "partial",
+        };
+      }
+      if (isPosOnlyModules(licensedModules)) {
+        await db.update(tenants).set({ status: "failed" }).where(eq(tenants.id, tenantId));
+        await db
+          .update(tenantDeployments)
+          .set({ status: "failed", lastError: posError, updatedAt: new Date() })
+          .where(eq(tenantDeployments.tenantId, tenantId));
+        return { ok: false, message: posError, cause: posError };
       }
     }
     if (licensedModules.includes("pms") && tenantId) {
@@ -791,6 +1129,14 @@ export async function executeProvisionRuntime(
       });
     }
 
+    if (tenantId) {
+      await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId));
+      await db
+        .update(tenantDeployments)
+        .set({ status: "active", lastError: null, updatedAt: new Date() })
+        .where(eq(tenantDeployments.tenantId, tenantId));
+    }
+
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
     return {
       ok: true,
@@ -802,6 +1148,16 @@ export async function executeProvisionRuntime(
       oneTimeAdminPassword: oneTimeAdminPassword!,
       financeOrganizationId,
       financeTenantId,
+      financeDefaultWarehouseId,
+      walkInCustomerId,
+      cashAccountId,
+      cardAccountId,
+      posOrganizationId,
+      posUrl,
+      posApiUrl,
+      posDefaultCredentials,
+      posStatus: posOutcome.posStatus,
+      tenantStatus: "active",
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

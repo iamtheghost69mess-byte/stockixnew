@@ -1,9 +1,14 @@
 // @ts-nocheck
 import React from 'react';
 import { useDashboardMeta } from '@/hooks/query';
+import { useAuthOrganizationId, useIsAuthenticated } from '@/hooks/state';
 
 export default function SuspendedOverlay() {
-  const { data } = useDashboardMeta({ enabled: true });
+  const isAuthenticated = useIsAuthenticated();
+  const organizationId = useAuthOrganizationId();
+  const { data } = useDashboardMeta({
+    enabled: isAuthenticated && !!organizationId,
+  });
   const status = data?.licenseStatus ?? data?.license_status;
 
   if (status !== 'suspended' && status !== 'revoked') {

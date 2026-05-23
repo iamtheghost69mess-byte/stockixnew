@@ -2,6 +2,7 @@ import { apiConfig } from "@repo/config";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 
+import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
 import { CryptoTenantSecretGenerator } from "../domain/provisioning/adapters/crypto-tenant-secret-generator.js";
 import { fetchBuildOrganization } from "../domain/provisioning/adapters/fetch-stockix-finance-build-org.js";
 import {
@@ -319,6 +320,18 @@ export async function executeOrgProvisionRuntime(
 
   await check();
   await saveFinanceOrganizationId(input.organizationId, financeOrganizationId, log);
+
+  if (apiConfig.internalApiSecret) {
+    await check();
+    log("[org-provision] Activating primary warehouse");
+    await activateFinanceWarehouses({
+      internalBaseUrl: mainBase,
+      internalApiSecret: apiConfig.internalApiSecret,
+      financeTenantId: newFinanceTenantId,
+      correlationId,
+      log,
+    });
+  }
 
   const parentFinanceTenantId =
     signinSession.tenantId ??
