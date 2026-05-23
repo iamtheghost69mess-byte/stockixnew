@@ -10,7 +10,7 @@ import { RealizedGainOrLossProvider } from './RealizedGainOrLossProvider';
 import RealizedGainOrLossTable from './RealizedGainOrLossTable';
 
 import withCurrentOrganization from '../../Organization/withCurrentOrganization';
-import withRealizedGainOrLossActions from './withRealizedGainOrLossActions';
+import { withRealizedGainOrLossActions } from './withRealizedGainOrLossActions';
 
 import { compose } from '@/utils';
 

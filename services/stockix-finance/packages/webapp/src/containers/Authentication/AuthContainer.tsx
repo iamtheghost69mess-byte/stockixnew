@@ -1,6 +1,7 @@
 // @ts-nocheck
 import styled from 'styled-components';
-import { Icon, FormattedMessage as T } from '@/components';
+import { FormattedMessage as T } from '@/components';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 interface AuthContainerProps {
   children: React.ReactNode;
@@ -11,7 +12,7 @@ export function AuthContainer({ children }: AuthContainerProps) {
     <AuthPage>
       <AuthInsider>
         <AuthLogo>
-          <Icon icon="bigcapital" height={37} width={214} />
+          <StockixLogo height={37} width={214} />
         </AuthLogo>
 
         {children}

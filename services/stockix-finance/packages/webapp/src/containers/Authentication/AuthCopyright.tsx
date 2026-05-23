@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
-import { Icon } from '@/components/Icon';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 export default function AuthCopyright() {
-  return <Icon width={122} height={22} icon={'bigcapital'} />;
+  return <StockixLogo width={122} height={22} />;
 }

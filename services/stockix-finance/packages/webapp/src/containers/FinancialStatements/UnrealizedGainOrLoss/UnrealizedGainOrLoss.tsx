@@ -10,7 +10,7 @@ import UnrealizedGainOrLossActionsBar from './UnrealizedGainOrLossActionsBar';
 import UnrealizedGainOrLossTable from './UnrealizedGainOrLossTable';
 
 import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
-import withUnrealizedGainOrLossActions from './withUnrealizedGainOrLossActions';
+import { withUnrealizedGainOrLossActions } from './withUnrealizedGainOrLossActions';
 
 import { compose } from '@/utils';
 

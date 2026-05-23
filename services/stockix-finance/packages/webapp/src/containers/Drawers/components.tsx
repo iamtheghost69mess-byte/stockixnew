@@ -1,7 +1,8 @@
 // @ts-nocheck
 import React from 'react';
 import moment from 'moment';
-import { Icon, If, Money } from '@/components';
+import { If, Money } from '@/components';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 export const TemplateHeader = ({ defaultLabels }) => (
   <div className={'template__header'}>
@@ -9,7 +10,7 @@ export const TemplateHeader = ({ defaultLabels }) => (
       <h1>{defaultLabels.name}</h1>
       <p>support@stockix.com </p>
     </div>
-    <Icon icon="bigcapital" height={30} width={200} />
+    <StockixLogo height={30} width={160} />
   </div>
 );
 

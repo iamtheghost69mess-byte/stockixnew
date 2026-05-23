@@ -9,11 +9,7 @@ import {
   Classes,
   Tooltip,
   Position,
-  MenuItem,
-  Menu,
-  MenuDivider,
 } from '@blueprintjs/core';
-import { Popover2 } from '@blueprintjs/popover2';
 
 import { FormattedMessage as T, Icon, Hint, If } from '@/components';
 
@@ -24,7 +20,6 @@ import DashboardBackLink from '@/components/Dashboard/DashboardBackLink';
 import { withUniversalSearchActions } from '@/containers/UniversalSearch/withUniversalSearchActions';
 import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
 import { withDashboard } from '@/containers/Dashboard/withDashboard';
-import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
 import QuickNewDropdown from '@/containers/QuickNewDropdown/QuickNewDropdown';
@@ -32,12 +27,6 @@ import {
   DashboardHamburgerButton,
   DashboardQuickSearchButton,
 } from './_components';
-
-import { DialogsName } from '@/constants/dialogs';
-import {
-  COMMUNITY_BIGCAPITAL_LINK,
-  DOCS_BIGCAPITAL_LINK,
-} from '@/constants/routes';
 
 import { compose } from '@/utils';
 
@@ -58,9 +47,6 @@ function DashboardTopbar({
 
   // #withGlobalSearch
   openGlobalSearch,
-
-  // #withDialogActions
-  openDialog,
 
   // #withCurrentOrganization
   organization,
@@ -135,34 +121,6 @@ function DashboardTopbar({
               />
             </Tooltip>
 
-            <Popover2
-              content={
-                <Menu>
-                  <MenuItem
-                    text={'Documents'}
-                    onClick={() => window.open(DOCS_BIGCAPITAL_LINK)}
-                    labelElement={<Icon icon={'share'} iconSize={16} />}
-                  />
-                  <MenuItem
-                    text={'Community support'}
-                    onClick={() => window.open(COMMUNITY_BIGCAPITAL_LINK)}
-                    labelElement={<Icon icon={'share'} iconSize={16} />}
-                  />
-                  <MenuItem
-                    text={'Keyboard shortcuts'}
-                    onClick={() => openDialog(DialogsName.KeyboardShortcutForm)}
-                  />
-                  <MenuDivider />
-                  <MenuItem text={'Share feedback'} />
-                </Menu>
-              }
-            >
-              <Button
-                className={Classes.MINIMAL}
-                icon={<Icon icon={'help-24'} iconSize={20} />}
-                text={<T id={'help'} />}
-              />
-            </Popover2>
             <NavbarDivider />
           </NavbarGroup>
         </Navbar>
@@ -199,6 +157,5 @@ export default compose(
     pageHint,
   })),
   withDashboardActions,
-  withDialogActions,
   withCurrentOrganization(({ organization }) => ({ organization })),
 )(DashboardTopbar);

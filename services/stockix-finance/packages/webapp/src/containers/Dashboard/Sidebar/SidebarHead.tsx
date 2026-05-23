@@ -2,6 +2,7 @@
 import { Button, MenuItem, Popover, Menu, Position } from '@blueprintjs/core';
 
 import { Icon } from '@/components';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 import { useAuthenticatedAccount } from '@/hooks/query';
@@ -126,12 +127,7 @@ function SidebarHeadJSX({
       </div>
 
       <div className="sidebar__head-logo">
-        <Icon
-          icon={'mini-bigcapital'}
-          width={28}
-          height={28}
-          className="bigcapital--alt"
-        />
+        <StockixLogo width={28} height={12} className="stockix-logo" />
       </div>
     </div>
   );

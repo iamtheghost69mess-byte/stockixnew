@@ -2,32 +2,16 @@
 import React from 'react';
 import { useHistory } from 'react-router-dom';
 import { Text } from '@blueprintjs/core';
-import { Icon, For, FormattedMessage as T, Stack } from '@/components';
-import { getFooterLinks } from '@/constants/footerLinks';
+import { FormattedMessage as T, Stack } from '@/components';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 import { useAuthActions } from '@/hooks/state';
 import style from './SetupLeftSection.module.scss';
 import { useAuthMetadata } from '@/hooks/query';
 
 /**
- * Footer item link.
- */
-function FooterLinkItem({ title, link }) {
-  return (
-    <div class="content__links-item">
-      <a href={link} target="_blank">
-        {title}
-      </a>
-    </div>
-  );
-}
-
-/**
  * Setup left section footer.
  */
 function SetupLeftSectionFooter() {
-  // Retrieve the footer links.
-  const footerLinks = getFooterLinks();
-
   const { data: authMeta } = useAuthMetadata();
   const demoUrl = authMeta?.meta?.one_click_demo?.demo_url;
 
@@ -45,10 +29,6 @@ function SetupLeftSectionFooter() {
           </button>
         </Stack>
       )}
-
-      <div className={'content__links'}>
-        <For render={FooterLinkItem} of={footerLinks} />
-      </div>
     </div>
   );
 }
@@ -93,12 +73,7 @@ export default function SetupLeftSection() {
     <section className={'setup-page__left-section'}>
       <div className={'content'}>
         <div className={'content__logo'}>
-          <Icon
-            icon="bigcapital"
-            className={'bigcapital--alt'}
-            height={37}
-            width={190}
-          />
+          <StockixLogo height={37} width={190} />
         </div>
         <SetupLeftSectionHeader />
         <SetupLeftSectionFooter />

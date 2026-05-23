@@ -1,13 +1,13 @@
 // @ts-nocheck
 import React from 'react';
 import classNames from 'classnames';
-import { Icon } from '@/components';
 
 import '@/style/components/BigcapitalLoading.scss';
 import { useIsDarkMode } from '@/hooks/useDarkMode';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 /**
- * Stockix logo loading.
+ * Stockix logo loading splash.
  */
 export default function BigcapitalLoading({ className }) {
   const isDarkmode = useIsDarkMode();
@@ -15,17 +15,12 @@ export default function BigcapitalLoading({ className }) {
   return (
     <div className={classNames('bigcapital-loading', className)}>
       <div class="center">
-        {isDarkmode ? (
-          <Icon
-            icon="bigcapital-alt"
-            height={37}
-            width={228}
-            color="#fff"
-            className="bigcapital-logo"
-          />
-        ) : (
-          <Icon icon="bigcapital" height={37} width={228} />
-        )}
+        <StockixLogo
+          height={37}
+          width={214}
+          color={isDarkmode ? '#fff' : undefined}
+          className="bigcapital-logo"
+        />
       </div>
     </div>
   );

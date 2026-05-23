@@ -7,12 +7,12 @@ import { TransitionGroup, CSSTransition } from 'react-transition-group';
 import { Spinner } from '@blueprintjs/core';
 
 import authenticationRoutes from '@/routes/authentication';
-import { Box, Icon, FormattedMessage as T } from '@/components';
+import { Box, FormattedMessage as T } from '@/components';
 import { AuthMetaBootProvider } from './AuthMetaBoot';
 
 import '@/style/pages/Authentication/Auth.scss';
 import { useIsDarkMode } from '@/hooks/useDarkMode';
-import { BigcapitalAlt } from '@/components/Icons/BigcapitalAlt';
+import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 export function Authentication() {
   const isDarkMode = useIsDarkMode();
@@ -22,11 +22,11 @@ export function Authentication() {
       <AuthPage>
         <AuthInsider>
           <AuthLogo>
-            {isDarkMode ? (
-              <BigcapitalAlt color={"rgba(255, 255, 255, 0.6)"} height={37} width={214} />
-            ) : (
-              <Icon icon="bigcapital" height={37} width={214} />
-            )}
+            <StockixLogo
+              height={37}
+              width={214}
+              color={isDarkMode ? 'rgba(255, 255, 255, 0.6)' : undefined}
+            />
           </AuthLogo>
 
           <AuthMetaBootProvider>
