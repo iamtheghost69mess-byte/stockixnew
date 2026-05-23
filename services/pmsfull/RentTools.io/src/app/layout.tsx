@@ -19,15 +19,15 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://renttools.io";
-const SITE_NAME = "RentTools";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3006";
+const SITE_NAME = "Stockix PMS";
 const SITE_TAGLINE =
-  "Free open-source property manager for short-term rental hosts. Sync Airbnb + Booking.com calendars, automate cleaning, extract guest passports.";
+  "Property Management System by Stockix. Sync calendars, manage reservations, and run your hospitality operations.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — open-source property manager for short-term rentals`,
+    default: `${SITE_NAME}`,
     template: `%s · ${SITE_NAME}`,
   },
   description: SITE_TAGLINE,
@@ -39,14 +39,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} — open-source property manager`,
+    title: SITE_NAME,
     description: SITE_TAGLINE,
     url: SITE_URL,
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} — open-source property manager`,
+    title: SITE_NAME,
     description: SITE_TAGLINE,
   },
   appleWebApp: {
@@ -73,8 +73,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafaf9" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1117" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -110,13 +110,12 @@ const ORGANIZATION_JSON_LD = {
     width: 512,
     height: 512,
   },
-  sameAs: ["https://github.com/Gribadan/RentTools.io"],
-  founder: { "@type": "Person", name: "Ilya Asminkin" },
+  sameAs: [],
   contactPoint: {
     "@type": "ContactPoint",
     contactType: "customer support",
-    email: "support@renttools.io",
-    availableLanguage: ["en", "ru"],
+    email: "support@stockix.com",
+    availableLanguage: ["en"],
   },
 };
 

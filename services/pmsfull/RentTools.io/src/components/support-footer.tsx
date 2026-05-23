@@ -32,18 +32,10 @@ export function SupportFooter() {
         <Link href="/privacy" className="underline hover:text-[var(--ink-2)]">Privacy</Link>.
       </p>
       <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
-        <span>© 2026 RentTools</span>
+        <span>© {new Date().getFullYear()} Stockix PMS</span>
         <Link href="/blog" className="hover:text-[var(--ink-2)]">Blog</Link>
         <Link href="/privacy" className="hover:text-[var(--ink-2)]">Privacy</Link>
         <Link href="/terms" className="hover:text-[var(--ink-2)]">Terms</Link>
-        <a
-          href="https://github.com/Gribadan/RentTools.io"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-[var(--ink-2)]"
-        >
-          Source
-        </a>
         {email && (
           <a href={`mailto:${email}`} className="hover:text-[var(--ink-2)]">
             Need help? {email}

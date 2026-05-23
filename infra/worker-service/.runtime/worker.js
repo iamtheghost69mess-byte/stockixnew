@@ -218,6 +218,10 @@ var env = {
   EASY_SMS_TOKEN: readOptionalString("EASY_SMS_TOKEN"),
   JWT_SECRET: readOptionalString("JWT_SECRET"),
   BASE_URL: readOptionalString("BASE_URL"),
+  THROTTLE_GLOBAL_TTL: readNumber("THROTTLE_GLOBAL_TTL", 6e4),
+  THROTTLE_GLOBAL_LIMIT: readNumber("THROTTLE_GLOBAL_LIMIT", 2e3),
+  THROTTLE_AUTH_TTL: readNumber("THROTTLE_AUTH_TTL", 6e4),
+  THROTTLE_AUTH_LIMIT: readNumber("THROTTLE_AUTH_LIMIT", 200),
   npm_package_json: readOptionalString("npm_package_json"),
   npm_package_type: readOptionalString("npm_package_type")
 };
@@ -3977,7 +3981,11 @@ function buildTenantEnvMap(params) {
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
     BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
-    REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? ""
+    REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
+    THROTTLE_GLOBAL_TTL: String(env.THROTTLE_GLOBAL_TTL),
+    THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
+    THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),
+    THROTTLE_AUTH_LIMIT: String(env.THROTTLE_AUTH_LIMIT)
   };
 }
 function serializeTenantEnvMap(map) {

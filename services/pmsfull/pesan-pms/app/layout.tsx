@@ -4,9 +4,21 @@ import { AuthProvider } from '@/components/auth-provider'
 import { Toaster } from '@/components/ui/sonner'
 
 export const metadata: Metadata = {
-  title: 'Pesan PMS',
-  description: 'Open-source property management system for hotels, homestays, villas, and other accommodation properties',
-  generator: 'Next.js',
+  title: {
+    default: 'Stockix PMS',
+    template: '%s | Stockix PMS',
+  },
+  description: 'Property Management System by Stockix',
+  applicationName: 'Stockix PMS',
+  authors: [{ name: 'Stockix' }],
+  icons: {
+    icon: [{ url: '/logo.svg', type: 'image/svg+xml' }],
+  },
+  openGraph: {
+    title: 'Stockix PMS',
+    description: 'Property Management System by Stockix',
+    siteName: 'Stockix PMS',
+  },
 }
 
 export default function RootLayout({

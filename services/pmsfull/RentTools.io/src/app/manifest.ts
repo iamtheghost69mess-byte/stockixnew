@@ -2,49 +2,30 @@ import type { MetadataRoute } from "next";
 import { getLocale } from "@/lib/i18n/server";
 import type { Locale } from "@/lib/i18n/translations";
 
-/**
- * PWA manifest. Per-locale because the `name` / `short_name` /
- * `description` / `lang` fields surface in the OS install dialog and
- * the eventual home-screen label. A Russian visitor installing the
- * app from /ru/ should see "RentTools" with a Russian description,
- * and the OS tags the installed app `lang="ru"` (which influences
- * IME selection + screen-reader voice on some platforms).
- *
- * Adding a new language: extend the LOCALIZED block below. The
- * fallback path is English. `getLocale()` already resolves the URL
- * prefix → cookie → default chain, so this manifest reflects whatever
- * locale the install was initiated under.
- */
-
 const LOCALIZED: Record<Locale, { name: string; description: string; lang: string }> = {
   en: {
-    name: "RentTools",
-    description:
-      "Free, open-source property manager for short-term rental hosts. Sync Airbnb + Booking.com, automate cleaning.",
+    name: "Stockix PMS",
+    description: "Property Management System by Stockix",
     lang: "en",
   },
   ru: {
-    name: "RentTools",
-    description:
-      "Бесплатный менеджер для хостов краткосрочной аренды с открытым кодом. Синхронизация Airbnb и Booking.com, автоматизация уборок.",
+    name: "Stockix PMS",
+    description: "Система управления недвижимостью от Stockix",
     lang: "ru",
   },
   de: {
-    name: "RentTools",
-    description:
-      "Kostenlose Open-Source-Verwaltung für Kurzzeitvermieter. Airbnb und Booking.com synchronisieren, Reinigung automatisieren.",
+    name: "Stockix PMS",
+    description: "Immobilienverwaltung von Stockix",
     lang: "de",
   },
   fr: {
-    name: "RentTools",
-    description:
-      "Gestionnaire open source gratuit pour les hôtes de location courte durée. Synchronisez Airbnb et Booking.com, automatisez le ménage.",
+    name: "Stockix PMS",
+    description: "Système de gestion immobilière par Stockix",
     lang: "fr",
   },
   es: {
-    name: "RentTools",
-    description:
-      "Gestor de código abierto y gratuito para anfitriones de alquiler vacacional. Sincronice Airbnb y Booking.com y automatice las limpiezas.",
+    name: "Stockix PMS",
+    description: "Sistema de gestión de propiedades de Stockix",
     lang: "es",
   },
 };
@@ -54,19 +35,16 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const copy = LOCALIZED[locale];
   return {
     name: copy.name,
-    short_name: copy.name,
+    short_name: "Stockix",
     description: copy.description,
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",
-    theme_color: "#ff385c",
-    background_color: "#fafaf9",
+    theme_color: "#000000",
+    background_color: "#ffffff",
     lang: copy.lang,
     icons: [
-      // SVG goes first so any browser that can rasterise it gets the
-      // sharpest possible icon at any zoom level. PNG fallbacks for
-      // stricter installers (Lighthouse audits PWA icon as PNG).
       {
         src: "/icon.svg",
         sizes: "any",

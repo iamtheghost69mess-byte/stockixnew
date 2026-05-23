@@ -31,9 +31,11 @@ import { VendorCreditsImportable } from './commands/VendorCreditsImportable';
 import { BulkDeleteVendorCreditsService } from './BulkDeleteVendorCredits.service';
 import { ValidateBulkDeleteVendorCreditsService } from './ValidateBulkDeleteVendorCredits.service';
 import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+import { TenancyModule } from '../Tenancy/Tenancy.module';
 
 @Module({
   imports: [
+    TenancyModule,
     CurrenciesModule,
     ItemsModule,
     PdfTemplatesModule,

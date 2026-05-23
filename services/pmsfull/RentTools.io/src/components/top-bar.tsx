@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/context";
 import type { Locale } from "@/lib/i18n/translations";
 import { SUPPORTED_LOCALES } from "@/lib/i18n/alternates";
 import type { Property } from "@/lib/types";
+import { StockixLogo } from "@/components/stockix-logo";
 
 interface CopyShape {
   tabDashboard: string;
@@ -340,55 +341,8 @@ export function TopBar({
             className="flex items-center gap-2 shrink-0 text-[var(--ink)] hover:opacity-90 transition-opacity"
             aria-label="Dashboard home"
           >
-            {/* Brand mark: white house silhouette on coral pill, with
-                three drifting smoke puffs from the chimney. Sized to
-                match the marketing site header (h-9 / 22 px svg) so
-                the brand reads identically across pages. Smoke is
-                pure SVG <animate> so no framer-motion dep, no
-                entrance shake / scale-rotate spring — the mark just
-                paints in place on first render. */}
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--m-accent)] shadow-sm shadow-[var(--m-accent)]/30">
-              <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" aria-hidden="true">
-                <g fill="white" stroke="white" strokeWidth="0.4" strokeLinejoin="round">
-                  {/* Roof + walls outline as one shape */}
-                  <path d="M3.4 11.6 L12 4.5 L20.6 11.6 L19 11.6 L19 19.5 L5 19.5 L5 11.6 Z" />
-                  {/* Chimney */}
-                  <rect x="15.6" y="6.2" width="1.7" height="3.4" rx="0.2" />
-                </g>
-                {/* Door + windows are punched out using the coral
-                    bg colour so they read as openings on the white
-                    silhouette, no extra fill needed. */}
-                <g fill="var(--m-accent)">
-                  <rect x="10.6" y="14" width="2.8" height="5.5" rx="0.4" />
-                  <rect x="6.7" y="13" width="2.4" height="2.4" rx="0.3" />
-                  <rect x="14.9" y="13" width="2.4" height="2.4" rx="0.3" />
-                </g>
-                {/* Smoke — three circles drifting up from the chimney,
-                    staggered so the puffs feel continuous. Pure SVG
-                    SMIL so it works with no JS. */}
-                <g fill="white">
-                  <circle cx="16.45" cy="5.5" r="0.6" opacity="0">
-                    <animate attributeName="cy" values="5.5;3.2;1" dur="3s" repeatCount="indefinite" />
-                    <animate attributeName="cx" values="16.45;16.7;17.1" dur="3s" repeatCount="indefinite" />
-                    <animate attributeName="r" values="0.4;0.7;0.9" dur="3s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0;0.85;0" dur="3s" repeatCount="indefinite" />
-                  </circle>
-                  <circle cx="16.45" cy="5.5" r="0.6" opacity="0">
-                    <animate attributeName="cy" values="5.5;3.2;1" dur="3s" begin="1s" repeatCount="indefinite" />
-                    <animate attributeName="cx" values="16.45;16.2;15.9" dur="3s" begin="1s" repeatCount="indefinite" />
-                    <animate attributeName="r" values="0.4;0.7;0.9" dur="3s" begin="1s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0;0.7;0" dur="3s" begin="1s" repeatCount="indefinite" />
-                  </circle>
-                  <circle cx="16.45" cy="5.5" r="0.6" opacity="0">
-                    <animate attributeName="cy" values="5.5;3.2;1" dur="3s" begin="2s" repeatCount="indefinite" />
-                    <animate attributeName="cx" values="16.45;16.6;17" dur="3s" begin="2s" repeatCount="indefinite" />
-                    <animate attributeName="r" values="0.4;0.7;0.9" dur="3s" begin="2s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0;0.6;0" dur="3s" begin="2s" repeatCount="indefinite" />
-                  </circle>
-                </g>
-              </svg>
-            </div>
-            <span className="hidden sm:block text-[17px] font-semibold tracking-tight">RentTools</span>
+            <StockixLogo className="h-5 w-auto shrink-0" />
+            <span className="hidden sm:block text-[17px] font-semibold tracking-tight">PMS</span>
           </button>
 
           {/* Property selector */}

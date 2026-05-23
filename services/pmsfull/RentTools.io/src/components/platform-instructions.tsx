@@ -30,14 +30,14 @@ const DATA: Record<Platform, Record<Mode, InstructionData>> = {
       ],
     },
     import: {
-      title: "How to import RentTools into Airbnb",
+      title: "How to import Stockix PMS into Airbnb",
       steps: [
         "Back in Airbnb → Calendar → Availability settings.",
         "Find the \"Sync calendars\" section.",
         "If Booking.com is already linked there, remove it — replace with our URL.",
         "Click \"Import calendar\".",
         "Paste the URL above into the \"Calendar address (URL)\" field.",
-        "Name it \"RentTools Sync\" and click Import.",
+        "Name it \"Stockix PMS Sync\" and click Import.",
       ],
     },
   },
@@ -54,13 +54,13 @@ const DATA: Record<Platform, Record<Mode, InstructionData>> = {
       ],
     },
     import: {
-      title: "How to import RentTools into Booking.com",
+      title: "How to import Stockix PMS into Booking.com",
       steps: [
         "Back in admin.booking.com → Rates & Availability → Sync calendars.",
         "If Airbnb is already linked there, remove it — replace with our URL.",
         "Find the \"Import\" section (or \"Add connection\").",
         "Paste the URL above into the iCal URL field.",
-        "Name it \"RentTools Sync\" and click Save.",
+        "Name it \"Stockix PMS Sync\" and click Save.",
       ],
     },
   },

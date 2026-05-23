@@ -91,6 +91,10 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
+    THROTTLE_GLOBAL_TTL: String(env.THROTTLE_GLOBAL_TTL),
+    THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
+    THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),
+    THROTTLE_AUTH_LIMIT: String(env.THROTTLE_AUTH_LIMIT),
   };
 }
 

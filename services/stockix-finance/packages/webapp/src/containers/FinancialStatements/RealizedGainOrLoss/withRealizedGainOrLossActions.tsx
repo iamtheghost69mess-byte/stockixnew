@@ -8,3 +8,4 @@ const mapDispatchToProps = (dispatch) => ({
 });
 
 export const withRealizedGainOrLossActions = connect(null, mapDispatchToProps);
+export default withRealizedGainOrLossActions;

@@ -234,6 +234,10 @@ export const env = {
   EASY_SMS_TOKEN: readOptionalString("EASY_SMS_TOKEN"),
   JWT_SECRET: readOptionalString("JWT_SECRET"),
   BASE_URL: readOptionalString("BASE_URL"),
+  THROTTLE_GLOBAL_TTL: readNumber("THROTTLE_GLOBAL_TTL", 60_000),
+  THROTTLE_GLOBAL_LIMIT: readNumber("THROTTLE_GLOBAL_LIMIT", 2000),
+  THROTTLE_AUTH_TTL: readNumber("THROTTLE_AUTH_TTL", 60_000),
+  THROTTLE_AUTH_LIMIT: readNumber("THROTTLE_AUTH_LIMIT", 200),
   npm_package_json: readOptionalString("npm_package_json"),
   npm_package_type: readOptionalString("npm_package_type"),
 } as const;

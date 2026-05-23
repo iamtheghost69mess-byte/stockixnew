@@ -38,9 +38,11 @@ import { CreditNotesApplyInvoiceModule } from '../CreditNotesApplyInvoice/Credit
 import { BulkDeleteCreditNotesService } from './BulkDeleteCreditNotes.service';
 import { ValidateBulkDeleteCreditNotesService } from './ValidateBulkDeleteCreditNotes.service';
 import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+import { TenancyModule } from '../Tenancy/Tenancy.module';
 
 @Module({
   imports: [
+    TenancyModule,
     CurrenciesModule,
     ItemsModule,
     BranchesModule,

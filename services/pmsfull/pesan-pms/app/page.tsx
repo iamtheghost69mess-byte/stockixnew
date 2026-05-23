@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
 import Link from "next/link";
 
 export default function HomePage() {
@@ -31,7 +32,10 @@ export default function HomePage() {
       {/* Hero Section */}
       <header className="bg-white shadow">
         <div className="container mx-auto px-4 py-6 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-primary">Pesan PMS</h1>
+          <Link href="/" className="flex items-center gap-2 text-primary">
+            <Logo className="h-6 w-auto" />
+            <span className="text-2xl font-bold">PMS</span>
+          </Link>
           <div className="space-x-4">
             <Button asChild variant="outline">
               <Link href="/auth/login">Login</Link>
@@ -48,7 +52,7 @@ export default function HomePage() {
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-4xl font-bold mb-6">Property Management Made Simple</h2>
             <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
-              Pesan PMS is an open-source property management system designed to help manage hotels, homestays, villas, and other accommodation properties.
+              Stockix PMS helps you manage hotels, homestays, villas, and other accommodation properties from one place.
             </p>
             <Button asChild size="lg">
               <Link href="/auth/signup">Get Started</Link>
@@ -81,17 +85,16 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="mb-6 md:mb-0">
-              <h2 className="text-2xl font-bold">Pesan PMS</h2>
-              <p className="mt-2 text-gray-400">Open-source property management system</p>
+              <h2 className="text-2xl font-bold">Stockix PMS</h2>
+              <p className="mt-2 text-gray-400">Property Management System by Stockix</p>
             </div>
             <div className="flex space-x-6">
               <Link href="/auth/login" className="hover:text-primary transition-colors">Login</Link>
               <Link href="/auth/signup" className="hover:text-primary transition-colors">Sign Up</Link>
-              <a href="https://github.com/yourusername/pesan-pms" className="hover:text-primary transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-gray-800 text-center text-gray-400">
-            <p>© {new Date().getFullYear()} Pesan PMS. Licensed under MIT.</p>
+            <p>© {new Date().getFullYear()} Stockix. All rights reserved.</p>
           </div>
         </div>
       </footer>

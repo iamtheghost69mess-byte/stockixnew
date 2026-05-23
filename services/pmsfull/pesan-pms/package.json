@@ -1,16 +1,16 @@
 {
-  "name": "pesan-pms",
+  "name": "stockix-pms",
   "version": "0.1.0",
-  "description": "Open-source property management system for hotels, homestays, villas, and other accommodation properties",
+  "description": "Property Management System by Stockix",
   "private": true,
-  "author": "Pesan PMS Team",
+  "author": "Stockix",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/yourusername/pesan-pms"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3005",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

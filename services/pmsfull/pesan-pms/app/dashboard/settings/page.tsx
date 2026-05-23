@@ -15,7 +15,7 @@ export default function SettingsPage() {
   const tabParam = searchParams.get("tab");
 
   const [activeTab, setActiveTab] = useState("general");
-  const [hotelName, setHotelName] = useState("Pesan PMS");
+  const [hotelName, setHotelName] = useState("Stockix PMS");
   const [currency, setCurrency] = useState("USD");
   const [timezone, setTimezone] = useState("UTC");
   const [isLoading, setIsLoading] = useState(false);

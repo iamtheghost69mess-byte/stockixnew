@@ -22,7 +22,7 @@ export const translations = {
   "common.calendar": { en: "Calendar", ru: "Календарь", de: "Kalender", fr: "Calendrier", es: "Calendario" },
 
   // Login
-  "login.title": { en: "RentTools", ru: "RentTools", de: "RentTools", fr: "RentTools", es: "RentTools" },
+  "login.title": { en: "Stockix PMS", ru: "Stockix PMS", de: "Stockix PMS", fr: "Stockix PMS", es: "Stockix PMS" },
   "login.subtitle": { en: "Sign in to continue", ru: "Войдите для продолжения", de: "Anmelden, um fortzufahren", fr: "Connectez-vous pour continuer", es: "Inicie sesión para continuar" },
   "login.username": { en: "Username", ru: "Логин", de: "Benutzername", fr: "Identifiant", es: "Usuario" },
   "login.usernamePlaceholder": { en: "Enter username", ru: "Введите логин", de: "Benutzername eingeben", fr: "Saisissez votre identifiant", es: "Introduzca el usuario" },
@@ -49,7 +49,7 @@ export const translations = {
   "signup.continueWithGoogle": { en: "Sign up with Google", ru: "Регистрация через Google", de: "Mit Google registrieren", fr: "S'inscrire avec Google", es: "Registrarse con Google" },
 
   // Welcome modal (first-time)
-  "welcome.title": { en: "Welcome to RentTools", ru: "Добро пожаловать в RentTools", de: "Willkommen bei RentTools", fr: "Bienvenue sur RentTools", es: "Bienvenido a RentTools" },
+  "welcome.title": { en: "Welcome to Stockix PMS", ru: "Добро пожаловать в Stockix PMS", de: "Willkommen bei Stockix PMS", fr: "Bienvenue sur Stockix PMS", es: "Bienvenido a Stockix PMS" },
   "welcome.subtitle": { en: "Let's get started — pick one to set up your workspace.", ru: "Давайте начнём — выберите способ настройки.", de: "Loslegen — wählen Sie eine Option, um Ihren Arbeitsbereich einzurichten.", fr: "On commence — choisissez une option pour configurer votre espace.", es: "Comencemos — elija una opción para configurar su espacio." },
   "welcome.addFirst": { en: "Add my first property", ru: "Добавить первый объект", de: "Erste Unterkunft hinzufügen", fr: "Ajouter mon premier logement", es: "Añadir mi primer alojamiento" },
   "welcome.namePlaceholder": { en: "Property name", ru: "Название объекта", de: "Name der Unterkunft", fr: "Nom du logement", es: "Nombre del alojamiento" },
@@ -99,7 +99,7 @@ export const translations = {
   "profile.invitesInvalidWa": { en: "WhatsApp URL must start with https://chat.whatsapp.com/", ru: "Ссылка WhatsApp должна начинаться с https://chat.whatsapp.com/", de: "WhatsApp-Link muss mit https://chat.whatsapp.com/ beginnen", fr: "Le lien WhatsApp doit commencer par https://chat.whatsapp.com/", es: "El enlace de WhatsApp debe empezar por https://chat.whatsapp.com/" },
 
   // Sidebar
-  "sidebar.title": { en: "RentTools", ru: "RentTools", de: "RentTools", fr: "RentTools", es: "RentTools" },
+  "sidebar.title": { en: "Stockix PMS", ru: "Stockix PMS", de: "Stockix PMS", fr: "Stockix PMS", es: "Stockix PMS" },
   "sidebar.subtitle": { en: "Properties & guests", ru: "Объекты и гости", de: "Unterkünfte & Gäste", fr: "Logements et voyageurs", es: "Alojamientos y huéspedes" },
   "sidebar.dashboard": { en: "Dashboard", ru: "Обзор", de: "Übersicht", fr: "Tableau de bord", es: "Panel" },
   "sidebar.tasks": { en: "Tasks", ru: "Задачи", de: "Aufgaben", fr: "Tâches", es: "Tareas" },
@@ -131,7 +131,7 @@ export const translations = {
   "dashboard.noReservations": { en: "No reservations yet. Click 'New Reservation' to create one.", ru: "Бронирований пока нет. Нажмите 'Новая бронь' для создания.", de: "Noch keine Reservierungen. Auf „Neue Reservierung“ klicken, um eine anzulegen.", fr: "Aucune réservation pour l'instant. Cliquez sur « Nouvelle réservation » pour en créer une.", es: "Aún no hay reservas. Pulse «Nueva reserva» para crear una." },
   "dashboard.noReservationsGlobal": { en: "No reservations yet. Create a property and add reservations to get started.", ru: "Бронирований пока нет. Создайте объект и добавьте бронь.", de: "Noch keine Reservierungen. Legen Sie eine Unterkunft an und fügen Sie Reservierungen hinzu.", fr: "Aucune réservation pour l'instant. Créez un logement et ajoutez des réservations pour commencer.", es: "Aún no hay reservas. Cree un alojamiento y añada reservas para empezar." },
   "dashboard.emptyTitle": { en: "Start with your first property", ru: "Начните с первого объекта", de: "Mit der ersten Unterkunft beginnen", fr: "Commencez par votre premier logement", es: "Empiece por su primer alojamiento" },
-  "dashboard.emptyBody": { en: "RentTools needs a property before you can sync calendars or track reservations. Add one in under a minute — or try a pre-filled sample to see how it works.", ru: "RentTools нужен объект, чтобы синхронизировать календари и отслеживать бронирования. Это занимает меньше минуты — или попробуйте заполненный пример.", de: "RentTools braucht eine Unterkunft, bevor Sie Kalender synchronisieren oder Reservierungen verfolgen können. In unter einer Minute angelegt — oder probieren Sie ein fertiges Beispiel aus.", fr: "RentTools a besoin d'un logement avant de synchroniser des calendriers ou de suivre des réservations. À ajouter en moins d'une minute — ou essayez un exemple pré-rempli pour voir le fonctionnement.", es: "RentTools necesita un alojamiento antes de sincronizar calendarios o seguir reservas. Añádalo en menos de un minuto — o pruebe un ejemplo precargado para ver cómo funciona." },
+  "dashboard.emptyBody": { en: "Stockix PMS needs a property before you can sync calendars or track reservations. Add one in under a minute — or try a pre-filled sample to see how it works.", ru: "Stockix PMS нужен объект, чтобы синхронизировать календари и отслеживать бронирования. Это занимает меньше минуты — или попробуйте заполненный пример.", de: "Stockix PMS braucht eine Unterkunft, bevor Sie Kalender synchronisieren oder Reservierungen verfolgen können. In unter einer Minute angelegt — oder probieren Sie ein fertiges Beispiel aus.", fr: "Stockix PMS a besoin d'un logement avant de synchroniser des calendriers ou de suivre des réservations. À ajouter en moins d'une minute — ou essayez un exemple pré-rempli pour voir le fonctionnement.", es: "Stockix PMS necesita un alojamiento antes de sincronizar calendarios o seguir reservas. Añádalo en menos de un minuto — o pruebe un ejemplo precargado para ver cómo funciona." },
   "dashboard.emptyAdd": { en: "Add my first property", ru: "Добавить первый объект", de: "Erste Unterkunft hinzufügen", fr: "Ajouter mon premier logement", es: "Añadir mi primer alojamiento" },
   "dashboard.emptySample": { en: "Use a sample property", ru: "Создать пример", de: "Beispiel-Unterkunft verwenden", fr: "Utiliser un logement d'exemple", es: "Usar un alojamiento de ejemplo" },
   "dashboard.reservationsAcross": { en: "reservations across", ru: "бронирований в", de: "Reservierungen in", fr: "réservations sur", es: "reservas en" },

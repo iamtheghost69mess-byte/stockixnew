@@ -20,7 +20,7 @@ import { NavUser } from "./nav-user"
 import { PropertySwitcher } from "./property-switcher"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar"
 
-// Pesan PMS data
+// Stockix PMS demo data
 const data = {
   user: {
     name: "John Doe",

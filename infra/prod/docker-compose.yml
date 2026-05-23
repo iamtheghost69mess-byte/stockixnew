@@ -271,7 +271,7 @@ services:
       dockerfile: docker/Dockerfile
     image: stockix-chatlive:local
     restart: unless-stopped
-    command: ["bundle", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
     environment:
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
       - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-https://chat.${ROOT_DOMAIN}}
