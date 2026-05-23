@@ -119,16 +119,26 @@ async function readJson(res: Response): Promise<unknown> {
 
 type Props = {
   tenantId: string;
-  financeLinked: boolean;
+  hasAccountingModule: boolean;
+  deploymentReady: boolean;
+  financeTenantId: number | null;
 };
 
-export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
+export default function TenantUsersPanel({
+  tenantId,
+  hasAccountingModule,
+  deploymentReady,
+  financeTenantId,
+}: Props) {
+  const financeUsersEnabled = hasAccountingModule && deploymentReady;
   const me = useMe();
   const canMutate = Boolean(me?.capabilities.canManageTenants);
 
   const [users, setUsers] = useState<FinanceUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadErrorCode, setLoadErrorCode] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -166,17 +176,22 @@ export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
   });
 
   const load = useCallback(async () => {
-    if (!financeLinked) {
+    if (!financeUsersEnabled) {
       setLoading(false);
       setUsers([]);
+      setLoadError(null);
+      setLoadErrorCode(null);
       return;
     }
     setLoading(true);
     setLoadError(null);
+    setLoadErrorCode(null);
     try {
       const res = await fetch(`/api/tenants/${tenantId}/users`);
       const body = await readJson(res);
       if (!res.ok) {
+        const errBody = body as { error?: string };
+        setLoadErrorCode(typeof errBody.error === "string" ? errBody.error : null);
         setLoadError(formatApiError(body, "Could not load finance users."));
         setUsers([]);
         return;
@@ -186,7 +201,23 @@ export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, financeLinked]);
+  }, [tenantId, financeUsersEnabled]);
+
+  const repairFinanceLink = async () => {
+    setRepairing(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/repair-finance-link`, { method: "POST" });
+      const body = await readJson(res);
+      if (!res.ok) {
+        toast.error(formatApiError(body, "Could not link Finance tenant."));
+        return;
+      }
+      toast.success("Finance tenant linked.");
+      await load();
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -309,7 +340,7 @@ export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
     }
   };
 
-  if (!financeLinked) {
+  if (!hasAccountingModule) {
     return (
       <Card>
         <CardHeader>
@@ -318,8 +349,25 @@ export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
             Finance users
           </CardTitle>
           <CardDescription>
-            User management is available after the tenant is provisioned and linked to a finance
-            deployment (internal port and finance tenant id).
+            This tenant was provisioned without the Finance (accounting) module. User management
+            applies to the Bigcapital stack only; use POS staff settings for point-of-sale users.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  if (!deploymentReady) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="h-4 w-4" />
+            Finance users
+          </CardTitle>
+          <CardDescription>
+            Available after provisioning completes and the Finance stack is active on its internal
+            port.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -338,6 +386,9 @@ export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
             <CardDescription>
               Manage users in this tenant&apos;s Bigcapital stack. Uses tenant database user ids for
               edits (not system user ids from create response).
+              {financeTenantId == null || financeTenantId <= 0
+                ? " Finance tenant id is not stored yet; loading users will attempt to link it automatically."
+                : null}
             </CardDescription>
           </div>
           {canMutate ? (
@@ -354,7 +405,25 @@ export default function TenantUsersPanel({ tenantId, financeLinked }: Props) {
               Loading users…
             </div>
           ) : loadError ? (
-            <p className="text-sm text-destructive">{loadError}</p>
+            <div className="space-y-3">
+              <p className="text-sm text-destructive">{loadError}</p>
+              {canMutate &&
+              (loadErrorCode === "finance_tenant_not_linked" ||
+                loadErrorCode === "finance_resolve_failed") ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={repairing}
+                  onClick={() => void repairFinanceLink()}
+                >
+                  {repairing ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Repair Finance link
+                </Button>
+              ) : null}
+            </div>
           ) : users.length === 0 ? (
             <p className="text-sm text-muted-foreground">No users in this finance tenant yet.</p>
           ) : (

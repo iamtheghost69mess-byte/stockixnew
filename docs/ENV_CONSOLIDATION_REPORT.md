@@ -1,25 +1,27 @@
 # ENV Consolidation Report
 
 Date: 2026-05-22  
-**Updated:** 2026-05-22 (consolidation fix applied)
+**Last reviewed:** 2026-05-23 (docs aligned with `packages/config` and `.env.example` inventory)
 
 ## Status After Consolidation Fix
 
-| Item | Before | After |
-|------|--------|-------|
-| Local `.env` multi-product vars | ❌ Missing | ✅ Added |
+| Item | Before | After (current) |
+|------|--------|-----------------|
+| Local `.env` multi-product vars | ❌ Missing | ⚠️ Operator must merge from `.env.example` (not auto-synced) |
 | `services/pms/.env.example` | ❌ Missing | ✅ Created |
 | `services/pms/frontend/.env.example` | ❌ Missing | ✅ Created |
 | POS `.env.example` `AUTH_TOKEN_SECRET` | ❌ Missing | ✅ Documented |
-| `@repo/config` `posConfig` | ❌ Missing | ✅ Added |
-| `@repo/config` `pmsConfig` | ❌ Missing | ✅ Added |
-| `@repo/config` `chatwootConfig` | ❌ Missing | ✅ Added |
-| `@repo/config` `moduleGatingConfig` | ❌ Missing | ✅ Added |
-| `pos-proxy` / `pms-proxy` use typed config | ❌ raw `process.env` | ⏸️ Deferred (app source not touched) |
-| `chatwoot-provision` uses typed config | ❌ raw `process.env` | ⏸️ Deferred (app source not touched) |
-| S3/PostHog in root `.env.example` | ❌ Missing | ✅ Added |
-| `NEXT_PUBLIC_PMS_API_URL` in `infra/prod/.env.example` | ❌ Missing | ✅ Added |
-| `infra/prod/.env` multi-product vars | ❌ Missing | ✅ Added |
+| `@repo/config` `posConfig` | ❌ Missing | ✅ Exported (`packages/config/src/index.ts`) |
+| `@repo/config` `pmsConfig` | ❌ Missing | ✅ Exported |
+| `@repo/config` `chatwootConfig` | ❌ Missing | ✅ Exported |
+| `@repo/config` `moduleGatingConfig` | ❌ Missing | ✅ Exported |
+| `pos-proxy` / `pms-proxy` use typed config | ❌ raw `process.env` | ⏸️ Still `process.env` in `apps/api/src/*-proxy.ts` |
+| `chatwoot-provision` uses typed config | ❌ raw `process.env` | ⏸️ Still raw env in worker |
+| S3/PostHog in root `.env.example` | ❌ Missing | ✅ Present (lines ~256–265) |
+| `NEXT_PUBLIC_PMS_API_URL` in `infra/prod/.env.example` | ❌ Missing | ✅ Present (line ~110) |
+| `infra/prod/.env.example` multi-product block | ❌ Missing | ✅ POS / PMS / Chatwoot / `PROVISION_MODULE_GATING` |
+| Finance `INTERNAL_API_SECRET` in tenant `.env` | — | ✅ Written by `tenant-env.ts` from worker |
+| Finance users auto-link (`resolve-tenant`) | — | ✅ API uses `INTERNAL_API_SECRET` + `TENANT_INTERNAL_HOST` |
 
 ## Still Manual (Cannot Be Done by Code)
 
@@ -35,12 +37,12 @@ Date: 2026-05-22
 
 | Metric | Value |
 |--------|-------|
-| Root `.env.example` keys (`^[A-Z]`) | **~124** (after fix) |
-| Root `.env` keys (local, present) | **~128** (after fix) |
-| `.env.example` files in repo | **14** (incl. new PMS templates) |
-| `@repo/config` product configs | ✅ Exported |
-| Conflicts (same concept, different names) | **6** major groups (unchanged) |
-| Services needing own `.env` (Strategy B) | **3** (Finance server, POS backend, POS frontend local) |
+| Root `.env.example` keys (`^[A-Z_]+=`) | **138** |
+| Root `.env` keys (local) | Varies — merge missing blocks from `.env.example` |
+| `.env.example` files in repo | **16** (incl. `services/pms/*`, duplicate `chatlive` under `pms/`) |
+| `@repo/config` product configs | ✅ `posConfig`, `pmsConfig`, `chatwootConfig`, `moduleGatingConfig` |
+| Conflicts (same concept, different names) | **6** major groups (see below) |
+| Services needing own `.env` (Strategy B) | Finance server, POS backend, POS frontend (local dev) |
 
 ---
 
@@ -84,9 +86,12 @@ Present and aligned with control plane: `DATABASE_URL`, `SESSION_SECRET`, `AUTH_
 apps/api/.env.example
 apps/dashboard/.env.example
 infra/prod/.env.example
+services/pms/.env.example
+services/pms/frontend/.env.example
 services/chatlive/.env.example
 services/chatlive/tests/playwright/.env.example
-services/pmsfull/RentTools.io/.env.example          # legacy reference only
+services/pms/chatlive/.env.example                    # duplicate upstream tree
+services/pmsfull/RentTools.io/.env.example            # legacy reference only
 services/posnew/apps/pos-backend/.env.example
 services/posnew/apps/pos-frontend2/.env.example
 services/stockix-finance/.env.example
@@ -94,12 +99,10 @@ services/stockix-finance/packages/server/.env.example
 services/stockix-finance/packages/webapp/.env.example
 ```
 
-**Not found (expected for new services):**
+**Still optional / missing:**
 
-- `services/pms/.env.example`
-- `services/pms/frontend/.env.example`
-- `services/posnew/.env.example`
-- `infra/dev/.env.example`
+- `services/posnew/.env.example` (monorepo root only; per-app examples exist)
+- `infra/dev/.env.example` (dev Postgres credentials are in compose file)
 
 **Legacy / out of scope for consolidation:**
 
@@ -131,7 +134,8 @@ services/stockix-finance/packages/webapp/.env.example
 
 - Loads `<monorepoRoot>/.env` then `.env.local` (override) unless `STOCKIX_LOAD_ROOT_ENV=0` or Vitest without `STOCKIX_LOAD_ROOT_ENV=1`.
 - Exports `env`, `apiConfig`, `dashboardConfig`, `dbConfig`, `mailConfig`, `infraConfig`.
-- Does **not** export typed helpers for `POS_PLATFORM_*`, `PMS_*`, `CHATWOOT_*`, or `PROVISION_MODULE_GATING` (API reads those via raw `process.env`).
+- Also exports **`posConfig`**, **`pmsConfig`**, **`chatwootConfig`**, **`moduleGatingConfig`** (worker and services should prefer these).
+- **`apps/api` POS/PMS proxies** still read `process.env` directly (not migrated to `posConfig`/`pmsConfig` yet).
 
 **apps/api POS/PMS proxies**
 
@@ -181,7 +185,8 @@ Written to: `{TENANT_ENV_ROOT}/{slug}/.env` (atomic write).
 | `JWT_SECRET` | ✅ (legacy) | ✅ | ✅ per-tenant | ✅ POS legacy JWT | ❌ | ❌ | DUPLICATE (Finance vs POS vs root legacy) |
 | `PLATFORM_JWT_SECRET` | ❌ | ❌ | ❌ | ✅ POS platform plane | ❌ | ❌ | POS ONLY |
 | `LICENSE_SIGNING_SECRET` | ✅ | ✅ | ❌ | ❌ (offline license in API) | ❌ | ❌ | ROOT/API |
-| `INTERNAL_API_SECRET` | ✅ | ✅ | ✅ tenant file | ❌ | ✅ internal routes | ❌ | SHARED (API ↔ Finance) |
+| `INTERNAL_API_SECRET` | ✅ | ✅ | ✅ tenant file | ❌ | ✅ internal routes | ❌ | **SHARED (API/worker ↔ Finance)** — required for provision, finance users, resolve-tenant |
+| `TENANT_INTERNAL_HOST` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | API/worker reach tenant stacks (`apiConfig.tenantInternalHost`) |
 | `PLATFORM_API_SECRET` | ✅ | ✅ | ❌ | ❌ | ✅ proxy | ❌ | ROOT + PMS internal |
 | `POS_PLATFORM_BASE_URL` | ✅ | ❌ local | ❌ | ❌ | ❌ | ❌ | ROOT ONLY (API proxy) |
 | `POS_PLATFORM_API_KEY` | ✅ | ❌ local | ❌ | ❌ (server validates X-Api-Key) | ❌ | ❌ | ROOT + POS platform API |
@@ -194,7 +199,7 @@ Written to: `{TENANT_ENV_ROOT}/{slug}/.env` (atomic write).
 | `PROVISION_MODULE_GATING` | ✅ | ❌ local | ❌ | ❌ | ❌ | ✅ prod example | ROOT / worker |
 | `GEMINI_API_KEY` | ❌ | ❌ | ❌ | ❌ | ❌ (not implemented) | ❌ | MISSING (was RentTools only) |
 | `PMS_DATABASE_URL` | ❌ | ❌ | ❌ | ❌ | uses `DATABASE_URL` | ❌ | OPTIONAL (not used) |
-| `S3_*` / `POSTHOG_*` | ❌ root example | ❌ | via tenant map | B2 optional | ❌ | ✅ `infra/prod` only | Prod-only gap in root |
+| `S3_*` / `POSTHOG_*` | ✅ root + prod | optional local | via tenant map | B2 optional | ❌ | ✅ prod compose | Worker copies `S3_*` into tenant `.env` |
 
 ---
 
@@ -250,38 +255,34 @@ Written to: `{TENANT_ENV_ROOT}/{slug}/.env` (atomic write).
 
 ## Variables in root `.env.example` vs `infra/prod/.env.example`
 
-| In `infra/prod/.env.example` only | Notes |
-|-----------------------------------|--------|
-| `S3_*` | Tenant uploads; worker passes into tenant `.env` |
-| `POSTHOG_*` | Analytics |
-| `NEXT_PUBLIC_PMS_API_URL` | Missing from prod example (browser PMS URL) |
+Both files now include **S3_***, **POSTHOG_***, **POS/PMS/Chatwoot** blocks, and **`PROVISION_MODULE_GATING`**. Prod uses different hostnames (`host.docker.internal`, public URLs) and **`PROVISION_MODULE_GATING=1`** by default.
 
-| In root `.env.example` only | Notes |
-|-----------------------------|--------|
-| Full legacy `DB_*` / `SYSTEM_DB_*` / `TENANT_DB_*` | Local/dev Finance paths |
-| `PLAYWRIGHT_*`, `SMOKE_*` | Tooling |
-| `STOCKIX_TENANT_APP_ROOT` empty default | Prod sets explicit path |
+| Mostly root `.env.example` only | Notes |
+|----------------------------------|--------|
+| Full legacy `DB_*` / `SYSTEM_DB_*` / `TENANT_DB_*` | Isolated Finance server dev |
+| `PLAYWRIGHT_*`, `SMOKE_*`, `BROWSER_WS_ENDPOINT` | Tooling |
+| `NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST` | Local dashboard tenant links |
+| `DOCKER_COMPOSE_*_TIMEOUT_MS` | Worker compose timeouts (also set in prod example) |
+
+| Prod-specific values | Notes |
+|---------------------|--------|
+| `TENANT_INTERNAL_HOST=host.docker.internal` | Required for API → tenant Finance on same host |
+| `STOCKIX_LOAD_ROOT_ENV=0` | Set in compose, not in `.env.example` |
 
 ---
 
-## `@repo/config` gap analysis
+## `@repo/config` product configs
 
-**Today:** POS/PMS/Chatwoot vars are **not** in `packages/config/src/index.ts` `env` object.
+**Implemented** in `packages/config/src/index.ts`:
 
-**Consumers use raw `process.env`:**
+- `posConfig` — `POS_PLATFORM_BASE_URL`, `POS_PLATFORM_API_KEY`, `POS_APP_ROOT`
+- `pmsConfig` — `PMS_PORT`, `PMS_BASE_URL`, `PMS_APP_ROOT`, `PMS_ICAL_SYNC_INTERVAL_MS`, `GEMINI_API_KEY`
+- `chatwootConfig` — `CHATWOOT_*` (base URL, token, brand)
+- `moduleGatingConfig.enabled` — `PROVISION_MODULE_GATING === '1'`
 
-- `apps/api/src/pos-proxy.ts`, `pms-proxy.ts`
-- `infra/worker-service` chatwoot + module stacks
-- `services/pms/src/index.ts` (`PMS_PORT`)
+**Still using raw `process.env`:** `apps/api/src/pos-proxy.ts`, `pms-proxy.ts` (optional cleanup).
 
-**Recommended follow-up (not applied this pass):**
-
-```typescript
-export const posConfig = { platformBaseUrl, platformApiKey };
-export const pmsConfig = { port, baseUrl, icalSyncIntervalMs };
-export const chatwootConfig = { baseUrl, apiAccessToken, brandName };
-export const moduleGatingConfig = { enabled: PROVISION_MODULE_GATING === '1' };
-```
+**`apiConfig.internalApiSecret`:** uses `INTERNAL_API_SECRET`, or falls back to `WORKER_SECRET` in development/test only — production must set `INTERNAL_API_SECRET` explicitly.
 
 ---
 
@@ -289,8 +290,8 @@ export const moduleGatingConfig = { enabled: PROVISION_MODULE_GATING === '1' };
 
 | File | Status | Recommendation |
 |------|--------|----------------|
-| `services/pms/.env.example` | **Missing** | Add pointer doc: copy `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `PMS_PORT` from root |
-| `services/pms/frontend/.env.example` | **Missing** | `NEXT_PUBLIC_PMS_API_URL=http://localhost:3003` |
+| `services/pms/.env.example` | ✅ Exists | Pointer to root; documents `AUTH_TOKEN_SECRET` + `INTERNAL_API_SECRET` |
+| `services/pms/frontend/.env.example` | ✅ Exists | `NEXT_PUBLIC_PMS_API_URL=http://localhost:3003` |
 | `services/posnew/apps/pos-backend/.env.example` | Exists | **Add** `AUTH_TOKEN_SECRET=` with comment “must match root” |
 | `apps/api/.env.example` | Exists | OK — points to root |
 | `apps/dashboard/.env.example` | Exists | OK — points to root |
@@ -298,15 +299,14 @@ export const moduleGatingConfig = { enabled: PROVISION_MODULE_GATING === '1' };
 
 ---
 
-## Missing from root `.env.example` (recommended additions)
+## Optional / future additions
 
-| Variable | Purpose | Priority |
-|----------|---------|------------|
-| `PMS_DATABASE_URL` | Optional separate Postgres for PMS | Low (code uses `DATABASE_URL`) |
-| `PMS_ICAL_SYNC_INTERVAL_MS` | Override 10m sync (hardcoded in `jobs/ical-sync.ts`) | Low |
-| `GEMINI_API_KEY` | Passport OCR if ported from RentTools | Low / feature flag |
-| `S3_*`, `POSTHOG_*` | Align root with `infra/prod/.env.example` | Medium |
-| `NEXT_PUBLIC_PMS_API_URL` in `infra/prod/.env.example` | Prod PMS frontend builds | Medium |
+| Variable | Purpose | Status |
+|----------|---------|--------|
+| `PMS_DATABASE_URL` | Dedicated PMS Postgres | Documented in `services/pms/.env.example`; code uses `DATABASE_URL` |
+| `PMS_ICAL_SYNC_INTERVAL_MS` | iCal sync interval | ✅ In root + `pmsConfig` |
+| `GEMINI_API_KEY` | Passport OCR | ✅ In root + `pmsConfig` |
+| Migrate API proxies to `posConfig`/`pmsConfig` | Consistency | Low priority |
 
 ---
 
@@ -316,8 +316,9 @@ export const moduleGatingConfig = { enabled: PROVISION_MODULE_GATING === '1' };
 2. Set **`AUTH_TOKEN_SECRET`** once; verify POS/PMS stacks receive the same value on provision.
 3. After Chatwoot first boot: set **`CHATWOOT_API_ACCESS_TOKEN`** (super admin).
 4. Create POS platform API key → **`POS_PLATFORM_API_KEY`** on control-plane API.
-5. Keep **`PROVISION_MODULE_GATING=0`** until staging proves module-only tenants.
-6. Do **not** manually edit `{TENANT_ENV_ROOT}/{slug}/.env` — worker regenerates on provision.
+5. Set **`PROVISION_MODULE_GATING=1`** in prod when module-only tenants are validated; keep **`0`** locally unless testing gating.
+6. Set **`INTERNAL_API_SECRET`** on prod and verify it matches each tenant Finance container (Finance users panel and internal provision routes).
+7. Do **not** manually edit `{TENANT_ENV_ROOT}/{slug}/.env` except for emergencies — worker regenerates on provision.
 
 ---
 
@@ -331,13 +332,11 @@ export const moduleGatingConfig = { enabled: PROVISION_MODULE_GATING === '1' };
 | Standalone POS / Finance dev | ⚠️ Strategy B — separate files; document `AUTH_TOKEN_SECRET` sync |
 | Tenant Finance stack | ✅ Strategy C — worker-generated |
 | Chatwoot | ✅ Strategy D — `infra/prod` compose |
-| `@repo/config` typed product configs | ❌ Not yet — optional improvement |
+| `@repo/config` typed product configs | ✅ Done |
 | Legacy `pmsfull` / `chatlive` examples | ℹ️ Reference only; do not consolidate into root |
 
-**Next consolidation PR (suggested order):**
+**Suggested follow-up (low priority):**
 
-1. Merge missing keys into your local `.env` (no secrets in git).
-2. Add `services/pms/.env.example` + `services/pms/frontend/.env.example` (templates only).
-3. Update `services/posnew/apps/pos-backend/.env.example` with `AUTH_TOKEN_SECRET`.
-4. Extend `@repo/config` with `posConfig`, `pmsConfig`, `chatwootConfig`.
-5. Mirror `S3_*` / `POSTHOG_*` / `NEXT_PUBLIC_PMS_API_URL` between root and `infra/prod/.env.example`.
+1. Merge any missing keys from `.env.example` into your local `.env` (no secrets in git).
+2. Switch `apps/api/src/pos-proxy.ts` and `pms-proxy.ts` to `posConfig` / `pmsConfig`.
+3. After deploy, use dashboard **Repair Finance link** or re-open Finance users if `finance_tenant_id` was missing on old tenants.

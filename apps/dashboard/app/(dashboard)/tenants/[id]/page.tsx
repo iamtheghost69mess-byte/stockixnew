@@ -817,12 +817,14 @@ export default function TenantDetailPage() {
       <div className="mt-6">
         <TenantUsersPanel
           tenantId={tenant.id}
-          financeLinked={
+          hasAccountingModule={tenant.modules.includes("accounting")}
+          deploymentReady={
             !isProvisioning &&
             (tenant.deployment?.status ?? "").toLowerCase() === "active" &&
             tenant.deployment != null &&
             Number(tenant.deployment.internalPort) > 0
           }
+          financeTenantId={tenant.deployment?.financeTenantId ?? null}
         />
       </div>
 

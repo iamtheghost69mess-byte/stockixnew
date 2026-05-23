@@ -11,6 +11,7 @@ import {
   type CreateFinanceUserDto,
   type UpdateFinanceUserDto,
 } from "./finance-users.client.js";
+import { resolveAndPersistFinanceTenantId } from "./finance-tenant-resolve.js";
 
 type ApiEnv = {
   Variables: {
@@ -94,13 +95,19 @@ async function resolveTenantFinanceUsersContext(
     };
   }
 
-  const financeTenantId = row.financeTenantId == null ? null : Number(row.financeTenantId);
+  let financeTenantId = row.financeTenantId == null ? null : Number(row.financeTenantId);
   if (financeTenantId == null || !Number.isFinite(financeTenantId) || financeTenantId <= 0) {
-    return {
-      error: "finance_tenant_not_linked",
-      status: 503,
-      message: "Finance tenant id is not set for this deployment",
-    };
+    const repaired = await resolveAndPersistFinanceTenantId(db, stockixTenantId);
+    if (repaired.ok) {
+      financeTenantId = repaired.financeTenantId;
+    } else {
+      return {
+        error: "finance_tenant_not_linked",
+        status: 503,
+        message:
+          "Finance tenant id is not set for this deployment. Re-provision the accounting stack or ensure the Finance API is reachable.",
+      };
+    }
   }
 
   const internalBaseUrl = internalBaseUrlFromPort(port);
@@ -147,6 +154,40 @@ async function withFinanceUsersContext(
 }
 
 export function registerTenantFinanceUsersApi(app: Hono<ApiEnv>, db: Db | null): void {
+  app.post("/tenants/:tenantId/repair-finance-link", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
+    if (!tenantParsed.success) {
+      return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    const result = await resolveAndPersistFinanceTenantId(db, tenantParsed.data);
+    if (!result.ok) {
+      const status =
+        result.error === "tenant_not_found"
+          ? 404
+          : result.error === "tenant_no_internal_port"
+            ? 503
+            : 503;
+      return c.json(
+        {
+          error: result.error,
+          message:
+            result.error === "finance_resolve_failed"
+              ? "Could not resolve Finance tenant from the live stack. Ensure the tenant containers are running and INTERNAL_API_SECRET matches Finance."
+              : undefined,
+        },
+        status as 404 | 503,
+      );
+    }
+
+    return c.json({
+      financeTenantId: result.financeTenantId,
+      organizationId: result.organizationId,
+      source: result.source,
+    });
+  });
+
   app.get("/tenants/:tenantId/users", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
     const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));

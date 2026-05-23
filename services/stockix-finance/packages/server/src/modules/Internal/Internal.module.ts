@@ -5,6 +5,8 @@ import { InternalProvisionController } from './InternalProvision.controller';
 import { InternalLicenseController } from './InternalLicense.controller';
 import { InternalUsersController } from './InternalUsers.controller';
 import { InternalOrgController } from './InternalOrg.controller';
+import { InternalResolveController } from './InternalResolve.controller';
+import { InternalResolveTenantService } from './commands/InternalResolveTenant.service';
 import { InternalPosController } from './InternalPos.controller';
 import { InternalPosReceiptsService } from './commands/InternalPosReceipts.service';
 import { SaleReceiptsModule } from '@/modules/SaleReceipts/SaleReceipts.module';
@@ -37,9 +39,11 @@ import { CopyParentTenantSettingsService } from '@/modules/Organization/CopyPare
     InternalLicenseController,
     InternalUsersController,
     InternalOrgController,
+    InternalResolveController,
     InternalPosController,
   ],
   providers: [
+    InternalResolveTenantService,
     AttachUserToTenantService,
     ProvisionUserService,
     SyncLicenseService,

@@ -98,29 +98,7 @@ function encryptDeploymentSecret(plaintext: string): string {
   return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
 }
 
-async function loadProvisionJournal(
-  db: PostgresJsDatabase<typeof dbSchema>,
-  correlationId: string,
-): Promise<Set<string>> {
-  const rows = await db
-    .select({
-      phase: tenantProvisionEvents.phase,
-      meta: tenantProvisionEvents.meta,
-    })
-    .from(tenantProvisionEvents)
-    .where(eq(tenantProvisionEvents.correlationId, correlationId))
-    .orderBy(asc(tenantProvisionEvents.createdAt))
-    .limit(2000);
-  const journal = new Set<string>();
-  for (const row of rows) {
-    if (row.phase !== "journal") continue;
-    const key = row.meta && typeof row.meta === "object" ? (row.meta.operationKey as string | undefined) : undefined;
-    if (key && key.length > 0) {
-      journal.add(key);
-    }
-  }
-  return journal;
-}
+import { loadProvisionJournalState } from "./provision-journal.js";
 
 async function resolveServerInternalUrl(params: {
   composeFile: string;
@@ -207,7 +185,14 @@ export async function executeProvisionRuntime(
     | { composeFile: string; project: string; envPath: string; composeEnv: Record<string, string> }
     | null = null;
   let sideEffectsStarted = false;
-  const completedOps = await loadProvisionJournal(db, correlationId);
+  const journalState = await loadProvisionJournalState(db, correlationId);
+  const completedOps = journalState.completedOps;
+  if (journalState.financeTenantId) financeTenantId = journalState.financeTenantId;
+  if (journalState.financeOrganizationId) financeOrganizationId = journalState.financeOrganizationId;
+  if (journalState.financeDefaultWarehouseId) financeDefaultWarehouseId = journalState.financeDefaultWarehouseId;
+  if (journalState.walkInCustomerId) walkInCustomerId = journalState.walkInCustomerId;
+  if (journalState.cashAccountId) cashAccountId = journalState.cashAccountId;
+  if (journalState.cardAccountId) cardAccountId = journalState.cardAccountId;
   const checkNotCancelled = async () => {
     if (!assertNotCancelled) return;
     await assertNotCancelled();
@@ -868,6 +853,9 @@ export async function executeProvisionRuntime(
         await markOp("tenant.build_organization", "Organization build completed", {
           alreadyBuilt: buildResult.alreadyBuilt === true,
           elapsedMs: elapsedMs(),
+          ...(buildResult.financeOrganizationId
+            ? { financeOrganizationId: buildResult.financeOrganizationId }
+            : {}),
         });
         await trace.event(
           "progress",

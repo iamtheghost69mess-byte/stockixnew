@@ -1,6 +1,8 @@
 # Environment Variables — Explanation Guide
 
-> Variable-by-variable reference for the **repo-root** canonical schema (`.env.example`).
+Last updated: 2026-05-23
+
+> Variable-by-variable reference for the **repo-root** canonical schema (`.env.example`, ~138 keys).
 > For file locations and ownership see [ENV_MAP.md](./ENV_MAP.md).
 > For setup steps see [LOCAL_SETUP.md](./LOCAL_SETUP.md).
 
@@ -80,11 +82,19 @@
 - **Used by:** API, Dashboard
 
 ### WORKER_SECRET
-- **What:** Authenticates infra worker job claim/complete and internal worker callbacks.
+- **What:** Authenticates infra worker job claim/complete and internal worker callbacks to the control-plane API.
 - **Local:** 32+ byte hex
-- **Production:** Different value from dev
+- **Production:** Different value from dev; **do not** reuse as `INTERNAL_API_SECRET` in production
 - **Required:** Yes
-- **Used by:** API, Worker; finance `INTERNAL_API_SECRET` often matches in dev
+- **Used by:** API, Worker
+
+### INTERNAL_API_SECRET
+- **What:** Shared secret for Finance server internal routes (`x-internal-secret` header): provision attach-user, warehouse activation, license sync, **`GET /api/internal/resolve-tenant`**, and finance user proxy from the API.
+- **Local:** Optional — `@repo/config` falls back to `WORKER_SECRET` in `development`/`test` when unset
+- **Production:** **Required** — generate separately from `WORKER_SECRET`; must match value in each tenant `{TENANT_ENV_ROOT}/{slug}/.env` (worker copies it via `tenant-env.ts`)
+- **Required:** Yes in production
+- **Used by:** API (`apiConfig.internalApiSecret`), Worker, Finance server (`InternalSecretGuard`), tenant Finance containers
+- **Troubleshooting:** Dashboard “Finance tenant id is not set” often means this secret or `TENANT_INTERNAL_HOST` does not match the running Finance stack
 
 ### DASHBOARD_URL
 - **What:** Public URL of the operator dashboard (redirects, CSRF origin checks).
@@ -129,11 +139,11 @@
 - **Used by:** Worker
 
 ### TENANT_INTERNAL_HOST
-- **What:** Host used to health-check tenant stacks from the worker.
+- **What:** Hostname the API and worker use to reach tenant Finance/POS containers on the host (health checks, finance users proxy, internal resolve).
 - **Local:** `127.0.0.1`
-- **Production:** `127.0.0.1` or `host.docker.internal`
-- **Required:** For provisioning health checks
-- **Used by:** Worker
+- **Production:** `host.docker.internal` (see `infra/prod/.env.example`)
+- **Required:** Yes for provisioning and finance user management
+- **Used by:** Worker, API (`apiConfig.tenantInternalHost` → `http://{host}:{internalPort}`)
 
 ### CORS_ORIGINS
 - **What:** Comma-separated allowed browser origins for API CORS.
@@ -189,11 +199,12 @@
 - **Used by:** API, Dashboard
 
 ### AUTH_TOKEN_SECRET
-- **What:** Signs JWT access tokens issued by the API.
+- **What:** Signs and verifies **Stockix product** JWTs (`@repo/auth` / Jose). Must be identical on control plane, POS tenant stacks, and PMS.
 - **Local:** 64-byte hex
-- **Production:** Different 64-byte hex
+- **Production:** Different 64-byte hex from dev
 - **Required:** Yes
-- **Used by:** API
+- **Used by:** API, PMS (`services/pms`), POS (`verifyStockixJWT` / compose at provision)
+- **Not the same as:** `JWT_SECRET` (Finance/POS legacy app tokens) or `SESSION_SECRET` (dashboard cookies)
 
 ### LICENSE_SIGNING_SECRET
 - **What:** HS256 secret for POS offline license JWTs (min 32 chars).
@@ -453,3 +464,167 @@
 - **Production:** Set in CI if needed
 - **Required:** No
 - **Used by:** Build tooling
+
+---
+
+## DOCKER COMPOSE TIMEOUTS (worker)
+
+### DOCKER_COMPOSE_UP_TIMEOUT_MS
+- **What:** Max wait for `docker compose up` / image pull during provision.
+- **Local:** `1800000` (30 min)
+- **Production:** Same unless slow registry
+- **Required:** No
+- **Used by:** Worker (`apiConfig.dockerComposeUpTimeoutMs`)
+
+### DOCKER_COMPOSE_RUN_TIMEOUT_MS
+- **What:** Max wait for one-off `docker compose run` (migrations).
+- **Local:** `900000` (15 min)
+- **Production:** Same
+- **Required:** No
+- **Used by:** Worker
+
+### DOCKER_COMPOSE_DEFAULT_TIMEOUT_MS
+- **What:** Default timeout for other compose subcommands.
+- **Local:** `600000` (10 min)
+- **Production:** Same
+- **Required:** No
+- **Used by:** Worker
+
+---
+
+## RATE LIMITING (API)
+
+### THROTTLE_GLOBAL_TTL, THROTTLE_GLOBAL_LIMIT
+- **What:** Global request throttle window (ms) and max requests per window.
+- **Local:** `60000`, `2000`
+- **Production:** Tune per traffic
+- **Required:** No (defaults in `@repo/config`)
+- **Used by:** API
+
+### THROTTLE_AUTH_TTL, THROTTLE_AUTH_LIMIT
+- **What:** Stricter throttle for auth routes.
+- **Local:** `60000`, `200`
+- **Production:** Tune per traffic
+- **Required:** No
+- **Used by:** API
+
+---
+
+## OBJECT STORAGE (S3-compatible)
+
+### S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET, S3_ENDPOINT, S3_FORCE_PATH_STYLE
+- **What:** Backblaze B2 / S3-compatible storage for tenant uploads. Worker copies into per-tenant `.env` when set.
+- **Local:** Empty or B2 dev bucket
+- **Production:** Backblaze keys + bucket (see `infra/prod/.env.example`)
+- **Required:** No until file uploads are enabled
+- **Used by:** Worker → tenant env; Finance attachments when configured
+
+---
+
+## ANALYTICS
+
+### POSTHOG_API_KEY, POSTHOG_HOST
+- **What:** Optional product analytics.
+- **Local:** Empty
+- **Production:** Set in `infra/prod/.env` when using PostHog
+- **Required:** No
+- **Used by:** Prod compose / dashboard when wired
+
+---
+
+## MULTI-PRODUCT PLATFORM
+
+### POS_PLATFORM_BASE_URL
+- **What:** Base URL for the POS platform API (`/api/platform/v1`). Control-plane API proxies org bootstrap here.
+- **Local:** `http://localhost:8010`
+- **Production:** `http://host.docker.internal:8010` or internal service URL
+- **Required:** When using POS platform proxy
+- **Used by:** `apps/api/src/pos-proxy.ts`, `posConfig.platformBaseUrl`
+
+### POS_PLATFORM_API_KEY
+- **What:** `X-Api-Key` for Stockix → POS server-to-server calls. Created on POS platform first run.
+- **Local:** Empty until POS platform is configured
+- **Production:** Set after generating platform key
+- **Required:** For POS org bootstrap via API
+- **Used by:** POS proxy, `posConfig.platformApiKey`
+
+### POS_APP_ROOT
+- **What:** Absolute or repo-relative path to `services/posnew` for worker `provisionPosStack`.
+- **Local:** `services/posnew`
+- **Production:** `/opt/stockix/stockixnew/services/posnew`
+- **Required:** When provisioning POS module
+- **Used by:** Worker, `posConfig.appRoot`
+
+### PMS_PORT, PMS_BASE_URL
+- **What:** PMS Hono service listen port and URL for API proxy routes.
+- **Local:** `3003`, `http://localhost:3003`
+- **Production:** `3003`, `http://host.docker.internal:3003`
+- **Required:** When running PMS
+- **Used by:** PMS service, `pms-proxy.ts`, `pmsConfig`
+
+### NEXT_PUBLIC_PMS_API_URL
+- **What:** Browser-visible PMS API URL (Next.js public env).
+- **Local:** `http://localhost:3003`
+- **Production:** Public PMS API hostname (HTTPS)
+- **Required:** For PMS frontend builds
+- **Used by:** `services/pms/frontend`
+
+### PMS_APP_ROOT
+- **What:** Path to `services/pms` for worker provisioning.
+- **Local:** `services/pms`
+- **Production:** Host path under `/opt/stockix/...`
+- **Required:** When provisioning PMS module
+- **Used by:** Worker, `pmsConfig.appRoot`
+
+### PMS_ICAL_SYNC_INTERVAL_MS
+- **What:** How often PMS syncs iCal feeds (milliseconds).
+- **Local:** `600000` (10 min)
+- **Production:** Same unless overridden
+- **Required:** No
+- **Used by:** PMS jobs, `pmsConfig.icalSyncIntervalMs`
+
+### GEMINI_API_KEY
+- **What:** Google Gemini API key for optional passport OCR in PMS.
+- **Local:** Empty
+- **Production:** Empty until feature enabled
+- **Required:** No
+- **Used by:** PMS, `pmsConfig.geminiApiKey`
+
+### CHATWOOT_BASE_URL, CHATWOOT_API_ACCESS_TOKEN, CHATWOOT_SECRET_KEY_BASE, CHATWOOT_DB_PASSWORD
+- **What:** Shared Chatwoot instance URL, super-admin API token, Rails `SECRET_KEY_BASE`, and Postgres password.
+- **Local:** `http://localhost:3200` + empty token until boot
+- **Production:** `https://chat.[domain]` + strong secrets
+- **Required:** When provisioning chat module
+- **Used by:** `infra/prod/docker-compose.yml`, worker Chatwoot provision, `chatwootConfig`
+
+### CHATWOOT_FRONTEND_URL, CHATWOOT_INSTALLATION_NAME, CHATWOOT_BRAND_NAME, CHATWOOT_BRAND_URL, CHATWOOT_WIDGET_BRAND_URL
+- **What:** Public Chatwoot URL and white-label metadata.
+- **Local:** Defaults in `.env.example`
+- **Production:** Match public chat hostname
+- **Required:** For branded Chatwoot
+- **Used by:** Chatwoot compose env mapping
+
+### CHATWOOT_LOGO_URL, CHATWOOT_LOGO_DARK_URL, CHATWOOT_LOGO_THUMBNAIL_URL, CHATWOOT_DISPLAY_MANIFEST, CHATWOOT_HELPCENTER_URL
+- **What:** Brand asset paths and help center link for Chatwoot UI.
+- **Local:** `/brand-assets/...`
+- **Production:** Same or CDN URLs
+- **Required:** No
+- **Used by:** Chatwoot compose
+
+### PROVISION_MODULE_GATING
+- **What:** `0` = always provision Finance stack (safe local default). `1` = provision only stacks listed in tenant `modules[]` (`accounting`, `pos`, `pms`, `chat`).
+- **Local:** `0`
+- **Production:** `1` in `infra/prod/.env.example`
+- **Required:** No (defaults to off)
+- **Used by:** Worker (`moduleGatingConfig.enabled`)
+
+---
+
+## PRODUCTION RUNTIME
+
+### STOCKIX_LOAD_ROOT_ENV
+- **What:** When `0` or `false`, `@repo/config` does **not** load repo-root `.env` (Compose `environment:` wins). Set in `infra/prod/docker-compose.yml` for api/worker — not usually in `.env.example`.
+- **Local:** Unset (root `.env` loads)
+- **Production:** `0` inside containers
+- **Required:** Implicit in prod compose
+- **Used by:** `@repo/config` bootstrap

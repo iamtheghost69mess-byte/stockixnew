@@ -63,6 +63,10 @@ import { handleAuditLogList } from "./routes/audit-log.js";
 import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
+import {
+  readFinanceTenantIdFromProvisionEvents,
+  resolveAndPersistFinanceTenantId,
+} from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
@@ -1187,7 +1191,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const financeOrganizationIdFromResult = completeResult
     ? readNonEmptyString(completeResult.financeOrganizationId)
     : undefined;
-  const financeTenantIdFromResult = completeResult
+  let financeTenantIdFromResult = completeResult
     ? Number(completeResult.financeTenantId)
     : NaN;
   const financeDefaultWarehouseIdFromResult = completeResult
@@ -1221,6 +1225,18 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     .where(eq(tenantLifecycleJobs.id, jobId))
     .limit(1);
   if (!currentJob) return c.json({ error: "job_not_found" }, 404);
+
+  if (
+    currentJob.type === "tenant.provision"
+    && currentJob.correlationId
+    && (!Number.isFinite(financeTenantIdFromResult) || financeTenantIdFromResult <= 0)
+  ) {
+    const fromJournal = await readFinanceTenantIdFromProvisionEvents(
+      db,
+      currentJob.correlationId,
+    );
+    if (fromJournal) financeTenantIdFromResult = fromJournal;
+  }
   if (workerId && currentJob.claimedBy && currentJob.claimedBy !== workerId) {
     return c.json({ error: "job_claim_mismatch" }, 409);
   }
@@ -4173,10 +4189,12 @@ app.get("/tenants/:tenantId", async (c) => {
       internalPort: tenantDeployments.internalPort,
       posUrl: tenantDeployments.posUrl,
       posOrganizationId: tenantDeployments.posOrganizationId,
+      financeTenantId: tenantDeployments.financeTenantId,
       financeDefaultWarehouseId: tenantDeployments.financeDefaultWarehouseId,
       financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
       financeCashAccountId: tenantDeployments.financeCashAccountId,
       financeCardAccountId: tenantDeployments.financeCardAccountId,
+      financeOrganizationId: organizations.financeOrganizationId,
       deploymentLastError: tenantDeployments.lastError,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
       deploymentCreatedAt: tenantDeployments.createdAt,
@@ -4188,6 +4206,10 @@ app.get("/tenants/:tenantId", async (c) => {
     })
     .from(tenants)
     .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .leftJoin(
+      organizations,
+      and(eq(organizations.tenantId, tenants.id), eq(organizations.isPrimary, true)),
+    )
     .leftJoin(tenantConfig, eq(tenantConfig.tenantId, tenants.id))
     .where(eq(tenants.id, parsed.data))
     .limit(1);
@@ -4230,6 +4252,8 @@ app.get("/tenants/:tenantId", async (c) => {
               composeProjectName: row.composeProjectName,
               internalPort: row.internalPort,
               posUrl: row.posUrl,
+              financeTenantId: row.financeTenantId,
+              financeOrganizationId: row.financeOrganizationId,
               financeDefaultWarehouseId: row.financeDefaultWarehouseId,
               financeWalkInCustomerId: row.financeWalkInCustomerId,
               financeCashAccountId: row.financeCashAccountId,

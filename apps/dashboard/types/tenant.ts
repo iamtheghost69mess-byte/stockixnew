@@ -51,6 +51,8 @@ export type TenantDetail = {
     composeProjectName: string;
     internalPort: number;
     posUrl: string | null;
+    financeTenantId: number | null;
+    financeOrganizationId: string | null;
     financeDefaultWarehouseId: number | null;
     financeWalkInCustomerId: number | null;
     financeCashAccountId: number | null;

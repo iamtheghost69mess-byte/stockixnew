@@ -23,6 +23,12 @@ vi.mock("../src/finance-users.client.js", () => ({
   }),
 }));
 
+const resolveAndPersistMock = vi.fn();
+
+vi.mock("../src/finance-tenant-resolve.js", () => ({
+  resolveAndPersistFinanceTenantId: (...args: unknown[]) => resolveAndPersistMock(...args),
+}));
+
 const TENANT_UUID = "11111111-1111-4111-8111-111111111111";
 
 function mockDbRow(overrides?: { financeTenantId?: number | null; internalPort?: number | null }) {
@@ -55,6 +61,7 @@ describe("finance-users-http", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    resolveAndPersistMock.mockResolvedValue({ ok: false, error: "finance_resolve_failed" });
     const { registerTenantFinanceUsersApi } = await import("../src/finance-users-http.js");
     app = new Hono();
     app.use("*", async (c, next) => {
@@ -81,6 +88,41 @@ describe("finance-users-http", () => {
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.error).toBe("finance_tenant_not_linked");
+    expect(resolveAndPersistMock).toHaveBeenCalledWith(expect.anything(), TENANT_UUID);
+  });
+
+  it("auto-repairs finance tenant id before listing users", async () => {
+    resolveAndPersistMock.mockResolvedValueOnce({
+      ok: true,
+      financeTenantId: 99,
+      source: "finance_api",
+    });
+    listUsersMock.mockResolvedValue({ users: [] });
+
+    const { registerTenantFinanceUsersApi } = await import("../src/finance-users-http.js");
+    const localApp = new Hono();
+    registerTenantFinanceUsersApi(localApp, mockDbRow({ financeTenantId: null }) as never);
+
+    const res = await localApp.request(`http://local/tenants/${TENANT_UUID}/users`);
+    expect(res.status).toBe(200);
+    expect(listUsersMock).toHaveBeenCalledWith(99);
+  });
+
+  it("repair-finance-link persists resolved tenant id", async () => {
+    resolveAndPersistMock.mockResolvedValueOnce({
+      ok: true,
+      financeTenantId: 77,
+      organizationId: "org-abc",
+      source: "finance_api",
+    });
+
+    const res = await app.request(
+      `http://local/tenants/${TENANT_UUID}/repair-finance-link`,
+      { method: "POST" },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ financeTenantId: 77, source: "finance_api" });
   });
 
   it("lists users via finance client", async () => {
