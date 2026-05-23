@@ -179,6 +179,17 @@
   "invoice.paper.payment_amount": "Payment Amount",
   "invoice.paper.balance_due": "Balance Due",
 
+  "bill.paper.bill": "Bill",
+  "bill.paper.bill_amount": "Bill Amount",
+  "bill.paper.due_amount": "Due Amount",
+  "bill.paper.vendor": "Vendor",
+  "bill.paper.bill_date": "Bill Date",
+  "bill.paper.due_date": "Due Date",
+  "bill.paper.total": "Total",
+  "bill.paper.payment_amount": "Payment Amount",
+  "bill.paper.balance_due": "Balance Due",
+  "bill.paper.notes_title": "Notes",
+
   "item_entry.paper.item_name": "Item name",
   "item_entry.paper.rate": "Rate",
   "item_entry.paper.quantity": "Quantity",

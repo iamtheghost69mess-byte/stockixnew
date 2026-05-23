@@ -7,6 +7,7 @@ import { FormattedMessage as T, Icon, If } from '@/components';
 import { getColumnWidth } from '@/utils';
 import { useGeneralLedgerContext } from './GeneralLedgerProvider';
 import FinancialLoadingBar from '../FinancialLoadingBar';
+import { useCurrentOrganization } from '@/hooks/state';
 
 import { Align } from '@/constants';
 
@@ -14,10 +15,13 @@ import { Align } from '@/constants';
  * Retrieve the general ledger table columns.
  */
 export function useGeneralLedgerTableColumns() {
-  // General ledger context.
   const {
     generalLedger: { tableRows },
   } = useGeneralLedgerContext();
+
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency ?? '';
+  const suffix = baseCurrency ? ` (${baseCurrency})` : '';
 
   return React.useMemo(
     () => [
@@ -54,7 +58,7 @@ export function useGeneralLedgerTableColumns() {
         textOverview: true,
       },
       {
-        Header: intl.get('credit'),
+        Header: intl.get('credit') + suffix,
         accessor: 'formatted_credit',
         className: 'credit',
         width: getColumnWidth(tableRows, 'formatted_credit', {
@@ -65,7 +69,7 @@ export function useGeneralLedgerTableColumns() {
         align: Align.Right,
       },
       {
-        Header: intl.get('debit'),
+        Header: intl.get('debit') + suffix,
         accessor: 'formatted_debit',
         className: 'debit',
         width: getColumnWidth(tableRows, 'formatted_debit', {
@@ -76,7 +80,7 @@ export function useGeneralLedgerTableColumns() {
         align: Align.Right,
       },
       {
-        Header: intl.get('amount'),
+        Header: intl.get('amount') + suffix,
         accessor: 'formatted_amount',
         className: 'amount',
         width: getColumnWidth(tableRows, 'formatted_amount', {
@@ -87,7 +91,7 @@ export function useGeneralLedgerTableColumns() {
         align: Align.Right,
       },
       {
-        Header: intl.get('running_balance'),
+        Header: intl.get('running_balance') + suffix,
         accessor: 'formatted_running_balance',
         className: 'running_balance',
         width: getColumnWidth(tableRows, 'formatted_running_balance', {
@@ -98,7 +102,7 @@ export function useGeneralLedgerTableColumns() {
         align: Align.Right,
       },
     ],
-    [tableRows],
+    [tableRows, suffix],
   );
 }
 

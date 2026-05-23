@@ -37,9 +37,9 @@ services:
       mysql:
         condition: service_healthy
       mongo:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       # Official image loads newrelic; without these it logs bootstrap errors locally.
       - NEW_RELIC_ENABLED=false
@@ -112,7 +112,12 @@ services:
     expose:
       - "27017"
     volumes:
-      - mongo:/var/lib/mongodb
+      - mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     build:
@@ -122,6 +127,11 @@ services:
       - "6379"
     volumes:
       - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   mysql:

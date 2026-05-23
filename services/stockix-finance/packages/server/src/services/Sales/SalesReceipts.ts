@@ -38,6 +38,8 @@ import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { WarehouseTransactionDTOTransform } from '@/services/Warehouses/Integrations/WarehouseTransactionDTOTransform';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
 import { TransformerInjectable } from '@/lib/Transformer/TransformerInjectable';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 @Service('SalesReceipts')
 export default class SalesReceiptService implements ISalesReceiptsService {
@@ -250,6 +252,12 @@ export default class SalesReceiptService implements ISalesReceiptsService {
       .findById(saleReceiptDTO.customerId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      paymentCustomer.currencyCode,
+      tenantMeta.baseCurrency,
+      saleReceiptDTO.exchangeRate
+    );
     // Transform sale receipt DTO to model.
     const saleReceiptObj = await this.transformDTOToModel(
       tenantId,
@@ -327,6 +335,12 @@ export default class SalesReceiptService implements ISalesReceiptsService {
       .modify('customer')
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      paymentCustomer.currencyCode,
+      tenantMeta.baseCurrency,
+      saleReceiptDTO.exchangeRate
+    );
     // Transform sale receipt DTO to model.
     const saleReceiptObj = await this.transformDTOToModel(
       tenantId,

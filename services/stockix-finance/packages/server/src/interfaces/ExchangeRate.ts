@@ -25,6 +25,8 @@ export interface IExchangeRateFilter {
   filterRoles?: IFilterRole[];
   columnSortBy: string;
   sortOrder: string;
+  stringifiedFilterRoles?: string;
+  currencyCode?: string;
 };
 
 export interface IExchangeRatesService {

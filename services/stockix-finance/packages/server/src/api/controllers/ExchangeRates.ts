@@ -29,6 +29,21 @@ export default class ExchangeRatesController extends BaseController {
       this.dynamicListService.handlerErrorsToResponse,
       this.handleServiceError,
     );
+    // Must be registered before /:id to avoid shadowing.
+    router.get(
+      '/lookup',
+      [...this.exchangeRateLookupSchema],
+      this.validationResult,
+      asyncMiddleware(this.lookupExchangeRate.bind(this)),
+      this.handleServiceError,
+    );
+    router.get(
+      '/by-date',
+      [...this.exchangeRateLookupSchema],
+      this.validationResult,
+      asyncMiddleware(this.rateByDate.bind(this)),
+      this.handleServiceError,
+    );
     router.post(
       '/',
       [...this.exchangeRateDTOSchema],
@@ -57,9 +72,9 @@ export default class ExchangeRatesController extends BaseController {
     return [
       query('page').optional().isNumeric().toInt(),
       query('page_size').optional().isNumeric().toInt(),
-
       query('column_sort_by').optional(),
       query('sort_order').optional().isIn(['desc', 'asc']),
+      query('currency_code').optional().trim().escape(),
     ];
   }
 
@@ -83,6 +98,13 @@ export default class ExchangeRatesController extends BaseController {
     return [
       query('ids').isArray({ min: 2 }),
       query('ids.*').isNumeric().toInt(),
+    ];
+  }
+
+  get exchangeRateLookupSchema() {
+    return [
+      query('currency_code').exists().trim().escape(),
+      query('date').exists().isISO8601(),
     ];
   }
 
@@ -111,6 +133,51 @@ export default class ExchangeRatesController extends BaseController {
         filter
       );
       return res.status(200).send({ exchange_rates: exchangeRates });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Look up a single exchange rate by currency_code + exact date.
+   */
+  async lookupExchangeRate(req: Request, res: Response, next: NextFunction) {
+    const { tenantId } = req;
+    const { currency_code, date } = req.query as { currency_code: string; date: string };
+
+    try {
+      const rate = await this.exchangeRatesService.lookupExchangeRate(
+        tenantId,
+        currency_code,
+        date,
+      );
+      if (!rate) {
+        return res.status(404).send({ exchange_rate: null });
+      }
+      return res.status(200).send({ exchange_rate: this.transfromToResponse(rate) });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Returns the most recent exchange rate on or before the given date.
+   * Always responds 200 — exchange_rate is null when no rate is found.
+   * Used for transaction-date conversion on form footers and table cells.
+   */
+  async rateByDate(req: Request, res: Response, next: NextFunction) {
+    const { tenantId } = req;
+    const { currency_code, date } = req.query as { currency_code: string; date: string };
+
+    try {
+      const rate = await this.exchangeRatesService.lookupRateByDate(
+        tenantId,
+        currency_code,
+        date,
+      );
+      return res.status(200).send({
+        exchange_rate: rate ? this.transfromToResponse(rate) : null,
+      });
     } catch (error) {
       next(error);
     }

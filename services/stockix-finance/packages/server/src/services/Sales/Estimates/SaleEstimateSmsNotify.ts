@@ -84,7 +84,7 @@ export default class SaleEstimateNotifyBySms {
     saleEstimate: ISaleEstimate & { customer: ICustomer }
   ) => {
     const smsClient = this.tenancy.smsClient(tenantId);
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieve the formatted sms notification message for estimate details.
     const formattedSmsMessage = this.formattedEstimateDetailsMessage(
@@ -190,7 +190,7 @@ export default class SaleEstimateNotifyBySms {
     this.validateEstimateExistance(saleEstimate);
 
     // Retrieve the current tenant metadata.
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieve the formatted sms message from the given estimate model.
     const formattedSmsMessage = this.formattedEstimateDetailsMessage(

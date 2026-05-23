@@ -25,7 +25,8 @@ export default class CashflowAccountTransactionReport extends FinancialSheet {
   constructor(
     transactions,
     openingBalance: number,
-    query: ICashflowAccountTransactionsQuery
+    query: ICashflowAccountTransactionsQuery,
+    baseCurrency: string
   ) {
     super();
 
@@ -35,7 +36,7 @@ export default class CashflowAccountTransactionReport extends FinancialSheet {
     this.runningBalance = runningAmount(this.openingBalance);
     this.query = query;
     this.numberFormat = query.numberFormat;
-    this.baseCurrency = 'USD';
+    this.baseCurrency = baseCurrency;
   }
 
   /**

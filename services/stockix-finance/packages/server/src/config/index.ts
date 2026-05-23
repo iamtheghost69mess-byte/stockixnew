@@ -4,7 +4,7 @@ import { castCommaListEnvVarToArray, parseBoolean } from '@/utils';
 
 dotenv.config();
 
-module.exports = {
+const config = {
   /**
    * Your favorite port
    */
@@ -166,3 +166,5 @@ module.exports = {
    */
   databaseBatch: 4,
 };
+
+export = config;

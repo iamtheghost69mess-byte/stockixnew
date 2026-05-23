@@ -107,12 +107,11 @@ export default class ItemsController extends BaseController {
       // Purchase attributes.
       check('purchasable').optional().isBoolean().toBoolean(),
       check('cost_price')
-        .optional({ nullable: true })
+        .if(check('purchasable').isIn(['true', true]))
+        .exists()
         .isFloat({ min: 0, max: DATATYPES_LENGTH.DECIMAL_13_3 })
-        .toFloat()
-        .if(check('purchasable').equals('true'))
-        .exists(),
-      check('cost_account_id').if(check('purchasable').equals('true')).exists(),
+        .toFloat(),
+      check('cost_account_id').if(check('purchasable').isIn(['true', true])).exists(),
       check('cost_account_id')
         .optional({ nullable: true })
         .isInt({ min: 0, max: DATATYPES_LENGTH.INT_10 })
@@ -120,12 +119,11 @@ export default class ItemsController extends BaseController {
       // Sell attributes.
       check('sellable').optional().isBoolean().toBoolean(),
       check('sell_price')
-        .optional({ nullable: true })
+        .if(check('sellable').isIn(['true', true]))
+        .exists()
         .isFloat({ min: 0, max: DATATYPES_LENGTH.DECIMAL_13_3 })
-        .toFloat()
-        .if(check('sellable').equals('true'))
-        .exists(),
-      check('sell_account_id').if(check('sellable').equals('true')).exists(),
+        .toFloat(),
+      check('sell_account_id').if(check('sellable').isIn(['true', true])).exists(),
       check('sell_account_id')
         .optional({ nullable: true })
         .isInt({ min: 0, max: DATATYPES_LENGTH.INT_10 })

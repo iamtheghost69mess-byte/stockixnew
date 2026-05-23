@@ -141,9 +141,9 @@ export default class CurrenciesService implements ICurrenciesService {
   ) {
     const tenant = await Tenant.query()
       .findById(tenantId)
-      .withGraphFetched('metadata');
+      .withGraphFetched('metadata') as Tenant;
 
-    if (tenant.metadata.baseCurrency === currencyCode) {
+    if (tenant.metadata?.baseCurrency === currencyCode) {
       throw new ServiceError(ERRORS.CANNOT_DELETE_BASE_CURRENCY);
     }
   }
@@ -174,15 +174,26 @@ export default class CurrenciesService implements ICurrenciesService {
    * @return {Promise<ICurrency[]>}
    */
   public async listCurrencies(tenantId: number): Promise<ICurrency[]> {
-    const { Currency } = this.tenancy.models(tenantId);
+    const { Currency, ExchangeRate } = this.tenancy.models(tenantId);
 
-    const currencies = await Currency.query().onBuild((query) => {
-      query.orderBy('createdAt', 'ASC');
-    });
+    const [currencies, allRates] = await Promise.all([
+      Currency.query().orderBy('createdAt', 'ASC'),
+      ExchangeRate.query().select('id', 'currency_code', 'exchange_rate', 'date').orderBy('date', 'DESC'),
+    ]);
+
+    // Build latest-rate-per-currency map; rates are DESC so first seen is latest.
+    const latestRatesMap: Record<string, { id: number; exchangeRate: number; date: string }> = {};
+    for (const rate of allRates) {
+      if (!(rate.currencyCode in latestRatesMap)) {
+        latestRatesMap[rate.currencyCode] = rate;
+      }
+    }
+
     return this.transformer.transform(
       tenantId,
       currencies,
-      new CurrencyTransformer()
+      new CurrencyTransformer(),
+      { latestRatesMap }
     );
   }
 }

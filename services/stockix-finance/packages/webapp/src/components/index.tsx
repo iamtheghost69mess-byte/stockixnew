@@ -12,6 +12,7 @@ export * from './UniversalSearch/UniversalSearch';
 export * from './PdfPreview';
 export * from './Details';
 export * from './TotalLines/index';
+export * from './DualCurrencyTotalLines';
 export * from './Alert';
 export * from './Subscriptions';
 export * from './Dashboard';

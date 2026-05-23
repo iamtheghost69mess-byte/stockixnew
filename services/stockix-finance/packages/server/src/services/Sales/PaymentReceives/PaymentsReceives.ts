@@ -39,6 +39,7 @@ import UnitOfWork from '@/services/UnitOfWork';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
 import { TenantMetadata } from '@/system/models';
 import { TransformerInjectable } from '@/lib/Transformer/TransformerInjectable';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 /**
  * Payment receive service.
@@ -439,7 +440,7 @@ export default class PaymentReceiveService implements IPaymentsReceiveService {
   ) {
     const { PaymentReceive, Contact } = this.tenancy.models(tenantId);
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Validate customer existance.
     const paymentCustomer = await Contact.query()
@@ -447,6 +448,11 @@ export default class PaymentReceiveService implements IPaymentsReceiveService {
       .findById(paymentReceiveDTO.customerId)
       .throwIfNotFound();
 
+    validateForeignCurrencyExchangeRate(
+      paymentCustomer.currencyCode,
+      tenantMeta.baseCurrency,
+      paymentReceiveDTO.exchangeRate
+    );
     // Transformes the payment receive DTO to model.
     const paymentReceiveObj = await this.transformCreateDTOToModel(
       tenantId,
@@ -531,7 +537,7 @@ export default class PaymentReceiveService implements IPaymentsReceiveService {
   ) {
     const { PaymentReceive, Contact } = this.tenancy.models(tenantId);
 
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Validate the payment receive existance.
     const oldPaymentReceive = await this.getPaymentReceiveOrThrowError(
@@ -544,6 +550,11 @@ export default class PaymentReceiveService implements IPaymentsReceiveService {
       .findById(paymentReceiveDTO.customerId)
       .throwIfNotFound();
 
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      paymentReceiveDTO.exchangeRate
+    );
     // Transformes the payment receive DTO to model.
     const paymentReceiveObj = await this.transformEditDTOToModel(
       tenantId,

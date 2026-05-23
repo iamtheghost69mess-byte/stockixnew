@@ -23,15 +23,25 @@ import {
 } from '@/components';
 import { SaleInvoiceAction, AbilitySubject } from '@/constants/abilityOption';
 import { useInvoiceDetailDrawerContext } from './InvoiceDetailDrawerProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import {
+  DualCurrencyTableCurrencyCell,
+  DualCurrencyTableValueCell,
+} from '@/components/DualCurrencyTotalLines';
 
 /**
  * Retrieve invoice readonly details table columns.
+ * Includes a Currency column and dual-currency (base + secondary) stacked
+ * values for Rate and Amount when display currencies are configured.
  */
 export const useInvoiceReadonlyEntriesColumns = () => {
-  // Invoice details drawer context.
   const {
-    invoice: { entries },
+    invoice: { entries, invoice_date, currency_code },
   } = useInvoiceDetailDrawerContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
 
   return React.useMemo(
     () => [
@@ -57,37 +67,49 @@ export const useInvoiceReadonlyEntriesColumns = () => {
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'quantity', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'quantity', { minWidth: 60, magicSpacing: 5 }),
       },
+      // Currency column — only shown when secondary currencies are configured
+      ...(hasSecondary
+        ? [
+            {
+              Header: intl.get('currency'),
+              id: 'currency',
+              accessor: () => null,
+              Cell: DualCurrencyTableCurrencyCell,
+              disableSortBy: true,
+              width: 110,
+              // custom data forwarded to the Cell component via column object
+              invoiceCurrency: currency_code,
+              invoiceDate: invoice_date,
+            },
+          ]
+        : []),
       {
         Header: intl.get('rate'),
         accessor: 'rate',
-        Cell: FormatNumberCell,
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'rate', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'rate', { minWidth: 60, magicSpacing: 5 }),
+        invoiceCurrency: currency_code,
+        invoiceDate: invoice_date,
       },
       {
         Header: intl.get('amount'),
         accessor: 'amount',
-        Cell: FormatNumberCell,
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'amount', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'amount', { minWidth: 60, magicSpacing: 5 }),
+        invoiceCurrency: currency_code,
+        invoiceDate: invoice_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, invoice_date, currency_code],
   );
 };
 

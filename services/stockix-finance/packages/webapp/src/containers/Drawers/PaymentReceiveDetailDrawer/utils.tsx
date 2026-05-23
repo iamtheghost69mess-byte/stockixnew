@@ -13,14 +13,22 @@ import {
 import { Icon, FormatNumberCell } from '@/components';
 import { getColumnWidth } from '@/utils';
 import { usePaymentReceiveDetailContext } from './PaymentReceiveDetailProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import { DualCurrencyTableValueCell } from '@/components/DualCurrencyTotalLines';
 
 /**
  * Retrieve payment entries table columns.
+ * Payment amount columns show secondary-currency equivalents when display
+ * currencies are configured.
  */
 export const usePaymentReceiveEntriesColumns = () => {
   const {
-    paymentReceive: { entries },
+    paymentReceive: { entries, payment_date, currency_code },
   } = usePaymentReceiveDetailContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
 
   return React.useMemo(
     () => [
@@ -41,40 +49,38 @@ export const usePaymentReceiveEntriesColumns = () => {
       {
         Header: intl.get('invoice_amount'),
         accessor: 'invoice.balance',
-        Cell: FormatNumberCell,
-        width: getColumnWidth(entries, 'invoice.balance', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'invoice.balance', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: payment_date,
       },
       {
         Header: intl.get('amount_due'),
         accessor: 'invoice.due_amount',
-        Cell: FormatNumberCell,
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
         align: 'right',
-        width: getColumnWidth(entries, 'invoice.due_amount', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'invoice.due_amount', { minWidth: 60, magicSpacing: 5 }),
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: payment_date,
       },
       {
         Header: intl.get('payment_amount'),
         accessor: 'invoice.payment_amount',
-        Cell: FormatNumberCell,
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
         align: 'right',
-        width: getColumnWidth(entries, 'invoice.payment_amount', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'invoice.payment_amount', { minWidth: 60, magicSpacing: 5 }),
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: payment_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, payment_date, currency_code],
   );
 };
 

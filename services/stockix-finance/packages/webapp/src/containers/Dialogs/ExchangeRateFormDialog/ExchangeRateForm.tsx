@@ -11,8 +11,8 @@ import {
 } from './ExchangeRateForm.schema';
 import ExchangeRateFormContent from './ExchangeRateFormContent';
 import { useExchangeRateFromContext } from './ExchangeRateFormProvider';
+import { useExchangeRateLookup } from '@/hooks/query/exchangeRates';
 import withDialogActions from '@/containers/Dialog/withDialogActions';
-
 import { compose, transformToForm } from '@/utils';
 
 const defaultInitialValues = {
@@ -21,76 +21,85 @@ const defaultInitialValues = {
   date: moment(new Date()).format('YYYY-MM-DD'),
 };
 
-/**
- * Exchange rate form.
- */
-function ExchangeRateForm({
-  // #withDialogActions
-  closeDialog,
-}) {
+function ExchangeRateForm({ closeDialog }) {
   const {
     createExchangeRateMutate,
     editExchangeRateMutate,
     isNewMode,
     dialogName,
     exchangeRate,
+    currencyCode,
+    switchToEditMode,
   } = useExchangeRateFromContext();
 
-  // Form validation schema in create and edit mode.
+  const { mutateAsync: lookupMutate } = useExchangeRateLookup();
+
   const validationSchema = isNewMode
     ? CreateExchangeRateFormSchema
     : EditExchangeRateFormSchema;
+
   const initialValues = useMemo(
     () => ({
       ...defaultInitialValues,
+      ...(currencyCode ? { currency_code: currencyCode } : {}),
       ...transformToForm(exchangeRate, defaultInitialValues),
     }),
-    [],
+    // Re-compute when mode flips or the pre-filled currency changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [exchangeRate, currencyCode],
   );
 
-  // Transformers response errors.
-  const transformErrors = (errors, { setErrors }) => {
-    if (
-      errors.find((error) => error.type === 'EXCHANGE.RATE.DATE.PERIOD.DEFINED')
-    ) {
+  const handleFormSubmit = (values, { setSubmitting, setErrors }) => {
+    setSubmitting(true);
+
+    const afterSubmit = () => closeDialog(dialogName);
+
+    const onSuccess = () => {
+      AppToaster.show({
+        message: intl.get(
+          isNewMode
+            ? 'the_exchange_rate_has_been_created_successfully'
+            : 'the_exchange_rate_has_been_edited_successfully',
+        ),
+        intent: Intent.SUCCESS,
+      });
+      afterSubmit();
+    };
+
+    const onError = (error) => {
+      const errors = error?.response?.data?.errors ?? [];
+
+      // A rate for this currency+date already exists — auto-switch to edit mode.
+      if (errors.find((e) => e.type === 'EXCHANGE.RATE.PERIOD.EXISTS')) {
+        lookupMutate({ currencyCode: values.currency_code, date: values.date })
+          .then(({ data }) => {
+            if (data?.exchange_rate) {
+              switchToEditMode(data.exchange_rate);
+              AppToaster.show({
+                message: intl.get('exchange_rate_period_exists_editing'),
+                intent: Intent.PRIMARY,
+              });
+            }
+          })
+          .catch(() => {
+            setErrors({
+              exchange_rate: intl.get(
+                'there_is_exchange_rate_in_this_date_with_the_same_currency',
+              ),
+            });
+          });
+        setSubmitting(false);
+        return;
+      }
+
       setErrors({
         exchange_rate: intl.get(
           'there_is_exchange_rate_in_this_date_with_the_same_currency',
         ),
       });
-    }
-  };
-
-  // Handle the form submit.
-  const handleFormSubmit = (values, { setSubmitting, setErrors }) => {
-    setSubmitting(true);
-
-    // Handle close the dialog after success response.
-    const afterSubmit = () => {
-      closeDialog(dialogName);
-    };
-    const onSuccess = ({ response }) => {
-      AppToaster.show({
-        message: intl.get(
-          !isNewMode
-            ? 'the_exchange_rate_has_been_edited_successfully'
-            : 'the_exchange_rate_has_been_created_successfully',
-        ),
-        intent: Intent.SUCCESS,
-      });
-      afterSubmit(response);
-    };
-    // Handle the response error.
-    const onError = (error) => {
-      const {
-        response: {
-          data: { errors },
-        },
-      } = error;
-
-      transformErrors(errors, { setErrors });
       setSubmitting(false);
     };
+
     if (isNewMode) {
       createExchangeRateMutate(values).then(onSuccess).catch(onError);
     } else {
@@ -105,6 +114,7 @@ function ExchangeRateForm({
       validationSchema={validationSchema}
       initialValues={initialValues}
       onSubmit={handleFormSubmit}
+      enableReinitialize
     >
       <ExchangeRateFormContent />
     </Formik>

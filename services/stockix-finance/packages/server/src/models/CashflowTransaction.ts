@@ -6,9 +6,22 @@ import {
   getCashflowTransactionType,
 } from '@/services/Cashflow/utils';
 import AccountTransaction from './AccountTransaction';
-import { CASHFLOW_DIRECTION } from '@/services/Cashflow/constants';
+import {
+  CASHFLOW_DIRECTION,
+  CASHFLOW_TRANSACTION_TYPE,
+} from '@/services/Cashflow/constants';
 
 export default class CashflowTransaction extends TenantModel {
+  id: number;
+  amount: number;
+  exchangeRate: number;
+  publishedAt: Date | string | null;
+  transactionType: CASHFLOW_TRANSACTION_TYPE;
+  cashflowAccountId: number;
+  creditAccountId?: number;
+  currencyCode?: string;
+  createdAt: Date;
+
   /**
    * Table name.
    */
@@ -42,7 +55,7 @@ export default class CashflowTransaction extends TenantModel {
    * @returns {number}
    */
   get localAmount() {
-    return this.amount * this.exchangeRate;
+    return this.amount / this.exchangeRate;
   }
 
   /**

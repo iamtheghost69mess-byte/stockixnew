@@ -246,6 +246,7 @@ export const useJournalTotals = () => {
   );
 
   return {
+    total,
     formattedTotal,
     formattedSubtotal,
   };

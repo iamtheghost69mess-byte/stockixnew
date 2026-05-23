@@ -20,7 +20,6 @@ import { Knex } from 'knex';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import UnitOfWork from '@/services/UnitOfWork';
 
-type TCostMethod = 'FIFO' | 'LIFO' | 'AVG';
 
 @Service()
 export default class InventoryService {
@@ -51,13 +50,13 @@ export default class InventoryService {
     date: Date | string;
     direction: TInventoryTransactionDirection;
     entries: IItemEntry[];
-    createdAt: Date;
+    createdAt: Date | string;
   }): IInventoryTransaction[] {
     const exchangeRate = transaction.exchangeRate || 1;
 
     return transaction.entries.map((entry: IItemEntry) => ({
       ...pick(entry, ['itemId', 'quantity']),
-      rate: entry.rate * exchangeRate,
+      rate: entry.rate / exchangeRate,
       transactionType: transaction.transactionType,
       transactionId: transaction.transactionId,
       direction: transaction.direction,
@@ -105,13 +104,14 @@ export default class InventoryService {
     let costMethodComputer: IInventoryCostMethod;
 
     // Switch between methods based on the item cost method.
-    switch ('AVG') {
+    switch (item.costMethod) {
       case 'FIFO':
       case 'LIFO':
         costMethodComputer = new InventoryCostLotTracker(
           tenantId,
           fromDate,
-          itemId
+          itemId,
+          item.costMethod as 'FIFO' | 'LIFO'
         );
         break;
       case 'AVG':
@@ -137,7 +137,7 @@ export default class InventoryService {
     itemId: number,
     startingDate: Date | string
   ) {
-    const agenda = Container.get('agenda');
+    const agenda = Container.get('agenda') as any;
 
     // Cancel any `compute-item-cost` in the queue has upper starting date
     // with the same given item.

@@ -130,8 +130,8 @@ export class ManualJournalGLEntries {
 
       return {
         ...commonEntry,
-        debit: entry.debit,
-        credit: entry.credit,
+        debit: entry.debit / (manualJournal.exchangeRate || 1),
+        credit: entry.credit / (manualJournal.exchangeRate || 1),
         accountId: entry.accountId,
 
         contactId: entry.contactId,
@@ -142,7 +142,7 @@ export class ManualJournalGLEntries {
 
         branchId: entry.branchId,
         projectId: entry.projectId,
-      };
+      } as ILedgerEntry;
     }
   );
 

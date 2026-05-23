@@ -43,7 +43,7 @@ export default class DynamicListService implements IDynamicListService {
       ...(model.defaultSort
         ? {
             sortOrder: model.defaultSort.sortOrder,
-            columnSortBy: model.defaultSort.sortOrder,
+            columnSortBy: model.defaultSort.sortField,
           }
         : {}),
       ...filterDTO,

@@ -8,11 +8,29 @@ import CustomViewBaseModel from './CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Sales/constants';
 import ModelSearchable from './ModelSearchable';
 
-export default class SaleInvoice extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class SaleInvoice extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  customerId: number;
+  balance: number;
+  exchangeRate: number;
+  invoiceDate: Date | string;
+  invoiceNo: string;
+  referenceNo?: string;
+  note?: string;
+  deliveredAt: Date | string | null;
+  paymentAmount: number;
+  writtenoffAmount: number;
+  creditedAmount: number;
+  dueDate: Date | string;
+  writtenoffAt: Date | string | null;
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -37,6 +55,7 @@ export default class SaleInvoice extends mixin(TenantModel, [
   static get virtualAttributes() {
     return [
       'localAmount',
+      'localDueAmount',
       'dueAmount',
       'balanceAmount',
       'isDelivered',
@@ -56,7 +75,17 @@ export default class SaleInvoice extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.balance * this.exchangeRate;
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.balance / this.exchangeRate;
+  }
+
+  /**
+   * Invoice due amount in local currency.
+   * @returns {number}
+   */
+  get localDueAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.dueAmount / this.exchangeRate;
   }
 
   /**
@@ -64,7 +93,8 @@ export default class SaleInvoice extends mixin(TenantModel, [
    * @returns {number}
    */
   get localWrittenoffAmount() {
-    return this.writtenoffAmount * this.exchangeRate;
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.writtenoffAmount / this.exchangeRate;
   }
 
   /**
@@ -177,8 +207,8 @@ export default class SaleInvoice extends mixin(TenantModel, [
        */
       filterDateRange(query, startDate, endDate, type = 'day') {
         const dateFormat = 'YYYY-MM-DD HH:mm:ss';
-        const fromDate = moment(startDate).startOf(type).format(dateFormat);
-        const toDate = moment(endDate).endOf(type).format(dateFormat);
+        const fromDate = moment(startDate).startOf(type as any).format(dateFormat);
+        const toDate = moment(endDate).endOf(type as any).format(dateFormat);
 
         if (startDate) {
           query.where('invoice_date', '>=', fromDate);

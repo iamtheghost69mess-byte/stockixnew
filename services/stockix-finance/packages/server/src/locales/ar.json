@@ -181,6 +181,17 @@
   "invoice.paper.payment_amount": "مبلغ المدفوع",
   "invoice.paper.invoice_amount": "قيمة الفاتورة",
 
+  "bill.paper.bill": "فاتورة مشتريات",
+  "bill.paper.bill_amount": "قيمة الفاتورة",
+  "bill.paper.due_amount": "المبلغ المستحق",
+  "bill.paper.vendor": "المورد",
+  "bill.paper.bill_date": "تاريخ الفاتورة",
+  "bill.paper.due_date": "تاريخ الاستحقاق",
+  "bill.paper.total": "المجموع",
+  "bill.paper.payment_amount": "مبلغ المدفوع",
+  "bill.paper.balance_due": "مبلغ المستحق",
+  "bill.paper.notes_title": "ملاحظات",
+
   "item_entry.paper.item_name": "اسم الصنف",
   "item_entry.paper.rate": "السعر",
   "item_entry.paper.quantity": "الكمية",

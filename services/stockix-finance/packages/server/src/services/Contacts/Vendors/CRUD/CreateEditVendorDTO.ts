@@ -34,7 +34,7 @@ export class CreateEditVendorDTO {
     const commonDTO = this.transformCommonDTO(vendorDTO);
 
     // Retrieves the tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     return {
       ...commonDTO,

@@ -77,7 +77,7 @@ export default class PaymentReceiveNotifyBySms {
     paymentReceive: IPaymentReceive
   ) => {
     const smsClient = this.tenancy.smsClient(tenantId);
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieve the formatted payment details sms notification message.
     const message = this.formattedPaymentDetailsMessage(
@@ -193,7 +193,7 @@ export default class PaymentReceiveNotifyBySms {
       .withGraphFetched('entries.invoice');
 
     // Current tenant metadata.
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Retrieve the formatted sms message of payment receive details.
     const smsMessage = this.formattedPaymentDetailsMessage(

@@ -27,6 +27,13 @@ const Schema = Yup.object().shape({
   date_format: Yup.string()
     .required()
     .label(intl.get('date_format_')),
+  display_currencies: Yup.array().of(Yup.string()).nullable(),
+  secondary_currency: Yup.string()
+    .nullable()
+    .notOneOf(
+      [Yup.ref('base_currency')],
+      intl.get('secondary_currency_must_differ_from_base'),
+    ),
 });
 
 export const PreferencesGeneralSchema = Schema;

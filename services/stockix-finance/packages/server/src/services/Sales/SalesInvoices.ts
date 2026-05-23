@@ -40,6 +40,8 @@ import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { BranchTransactionDTOTransform } from '@/services/Branches/Integrations/BranchTransactionDTOTransform';
 import { WarehouseTransactionDTOTransform } from '@/services/Warehouses/Integrations/WarehouseTransactionDTOTransform';
 import { TransformerInjectable } from '@/lib/Transformer/TransformerInjectable';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
 /**
  * Sales invoices service
@@ -321,6 +323,12 @@ export default class SaleInvoicesService implements ISalesInvoicesService {
       .findById(saleInvoiceDTO.customerId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      saleInvoiceDTO.exchangeRate
+    );
     // Validate the from estimate id exists on the storage.
     if (saleInvoiceDTO.fromEstimateId) {
       const fromEstimate =
@@ -412,6 +420,12 @@ export default class SaleInvoicesService implements ISalesInvoicesService {
       .modify('customer')
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    validateForeignCurrencyExchangeRate(
+      customer.currencyCode,
+      tenantMeta.baseCurrency,
+      saleInvoiceDTO.exchangeRate
+    );
     // Validate items ids existance.
     await this.itemsEntriesService.validateItemsIdsExistance(
       tenantId,

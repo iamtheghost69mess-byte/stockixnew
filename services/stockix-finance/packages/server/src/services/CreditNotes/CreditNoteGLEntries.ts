@@ -191,7 +191,7 @@ export default class CreditNoteGLEntries {
       index: number
     ): ILedgerEntry => {
       const commonEntry = this.getCreditNoteCommonEntry(creditNote);
-      const localAmount = entry.amount * creditNote.exchangeRate;
+      const localAmount = entry.amount / (creditNote.exchangeRate || 1);
 
       return {
         ...commonEntry,

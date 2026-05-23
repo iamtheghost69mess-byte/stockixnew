@@ -119,7 +119,7 @@ export class BillGLEntries {
     (bill: IBill, entry: IItemEntry, index: number): ILedgerEntry => {
       const commonJournalMeta = this.getBillCommonEntry(bill);
 
-      const localAmount = bill.exchangeRate * entry.amount;
+      const localAmount = entry.amount / (bill.exchangeRate || 1);
       const landedCostAmount = sumBy(entry.allocatedCostEntries, 'cost');
 
       return {

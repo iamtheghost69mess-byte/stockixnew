@@ -13,6 +13,7 @@ import {
 import TenancyService from '@/services/Tenancy/TenancyService';
 import events from '@/subscribers/events';
 import { Tenant, TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
 import { CommandManualJournalValidators } from './CommandManualJournalValidators';
@@ -122,6 +123,11 @@ export class CreateManualJournalService {
       manualJournalDTO,
       baseCurrency
     );
+    validateForeignCurrencyExchangeRate(
+      manualJournalDTO.currencyCode,
+      baseCurrency,
+      manualJournalDTO.exchangeRate
+    );
   };
 
   /**
@@ -138,7 +144,7 @@ export class CreateManualJournalService {
     const { ManualJournal } = this.tenancy.models(tenantId);
 
     // Retrieves the tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Authorize manual journal creating.
     await this.authorize(

@@ -6,10 +6,17 @@ import express from 'express';
 import loadersFactory from 'loaders';
 
 async function startServer() {
+  console.log('--- SERVER BOOTSTRAP STARTING ---');
   const app = express();
 
-  // Intiialize all registered loaders.
-  await loadersFactory({ expressApp: app });
+  try {
+    // Intiialize all registered loaders.
+    await loadersFactory({ expressApp: app });
+  } catch (err) {
+    console.error('--- FATAL BOOTSTRAP ERROR ---');
+    console.error(err);
+    process.exit(1);
+  }
 
   app.listen(app.get('port'), (err) => {
     if (err) {

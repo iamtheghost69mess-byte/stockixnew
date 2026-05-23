@@ -1,0 +1,90 @@
+extends ../PaperTemplateLayout.pug
+
+block head
+  style
+    if (isRtl)
+      include ../../css/modules/bill-rtl.css
+    else
+      include ../../css/modules/bill.css
+
+block content
+ div.bill
+  div.bill__header
+    div.paper
+      h1.title #{__("bill.paper.bill")}
+      if bill.billNumber
+       span.billNo #{bill.billNumber}
+
+    div.organization
+      h3.title #{organizationName}
+      if organizationEmail
+       span.email #{organizationEmail}
+
+  div.bill__due-amount
+    div.label #{__('bill.paper.bill_amount')}
+    div.amount #{bill.formattedAmount}
+
+  div.bill__meta
+   div.bill__meta-item.bill__meta-item--amount
+    span.label #{__('bill.paper.due_amount')}
+    span.value #{bill.formattedDueAmount}
+
+   div.bill__meta-item.bill__meta-item--vendor
+    span.label #{__("bill.paper.vendor")}
+    span.value #{bill.vendor.displayName}
+
+   div.bill__meta-item.bill__meta-item--bill-date
+    span.label #{__("bill.paper.bill_date")}
+    span.value #{bill.formattedBillDate}
+
+   div.bill__meta-item.bill__meta-item--due-date
+    span.label #{__("bill.paper.due_date")}
+    span.value #{bill.formattedDueDate}
+
+  div.bill__table
+   table
+    thead
+     tr
+       th.item #{__("item_entry.paper.item_name")}
+       th.rate #{__("item_entry.paper.rate")}
+       th.quantity #{__("item_entry.paper.quantity")}
+       th.total #{__("item_entry.paper.total")}
+    tbody
+      each entry in bill.entries
+       tr
+        td.item
+         div.title=entry.item.name
+         span.description=entry.description
+        td.rate=entry.rate
+        td.quantity=entry.quantity
+        td.total=entry.amount
+
+  div.bill__table-after
+    div.bill__table-total
+      table
+        tbody
+          tr.total
+            td #{__('bill.paper.total')}
+            td #{bill.formattedAmount}
+          if displayTotals && displayTotals.length
+            each dc in displayTotals
+              tr.total-display-currency
+                td ≈ #{dc.currency}
+                td #{dc.formattedTotal}
+          tr.payment-amount
+            td #{__('bill.paper.payment_amount')}
+            td #{bill.formattedPaymentAmount}
+          tr.blanace-due
+            td #{__('bill.paper.balance_due')}
+            td #{bill.formattedDueAmount}
+          if displayTotals && displayTotals.length
+            each dc in displayTotals
+              tr.balance-due-display-currency
+                td ≈ #{dc.currency} #{__('bill.paper.balance_due')}
+                td #{dc.formattedDueAmount}
+
+  div.bill__footer
+    if bill.note
+     div.bill__notes
+      h3 #{__("bill.paper.notes_title")}
+      p #{bill.note}

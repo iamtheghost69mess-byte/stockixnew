@@ -112,18 +112,40 @@ commander
   .command('system:migrate:latest')
   .description('Migrate latest mgiration of the system database.')
   .action(async () => {
+    const sysKnex = initSystemKnex();
     try {
-      const sysKnex = await initSystemKnex();
       const [batchNo, log] = await sysKnex.migrate.latest();
+      await sysKnex.destroy();
 
       if (log.length === 0) {
-        success(color.cyan('Already up to date'));
+        console.log(color.cyan('Already up to date'));
+      } else {
+        console.log(
+          color.green(`Batch ${batchNo} run: ${log.length} migrations`) +
+            (argv.verbose ? `\n${color.cyan(log.join('\n'))}` : '')
+        );
       }
-      success(
-        color.green(`Batch ${batchNo} run: ${log.length} migrations`) +
-          (argv.verbose ? `\n${color.cyan(log.join('\n'))}` : '')
-      );
+      process.exit(0);
     } catch (error) {
+      await sysKnex.destroy().catch(() => {});
+      exit(error);
+    }
+  });
+
+commander
+  .command('system:migrate:unlock')
+  .description('Force-release a stuck knex migration lock on the system database.')
+  .action(async () => {
+    const sysKnex = initSystemKnex();
+    try {
+      await sysKnex.raw(
+        'UPDATE `knex_migrations_lock` SET `is_locked` = 0 WHERE `index` = 1'
+      );
+      await sysKnex.destroy();
+      console.log(color.cyan('Migration lock released.'));
+      process.exit(0);
+    } catch (error) {
+      await sysKnex.destroy().catch(() => {});
       exit(error);
     }
   });

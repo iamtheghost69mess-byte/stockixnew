@@ -4,23 +4,25 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
 } from '@/components';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
 import { useJournalTotals } from './utils';
 
 export function MakeJournalFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = useJournalTotals();
+  const { total, formattedSubtotal, formattedTotal } = useJournalTotals();
 
   return (
     <MakeJouranlTotalLines>
-      <TotalLine
+      <DualCurrencyFormTotalLine
+        amount={total}
         title={<T id={'make_journal.label.subtotal'} />}
         value={formattedSubtotal}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
+        amount={total}
         title={<T id={'make_journal.label.total'} />}
         value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
@@ -29,7 +31,7 @@ export function MakeJournalFormFooterRight() {
   );
 }
 
-const MakeJouranlTotalLines =styled(TotalLines)`
+const MakeJouranlTotalLines = styled(TotalLines)`
   width: 100%;
   color: #555555;
 `;

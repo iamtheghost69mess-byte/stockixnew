@@ -1,18 +1,14 @@
 // @ts-nocheck
-import React, { useEffect } from 'react';
+import React from 'react';
 import intl from 'react-intl-universal';
 import { Formik } from 'formik';
 import { Intent } from '@blueprintjs/core';
-
 import '@/style/pages/Preferences/GeneralForm.scss';
-
 import { AppToaster } from '@/components';
 import GeneralForm from './GeneralForm';
 import { PreferencesGeneralSchema } from './General.schema';
 import { useGeneralFormContext } from './GeneralFormProvider';
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-
-import { compose, transformToForm } from '@/utils';
+import { transformToForm } from '@/utils';
 
 const defaultValues = {
   name: '',
@@ -23,48 +19,39 @@ const defaultValues = {
   fiscal_year: '',
   date_format: '',
   timezone: '',
+  display_currencies: [],
+  secondary_currency: '',
 };
 
 /**
- * Preferences - General form Page.
+ * Preferences - General form page.
  */
-function GeneralFormPage({
-  // #withDashboardActions
-  changePreferencesPageTitle,
-}) {
+export default function GeneralFormPage() {
   const { updateOrganization, organization } = useGeneralFormContext();
 
-  useEffect(() => {
-    changePreferencesPageTitle(intl.get('general'));
-  }, [changePreferencesPageTitle]);
-
-  // Initial values.
   const initialValues = {
     ...defaultValues,
-    ...transformToForm(organization.metadata, defaultValues),
+    ...transformToForm(organization?.metadata, defaultValues),
   };
-  // Handle the form submit.
-  const handleFormSubmit = (values, { setSubmitting, resetForm }) => {
-    // Handle request success.
-    const onSuccess = (response) => {
+
+  const handleFormSubmit = (values, { setSubmitting }) => {
+    const onSuccess = () => {
       AppToaster.show({
         message: intl.get('preferences.general.success_message'),
         intent: Intent.SUCCESS,
       });
       setSubmitting(false);
 
-      // Reboot the application if the application's language is mutated.
-      if (organization.metadata?.language !== values.language) {
+      if (organization?.metadata?.language !== values.language) {
         window.location.reload();
       }
     };
-    // Handle request error.
-    const onError = (errors) => {
+
+    const onError = () => {
       setSubmitting(false);
     };
-    updateOrganization({ ...values })
-      .then(onSuccess)
-      .catch(onError);
+
+    updateOrganization({ ...values }).then(onSuccess).catch(onError);
   };
 
   return (
@@ -73,8 +60,7 @@ function GeneralFormPage({
       validationSchema={PreferencesGeneralSchema}
       onSubmit={handleFormSubmit}
       component={GeneralForm}
+      enableReinitialize
     />
   );
 }
-
-export default compose(withDashboardActions)(GeneralFormPage);

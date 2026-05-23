@@ -10,6 +10,7 @@ import {
   useUpdateOrganization,
   useDateFormats,
   useOrgBaseCurrencyMutateAbilities,
+  useCurrencies,
 } from '@/hooks/query';
 import PreferencesPageLoader from '../PreferencesPageLoader';
 
@@ -30,6 +31,8 @@ function GeneralFormProvider({ ...props }) {
   const { data: baseCurrencyMutateAbility } =
     useOrgBaseCurrencyMutateAbilities();
 
+  const { data: currencies, isLoading: isCurrenciesLoading } = useCurrencies();
+
   // Mutate organization information.
   const { mutateAsync: updateOrganization } = useUpdateOrganization();
 
@@ -37,10 +40,12 @@ function GeneralFormProvider({ ...props }) {
   const provider = {
     isOrganizationLoading,
     isDateFormatsLoading,
+    isCurrenciesLoading,
     updateOrganization,
     baseCurrencyMutateAbility,
     organization,
     dateFormats,
+    currencies,
   };
 
   return (
@@ -51,7 +56,7 @@ function GeneralFormProvider({ ...props }) {
       )}
     >
       <GeneralFormCard>
-        {isOrganizationLoading || isDateFormatsLoading ? (
+        {isOrganizationLoading || isDateFormatsLoading || isCurrenciesLoading ? (
           <PreferencesPageLoader />
         ) : (
           <GeneralFormContext.Provider value={provider} {...props} />

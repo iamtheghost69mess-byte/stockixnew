@@ -36,7 +36,7 @@ export class BillPaymentGLEntries {
       .withGraphFetched('entries.bill');
 
     // Retrieves the given tenant metadata.
-    const tenantMeta = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Finds or creates a new A/P account of the given currency.
     const APAccount = await accountRepository.findOrCreateAccountsPayable(
@@ -47,7 +47,7 @@ export class BillPaymentGLEntries {
     // Exchange gain or loss account.
     const EXGainLossAccount = await Account.query(trx).modify(
       'findBySlug',
-      'exchange-grain-loss'
+      'exchange-gain-loss'
     );
     // Retrieves the bill payment ledger.
     const ledger = this.getBillPaymentLedger(
@@ -132,8 +132,8 @@ export class BillPaymentGLEntries {
    */
   private getPaymentExGainOrLoss = (billPayment: IBillPayment): number => {
     return sumBy(billPayment.entries, (entry) => {
-      const paymentLocalAmount = entry.paymentAmount * billPayment.exchangeRate;
-      const invoicePayment = entry.paymentAmount * entry.bill.exchangeRate;
+      const paymentLocalAmount = entry.paymentAmount / billPayment.exchangeRate;
+      const invoicePayment = entry.paymentAmount / entry.bill.exchangeRate;
 
       return invoicePayment - paymentLocalAmount;
     });

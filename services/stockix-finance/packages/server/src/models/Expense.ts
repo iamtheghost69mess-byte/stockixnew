@@ -1,6 +1,6 @@
 import { Model, mixin, raw } from 'objection';
 import TenantModel from 'models/TenantModel';
-import { viewRolesBuilder } from '@/lib/ViewRolesBuilder';
+import { buildFilterQuery } from '@/lib/ViewRolesBuilder';
 import ModelSetting from './ModelSetting';
 import ExpenseSettings from './Expense.Settings';
 import CustomViewBaseModel from './CustomViewBaseModel';
@@ -8,11 +8,25 @@ import { DEFAULT_VIEWS } from '@/services/Expenses/constants';
 import ModelSearchable from './ModelSearchable';
 import moment from 'moment';
 
-export default class Expense extends mixin(TenantModel, [
-  ModelSetting,
-  CustomViewBaseModel,
-  ModelSearchable,
-]) {
+export default class Expense extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  totalAmount: number;
+  exchangeRate: number;
+  date: Date | string;
+  referenceNo?: string;
+  description?: string;
+  publishedAt: Date | string | null;
+  landedCostAmount: number;
+  allocatedCostAmount: number;
+  invoicedAmount: number;
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
+
   /**
    * Table name
    */
@@ -54,7 +68,7 @@ export default class Expense extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAmount() {
-    return this.totalAmount * this.exchangeRate;
+    return this.totalAmount / this.exchangeRate;
   }
 
   /**
@@ -62,7 +76,7 @@ export default class Expense extends mixin(TenantModel, [
    * @returns {number}
    */
   get localLandedCostAmount() {
-    return this.landedCostAmount * this.exchangeRate;
+    return this.landedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -70,7 +84,7 @@ export default class Expense extends mixin(TenantModel, [
    * @returns {number}
    */
   get localAllocatedCostAmount() {
-    return this.allocatedCostAmount * this.exchangeRate;
+    return this.allocatedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -86,7 +100,7 @@ export default class Expense extends mixin(TenantModel, [
    * @returns {number}
    */
   get localUnallocatedCostAmount() {
-    return this.unallocatedCostAmount * this.exchangeRate;
+    return this.unallocatedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -136,7 +150,7 @@ export default class Expense extends mixin(TenantModel, [
         }
       },
       viewRolesBuilder(query, conditionals, expression) {
-        viewRolesBuilder(conditionals, expression)(query);
+        buildFilterQuery(Expense, conditionals, expression)(query);
       },
 
       filterByDraft(query) {

@@ -112,7 +112,7 @@ export default class SaleInvoiceNotifyBySms {
     invoice: ISaleInvoice & { customer: ICustomer }
   ): Promise<void> => {
     const smsClient = this.tenancy.smsClient(tenantId);
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Formates the given sms message.
     const message = this.formattedInvoiceDetailsMessage(
@@ -204,7 +204,7 @@ export default class SaleInvoiceNotifyBySms {
     this.validateSaleInvoiceExistance(saleInvoice);
 
     // Current tenant metadata.
-    const tenantMetadata = await TenantMetadata.query().findOne({ tenantId });
+    const tenantMetadata = await TenantMetadata.findByTenantId(tenantId);
 
     // Transformes the invoice notification key to sms notification key.
     const notificationKey = this.transformDTOKeyToNotificationKey(

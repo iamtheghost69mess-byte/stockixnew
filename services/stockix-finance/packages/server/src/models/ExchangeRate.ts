@@ -1,44 +1,46 @@
-import bcrypt from 'bcryptjs';
-import { Model } from 'objection';
+import { mixin } from 'objection';
 import TenantModel from 'models/TenantModel';
+import ModelSetting from './ModelSetting';
 
-export default class ExchangeRate extends TenantModel {
-  /**
-   * Table name.
-   */
+export default class ExchangeRate extends mixin(TenantModel, [ModelSetting]) {
   static get tableName() {
     return 'exchange_rates';
   }
 
-  /**
-   * Timestamps columns.
-   */
   get timestamps() {
     return ['createdAt', 'updatedAt'];
   }
 
-  /**
-   * Model defined fields.
-   */
-  static get fields(){
+  static get meta() {
     return {
-      currency_code: {
-        label: 'Currency',
-        column: 'currency_code'
+      defaultFilterField: 'currency_code',
+      defaultSort: {
+        sortField: 'created_at',
+        sortOrder: 'DESC',
       },
-      exchange_rate: {
-        label: 'Exchange rate',
-        column: 'exchange_rate',
+      fields: {
+        currency_code: {
+          name: 'exchange_rate.field.currency_code',
+          column: 'currency_code',
+          fieldType: 'text',
+        },
+        exchange_rate: {
+          name: 'exchange_rate.field.exchange_rate',
+          column: 'exchange_rate',
+          fieldType: 'number',
+        },
+        date: {
+          name: 'exchange_rate.field.date',
+          column: 'date',
+          fieldType: 'text',
+        },
+        created_at: {
+          name: 'exchange_rate.field.created_at',
+          column: 'created_at',
+          fieldType: 'text',
+          columnType: 'date',
+        },
       },
-      date: {
-        label: 'Date',
-        column: 'date',
-      },
-      created_at: {
-        label: "Created at",
-        column: "created_at",
-        columnType: "date",
-      },
-    }
+    };
   }
 }

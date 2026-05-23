@@ -12,9 +12,11 @@ export class PurchaseInvoiceTransformer extends Transformer {
       'formattedBillDate',
       'formattedDueDate',
       'formattedAmount',
+      'formattedLocalAmount',
       'formattedPaymentAmount',
       'formattedBalance',
       'formattedDueAmount',
+      'formattedLocalDueAmount',
       'formattedExchangeRate',
     ];
   };
@@ -64,6 +66,26 @@ export class PurchaseInvoiceTransformer extends Transformer {
    */
   protected formattedDueAmount = (bill): string => {
     return formatNumber(bill.dueAmount, { currencyCode: bill.currencyCode });
+  };
+
+  /**
+   * Retrieve formatted bill local amount.
+   * @param {IBill} bill
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (bill): string => {
+    if (bill.localAmount == null) return '';
+    return this.formatMoney(bill.localAmount);
+  };
+
+  /**
+   * Retrieve formatted bill local due amount.
+   * @param {IBill} bill
+   * @returns {string}
+   */
+  protected formattedLocalDueAmount = (bill): string => {
+    if (bill.localDueAmount == null) return '';
+    return this.formatMoney(bill.localDueAmount);
   };
 
   /**

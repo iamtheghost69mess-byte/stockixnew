@@ -7,6 +7,8 @@ import CheckPolicies from '@/api/middleware/CheckPolicies';
 import { AbilitySubject, ReportsAction } from '@/interfaces';
 import { ProfitLossSheetTable } from '@/services/FinancialStatements/ProfitLossSheet/ProfitLossSheetTable';
 import HasTenancyService from '@/services/Tenancy/TenancyService';
+import ExchangeRatesService from '@/services/ExchangeRates/ExchangeRatesService';
+import { TenantMetadata } from '@/system/models';
 @Service()
 export default class ProfitLossSheetController extends BaseFinancialReportController {
   @Inject()
@@ -14,6 +16,9 @@ export default class ProfitLossSheetController extends BaseFinancialReportContro
 
   @Inject()
   tenancy: HasTenancyService;
+
+  @Inject()
+  exchangeRatesService: ExchangeRatesService;
 
   /**
    * Router constructor.
@@ -88,6 +93,7 @@ export default class ProfitLossSheetController extends BaseFinancialReportContro
   async profitLossSheet(req: Request, res: Response, next: NextFunction) {
     const { tenantId, settings } = req;
     const i18n = this.tenancy.i18n(tenantId);
+    const baseCurrency: string = settings.get({ group: 'organization', key: 'base_currency' }) ?? '';
     const filter = this.matchedQueryData(req);
 
     try {
@@ -97,9 +103,20 @@ export default class ProfitLossSheetController extends BaseFinancialReportContro
       const accept = this.accepts(req);
       const acceptType = accept.types(['json', 'application/json+table']);
 
+      const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+      const secondaryCurrency = tenantMeta?.secondaryCurrency ?? '';
+      const secondaryRateRow = secondaryCurrency
+        ? await this.exchangeRatesService.lookupRateByDate(
+            tenantId,
+            secondaryCurrency,
+            filter.toDate ?? new Date()
+          )
+        : null;
+      const secondaryRate = secondaryRateRow?.exchangeRate ?? 0;
+
       switch (acceptType) {
         case 'application/json+table':
-          const table = new ProfitLossSheetTable(data, query, i18n);
+          const table = new ProfitLossSheetTable(data, query, i18n, baseCurrency, secondaryCurrency, secondaryRate);
 
           return res.status(200).send({
             table: {

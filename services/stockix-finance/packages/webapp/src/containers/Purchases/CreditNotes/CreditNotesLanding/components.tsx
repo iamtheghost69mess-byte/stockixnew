@@ -12,6 +12,7 @@ import {
   If,
   Icon,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import { safeCallback } from '@/utils';
 import { VendorCreditAction, AbilitySubject } from '@/constants/abilityOption';
@@ -147,6 +148,7 @@ export function useVendorsCreditNoteTableColumns() {
         id: 'amount',
         Header: intl.get('amount'),
         accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,
@@ -157,6 +159,7 @@ export function useVendorsCreditNoteTableColumns() {
         id: 'balance',
         Header: intl.get('balance'),
         accessor: 'formatted_credits_remaining',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

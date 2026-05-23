@@ -61,17 +61,27 @@ block content
 
   div.invoice__table-after
     div.invoice__table-total
-      table 
+      table
         tbody
           tr.total
             td #{__('invoice.paper.total')}
             td #{saleInvoice.formattedAmount}
+          if displayTotals && displayTotals.length
+            each dc in displayTotals
+              tr.total-display-currency
+                td ≈ #{dc.currency}
+                td #{dc.formattedTotal}
           tr.payment-amount
             td #{__('invoice.paper.payment_amount')}
             td #{saleInvoice.formattedPaymentAmount}
           tr.blanace-due
             td #{__('invoice.paper.balance_due')}
             td #{saleInvoice.formattedDueAmount}
+          if displayTotals && displayTotals.length
+            each dc in displayTotals
+              tr.balance-due-display-currency
+                td ≈ #{dc.currency} #{__('invoice.paper.balance_due')}
+                td #{dc.formattedDueAmount}
 
   div.invoice__footer        
     if saleInvoice.termsConditions

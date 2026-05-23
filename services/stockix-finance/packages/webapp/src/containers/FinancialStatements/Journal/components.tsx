@@ -7,6 +7,7 @@ import { Button } from '@blueprintjs/core';
 import { Icon, If, FormattedMessage as T } from '@/components';
 import { useJournalSheetContext } from './JournalProvider';
 import FinancialLoadingBar from '../FinancialLoadingBar';
+import { useCurrentOrganization } from '@/hooks/state';
 
 import { Align } from '@/constants';
 
@@ -14,6 +15,9 @@ import { Align } from '@/constants';
  * Retrieve the journal table columns.
  */
 export const useJournalTableColumns = () => {
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency ?? '';
+
   return React.useMemo(
     () => [
       {
@@ -58,17 +62,45 @@ export const useJournalTableColumns = () => {
         textOverview: true,
       },
       {
-        Header: intl.get('credit'),
+        Header: baseCurrency ? `${intl.get('credit')} (${baseCurrency})` : intl.get('credit'),
         accessor: 'formatted_credit',
         align: Align.Right,
+        width: 110,
       },
       {
-        Header: intl.get('debit'),
+        Header: baseCurrency ? `${intl.get('debit')} (${baseCurrency})` : intl.get('debit'),
         accessor: 'formatted_debit',
         align: Align.Right,
+        width: 110,
+      },
+      {
+        id: 'foreign_currency_code',
+        Header: intl.get('currency'),
+        accessor: (row) =>
+          row.foreign_currency_code !== row.currency_code
+            ? row.foreign_currency_code
+            : null,
+        width: 70,
+        className: 'foreign-currency-code',
+      },
+      {
+        id: 'formatted_foreign_credit',
+        Header: intl.get('credit_fcy'),
+        accessor: (row) => row.formatted_foreign_credit ?? '—',
+        align: Align.Right,
+        width: 110,
+        className: 'foreign-amount',
+      },
+      {
+        id: 'formatted_foreign_debit',
+        Header: intl.get('debit_fcy'),
+        accessor: (row) => row.formatted_foreign_debit ?? '—',
+        align: Align.Right,
+        width: 110,
+        className: 'foreign-amount',
       },
     ],
-    [],
+    [baseCurrency],
   );
 };
 
