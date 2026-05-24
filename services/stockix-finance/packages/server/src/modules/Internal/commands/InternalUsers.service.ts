@@ -1,10 +1,16 @@
 import { hashPassword } from '@/modules/Auth/Auth.utils';
 import { HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import * as uniqid from 'uniqid';
+import { events } from '@/common/events/events';
 import { ServiceError } from '@/modules/Items/ServiceError';
 import { SystemUser } from '@/modules/System/models/SystemUser';
 import { TenantModel } from '@/modules/System/models/TenantModel';
 import { TenantLicense } from '@/modules/System/models/TenantLicense';
 import UserTenant from '@/modules/System/models/UserTenant';
+import { UserInvite } from '@/modules/UsersModule/models/InviteUser.model';
+import { IUserInviteTenantSyncedEventPayload } from '@/modules/UsersModule/Users.types';
+import { ERRORS } from '@/modules/UsersModule/Users.constants';
 import { TenantKnexFactory } from '@/modules/Tenancy/TenantKnexFactory';
 
 export interface CreateInternalUserDto {
@@ -18,6 +24,13 @@ export interface CreateInternalUserDto {
 export interface UpdateInternalUserDto {
   roleId?: number;
   isActive?: boolean;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface InviteInternalUserDto {
+  email: string;
+  roleId: number;
   firstName?: string;
   lastName?: string;
 }
@@ -37,7 +50,11 @@ export class InternalUsersService {
     @Inject(TenantLicense.name)
     private readonly tenantLicenseModel: typeof TenantLicense,
 
+    @Inject(UserInvite.name)
+    private readonly inviteModel: typeof UserInvite,
+
     private readonly tenantKnexFactory: TenantKnexFactory,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createUser(tenantId: number, dto: CreateInternalUserDto) {
@@ -58,6 +75,7 @@ export class InternalUsersService {
         verified: true,
         verifyToken: '',
         tenantId,
+        mustChangePassword: true,
       });
       created = true;
     }
@@ -240,6 +258,98 @@ export class InternalUsersService {
     isActive: boolean,
   ) {
     return this.updateUser(tenantId, userId, { isActive });
+  }
+
+  /**
+   * Sends a Finance user invitation email (control-plane / internal API).
+   */
+  async sendInvite(tenantId: number, dto: InviteInternalUserDto) {
+    const tenant = await this.ensureTenantExists(tenantId);
+    await this.validateUserLimit(tenantId);
+
+    const tenantKnex = await this.tenantKnexFactory.getKnexForTenantId(tenantId);
+    const existing = await tenantKnex('users').where({ email: dto.email }).first();
+    if (existing) {
+      throw new ServiceError(ERRORS.EMAIL_EXISTS);
+    }
+
+    const role = await tenantKnex('roles').where({ id: dto.roleId }).first();
+    if (!role) {
+      throw new NotFoundException(`Role not found: ${dto.roleId}`);
+    }
+
+    const invitingRow = await tenantKnex('users').orderBy('id', 'asc').first();
+    if (!invitingRow) {
+      throw new NotFoundException('No users in tenant to send invite as');
+    }
+
+    const [insertedId] = await tenantKnex('users').insert({
+      email: dto.email,
+      first_name: dto.firstName?.trim() || '',
+      last_name: dto.lastName?.trim() || '',
+      role_id: dto.roleId,
+      active: true,
+      invited_at: new Date(),
+    });
+
+    const tenantUser = await tenantKnex('users').where({ id: insertedId }).first();
+    if (!tenantUser) {
+      throw new NotFoundException('Failed to create invited tenant user');
+    }
+
+    let systemUser = await this.systemUserModel.query().findOne({ email: dto.email });
+    if (!systemUser) {
+      systemUser = await this.systemUserModel.query().insert({
+        email: dto.email,
+        firstName: dto.firstName?.trim() || '',
+        lastName: dto.lastName?.trim() || '',
+        active: true,
+        verified: true,
+        verifyToken: '',
+        tenantId,
+      });
+    }
+
+    const existingMembership = await this.userTenantModel
+      .query()
+      .findOne({ userId: systemUser.id, tenantId });
+
+    if (!existingMembership) {
+      await this.userTenantModel.query().insert({
+        userId: systemUser.id,
+        tenantId,
+        organizationId: tenant.organizationId,
+        role: 'member',
+        isActive: true,
+      });
+    }
+
+    await tenantKnex('users')
+      .where({ id: insertedId })
+      .update({ system_user_id: systemUser.id });
+
+    const inviteToken = uniqid();
+    const invite = await this.inviteModel.query().insert({
+      email: dto.email,
+      tenantId,
+      userId: systemUser.id,
+      token: inviteToken,
+    });
+
+    await this.eventEmitter.emitAsync(
+      events.inviteUser.sendInviteTenantSynced,
+      {
+        invite,
+        user: tenantUser,
+        invitingUser: invitingRow,
+      } as IUserInviteTenantSyncedEventPayload,
+    );
+
+    return {
+      userId: insertedId,
+      email: dto.email,
+      message: 'Invitation queued for delivery',
+    };
   }
 
   private async ensureTenantExists(tenantId: number) {

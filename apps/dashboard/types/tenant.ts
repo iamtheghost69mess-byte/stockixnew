@@ -45,6 +45,10 @@ export type TenantDetail = {
     adminPinMasked: string;
     allRoles: { role: string; username: string; pinMasked: string }[];
   } | null;
+  latestProvision: {
+    correlationId: string;
+    jobStatus: string;
+  } | null;
   createdAt: string;
   deployment: {
     status: string;

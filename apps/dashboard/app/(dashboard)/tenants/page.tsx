@@ -684,7 +684,7 @@ function TenantsPageContent() {
           Create isolated tenant stacks (Docker). Progress streams live; when a
           tenant is <strong>active</strong>, use <strong>Open login</strong> in
           the list — it does not go away when you visit other pages. The
-          one-time admin password is shown only once at the end of provisioning.
+          bootstrap admin password is shown only once at the end of provisioning (about 15 minutes in cache).
         </p>
       </div>
 
@@ -766,7 +766,7 @@ function TenantsPageContent() {
           </div>
           {oneTimePassword ? (
             <div>
-              <p className="font-medium text-foreground">One-time password</p>
+              <p className="font-medium text-foreground">Bootstrap password (shown once)</p>
               <p className="mt-1 break-all font-mono text-xs">{oneTimePassword}</p>
             </div>
           ) : (

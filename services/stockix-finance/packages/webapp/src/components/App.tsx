@@ -36,6 +36,9 @@ const OneClickDemoPage = lazy(
 const PaymentPortalPage = lazy(
   () => import('@/containers/PaymentPortal/PaymentPortalPage'),
 );
+const ChangePasswordPage = lazy(
+  () => import('@/containers/Authentication/ChangePasswordPage'),
+);
 
 /**
  * App inner.
@@ -59,6 +62,10 @@ function AppInsider({ history }) {
               <Route
                 path={'/auth/email_confirmation'}
                 children={<EmailConfirmation />}
+              />
+              <Route
+                path={'/auth/change-password'}
+                children={<ChangePasswordPage />}
               />
               <Route path={'/auth'} children={<AuthenticationPage />} />
               <Route

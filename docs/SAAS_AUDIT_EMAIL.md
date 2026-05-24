@@ -62,9 +62,10 @@ Polling **does** stop when status becomes `active` (or anything other than provi
 
 **Fix needed:**
 
-- [ ] Align impersonate cookie `maxAge` with JWT expiry (or read JWT `exp` when setting cookie)
-- [ ] Use **one** 401 handler in Finance webapp (prefer axios redirect; remove `setLogout()` on 401 in `useRequest`)
-- [ ] Ensure deployment status transitions to `active` on successful provision (already in worker `provision-runtime.ts:1324-1329` and API complete `index.ts:1351-1363`; investigate stuck tenants operationally)
+- [x] Align impersonate cookie `maxAge` with JWT expiry (reads JWT `exp` when setting cookie)
+- [x] Use **one** 401 handler in Finance webapp (axios redirect only; `setLogout()` removed on 401 in `useRequest`)
+- [x] Dashboard provisioning poll cap (45 min) + stale banner on tenant detail
+- [ ] Ensure deployment status transitions to `active` on successful provision (ops: investigate stuck tenants)
 
 ---
 
@@ -105,9 +106,8 @@ The label “one-time password” in the UI refers to **operator visibility wind
 
 **Fix needed:**
 
-- [ ] Document bootstrap password semantics in tenant detail UI (not only list wizard)
-- [ ] Optional: force password change on first login in Finance
-- [ ] Optional: rename UI copy from “one-time” to “bootstrap (shown once)” to reduce confusion
+- [x] Bootstrap password card on tenant detail + “Bootstrap password (shown once)” copy
+- [x] Force password change on first login (`must_change_password` + `/auth/change-password`)
 
 ---
 
@@ -222,7 +222,7 @@ Control plane license row is source of truth for sync; Finance copy via `POST /a
 | Password reset (Finance) | Per-tenant mail | ✅ if SMTP set | `AuthSendResetPasswordService` |
 | License expiring (30 days) | ✅ | ✅ | `license-expire-followup.ts` + `sendLicenseExpiringEmail` |
 | License expired | ✅ | ✅ | `sendLicenseExpiredEmail` |
-| User invitation (Finance) | Per-tenant mail | ✅ if SMTP + queue | Not exposed in Stockix dashboard |
+| User invitation (Finance) | Per-tenant mail | ✅ if SMTP + queue | Dashboard **Invite user** via internal API |
 | User invitation (Stockix owners) | ✅ | ✅ | `sendOwnerInviteEmail` on `/owners/invite` (non-fatal on failure) |
 | Finance transactional (invoice/receipt) | Per-tenant | Depends on org mail settings | Mail module + queues |
 | POS emails | ✅ | ✅ if `RESEND_API_KEY` | `platformWorker.js` |
@@ -234,8 +234,8 @@ Control plane license row is source of truth for sync; Finance copy via `POST /a
 
 **Fix needed:**
 
-- [ ] Send invite email on `POST /owners/invite`
-- [ ] Verify each tenant Finance stack receives `MAIL_*` in provisioned `.env`
+- [x] Send invite email on `POST /owners/invite`
+- [ ] Verify each tenant Finance stack receives `MAIL_*` in provisioned `.env` (ops)
 - [ ] Operational: confirm `MAIL_FROM_ADDRESS` domain verified in Resend
 
 ---
@@ -258,27 +258,29 @@ Control plane license row is source of truth for sync; Finance copy via `POST /a
 
 ## 8. What Was Fixed In This Pass
 
-| File | Change |
-|------|--------|
-| `services/stockix-finance/.../Auth.controller.ts` | Impersonate `token` cookie `maxAge` aligned to 24h (JWT `1d`) |
-| `services/stockix-finance/.../webapp/src/hooks/useRequest.tsx` | Removed `setLogout()` on 401 to stop reload + redirect loop (axios handles redirect) |
-| `infra/worker-service/src/provision-runtime.ts` | On resume after skipped bootstrap, restore `financeTenantId` from `tenant_deployments` |
-| `services/stockix-finance/.../License.service.ts` | `assertCanCreateOrganization()` enforces `maxOrganizations` |
-| `services/stockix-finance/.../TenantsManager.ts` | Calls license check before `createTenant()` |
-| `services/stockix-finance/.../TenantDBManager.module.ts` | Imports `LicenseModule` |
-| `apps/api/src/mail/templates/owner-invite.ts` | New invite email template |
-| `apps/api/src/mail/send.ts` | `sendOwnerInviteEmail()` |
-| `apps/api/src/index.ts` | Sends invite email on `POST /owners/invite` |
-| `apps/dashboard/components/tenant-org-access-panel.tsx` | Clarified “Stockix support agent” dropdown labels |
+| Area | Key files |
+|------|-----------|
+| Session 401 loop | `useRequest.tsx`, `axios.tsx` |
+| Impersonate cookie TTL | `Auth.controller.ts` (JWT `exp`-aligned `maxAge`) |
+| `finance_tenant_id` on provision resume | `provision-runtime.ts` |
+| `maxOrganizations` | `License.service.ts`, `TenantsManager.ts` |
+| Owner invite email | `mail/send.ts`, `index.ts` |
+| Support-agent labels | `tenant-org-access-panel.tsx` |
+| Provisioning poll cap + banner | `tenants/[id]/page.tsx` |
+| Bootstrap UX + repair link on detail | `tenants/[id]/page.tsx`, `repair-finance-link` API route |
+| Finance invite from dashboard | `InternalUsers.*`, `finance-users-http.ts`, `tenant-users-panel.tsx` |
+| Force password change | Migration `must_change_password`, `AuthChangePassword.service.ts`, webapp `/auth/change-password` |
+
+See [STAGING_VERIFICATION.md](./STAGING_VERIFICATION.md) for operator runbook and sign-off checklist.
 
 ---
 
 ## 9. Still Outstanding
 
-- Finance-first-login forced password change
-- Stuck `provisioning` status operational playbook
-- Per-tenant Finance mail verification in production
+- Per-tenant Finance mail verification in production (ops)
+- Stuck `provisioning` status — operational playbook in STAGING_VERIFICATION (no further code required for cap)
 - POS split-bill / multi-payment deposit (separate integration scope)
+- JWT license claims in finance token (`docs/accountmissing2.md`)
 
 ---
 

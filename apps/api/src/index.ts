@@ -4239,6 +4239,21 @@ app.get("/tenants/:tenantId", async (c) => {
       }
     : null;
 
+  const [latestProvisionJob] = await db
+    .select({
+      correlationId: tenantLifecycleJobs.correlationId,
+      jobStatus: tenantLifecycleJobs.status,
+    })
+    .from(tenantLifecycleJobs)
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, parsed.data),
+        eq(tenantLifecycleJobs.type, "tenant.provision"),
+      ),
+    )
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+
   return c.json({
     tenant: {
       id: row.id,
@@ -4253,6 +4268,13 @@ app.get("/tenants/:tenantId", async (c) => {
       modules: parseTenantModules(row.modules),
       posOrganizationId: row.posOrganizationId,
       posBootstrapCredentials,
+      latestProvision:
+        latestProvisionJob?.correlationId
+          ? {
+              correlationId: latestProvisionJob.correlationId,
+              jobStatus: latestProvisionJob.jobStatus,
+            }
+          : null,
       createdAt: row.createdAt.toISOString(),
       deployment:
         row.deploymentStatus === null

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
@@ -66,6 +66,9 @@ function moduleBadgeVariant(
   return "outline";
 }
 
+const MAX_PROVISION_POLL_MS = 45 * 60 * 1000;
+const PROVISION_POLL_INTERVAL_MS = 2500;
+
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return {};
@@ -107,6 +110,11 @@ export default function TenantDetailPage() {
   const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
   const [retryingProvision, setRetryingProvision] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
+  const [provisionPollTimedOut, setProvisionPollTimedOut] = useState(false);
+  const provisionPollStartedAtRef = useRef<number | null>(null);
+  const [bootstrapPassword, setBootstrapPassword] = useState<string | null>(null);
+  const [bootstrapPasswordLoading, setBootstrapPasswordLoading] = useState(false);
+  const [repairingFinanceLink, setRepairingFinanceLink] = useState(false);
   const [assignPickOpen, setAssignPickOpen] = useState(false);
   const [unassignedPickLoading, setUnassignedPickLoading] = useState(false);
   const [unassignedList, setUnassignedList] = useState<LicenseRow[]>([]);
@@ -214,15 +222,76 @@ export default function TenantDetailPage() {
   const deploymentStatus = (tenant?.deployment?.status ?? tenant?.status ?? "").toLowerCase();
   const isProvisioning =
     deploymentStatus === "provisioning" || deploymentStatus === "pending";
+  const shouldPollProvisioning = isProvisioning && !provisionPollTimedOut;
 
   useEffect(() => {
-    if (!tenant || !isProvisioning) return;
+    if (!tenant || !isProvisioning) {
+      provisionPollStartedAtRef.current = null;
+      setProvisionPollTimedOut(false);
+      return;
+    }
+    if (provisionPollStartedAtRef.current == null) {
+      provisionPollStartedAtRef.current = Date.now();
+    }
+    if (!shouldPollProvisioning) return;
+
     const intervalId = window.setInterval(() => {
+      const startedAt = provisionPollStartedAtRef.current ?? Date.now();
+      if (Date.now() - startedAt >= MAX_PROVISION_POLL_MS) {
+        setProvisionPollTimedOut(true);
+        return;
+      }
       void loadTenant();
       void loadEvents();
-    }, 2500);
+    }, PROVISION_POLL_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
-  }, [tenant, isProvisioning]);
+  }, [tenant, isProvisioning, shouldPollProvisioning]);
+
+  const loadBootstrapPassword = useCallback(async () => {
+    const correlationId = tenant?.latestProvision?.correlationId;
+    if (!correlationId) return;
+    setBootstrapPasswordLoading(true);
+    try {
+      const res = await fetch(`/api/tenants/provision-status/${correlationId}`);
+      const data = (await readJson(res)) as {
+        oneTimeAdminPassword?: string | null;
+        status?: string;
+      };
+      if (res.ok && data.oneTimeAdminPassword) {
+        setBootstrapPassword(data.oneTimeAdminPassword);
+      }
+    } finally {
+      setBootstrapPasswordLoading(false);
+    }
+  }, [tenant?.latestProvision?.correlationId]);
+
+  useEffect(() => {
+    if (!tenant) return;
+    const active =
+      (tenant.deployment?.status ?? "").toLowerCase() === "active" ||
+      tenant.status === "active";
+    if (!active || !tenant.latestProvision?.correlationId) return;
+    void loadBootstrapPassword();
+  }, [tenant, loadBootstrapPassword]);
+
+  const repairFinanceLink = async () => {
+    if (!tenant) return;
+    setRepairingFinanceLink(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenant.id}/repair-finance-link`, {
+        method: "POST",
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        toast.error(formatApiError(body, "Could not link Finance tenant."));
+        return;
+      }
+      toast.success("Finance tenant linked.");
+      await loadTenant();
+    } finally {
+      setRepairingFinanceLink(false);
+    }
+  };
 
   useEffect(() => {
     if (!assignPickOpen || !isSuper) return;
@@ -337,6 +406,55 @@ export default function TenantDetailPage() {
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
+
+      {provisionPollTimedOut && isProvisioning ? (
+        <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-50">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Provisioning is taking longer than expected</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>
+              Auto-refresh paused after {MAX_PROVISION_POLL_MS / 60000} minutes. Check provisioning
+              events below, worker logs, and Docker — then refresh manually or stop provisioning.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setProvisionPollTimedOut(false);
+                  provisionPollStartedAtRef.current = Date.now();
+                  void loadTenant();
+                  void loadEvents();
+                }}
+              >
+                <RotateCw className="mr-1 h-4 w-4" />
+                Resume auto-refresh
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void loadTenant();
+                  void loadEvents();
+                }}
+              >
+                Refresh now
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setStopProvisionOpen(true)}
+              >
+                <Square className="mr-1 h-4 w-4" />
+                Stop provisioning
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {provisionPartial ? (
         <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-50">
@@ -654,6 +772,58 @@ export default function TenantDetailPage() {
           </CardContent>
         </Card>
 
+        {hasAccountingModule &&
+        (tenant.deployment?.status ?? "").toLowerCase() === "active" ? (
+          <Card className="md:col-span-3">
+            <CardHeader>
+              <CardTitle>Bootstrap access (Finance)</CardTitle>
+              <CardDescription>
+                The bootstrap password is derived per tenant slug (not single-use). It is shown here
+                for about 15 minutes after provisioning while the control plane cache is warm. Tell
+                the tenant admin to sign in at Finance login and change the password immediately.
+                {isSuper ? " Super admins can use Impersonate for support access." : ""}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p>
+                Admin email:{" "}
+                <span className="font-mono text-xs">{tenant.adminEmail}</span>
+              </p>
+              {bootstrapPasswordLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading bootstrap password…
+                </div>
+              ) : bootstrapPassword ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground">Bootstrap password (shown once)</p>
+                    <p className="mt-1 break-all font-mono text-xs">{bootstrapPassword}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="Copy bootstrap password"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(bootstrapPassword);
+                      toast.success("Copied bootstrap password");
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  Bootstrap password is no longer in the short-lived cache. Use Impersonate (super
+                  admin) or reset flows if the admin cannot sign in.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
         {hasPosModule ? (
           <Card className="md:col-span-3">
             <CardHeader>
@@ -724,7 +894,7 @@ export default function TenantDetailPage() {
         {hasAccountingAndPos ? (
           <Card className="md:col-span-3">
             <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
-              <div>
+              <div className="min-w-0 flex-1">
                 <CardTitle>Finance ↔ POS integration</CardTitle>
                 <CardDescription>
                   When both modules provision successfully, Bigcapital integration is enabled automatically
@@ -732,12 +902,32 @@ export default function TenantDetailPage() {
                   for debugging.
                 </CardDescription>
               </div>
-              <Link
-                href={posOrgHref}
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-              >
-                POS organizations
-              </Link>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {(!tenant.deployment?.financeTenantId ||
+                  tenant.deployment.financeTenantId <= 0) &&
+                (tenant.deployment?.status ?? "").toLowerCase() === "active" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={repairingFinanceLink}
+                    onClick={() => void repairFinanceLink()}
+                  >
+                    {repairingFinanceLink ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCw className="mr-1 h-4 w-4" />
+                    )}
+                    Repair Finance link
+                  </Button>
+                ) : null}
+                <Link
+                  href={posOrgHref}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
+                >
+                  POS organizations
+                </Link>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {[
@@ -1183,7 +1373,11 @@ export default function TenantDetailPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Provisioning History</CardTitle>
           <Button variant="ghost" size="sm" onClick={() => void loadEvents()}>
-            {isProvisioning ? "Live (auto-refreshing)" : "Refresh"}
+            {shouldPollProvisioning
+              ? "Live (auto-refreshing)"
+              : provisionPollTimedOut && isProvisioning
+                ? "Refresh (auto-refresh paused)"
+                : "Refresh"}
           </Button>
         </CardHeader>
         <CardContent>

@@ -5,7 +5,16 @@ type Params = { params: Promise<{ tenantId: string }> };
 
 export async function POST(req: NextRequest, { params }: Params) {
   const { tenantId } = await params;
-  const res = await apiFetch(`/tenants/${tenantId}/repair-finance-link`, { method: "POST" }, req);
+  const body = await req.text();
+  const res = await apiFetch(
+    `/tenants/${tenantId}/users/invite`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    },
+    req,
+  );
   const text = await res.text();
   return new NextResponse(text, {
     status: res.status,

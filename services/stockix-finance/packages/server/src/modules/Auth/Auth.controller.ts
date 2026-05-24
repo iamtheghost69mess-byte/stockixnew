@@ -38,6 +38,7 @@ import { SystemUser } from '../System/models/SystemUser';
 import UserTenant from '../System/models/UserTenant';
 import { IgnoreTenantInitializedRoute } from '../Tenancy/EnsureTenantIsInitialized.guard';
 import { IgnoreTenantSeededRoute } from '../Tenancy/EnsureTenantIsSeeded.guards';
+import { decode } from 'jsonwebtoken';
 
 @Controller('/auth')
 @ApiTags('Auth')
@@ -107,6 +108,7 @@ export class AuthController {
       organizationId,
       tenantId,
       userId: user.id,
+      mustChangePassword: !!user.mustChangePassword,
     };
   }
 
@@ -193,11 +195,18 @@ export class AuthController {
       res.status(400).json({ error: 'Invalid token' });
       return;
     }
-    // Match JWT signOptions.expiresIn ('1d' in Auth.module) so the cookie outlives the session.
+    const decoded = decode(t) as { exp?: number } | null;
+    let maxAge = 24 * 60 * 60 * 1000;
+    if (decoded?.exp) {
+      const ms = decoded.exp * 1000 - Date.now();
+      if (ms > 60_000) {
+        maxAge = ms;
+      }
+    }
     res.cookie('token', t, {
       httpOnly: false,
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge,
       path: '/',
     });
     res.redirect('/');

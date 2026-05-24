@@ -14,6 +14,16 @@ Stockix is the **control plane** for a multi-tenant SaaS: owner dashboard, APIs,
 | `packages/eslint-config` / `typescript-config` | Shared tooling |
 | `infra/` | Docker Compose stacks and reverse proxy config |
 
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| [docs/PLATFORM_REFERENCE.md](docs/PLATFORM_REFERENCE.md) | Architecture, services, build history |
+| [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md) | All environment variables and setup |
+| [docs/INTEGRATION_REFERENCE.md](docs/INTEGRATION_REFERENCE.md) | POS + Bigcapital bridge, gaps, status |
+| [docs/PROVISIONING_REFERENCE.md](docs/PROVISIONING_REFERENCE.md) | Tenant provisioning, license, plans |
+| [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) | Pre-deploy checklist for operators |
+
 ## Prerequisites
 
 - Node.js 20.9+ (recommended: use [nvm](https://github.com/nvm-sh/nvm) — a `.nvmrc` is included, so `nvm use` picks the right version automatically)
@@ -64,7 +74,7 @@ root .env  →  @repo/config  →  worker (provision)
          docker compose  →  Finance server + webapp containers
 ```
 
-**Deeper reference:** [docs/env-guide.md](docs/env-guide.md) · [docs/envexplanation.md](docs/envexplanation.md) · [env.md](env.md) (audit)
+**Deeper reference:** [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md)
 
 ### First-time setup
 
@@ -154,7 +164,7 @@ Stripe, Plaid, and LemonSqueezy are **disabled** in Finance `.env` (commented bl
 3. Set `DATABASE_URL` / `POSTGRES_*`, domain URLs (`ROOT_DOMAIN`, `DASHBOARD_URL`, `NEXT_PUBLIC_*`), Traefik (`ACME_EMAIL`, `CF_DNS_API_TOKEN`), and provisioning paths (`STOCKIX_REPO`, `TENANT_ENV_ROOT`, `STOCKIX_TENANT_APP_ROOT`).
 4. Run production Compose from `infra/prod` with `--env-file .env` (not laptop root `.env`).
 
-See [docs/deployment-checklist.md](docs/deployment-checklist.md) for the full deploy flow.
+See [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) for the full deploy flow.
 
 ### Stockix Finance local dev (layer 3)
 

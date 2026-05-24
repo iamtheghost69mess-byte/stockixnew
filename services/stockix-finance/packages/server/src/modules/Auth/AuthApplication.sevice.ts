@@ -11,6 +11,7 @@ import { GetAuthMetaService } from './queries/GetAuthMeta.service';
 import { GetAuthenticatedAccount } from './queries/GetAuthedAccount.service';
 import { ListMyTenantsService } from './queries/ListMyTenants.service';
 import { SwitchTenantService } from './commands/SwitchTenant.service';
+import { AuthChangePasswordService } from './commands/AuthChangePassword.service';
 
 @Injectable()
 export class AuthenticationApplication {
@@ -25,6 +26,7 @@ export class AuthenticationApplication {
     private readonly getAuthedAccountService: GetAuthenticatedAccount,
     private readonly listMyTenantsService: ListMyTenantsService,
     private readonly switchTenantService: SwitchTenantService,
+    private readonly authChangePasswordService: AuthChangePasswordService,
   ) {}
 
   /**
@@ -103,5 +105,9 @@ export class AuthenticationApplication {
 
   public switchTenant(organizationId: string) {
     return this.switchTenantService.switchTenant(organizationId);
+  }
+
+  public changePassword(userId: number, password: string) {
+    return this.authChangePasswordService.changePassword(userId, password);
   }
 }
