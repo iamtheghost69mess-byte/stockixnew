@@ -1,0 +1,3628 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
+info:
+  title: Stockix Platform APIs
+  version: 1.0.0
+  description: 'OpenAPI 3.1 derived from Stockix monorepo backend source. Only documents routes present in code.
+
+
+    | Service | Base URL | Coverage |
+
+    |---|---|---|
+
+    | Control Plane | http://localhost:4000 | This file (full) |
+
+    | PMS | http://localhost:3003 | This file (full) |
+
+    | Finance | https://{tenant}.stockix.cloud/api | NOT PROVIDED — services/stockix-finance/shared/sdk-ts/openapi.json or
+    /swagger |
+
+    | POS Tenant | http://localhost:8010 | NOT PROVIDED — services/posnew/apps/pos-backend/openapi/tenant-pos-v1.yaml |
+
+    | POS Platform | http://localhost:8010/api/platform/v1 | NOT PROVIDED — services/posnew/apps/pos-backend/openapi/platform-v1.yaml
+    |
+
+    | Chatlive | CHATWOOT_BASE_URL | NOT PROVIDED — services/chatlive/swagger/swagger.json |
+
+
+    RBAC rank: read_only < support_agent < billing_manager < super_admin.
+
+    Dedicated license suspend endpoint: NOT PROVIDED (use revoke or tenant suspend).'
+servers:
+- url: http://localhost:4000
+  description: Stockix Control Plane API
+- url: http://localhost:3003
+  description: PMS service
+tags:
+- name: CP-Health
+- name: CP-Public
+- name: CP-Auth
+- name: CP-Internal
+- name: CP-Owners
+- name: CP-API-Keys
+- name: CP-Tenants
+- name: CP-Organizations
+- name: CP-Finance-Users
+- name: CP-POS-Proxy
+- name: CP-POS-Credentials
+- name: CP-PMS-Proxy
+- name: CP-Plans
+- name: CP-Licenses
+- name: CP-Fingerprints
+- name: CP-Audit
+- name: CP-Search
+- name: PMS-Properties
+- name: PMS-Rooms
+- name: PMS-Bookings
+- name: PMS-Guests
+- name: PMS-Payments
+- name: PMS-Channels
+- name: PMS-Cleaning
+- name: PMS-Staff
+- name: PMS-Reports
+- name: PMS-Calendar
+- name: PMS-Templates
+- name: PMS-DateOverrides
+- name: PMS-Public
+security:
+- SessionCookie: []
+- BearerSession: []
+- PlatformApiSecret: []
+paths:
+  /health:
+    get:
+      tags:
+      - CP-Health
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                    - ok
+                  service:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+  /public/tenant-orgs/{tenantId}:
+    get:
+      tags:
+      - CP-Public
+      summary: List active organizations (public)
+      description: No auth. Returns publicUrl per org for onboarding UIs.
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '503':
+          description: HTTP 503
+  /auth/session/validate:
+    post:
+      tags:
+      - CP-Auth
+      summary: Validate session
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/login:
+    post:
+      tags:
+      - CP-Auth
+      summary: Owner login
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/mfa/begin:
+    post:
+      tags:
+      - CP-Auth
+      summary: Begin MFA setup
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/mfa/enable:
+    post:
+      tags:
+      - CP-Auth
+      summary: Enable MFA
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/mfa/disable:
+    post:
+      tags:
+      - CP-Auth
+      summary: Disable MFA
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/mfa/status:
+    get:
+      tags:
+      - CP-Auth
+      summary: MFA status
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/reconfirm:
+    post:
+      tags:
+      - CP-Auth
+      summary: Reconfirm password
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/verify-mfa:
+    post:
+      tags:
+      - CP-Auth
+      summary: Complete MFA login
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/me:
+    get:
+      tags:
+      - CP-Auth
+      summary: Current owner
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/logout:
+    post:
+      tags:
+      - CP-Auth
+      summary: Logout
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/invite/{token}:
+    get:
+      tags:
+      - CP-Auth
+      summary: Invite metadata
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/invite/accept:
+    post:
+      tags:
+      - CP-Auth
+      summary: Accept invite
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/password/forgot:
+    post:
+      tags:
+      - CP-Auth
+      summary: Forgot password
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /auth/password/reset:
+    post:
+      tags:
+      - CP-Auth
+      summary: Reset password
+      description: Public auth surface. Mutating routes enforce CSRF via Origin header unless Authorization is present. Rate
+        limits apply to login, MFA verify, invite accept, password reset.
+      security: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '429':
+          description: HTTP 429
+  /plans:
+    get:
+      tags:
+      - CP-Plans
+      summary: List plans
+      responses:
+        '200':
+          description: Plan catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plan'
+      x-stockix-min-role: read_only
+    post:
+      tags:
+      - CP-Plans
+      summary: Create plan
+      description: 409 SLUG_EXISTS if slug taken. Cannot deactivate plan with active licenses (DELETE).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              - slug
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                slug:
+                  type: string
+                maxOrganizations:
+                  type: integer
+                  default: 1
+                maxActivations:
+                  type: integer
+                  default: 1
+                maxUsers:
+                  type: integer
+                  default: 999
+                isPerpetual:
+                  type: boolean
+                features:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /plans/{planId}:
+    patch:
+      tags:
+      - CP-Plans
+      summary: Update plan
+      parameters:
+      - $ref: '#/components/parameters/PlanIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+      x-stockix-min-role: super_admin
+    delete:
+      tags:
+      - CP-Plans
+      summary: Deactivate plan
+      description: Soft delete (isActive=false). 409 PLAN_IN_USE.
+      parameters:
+      - $ref: '#/components/parameters/PlanIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /licenses/generate:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Generate license keys
+      description: If tenantId set, licenses are active immediately and tenant planSlug updated. expiresAt required when isPerpetual=false.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - product
+              - planSlug
+              properties:
+                product:
+                  $ref: '#/components/schemas/LicenseProduct'
+                modules:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LicenseModule'
+                planSlug:
+                  type: string
+                count:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 1
+                isPerpetual:
+                  type: boolean
+                  default: true
+                expiresAt:
+                  type: string
+                  format: date-time
+                validFrom:
+                  type: string
+                  format: date-time
+                maxActivations:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                gracePeriodDays:
+                  type: integer
+                  minimum: 0
+                  maximum: 365
+                  default: 7
+                notes:
+                  type: string
+                  maxLength: 500
+                tenantId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+      x-stockix-min-role: super_admin
+  /licenses:
+    get:
+      tags:
+      - CP-Licenses
+      summary: List licenses
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: product
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: planSlug
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: tenantId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: primary
+        in: query
+        required: false
+        schema:
+          type: string
+          description: With tenantId returns canonical license
+      - name: expiringInDays
+        in: query
+        required: false
+        schema:
+          type: integer
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+      responses:
+        '200':
+          description: Paginated licenses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  licenses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LicenseSummary'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+      x-stockix-min-role: read_only
+  /licenses/analytics:
+    get:
+      tags:
+      - CP-Licenses
+      summary: License analytics
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: read_only
+  /licenses/export.csv:
+    get:
+      tags:
+      - CP-Licenses
+      summary: Export licenses CSV
+      responses:
+        '200':
+          description: text/csv attachment
+      x-stockix-min-role: read_only
+  /licenses/activate:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Activate license on device
+      description: 'Public. Edge cases: device_blacklisted, license_not_assigned, max_activations_reached, license_not_yet_valid,
+        license_revoked, license_expired.'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateLicenseRequest'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+  /licenses/verify-offline:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Verify offline token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - offlineToken
+              - hardwareFingerprint
+              properties:
+                offlineToken:
+                  type: string
+                hardwareFingerprint:
+                  type: string
+      responses:
+        '200':
+          description: HTTP 200
+        '401':
+          description: HTTP 401
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+  /licenses/{licenseId}:
+    get:
+      tags:
+      - CP-Licenses
+      summary: License detail
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: read_only
+    patch:
+      tags:
+      - CP-Licenses
+      summary: Update license notes
+      description: notes max 2000
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: billing_manager
+  /licenses/{licenseId}/history:
+    get:
+      tags:
+      - CP-Licenses
+      summary: License audit history
+      description: Paginated page/pageSize max 100
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: read_only
+  /licenses/sync-audit/{tenantId}:
+    get:
+      tags:
+      - CP-Licenses
+      summary: Finance sync audit preview
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /licenses/{licenseId}/extend:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Extend license expiry
+      description: 409 cannot_extend_revoked
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: billing_manager
+  /licenses/{licenseId}/assign:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Assign license to tenant
+      description: 409 license_already_assigned
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /licenses/{licenseId}/revoke:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Revoke license
+      description: Deactivates devices; triggers Finance+POS sync
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /licenses/{licenseId}/activations/{activationId}/deactivate:
+    post:
+      tags:
+      - CP-Licenses
+      summary: Deactivate device activation
+      parameters:
+      - $ref: '#/components/parameters/LicenseIdPath'
+      - name: activationId
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: support_agent
+  /fingerprints/blacklist:
+    post:
+      tags:
+      - CP-Fingerprints
+      summary: Blacklist hardware fingerprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - hardwareFingerprint
+              properties:
+                hardwareFingerprint:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+      x-stockix-min-role: super_admin
+  /tenants:
+    get:
+      tags:
+      - CP-Tenants
+      summary: List tenants
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: read_only
+    post:
+      tags:
+      - CP-Tenants
+      summary: Provision tenant (async)
+      description: 202 accepted. Poll /tenants/provision-status/{correlationId}.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionTenantRequest'
+      responses:
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /tenants/export.csv:
+    get:
+      tags:
+      - CP-Tenants
+      summary: Export tenants CSV
+      responses:
+        '200':
+          description: CSV
+      x-stockix-min-role: read_only
+  /tenants/provision-status/{correlationId}:
+    get:
+      tags:
+      - CP-Tenants
+      summary: Poll provision status
+      parameters:
+      - $ref: '#/components/parameters/CorrelationIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/provision-stream/{correlationId}:
+    get:
+      tags:
+      - CP-Tenants
+      summary: SSE provision stream
+      parameters:
+      - $ref: '#/components/parameters/CorrelationIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/provision-stop/{correlationId}:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Stop provision by correlation
+      parameters:
+      - $ref: '#/components/parameters/CorrelationIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/provision-stop:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Stop provision for tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}:
+    get:
+      tags:
+      - CP-Tenants
+      summary: Tenant detail
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: read_only
+    patch:
+      tags:
+      - CP-Tenants
+      summary: Update tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+    delete:
+      tags:
+      - CP-Tenants
+      summary: Delete tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/retry-provision:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Retry provision
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/suspend:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Suspend tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/reactivate:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Reactivate tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/stop:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Stop tenant stacks
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/impersonate:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Issue impersonation token
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/events:
+    get:
+      tags:
+      - CP-Tenants
+      summary: Provisioning events
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: read_only
+  /tenants/{tenantId}/add-module:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Add module to tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/remove-module:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Remove module from tenant
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/repair-finance-link:
+    post:
+      tags:
+      - CP-Tenants
+      summary: Repair Finance tenant link
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/finance-password:
+    delete:
+      tags:
+      - CP-Tenants
+      summary: Clear finance password cache
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: HTTP 200
+        '202':
+          description: HTTP 202
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/organizations:
+    get:
+      tags:
+      - CP-Organizations
+      summary: List organizations
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: read_only
+    post:
+      tags:
+      - CP-Organizations
+      summary: Create organization
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/organizations/{orgId}:
+    get:
+      tags:
+      - CP-Organizations
+      summary: Get organization
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - $ref: '#/components/parameters/OrgIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: read_only
+    patch:
+      tags:
+      - CP-Organizations
+      summary: Update organization
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - $ref: '#/components/parameters/OrgIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: support_agent
+    delete:
+      tags:
+      - CP-Organizations
+      summary: Delete organization
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - $ref: '#/components/parameters/OrgIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/organization-access:
+    get:
+      tags:
+      - CP-Organizations
+      summary: List support org access grants
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+    post:
+      tags:
+      - CP-Organizations
+      summary: Grant support org access
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/organization-access/{accessId}:
+    delete:
+      tags:
+      - CP-Organizations
+      summary: Revoke support org access
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - name: accessId
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /tenants/{tenantId}/users:
+    get:
+      tags:
+      - CP-Finance-Users
+      summary: List Finance users
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: read_only
+    post:
+      tags:
+      - CP-Finance-Users
+      summary: Create Finance user
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/users/invite:
+    post:
+      tags:
+      - CP-Finance-Users
+      summary: Invite Finance user
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/users/{userId}:
+    patch:
+      tags:
+      - CP-Finance-Users
+      summary: Update Finance user
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+    delete:
+      tags:
+      - CP-Finance-Users
+      summary: Delete Finance user
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/users/{userId}/reset-password:
+    post:
+      tags:
+      - CP-Finance-Users
+      summary: Reset Finance user password
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/users/{userId}/suspend:
+    post:
+      tags:
+      - CP-Finance-Users
+      summary: Suspend Finance user
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/users/{userId}/activate:
+    post:
+      tags:
+      - CP-Finance-Users
+      summary: Activate Finance user
+      description: Proxies Finance internal API. 503 finance_tenant_not_linked if deployment unlinked.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      responses:
+        '200':
+          description: HTTP 200
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+        '503':
+          description: HTTP 503
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/pos-credentials:
+    get:
+      tags:
+      - CP-POS-Credentials
+      summary: Reveal POS role PINs
+      description: Proxies GET /api/platform/v1/organizations/{id}/credentials. Audited.
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: support_agent
+  /tenants/{tenantId}/pos-credentials/reset-pin:
+    post:
+      tags:
+      - CP-POS-Credentials
+      summary: Reset POS PIN for role
+      parameters:
+      - $ref: '#/components/parameters/TenantIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - role
+              properties:
+                role:
+                  type: string
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: support_agent
+  /pos/tenant-org:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: Resolve POS org by Stockix tenant
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/organizations:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: List POS organizations
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+    post:
+      tags:
+      - CP-POS-Proxy
+      summary: Create POS organization
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: super_admin
+  /pos/organizations/{id}:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: Get POS organization
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+    patch:
+      tags:
+      - CP-POS-Proxy
+      summary: Update POS organization
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: super_admin
+  /pos/devices:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: List POS devices
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/devices/{id}/approve:
+    post:
+      tags:
+      - CP-POS-Proxy
+      summary: Approve POS device
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: super_admin
+  /pos/devices/{id}:
+    delete:
+      tags:
+      - CP-POS-Proxy
+      summary: Delete POS device
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: super_admin
+  /pos/metrics/summary:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: POS metrics summary
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/metrics/kpis:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: POS KPI metrics
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/flags:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: List feature flags
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/flags/{key}:
+    patch:
+      tags:
+      - CP-POS-Proxy
+      summary: Update feature flag
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: super_admin
+  /pos/webhooks:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: List webhook config
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/notifications:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: List notifications
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/jobs:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: List platform jobs
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/audits:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: POS audit log
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/compliance/export:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: Compliance export
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pos/status:
+    get:
+      tags:
+      - CP-POS-Proxy
+      summary: POS platform status
+      description: 'Transparent proxy to POS Platform API (/api/platform/v1). Response shape: NOT PROVIDED (see platform-v1.yaml).'
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /pms/status:
+    get:
+      tags:
+      - CP-PMS-Proxy
+      summary: PMS proxy configuration
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: read_only
+  /pms/health:
+    get:
+      tags:
+      - CP-PMS-Proxy
+      summary: PMS health via proxy
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: read_only
+  /pms/api/{path}:
+    get:
+      tags:
+      - CP-PMS-Proxy
+      summary: Wildcard PMS API proxy
+      description: Forwards to PMS /api/* with x-stockix-internal-secret and x-stockix-tenant-id query tenantId.
+      parameters:
+      - name: path
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '502':
+          description: HTTP 502
+      x-stockix-min-role: read_only
+  /owners:
+    get:
+      tags:
+      - CP-Owners
+      summary: List owners
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: read_only
+    post:
+      tags:
+      - CP-Owners
+      summary: Create owner
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /owners/invite:
+    post:
+      tags:
+      - CP-Owners
+      summary: Invite owner
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '409':
+          description: HTTP 409
+      x-stockix-min-role: super_admin
+  /owners/{ownerId}:
+    patch:
+      tags:
+      - CP-Owners
+      summary: Update owner
+      parameters:
+      - $ref: '#/components/parameters/OwnerIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+      x-stockix-min-role: super_admin
+    delete:
+      tags:
+      - CP-Owners
+      summary: Delete owner
+      parameters:
+      - $ref: '#/components/parameters/OwnerIdPath'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: HTTP 200
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+      x-stockix-min-role: super_admin
+  /api-keys:
+    get:
+      tags:
+      - CP-API-Keys
+      summary: List API keys
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: super_admin
+    post:
+      tags:
+      - CP-API-Keys
+      summary: Create API key
+      description: 403 if authenticated via API key. rawKey returned once.
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '403':
+          description: HTTP 403
+      x-stockix-min-role: super_admin
+  /api-keys/{keyId}:
+    delete:
+      tags:
+      - CP-API-Keys
+      summary: Revoke API key
+      parameters:
+      - name: keyId
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '403':
+          description: HTTP 403
+        '404':
+          description: HTTP 404
+      x-stockix-min-role: super_admin
+  /audit-log:
+    get:
+      tags:
+      - CP-Audit
+      summary: List admin audit log
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: super_admin
+  /admin/orphan-check:
+    get:
+      tags:
+      - CP-Audit
+      summary: Orphan resource check
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: super_admin
+  /search:
+    get:
+      tags:
+      - CP-Search
+      summary: Global search
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: HTTP 200
+      x-stockix-min-role: read_only
+  /internal/jobs/claim:
+    post:
+      tags:
+      - CP-Internal
+      summary: Claim next job
+      security:
+      - WorkerSecret: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/jobs/{jobId}/heartbeat:
+    post:
+      tags:
+      - CP-Internal
+      summary: Job heartbeat
+      security:
+      - WorkerSecret: []
+      parameters:
+      - $ref: '#/components/parameters/JobIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/jobs/{jobId}/cancel-check:
+    get:
+      tags:
+      - CP-Internal
+      summary: Check cancel flag
+      security:
+      - WorkerSecret: []
+      parameters:
+      - $ref: '#/components/parameters/JobIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/jobs/{jobId}/complete:
+    post:
+      tags:
+      - CP-Internal
+      summary: Complete job
+      security:
+      - WorkerSecret: []
+      parameters:
+      - $ref: '#/components/parameters/JobIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/jobs/{jobId}/fail:
+    post:
+      tags:
+      - CP-Internal
+      summary: Fail job
+      security:
+      - WorkerSecret: []
+      parameters:
+      - $ref: '#/components/parameters/JobIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/jobs/dead:
+    get:
+      tags:
+      - CP-Internal
+      summary: List dead jobs
+      security:
+      - WorkerSecret: []
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/jobs/{jobId}/requeue:
+    post:
+      tags:
+      - CP-Internal
+      summary: Requeue dead job
+      security:
+      - WorkerSecret: []
+      parameters:
+      - $ref: '#/components/parameters/JobIdPath'
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /internal/organizations/{controlPlaneOrgId}:
+    patch:
+      tags:
+      - CP-Internal
+      summary: Patch organization from worker
+      security:
+      - WorkerSecret: []
+      parameters:
+      - name: controlPlaneOrgId
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '401':
+          description: HTTP 401
+  /api/properties:
+    get:
+      tags:
+      - PMS-Properties
+      summary: List propertys
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Properties
+      summary: Create property
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/properties/{id}:
+    get:
+      tags:
+      - PMS-Properties
+      summary: Get property
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    patch:
+      tags:
+      - PMS-Properties
+      summary: Update property
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    delete:
+      tags:
+      - PMS-Properties
+      summary: Delete property
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/rooms:
+    get:
+      tags:
+      - PMS-Rooms
+      summary: List rooms
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Rooms
+      summary: Create room
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/rooms/{id}:
+    get:
+      tags:
+      - PMS-Rooms
+      summary: Get room
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    patch:
+      tags:
+      - PMS-Rooms
+      summary: Update room
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    delete:
+      tags:
+      - PMS-Rooms
+      summary: Delete room
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/guests:
+    get:
+      tags:
+      - PMS-Guests
+      summary: List guests
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Guests
+      summary: Create guest
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/guests/{id}:
+    get:
+      tags:
+      - PMS-Guests
+      summary: Get guest
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    patch:
+      tags:
+      - PMS-Guests
+      summary: Update guest
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    delete:
+      tags:
+      - PMS-Guests
+      summary: Delete guest
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/bookings:
+    get:
+      tags:
+      - PMS-Bookings
+      summary: List bookings
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: propertyId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: HTTP 200
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Bookings
+      summary: Create booking
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/bookings/{id}:
+    get:
+      tags:
+      - PMS-Bookings
+      summary: Get booking
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    patch:
+      tags:
+      - PMS-Bookings
+      summary: Update booking
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/bookings/{id}/check-in:
+    post:
+      tags:
+      - PMS-Bookings
+      summary: Booking check-in
+      description: check-out sets room cleaning and syncs Finance receipt (async).
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/bookings/{id}/check-out:
+    post:
+      tags:
+      - PMS-Bookings
+      summary: Booking check-out
+      description: check-out sets room cleaning and syncs Finance receipt (async).
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/bookings/{id}/cancel:
+    post:
+      tags:
+      - PMS-Bookings
+      summary: Booking cancel
+      description: check-out sets room cleaning and syncs Finance receipt (async).
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/payments:
+    get:
+      tags:
+      - PMS-Payments
+      summary: List payments
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: bookingId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Payments
+      summary: Record payment
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/payments/{id}:
+    get:
+      tags:
+      - PMS-Payments
+      summary: Get payment
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/channels:
+    get:
+      tags:
+      - PMS-Channels
+      summary: List iCal channels
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Channels
+      summary: Create channel
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/channels/{id}:
+    patch:
+      tags:
+      - PMS-Channels
+      summary: Update channel
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    delete:
+      tags:
+      - PMS-Channels
+      summary: Delete channel
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/channels/sync:
+    post:
+      tags:
+      - PMS-Channels
+      summary: Trigger calendar sync
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/channels/logs:
+    get:
+      tags:
+      - PMS-Channels
+      summary: Sync audit logs
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/cleaning/tasks:
+    get:
+      tags:
+      - PMS-Cleaning
+      summary: List tasks
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Cleaning
+      summary: Create task
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/cleaning/tasks/{id}:
+    patch:
+      tags:
+      - PMS-Cleaning
+      summary: Update task
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/cleaning/cleaners:
+    get:
+      tags:
+      - PMS-Cleaning
+      summary: List cleaners
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Cleaning
+      summary: Create cleaner
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/cleaning/cleaners/{id}:
+    patch:
+      tags:
+      - PMS-Cleaning
+      summary: Update cleaner
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    delete:
+      tags:
+      - PMS-Cleaning
+      summary: Delete cleaner
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/cleaning/assignments:
+    get:
+      tags:
+      - PMS-Cleaning
+      summary: List assignments
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Cleaning
+      summary: Create assignment
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/cleaning/assignments/{id}:
+    delete:
+      tags:
+      - PMS-Cleaning
+      summary: Delete assignment
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff:
+    get:
+      tags:
+      - PMS-Staff
+      summary: List staff
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Staff
+      summary: Create staff
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff/{id}:
+    delete:
+      tags:
+      - PMS-Staff
+      summary: Delete staff
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff/managers:
+    get:
+      tags:
+      - PMS-Staff
+      summary: List property managers
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Staff
+      summary: Assign property manager
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff/managers/{id}:
+    delete:
+      tags:
+      - PMS-Staff
+      summary: Remove property manager
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff/invites:
+    get:
+      tags:
+      - PMS-Staff
+      summary: List invites
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Staff
+      summary: Create invite
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff/invites/{token}/accept:
+    post:
+      tags:
+      - PMS-Staff
+      summary: Accept staff invite
+      description: 409 if revoked/expired/already accepted.
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: HTTP 200
+        '400':
+          description: HTTP 400
+        '404':
+          description: HTTP 404
+        '409':
+          description: HTTP 409
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/staff/invites/{id}/revoke:
+    post:
+      tags:
+      - PMS-Staff
+      summary: Revoke invite
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/reports/occupancy:
+    get:
+      tags:
+      - PMS-Reports
+      summary: Occupancy report
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/reports/revenue:
+    get:
+      tags:
+      - PMS-Reports
+      summary: Revenue report
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/reports/guests:
+    get:
+      tags:
+      - PMS-Reports
+      summary: Guest statistics
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/calendar/events:
+    get:
+      tags:
+      - PMS-Calendar
+      summary: Calendar events
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/message-templates:
+    get:
+      tags:
+      - PMS-Templates
+      summary: List message templates
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-Templates
+      summary: Create message template
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+        '400':
+          description: HTTP 400
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/message-templates/{id}:
+    get:
+      tags:
+      - PMS-Templates
+      summary: Get message template
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    patch:
+      tags:
+      - PMS-Templates
+      summary: Update message template
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    delete:
+      tags:
+      - PMS-Templates
+      summary: Delete message template
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+        '404':
+          description: HTTP 404
+        '503':
+          description: HTTP 503
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/date-overrides:
+    get:
+      tags:
+      - PMS-DateOverrides
+      summary: List date overrides
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+    post:
+      tags:
+      - PMS-DateOverrides
+      summary: Create date override
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      responses:
+        '201':
+          description: HTTP 201
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/date-overrides/{id}:
+    delete:
+      tags:
+      - PMS-DateOverrides
+      summary: Delete date override
+      security:
+      - PmsProductJwt: []
+      - PmsInternalBypass: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: uuid
+      responses:
+        '200':
+          description: HTTP 200
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+  /api/ical/{token}:
+    get:
+      tags:
+      - PMS-Public
+      summary: Public iCal feed
+      security: []
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: {}
+      responses:
+        '200':
+          description: text/calendar
+          content:
+            text/calendar:
+              schema:
+                type: string
+      servers:
+      - url: http://localhost:3003
+        description: PMS service
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: stockix-session
+      description: Owner dashboard HttpOnly session cookie.
+    BearerSession:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Owner session JWT.
+    PlatformApiSecret:
+      type: http
+      scheme: bearer
+      description: Bearer PLATFORM_API_SECRET.
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: sk_live_
+      description: Read-only platform API key.
+    WorkerSecret:
+      type: http
+      scheme: bearer
+      description: Bearer WORKER_SECRET for internal worker routes.
+    PmsProductJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Product JWT (AUTH_TOKEN_SECRET, module pms).
+    PmsInternalBypass:
+      type: apiKey
+      in: header
+      name: x-stockix-tenant-id
+      description: UUID tenant; pair with x-stockix-internal-secret = PLATFORM_API_SECRET.
+  parameters:
+    TenantIdPath:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    LicenseIdPath:
+      name: licenseId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    PlanIdPath:
+      name: planId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    CorrelationIdPath:
+      name: correlationId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    OwnerIdPath:
+      name: ownerId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    OrgIdPath:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    JobIdPath:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: Required for POST/PATCH/DELETE on /owners/* and /tenants/*.
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+    OwnerRole:
+      type: string
+      enum:
+      - read_only
+      - support_agent
+      - billing_manager
+      - super_admin
+    StockixModule:
+      type: string
+      enum:
+      - accounting
+      - pos
+      - pms
+      - chat
+    LicenseProduct:
+      type: string
+      enum:
+      - platform
+      - pos_desktop
+      - bundle
+    LicenseModule:
+      type: string
+      enum:
+      - accounting
+      - pos
+      - pms
+      - chat
+    LicenseStatus:
+      type: string
+      enum:
+      - unassigned
+      - active
+      - revoked
+      - expired
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        maxOrganizations:
+          type: integer
+        maxActivations:
+          type: integer
+        maxUsers:
+          type: integer
+        isActive:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+    LicenseSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        licenseKey:
+          type: string
+        product:
+          $ref: '#/components/schemas/LicenseProduct'
+        planSlug:
+          type: string
+        status:
+          $ref: '#/components/schemas/LicenseStatus'
+        tenantId:
+          type: string
+          format: uuid
+          nullable: true
+        maxActivations:
+          type: integer
+        activationCount:
+          type: integer
+        isPerpetual:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LicenseModule'
+    ProvisionTenantRequest:
+      type: object
+      required:
+      - slug
+      - name
+      - owner_id
+      - admin_email
+      - admin_first_name
+      - admin_last_name
+      properties:
+        slug:
+          type: string
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+        name:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        admin_email:
+          type: string
+          format: email
+        admin_first_name:
+          type: string
+        admin_last_name:
+          type: string
+        plan_slug:
+          type: string
+          default: starter
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockixModule'
+          default:
+          - accounting
+        assign_existing_license_id:
+          type: string
+          format: uuid
+    ActivateLicenseRequest:
+      type: object
+      required:
+      - licenseKey
+      - hardwareFingerprint
+      properties:
+        licenseKey:
+          type: string
+        hardwareFingerprint:
+          type: string
+          minLength: 8
+          maxLength: 256
+        machineName:
+          type: string
+          maxLength: 120
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
