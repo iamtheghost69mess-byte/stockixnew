@@ -4078,8 +4078,13 @@ async function activateFinanceWarehouses(params) {
     const detail = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : text2.slice(0, 300);
     throw new Error(`activate_warehouses_failed:${res.status}:${detail}`);
   }
-  const primaryWarehouseId = Number(body.primaryWarehouseId);
+  const primaryWarehouseId = Number(
+    body.primaryWarehouseId ?? body.primary_warehouse_id
+  );
   if (!Number.isFinite(primaryWarehouseId) || primaryWarehouseId <= 0) {
+    params.log?.(
+      `[provision] activate-warehouses unexpected body (HTTP ${res.status}): ${text2.slice(0, 400)}`
+    );
     throw new Error("activate_warehouses_failed:missing_primaryWarehouseId");
   }
   params.log?.(

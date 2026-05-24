@@ -31,6 +31,7 @@
     "provision:diagnose": "pnpm --filter api exec node scripts/provision-diagnose.mjs --",
     "provision:smoke": "pnpm --filter api exec node scripts/provision-smoke.mjs --full",
     "provision:test": "node scripts/provision-test-local.mjs",
+    "provision:modules": "pnpm --filter api exec node scripts/provision-module-matrix.mjs --",
     "lint": "turbo run lint",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "architecture:validate": "node scripts/architecture-validation.mjs",
