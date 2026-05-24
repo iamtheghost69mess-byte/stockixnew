@@ -2,36 +2,149 @@
 
 import { useEffect, useState } from "react";
 
+import { PlusIcon } from "lucide-react";
+
+import { PmsPageShell } from "@/components/pms-page-shell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { usePmsTenant } from "@/hooks/use-pms-tenant";
+import { pmsFetch } from "@/lib/pms-fetch";
+
+type Property = {
+  id: string;
+  name: string;
+  type: string;
+  city: string | null;
+  country: string | null;
+  checkInTime: string;
+  checkOutTime: string;
+  minNights: number;
+  cleaningEnabled: boolean;
+};
+
 export default function PmsPropertiesPage() {
-  const [tenantId, setTenantId] = useState("");
-  const [data, setData] = useState<unknown>(null);
+  const { tenantId } = usePmsTenant();
+  const [rows, setRows] = useState<Property[]>([]);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", type: "hotel", address: "", city: "", country: "" });
 
-  useEffect(() => {
-    const saved = sessionStorage.getItem("pms-tenant-id");
-    if (saved) setTenantId(saved);
-  }, []);
-
-  useEffect(() => {
+  async function load() {
     if (!tenantId) return;
-    sessionStorage.setItem("pms-tenant-id", tenantId);
-    void (async () => {
-      const res = await fetch(`/api/pms/properties?tenantId=${tenantId}`);
-      setData(await res.json());
-    })();
-  }, [tenantId]);
+    const res = await pmsFetch("properties", tenantId);
+    const data = (await res.json()) as { properties?: Property[] };
+    setRows(data.properties ?? []);
+  }
+
+  useEffect(() => { void load(); }, [tenantId]);
+
+  async function handleCreate() {
+    if (!tenantId || !form.name) return;
+    setSaving(true);
+    await pmsFetch("properties", tenantId, { method: "POST", body: JSON.stringify(form) });
+    setSaving(false);
+    setOpen(false);
+    setForm({ name: "", type: "hotel", address: "", city: "", country: "" });
+    void load();
+  }
+
+  if (!tenantId) {
+    return (
+      <PmsPageShell title="Properties">
+        <p className="text-sm text-muted-foreground">Select a tenant on the Overview page first.</p>
+      </PmsPageShell>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">PMS properties</h1>
-      <input
-        className="flex h-9 w-full max-w-md rounded-md border px-3 text-sm"
-        placeholder="Tenant UUID"
-        value={tenantId}
-        onChange={(e) => setTenantId(e.target.value)}
-      />
-      <pre className="rounded-lg border bg-muted/30 p-4 text-xs">
-        {data ? JSON.stringify(data, null, 2) : "Enter tenant id from PMS overview"}
-      </pre>
-    </div>
+    <PmsPageShell title="Properties" description="Manage properties for this tenant.">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setOpen(true)}>
+          <PlusIcon className="mr-1 h-4 w-4" /> New property
+        </Button>
+      </div>
+
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Check-in / out</TableHead>
+              <TableHead>Min nights</TableHead>
+              <TableHead>Cleaning</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  No properties yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="capitalize">{p.type}</TableCell>
+                  <TableCell>{[p.city, p.country].filter(Boolean).join(", ") || "—"}</TableCell>
+                  <TableCell className="tabular-nums">{p.checkInTime} / {p.checkOutTime}</TableCell>
+                  <TableCell>{p.minNights}</TableCell>
+                  <TableCell>
+                    <Badge variant={p.cleaningEnabled ? "default" : "secondary"}>
+                      {p.cleaningEnabled ? "On" : "Off"}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New property</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {(["name", "type", "address", "city", "country"] as const).map((field) => (
+              <div key={field} className="space-y-1">
+                <Label className="capitalize">{field}</Label>
+                <Input
+                  value={form[field]}
+                  onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
+                  placeholder={field}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleCreate()} disabled={saving || !form.name}>
+              {saving ? "Saving…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PmsPageShell>
   );
 }

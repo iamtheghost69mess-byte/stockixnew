@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { PmsPageShell } from "@/components/pms-page-shell";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -11,13 +12,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePmsTenant } from "@/hooks/use-pms-tenant";
+import { pmsFetch } from "@/lib/pms-fetch";
 
 type TenantRow = { tenantId: string; name: string; slug: string; modules?: string };
 
+type OccupancyData = {
+  totalRooms: number;
+  totalBookings: number;
+  averageOccupancyRate: number;
+};
+
+type RevenueData = {
+  totalBookings: number;
+  totalRevenueCents: number;
+  totalCollectedCents: number;
+  outstandingCents: number;
+};
+
 export default function PmsOverviewPage() {
+  const { tenantId, setTenantId } = usePmsTenant();
   const [tenants, setTenants] = useState<TenantRow[]>([]);
-  const [tenantId, setTenantId] = useState("");
-  const [occupancy, setOccupancy] = useState<unknown>(null);
+  const [occupancy, setOccupancy] = useState<OccupancyData | null>(null);
+  const [revenue, setRevenue] = useState<RevenueData | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -32,60 +49,84 @@ export default function PmsOverviewPage() {
         }
       });
       setTenants(list);
-      if (list[0]) setTenantId(list[0].tenantId);
+      if (!tenantId && list[0]) setTenantId(list[0].tenantId);
     })();
   }, []);
 
   useEffect(() => {
     if (!tenantId) return;
     void (async () => {
-      const res = await fetch(`/api/pms/reports/occupancy?tenantId=${tenantId}`);
-      setOccupancy(await res.json());
+      const today = new Date().toISOString().slice(0, 10);
+      const [occRes, revRes] = await Promise.all([
+        pmsFetch(`reports/occupancy?from=${today}&to=${today}`, tenantId),
+        pmsFetch("reports/revenue", tenantId),
+      ]);
+      setOccupancy((await occRes.json()) as OccupancyData);
+      setRevenue((await revRes.json()) as RevenueData);
     })();
   }, [tenantId]);
 
+  const fmt = (cents: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">PMS</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Property management for tenants with the PMS module licensed.
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Select value={tenantId} onValueChange={(v) => setTenantId(v ?? "")}>
-          <SelectTrigger className="w-[280px]">
+    <PmsPageShell
+      title="PMS"
+      description="Property management for tenants with the PMS module licensed."
+    >
+      <div className="max-w-sm">
+        <Select value={tenantId} onValueChange={setTenantId}>
+          <SelectTrigger>
             <SelectValue placeholder="Select tenant" />
           </SelectTrigger>
           <SelectContent>
             {tenants.map((t) => (
               <SelectItem key={t.tenantId} value={t.tenantId}>
-                {t.name} ({t.slug})
+                {t.name} <span className="text-muted-foreground">({t.slug})</span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Link href="/pms/properties" className="text-sm text-primary hover:underline">
-          Properties
-        </Link>
-        <Link href="/pms/bookings" className="text-sm text-primary hover:underline">
-          Bookings
-        </Link>
-        <Link href="/pms/guests" className="text-sm text-primary hover:underline">
-          Guests
-        </Link>
-        <Link href="/pms/channels" className="text-sm text-primary hover:underline">
-          iCal channels
-        </Link>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Occupancy</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="text-xs">{JSON.stringify(occupancy, null, 2)}</pre>
-        </CardContent>
-      </Card>
-    </div>
+
+      {tenantId ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Total Rooms</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold tabular-nums">
+              {occupancy?.totalRooms ?? "—"}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Today's Occupancy</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold tabular-nums">
+              {occupancy ? `${Math.round(occupancy.averageOccupancyRate * 100)}%` : "—"}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold tabular-nums">
+              {revenue?.totalBookings ?? "—"}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold tabular-nums">
+              {revenue ? fmt(revenue.totalRevenueCents) : "—"}
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Select a tenant to view data.</p>
+      )}
+    </PmsPageShell>
   );
 }
