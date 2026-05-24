@@ -16,6 +16,10 @@ export default defineConfig({
   noExternal: [/^@repo\//, "jose"],
   esbuildOptions(options) {
     options.alias = {
+      "@repo/config/public": path.resolve(
+        dirname,
+        "../../packages/config/src/public.ts",
+      ),
       "@repo/config": path.resolve(dirname, "../../packages/config/src/index.ts"),
       "@repo/db": path.resolve(dirname, "../../packages/db/src/index.ts"),
       "@repo/db/schema": path.resolve(dirname, "../../packages/db/src/schema.ts"),
