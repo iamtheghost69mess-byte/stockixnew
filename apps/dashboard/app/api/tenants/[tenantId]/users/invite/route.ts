@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api-server";
+import { apiFetch } from "@/lib/api-client";
 import { NextRequest, NextResponse } from "next/server";
 
 type Params = { params: Promise<{ tenantId: string }> };
