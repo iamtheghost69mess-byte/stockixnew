@@ -41,6 +41,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -124,6 +132,12 @@ export default function TenantDetailPage() {
   const [licenseHistory, setLicenseHistory] = useState<LicenseRow[]>([]);
   const [licenseHistoryLoading, setLicenseHistoryLoading] = useState(false);
   const [licenseHistoryOpen, setLicenseHistoryOpen] = useState(false);
+  const [posCredentialsOpen, setPosCredentialsOpen] = useState(false);
+  const [posCredentialsLoading, setPosCredentialsLoading] = useState(false);
+  const [posCredentials, setPosCredentials] = useState<
+    { role: string; username: string; pin: string }[]
+  >([]);
+  const [posPinResettingRole, setPosPinResettingRole] = useState<string | null>(null);
   const profileForm = useForm<TenantProfileValues>({
     resolver: zodResolver(tenantProfileSchema),
     defaultValues: {
@@ -327,6 +341,9 @@ export default function TenantDetailPage() {
   const hasPosModule = tenantModules.includes("pos");
   const hasAccountingModule = tenantModules.includes("accounting");
   const hasAccountingAndPos = hasAccountingModule && hasPosModule;
+  const canRevealPosPins = Boolean(
+    me?.capabilities.canManageTenants && tenant?.posOrganizationId,
+  );
 
   const posOrgHref = useMemo(() => {
     if (tenant?.posOrganizationId) {
@@ -342,6 +359,63 @@ export default function TenantDetailPage() {
       toast.success(`${label} copied`);
     } catch {
       toast.error(`Could not copy ${label}`);
+    }
+  };
+
+  const copyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Could not copy ${label}`);
+    }
+  };
+
+  const loadPosCredentials = async () => {
+    if (!id) return;
+    setPosCredentialsLoading(true);
+    try {
+      const res = await fetch(`/api/tenants/${id}/pos-credentials`);
+      const body = (await readJson(res)) as {
+        roles?: { role: string; username: string; pin: string }[];
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not load POS credentials"));
+      }
+      setPosCredentials(Array.isArray(body.roles) ? body.roles : []);
+      setPosCredentialsOpen(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load POS credentials");
+    } finally {
+      setPosCredentialsLoading(false);
+    }
+  };
+
+  const resetPosPin = async (role: string) => {
+    if (!id) return;
+    setPosPinResettingRole(role);
+    try {
+      const res = await fetch(`/api/tenants/${id}/pos-credentials/reset-pin`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const body = (await readJson(res)) as {
+        roles?: { role: string; username: string; pin: string }[];
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not reset PIN"));
+      }
+      setPosCredentials(Array.isArray(body.roles) ? body.roles : []);
+      toast.success(`New PIN issued for ${role}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not reset PIN");
+    } finally {
+      setPosPinResettingRole(null);
     }
   };
 
@@ -862,10 +936,26 @@ export default function TenantDetailPage() {
               )}
               {tenant.posBootstrapCredentials ? (
                 <div className="space-y-2 rounded-md border p-3">
-                  <p className="font-medium text-foreground">Bootstrap credentials</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-foreground">Bootstrap credentials</p>
+                    {canRevealPosPins ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={posCredentialsLoading}
+                        onClick={() => void loadPosCredentials()}
+                      >
+                        {posCredentialsLoading ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Reveal Staff PINs
+                      </Button>
+                    ) : null}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    PINs are masked. Values were captured at provision time from the worker secret
-                    store.
+                    PINs are masked here. Use Reveal Staff PINs to fetch live credentials from the
+                    POS platform (requires manage-tenant access).
                   </p>
                   <p>
                     Admin PIN:{" "}
@@ -880,6 +970,28 @@ export default function TenantDetailPage() {
                       ))}
                     </ul>
                   ) : null}
+                </div>
+              ) : canRevealPosPins ? (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-foreground">Staff PINs</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={posCredentialsLoading}
+                      onClick={() => void loadPosCredentials()}
+                    >
+                      {posCredentialsLoading ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Reveal Staff PINs
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Provision-time PIN cache is unavailable. Reveal loads current PINs from the POS
+                    organization.
+                  </p>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -1189,6 +1301,80 @@ export default function TenantDetailPage() {
         defaultTenantId={tenant.id}
         onSuccess={() => void loadLicense()}
       />
+
+      <Dialog
+        open={posCredentialsOpen}
+        onOpenChange={(open) => {
+          setPosCredentialsOpen(open);
+          if (!open) setPosCredentials([]);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>POS staff PINs</DialogTitle>
+          </DialogHeader>
+          <Alert>
+            <AlertDescription>
+              Store these securely. Share only with the tenant admin.
+            </AlertDescription>
+          </Alert>
+          {posCredentials.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No bootstrap credentials found on the POS organization.</p>
+          ) : (
+            <ScrollArea className="max-h-[360px] rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>PIN</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {posCredentials.map((row) => (
+                    <TableRow key={`${row.role}-${row.username}`}>
+                      <TableCell className="font-medium capitalize">{row.role}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.username}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.pin}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void copyText(`${row.role} PIN`, row.pin)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={posPinResettingRole === row.role}
+                            onClick={() => void resetPosPin(row.role)}
+                          >
+                            {posPinResettingRole === row.role ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Reset PIN"
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setPosCredentialsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={assignPickOpen}

@@ -67,6 +67,7 @@ import {
   resolveAndPersistFinanceTenantId,
 } from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
+import { registerPosCredentialsRoutes } from "./pos-credentials-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
@@ -1398,17 +1399,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             .where(eq(licenses.id, assignExistingLicenseId))
             .limit(1);
           if (lic?.status === "unassigned") {
-            const assignSet: {
-              tenantId: string;
-              status: string;
-              activatedAt: Date;
-              validFrom: Date;
-              updatedAt: Date;
-              planSlug: string;
-              modules: string;
-              maxOrganizations?: number;
-              maxActivations?: number;
-            } = {
+            const assignSet = {
               tenantId: targetTenantId,
               status: "active",
               activatedAt: new Date(),
@@ -1416,13 +1407,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               updatedAt: new Date(),
               planSlug,
               modules: modulesSerialized,
+              maxOrganizations: planLimits.maxOrganizations,
+              maxActivations: planLimits.maxActivations,
             };
-            if (lic.maxOrganizations === 1) {
-              assignSet.maxOrganizations = planLimits.maxOrganizations;
-            }
-            if (lic.maxActivations === 1) {
-              assignSet.maxActivations = planLimits.maxActivations;
-            }
             await db
               .update(licenses)
               .set(assignSet)
@@ -5065,6 +5052,7 @@ function startReadinessReconciler() {
 
 registerLicenseApi(app, db);
 registerTenantFinanceUsersApi(app, db);
+registerPosCredentialsRoutes(app, db);
 registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);
 

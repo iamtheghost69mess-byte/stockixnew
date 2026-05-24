@@ -28,7 +28,11 @@ import {
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
-import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
+import { getPlanLimits } from "../../../apps/api/src/license-utils.js";
+import {
+  FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+  syncFinanceLicense,
+} from "../domain/provisioning/adapters/sync-finance-license.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 import { provisionChatwootAccount } from "./chatwoot-provision.js";
@@ -1185,9 +1189,19 @@ export async function executeProvisionRuntime(
       });
     }
     if (financeTenantId && internalUrl) {
+      const planSlug = input.planSlug ?? "starter";
+      const planLimits = await getPlanLimits(db, planSlug);
       await syncFinanceLicense(
         internalUrl,
-        { tenantId: financeTenantId, status: "active", isPerpetual: true },
+        {
+          tenantId: financeTenantId,
+          planSlug,
+          status: "active",
+          isPerpetual: true,
+          maxOrganizations: planLimits.maxOrganizations,
+          maxActivations: planLimits.maxActivations,
+          maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+        },
         log,
       );
     }

@@ -36,6 +36,14 @@ describe('LicenseService.assertCanCreateOrganization', () => {
     await expect(service.assertCanCreateOrganization()).resolves.toBeUndefined();
   });
 
+  it('blocks 4th org when maxOrganizations is 3', async () => {
+    const service = buildService(3, 3);
+    await expect(service.assertCanCreateOrganization()).rejects.toMatchObject({
+      errorType: 'ORGANIZATION_LIMIT_REACHED',
+      httpStatus: HttpStatus.PAYMENT_REQUIRED,
+    });
+  });
+
   it('allows unlimited organizations when maxOrganizations is -1', async () => {
     const service = buildService(99, -1);
     await expect(service.assertCanCreateOrganization()).resolves.toBeUndefined();

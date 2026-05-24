@@ -3,6 +3,7 @@ import {
   buildFinanceLicenseLimitFields,
   FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
   mapStockixLicenseStatus,
+  resolveFinanceLicenseLimitFields,
   syncFinanceLicenseForStockixTenant,
 } from "../src/finance-license.client.js";
 
@@ -33,6 +34,24 @@ describe("Finance sync payload — field semantics", () => {
       maxActivations: 3,
     });
     expect(payload.maxOrganizations).toBe(5);
+  });
+
+  it("uses plan limits when license is null", () => {
+    const payload = buildFinanceLicenseLimitFields(null, {
+      maxOrganizations: 3,
+      maxActivations: 2,
+    });
+    expect(payload.maxOrganizations).toBe(3);
+    expect(payload.maxActivations).toBe(2);
+  });
+
+  it("upgrades sentinel license limit 1 from plan maxOrganizations 3", () => {
+    const payload = resolveFinanceLicenseLimitFields(
+      { maxOrganizations: 1, maxActivations: 1 },
+      { maxOrganizations: 3, maxActivations: 5 },
+    );
+    expect(payload.maxOrganizations).toBe(3);
+    expect(payload.maxActivations).toBe(5);
   });
 });
 

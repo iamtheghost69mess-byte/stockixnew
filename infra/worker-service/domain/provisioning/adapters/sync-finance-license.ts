@@ -1,5 +1,8 @@
 import { apiConfig } from "@repo/config";
 
+/** Matches apps/api/src/finance-license.client.ts default staff cap. */
+export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
+
 export type SyncFinanceLicensePayload = {
   tenantId: number;
   planSlug?: string;
@@ -8,6 +11,7 @@ export type SyncFinanceLicensePayload = {
   expiresAt?: string | null;
   gracePeriodDays?: number;
   maxUsers?: number;
+  maxActivations?: number;
   maxOrganizations?: number;
   isPerpetual?: boolean;
   featureFlags?: Record<string, boolean> | null;
@@ -32,7 +36,8 @@ export async function syncFinanceLicense(
     validFrom: payload.validFrom ?? new Date().toISOString(),
     expiresAt: payload.expiresAt ?? null,
     gracePeriodDays: payload.gracePeriodDays ?? 30,
-    maxUsers: payload.maxUsers ?? 10,
+    maxUsers: payload.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxActivations: payload.maxActivations ?? 1,
     maxOrganizations: payload.maxOrganizations ?? 1,
     isPerpetual: payload.isPerpetual ?? true,
     featureFlags: payload.featureFlags ?? null,

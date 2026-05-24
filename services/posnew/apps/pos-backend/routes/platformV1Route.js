@@ -29,7 +29,9 @@ const {
   patchOrgLocationSupport,
   patchEntitlements,
   deleteOrg,
+  getOrgCredentials,
   resetCredentialRolePin,
+  resetOrgPin,
   retryProvisioning,
 } = require("../controllers/platformOrgController");
 const { wireBigcapitalIntegration } = require("../controllers/platformIntegrationController");
@@ -153,6 +155,16 @@ router.post(
   "/organizations/:id/provisioning/retry",
   requirePlatformPermission(P.ORG_WRITE),
   retryProvisioning
+);
+router.get(
+  "/organizations/:id/credentials",
+  requirePlatformPermission(P.ORG_READ),
+  getOrgCredentials
+);
+router.post(
+  "/organizations/:id/reset-pin",
+  requirePlatformPermission(P.ORG_WRITE),
+  resetOrgPin
 );
 router.patch(
   "/organizations/:id/credentials/:role/reset-pin",

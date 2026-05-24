@@ -67,6 +67,7 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
       return "support_agent";
     }
     if (pathname.includes("/impersonate")) return "super_admin";
+    if (pathname.includes("/pos-credentials")) return "support_agent";
     if (pathname.includes("/organization-access")) return "super_admin";
     if (pathname.includes("/provision")) return "support_agent";
     if (pathname.includes("/organizations") && m !== "GET") return "support_agent";

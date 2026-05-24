@@ -1032,6 +1032,54 @@ const deleteOrg = async (req, res, next) => {
   }
 };
 
+/** Return bootstrap staff PINs for platform operators (API key / platform JWT). */
+const getOrgCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId).select("defaultCredentials slug").lean();
+    if (!org) return next(createHttpError(404, "Organization not found."));
+
+    const creds = Array.isArray(org.defaultCredentials) ? org.defaultCredentials : [];
+    const roles = creds
+      .filter((c) => c && c.role && c.pin)
+      .map((c) => ({
+        role: String(c.role).toLowerCase().trim(),
+        username:
+          c.username != null && String(c.username).trim() !== ""
+            ? String(c.username).toLowerCase().trim()
+            : c.name != null && String(c.name).trim() !== ""
+              ? String(c.name).toLowerCase().trim()
+              : String(c.role).toLowerCase().trim(),
+        pin: String(c.pin),
+      }));
+
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.credentials_viewed",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { roleCount: roles.length },
+    });
+
+    res.json({ success: true, data: { roles } });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** Body: { role: "cashier" } — same behavior as PATCH .../credentials/:role/reset-pin */
+const resetOrgPin = async (req, res, next) => {
+  const role = String(req.body?.role || "").toLowerCase().trim();
+  if (!role) {
+    return next(createHttpError(400, "role is required."));
+  }
+  req.params.role = role;
+  return resetCredentialRolePin(req, res, next);
+};
+
 /** Reset PIN for the default bootstrap user where `username` or `name` and `role` match (e.g. `waiter`). Updates `defaultCredentials`. */
 const resetCredentialRolePin = async (req, res, next) => {
   try {
@@ -1144,6 +1192,8 @@ module.exports = {
   patchOrgLocationSupport,
   patchEntitlements,
   deleteOrg,
+  getOrgCredentials,
   resetCredentialRolePin,
+  resetOrgPin,
   retryProvisioning,
 };
