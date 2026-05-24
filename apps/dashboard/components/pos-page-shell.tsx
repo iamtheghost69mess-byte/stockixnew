@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PosHealthAlert } from "@/components/pos-health-alert";
 import { cn } from "@/lib/utils";
 
 const POS_LINKS = [
@@ -35,6 +36,7 @@ export function PosPageShell({
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
+      <PosHealthAlert />
       <nav className="flex flex-wrap gap-2 border-b pb-3">
         {POS_LINKS.map((link) => (
           <Link

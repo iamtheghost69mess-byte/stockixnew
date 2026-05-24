@@ -45,7 +45,10 @@ pnpm bootstrap:env
 # 3. Start Postgres, wait for it, run migrations, and seed
 pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local
 
-# 4. Start API + Dashboard
+# 4. (Once) POS backend deps — npm workspaces under services/posnew
+pnpm dev:pos:install
+
+# 5. Start API + Dashboard + worker + POS backend (8010)
 pnpm dev
 ```
 
@@ -53,6 +56,12 @@ pnpm dev
 |-----|-----|-------------|
 | Dashboard | http://localhost:3000 | `admin@localhost` / `admin` |
 | API | http://localhost:4000 | — |
+| POS platform API | http://localhost:8010 | `POS_PLATFORM_API_KEY` in root `.env` |
+| POS restaurant UI | http://localhost:3001 | Provisioned tenants may use `{slug}-pos.localhost` via Traefik |
+
+`pnpm dev` builds `@repo/auth`, starts POS API + POS UI, and syncs `AUTH_TOKEN_SECRET` / Redis for local dev.
+
+Control-plane only (no POS): `STOCKIX_DEV_SKIP_POS=1 pnpm dev`
 
 > To reset the database back to a clean state: `pnpm db:reset:local`
 

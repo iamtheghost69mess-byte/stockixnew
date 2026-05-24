@@ -42,7 +42,7 @@ export async function posProxyJson(
       data: {
         error: "pos_unavailable",
         message,
-        hint: `Start POS backend at ${POS_PLATFORM_BASE} or unset POS pages until it is running.`,
+        hint: `Run pnpm dev from repo root (POS API ${POS_PLATFORM_BASE}, UI ${process.env.POS_FRONTEND_URL ?? "http://localhost:3001"}). First time: pnpm dev:pos:install.`,
       },
       status: 503,
     };

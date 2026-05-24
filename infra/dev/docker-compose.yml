@@ -1,5 +1,16 @@
-# Local Stockix control-plane database only. Compose v2: `docker compose up -d`
+# Local Stockix control-plane database + shared Redis for POS dev.
+# Compose v2: `docker compose -f infra/dev/docker-compose.yml up -d`
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
   postgres:
     image: postgres:16-alpine
     environment:

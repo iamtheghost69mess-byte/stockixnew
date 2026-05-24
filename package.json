@@ -3,9 +3,11 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm infra:worker:build && concurrently -n apps,worker -c blue,magenta \"pnpm exec turbo run dev --filter=dashboard --filter=api\" \"node infra/worker-service/.runtime/worker.js\"",
+    "dev": "pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm --filter @repo/auth build && pnpm infra:worker:build && concurrently -n apps,worker,pos -c blue,magenta,green \"pnpm exec turbo run dev --filter=dashboard --filter=api\" \"node infra/worker-service/.runtime/worker.js\" \"node scripts/dev-pos-stack.mjs\"",
     "dev:all": "pnpm dev",
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
+    "dev:pos": "node scripts/dev-pos-stack.mjs",
+    "dev:pos:install": "npm install --prefix services/posnew",
     "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/dev/docker-compose.yml down",
     "db:wait": "pnpm --filter @repo/db db:wait",

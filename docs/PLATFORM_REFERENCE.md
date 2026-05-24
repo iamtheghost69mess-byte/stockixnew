@@ -59,7 +59,7 @@ Stockix is a **multi-tenant SaaS control plane** that provisions and operates pr
 | `lint` | Depends on `^lint` |
 | `check-types` | Depends on `^check-types` |
 
-Root scripts orchestrate Postgres (`db:up`, `db:migrate`), worker build/run, and `concurrently` for API + dashboard + worker.
+Root scripts orchestrate Postgres + Redis (`db:up`, `db:migrate`), `@repo/auth` build (CJS for POS), worker build/run, and `concurrently` for API + dashboard + worker + **POS stack** (`scripts/dev-pos-stack.mjs`: API **8010**, restaurant UI **3001**). Skip POS with `STOCKIX_DEV_SKIP_POS=1 pnpm dev`. First-time POS deps: `pnpm dev:pos:install`.
 
 ---
 
