@@ -75,7 +75,7 @@ export default function PmsOverviewPage() {
       description="Property management for tenants with the PMS module licensed."
     >
       <div className="max-w-sm">
-        <Select value={tenantId} onValueChange={setTenantId}>
+        <Select value={tenantId} onValueChange={(v) => { if (v) setTenantId(v); }}>
           <SelectTrigger>
             <SelectValue placeholder="Select tenant" />
           </SelectTrigger>
