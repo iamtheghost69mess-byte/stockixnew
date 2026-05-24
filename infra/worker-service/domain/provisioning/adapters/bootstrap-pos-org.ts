@@ -17,6 +17,8 @@ export type BootstrapPosOrgInput = {
   tenantId: string;
   adminEmail: string;
   log: (message: string) => void;
+  /** Stockix license expiry (defaults to +1 year when omitted). */
+  licenseExpiresAt?: Date | string | number | null;
   /** Override base URL (default: posConfig.platformBaseUrl). */
   posBaseUrl?: string;
   posHostPort?: number;
@@ -92,6 +94,19 @@ function normalizeCredentials(raw: unknown): PosRoleCredential[] {
     out.push({ role, username, pin });
   }
   return out;
+}
+
+function readFullCredentialsFromJson(body: unknown): PosRoleCredential[] {
+  if (!isRecord(body)) return [];
+  if (Array.isArray(body.fullCredentials)) {
+    const fromTop = normalizeCredentials(body.fullCredentials);
+    if (fromTop.length > 0) return fromTop;
+  }
+  const data = body.data;
+  if (isRecord(data) && Array.isArray(data.fullCredentials)) {
+    return normalizeCredentials(data.fullCredentials);
+  }
+  return [];
 }
 
 function toPosDefaultCredentials(creds: PosRoleCredential[]): PosDefaultCredentials {
@@ -192,7 +207,9 @@ export async function bootstrapPosOrganization(
 
   const licenseStartsAt = new Date().toISOString();
   const licenseEndsAt = new Date(
-    Date.now() + 365 * 24 * 60 * 60 * 1000,
+    input.licenseExpiresAt != null
+      ? new Date(input.licenseExpiresAt).getTime()
+      : Date.now() + 365 * 24 * 60 * 60 * 1000,
   ).toISOString();
 
   const idempotencyKey = `stockix-provision-${input.tenantId}`;
@@ -233,6 +250,9 @@ export async function bootstrapPosOrganization(
       ? createRes.json.data.defaultCredentials
       : null,
   );
+  if (credentials.length === 0) {
+    credentials = readFullCredentialsFromJson(createRes.json);
+  }
 
   if (bootstrapMode !== "sync_fallback") {
     const pollStarted = Date.now();
@@ -256,6 +276,10 @@ export async function bootstrapPosOrganization(
       const readyForPinLogin = data?.readyForPinLogin === true;
       // lifecycle is "active" on create before org_bootstrap finishes — wait for PIN readiness only.
       if (readyForPinLogin) {
+        const fromStatus = readFullCredentialsFromJson(statusRes.json);
+        if (fromStatus.length > 0) {
+          credentials = fromStatus;
+        }
         bootstrapReady = true;
         log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
         break;
@@ -269,24 +293,9 @@ export async function bootstrapPosOrganization(
     }
   }
 
-  const getRes = await platformFetch(base, `/api/platform/v1/organizations/${orgId}`, {
-    method: "GET",
-    apiKey,
-  });
-  if (!getRes.ok) {
-    throw new Error(
-      `POS org fetch failed (${getRes.status}): ${getRes.text.slice(0, 300)}`,
-    );
-  }
-  const orgData =
-    isRecord(getRes.json) && isRecord(getRes.json.data) ? getRes.json.data : null;
-  if (orgData?.defaultCredentials) {
-    credentials = normalizeCredentials(orgData.defaultCredentials);
-  }
-
   if (credentials.length === 0) {
     throw new Error(
-      `POS org bootstrap finished but defaultCredentials missing for orgId=${orgId}`,
+      `POS org bootstrap finished but fullCredentials missing for orgId=${orgId}`,
     );
   }
 

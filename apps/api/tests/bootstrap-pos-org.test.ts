@@ -9,19 +9,26 @@ describe("bootstrapPosOrganization", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
-        if (url.endsWith("/api/ping")) {
+        if (url.endsWith("/health") || url.endsWith("/ready") || url.endsWith("/api/ping")) {
           return new Response("ok", { status: 200 });
+        }
+        if (url.includes("/organizations/health-summary")) {
+          return new Response(JSON.stringify({ success: true }), { status: 200 });
         }
         if (url.endsWith("/api/platform/v1/organizations") && init?.method === "POST") {
           return new Response(
             JSON.stringify({
               success: true,
               bootstrapMode: "sync_fallback",
+              fullCredentials: [
+                { role: "admin", username: "admin", pin: "123456" },
+                { role: "cashier", username: "cashier", pin: "654321" },
+              ],
               data: {
                 _id: "507f1f77bcf86cd799439011",
                 defaultCredentials: [
-                  { role: "admin", username: "admin", pin: "123456" },
-                  { role: "cashier", username: "cashier", pin: "654321" },
+                  { role: "admin", username: "admin", pinMasked: "••••••", pinLastTwo: "56" },
+                  { role: "cashier", username: "cashier", pinMasked: "••••••", pinLastTwo: "21" },
                 ],
               },
             }),
@@ -32,7 +39,14 @@ describe("bootstrapPosOrganization", () => {
           return new Response(
             JSON.stringify({
               success: true,
-              data: { lifecycle: "active", readyForPinLogin: true },
+              data: {
+                lifecycle: "active",
+                readyForPinLogin: true,
+                fullCredentials: [
+                  { role: "admin", username: "admin", pin: "123456" },
+                  { role: "cashier", username: "cashier", pin: "654321" },
+                ],
+              },
             }),
             { status: 200 },
           );
@@ -44,8 +58,8 @@ describe("bootstrapPosOrganization", () => {
               data: {
                 _id: "507f1f77bcf86cd799439011",
                 defaultCredentials: [
-                  { role: "admin", username: "admin", pin: "123456" },
-                  { role: "cashier", username: "cashier", pin: "654321" },
+                  { role: "admin", username: "admin", pinMasked: "••••••", pinLastTwo: "56" },
+                  { role: "cashier", username: "cashier", pinMasked: "••••••", pinLastTwo: "21" },
                 ],
               },
             }),

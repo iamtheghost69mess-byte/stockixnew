@@ -9,6 +9,10 @@ const { writeAudit, auditFromRequest } = require("../services/platformAuditServi
 const { addJob } = require("../services/jobQueue");
 const { recordEvent } = require("../services/productEventService");
 const { bootstrapOrganization } = require("../services/orgBootstrapService");
+const {
+  storeFullCredentials,
+  consumeFullCredentials,
+} = require("../services/bootstrapCredentialReveal");
 const { isDisposableEmail, trackSignupIp, maybeOpenFraudCase } = require(
   "../services/abuseSignals"
 );
@@ -375,11 +379,16 @@ const createOrg = async (req, res, next) => {
       organizationId: String(org._id),
     });
     let bootstrapMode = "queue";
+    let fullCredentials = null;
     if (!queueResult?.queued) {
-      await bootstrapOrganization({
+      const bootstrapResult = await bootstrapOrganization({
         organizationId: String(org._id),
       });
       bootstrapMode = "sync_fallback";
+      fullCredentials = bootstrapResult?.fullCredentials ?? null;
+    }
+    if (fullCredentials?.length) {
+      await storeFullCredentials(String(org._id), fullCredentials);
     }
     await recordEvent({
       eventType: "organization.created",
@@ -426,6 +435,9 @@ const createOrg = async (req, res, next) => {
       data: orgPayload,
       bootstrapMode,
     };
+    if (bootstrapMode === "sync_fallback" && fullCredentials?.length) {
+      responseBody.fullCredentials = fullCredentials;
+    }
     if (idemKey) {
       await IdempotencyRecord.create({
         key: idemKey,
@@ -495,19 +507,26 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       accessState.status === "active" &&
       org.isBootstrapped === true &&
       adminCount > 0;
+    const payload = {
+      organizationId: String(orgId),
+      slug: org.slug,
+      name: org.name,
+      lifecycle: org.lifecycle,
+      isBootstrapped: !!org.isBootstrapped,
+      adminUserCount: adminCount,
+      hasAdminUser: adminCount > 0,
+      readyForPinLogin,
+      provisioningSteps: org.provisioningSteps || [],
+    };
+    if (readyForPinLogin) {
+      const fullCredentials = await consumeFullCredentials(orgId);
+      if (fullCredentials?.length) {
+        payload.fullCredentials = fullCredentials;
+      }
+    }
     res.json({
       success: true,
-      data: {
-        organizationId: String(orgId),
-        slug: org.slug,
-        name: org.name,
-        lifecycle: org.lifecycle,
-        isBootstrapped: !!org.isBootstrapped,
-        adminUserCount: adminCount,
-        hasAdminUser: adminCount > 0,
-        readyForPinLogin,
-        provisioningSteps: org.provisioningSteps || [],
-      },
+      data: payload,
     });
   } catch (e) {
     next(e);
@@ -1044,7 +1063,7 @@ const getOrgCredentials = async (req, res, next) => {
 
     const creds = Array.isArray(org.defaultCredentials) ? org.defaultCredentials : [];
     const roles = creds
-      .filter((c) => c && c.role && c.pin)
+      .filter((c) => c && c.role)
       .map((c) => ({
         role: String(c.role).toLowerCase().trim(),
         username:
@@ -1053,7 +1072,8 @@ const getOrgCredentials = async (req, res, next) => {
             : c.name != null && String(c.name).trim() !== ""
               ? String(c.name).toLowerCase().trim()
               : String(c.role).toLowerCase().trim(),
-        pin: String(c.pin),
+        pinMasked: c.pinMasked != null ? String(c.pinMasked) : "",
+        pinLastTwo: c.pinLastTwo != null ? String(c.pinLastTwo) : "",
       }));
 
     await writeAudit({
@@ -1113,7 +1133,11 @@ const resetCredentialRolePin = async (req, res, next) => {
     for (let i = 0; i < 100; i++) {
       const candidate = Math.floor(100000 + Math.random() * 900000).toString();
       const lookup = computePinLookup(candidate);
-      const taken = await User.exists({ pinLookup: lookup, _id: { $ne: user._id } });
+      const taken = await User.exists({
+        organization: orgId,
+        pinLookup: lookup,
+        _id: { $ne: user._id },
+      });
       if (!taken) {
         newPin = candidate;
         break;
@@ -1126,20 +1150,31 @@ const resetCredentialRolePin = async (req, res, next) => {
     const creds = Array.isArray(org.defaultCredentials)
       ? org.defaultCredentials.map((c) =>
           c && String(c.role).toLowerCase() === roleNorm
-            ? { role: roleNorm, username: roleNorm, pin: newPin }
+            ? {
+                role: roleNorm,
+                username: roleNorm,
+                pinMasked: newPin.replace(/./g, "•"),
+                pinLastTwo: newPin.slice(-2),
+              }
             : {
                 role: c.role,
                 username:
                   c.username != null && String(c.username).trim() !== ""
                     ? String(c.username).toLowerCase().trim()
                     : c.name,
-                pin: c.pin,
+                pinMasked: c.pinMasked,
+                pinLastTwo: c.pinLastTwo,
               }
         )
       : [];
     const hasRow = creds.some((c) => c && String(c.role).toLowerCase() === roleNorm);
     if (!hasRow) {
-      creds.push({ role: roleNorm, username: roleNorm, pin: newPin });
+      creds.push({
+        role: roleNorm,
+        username: roleNorm,
+        pinMasked: newPin.replace(/./g, "•"),
+        pinLastTwo: newPin.slice(-2),
+      });
     }
 
     const session = await mongoose.startSession();
@@ -1167,7 +1202,12 @@ const resetCredentialRolePin = async (req, res, next) => {
       data: {
         role: roleNorm,
         pin: newPin,
-        defaultCredentials: creds,
+        defaultCredentials: creds.map((c) => ({
+          role: c.role,
+          username: c.username,
+          pinMasked: c.pinMasked,
+          pinLastTwo: c.pinLastTwo,
+        })),
       },
     });
   } catch (e) {
@@ -1175,6 +1215,42 @@ const resetCredentialRolePin = async (req, res, next) => {
     if (msg.includes("already assigned")) {
       return next(createHttpError(409, "PIN collision—retry the request."));
     }
+    next(e);
+  }
+};
+
+const suspendOrg = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId);
+    if (!org) return next(createHttpError(404, "Organization not found."));
+
+    const reason = String(req.body?.reason || "license_revoked").trim();
+    if (org.lifecycle !== "suspended") {
+      const check = validateLifecycleTransition(org.lifecycle, "suspended");
+      if (!check.ok) {
+        return next(createHttpError(400, check.message));
+      }
+      org.lifecycle = "suspended";
+      org.lifecycleReasonCode = reason.slice(0, 64);
+      org.lifecycleNote = reason;
+      await org.save();
+      await OrgAccessCache.invalidateOrgAccessCache(org._id);
+    }
+
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.suspend",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { reason, lifecycle: org.lifecycle },
+    });
+
+    res.json({ success: true, data: withOrganizationAccessState(org) });
+  } catch (e) {
     next(e);
   }
 };
@@ -1188,6 +1264,7 @@ module.exports = {
   getOrgObservability,
   getOrgProvisioningStatus,
   patchOrgLifecycle,
+  suspendOrg,
   patchOrgLicense,
   patchOrgLocationSupport,
   patchEntitlements,

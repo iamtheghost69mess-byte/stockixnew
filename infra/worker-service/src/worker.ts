@@ -24,6 +24,8 @@ import {
   provisionTenant,
 } from "../domain/provisioner.js";
 import { executeOrgProvisionRuntime } from "./org-provision-runtime.js";
+import { executeAddModuleRuntime } from "./provision-runtime.js";
+import { stopModuleStack } from "./module-stacks.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
@@ -389,6 +391,20 @@ const orgProvisionPayloadSchema = z.object({
   stockixApiUrl: z.string().optional(),
 });
 
+const addModulePayloadSchema = z.object({
+  tenantId: z.string().uuid(),
+  slug: z.string().min(1),
+  name: z.string().min(1),
+  adminEmail: z.string().email(),
+  planSlug: z.string().optional(),
+  module: z.enum(["pos", "pms", "chat"]),
+});
+
+const removeModulePayloadSchema = z.object({
+  slug: z.string().min(1),
+  module: z.enum(["pos", "pms", "chat"]),
+});
+
 async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
   correlationId: string | null;
@@ -522,6 +538,61 @@ async function runOrgProvisionJob(
   );
 }
 
+async function runAddModuleJob(
+  db: ReturnType<typeof createDb>,
+  job: {
+    id: string;
+    correlationId: string | null;
+    payload: Record<string, unknown>;
+  },
+): Promise<{
+  tenantStatus?: string;
+  posStatus?: string;
+  posError?: string;
+  posOrganizationId?: string;
+  posUrl?: string;
+  posApiUrl?: string;
+  posDefaultCredentials?: {
+    adminPin: string;
+    allRoles: { role: string; username: string; pin: string }[];
+  };
+}> {
+  const payload = addModulePayloadSchema.parse(job.payload);
+  const result = await executeAddModuleRuntime(
+    db,
+    {
+      tenantId: payload.tenantId,
+      slug: payload.slug,
+      name: payload.name,
+      adminEmail: payload.adminEmail,
+      module: payload.module,
+      planSlug: payload.planSlug,
+    },
+    (m) => console.log(`[worker][${job.id}] ${m}`),
+    job.correlationId ?? randomUUID(),
+  );
+  return {
+    tenantStatus: result.tenantStatus,
+    posStatus: result.posStatus,
+    posError: result.posError,
+    posOrganizationId: result.posOrganizationId,
+    posUrl: result.posUrl,
+    posApiUrl: result.posApiUrl,
+    posDefaultCredentials: result.posDefaultCredentials,
+  };
+}
+
+async function runRemoveModuleJob(
+  job: { id: string; payload: Record<string, unknown> },
+): Promise<void> {
+  const payload = removeModulePayloadSchema.parse(job.payload);
+  if (payload.module === "pos" || payload.module === "pms") {
+    await stopModuleStack(payload.slug, payload.module, (m) =>
+      console.log(`[worker][${job.id}] ${m}`),
+    );
+  }
+}
+
 async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
   tenantId: string | null;
@@ -567,6 +638,8 @@ const handlers = {
   "tenant.provision": runProvisionJob,
   "organization.provision": runOrgProvisionJob,
   "tenant.deprovision": runDeprovisionJob,
+  add_module: runAddModuleJob,
+  remove_module: (_db: ReturnType<typeof createDb>, job: ClaimedJob) => runRemoveModuleJob(job),
   "tenant.lifecycle": (
     db: ReturnType<typeof createDb>,
     job: { tenantId: string | null; id: string; payload: Record<string, unknown> },
@@ -670,6 +743,8 @@ async function loop() {
         | undefined;
       if (job.type === "tenant.provision") {
         provisionComplete = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
+      } else if (job.type === "add_module") {
+        provisionComplete = await withExecutionTimeout(runAddModuleJob(db, job), jobExecutionTimeoutMs);
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
@@ -695,6 +770,7 @@ async function loop() {
           cancelledByUser
           || job.type === "tenant.provision"
           || job.type === "organization.provision"
+          || job.type === "add_module"
           || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
@@ -716,6 +792,7 @@ async function loop() {
         const fallbackNoRetry =
           job.type === "tenant.provision"
           || job.type === "organization.provision"
+          || job.type === "add_module"
           || isPermanentProvisionError(message);
         const status = fallbackNoRetry ? "dead" : "pending";
         const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 30_000);
@@ -747,6 +824,11 @@ async function loop() {
                 updatedAt: new Date(),
               })
               .where(eq(tenantDeployments.tenantId, job.tenantId));
+          } else if (job.type === "add_module" && job.tenantId) {
+            await tx
+              .update(tenants)
+              .set({ status: "active" })
+              .where(eq(tenants.id, job.tenantId));
           }
         }).catch((fallbackError) => {
           console.error(

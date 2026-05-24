@@ -407,11 +407,13 @@ var chatwootConfig = {
 };
 var moduleGatingConfig = {
   /**
-   * When true, worker provisions only the Docker stacks matching
+   * When true (default), worker provisions only the Docker stacks matching
    * the tenant's modules[] array.
-   * When false (default), Finance stack always provisioned (safe default).
+   * Set PROVISION_MODULE_GATING=0 for legacy mode (always provisions Finance).
    */
-  enabled: process.env.PROVISION_MODULE_GATING === "1"
+  get enabled() {
+    return process.env.PROVISION_MODULE_GATING !== "0";
+  }
 };
 
 // ../../packages/db/src/index.ts
@@ -2827,6 +2829,7 @@ var plans = pgTable(
     description: text("description"),
     maxOrganizations: integer("max_organizations").notNull().default(1),
     maxActivations: integer("max_activations").notNull().default(1),
+    maxUsers: integer("max_users").notNull().default(999),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     /** Price in smallest currency unit (e.g. cents). Null = custom / not set. */
@@ -3155,15 +3158,17 @@ async function getActiveLicenseForTenant(db, tenantId) {
 async function getPlanLimits(db, planSlug) {
   const row = await db.select({
     maxOrganizations: plans.maxOrganizations,
-    maxActivations: plans.maxActivations
+    maxActivations: plans.maxActivations,
+    maxUsers: plans.maxUsers
   }).from(plans).where(eq(plans.slug, planSlug)).limit(1);
   if (!row[0]) {
     console.warn(`[getPlanLimits] Plan slug "${planSlug}" not found. Using defaults.`);
-    return { maxOrganizations: 1, maxActivations: 1 };
+    return { maxOrganizations: 1, maxActivations: 1, maxUsers: 999 };
   }
   return {
     maxOrganizations: row[0].maxOrganizations,
-    maxActivations: row[0].maxActivations
+    maxActivations: row[0].maxActivations,
+    maxUsers: row[0].maxUsers
   };
 }
 async function isLicenseLimitsConsistentWithPlan(db, license) {
@@ -3194,11 +3199,19 @@ import { eq as eq4 } from "drizzle-orm";
 // src/finance-license.client.ts
 import { eq as eq2 } from "drizzle-orm";
 var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
-function buildFinanceLicenseLimitFields(license) {
+function resolveFinanceLicenseLimitFields(license, planLimits) {
+  let maxOrganizations = license?.maxOrganizations ?? planLimits.maxOrganizations;
+  let maxActivations = license?.maxActivations ?? planLimits.maxActivations;
+  if (license?.maxOrganizations === 1 && planLimits.maxOrganizations !== 1) {
+    maxOrganizations = planLimits.maxOrganizations;
+  }
+  if (license?.maxActivations === 1 && planLimits.maxActivations !== 1) {
+    maxActivations = planLimits.maxActivations;
+  }
   return {
-    maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
-    maxActivations: license?.maxActivations ?? 1,
-    maxOrganizations: license?.maxOrganizations ?? 1
+    maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxOrganizations,
+    maxActivations
   };
 }
 function mapStockixLicenseStatus(license, tenantStatus) {
@@ -3254,11 +3267,12 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
   const license = await getActiveLicenseForTenant(db, params.stockixTenantId);
   const [tenantRow] = await db.select({ status: tenants.status, planSlug: tenants.planSlug }).from(tenants).where(eq2(tenants.id, params.stockixTenantId)).limit(1);
   const planSlug = license?.planSlug ?? tenantRow?.planSlug ?? "owner-managed";
+  const planLimits = await getPlanLimits(db, planSlug);
   if (license) {
     const isConsistent = await isLicenseLimitsConsistentWithPlan(db, license);
     if (!isConsistent) {
       log(
-        `[LicenseSync] License limits differ from plan limits for license ${license.id}, tenant ${license.tenantId ?? "none"} \u2014 license values will be used for sync`
+        `[LicenseSync] License limits differ from plan limits for license ${license.id}, tenant ${license.tenantId ?? "none"} \u2014 plan limits will be applied for sync`
       );
     }
   }
@@ -3277,7 +3291,7 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
     validFrom: (license?.validFrom ?? /* @__PURE__ */ new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    ...buildFinanceLicenseLimitFields(license),
+    ...resolveFinanceLicenseLimitFields(license, planLimits),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null
   };
@@ -3439,6 +3453,24 @@ function renderLicenseExpired(props) {
 }
 
 // src/mail/send.ts
+async function sendFinanceCredentialsEmail(opts) {
+  const brandName = "Stockix";
+  const modulesLabel = opts.modules.length > 0 ? opts.modules.join(", ") : "accounting";
+  return sendMail({
+    to: opts.to,
+    subject: `Your ${brandName} accounting access is ready`,
+    html: `
+        <h2>Your accounting platform is ready</h2>
+        <p>Tenant: ${opts.tenantName}</p>
+        <p>Login URL: <a href="${opts.financeUrl}">${opts.financeUrl}</a></p>
+        <p>Email: ${opts.adminEmail}</p>
+        <p>Temporary password: <strong>${opts.oneTimePassword}</strong></p>
+        <p>You will be asked to change your password on first login.</p>
+        <p>Modules: ${modulesLabel}</p>
+      `,
+    idempotencyKey: `finance-credentials/${opts.adminEmail}/${opts.financeUrl}`
+  });
+}
 async function sendLicenseExpiringEmail(opts) {
   const daysRemaining = Math.max(
     0,
@@ -3955,7 +3987,9 @@ import { mkdir, rename, writeFile } from "fs/promises";
 import { join as join4 } from "path";
 function buildTenantSignupEnv() {
   return {
-    SIGNUP_DISABLED: "true"
+    SIGNUP_DISABLED: apiConfig.signupDisabled ? "true" : "false",
+    SIGNUP_ALLOWED_DOMAINS: apiConfig.signupAllowedDomains,
+    SIGNUP_ALLOWED_EMAILS: apiConfig.signupAllowedEmailsOverride
   };
 }
 function mailSecureEnvValue() {
@@ -3990,7 +4024,7 @@ function buildTenantEnvMap(params) {
     MONGODB_DATABASE_URL: env.MONGODB_DATABASE_URL ?? "mongodb://mongo/stockix",
     PUBLIC_PROXY_PORT: String(params.publicProxyPort),
     PUBLIC_PROXY_SSL_PORT: "443",
-    SIGNUP_DISABLED: signup.SIGNUP_DISABLED,
+    ...signup,
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
     MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",
@@ -4235,6 +4269,7 @@ async function wirePosBigcapitalIntegration(input) {
 }
 
 // ../../infra/worker-service/domain/provisioning/adapters/sync-finance-license.ts
+var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS2 = 999;
 async function syncFinanceLicense(internalBaseUrl, payload, log) {
   const secret = apiConfig.internalApiSecret;
   if (!secret) {
@@ -4249,7 +4284,8 @@ async function syncFinanceLicense(internalBaseUrl, payload, log) {
     validFrom: payload.validFrom ?? (/* @__PURE__ */ new Date()).toISOString(),
     expiresAt: payload.expiresAt ?? null,
     gracePeriodDays: payload.gracePeriodDays ?? 30,
-    maxUsers: payload.maxUsers ?? 10,
+    maxUsers: payload.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS2,
+    maxActivations: payload.maxActivations ?? 1,
     maxOrganizations: payload.maxOrganizations ?? 1,
     isPerpetual: payload.isPerpetual ?? true,
     featureFlags: payload.featureFlags ?? null
@@ -4683,7 +4719,7 @@ function resolveTenantModules(inputModules) {
   return filtered.length > 0 ? filtered : [...DEFAULT_MODULES];
 }
 function isModuleGatingEnabled() {
-  return process.env.PROVISION_MODULE_GATING === "1";
+  return moduleGatingConfig.enabled;
 }
 function shouldProvisionFinanceStack(modules) {
   return resolveTenantModules(modules).includes("accounting");
@@ -4852,6 +4888,31 @@ async function provisionPosStackTracked(opts, trace) {
     throw error;
   }
 }
+async function unpublishPosTraefik(slug) {
+  await removePosTraefikConfig(slug);
+}
+async function stopModuleStack(slug, module, log) {
+  if (module === "pos") {
+    const composeFile2 = join6(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
+    const project2 = `stockix-pos-${slug}`;
+    log(`[module-stop][pos] compose down project=${project2}`);
+    await execa2(
+      "docker",
+      ["compose", "-f", composeFile2, "-p", project2, "down", "--remove-orphans"],
+      { stdio: "pipe", reject: false }
+    );
+    await unpublishPosTraefik(slug);
+    return;
+  }
+  const composeFile = join6(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
+  const project = `stockix-pms-${slug}`;
+  log(`[module-stop][pms] compose down project=${project}`);
+  await execa2(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
+    { stdio: "pipe", reject: false }
+  );
+}
 async function provisionPmsStack(opts) {
   const composeFile = join6(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
   const project = `stockix-pms-${opts.slug}`;
@@ -4963,7 +5024,7 @@ async function runWirePosIntegrationStep(params) {
   if (!hasAccountingAndPos(params.licensedModules)) {
     return { ok: true };
   }
-  if (params.hasOp("tenant.wire_pos_integration")) {
+  if (!params.forceRerun && params.hasOp("tenant.wire_pos_integration")) {
     await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
       meta: { operationKey: "tenant.wire_pos_integration" }
     });
@@ -5218,9 +5279,15 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     if (posOnlyRetry) {
       const [existing] = await db.select({
         tenantId: tenants.id,
+        tenantModules: tenants.modules,
         deploymentId: tenantDeployments.id,
         internalPort: tenantDeployments.internalPort,
-        composeProjectName: tenantDeployments.composeProjectName
+        composeProjectName: tenantDeployments.composeProjectName,
+        financeTenantId: tenantDeployments.financeTenantId,
+        financeDefaultWarehouseId: tenantDeployments.financeDefaultWarehouseId,
+        financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
+        financeCashAccountId: tenantDeployments.financeCashAccountId,
+        financeCardAccountId: tenantDeployments.financeCardAccountId
       }).from(tenants).innerJoin(tenantDeployments, eq9(tenantDeployments.tenantId, tenants.id)).where(eq9(tenants.slug, input.slug)).limit(1);
       if (!existing) {
         throw new Error(`tenant_not_found:${input.slug}`);
@@ -5228,9 +5295,12 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       tenantId = existing.tenantId;
       deploymentId = existing.deploymentId;
       port = existing.internalPort;
+      const retryLicensedModules = resolveTenantModules(
+        parseTenantModulesJson(existing.tenantModules)
+      );
       await checkNotCancelled();
       const posOutcome2 = await runPosProvisionStep({
-        licensedModules: licensedModulesEarly,
+        licensedModules: retryLicensedModules,
         slug: input.slug,
         tenantId,
         tenantName: input.name,
@@ -5241,8 +5311,46 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         trace
       });
       if (posOutcome2.posStatus === "ok") {
-        await db.update(tenants).set({ status: "active" }).where(eq9(tenants.id, tenantId));
-        await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(tenantDeployments.tenantId, tenantId));
+        let tenantStatus = "active";
+        let wireError;
+        const shouldWire = hasAccountingAndPos(retryLicensedModules) && existing.financeTenantId != null && existing.financeTenantId > 0 && existing.financeWalkInCustomerId != null && existing.financeWalkInCustomerId > 0;
+        if (shouldWire && posOutcome2.posOrganizationId && posOutcome2.posHostPort && port && existing.financeCashAccountId && existing.financeCashAccountId > 0 && existing.financeCardAccountId && existing.financeCardAccountId > 0) {
+          const workerInternalUrl = port > 0 ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}` : void 0;
+          const wireResult = await runWirePosIntegrationStep({
+            licensedModules: retryLicensedModules,
+            slug: input.slug,
+            posOrganizationId: posOutcome2.posOrganizationId,
+            posHostPort: posOutcome2.posHostPort,
+            financeInternalPort: port,
+            workerInternalUrl,
+            financeTenantId: existing.financeTenantId,
+            walkInCustomerId: existing.financeWalkInCustomerId,
+            cashAccountId: existing.financeCashAccountId,
+            cardAccountId: existing.financeCardAccountId,
+            financeDefaultWarehouseId: existing.financeDefaultWarehouseId ?? void 0,
+            log,
+            trace,
+            markOp,
+            hasOp,
+            forceRerun: true
+          });
+          if (!wireResult.ok) {
+            tenantStatus = "partial";
+            wireError = wireResult.error;
+          } else {
+            await trace.event("progress", "Integration re-wired on retry", {
+              meta: { operationKey: "tenant.wire_pos_integration" }
+            });
+          }
+        }
+        await db.update(tenants).set({ status: tenantStatus }).where(eq9(tenants.id, tenantId));
+        await db.update(tenantDeployments).set({
+          status: "active",
+          lastError: wireError ?? null,
+          updatedAt: /* @__PURE__ */ new Date(),
+          ...posOutcome2.posOrganizationId ? { posOrganizationId: posOutcome2.posOrganizationId } : {},
+          ...posOutcome2.posUrl ? { posUrl: posOutcome2.posUrl } : {}
+        }).where(eq9(tenantDeployments.tenantId, tenantId));
         log(`[provision] POS-only retry success slug=${input.slug}`);
         return {
           ok: true,
@@ -5253,11 +5361,12 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
           baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
           oneTimeAdminPassword,
           posStatus: "ok",
-          tenantStatus: "active",
+          tenantStatus,
           posOrganizationId: posOutcome2.posOrganizationId,
           posUrl: posOutcome2.posUrl,
           posApiUrl: posOutcome2.posApiUrl,
-          posDefaultCredentials: posOutcome2.posDefaultCredentials
+          posDefaultCredentials: posOutcome2.posDefaultCredentials,
+          ...wireError ? { posError: wireError } : {}
         };
       }
       const posError = posOutcome2.posError ?? "POS provisioning failed";
@@ -5560,6 +5669,23 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         elapsedMs: elapsedMs()
       });
       log("[provision] step done: tenant.bootstrap_admin");
+      if (oneTimeAdminPassword && input.adminEmail.trim()) {
+        try {
+          await sendFinanceCredentialsEmail({
+            to: input.adminEmail,
+            tenantName: input.name,
+            financeUrl: baseUrl,
+            adminEmail: input.adminEmail,
+            oneTimePassword: oneTimeAdminPassword,
+            modules: resolveTenantModules(input.modules)
+          });
+          log(`[provision] Finance credentials email sent to ${input.adminEmail}`);
+        } catch (emailErr) {
+          log(
+            `[provision] Finance credentials email failed (non-fatal): ${emailErr instanceof Error ? emailErr.message : String(emailErr)}`
+          );
+        }
+      }
     } else {
       await trace.event("resume", "Skipping bootstrap admin registration (already journaled)", {
         meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail }
@@ -5896,9 +6022,19 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       });
     }
     if (financeTenantId && internalUrl) {
+      const planSlug = input.planSlug ?? "starter";
+      const planLimits = await getPlanLimits(db, planSlug);
       await syncFinanceLicense(
         internalUrl,
-        { tenantId: financeTenantId, status: "active", isPerpetual: true },
+        {
+          tenantId: financeTenantId,
+          planSlug,
+          status: "active",
+          isPerpetual: true,
+          maxOrganizations: planLimits.maxOrganizations,
+          maxActivations: planLimits.maxActivations,
+          maxUsers: planLimits.maxUsers
+        },
         log
       );
     }
@@ -6080,6 +6216,199 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     await trace.event("failed", message, { level: "error", meta: { cause: String(err) } }).catch((error) => recordCleanupError("final_failed_event", error));
     log(`[provision] failed slug=${input.slug} correlationId=${correlationId}: ${message}`);
     return { ok: false, message, cause: String(err) };
+  }
+}
+async function executeAddModuleRuntime(db, input, log, correlationId) {
+  const trace = createProvisionTracer(
+    db,
+    correlationId,
+    () => ({ slug: input.slug, tenantId: input.tenantId }),
+    log
+  );
+  const [row] = await db.select({
+    tenantId: tenants.id,
+    slug: tenants.slug,
+    name: tenants.name,
+    adminEmail: tenants.adminEmail,
+    modules: tenants.modules,
+    deploymentId: tenantDeployments.id,
+    internalPort: tenantDeployments.internalPort,
+    financeTenantId: tenantDeployments.financeTenantId,
+    financeDefaultWarehouseId: tenantDeployments.financeDefaultWarehouseId,
+    financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
+    financeCashAccountId: tenantDeployments.financeCashAccountId,
+    financeCardAccountId: tenantDeployments.financeCardAccountId
+  }).from(tenants).innerJoin(tenantDeployments, eq9(tenantDeployments.tenantId, tenants.id)).where(eq9(tenants.id, input.tenantId)).limit(1);
+  if (!row) {
+    throw new Error(`tenant_not_found:${input.tenantId}`);
+  }
+  const licensedModules = resolveTenantModules(parseTenantModulesJson(row.modules));
+  if (!licensedModules.includes(input.module)) {
+    throw new Error(`module_not_on_tenant:${input.module}`);
+  }
+  await trace.event("add_module", `Provisioning module ${input.module}`, {
+    meta: { module: input.module }
+  });
+  const internalApiSecret = apiConfig.internalApiSecret?.trim() ?? "";
+  const financeInternalPort = row.internalPort ?? void 0;
+  const internalUrl = financeInternalPort && financeInternalPort > 0 ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? "127.0.0.1"}:${financeInternalPort}` : void 0;
+  if (input.module === "pos") {
+    let financeTenantId = row.financeTenantId ?? void 0;
+    let financeDefaultWarehouseId = row.financeDefaultWarehouseId ?? void 0;
+    let walkInCustomerId = row.financeWalkInCustomerId ?? void 0;
+    let cashAccountId = row.financeCashAccountId ?? void 0;
+    let cardAccountId = row.financeCardAccountId ?? void 0;
+    const hasAccounting = licensedModules.includes("accounting");
+    if (hasAccounting && financeTenantId && internalUrl && internalApiSecret) {
+      if (!financeDefaultWarehouseId || financeDefaultWarehouseId <= 0) {
+        const wh = await activateFinanceWarehouses({
+          internalBaseUrl: internalUrl,
+          internalApiSecret,
+          financeTenantId,
+          correlationId,
+          log
+        });
+        financeDefaultWarehouseId = wh.primaryWarehouseId;
+        await persistFinanceDeploymentIds(db, row.deploymentId, {
+          financeDefaultWarehouseId
+        });
+      }
+      if (!walkInCustomerId || walkInCustomerId <= 0 || (!cashAccountId || cashAccountId <= 0) || (!cardAccountId || cardAccountId <= 0)) {
+        const seeded = await seedFinancePosDefaults({
+          internalBaseUrl: internalUrl,
+          internalApiSecret,
+          financeTenantId,
+          correlationId,
+          log
+        });
+        walkInCustomerId = seeded.walkInCustomerId;
+        cashAccountId = seeded.cashAccountId;
+        cardAccountId = seeded.cardAccountId;
+        await persistFinanceDeploymentIds(db, row.deploymentId, {
+          walkInCustomerId,
+          cashAccountId,
+          cardAccountId
+        });
+      }
+    }
+    const posOutcome = await runPosProvisionStep({
+      licensedModules,
+      slug: input.slug,
+      tenantId: input.tenantId,
+      tenantName: input.name,
+      adminEmail: input.adminEmail,
+      financeInternalPort: financeInternalPort ?? void 0,
+      db,
+      log,
+      trace
+    });
+    if (posOutcome.posStatus !== "ok") {
+      const posError = posOutcome.posError ?? "POS module provisioning failed";
+      await db.update(tenantDeployments).set({ lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(tenantDeployments.tenantId, input.tenantId));
+      return {
+        ok: true,
+        module: "pos",
+        posStatus: "failed",
+        posError,
+        tenantStatus: hasAccounting ? "partial" : "active"
+      };
+    }
+    if (posOutcome.posOrganizationId) {
+      await db.update(tenantDeployments).set({
+        posOrganizationId: posOutcome.posOrganizationId,
+        ...posOutcome.posUrl ? { posUrl: posOutcome.posUrl } : {},
+        lastError: null,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq9(tenantDeployments.tenantId, input.tenantId));
+    }
+    if (hasAccounting && posOutcome.posOrganizationId && posOutcome.posHostPort && financeTenantId && walkInCustomerId && cashAccountId && cardAccountId && financeInternalPort) {
+      const wireResult = await runWirePosIntegrationStep({
+        licensedModules,
+        slug: input.slug,
+        posOrganizationId: posOutcome.posOrganizationId,
+        posHostPort: posOutcome.posHostPort,
+        financeInternalPort,
+        workerInternalUrl: internalUrl,
+        financeTenantId,
+        walkInCustomerId,
+        cashAccountId,
+        cardAccountId,
+        financeDefaultWarehouseId,
+        log,
+        trace,
+        markOp: async (operationKey, message, meta) => {
+          await trace.event("progress", message, { meta: { operationKey, ...meta } });
+        },
+        hasOp: () => false
+      });
+      if (!wireResult.ok) {
+        await db.update(tenants).set({ status: "partial" }).where(eq9(tenants.id, input.tenantId));
+        await db.update(tenantDeployments).set({ lastError: wireResult.error, updatedAt: /* @__PURE__ */ new Date() }).where(eq9(tenantDeployments.tenantId, input.tenantId));
+        return {
+          ok: true,
+          module: "pos",
+          posStatus: "ok",
+          posError: wireResult.error,
+          tenantStatus: "partial",
+          posOrganizationId: posOutcome.posOrganizationId,
+          posUrl: posOutcome.posUrl,
+          posApiUrl: posOutcome.posApiUrl,
+          posDefaultCredentials: posOutcome.posDefaultCredentials
+        };
+      }
+    }
+    if (financeTenantId && internalUrl) {
+      const planSlug = input.planSlug ?? "starter";
+      const planLimits = await getPlanLimits(db, planSlug);
+      await syncFinanceLicense(
+        internalUrl,
+        {
+          tenantId: financeTenantId,
+          planSlug,
+          status: "active",
+          isPerpetual: true,
+          maxOrganizations: planLimits.maxOrganizations,
+          maxActivations: planLimits.maxActivations,
+          maxUsers: planLimits.maxUsers
+        },
+        log
+      );
+    }
+    return {
+      ok: true,
+      module: "pos",
+      posStatus: "ok",
+      tenantStatus: "active",
+      posOrganizationId: posOutcome.posOrganizationId,
+      posUrl: posOutcome.posUrl,
+      posApiUrl: posOutcome.posApiUrl,
+      posDefaultCredentials: posOutcome.posDefaultCredentials
+    };
+  }
+  if (input.module === "pms") {
+    await provisionPmsStack({ slug: input.slug, tenantId: input.tenantId, log });
+    return { ok: true, module: "pms", tenantStatus: "active" };
+  }
+  const chatwootBaseUrl = process.env.CHATWOOT_BASE_URL ?? "";
+  const chatwootApiKey = process.env.CHATWOOT_API_ACCESS_TOKEN ?? "";
+  await provisionChatwootAccount({
+    db,
+    tenantId: input.tenantId,
+    tenantName: input.name,
+    adminEmail: input.adminEmail,
+    chatwootBaseUrl,
+    chatwootApiKey,
+    log
+  });
+  return { ok: true, module: "chat", tenantStatus: "active" };
+}
+function parseTenantModulesJson(json) {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter((m) => typeof m === "string") : [];
+  } catch {
+    return [];
   }
 }
 
@@ -7119,6 +7448,18 @@ var orgProvisionPayloadSchema = z2.object({
   stockixTenantId: z2.string().uuid(),
   stockixApiUrl: z2.string().optional()
 });
+var addModulePayloadSchema = z2.object({
+  tenantId: z2.string().uuid(),
+  slug: z2.string().min(1),
+  name: z2.string().min(1),
+  adminEmail: z2.string().email(),
+  planSlug: z2.string().optional(),
+  module: z2.enum(["pos", "pms", "chat"])
+});
+var removeModulePayloadSchema = z2.object({
+  slug: z2.string().min(1),
+  module: z2.enum(["pos", "pms", "chat"])
+});
 async function runProvisionJob(db, job) {
   const guard = async () => {
     await assertProvisionNotCancelled(job.id);
@@ -7217,6 +7558,41 @@ async function runOrgProvisionJob(db, job) {
     guard
   );
 }
+async function runAddModuleJob(db, job) {
+  const payload = addModulePayloadSchema.parse(job.payload);
+  const result = await executeAddModuleRuntime(
+    db,
+    {
+      tenantId: payload.tenantId,
+      slug: payload.slug,
+      name: payload.name,
+      adminEmail: payload.adminEmail,
+      module: payload.module,
+      planSlug: payload.planSlug
+    },
+    (m) => console.log(`[worker][${job.id}] ${m}`),
+    job.correlationId ?? randomUUID()
+  );
+  return {
+    tenantStatus: result.tenantStatus,
+    posStatus: result.posStatus,
+    posError: result.posError,
+    posOrganizationId: result.posOrganizationId,
+    posUrl: result.posUrl,
+    posApiUrl: result.posApiUrl,
+    posDefaultCredentials: result.posDefaultCredentials
+  };
+}
+async function runRemoveModuleJob(job) {
+  const payload = removeModulePayloadSchema.parse(job.payload);
+  if (payload.module === "pos" || payload.module === "pms") {
+    await stopModuleStack(
+      payload.slug,
+      payload.module,
+      (m) => console.log(`[worker][${job.id}] ${m}`)
+    );
+  }
+}
 async function runDeprovisionJob(db, job) {
   if (!job.tenantId) throw new Error("tenantId is required");
   const removeVolumes = job.payload.removeVolumes === true;
@@ -7247,6 +7623,8 @@ var handlers = {
   "tenant.provision": runProvisionJob,
   "organization.provision": runOrgProvisionJob,
   "tenant.deprovision": runDeprovisionJob,
+  add_module: runAddModuleJob,
+  remove_module: (_db, job) => runRemoveModuleJob(job),
   "tenant.lifecycle": (db, job) => {
     const rawCommand = String(job.payload.command ?? "");
     if (!ALLOWED_LIFECYCLE_COMMANDS.includes(rawCommand)) {
@@ -7317,6 +7695,8 @@ async function loop() {
       let provisionComplete;
       if (job.type === "tenant.provision") {
         provisionComplete = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
+      } else if (job.type === "add_module") {
+        provisionComplete = await withExecutionTimeout(runAddModuleJob(db, job), jobExecutionTimeoutMs);
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
@@ -7337,7 +7717,7 @@ async function loop() {
       console.error(`[worker][${job.id}] failed: ${message}`);
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
-        const noRetry = cancelledByUser || job.type === "tenant.provision" || job.type === "organization.provision" || isPermanentProvisionError(message);
+        const noRetry = cancelledByUser || job.type === "tenant.provision" || job.type === "organization.provision" || job.type === "add_module" || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         console.log(
@@ -7355,7 +7735,7 @@ async function loop() {
         console.error(
           `[worker][${job.id}] failed to report failure: ${reportError instanceof Error ? reportError.message : String(reportError)}`
         );
-        const fallbackNoRetry = job.type === "tenant.provision" || job.type === "organization.provision" || isPermanentProvisionError(message);
+        const fallbackNoRetry = job.type === "tenant.provision" || job.type === "organization.provision" || job.type === "add_module" || isPermanentProvisionError(message);
         const status = fallbackNoRetry ? "dead" : "pending";
         const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 3e4);
         await db.transaction(async (tx) => {
@@ -7376,6 +7756,8 @@ async function loop() {
               lastError: `worker_fallback_failure_persist:${message}`,
               updatedAt: /* @__PURE__ */ new Date()
             }).where(eq11(tenantDeployments.tenantId, job.tenantId));
+          } else if (job.type === "add_module" && job.tenantId) {
+            await tx.update(tenants).set({ status: "active" }).where(eq11(tenants.id, job.tenantId));
           }
         }).catch((fallbackError) => {
           console.error(

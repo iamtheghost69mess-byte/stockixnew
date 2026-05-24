@@ -2,7 +2,7 @@ import { isAbsolute, join } from "node:path";
 
 import { execa } from "execa";
 
-import { apiConfig, posConfig } from "@repo/config";
+import { apiConfig, moduleGatingConfig, posConfig } from "@repo/config";
 
 import { allocateTenantPort } from "@repo/db";
 
@@ -79,12 +79,9 @@ export function resolveTenantModules(inputModules?: string[] | null): string[] {
 
 
 
-/** True when `PROVISION_MODULE_GATING=1` (any other value disables gating). */
-
+/** True when module gating is enabled (default). Only `PROVISION_MODULE_GATING=0` disables it. */
 export function isModuleGatingEnabled(): boolean {
-
-  return process.env.PROVISION_MODULE_GATING === "1";
-
+  return moduleGatingConfig.enabled;
 }
 
 
@@ -168,6 +165,9 @@ export type ProvisionPosStackInput = {
   log: (m: string) => void;
 
   db?: PostgresJsDatabase<typeof dbSchema>;
+
+  /** Stockix license expiry passed to POS org bootstrap. */
+  licenseExpiresAt?: Date | null;
 
   /** Finance stack host port (for POS container → Finance URL). */
 
@@ -384,6 +384,8 @@ export async function provisionPosStack(
 
     log: opts.log,
 
+    licenseExpiresAt: opts.licenseExpiresAt,
+
     posHostPort: backendPort,
 
   });
@@ -502,6 +504,34 @@ export async function unpublishPosTraefik(slug: string): Promise<void> {
 
   await removePosTraefikConfig(slug);
 
+}
+
+/** Stop a module stack without removing volumes (remove-module). */
+export async function stopModuleStack(
+  slug: string,
+  module: "pos" | "pms",
+  log: (m: string) => void,
+): Promise<void> {
+  if (module === "pos") {
+    const composeFile = join(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
+    const project = `stockix-pos-${slug}`;
+    log(`[module-stop][pos] compose down project=${project}`);
+    await execa(
+      "docker",
+      ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
+      { stdio: "pipe", reject: false },
+    );
+    await unpublishPosTraefik(slug);
+    return;
+  }
+  const composeFile = join(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
+  const project = `stockix-pms-${slug}`;
+  log(`[module-stop][pms] compose down project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
+    { stdio: "pipe", reject: false },
+  );
 }
 
 

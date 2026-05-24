@@ -68,6 +68,7 @@ import {
 } from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
 import { registerPosCredentialsRoutes } from "./pos-credentials-http.js";
+import { registerTenantModulesRoutes } from "./tenant-modules-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
@@ -1668,6 +1669,74 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       }
     }
   }
+  if (currentJob?.type === "add_module" && currentJob.tenantId) {
+    if (currentJob.correlationId && posDefaultCredentials) {
+      provisionPosCredentialsCache.set(currentJob.correlationId, {
+        credentials: posDefaultCredentials,
+        expiresAt: Date.now() + PROVISION_PASSWORD_TTL_MS,
+      });
+      await appendProvisionEventSafe({
+        correlationId: currentJob.correlationId,
+        phase: "secret",
+        level: "info",
+        message: "POS bootstrap PIN credentials persisted (add module)",
+        tenantId: currentJob.tenantId,
+        meta: {
+          type: "pos_bootstrap_pins",
+          cipher: encryptProvisionSecret(JSON.stringify(posDefaultCredentials)),
+          posOrganizationId:
+            completeResult && typeof completeResult.posOrganizationId === "string"
+              ? completeResult.posOrganizationId
+              : undefined,
+        },
+      });
+    }
+    const tenantStatusFromResult =
+      completeResult && typeof completeResult.tenantStatus === "string"
+        ? completeResult.tenantStatus
+        : null;
+    const posStatusFromResult =
+      completeResult && typeof completeResult.posStatus === "string"
+        ? completeResult.posStatus
+        : null;
+    const posErrorFromResult =
+      completeResult && typeof completeResult.posError === "string"
+        ? completeResult.posError
+        : null;
+    const finalTenantStatus =
+      tenantStatusFromResult === "partial" || tenantStatusFromResult === "active"
+        ? tenantStatusFromResult
+        : posStatusFromResult === "failed"
+          ? "partial"
+          : "active";
+    await db
+      .update(tenants)
+      .set({ status: finalTenantStatus })
+      .where(eq(tenants.id, currentJob.tenantId));
+    if (posOrganizationIdFromResult || posUrlFromResult || posErrorFromResult) {
+      await db
+        .update(tenantDeployments)
+        .set({
+          ...(posOrganizationIdFromResult
+            ? { posOrganizationId: posOrganizationIdFromResult }
+            : {}),
+          ...(posUrlFromResult ? { posUrl: posUrlFromResult } : {}),
+          lastError: finalTenantStatus === "partial" ? (posErrorFromResult ?? null) : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantDeployments.tenantId, currentJob.tenantId));
+    }
+    if (currentJob.correlationId) {
+      await appendProvisionEventSafe({
+        correlationId: currentJob.correlationId,
+        phase: "add_module.completed",
+        level: "info",
+        message: "Add-module worker job completed",
+        tenantId: currentJob.tenantId,
+        meta: { jobId: currentJob.id },
+      });
+    }
+  }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
     const correlations = await db
       .select({ correlationId: tenantLifecycleJobs.correlationId })
@@ -1746,6 +1815,17 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       noRetry,
       workerId: workerId || null,
     });
+
+    if (
+      updated.status === "dead"
+      && updated.type === "add_module"
+      && updated.tenantId
+    ) {
+      await db
+        .update(tenants)
+        .set({ status: "active" })
+        .where(eq(tenants.id, updated.tenantId));
+    }
 
     if (
       updated.status === "dead"
@@ -5053,6 +5133,7 @@ function startReadinessReconciler() {
 registerLicenseApi(app, db);
 registerTenantFinanceUsersApi(app, db);
 registerPosCredentialsRoutes(app, db);
+registerTenantModulesRoutes(app, db);
 registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);
 

@@ -17,12 +17,12 @@
  *
  * Env: STOCKIX_API_URL, OWNER_ID, PROVISION_ADMIN_EMAIL, PROVISION_POLL_MS,
  *      PROVISION_MAX_MS, POS_PLATFORM_BASE_URL, POS_PLATFORM_API_KEY,
- *      PROVISION_MODULE_GATING (0 default — POS-only still provisions Finance unless gating=1)
+ *      PROVISION_MODULE_GATING (default on — set 0 for legacy always-Finance mode)
  */
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { env } from "@repo/config";
+import { env, moduleGatingConfig } from "@repo/config";
 import { execa } from "execa";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -83,8 +83,7 @@ function argValue(flag) {
 }
 
 function moduleGatingEnabled() {
-  const raw = process.env.PROVISION_MODULE_GATING;
-  return raw === "1" || raw === "true";
+  return moduleGatingConfig.enabled;
 }
 
 function resolveExpect(value) {
@@ -209,7 +208,7 @@ async function preflight() {
   note(`PROVISION_MODULE_GATING=${moduleGatingEnabled() ? "1" : "0"}`);
   if (!moduleGatingEnabled()) {
     warn(
-      "POS-only scenario will still provision Finance (local default). Set PROVISION_MODULE_GATING=1 on worker+API for true POS-only.",
+      "POS-only scenario will still provision Finance when PROVISION_MODULE_GATING=0 (legacy mode).",
     );
   }
 

@@ -323,6 +323,7 @@ export const plans = pgTable(
     description: text("description"),
     maxOrganizations: integer("max_organizations").notNull().default(1),
     maxActivations: integer("max_activations").notNull().default(1),
+    maxUsers: integer("max_users").notNull().default(999),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     /** Price in smallest currency unit (e.g. cents). Null = custom / not set. */

@@ -7,7 +7,8 @@ const Category = require("../models/categoryModel");
 const PublicMenuBranding = require("../models/publicMenuBrandingModel");
 const accountingService = require("./accountingService");
 const { recordEvent } = require("./productEventService");
-const { computePinLookup } = require("../utils/pinLookup");
+const { createPinLookup } = require("../utils/pinLookup");
+const { storeFullCredentials } = require("./bootstrapCredentialReveal");
  
 const DEFAULT_BOOTSTRAP_ROLES = [
   "admin",
@@ -17,6 +18,16 @@ const DEFAULT_BOOTSTRAP_ROLES = [
   "kitchen",
   "hostess",
 ];
+
+function maskCredentialRow(role, username, plainPin) {
+  const pin = String(plainPin);
+  return {
+    role,
+    username,
+    pinMasked: pin.replace(/./g, "•"),
+    pinLastTwo: pin.slice(-2),
+  };
+}
  
 const STEPS = [
   { id: "infrastructure", label: "Core Infrastructure" },
@@ -27,14 +38,20 @@ const STEPS = [
   { id: "finalization", label: "Platform Finalization" },
 ];
  
-async function allocateUniqueSixDigitPin() {
-  for (let i = 0; i < 100; i++) {
-    const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    const pinLookup = computePinLookup(pin);
-    const taken = await User.exists({ pinLookup });
-    if (!taken) return pin;
+async function allocateUniqueSixDigitPin(organizationId) {
+  if (!organizationId) {
+    throw new Error("organizationId is required to allocate a PIN");
   }
-  throw new Error("bootstrap_pin_allocation_exhausted");
+  for (let attempts = 0; attempts < 100; attempts++) {
+    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    const pinLookup = createPinLookup(pin, organizationId);
+    const exists = await User.findOne({
+      organization: organizationId,
+      pinLookup,
+    });
+    if (!exists) return pin;
+  }
+  throw new Error("Could not allocate unique PIN for organization");
 }
  
 /**
@@ -84,21 +101,34 @@ async function bootstrapOrganization({ organizationId }) {
       { upsert: true }
     );
  
+    let fullCredentials;
     const userCount = await User.countDocuments({ organization: orgId });
     if (userCount === 0) {
       const session = await mongoose.startSession();
       try {
         await session.withTransaction(async () => {
-          const defaultCredentials = [];
+          const createdUsers = [];
           for (const role of DEFAULT_BOOTSTRAP_ROLES) {
-            const pin = await allocateUniqueSixDigitPin();
+            const plainPin = await allocateUniqueSixDigitPin(orgId);
             await User.create(
-              [{ name: role, username: role, role, organization: orgId, pin }],
+              [{ name: role, username: role, role, organization: orgId, pin: plainPin }],
               { session }
             );
-            defaultCredentials.push({ role, username: role, pin });
+            createdUsers.push({ role, username: role, plainPin });
           }
-          await Organization.findByIdAndUpdate(orgId, { $set: { defaultCredentials } }, { session });
+          fullCredentials = createdUsers.map((u) => ({
+            role: u.role,
+            username: u.username,
+            pin: u.plainPin,
+          }));
+          const maskedCredentials = createdUsers.map((u) =>
+            maskCredentialRow(u.role, u.username, u.plainPin)
+          );
+          await Organization.findByIdAndUpdate(
+            orgId,
+            { $set: { defaultCredentials: maskedCredentials } },
+            { session }
+          );
         });
       } finally {
         await session.endSession();
@@ -144,6 +174,9 @@ async function bootstrapOrganization({ organizationId }) {
  
     // 6. FINALIZATION
     await updateStep("finalization", "in_progress");
+    if (fullCredentials?.length) {
+      await storeFullCredentials(String(orgId), fullCredentials);
+    }
     await recordEvent({
       eventType: "tenant.bootstrap.complete",
       organizationId: orgId,
@@ -152,7 +185,7 @@ async function bootstrapOrganization({ organizationId }) {
     await Organization.findByIdAndUpdate(orgId, { isBootstrapped: true });
     await updateStep("finalization", "completed");
  
-    return { ok: true };
+    return { ok: true, fullCredentials };
   } catch (e) {
     // Record failure in the current active step
     await Organization.updateOne(

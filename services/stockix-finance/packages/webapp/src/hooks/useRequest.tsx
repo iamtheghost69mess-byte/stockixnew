@@ -1,112 +1,10 @@
 // @ts-nocheck
 import React from 'react';
 import axios from 'axios';
-import {
-  useAuthActions,
-  useAuthOrganizationId,
-  useSetGlobalErrors,
-  useAuthToken,
-} from './state';
-import { getCookie, normalizeApiPath } from '../utils';
+import http from '@/services/axios';
+import { normalizeApiPath } from '../utils';
 
 export default function useApiRequest() {
-  const setGlobalErrors = useSetGlobalErrors();
-  const { setLogout } = useAuthActions();
-  const currentLocale = getCookie('locale');
-
-  // Authentication token.
-  const token = useAuthToken();
-
-  // Authentication organization id.
-  const organizationId = useAuthOrganizationId();
-
-  const http = React.useMemo(() => {
-    // Axios instance.
-    const instance = axios.create();
-
-    // Request interceptors.
-    instance.interceptors.request.use(
-      (request) => {
-        const locale = currentLocale;
-
-        if (token) {
-          request.headers['Authorization'] = `Bearer ${token}`;
-        }
-        if (organizationId) {
-          request.headers['organization-id'] = organizationId;
-        }
-        if (locale) {
-          request.headers['Accept-Language'] = locale;
-        }
-        return request;
-      },
-      (error) => {
-        return Promise.reject(error);
-      },
-    );
-    // Response interceptors.
-    instance.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        const { status, data } = error.response ?? {};
-
-        if (!status) {
-          return Promise.reject(error);
-        }
-
-        if (status >= 500) {
-          setGlobalErrors({ something_wrong: true });
-        }
-        if (status === 401) {
-          const errorTypes = Array.isArray(data?.errors)
-            ? data.errors.map((e) => e?.type).filter(Boolean)
-            : [];
-          const isTenantSetupError = errorTypes.some((type) =>
-            [
-              'TENANT.DATABASE.NOT.INITALIZED',
-              'TENANT.DATABASE.NOT.SEED',
-              'TENANT.NOT.FOUND',
-            ].includes(type),
-          );
-          // Unauthenticated calls (e.g. global SuspendedOverlay) must not trigger logout loops.
-          if (!token || isTenantSetupError) {
-            return Promise.reject(error);
-          }
-          // axios interceptor clears cookies and redirects to /auth/login — avoid setLogout()
-          // reload here, which caused session-expired refresh loops with the redirect.
-          setGlobalErrors({ session_expired: true });
-        }
-        if (status === 403) {
-          setGlobalErrors({ access_denied: { message: data.message } });
-        }
-        if (status === 429) {
-          setGlobalErrors({ too_many_requests: true });
-        }
-        if (status === 400 && Array.isArray(data?.errors)) {
-          const lockedError = data.errors.find(
-            (error) => error.type === 'TRANSACTIONS_DATE_LOCKED',
-          );
-          if (lockedError) {
-            setGlobalErrors({ transactionsLocked: { ...lockedError.payload } });
-          }
-          if (
-            data.errors.find(
-              (e) => e.type === 'ORGANIZATION.SUBSCRIPTION.INACTIVE',
-            )
-          ) {
-            setGlobalErrors({ subscriptionInactive: true });
-          }
-          if (data.errors.find((e) => e.type === 'USER_INACTIVE')) {
-            setGlobalErrors({ userInactive: true });
-            setLogout();
-          }
-        }
-        return Promise.reject(error);
-      },
-    );
-    return instance;
-  }, [token, organizationId, currentLocale, setGlobalErrors, setLogout]);
-
   return React.useMemo(
     () => ({
       http,
@@ -135,38 +33,35 @@ export default function useApiRequest() {
         return http.delete(`/api/${normalizeApiPath(resource)}`, params);
       },
     }),
-    [http],
+    [],
   );
 }
 
 export function useAuthApiRequest() {
-  const http = React.useMemo(() => {
-    // Axios instance.
-    return axios.create();
-  }, []);
+  const httpInstance = React.useMemo(() => axios.create(), []);
 
   return React.useMemo(
     () => ({
-      http,
+      http: httpInstance,
       get(resource, params) {
-        return http.get(`/api/${normalizeApiPath(resource)}`, params);
+        return httpInstance.get(`/api/${normalizeApiPath(resource)}`, params);
       },
       post(resource, params, config) {
-        return http.post(`/api/${normalizeApiPath(resource)}`, params, config);
+        return httpInstance.post(`/api/${normalizeApiPath(resource)}`, params, config);
       },
       update(resource, slug, params) {
-        return http.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
+        return httpInstance.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
       },
       put(resource, params) {
-        return http.put(`/api/${normalizeApiPath(resource)}`, params);
+        return httpInstance.put(`/api/${normalizeApiPath(resource)}`, params);
       },
       patch(resource, params, config) {
-        return http.patch(`/api/${normalizeApiPath(resource)}`, params, config);
+        return httpInstance.patch(`/api/${normalizeApiPath(resource)}`, params, config);
       },
       delete(resource, params) {
-        return http.delete(`/api/${normalizeApiPath(resource)}`, params);
+        return httpInstance.delete(`/api/${normalizeApiPath(resource)}`, params);
       },
     }),
-    [http],
+    [httpInstance],
   );
 }

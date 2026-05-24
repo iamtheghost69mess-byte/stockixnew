@@ -18,6 +18,27 @@ type TraceContext = () => {
   parentTenantId?: string | null;
 };
 
+const PROVISION_META_SCRUB_KEYS = new Set([
+  "oneTimeAdminPassword",
+  "posDefaultCredentials",
+  "pin",
+  "fullCredentials",
+  "plainPin",
+]);
+
+function scrubProvisionMeta(
+  meta: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!meta) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (!PROVISION_META_SCRUB_KEYS.has(key)) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 export function createProvisionTracer(
   db: PostgresJsDatabase<typeof dbSchema>,
   correlationId: string,
@@ -29,15 +50,7 @@ export function createProvisionTracer(
       const level = opts?.level ?? "info";
       // Scrub oneTimeAdminPassword from meta before persisting to the DB (CRIT-02).
       const rawMeta = opts?.meta ?? null;
-      let meta: Record<string, unknown> | null = rawMeta;
-      if (meta && "oneTimeAdminPassword" in meta) {
-        const { oneTimeAdminPassword: _scrubbed, ...rest } = meta;
-        meta = rest;
-      }
-      if (meta && "posDefaultCredentials" in meta) {
-        const { posDefaultCredentials: _scrubbedPos, ...rest } = meta;
-        meta = rest;
-      }
+      const meta = scrubProvisionMeta(rawMeta);
       const ctx = getContext();
       log(`[${phase}] ${message}`);
       await db.insert(tenantProvisionEvents).values({

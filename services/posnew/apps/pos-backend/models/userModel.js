@@ -60,8 +60,6 @@ const userSchema = new mongoose.Schema(
       required: function pinLookupRequired() {
         return !this.passwordHash;
       },
-      unique: true,
-      sparse: true,
       select: false,
     },
 
@@ -164,6 +162,16 @@ userSchema.index(
     },
   }
 );
+userSchema.index(
+  { organization: 1, pinLookup: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      organization: { $type: "objectId" },
+      pinLookup: { $type: "string" },
+    },
+  }
+);
 
 userSchema.pre("validate", function ensureUsernameForLegacy(next) {
   if (this.username != null && String(this.username).trim() !== "") {
@@ -239,10 +247,16 @@ userSchema.pre("save", async function hashPin(next) {
 
     const UserModel = this.constructor;
     const lookup = computePinLookup(plain);
-    const existing = await UserModel.findOne({
+    const dupQuery = {
       pinLookup: lookup,
       _id: { $ne: this._id },
-    }).select("+pinLookup");
+    };
+    if (this.organization) {
+      dupQuery.organization = this.organization;
+    } else {
+      dupQuery.organization = null;
+    }
+    const existing = await UserModel.findOne(dupQuery).select("+pinLookup");
 
     if (existing) {
       const err = new Error("This PIN is already assigned to another user.");

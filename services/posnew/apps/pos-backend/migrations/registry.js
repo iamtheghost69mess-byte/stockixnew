@@ -7,6 +7,7 @@ const orgBackfillMigrations = require("./orgBackfillMigrations");
 const accountingOrgScopeMigration = require("./2026-04-10-005-accounting-org-scope");
 const userLocationIdsBackfill = require("./2026-04-27-004-user-locationIds-backfill");
 const stockDeductPaymentOnly = require("./2026-04-28-006-stock-deduct-payment-only");
+const pinLookupPerOrg = require("./2026-05-24-007-pin-lookup-per-org");
 
 module.exports = [
   {
@@ -62,4 +63,5 @@ module.exports = [
   accountingOrgScopeMigration,
   userLocationIdsBackfill,
   stockDeductPaymentOnly,
+  pinLookupPerOrg,
 ];

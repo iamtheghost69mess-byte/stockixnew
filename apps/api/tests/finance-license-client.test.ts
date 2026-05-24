@@ -40,15 +40,17 @@ describe("Finance sync payload — field semantics", () => {
     const payload = buildFinanceLicenseLimitFields(null, {
       maxOrganizations: 3,
       maxActivations: 2,
+      maxUsers: 50,
     });
     expect(payload.maxOrganizations).toBe(3);
     expect(payload.maxActivations).toBe(2);
+    expect(payload.maxUsers).toBe(50);
   });
 
   it("upgrades sentinel license limit 1 from plan maxOrganizations 3", () => {
     const payload = resolveFinanceLicenseLimitFields(
       { maxOrganizations: 1, maxActivations: 1 },
-      { maxOrganizations: 3, maxActivations: 5 },
+      { maxOrganizations: 3, maxActivations: 5, maxUsers: 10 },
     );
     expect(payload.maxOrganizations).toBe(3);
     expect(payload.maxActivations).toBe(5);

@@ -78,6 +78,7 @@ export type PlanRow = {
   description: string | null;
   maxOrganizations: number;
   maxActivations: number;
+  maxUsers: number;
   isActive: boolean;
   sortOrder: number;
   activeLicenseCount: number;
@@ -121,6 +122,7 @@ function parsePlansPayload(body: unknown): PlanRow[] {
       || typeof row.sortOrder !== "number"
       || typeof row.maxOrganizations !== "number"
       || typeof row.maxActivations !== "number"
+      || typeof row.maxUsers !== "number"
     ) {
       continue;
     }
@@ -134,6 +136,7 @@ function parsePlansPayload(body: unknown): PlanRow[] {
       description: typeof row.description === "string" ? row.description : null,
       maxOrganizations: row.maxOrganizations,
       maxActivations: row.maxActivations,
+      maxUsers: row.maxUsers,
       isActive: row.isActive,
       sortOrder: row.sortOrder,
       activeLicenseCount: typeof row.activeLicenseCount === "number" ? row.activeLicenseCount : 0,
@@ -160,6 +163,7 @@ const defaultCreateValues: PlanValues = {
   description: undefined,
   maxOrganizations: 1,
   maxActivations: 1,
+  maxUsers: 999,
   isActive: true,
   sortOrder: 0,
   currency: "USD",
@@ -341,6 +345,7 @@ export default function PlansPage() {
       description: "",
       maxOrganizations: 1,
       maxActivations: 1,
+      maxUsers: 999,
       isActive: true,
       sortOrder: 0,
       currency: "USD",
@@ -388,6 +393,7 @@ export default function PlansPage() {
       description: row.description ?? "",
       maxOrganizations: row.maxOrganizations,
       maxActivations: row.maxActivations,
+      maxUsers: row.maxUsers,
       isActive: row.isActive,
       sortOrder: row.sortOrder,
       priceMonthly: row.priceMonthly ?? undefined,
@@ -417,6 +423,7 @@ export default function PlansPage() {
           description: values.description?.trim() || undefined,
           maxOrganizations: values.maxOrganizations,
           maxActivations: values.maxActivations,
+          maxUsers: values.maxUsers,
           isActive: values.isActive,
           sortOrder: values.sortOrder,
           ...planBillingApiBody(values),
@@ -446,6 +453,7 @@ export default function PlansPage() {
           description: values.description?.trim() ? values.description.trim() : null,
           maxOrganizations: values.maxOrganizations,
           maxActivations: values.maxActivations,
+          maxUsers: values.maxUsers,
           isActive: values.isActive,
           sortOrder: values.sortOrder,
           ...planBillingApiBody(values),
@@ -545,6 +553,7 @@ export default function PlansPage() {
                 <TableHead>Price</TableHead>
                 <TableHead className="text-right">Max orgs</TableHead>
                 <TableHead className="text-right">Activations</TableHead>
+                <TableHead className="text-right">Max users</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[60px] text-right">Actions</TableHead>
               </TableRow>
@@ -552,14 +561,14 @@ export default function PlansPage() {
             <TableBody>
               {listLoading && plans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : null}
               {!listLoading && plans.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
                     No plans yet. Create a plan to use it in license and tenant flows.
                   </TableCell>
                 </TableRow>
@@ -574,6 +583,7 @@ export default function PlansPage() {
                     {row.maxOrganizations === -1 ? "Unlimited" : row.maxOrganizations}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{row.maxActivations}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.maxUsers}</TableCell>
                   <TableCell>
                     {row.isActive ? (
                       <Badge className="gap-1 border-emerald-600/30 bg-emerald-600/15 text-emerald-700 dark:text-emerald-400">
@@ -758,6 +768,29 @@ export default function PlansPage() {
                         </FormItem>
                       )}
                     />
+                    <FormField
+                      control={createForm.control}
+                      name="maxUsers"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Max users</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              className="w-28"
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value === "" ? "" : Number(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Staff user cap synced to Finance (accountants, managers).
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                   <FormField
                     control={createForm.control}
@@ -906,6 +939,29 @@ export default function PlansPage() {
                               onChange={(e) => field.onChange(e.target.value === "" ? "" : Number(e.target.value))}
                             />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={editForm.control}
+                      name="maxUsers"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Max users</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              className="w-28"
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value === "" ? "" : Number(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Staff user cap synced to Finance (accountants, managers).
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

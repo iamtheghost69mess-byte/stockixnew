@@ -20,6 +20,7 @@ vi.mock("../src/license-utils.js", () => ({
   getPlanLimits: vi.fn(async () => ({
     maxOrganizations: 3,
     maxActivations: 2,
+    maxUsers: 25,
   })),
   insertLicenseHistory: vi.fn(async () => undefined),
   isLicenseLimitsConsistentWithPlan: vi.fn(async () => true),
@@ -68,6 +69,6 @@ describe("provision finance license sync", () => {
     expect(postedBody?.planSlug).toBe("growth");
     expect(postedBody?.maxOrganizations).toBe(3);
     expect(postedBody?.maxActivations).toBe(2);
-    expect(postedBody?.maxUsers).toBe(FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS);
+    expect(postedBody?.maxUsers).toBe(25);
   });
 });

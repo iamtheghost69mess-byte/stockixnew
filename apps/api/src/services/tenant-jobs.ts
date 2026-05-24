@@ -7,7 +7,9 @@ export type TenantLifecycleJobType =
   | "tenant.provision"
   | "organization.provision"
   | "tenant.deprovision"
-  | "tenant.lifecycle";
+  | "tenant.lifecycle"
+  | "add_module"
+  | "remove_module";
 
 export async function insertTenantJob(
   db: PostgresJsDatabase<typeof schema>,

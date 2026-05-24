@@ -33,8 +33,7 @@ export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
  * Field mapping — Stockix control plane → Finance tenant_licenses
  *
  * maxUsers:       How many staff users (accountants, managers) can be
- *                 created in the finance app. Not tracked on Stockix licenses —
- *                 defaults to FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS.
+ *                 created in the finance app. Sourced from plans.maxUsers.
  *
  * maxActivations: How many POS desktop/device activations are allowed.
  *                 Maps to license.maxActivations on Stockix control plane.
@@ -55,7 +54,7 @@ type FinanceLicenseLimitSource = {
  */
 export function resolveFinanceLicenseLimitFields(
   license: FinanceLicenseLimitSource | null | undefined,
-  planLimits: { maxActivations: number; maxOrganizations: number },
+  planLimits: { maxActivations: number; maxOrganizations: number; maxUsers: number },
 ): Pick<FinanceLicenseSyncPayload, "maxUsers" | "maxActivations" | "maxOrganizations"> {
   let maxOrganizations = license?.maxOrganizations ?? planLimits.maxOrganizations;
   let maxActivations = license?.maxActivations ?? planLimits.maxActivations;
@@ -68,7 +67,7 @@ export function resolveFinanceLicenseLimitFields(
   }
 
   return {
-    maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxOrganizations,
     maxActivations,
   };
@@ -76,10 +75,14 @@ export function resolveFinanceLicenseLimitFields(
 
 export function buildFinanceLicenseLimitFields(
   license: FinanceLicenseLimitSource | null | undefined,
-  planLimits?: { maxActivations: number; maxOrganizations: number } | null,
+  planLimits?: { maxActivations: number; maxOrganizations: number; maxUsers?: number } | null,
 ): Pick<FinanceLicenseSyncPayload, "maxUsers" | "maxActivations" | "maxOrganizations"> {
   if (planLimits) {
-    return resolveFinanceLicenseLimitFields(license, planLimits);
+    return resolveFinanceLicenseLimitFields(license, {
+      maxOrganizations: planLimits.maxOrganizations,
+      maxActivations: planLimits.maxActivations,
+      maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    });
   }
   return {
     maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,

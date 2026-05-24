@@ -40,6 +40,7 @@ import {
 } from "./license-utils.js";
 import { buildFinanceLicenseLimitFields } from "./finance-license.client.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
+import { suspendPosOrgForLicense } from "./pos-license-sync.js";
 
 type ApiEnv = {
   Variables: {
@@ -86,6 +87,7 @@ type PlanDbRow = {
   description: string | null;
   maxOrganizations: number;
   maxActivations: number;
+  maxUsers: number;
   isActive: boolean;
   sortOrder: number;
   priceMonthly: number | null;
@@ -123,6 +125,7 @@ export function serializePlanRow(p: PlanDbRow, activeLicenseCount = 0) {
     description: p.description,
     maxOrganizations: p.maxOrganizations,
     maxActivations: p.maxActivations,
+    maxUsers: p.maxUsers,
     isActive: p.isActive,
     sortOrder: p.sortOrder,
     priceMonthly: p.priceMonthly,
@@ -184,6 +187,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     description: z.string().max(500).optional(),
     maxOrganizations: z.number().int().min(-1).max(9999).default(1),
     maxActivations: z.number().int().min(1).max(9999).default(1),
+    maxUsers: z.number().int().min(1).default(999),
     isActive: z.boolean().default(true),
     sortOrder: z.number().int().min(0).max(9999).default(0),
     priceMonthly: z.number().int().min(0).optional().nullable(),
@@ -217,6 +221,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         description: parsed.data.description ?? null,
         maxOrganizations: parsed.data.maxOrganizations,
         maxActivations: parsed.data.maxActivations,
+        maxUsers: parsed.data.maxUsers,
         isActive: parsed.data.isActive,
         sortOrder: parsed.data.sortOrder,
         ...planBillingInsertValues(parsed.data),
@@ -239,6 +244,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       description: z.union([z.string().max(500), z.null()]).optional(),
       maxOrganizations: z.number().int().min(-1).max(9999).optional(),
       maxActivations: z.number().int().min(1).max(9999).optional(),
+      maxUsers: z.number().int().min(1).optional(),
       isActive: z.boolean().optional(),
       sortOrder: z.number().int().min(0).max(9999).optional(),
       priceMonthly: z.number().int().min(0).optional().nullable(),
@@ -270,6 +276,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       description?: string | null;
       maxOrganizations?: number;
       maxActivations?: number;
+      maxUsers?: number;
       isActive?: boolean;
       sortOrder?: number;
       priceMonthly?: number | null;
@@ -283,6 +290,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (parsed.data.description !== undefined) setVals.description = parsed.data.description;
     if (parsed.data.maxOrganizations !== undefined) setVals.maxOrganizations = parsed.data.maxOrganizations;
     if (parsed.data.maxActivations !== undefined) setVals.maxActivations = parsed.data.maxActivations;
+    if (parsed.data.maxUsers !== undefined) setVals.maxUsers = parsed.data.maxUsers;
     if (parsed.data.isActive !== undefined) setVals.isActive = parsed.data.isActive;
     if (parsed.data.sortOrder !== undefined) setVals.sortOrder = parsed.data.sortOrder;
     if (parsed.data.priceMonthly !== undefined) setVals.priceMonthly = parsed.data.priceMonthly;
@@ -1542,6 +1550,17 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         err instanceof Error ? err.message : String(err),
       );
     });
+
+    if (lic.tenantId) {
+      void suspendPosOrgForLicense(db, lic.tenantId, body.reason ?? "license_revoked").catch(
+        (err) => {
+          console.error(
+            "[license] POS suspend failed (non-fatal)",
+            err instanceof Error ? err.message : String(err),
+          );
+        },
+      );
+    }
 
     return c.json({ revoked: true });
   });

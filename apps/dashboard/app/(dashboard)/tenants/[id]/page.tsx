@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { AlertCircle, Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2, UserCheck } from "lucide-react";
+import { AlertCircle, Copy, ExternalLink, History, Loader2, Minus, PauseCircle, PlayCircle, Plus, RotateCw, Square, Trash2, UserCheck } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
 import { LicenseAssignDialog } from "@/components/license-assign-dialog";
@@ -63,6 +63,7 @@ import { tenantProfileSchema, type TenantProfileValues } from "@/lib/schemas";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { cn } from "@/lib/utils";
 import { moduleLabel } from "@/lib/tenant-modules";
+import type { StockixModuleId } from "@/lib/tenant-modules";
 import type { LicenseRow, LicenseStatus } from "@/types/license";
 import type { ProvisionEventRow, TenantDetail } from "@/types/tenant";
 
@@ -138,6 +139,12 @@ export default function TenantDetailPage() {
     { role: string; username: string; pin: string }[]
   >([]);
   const [posPinResettingRole, setPosPinResettingRole] = useState<string | null>(null);
+  const [addModuleOpen, setAddModuleOpen] = useState(false);
+  const [addModuleChoice, setAddModuleChoice] = useState<"pos" | "pms" | "chat">("pos");
+  const [addingModule, setAddingModule] = useState(false);
+  const [removeModuleOpen, setRemoveModuleOpen] = useState(false);
+  const [moduleToRemove, setModuleToRemove] = useState<"pos" | "pms" | "chat" | null>(null);
+  const [removingModule, setRemovingModule] = useState(false);
   const profileForm = useForm<TenantProfileValues>({
     resolver: zodResolver(tenantProfileSchema),
     defaultValues: {
@@ -341,6 +348,9 @@ export default function TenantDetailPage() {
   const hasPosModule = tenantModules.includes("pos");
   const hasAccountingModule = tenantModules.includes("accounting");
   const hasAccountingAndPos = hasAccountingModule && hasPosModule;
+  const addableModules = (["pos", "pms", "chat"] as const).filter(
+    (mod) => !tenantModules.includes(mod),
+  );
   const canRevealPosPins = Boolean(
     me?.capabilities.canManageTenants && tenant?.posOrganizationId,
   );
@@ -369,6 +379,60 @@ export default function TenantDetailPage() {
     } catch {
       toast.error(`Could not copy ${label}`);
     }
+  };
+
+  const addModule = async () => {
+    if (!id) return;
+    setAddingModule(true);
+    try {
+      const res = await fetch(`/api/tenants/${id}/add-module`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module: addModuleChoice }),
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        throw new Error(formatApiError(body, `HTTP ${res.status}`));
+      }
+      toast.success(`Module ${moduleLabel(addModuleChoice)} added — provisioning started`);
+      setAddModuleOpen(false);
+      await loadTenant();
+      await loadEvents();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setAddingModule(false);
+    }
+  };
+
+  const removeModule = async () => {
+    if (!id || !moduleToRemove) return;
+    setRemovingModule(true);
+    try {
+      const res = await fetch(`/api/tenants/${id}/remove-module`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module: moduleToRemove }),
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        throw new Error(formatApiError(body, `HTTP ${res.status}`));
+      }
+      toast.success(`Module ${moduleLabel(moduleToRemove)} removed (data retained)`);
+      setRemoveModuleOpen(false);
+      setModuleToRemove(null);
+      await loadTenant();
+      await loadLicense();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setRemovingModule(false);
+    }
+  };
+
+  const openRemoveModule = (mod: "pos" | "pms" | "chat") => {
+    setModuleToRemove(mod);
+    setRemoveModuleOpen(true);
   };
 
   const loadPosCredentials = async () => {
@@ -614,13 +678,47 @@ export default function TenantDetailPage() {
                   <p>Created: {formatDateTime(tenant.createdAt)}</p>
                 </div>
                 <div className="space-y-2 pt-1">
-                  <Label>Licensed modules</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Licensed modules</Label>
+                    {isSuper && addableModules.length > 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAddModuleChoice(addableModules[0] ?? "pos");
+                          setAddModuleOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Add module
+                      </Button>
+                    ) : null}
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {tenant.modules.length > 0 ? (
                       tenant.modules.map((mod) => (
-                        <Badge key={mod} variant={moduleBadgeVariant(mod)}>
-                          {moduleLabel(mod)}
-                        </Badge>
+                        <div key={mod} className="flex items-center gap-1">
+                          <Badge variant={moduleBadgeVariant(mod)}>
+                            {moduleLabel(mod as StockixModuleId)}
+                          </Badge>
+                          {isSuper &&
+                          (mod === "pos" || mod === "pms" || mod === "chat") &&
+                          tenant.modules.length > 1 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              title={`Remove ${moduleLabel(mod as StockixModuleId)}`}
+                              onClick={() =>
+                                openRemoveModule(mod as "pos" | "pms" | "chat")
+                              }
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                        </div>
                       ))
                     ) : (
                       <span className="text-sm text-muted-foreground">None configured</span>
@@ -1451,6 +1549,84 @@ export default function TenantDetailPage() {
           }}
         />
       ) : null}
+
+      <Dialog
+        open={addModuleOpen}
+        onOpenChange={(open) => {
+          setAddModuleOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add module</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Provisions the selected module stack for this tenant. Existing modules are unchanged.
+          </p>
+          <div className="space-y-2">
+            <Label>Module</Label>
+            <Select
+              value={addModuleChoice}
+              onValueChange={(v) => setAddModuleChoice(v as "pos" | "pms" | "chat")}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select module" />
+              </SelectTrigger>
+              <SelectContent>
+                {addableModules.map((mod) => (
+                  <SelectItem key={mod} value={mod}>
+                    {moduleLabel(mod)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddModuleOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={addingModule || addableModules.length === 0} onClick={() => void addModule()}>
+              {addingModule ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Add & provision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={removeModuleOpen}
+        onOpenChange={(open) => {
+          setRemoveModuleOpen(open);
+          if (!open) setModuleToRemove(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove module</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Removes{" "}
+            <span className="font-medium text-foreground">
+              {moduleToRemove ? moduleLabel(moduleToRemove) : "this module"}
+            </span>{" "}
+            from the license and stops its Docker stack. Data volumes are not destroyed — stacks can be
+            re-provisioned later by adding the module again.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRemoveModuleOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={removingModule || !moduleToRemove}
+              onClick={() => void removeModule()}
+            >
+              {removingModule ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Remove module
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={stopProvisionOpen}

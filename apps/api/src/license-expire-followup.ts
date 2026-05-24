@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { insertLicenseHistory } from "./license-utils.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
+import { suspendPosOrgForLicense } from "./pos-license-sync.js";
 import {
   sendLicenseExpiredEmailForTenant,
   sendLicenseExpiringEmailForTenant,
@@ -48,6 +49,16 @@ export async function processLicenseExpiryFollowUp(
     } catch (err) {
       console.error(
         "[expireDueLicenses] Finance sync failed for tenant",
+        license.tenantId,
+        err,
+      );
+    }
+
+    try {
+      await suspendPosOrgForLicense(db, license.tenantId, "license_expired", log);
+    } catch (err) {
+      console.error(
+        "[expireDueLicenses] POS suspend failed for tenant",
         license.tenantId,
         err,
       );

@@ -25,6 +25,7 @@ const {
   getOrgObservability,
   getOrgProvisioningStatus,
   patchOrgLifecycle,
+  suspendOrg,
   patchOrgLicense,
   patchOrgLocationSupport,
   patchEntitlements,
@@ -186,6 +187,11 @@ router.patch(
   "/organizations/:id/lifecycle",
   requirePlatformPermission(P.ORG_WRITE),
   patchOrgLifecycle
+);
+router.post(
+  "/organizations/:id/suspend",
+  requirePlatformPermission(P.ORG_WRITE),
+  suspendOrg
 );
 router.patch(
   "/organizations/:id/license",

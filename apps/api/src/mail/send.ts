@@ -43,6 +43,76 @@ export async function sendTenantWelcomeEmail(opts: {
   });
 }
 
+export async function sendFinanceCredentialsEmail(opts: {
+  to: string;
+  tenantName: string;
+  financeUrl: string;
+  adminEmail: string;
+  oneTimePassword: string;
+  modules: string[];
+}) {
+  const brandName = "Stockix";
+  const modulesLabel = opts.modules.length > 0 ? opts.modules.join(", ") : "accounting";
+  return sendMail({
+    to: opts.to,
+    subject: `Your ${brandName} accounting access is ready`,
+    html: `
+        <h2>Your accounting platform is ready</h2>
+        <p>Tenant: ${opts.tenantName}</p>
+        <p>Login URL: <a href="${opts.financeUrl}">${opts.financeUrl}</a></p>
+        <p>Email: ${opts.adminEmail}</p>
+        <p>Temporary password: <strong>${opts.oneTimePassword}</strong></p>
+        <p>You will be asked to change your password on first login.</p>
+        <p>Modules: ${modulesLabel}</p>
+      `,
+    idempotencyKey: `finance-credentials/${opts.adminEmail}/${opts.financeUrl}`,
+  });
+}
+
+export type PosCredentialEmailRow = {
+  role: string;
+  username: string;
+  pin: string;
+};
+
+export async function sendPosCredentialsEmail(opts: {
+  to: string;
+  tenantName: string;
+  posUrl: string;
+  credentials: PosCredentialEmailRow[];
+}) {
+  const brandName = "Stockix";
+  const credentialRows = opts.credentials
+    .map(
+      (c) =>
+        `<tr>
+        <td>${c.role}</td>
+        <td>${c.username}</td>
+        <td><strong>${c.pin}</strong></td>
+      </tr>`,
+    )
+    .join("");
+
+  return sendMail({
+    to: opts.to,
+    subject: `Your ${brandName} POS staff credentials`,
+    html: `
+        <h2>POS Staff Login Credentials</h2>
+        <p>Tenant: ${opts.tenantName}</p>
+        <p>POS URL: <a href="${opts.posUrl}">${opts.posUrl}</a></p>
+        <p>Staff login uses 6-digit PIN codes:</p>
+        <table>
+          <tr><th>Role</th><th>Username</th><th>PIN</th></tr>
+          ${credentialRows}
+        </table>
+        <p><strong>Please store these securely.</strong>
+        Share each PIN only with the relevant staff member.</p>
+        <p>PINs can be changed from the POS admin panel.</p>
+      `,
+    idempotencyKey: `pos-credentials/${opts.to}/${opts.posUrl}`,
+  });
+}
+
 export async function sendLicenseExpiringEmail(opts: {
   to: string;
   tenantName: string;
