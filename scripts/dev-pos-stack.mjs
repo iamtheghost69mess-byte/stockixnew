@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
+import { findFreePort } from "./find-free-port.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
@@ -53,8 +54,19 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-const apiPort = String(process.env.POS_PLATFORM_PORT || "8010").trim();
-const uiPort = String(process.env.POS_FRONTEND_HOST_PORT || "3001").trim();
+const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
+const preferredApiPort = parseInt(process.env.POS_PLATFORM_PORT || "8010", 10);
+const preferredUiPort = parseInt(process.env.POS_FRONTEND_HOST_PORT || "3001", 10);
+const apiPortNum = strict ? preferredApiPort : await findFreePort(preferredApiPort);
+const uiPortNum = strict ? preferredUiPort : await findFreePort(preferredUiPort);
+const apiPort = String(apiPortNum);
+const uiPort = String(uiPortNum);
+if (apiPortNum !== preferredApiPort) {
+  console.warn(`[dev-pos] Port ${preferredApiPort} busy — POS API on ${apiPort}`);
+}
+if (uiPortNum !== preferredUiPort) {
+  console.warn(`[dev-pos] Port ${preferredUiPort} busy — POS UI on ${uiPort}`);
+}
 const platformKey = process.env.POS_PLATFORM_API_KEY?.trim() || "";
 const authSecret = process.env.AUTH_TOKEN_SECRET?.trim() || "";
 

@@ -74,7 +74,7 @@ export default function PmsOverviewPage() {
       title="PMS"
       description="Property management for tenants with the PMS module licensed."
     >
-      <div className="max-w-sm">
+      <div className="max-w-sm space-y-2">
         <Select value={tenantId} onValueChange={setTenantId}>
           <SelectTrigger>
             <SelectValue placeholder="Select tenant" />
@@ -87,6 +87,17 @@ export default function PmsOverviewPage() {
             ))}
           </SelectContent>
         </Select>
+        {tenants.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No tenants have the PMS module. Run{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">pnpm db:seed:pms-demo</code>{" "}
+            for a local demo tenant, or open{" "}
+            <a href="/tenants" className="font-medium text-primary underline-offset-4 hover:underline">
+              Tenants
+            </a>{" "}
+            → pick a tenant → add the PMS license under Licensed modules.
+          </p>
+        ) : null}
       </div>
 
       {tenantId ? (

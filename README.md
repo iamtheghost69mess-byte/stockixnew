@@ -48,20 +48,27 @@ pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local
 # 4. (Once) POS backend deps — npm workspaces under services/posnew
 pnpm dev:pos:install
 
-# 5. Start API + Dashboard + worker + POS backend (8010)
+# 5. Start API + Dashboard + worker + PMS + POS (ports auto-shift if busy)
 pnpm dev
 ```
 
 | App | URL | Credentials |
 |-----|-----|-------------|
 | Dashboard | http://localhost:3000 | `admin@localhost` / `admin` |
+| PMS (in dashboard) | http://localhost:3000/pms | Select **PMS Demo** tenant (seeded by `setup:local`) |
 | API | http://localhost:4000 | — |
+| PMS API (Hono) | http://localhost:3003 | Proxied via control-plane API `/pms/api/*` |
 | POS platform API | http://localhost:8010 | `POS_PLATFORM_API_KEY` in root `.env` |
 | POS restaurant UI | http://localhost:3001 | Provisioned tenants may use `{slug}-pos.localhost` via Traefik |
 
-`pnpm dev` builds `@repo/auth`, starts POS API + POS UI, and syncs `AUTH_TOKEN_SECRET` / Redis for local dev.
+`pnpm dev` runs `scripts/dev-stockix.mjs`: migrations, then **dashboard**, **API**, **worker**, **PMS** (`services/pms` on `PMS_PORT`), and **POS**. If a default port is taken, the next free port is used (see the startup banner).
 
-Control-plane only (no POS): `STOCKIX_DEV_SKIP_POS=1 pnpm dev`
+| Script | Purpose |
+|--------|---------|
+| `pnpm dev:pms` | PMS service only |
+| `pnpm db:seed:pms-demo` | Demo tenant with PMS license for `/pms` dropdown |
+
+Control-plane + PMS, no POS: `STOCKIX_DEV_SKIP_POS=1 pnpm dev`
 
 > To reset the database back to a clean state: `pnpm db:reset:local`
 

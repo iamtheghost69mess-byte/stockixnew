@@ -1,4 +1,3 @@
-import { serve } from "@hono/node-server";
 import { createHonoAuthMiddleware } from "@repo/auth";
 import { apiConfig } from "@repo/config";
 import { Hono } from "hono";
@@ -6,7 +5,7 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { db } from "./db.js";
 import type { PmsEnv } from "./types.js";
-import { startIcalSyncJob } from "./jobs/ical-sync.js";
+import { startPmsServer } from "./server.js";
 import { propertiesRouter } from "./routes/properties.js";
 import { roomsRouter } from "./routes/rooms.js";
 import { bookingsRouter } from "./routes/bookings.js";
@@ -85,11 +84,4 @@ app.route("/api/date-overrides", dateOverridesRouter);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-const port = parseInt(process.env.PMS_PORT ?? "3003", 10);
-
-if (db) {
-  startIcalSyncJob(db);
-}
-
-serve({ fetch: app.fetch, port });
-console.log(`[pms] Service running on port ${port}`);
+startPmsServer(app, db);
