@@ -31,7 +31,40 @@ async function enqueueBigcapitalSyncIfEnabled(order) {
   );
 }
 
+/**
+ * Queue Finance receipt void by order reference (full reversal / full refund).
+ * @param {import('mongoose').Document} order
+ */
+async function enqueueBigcapitalVoidIfEnabled(order) {
+  const orgId = order?.organization;
+  if (!orgId) return;
+
+  try {
+    const cfg = await IntegrationConfig.findOne({ organization: orgId }).lean();
+    if (!cfg?.bigcapital?.enabled) return;
+
+    await addJob(
+      QUEUE_NAME,
+      "void_receipt",
+      {
+        orderId: String(order._id),
+        organizationId: String(orgId),
+      },
+      {
+        jobId: `bigcapital_void_${order._id}`,
+        attempts: 5,
+        backoff: { type: "exponential", delay: 10000 },
+        removeOnComplete: 100,
+        removeOnFail: 500,
+      }
+    );
+  } catch (err) {
+    console.error("[BigcapitalVoid] Enqueue failed:", err.message);
+  }
+}
+
 module.exports = {
   QUEUE_NAME,
   enqueueBigcapitalSyncIfEnabled,
+  enqueueBigcapitalVoidIfEnabled,
 };

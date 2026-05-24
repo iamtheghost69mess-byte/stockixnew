@@ -6,6 +6,7 @@ const connectDB = require("../config/database");
 const { createWorker } = require("../services/jobQueue");
 const {
   processBigcapitalSyncJob,
+  processBigcapitalVoidJob,
   onBigcapitalSyncFailed,
 } = require("../services/bigcapitalSyncProcessor");
 
@@ -14,9 +15,12 @@ const QUEUE_NAME = "bigcapital_sync";
 async function main() {
   await connectDB();
 
-  const worker = createWorker(QUEUE_NAME, async (job) =>
-    processBigcapitalSyncJob(job)
-  );
+  const worker = createWorker(QUEUE_NAME, async (job) => {
+    if (job.name === "void_receipt") {
+      return processBigcapitalVoidJob(job);
+    }
+    return processBigcapitalSyncJob(job);
+  });
 
   if (!worker) {
     console.error(

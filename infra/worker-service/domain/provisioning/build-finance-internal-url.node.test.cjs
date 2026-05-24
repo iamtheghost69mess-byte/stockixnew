@@ -1,8 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-// Compiled path used when running via worker build; for unit test duplicate minimal behavior
-// by testing the same env contract the TS module implements.
 function buildUrl(slug, internalPort) {
   const template = process.env.POS_FINANCE_INTERNAL_URL_TEMPLATE?.trim();
   if (template) {

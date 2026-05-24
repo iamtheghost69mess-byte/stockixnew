@@ -26,15 +26,17 @@ import {
   posFetchModifierGroups,
   posFetchMenuItems,
 } from "@/lib/pos-catalog-api";
+import { enqueueOfflineMutation } from "@/lib/offline-queue";
 import { persistPosCheckToServer } from "@/lib/pos-check-sync";
 import { posFetchTaxConfig } from "@/lib/pos-config-api";
 import { unitPriceForDocumentCurrency } from "@/lib/pos-menu-prices";
 import {
+  describeAccountingPostingFailures,
+  describeFinanceSyncStatus,
   posApplyManualDiscount,
   posCreateSplitBill,
   posGetOpenOrderForTable,
   posMarkOrderPaid,
-  posPatchOrderItems,
   posPaySplitBillSplit,
   posPrintOrder,
 } from "@/lib/pos-order-api";
@@ -388,6 +390,30 @@ export function usePosSession(tableId: string) {
 
         if (!targetId) throw new Error("Could not initialize order for payment.");
 
+        const queueOfflinePayment = async () => {
+          await enqueueOfflineMutation(
+            "pay_order",
+            {
+              orderId: targetId,
+              paymentMethod: payload.method,
+              paymentData: payload.paymentData,
+              paymentSplits: payload.paymentSplits,
+            },
+            `pay:${targetId}`,
+          );
+          toast.success("Payment queued — will sync when back online.");
+          clearSession();
+          router.replace("/pos");
+        };
+
+        if (typeof window !== "undefined" && !navigator.onLine) {
+          if (payload.entitySplitBill) {
+            throw new Error("Split-bill payment requires an internet connection.");
+          }
+          await queueOfflinePayment();
+          return;
+        }
+
         if (payload.entitySplitBill && payload.splitBillRows?.length) {
           const sum = payload.splitBillRows.reduce((s, row) => s + row.amount, 0);
           if (Math.abs(sum - bills.totalUsd) > 0.02) {
@@ -415,19 +441,59 @@ export function usePosSession(tableId: string) {
               paymentMethod: payload.method,
             });
           }
-          await posMarkOrderPaid(targetId, payload.method, {
+          const paidRes = await posMarkOrderPaid(targetId, payload.method, {
             paymentData: payload.paymentData,
           });
+          const postingMsgs = [
+            ...describeAccountingPostingFailures(paidRes.accountingPosting),
+            describeFinanceSyncStatus(paidRes.accountingPosting),
+          ].filter((m): m is string => Boolean(m));
+          toast.success("Payment successful. Order closed.");
+          for (const msg of postingMsgs) {
+            toast.message(msg);
+          }
         } else {
-          await posMarkOrderPaid(targetId, payload.method, {
+          const paidRes = await posMarkOrderPaid(targetId, payload.method, {
             paymentData: payload.paymentData,
             paymentSplits: payload.paymentSplits,
           });
+          const postingMsgs = [
+            ...describeAccountingPostingFailures(paidRes.accountingPosting),
+            describeFinanceSyncStatus(paidRes.accountingPosting),
+          ].filter((m): m is string => Boolean(m));
+          toast.success("Payment successful. Order closed.");
+          for (const msg of postingMsgs) {
+            toast.message(msg);
+          }
         }
-        toast.success("Payment successful. Order closed.");
         clearSession();
         router.replace("/pos");
       } catch (e) {
+        if (
+          typeof window !== "undefined"
+          && !navigator.onLine
+          && activeOrderId
+          && !payload.entitySplitBill
+        ) {
+          try {
+            await enqueueOfflineMutation(
+              "pay_order",
+              {
+                orderId: activeOrderId,
+                paymentMethod: payload.method,
+                paymentData: payload.paymentData,
+                paymentSplits: payload.paymentSplits,
+              },
+              `pay:${activeOrderId}`,
+            );
+            toast.success("Payment queued — will sync when back online.");
+            clearSession();
+            router.replace("/pos");
+            return;
+          } catch {
+            /* fall through */
+          }
+        }
         toast.error(e instanceof Error ? e.message : "Payment failed.");
       } finally {
         setPaying(false);

@@ -1094,7 +1094,7 @@ export async function executeProvisionRuntime(
           const seeded = await seedFinancePosDefaults({
             internalBaseUrl: internalUrl,
             internalApiSecret,
-            financeTenantId,
+            financeTenantId: financeTenantId!,
             correlationId,
             log,
           });

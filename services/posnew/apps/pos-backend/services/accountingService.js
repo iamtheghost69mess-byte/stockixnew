@@ -1372,6 +1372,14 @@ async function postOrderSaleLedger(orderId, userId, idempotencyKey, opts = {}) {
   return entry;
 }
 
+async function isBigcapitalNativeGlBypass(organizationId) {
+  if (!organizationId) return false;
+  const cfg = await AccountingConfig.findOne({ organization: organizationId })
+    .select("bigcapitalIntegrationEnabled")
+    .lean();
+  return Boolean(cfg?.bigcapitalIntegrationEnabled);
+}
+
 async function reverseOrderSaleLedger(orderId, userId) {
   const oid = mongoose.Types.ObjectId.isValid(orderId)
     ? new mongoose.Types.ObjectId(orderId)
@@ -1382,7 +1390,13 @@ async function reverseOrderSaleLedger(orderId, userId) {
     sourceType: "order_sale",
     sourceId: oid,
   });
-  if (!sale) throw new Error("No sale journal to reverse for this order.");
+  if (!sale) {
+    const order = await Order.findById(oid).select("organization").lean();
+    if (order?.organization && (await isBigcapitalNativeGlBypass(order.organization))) {
+      return null;
+    }
+    throw new Error("No sale journal to reverse for this order.");
+  }
   const orgId = sale.organization;
   if (!orgId) throw new Error("Sale journal missing organization.");
 
@@ -1498,6 +1512,14 @@ async function postOrderRefund({
   if (!oid) throw new Error("Invalid order id");
   const amt = round2(amount);
   if (amt <= 0) throw new Error("Refund amount must be positive");
+
+  const orderForBypass = await Order.findById(oid).select("organization").lean();
+  if (
+    orderForBypass?.organization
+    && (await isBigcapitalNativeGlBypass(orderForBypass.organization))
+  ) {
+    return null;
+  }
 
   const sale = await JournalEntry.findOne({
     sourceType: "order_sale",
@@ -3184,6 +3206,7 @@ module.exports = {
   resolveFxRateFromTable,
   postOrderSaleLedger,
   postOrderCogsLedger,
+  isBigcapitalNativeGlBypass,
   reverseOrderSaleLedger,
   reverseOrderCogsLedger,
   postOrderRefund,

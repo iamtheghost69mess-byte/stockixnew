@@ -384,6 +384,13 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   oneTimeAdminPassword?: string;
   financeOrganizationId?: string;
   financeTenantId?: number;
+  financeDefaultWarehouseId?: number;
+  posStatus?: string;
+  posError?: string;
+  tenantStatus?: string;
+  walkInCustomerId?: number;
+  cashAccountId?: number;
+  cardAccountId?: number;
   posOrganizationId?: string;
   posUrl?: string;
   posApiUrl?: string;
