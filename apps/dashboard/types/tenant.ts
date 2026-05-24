@@ -13,6 +13,8 @@ export type TenantRow = {
   name: string;
   adminEmail: string;
   planSlug?: string;
+  /** Row in `tenants` (may differ from deployment when status is partial). */
+  tenantStatus?: string | null;
   deploymentStatus: string | null;
   internalPort: number | null;
   composeProject: string | null;

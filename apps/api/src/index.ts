@@ -2433,6 +2433,7 @@ app.get("/tenants", async (c) => {
       adminEmail: tenants.adminEmail,
       planSlug: tenants.planSlug,
       modules: tenants.modules,
+      tenantStatus: tenants.status,
       deploymentStatus: tenantDeployments.status,
       internalPort: tenantDeployments.internalPort,
       composeProject: tenantDeployments.composeProjectName,
@@ -4542,6 +4543,11 @@ async function loadTenantForLifecycle(tenantId: string) {
   return rows[0] ?? null;
 }
 
+/** Running stacks: full active or partial (Finance up, POS incomplete). */
+function tenantCanStopOrSuspend(tenantStatus: string | null | undefined): boolean {
+  return tenantStatus === "active" || tenantStatus === "partial";
+}
+
 app.post("/tenants/:tenantId/suspend", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
@@ -4558,7 +4564,17 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
       alreadySuspended: true,
     }, 200);
   }
-  if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
+  if (!tenantCanStopOrSuspend(row.tenantStatus)) {
+    return c.json(
+      {
+        error: "tenant_not_active",
+        message: `Tenant cannot be suspended (status=${row.tenantStatus ?? "unknown"}). Only active or partial tenants can be suspended.`,
+        tenantStatus: row.tenantStatus ?? null,
+        deploymentStatus: row.deploymentStatus ?? null,
+      },
+      409,
+    );
+  }
   const job = await insertTenantJob(db, {
     type: "tenant.lifecycle",
     tenantId: parsed.data,
@@ -4741,7 +4757,17 @@ app.post("/tenants/:tenantId/stop", async (c) => {
 
   const row = await loadTenantForLifecycle(parsed.data);
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
-  if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
+  if (!tenantCanStopOrSuspend(row.tenantStatus)) {
+    return c.json(
+      {
+        error: "tenant_not_active",
+        message: `Tenant cannot be stopped (status=${row.tenantStatus ?? "unknown"}). Only active or partial tenants can be stopped.`,
+        tenantStatus: row.tenantStatus ?? null,
+        deploymentStatus: row.deploymentStatus ?? null,
+      },
+      409,
+    );
+  }
   const job = await insertTenantJob(db, {
     type: "tenant.lifecycle",
     tenantId: parsed.data,

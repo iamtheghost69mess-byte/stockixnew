@@ -1432,7 +1432,7 @@ export default function TenantDetailPage() {
         </CardHeader>
         {dangerOpen ? (
           <CardContent className="space-y-4">
-            {tenant.status === "active" ? (
+            {tenant.status === "active" || tenant.status === "partial" ? (
               <Button variant="outline" onClick={() => setSuspendOpen(true)}>
                 <PauseCircle className="mr-1 h-4 w-4" />
                 Suspend tenant

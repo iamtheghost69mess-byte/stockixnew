@@ -306,7 +306,12 @@ function TenantsPageContent() {
         setTenants((prev) =>
           prev.map((t) =>
             t.tenantId === tenantId
-              ? { ...t, deploymentStatus: "suspended", lastError: null }
+              ? {
+                  ...t,
+                  tenantStatus: "suspended",
+                  deploymentStatus: "suspended",
+                  lastError: null,
+                }
               : t,
           ),
         );
@@ -341,7 +346,12 @@ function TenantsPageContent() {
         setTenants((prev) =>
           prev.map((t) =>
             t.tenantId === tenantId
-              ? { ...t, deploymentStatus: "active", lastError: null }
+              ? {
+                  ...t,
+                  tenantStatus: "active",
+                  deploymentStatus: "active",
+                  lastError: null,
+                }
               : t,
           ),
         );
