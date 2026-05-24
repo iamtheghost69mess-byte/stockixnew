@@ -4,6 +4,9 @@
 node_modules
 .pnp
 .pnp.js
+.pnpm-store/
+package-lock.json
+**/package-lock.json
 # Local env files
 .env
 .env.local
