@@ -10,8 +10,8 @@ import {
 import { useLocatedLandedCostColumns, ActionsMenu } from './components';
 import { useBillDrawerContext } from './BillDrawerProvider';
 
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import { TableStyle } from '@/constants';
 
@@ -22,7 +22,7 @@ import { DRAWERS } from '@/constants/drawers';
  * Located landed cost table.
  */
 function LocatedLandedCostTable({
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -33,6 +33,8 @@ function LocatedLandedCostTable({
 
   // Bill drawer context.
   const { transactions, billId } = useBillDrawerContext();
+
+  console.log(transactions, 'ahmed');
 
   // Handle the transaction delete action.
   const handleDeleteTransaction = ({ id }) => {
@@ -75,6 +77,6 @@ function LocatedLandedCostTable({
 }
 
 export default compose(
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
 )(LocatedLandedCostTable);

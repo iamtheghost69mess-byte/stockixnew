@@ -27,14 +27,18 @@ import {
 import { ItemAction, AbilitySubject } from '@/constants/abilityOption';
 import { useItemsListContext } from './ItemsListProvider';
 import { useRefreshItems } from '@/hooks/query/items';
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
 
-import withItems from './withItems';
-import withItemsActions from './withItemsActions';
-import withAlertActions from '@/containers/Alert/withAlertActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
+import { withItems } from './withItems';
+import { withItemsActions } from './withItemsActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
+import { withDialogActions } from '../Dialog/withDialogActions';
 
+import { DialogsName } from '@/constants/dialogs';
 import { compose } from '@/utils';
+import { isEmpty } from 'lodash';
+import { useBulkDeleteItemsDialog } from './hooks/use-bulk-delete-items-dialog';
 
 /**
  * Items actions bar.
@@ -48,17 +52,23 @@ function ItemsActionsBar({
   setItemsTableState,
   itemsInactiveMode,
 
-  // #withAlertActions
-  openAlert,
-
   // #withSettings
   itemsTableSize,
 
   // #withSettingsActions
   addSetting,
+
+  // #withDialogActions
+  openDialog,
 }) {
+  const { openBulkDeleteDialog, isValidatingBulkDeleteItems } =
+    useBulkDeleteItemsDialog();
+
   // Items list context.
   const { itemsViews, fields } = useItemsListContext();
+
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
 
   // Items refresh action.
   const { refresh } = useRefreshItems();
@@ -78,7 +88,7 @@ function ItemsActionsBar({
 
   // Handle cancel/confirm items bulk.
   const handleBulkDelete = () => {
-    openAlert('items-bulk-delete', { itemsIds: itemsSelectedRows });
+    openBulkDeleteDialog(itemsSelectedRows);
   };
 
   // Handle inactive switch changing.
@@ -94,6 +104,37 @@ function ItemsActionsBar({
   const handleTableRowSizeChange = (size) => {
     addSetting('items', 'tableSize', size);
   };
+  // Handles the import button click.
+  const handleImportBtnClick = () => {
+    history.push('/items/import');
+  };
+
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'item' });
+  };
+
+  // Handle the print button click.
+  const handlePrintBtnClick = () => {
+    downloadExportPdf({ resource: 'Item' });
+  };
+
+  if (!isEmpty(itemsSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteItems}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
 
   return (
     <DashboardActionsBar>
@@ -127,28 +168,25 @@ function ItemsActionsBar({
         >
           <DashboardFilterButton conditionsCount={itemsFilterRoles.length} />
         </AdvancedFilterPopover>
-
         <NavbarDivider />
-
-        <If condition={itemsSelectedRows.length}>
-          <Button
-            className={Classes.MINIMAL}
-            icon={<Icon icon="trash-16" iconSize={16} />}
-            text={<T id={'delete'} />}
-            intent={Intent.DANGER}
-            onClick={handleBulkDelete}
-          />
-        </If>
 
         <Button
           className={Classes.MINIMAL}
+          icon={<Icon icon={'print-16'} iconSize={'16'} />}
+          text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
+        />
+        <Button
+          className={Classes.MINIMAL}
           icon={<Icon icon="file-import-16" iconSize={16} />}
+          onClick={handleImportBtnClick}
           text={<T id={'import'} />}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-export-16" iconSize={16} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
         <NavbarDivider />
         <DashboardRowsHeightButton
@@ -187,5 +225,5 @@ export default compose(
     itemsTableSize: itemsSettings.tableSize,
   })),
   withItemsActions,
-  withAlertActions,
+  withDialogActions,
 )(ItemsActionsBar);

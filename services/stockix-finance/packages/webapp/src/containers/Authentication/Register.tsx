@@ -1,8 +1,7 @@
 // @ts-nocheck
-import React, { useMemo } from 'react';
 import intl from 'react-intl-universal';
 import { Formik } from 'formik';
-import { Link } from 'react-router-dom';
+import { Link, Redirect } from 'react-router-dom';
 import { Intent } from '@blueprintjs/core';
 
 import { AppToaster, FormattedMessage as T } from '@/components';
@@ -10,12 +9,17 @@ import AuthInsider from '@/containers/Authentication/AuthInsider';
 import { useAuthLogin, useAuthRegister } from '@/hooks/query/authentication';
 
 import RegisterForm from './RegisterForm';
-import { RegisterSchema, transformRegisterErrorsToForm, transformRegisterToastMessages } from './utils';
+import {
+  RegisterSchema,
+  transformRegisterErrorsToForm,
+  transformRegisterToastMessages,
+} from './utils';
 import {
   AuthFooterLinks,
   AuthFooterLink,
   AuthInsiderCard,
 } from './_components';
+import { useAuthMetaBoot } from './AuthMetaBoot';
 
 const initialValues = {
   first_name: '',
@@ -28,14 +32,19 @@ const initialValues = {
  * Register form.
  */
 export default function RegisterUserForm() {
+  const { signupDisabled } = useAuthMetaBoot();
   const { mutateAsync: authLoginMutate } = useAuthLogin();
   const { mutateAsync: authRegisterMutate } = useAuthRegister();
 
+  if (signupDisabled) {
+    return <Redirect to="/auth/login" />;
+  }
+
   const handleSubmit = (values, { setSubmitting, setErrors }) => {
     authRegisterMutate(values)
-      .then((response) => {
+      .then(() => {
         authLoginMutate({
-          crediential: values.email,
+          email: values.email,
           password: values.password,
         }).catch(
           ({
@@ -50,22 +59,20 @@ export default function RegisterUserForm() {
           },
         );
       })
-      .catch(
-        ({
-          response: {
-            data: { errors },
-          },
-        }) => {
-          const formErrors = transformRegisterErrorsToForm(errors);
-          const toastMessages = transformRegisterToastMessages(errors);
+      .catch(({ response }) => {
+        const {
+          data: { errors },
+        } = response;
+        
+        const formErrors = transformRegisterErrorsToForm(errors);
+        const toastMessages = transformRegisterToastMessages(errors);
 
-          toastMessages.forEach((toastMessage) => {
-            AppToaster.show(toastMessage);
-          });
-          setErrors(formErrors);
-          setSubmitting(false);
-        },
-      );
+        toastMessages.forEach((toastMessage) => {
+          AppToaster.show(toastMessage);
+        });
+        setErrors(formErrors);
+        setSubmitting(false);
+      });
   };
 
   return (
@@ -88,12 +95,15 @@ function RegisterFooterLinks() {
   return (
     <AuthFooterLinks>
       <AuthFooterLink>
-        Return to <Link to={'/auth/login'}>Sign In</Link>
+        <T id={'return_to'} />{' '}
+        <Link to={'/auth/login'}>
+          <T id={'sign_in'} />
+        </Link>
       </AuthFooterLink>
 
       <AuthFooterLink>
         <Link to={'/auth/send_reset_password'}>
-          <T id={'forget_my_password'} />
+          <T id={'forgot_my_password'} />
         </Link>
       </AuthFooterLink>
     </AuthFooterLinks>

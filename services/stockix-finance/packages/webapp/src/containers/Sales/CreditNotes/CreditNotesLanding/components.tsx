@@ -5,12 +5,12 @@ import clsx from 'classnames';
 import { Intent, Tag, Menu, MenuItem, MenuDivider } from '@blueprintjs/core';
 import { CLASSES } from '@/constants/classes';
 import {
-  FormatDateCell,
   FormattedMessage as T,
   Choose,
   If,
   Icon,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import { safeCallback } from '@/utils';
 import { CreditNoteAction, AbilitySubject } from '@/constants/abilityOption';
@@ -81,19 +81,19 @@ export function StatusAccessor(creditNote) {
     <div>
       <Choose>
         <Choose.When condition={creditNote.is_open}>
-          <Tag intent={Intent.WARNING} minimal={true} round={true}>
+          <Tag intent={Intent.WARNING} round minimal>
             <T id={'open'} />
           </Tag>
         </Choose.When>
 
         <Choose.When condition={creditNote.is_closed}>
-          <Tag intent={Intent.SUCCESS} minimal={true} round={true}>
+          <Tag intent={Intent.SUCCESS} round minimal>
             <T id={'closed'} />
           </Tag>
         </Choose.When>
 
         <Choose.When condition={creditNote.is_draft}>
-          <Tag intent={Intent.NONE} minimal={true} round={true}>
+          <Tag intent={Intent.NONE} round minimal>
             <T id={'draft'} />
           </Tag>
         </Choose.When>
@@ -112,7 +112,6 @@ export function useCreditNoteTableColumns() {
         id: 'credit_date',
         Header: intl.get('credit_note.column.credit_date'),
         accessor: 'formatted_credit_note_date',
-        Cell: FormatDateCell,
         width: 110,
         className: 'credit_date',
         clickable: true,
@@ -140,6 +139,7 @@ export function useCreditNoteTableColumns() {
         id: 'amount',
         Header: intl.get('amount'),
         accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import moment from 'moment';
 
 import { FinancialStatement, DashboardPageContent } from '@/components';
@@ -11,9 +11,10 @@ import { VendorsBalanceSummaryProvider } from './VendorsBalanceSummaryProvider';
 import { VendorsSummarySheetLoadingBar } from './components';
 import { VendorBalanceSummaryBody } from './VendorsBalanceSummaryBody';
 
-import withVendorsBalanceSummaryActions from './withVendorsBalanceSummaryActions';
+import { withVendorsBalanceSummaryActions } from './withVendorsBalanceSummaryActions';
 
-import { getDefaultVendorsBalanceQuery } from './utils';
+import { useVendorsBalanceSummaryQuery } from './utils';
+import { VendorBalanceDialogs } from './VendorBalanceDialogs';
 import { compose } from '@/utils';
 
 /**
@@ -23,9 +24,7 @@ function VendorsBalanceSummary({
   // #withVendorsBalanceSummaryActions
   toggleVendorSummaryFilterDrawer,
 }) {
-  const [filter, setFilter] = useState({
-    ...getDefaultVendorsBalanceQuery(),
-  });
+  const { query, setLocationQuery } = useVendorsBalanceSummaryQuery();
 
   // Handle refetch vendors balance summary.
   const handleFilterSubmit = (filter) => {
@@ -33,28 +32,26 @@ function VendorsBalanceSummary({
       ...filter,
       asDate: moment(filter.asDate).format('YYYY-MM-DD'),
     };
-    setFilter(_filter);
+    setLocationQuery(_filter);
   };
 
   // Handle number format submit.
   const handleNumberFormatSubmit = (format) => {
-    setFilter({
+    setLocationQuery({
       ...filter,
       numberFormat: format,
     });
   };
 
   useEffect(
-    () => () => {
-      toggleVendorSummaryFilterDrawer(false);
-    },
+    () => () => toggleVendorSummaryFilterDrawer(false),
     [toggleVendorSummaryFilterDrawer],
   );
 
   return (
-    <VendorsBalanceSummaryProvider filter={filter}>
+    <VendorsBalanceSummaryProvider filter={query}>
       <VendorsBalanceSummaryActionsBar
-        numberFormat={filter?.numberFormat}
+        numberFormat={query?.numberFormat}
         onNumberFormatSubmit={handleNumberFormatSubmit}
       />
       <VendorsSummarySheetLoadingBar />
@@ -62,12 +59,14 @@ function VendorsBalanceSummary({
       <DashboardPageContent>
         <FinancialStatement>
           <VendorsBalanceSummaryHeader
-            pageFilter={filter}
+            pageFilter={query}
             onSubmitFilter={handleFilterSubmit}
           />
           <VendorBalanceSummaryBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <VendorBalanceDialogs />
     </VendorsBalanceSummaryProvider>
   );
 }

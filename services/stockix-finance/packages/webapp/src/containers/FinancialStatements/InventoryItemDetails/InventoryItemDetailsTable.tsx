@@ -18,7 +18,7 @@ export function InventoryItemDetailsTable({
   companyName,
 }) {
   const {
-    inventoryItemDetails: { tableRows },
+    inventoryItemDetails: { tableRows, meta },
     isInventoryItemDetailsLoading,
     query,
   } = useInventoryItemDetailsContext();
@@ -35,8 +35,7 @@ export function InventoryItemDetailsTable({
       companyName={companyName}
       sheetType={intl.get('inventory_item_details')}
       loading={isInventoryItemDetailsLoading}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       fullWidth={true}
     >
       <InventoryItemDetailsDataTable
@@ -48,6 +47,7 @@ export function InventoryItemDetailsTable({
         expanded={expandedRows}
         expandToggleColumn={1}
         expandColumnSpace={0.8}
+        sticky={true}
         styleName={TableStyle.Constrant}
       />
     </FinancialSheet>
@@ -55,6 +55,13 @@ export function InventoryItemDetailsTable({
 }
 
 const InventoryItemDetailsDataTable = styled(ReportDataTable)`
+  --color-table-text: var(--color-light-gray1);
+  --color-table-total-text: var(--color-light-gray4);
+  --color-table-border: #ececec;
+  --color-report-table-border: var(--color-dark-gray4);
+  --color-table-total-border: #ddd;
+  --color-table-total-border: var(--color-dark-gray4);
+
   .table {
     .tbody {
       .tr .td {
@@ -63,20 +70,17 @@ const InventoryItemDetailsDataTable = styled(ReportDataTable)`
       }
 
       .tr:not(.no-results) .td:not(:first-of-type) {
-        border-left: 1px solid #ececec;
+        border-left: 1px solid var(--color-report-table-border);
       }
-
       .tr:last-child .td {
-        border-bottom: 1px solid #ddd;
+        border-bottom: 1px solid var(--color-table-total-border);
       }
-
       .tr.row_type {
         &--ITEM {
           .td {
             &.transaction_type {
               border-left-color: transparent;
             }
-
             &.date {
               .cell-inner {
                 white-space: nowrap;
@@ -85,7 +89,7 @@ const InventoryItemDetailsDataTable = styled(ReportDataTable)`
             }
           }
           &:not(:first-child).is-expanded .td {
-            border-top: 1px solid #ddd;
+            border-top: 1px solid var(--color-table-total-border);
           }
         }
 
@@ -93,6 +97,10 @@ const InventoryItemDetailsDataTable = styled(ReportDataTable)`
         &--OPENING_ENTRY,
         &--CLOSING_ENTRY {
           font-weight: 500;
+
+          .td {
+            color: var(--color-table-total-text);
+          }
         }
 
         &--ITEM {

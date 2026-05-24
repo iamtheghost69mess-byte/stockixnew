@@ -1,0 +1,29 @@
+{
+  "watch": [
+    "app.js",
+    "config",
+    "constants",
+    "controllers",
+    "middlewares",
+    "migrations",
+    "models",
+    "openapi",
+    "plugins",
+    "routes",
+    "services",
+    "utils",
+    "workers"
+  ],
+  "ext": "js,cjs,mjs,json,yml,yaml",
+  "ignore": [
+    "node_modules/**",
+    "tests/**",
+    "scripts/**",
+    "postman/**",
+    "uploads/**",
+    "**/*.log",
+    "package-lock.json",
+    ".tmp-pdf-selftest/**"
+  ],
+  "delay": 1500
+}

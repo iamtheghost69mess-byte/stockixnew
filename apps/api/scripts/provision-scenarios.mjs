@@ -31,20 +31,14 @@
  * • Duplicate-slug check (409): immediate after the first provision finishes.
  */
 
-import { config } from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { env } from "@repo/config";
 
-const apiDir = path.join(fileURLToPath(new URL(".", import.meta.url)), "..");
-config({ path: path.join(apiDir, ".env") });
-config({ path: path.join(apiDir, ".env.local"), override: true });
-
-const API = (process.env.STOCKIX_API_URL ?? "http://localhost:4000").replace(
+const API = env.STOCKIX_API_URL.replace(
   /\/$/,
   "",
 );
-const POLL_MS = Number(process.env.PROVISION_POLL_MS ?? "2000");
-const MAX_MS = Number(process.env.PROVISION_MAX_MS ?? String(45 * 60 * 1000));
+const POLL_MS = env.PROVISION_POLL_MS;
+const MAX_MS = env.PROVISION_MAX_MS;
 
 const wantFull = process.argv.includes("--full");
 
@@ -199,7 +193,7 @@ Timing guide:
   if (owners.length === 0) {
     fail("No owners. Run: pnpm --filter @repo/db db:seed:local");
   }
-  const ownerId = process.env.OWNER_ID ?? owners[0].id;
+  const ownerId = env.OWNER_ID ?? owners[0].id;
   console.log("✓ GET /owners, using owner_id:", ownerId);
 
   await runQuickScenarios(ownerId);
@@ -221,7 +215,7 @@ That will: provision one new tenant (Docker), measure wall time, then POST the s
     slug,
     name: `Scenario full ${slug}`,
     owner_id: ownerId,
-    admin_email: process.env.PROVISION_ADMIN_EMAIL ?? "scenario-bc@localhost.test",
+    admin_email: env.PROVISION_ADMIN_EMAIL,
     admin_first_name: "Scenario",
     admin_last_name: "Full",
   };

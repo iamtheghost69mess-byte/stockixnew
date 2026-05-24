@@ -1,0 +1,58 @@
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ClsMiddleware } from 'nestjs-cls';
+import * as path from 'path';
+import './utils/moment-mysql';
+import { AppModule } from './modules/App/App.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+
+global.__public_dirname = path.join(__dirname, '..', 'public');
+global.__static_dirname = path.join(__dirname, '../static');
+global.__views_dirname = path.join(global.__static_dirname, '/views');
+global.__images_dirname = path.join(global.__static_dirname, '/images');
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      type: 'unhandled_rejection',
+      reason: reason instanceof Error ? reason.message : String(reason),
+      promise: String(promise),
+    }),
+  );
+});
+
+process.on('uncaughtException', (error) => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      type: 'uncaught_exception',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    }),
+  );
+  process.exit(1);
+});
+
+async function bootstrap() {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
+  app.set('query parser', 'extended');
+  app.setGlobalPrefix('/api');
+
+  // create and mount the middleware manually here
+  app.use(new ClsMiddleware({}).use);
+
+  const config = new DocumentBuilder()
+    .setTitle('Stockix')
+    .setDescription('Financial accounting software')
+    .setVersion('1.0')
+    .build();
+
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('swagger', app, documentFactory);
+
+  await app.listen(process.env.PORT ?? 3000);
+}
+bootstrap();

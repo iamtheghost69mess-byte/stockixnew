@@ -16,8 +16,8 @@ import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
 import { compose, saveInvoke } from '@/utils';
 import { useProjectProfitabilitySummaryContext } from './ProjectProfitabilitySummaryProvider';
-import withProjectProfitabilitySummary from './withProjectProfitabilitySummary';
-import withProjectProfitabilitySummaryActions from './withProjectProfitabilitySummaryActions';
+import { withProjectProfitabilitySummary } from './withProjectProfitabilitySummary';
+import { withProjectProfitabilitySummaryActions } from './withProjectProfitabilitySummaryActions';
 
 /**
  * Project profitability summary actions bar.
@@ -91,17 +91,6 @@ function ProjectProfitabilitySummaryActionsBar({
             className={classNames(Classes.MINIMAL, 'button--filter')}
             text={<T id={'format'} />}
             icon={<Icon icon="numbers" width={23} height={16} />}
-          />
-        </Popover>
-        <Popover
-          // content={}
-          interactionKind={PopoverInteractionKind.CLICK}
-          position={Position.BOTTOM_LEFT}
-        >
-          <Button
-            className={classNames(Classes.MINIMAL, 'button--filter')}
-            text={<T id={'filter'} />}
-            icon={<Icon icon="filter-16" iconSize={16} />}
           />
         </Popover>
 

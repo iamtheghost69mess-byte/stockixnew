@@ -1,13 +1,71 @@
 # Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
-# Run from repo root context on the server (adjust path — e.g. /opt/stockix/stockixnew):
-#   cd /opt/stockix/stockixnew/infra/prod && docker compose --env-file .env up -d --build
+# Run from repo root on the server (e.g. /opt/stockix/stockixnew):
+#   cd infra/prod && docker compose --env-file .env up -d --build
 #
-# Prerequisites: `.env` (see `.env.example`), repo cloned at STOCKIX_REPO (default ../..).
+# Prerequisites:
+#   1. Copy infra/prod/.env.example → infra/prod/.env and fill secrets (never commit .env).
+#   2. On the server, sync env for worker dotenv fallback:
+#        pnpm env:sync-prod   (copies infra/prod/.env → repo root .env)
+#   3. Clone repo at STOCKIX_REPO (default /opt/stockix/stockixnew).
 #
-# Project name prefixes containers/volumes (e.g. stockix_postgres_data) so another Compose
-# stack on the same host stays separate — ports 80/443 must still not conflict (see DEPLOYMENT.md).
+# Env injection: platform variables are passed explicitly into api + infra-worker
+# (Compose wins over mounted .env; see STOCKIX_LOAD_ROOT_ENV).
 
 name: stockix
+
+# Shared runtime env for control plane (api + worker). Sourced from infra/prod/.env via compose substitution.
+x-stockix-platform-env: &stockix-platform-env
+  NODE_ENV: production
+  ROOT_DOMAIN: ${ROOT_DOMAIN}
+  PUBLIC_BASE_URL_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
+  DASHBOARD_URL: ${DASHBOARD_URL}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  STOCKIX_API_URL: ${STOCKIX_API_URL:-}
+  PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+  WORKER_SECRET: ${WORKER_SECRET}
+  INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+  SESSION_SECRET: ${SESSION_SECRET}
+  AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
+  DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
+  LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
+  JWT_SECRET: ${JWT_SECRET:-}
+  SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
+  SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
+  SIGNUP_ALLOWED_EMAILS: ${SIGNUP_ALLOWED_EMAILS:-}
+  MAIL_HOST: ${MAIL_HOST:-}
+  MAIL_PORT: ${MAIL_PORT:-587}
+  MAIL_USERNAME: ${MAIL_USERNAME:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+  MAIL_SECURE: ${MAIL_SECURE:-false}
+  MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Stockix}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+  MONGODB_DATABASE_URL: ${MONGODB_DATABASE_URL:-mongodb://mongo/stockix}
+  MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
+  WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
+  PROVISION_POLL_MS: ${PROVISION_POLL_MS:-2000}
+  PROVISION_MAX_MS: ${PROVISION_MAX_MS:-2700000}
+  METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
+  METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+  # Do not load repo-root .env inside containers (use explicit env below).
+  STOCKIX_LOAD_ROOT_ENV: "0"
+
+x-stockix-worker-env: &stockix-worker-env
+  <<: *stockix-platform-env
+  REPO_ROOT: /opt/stockix/stockixnew
+  STOCKIX_TENANT_APP_ROOT: ${STOCKIX_TENANT_APP_ROOT:-/opt/stockix/stockixnew/services/stockix-finance}
+  TENANT_ENV_ROOT: ${TENANT_ENV_ROOT:-/opt/stockix/tenants}
+  TRAEFIK_DYNAMIC_DIR: ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}
+  TRAEFIK_TENANT_UPSTREAM_HOST: ${TRAEFIK_TENANT_UPSTREAM_HOST:-host.docker.internal}
+  TENANT_INTERNAL_HOST: ${TENANT_INTERNAL_HOST:-host.docker.internal}
+  S3_REGION: ${S3_REGION:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  AGENDASH_AUTH_USER: ${AGENDASH_AUTH_USER:-agendash}
+  AGENDASH_AUTH_PASSWORD: ${AGENDASH_AUTH_PASSWORD:-}
+  DOCKER_HOST: tcp://socket-proxy:2375
 
 services:
   socket-proxy:
@@ -17,14 +75,20 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       CONTAINERS: 1
+      IMAGES: 1
       NETWORKS: 1
+      VOLUMES: 1
       SERVICES: 1
       TASKS: 1
+      POST: 1
+      BUILD: 1
     networks:
       - stockix_internal
+    security_opt:
+      - no-new-privileges:true
 
   traefik:
-    image: traefik:latest
+    image: traefik:v3.1.2
     restart: unless-stopped
     depends_on:
       - socket-proxy
@@ -49,6 +113,8 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --entrypoints.websecure.address=:443
+      - --ping=true
+      - --ping.entrypoint=web
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
@@ -57,6 +123,16 @@ services:
     networks:
       - stockix_public
       - stockix_internal
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:16-alpine
@@ -76,6 +152,8 @@ services:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-54330}:5432"
     networks:
       - stockix_public
+    security_opt:
+      - no-new-privileges:true
 
   api:
     build:
@@ -86,25 +164,23 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      <<: *stockix-platform-env
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
-      REPO_ROOT: /opt/stockix/stockixnew
-      STOCKIX_TENANT_APP_ROOT: /opt/stockix/stockixnew/services/stockix-finance
-      TENANT_ENV_ROOT: /opt/stockix/tenants
-      TRAEFIK_DYNAMIC_DIR: /opt/stockix/traefik-dynamic
-      ROOT_DOMAIN: ${ROOT_DOMAIN}
-      PUBLIC_BASE_URL_SCHEME: https
-      TENANT_INTERNAL_HOST: host.docker.internal
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
-    volumes:
-      - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
-      - /var/run/docker.sock:/var/run/docker.sock
-      - traefik_dynamic:/opt/stockix/traefik-dynamic
-      - stockix_tenants:/opt/stockix/tenants
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     networks:
       - stockix_public
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     labels:
       - traefik.enable=true
       - traefik.docker.network=stockix_public
@@ -113,6 +189,32 @@ services:
       - traefik.http.routers.stockix-api.tls.certresolver=cloudflare
       - traefik.http.services.stockix-api.loadbalancer.server.port=4000
 
+  infra-worker:
+    build:
+      context: ../..
+      dockerfile: infra/worker-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      socket-proxy:
+        condition: service_started
+    environment:
+      <<: *stockix-worker-env
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+    volumes:
+      - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
+      - traefik_dynamic:/opt/stockix/traefik-dynamic
+      - stockix_tenants:/opt/stockix/tenants
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - stockix_public
+    security_opt:
+      - no-new-privileges:true
+
   dashboard:
     build:
       context: ../..
@@ -120,17 +222,34 @@ services:
       args:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
-        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: https
+        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
     restart: unless-stopped
     depends_on:
-      - traefik
+      traefik:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     environment:
+      NODE_ENV: production
       SESSION_SECRET: ${SESSION_SECRET}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
-      NODE_ENV: production
+      PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+      SECURITY_HSTS: ${SECURITY_HSTS}
+      SECURITY_X_FRAME_OPTIONS: ${SECURITY_X_FRAME_OPTIONS}
+      SECURITY_REFERRER_POLICY: ${SECURITY_REFERRER_POLICY}
+      SECURITY_X_CONTENT_TYPE_OPTIONS: ${SECURITY_X_CONTENT_TYPE_OPTIONS}
+      SECURITY_CSP_BASE: ${SECURITY_CSP_BASE}
     networks:
       - stockix_public
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     labels:
       - traefik.enable=true
       - traefik.docker.network=stockix_public
@@ -140,6 +259,68 @@ services:
       - traefik.http.routers.stockix-dash.tls.domains[0].main=${ROOT_DOMAIN}
       - traefik.http.routers.stockix-dash.tls.domains[0].sans=*.${ROOT_DOMAIN}
       - traefik.http.services.stockix-dash.loadbalancer.server.port=3000
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  chatwoot:
+    build:
+      context: ../../services/chatlive
+      dockerfile: docker/Dockerfile
+    image: stockix-chatlive:local
+    restart: unless-stopped
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    environment:
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
+      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-https://chat.${ROOT_DOMAIN}}
+      - INSTALLATION_NAME=${CHATWOOT_INSTALLATION_NAME:-Stockix}
+      - BRAND_NAME=${CHATWOOT_BRAND_NAME:-}
+      - BRAND_URL=${CHATWOOT_BRAND_URL:-}
+      - WIDGET_BRAND_URL=${CHATWOOT_WIDGET_BRAND_URL:-}
+      - LOGO=${CHATWOOT_LOGO_URL:-/brand-assets/logo.svg}
+      - LOGO_DARK=${CHATWOOT_LOGO_DARK_URL:-/brand-assets/logo_dark.svg}
+      - LOGO_THUMBNAIL=${CHATWOOT_LOGO_THUMBNAIL_URL:-/brand-assets/logo_thumbnail.svg}
+      - DISPLAY_MANIFEST=${CHATWOOT_DISPLAY_MANIFEST:-false}
+      - HELPCENTER_URL=${CHATWOOT_HELPCENTER_URL:-}
+      - POSTGRES_HOST=chatwoot-postgres
+      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_USERNAME=chatwoot
+      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
+      - REDIS_URL=redis://chatwoot-redis:6379
+      - MAILER_SENDER_EMAIL=${MAIL_FROM_ADDRESS:-}
+      - SMTP_ADDRESS=${MAIL_HOST:-}
+      - SMTP_PORT=${MAIL_PORT:-587}
+      - SMTP_USERNAME=${MAIL_USERNAME:-}
+      - SMTP_PASSWORD=${MAIL_PASSWORD:-}
+    ports:
+      - "127.0.0.1:3200:3000"
+    depends_on:
+      - chatwoot-postgres
+      - chatwoot-redis
+    networks:
+      - stockix_internal
+
+  chatwoot-postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=chatwoot
+      - POSTGRES_USER=chatwoot
+      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
+    volumes:
+      - chatwoot_postgres:/var/lib/postgresql/data
+    networks:
+      - stockix_internal
+
+  chatwoot-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - chatwoot_redis:/data
+    networks:
+      - stockix_internal
 
 networks:
   stockix_public:
@@ -153,3 +334,5 @@ volumes:
   traefik_letsencrypt:
   traefik_dynamic:
   stockix_tenants:
+  chatwoot_postgres:
+  chatwoot_redis:

@@ -1,44 +1,71 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import { Intent, Menu, MenuItem, MenuDivider } from '@blueprintjs/core';
-import {
-  Can,
-  FormatDateCell,
-  If,
-  Icon,
-  MaterialProgressBar,
-} from '@/components';
-import { useAccountTransactionsContext } from './AccountTransactionsProvider';
-import { TRANSACRIONS_TYPE } from '@/constants/cashflowOptions';
-import { AbilitySubject, CashflowAction } from '@/constants/abilityOption';
+import { Intent, Menu, MenuItem, Tag } from '@blueprintjs/core';
+import { Icon } from '@/components';
 import { safeCallback } from '@/utils';
+import { useAccountTransactionsContext } from './AccountTransactionsProvider';
+import FinancialLoadingBar from '@/containers/FinancialStatements/FinancialLoadingBar';
+
+export function AccountTransactionsLoadingBar() {
+  const {
+    isBankAccountMetaSummaryFetching,
+    isCurrentAccountFetching,
+    isCashFlowAccountsFetching,
+  } = useAccountTransactionsContext();
+
+  const isLoading =
+    isCashFlowAccountsFetching ||
+    isCurrentAccountFetching ||
+    isBankAccountMetaSummaryFetching;
+
+  if (isLoading) {
+    return <FinancialLoadingBar />;
+  }
+  return null;
+}
 
 export function ActionsMenu({
-  payload: { onDelete, onViewDetails },
+  payload: { onUncategorize, onUnmatch },
   row: { original },
 }) {
   return (
     <Menu>
-      <MenuItem
-        icon={<Icon icon="reader-18" />}
-        text={intl.get('view_details')}
-        onClick={safeCallback(onViewDetails, original)}
-      />
-      <Can I={CashflowAction.Delete} a={AbilitySubject.Cashflow}>
-        <If condition={TRANSACRIONS_TYPE.includes(original.reference_type)}>
-          <MenuDivider />
-          <MenuItem
-            text={intl.get('delete_transaction')}
-            intent={Intent.DANGER}
-            onClick={safeCallback(onDelete, original)}
-            icon={<Icon icon="trash-16" iconSize={16} />}
-          />
-        </If>
-      </Can>
+      {original.status === 'categorized' && (
+        <MenuItem
+          icon={<Icon icon="reader-18" />}
+          text={'Uncategorize'}
+          onClick={safeCallback(onUncategorize, original)}
+        />
+      )}
+      {original.status === 'matched' && (
+        <MenuItem
+          text={'Unmatch'}
+          icon={<Icon icon="unlink" iconSize={16} />}
+          onClick={safeCallback(onUnmatch, original)}
+        />
+      )}
     </Menu>
   );
 }
+
+const allTransactionsStatusAccessor = (transaction) => {
+  return (
+    <Tag
+      intent={
+        transaction.status === 'categorized'
+          ? Intent.SUCCESS
+          : transaction.status === 'matched'
+          ? Intent.SUCCESS
+          : Intent.NONE
+      }
+      minimal={transaction.status === 'manual'}
+    >
+      {transaction.formatted_status}
+    </Tag>
+  );
+};
+
 /**
  * Retrieve account transctions table columns.
  */
@@ -48,8 +75,7 @@ export function useAccountTransactionsColumns() {
       {
         id: 'date',
         Header: intl.get('date'),
-        accessor: 'date',
-        Cell: FormatDateCell,
+        accessor: 'formatted_date',
         width: 110,
         className: 'date',
         clickable: true,
@@ -66,7 +92,7 @@ export function useAccountTransactionsColumns() {
       },
       {
         id: 'transaction_number',
-        Header: intl.get('transaction_number'),
+        Header: 'Transaction #',
         accessor: 'transaction_number',
         width: 160,
         className: 'transaction_number',
@@ -75,7 +101,7 @@ export function useAccountTransactionsColumns() {
       },
       {
         id: 'reference_number',
-        Header: intl.get('reference_no'),
+        Header: 'Ref.#',
         accessor: 'reference_number',
         width: 160,
         className: 'reference_number',
@@ -83,55 +109,44 @@ export function useAccountTransactionsColumns() {
         textOverview: true,
       },
       {
+        id: 'status',
+        Header: 'Status',
+        accessor: allTransactionsStatusAccessor,
+      },
+      {
         id: 'deposit',
-        Header: intl.get('cash_flow.label.deposit'),
+        Header: intl.get('banking.label.deposit'),
         accessor: 'formatted_deposit',
         width: 110,
         className: 'deposit',
         textOverview: true,
         align: 'right',
         clickable: true,
+        money: true,
       },
       {
         id: 'withdrawal',
-        Header: intl.get('cash_flow.label.withdrawal'),
+        Header: intl.get('banking.label.withdrawal'),
         accessor: 'formatted_withdrawal',
         className: 'withdrawal',
         width: 150,
         textOverview: true,
         align: 'right',
         clickable: true,
+        money: true,
       },
       {
         id: 'running_balance',
-        Header: intl.get('cash_flow.label.running_balance'),
+        Header: intl.get('banking.label.running_balance'),
         accessor: 'formatted_running_balance',
         className: 'running_balance',
-        width: 150,
-        textOverview: true,
         align: 'right',
-        clickable: true,
-      },
-      {
-        id: 'balance',
-        Header: intl.get('balance'),
-        accessor: 'formatted_balance',
-        className: 'balance',
         width: 150,
         textOverview: true,
         clickable: true,
-        align: 'right',
+        money: true,
       },
     ],
     [],
   );
-}
-
-/**
- * Account transactions progress bar.
- */
-export function AccountTransactionsProgressBar() {
-  const { isCashFlowTransactionsFetching } = useAccountTransactionsContext();
-
-  return isCashFlowTransactionsFetching ? <MaterialProgressBar /> : null;
 }

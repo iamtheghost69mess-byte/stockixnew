@@ -13,7 +13,8 @@ import {
 import { useHistory } from 'react-router-dom';
 import { useFormikContext } from 'formik';
 import classNames from 'classnames';
-import { Icon, If, FormattedMessage as T } from '@/components';
+import { Group, Icon, If, FormattedMessage as T } from '@/components';
+import { PageForm } from '@/components/PageForm';
 import { CLASSES } from '@/constants/classes';
 import { useMakeJournalFormContext } from './MakeJournalProvider';
 
@@ -31,38 +32,38 @@ export default function MakeJournalFloatingAction() {
 
   // Handle submit & publish button click.
   const handleSubmitPublishBtnClick = (event) => {
-    submitForm();
     setSubmitPayload({ redirect: true, publish: true });
+    submitForm();
   };
 
   // Handle submit, publish & new button click.
   const handleSubmitPublishAndNewBtnClick = (event) => {
-    submitForm();
     setSubmitPayload({ redirect: false, publish: true, resetForm: true });
+    submitForm();
   };
 
   // Handle submit, publish & edit button click.
   const handleSubmitPublishContinueEditingBtnClick = (event) => {
-    submitForm();
     setSubmitPayload({ redirect: false, publish: true });
+    submitForm();
   };
 
   // Handle submit as draft button click.
   const handleSubmitDraftBtnClick = (event) => {
-    submitForm();
     setSubmitPayload({ redirect: true, publish: false });
+    submitForm();
   };
 
   // Handle submit as draft & new button click.
   const handleSubmitDraftAndNewBtnClick = (event) => {
-    submitForm();
     setSubmitPayload({ redirect: false, publish: false, resetForm: true });
+    submitForm();
   };
 
   // Handle submit as draft & continue editing button click.
   const handleSubmitDraftContinueEditingBtnClick = (event) => {
-    submitForm();
     setSubmitPayload({ redirect: false, publish: false });
+    submitForm();
   };
 
   // Handle cancel button click.
@@ -76,7 +77,10 @@ export default function MakeJournalFloatingAction() {
   };
 
   return (
-    <div className={classNames(CLASSES.PAGE_FORM_FLOATING_ACTIONS)}>
+    <PageForm.FooterActions
+      spacing={10}
+      className={classNames(CLASSES.PAGE_FORM_FLOATING_ACTIONS)}
+    >
       {/* ----------- Save And Publish ----------- */}
       <If condition={!manualJournal || !manualJournal?.is_published}>
         <ButtonGroup>
@@ -188,6 +192,6 @@ export default function MakeJournalFloatingAction() {
         onClick={handleCancelBtnClick}
         text={<T id={'cancel'} />}
       />
-    </div>
+    </PageForm.FooterActions>
   );
 }

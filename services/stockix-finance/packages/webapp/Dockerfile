@@ -1,23 +1,31 @@
-FROM node:14.15.0 as build
+FROM node:20-bookworm-slim AS build
 
 USER root
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
-COPY lerna.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json ./
+COPY packages/webapp/package.json ./packages/webapp/
+COPY shared/bigcapital-utils/package.json ./shared/bigcapital-utils/
+COPY shared/email-components/package.json ./shared/email-components/
+COPY shared/pdf-templates/package.json ./shared/pdf-templates/
+COPY shared/sdk-ts/package.json ./shared/sdk-ts/
 
-COPY ./packages/webapp/package*.json /app/packages/webapp/
+# Pin pnpm to satisfy root package.json "pnpm": "^9.0.5" (Corepack activates this exact minor).
+RUN corepack enable \
+  && corepack prepare pnpm@9.0.5 --activate \
+  && pnpm --version \
+  && pnpm install --frozen-lockfile --filter @stockix/webapp...
 
-RUN npm install
-RUN npm run bootstrap
-
-# Build webapp package
+COPY ./lerna.json /app/lerna.json
 COPY ./packages/webapp /app/packages/webapp
-RUN npm run build:webapp
+COPY ./shared /app/shared
+RUN pnpm --filter @stockix/utils run build \
+  && pnpm --filter @stockix/pdf-templates run build \
+  && pnpm --filter @stockix/email-components run build \
+  && pnpm --filter @stockix/webapp run build
 
-FROM nginx
+FROM nginx:1.27-alpine
 
 COPY ./packages/webapp/nginx/sites/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/packages/webapp/build /usr/share/nginx/html
+COPY --from=build /app/packages/webapp/dist /usr/share/nginx/html

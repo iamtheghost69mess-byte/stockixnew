@@ -14,12 +14,14 @@ import classNames from 'classnames';
 
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
-import { safeInvoke } from '@blueprintjs/core/lib/esm/common/utils';
 import { useARAgingSummaryContext } from './ARAgingSummaryProvider';
-import withARAgingSummaryActions from './withARAgingSummaryActions';
-import withARAgingSummary from './withARAgingSummary';
+import { withARAgingSummaryActions } from './withARAgingSummaryActions';
+import { withARAgingSummary } from './withARAgingSummary';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
-import { compose } from '@/utils';
+import { compose, safeInvoke } from '@/utils';
+import { ARAgingSummaryExportMenu } from './components';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * A/R Aging summary sheet - Actions bar.
@@ -30,6 +32,9 @@ function ARAgingSummaryActionsBar({
 
   // #withReceivableAgingActions
   toggleARAgingSummaryFilterDrawer: toggleDisplayFilterDrawer,
+
+  // #withDialogActions
+  openDialog,
 
   // #ownProps
   numberFormat,
@@ -49,6 +54,11 @@ function ARAgingSummaryActionsBar({
   // Handle number format submit.
   const handleNumberFormatSubmit = (numberFormat) => {
     safeInvoke(onNumberFormatSubmit, numberFormat);
+  };
+
+  // Handles the print button click.
+  const handlePrintBtnClick = () => {
+    openDialog(DialogsName.ARAgingSummaryPdfPreview)
   };
 
   return (
@@ -96,23 +106,26 @@ function ARAgingSummaryActionsBar({
           />
         </Popover>
 
-        <Button
-          className={Classes.MINIMAL}
-          text={<T id={'filter'} />}
-          icon={<Icon icon="filter-16" iconSize={16} />}
-        />
         <NavbarDivider />
 
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
+        <Popover
+          content={<ARAgingSummaryExportMenu />}
+          interactionKind={PopoverInteractionKind.CLICK}
+          placement="bottom-start"
+          minimal
+        >
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="file-export-16" iconSize={16} />}
+            text={<T id={'export'} />}
+          />
+        </Popover>
       </NavbarGroup>
     </DashboardActionsBar>
   );
@@ -123,4 +136,5 @@ export default compose(
   withARAgingSummary(({ ARAgingSummaryFilterDrawer }) => ({
     isFilterDrawerOpen: ARAgingSummaryFilterDrawer,
   })),
+  withDialogActions,
 )(ARAgingSummaryActionsBar);

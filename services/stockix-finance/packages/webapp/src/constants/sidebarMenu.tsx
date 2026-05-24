@@ -24,6 +24,7 @@ import {
   ExpenseAction,
   CashflowAction,
   PreferencesAbility,
+  TaxRateAction,
 } from '@/constants/abilityOption';
 import { DialogsName } from './dialogs';
 
@@ -73,7 +74,7 @@ export const SidebarMenu = [
                 },
               },
               {
-                text: <T id={'category_list'} />,
+                text: <T id={'categories_list'} />,
                 href: '/items/categories',
                 type: ISidebarMenuItemType.Link,
                 permission: {
@@ -178,8 +179,8 @@ export const SidebarMenu = [
             type: ISidebarMenuItemType.Link,
           },
           {
-            text: <T id={'sidebar.payment_receives'} />,
-            href: '/payment-receives',
+            text: <T id={'sidebar.payments_received'} />,
+            href: '/payments-received',
             type: ISidebarMenuItemType.Link,
             permission: {
               subject: AbilitySubject.PaymentReceive,
@@ -225,8 +226,8 @@ export const SidebarMenu = [
             type: ISidebarMenuItemType.Link,
           },
           {
-            text: <T id={'sidebar.new_payment_receive'} />,
-            href: '/payment-receives/new',
+            text: <T id={'sidebar.new_payment_received'} />,
+            href: '/payment-received/new',
             type: ISidebarMenuItemType.Link,
             permission: {
               subject: AbilitySubject.PaymentReceive,
@@ -264,8 +265,8 @@ export const SidebarMenu = [
             type: ISidebarMenuItemType.Link,
           },
           {
-            text: <T id={'payment_mades'} />,
-            href: '/payment-mades',
+            text: <T id={'payments_made'} />,
+            href: '/payments-made',
             type: ISidebarMenuItemType.Link,
             permission: {
               subject: AbilitySubject.PaymentMade,
@@ -298,7 +299,7 @@ export const SidebarMenu = [
           },
           {
             text: <T id={'sidebar.new_payment_made'} />,
-            href: '/payment-mades/new',
+            href: '/payments-made/new',
             type: ISidebarMenuItemType.Link,
             permission: {
               subject: AbilitySubject.PaymentMade,
@@ -406,6 +407,15 @@ export const SidebarMenu = [
                 href: '/transactions-locking',
                 type: ISidebarMenuItemType.Link,
               },
+              {
+                text: 'Tax Rates',
+                href: '/tax-rates',
+                type: ISidebarMenuItemType.Link,
+                permission: {
+                  subject: AbilitySubject.TaxRate,
+                  ability: TaxRateAction.View,
+                },
+              },
             ],
           },
           {
@@ -431,12 +441,12 @@ export const SidebarMenu = [
   // # Cashflow
   // ---------------
   {
-    text: <T id={'siebar.cashflow'} />,
+    text: <T id={'sidebar.banking'} />,
     type: ISidebarMenuItemType.Overlay,
     overlayId: ISidebarMenuOverlayIds.Cashflow,
     children: [
       {
-        text: <T id={'siebar.cashflow'} />,
+        text: <T id={'sidebar.banking'} />,
         type: ISidebarMenuItemType.Group,
         children: [
           {
@@ -447,6 +457,11 @@ export const SidebarMenu = [
               subject: AbilitySubject.Cashflow,
               ability: CashflowAction.View,
             },
+          },
+          {
+            text: 'Rules',
+            href: '/bank-rules',
+            type: ISidebarMenuItemType.Link,
           },
         ],
       },
@@ -737,6 +752,21 @@ export const SidebarMenu = [
             permission: {
               subject: AbilitySubject.Report,
               ability: ReportsAction.READ_VENDORS_SUMMARY_BALANCE,
+            },
+          },
+        ],
+      },
+      {
+        text: 'Taxes',
+        type: ISidebarMenuItemType.Group,
+        children: [
+          {
+            text: 'Sales Tax Liability Summary',
+            href: '/financial-reports/sales-tax-liability-summary',
+            type: ISidebarMenuItemType.Link,
+            permission: {
+              subject: AbilitySubject.Report,
+              ability: ReportsAction.READ_SALES_TAX_LIABILITY_SUMMARY,
             },
           },
         ],

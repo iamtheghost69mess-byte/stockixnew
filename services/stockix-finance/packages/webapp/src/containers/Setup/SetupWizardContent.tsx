@@ -1,28 +1,44 @@
 // @ts-nocheck
 import React from 'react';
-
-import SetupSteps from './SetupSteps';
-import WizardSetupSteps from './WizardSetupSteps';
+import { x } from '@xstyled/emotion';
+import { css } from '@emotion/css';
 
 import SetupOrganizationPage from './SetupOrganizationPage';
 import SetupInitializingForm from './SetupInitializingForm';
-import SetupCongratsPage from './SetupCongratsPage';
+import { Stepper } from '@/components/Stepper';
+
+interface SetupWizardContentProps {
+  stepIndex: number;
+  stepId: string;
+}
+
+const itemsClassName = css`
+  padding: 40px 40px 20px;
+`;
 
 /**
  * Setup wizard content.
  */
-export default function SetupWizardContent({ setupStepIndex, setupStepId }) {
+export default function SetupWizardContent({
+  stepIndex,
+  stepId,
+}: SetupWizardContentProps) {
   return (
-    <div class="setup-page__content">
-      <WizardSetupSteps currentStep={setupStepIndex} />
-
-      <div class="setup-page-form">
-        <SetupSteps step={{ id: setupStepId }}>
+    <x.div w="100%" overflow="auto">
+      <Stepper
+        active={stepIndex}
+        classNames={{
+          items: itemsClassName,
+        }}
+      >
+        <Stepper.Step label={'Organization'}>
           <SetupOrganizationPage id="organization" />
+        </Stepper.Step>
+
+        <Stepper.Step label={'Initializing'}>
           <SetupInitializingForm id={'initializing'} />
-          <SetupCongratsPage id="congrats" />
-        </SetupSteps>
-      </div>
-    </div>
+        </Stepper.Step>
+      </Stepper>
+    </x.div>
   );
 }

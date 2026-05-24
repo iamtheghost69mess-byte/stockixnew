@@ -9,6 +9,7 @@ export type ProvisionEventPayload = {
   correlationId: string;
   slug: string | null;
   tenantId: string | null;
+  parentTenantId: string | null;
   deploymentId: string | null;
   phase: string;
   level: string;
@@ -32,6 +33,7 @@ type TraceContext = () => {
   slug: string;
   tenantId?: string;
   deploymentId?: string;
+  parentTenantId?: string | null;
 };
 
 export function createProvisionTracer(
@@ -43,7 +45,13 @@ export function createProvisionTracer(
   return {
     async event(phase, message, opts) {
       const level = opts?.level ?? "info";
-      const meta = opts?.meta ?? null;
+      // Scrub oneTimeAdminPassword from meta before persisting to the DB (CRIT-02).
+      const rawMeta = opts?.meta ?? null;
+      let meta: Record<string, unknown> | null = rawMeta;
+      if (meta && "oneTimeAdminPassword" in meta) {
+        const { oneTimeAdminPassword: _scrubbed, ...rest } = meta;
+        meta = rest;
+      }
       const ctx = getContext();
       log(`[${phase}] ${message}`);
       const [row] = await db
@@ -52,6 +60,7 @@ export function createProvisionTracer(
           correlationId,
           slug: ctx.slug,
           tenantId: ctx.tenantId ?? null,
+          parentTenantId: ctx.parentTenantId ?? null,
           deploymentId: ctx.deploymentId ?? null,
           phase,
           level,
@@ -70,6 +79,7 @@ export function createProvisionTracer(
         correlationId,
         slug: ctx.slug,
         tenantId: ctx.tenantId ?? null,
+        parentTenantId: ctx.parentTenantId ?? null,
         deploymentId: ctx.deploymentId ?? null,
         phase,
         level,

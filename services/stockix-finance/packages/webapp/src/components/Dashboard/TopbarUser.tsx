@@ -13,7 +13,7 @@ import { FormattedMessage as T } from '@/components';
 
 import { useAuthActions } from '@/hooks/state';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
 import { useAuthenticatedAccount } from '@/hooks/query';
 import { firstLettersArgs, compose } from '@/utils';
@@ -79,6 +79,4 @@ function DashboardTopbarUser({
     </Popover>
   );
 }
-export default compose(
-  withDialogActions,
-)(DashboardTopbarUser);
+export default compose(withDialogActions)(DashboardTopbarUser);

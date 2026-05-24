@@ -5,12 +5,10 @@ import styled from 'styled-components';
 import { defaultTo } from 'lodash';
 
 import {
-  ButtonLink,
   Row,
   Col,
   DetailsMenu,
   DetailItem,
-  FormatDate,
   CommercialDocHeader,
   CommercialDocTopHeader,
   CustomerDrawerLink,
@@ -25,14 +23,12 @@ import { InvoiceDetailsStatus } from './utils';
 export default function InvoiceDetailHeader() {
   const { invoice } = useInvoiceDetailDrawerContext();
 
-  const handleCustomerLinkClick = () => {};
-
   return (
     <CommercialDocHeader>
       <CommercialDocTopHeader>
         <DetailsMenu>
           <AmountDetailItem label={intl.get('amount')}>
-            <h3 class="big-number">{invoice.formatted_amount}</h3>
+            <h3 class="big-number">{invoice.total_formatted}</h3>
           </AmountDetailItem>
 
           <StatusDetailItem label={''}>
@@ -45,11 +41,11 @@ export default function InvoiceDetailHeader() {
         <Col xs={6}>
           <DetailsMenu direction={'horizantal'} minLabelSize={'180px'}>
             <DetailItem label={intl.get('invoice_date')}>
-              <FormatDate value={invoice.invoice_date} />
+              {invoice.invoice_date_formatted}
             </DetailItem>
 
             <DetailItem label={intl.get('due_date')}>
-              <FormatDate value={invoice.due_date} />
+              {invoice.due_date_formatted}
             </DetailItem>
 
             <DetailItem label={intl.get('customer_name')}>
@@ -75,11 +71,11 @@ export default function InvoiceDetailHeader() {
             textAlign={'right'}
           >
             <DetailItem label={intl.get('due_amount')}>
-              <strong>{invoice.formatted_due_amount}</strong>
+              <strong>{invoice.due_amount_formatted}</strong>
             </DetailItem>
 
             <DetailItem label={intl.get('invoice.details.payment_amount')}>
-              <strong>{invoice.formatted_payment_amount}</strong>
+              <strong>{invoice.payment_amount_formatted}</strong>
             </DetailItem>
 
             <DetailItem
@@ -88,7 +84,7 @@ export default function InvoiceDetailHeader() {
             />
             <DetailItem
               label={intl.get('invoice.details.created_at')}
-              children={<FormatDate value={invoice.created_at} />}
+              children={invoice.created_at_formatted}
             />
           </DetailsMenu>
         </Col>

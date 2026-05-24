@@ -1,4 +1,4 @@
-FROM node:18-alpine as deps
+FROM node:20-alpine as deps
 
 USER root
 
@@ -86,37 +86,48 @@ RUN chown node:node /
 # saves hundreds of MB and avoids install timeouts or Alpine glibc mismatches during `npm install`.
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 
-COPY ./package*.json ./
-COPY ./packages/server/package*.json ./packages/server/
-COPY ./.npmrc ./.npmrc
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json ./
+COPY packages/server/package.json ./packages/server/
+COPY shared/bigcapital-utils/package.json ./shared/bigcapital-utils/
+COPY shared/email-components/package.json ./shared/email-components/
+COPY shared/pdf-templates/package.json ./shared/pdf-templates/
+COPY shared/sdk-ts/package.json ./shared/sdk-ts/
 
-COPY ./lerna.json ./lerna.json
-
-# .npmrc sets legacy-peer-deps; flag kept for older npm that ignores the file in edge cases.
-RUN npm install --legacy-peer-deps
-RUN npm run bootstrap
+# Pin pnpm to satisfy root package.json "pnpm": "^9.0.5" (Corepack activates this exact minor).
+RUN corepack enable \
+  && corepack prepare pnpm@9.0.5 --activate \
+  && pnpm --version \
+  && pnpm install --frozen-lockfile --filter @stockix/server...
 
 # -----------------------------------------------------------------------------
-# Migration image: only the CLI webpack bundle (`commands.js`). Skips Gulp/Sass
-# and the main app webpack build — those often fail on musl/Alpine or OOM on small VPS.
+# Migration image: Nest CLI build emits dist/cli.js (nest-commander).
 # -----------------------------------------------------------------------------
 FROM deps AS build-migration
 COPY --chown=node:node ./packages/server ./packages/server
-RUN cd packages/server && npm run build:commands
+COPY --chown=node:node ./shared ./shared
+RUN pnpm --filter @stockix/utils run build \
+  && pnpm --filter @stockix/pdf-templates run build \
+  && pnpm --filter @stockix/email-components run build \
+  && pnpm --filter @stockix/server run build
 
 FROM build-migration AS migration
 USER root
 RUN apk add --no-cache bash git \
   && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
 WORKDIR /app/packages/server
-CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./build/commands.js", "system:migrate:latest"]
+CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./dist/cli.js", "system:migrate:latest"]
 
 # -----------------------------------------------------------------------------
 # Full API server image: resources + app + CLI bundles.
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
-RUN npm run build:server --skip-nx-cache
+COPY --chown=node:node ./shared ./shared
+RUN pnpm --filter @stockix/utils run build \
+  && pnpm --filter @stockix/pdf-templates run build \
+  && pnpm --filter @stockix/email-components run build \
+  && pnpm --filter @stockix/server run build
 
 FROM build-app AS app
-CMD [ "node", "./packages/server/build/index.js" ]
+WORKDIR /app/packages/server
+CMD [ "node", "dist/main.js" ]

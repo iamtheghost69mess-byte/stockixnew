@@ -2,7 +2,7 @@
 import { useMutation, useQueryClient } from 'react-query';
 import useApiRequest from '../useRequest';
 import { useRequestQuery } from '../useQueryRequest';
-import { transformPagination } from '@/utils';
+import { transformPagination, transformToCamelCase } from '@/utils';
 import t from './types';
 
 const defaultPagination = {
@@ -76,7 +76,7 @@ export function useExpense(id, props) {
       url: `expenses/${id}`,
     },
     {
-      select: (res) => res.data.expense,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -103,6 +103,49 @@ export function useDeleteExpense(props) {
 }
 
 /**
+ * Deletes multiple expenses in bulk.
+ */
+export function useBulkDeleteExpenses(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('expenses/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }),
+    {
+      onSuccess: () => {
+        // Common invalidate queries.
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+export function useValidateBulkDeleteExpenses(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest
+        .post('expenses/validate-bulk-delete', { ids })
+        .then((res) => transformToCamelCase(res.data)),
+    {
+      ...props,
+    },
+  );
+}
+
+/**
  * Edits the given expense.
  */
 export function useEditExpense(props) {
@@ -110,7 +153,7 @@ export function useEditExpense(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`expenses/${id}`, values),
+    ([id, values]) => apiRequest.put(`expenses/${id}`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Invalidate specific expense.

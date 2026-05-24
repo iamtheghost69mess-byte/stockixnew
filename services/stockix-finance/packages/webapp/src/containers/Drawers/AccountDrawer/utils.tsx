@@ -2,7 +2,6 @@
 import intl from 'react-intl-universal';
 import React from 'react';
 
-import { FormatDateCell } from '@/components';
 import { useAccountDrawerTableOptionsContext } from './AccountDrawerTableOptionsProvider';
 
 /**
@@ -15,8 +14,7 @@ export const useAccountReadEntriesColumns = () => {
     () => [
       {
         Header: intl.get('transaction_date'),
-        accessor: 'date',
-        Cell: FormatDateCell,
+        accessor: 'formatted_date',
         width: 110,
         textOverview: true,
       },
@@ -27,20 +25,20 @@ export const useAccountReadEntriesColumns = () => {
         textOverview: true,
       },
       {
+        Header: intl.get('debit'),
+        accessor: isFCYCurrencyType ? 'formatted_fc_debit' : 'formatted_debit',
+        width: 80,
+        className: 'debit',
+        align: 'right',
+        textOverview: true,
+      },
+      {
         Header: intl.get('credit'),
         accessor: isFCYCurrencyType
           ? 'formatted_fc_credit'
           : 'formatted_credit',
         width: 80,
         className: 'credit',
-        align: 'right',
-        textOverview: true,
-      },
-      {
-        Header: intl.get('debit'),
-        accessor: isFCYCurrencyType ? 'formatted_fc_debit' : 'formatted_debit',
-        width: 80,
-        className: 'debit',
         align: 'right',
         textOverview: true,
       },

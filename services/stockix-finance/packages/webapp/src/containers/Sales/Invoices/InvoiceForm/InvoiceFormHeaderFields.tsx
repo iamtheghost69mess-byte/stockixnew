@@ -2,30 +2,27 @@
 import React from 'react';
 import styled from 'styled-components';
 import classNames from 'classnames';
-import { FormGroup, InputGroup, Position, Classes } from '@blueprintjs/core';
-import { DateInput } from '@blueprintjs/datetime';
-import { FastField, ErrorMessage, useFormikContext } from 'formik';
+import { Position, Classes } from '@blueprintjs/core';
+import { useFormikContext } from 'formik';
+import { css } from '@emotion/css';
+import { Theme, useTheme } from '@emotion/react';
 
 import {
   FFormGroup,
   FormattedMessage as T,
-  Col,
-  Row,
   CustomerDrawerLink,
   FieldRequiredHint,
   FeatureCan,
   CustomersSelect,
+  Stack,
+  FInputGroup,
+  Icon,
+  FDateInput,
 } from '@/components';
-import {
-  momentFormatter,
-  tansformDateValue,
-  inputIntent,
-  handleDateChange,
-} from '@/utils';
-import { CLASSES } from '@/constants/classes';
 import { customerNameFieldShouldUpdate } from './utils';
 
 import { useInvoiceFormContext } from './InvoiceFormProvider';
+import { useCustomerUpdateExRate } from '@/containers/Entries/withExRateItemEntriesPriceRecalc';
 import {
   InvoiceExchangeRateInputField,
   InvoiceProjectSelectButton,
@@ -37,99 +34,98 @@ import {
 } from '@/containers/Projects/components';
 import { Features } from '@/constants';
 
+const getInvoiceFieldsStyle = (theme: Theme) => css`
+  .${theme.bpPrefix}-form-group {
+    margin-bottom: 0;
+
+    &.${theme.bpPrefix}-inline {
+      max-width: 450px;
+    }
+    .${theme.bpPrefix}-label {
+      min-width: 150px;
+      font-weight: 500;
+    }
+    .${theme.bpPrefix}-form-content {
+      width: 100%;
+    }
+  }
+`;
+
 /**
  * Invoice form header fields.
  */
 export default function InvoiceFormHeaderFields() {
-  // Invoice form context.
+  const theme = useTheme();
   const { projects } = useInvoiceFormContext();
   const { values } = useFormikContext();
+  const invoiceFieldsClassName = getInvoiceFieldsStyle(theme);
 
   return (
-    <div className={classNames(CLASSES.PAGE_FORM_HEADER_FIELDS)}>
+    <Stack spacing={18} flex={1} className={invoiceFieldsClassName}>
       {/* ----------- Customer name ----------- */}
       <InvoiceFormCustomerSelect />
 
       {/* ----------- Exchange rate ----------- */}
-      <InvoiceExchangeRateInputField
-        name={'exchange_rate'}
-        formGroupProps={{ label: ' ', inline: true }}
-      />
-      <Row>
-        <Col xs={6}>
-          {/* ----------- Invoice date ----------- */}
-          <FastField name={'invoice_date'}>
-            {({ form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'invoice_date'} />}
-                inline={true}
-                labelInfo={<FieldRequiredHint />}
-                className={classNames('form-group--invoice-date', CLASSES.FILL)}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="invoice_date" />}
-              >
-                <DateInput
-                  {...momentFormatter('YYYY/MM/DD')}
-                  value={tansformDateValue(value)}
-                  onChange={handleDateChange((formattedDate) => {
-                    form.setFieldValue('invoice_date', formattedDate);
-                  })}
-                  popoverProps={{
-                    position: Position.BOTTOM_LEFT,
-                    minimal: true,
-                  }}
-                />
-              </FormGroup>
-            )}
-          </FastField>
-        </Col>
+      <InvoiceExchangeRateInputField />
 
-        <Col xs={6}>
-          {/* ----------- Due date ----------- */}
-          <FastField name={'due_date'}>
-            {({ form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'due_date'} />}
-                labelInfo={<FieldRequiredHint />}
-                inline={true}
-                className={classNames('form-group--due-date', CLASSES.FILL)}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="due_date" />}
-              >
-                <DateInput
-                  {...momentFormatter('YYYY/MM/DD')}
-                  value={tansformDateValue(value)}
-                  onChange={handleDateChange((formattedDate) => {
-                    form.setFieldValue('due_date', formattedDate);
-                  })}
-                  popoverProps={{
-                    position: Position.BOTTOM_LEFT,
-                    minimal: true,
-                  }}
-                />
-              </FormGroup>
-            )}
-          </FastField>
-        </Col>
-      </Row>
+      {/* ----------- Invoice date ----------- */}
+      <FFormGroup
+        name={'invoice_date'}
+        label={<T id={'invoice_date'} />}
+        labelInfo={<FieldRequiredHint />}
+        inline
+        fastField
+      >
+        <FDateInput
+          name={'invoice_date'}
+          formatDate={(date) => date.toLocaleDateString()}
+          parseDate={(str) => new Date(str)}
+          popoverProps={{
+            position: Position.BOTTOM_LEFT,
+            minimal: true,
+            fill: true,
+          }}
+          inputProps={{
+            leftIcon: <Icon icon={'date-range'} />,
+          }}
+          fill
+          fastField
+        />
+      </FFormGroup>
+
+      {/* ----------- Due date ----------- */}
+      <FFormGroup
+        name={'due_date'}
+        label={<T id={'due_date'} />}
+        labelInfo={<FieldRequiredHint />}
+        inline
+        fastField
+      >
+        <FDateInput
+          name={'due_date'}
+          formatDate={(date) => date.toLocaleDateString()}
+          parseDate={(str) => new Date(str)}
+          popoverProps={{
+            position: Position.BOTTOM_LEFT,
+            minimal: true,
+            fill: true,
+          }}
+          inputProps={{
+            leftIcon: <Icon icon={'date-range'} />,
+            fill: true,
+          }}
+          fill
+          fastField
+        />
+      </FFormGroup>
 
       {/* ----------- Invoice number ----------- */}
       <InvoiceFormInvoiceNumberField />
 
       {/* ----------- Reference ----------- */}
-      <FastField name={'reference_no'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'reference'} />}
-            inline={true}
-            className={classNames('form-group--reference', CLASSES.FILL)}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="reference_no" />}
-          >
-            <InputGroup minimal={true} {...field} />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup name={'reference_no'} label={<T id={'reference'} />} inline>
+        <FInputGroup name={'reference_no'} minimal={true} />
+      </FFormGroup>
 
       {/*------------ Project name -----------*/}
       <FeatureCan feature={Features.Projects}>
@@ -152,7 +148,7 @@ export default function InvoiceFormHeaderFields() {
           )}
         </FFormGroup>
       </FeatureCan>
-    </div>
+    </Stack>
   );
 }
 
@@ -161,8 +157,20 @@ export default function InvoiceFormHeaderFields() {
  * @returns {React.ReactNode}
  */
 function InvoiceFormCustomerSelect() {
-  const { customers } = useInvoiceFormContext();
   const { values, setFieldValue } = useFormikContext();
+  const { customers } = useInvoiceFormContext();
+
+  const updateEntries = useCustomerUpdateExRate();
+
+  // Handles the customer item change.
+  const handleItemChange = (customer) => {
+    // If the customer id has changed change the customer id and currency code.
+    if (values.customer_id !== customer.id) {
+      setFieldValue('customer_id', customer.id);
+      setFieldValue('currency_code', customer?.currency_code);
+    }
+    updateEntries(customer);
+  };
 
   return (
     <FFormGroup
@@ -178,10 +186,7 @@ function InvoiceFormCustomerSelect() {
         name={'customer_id'}
         items={customers}
         placeholder={<T id={'select_customer_account'} />}
-        onItemChange={(customer) => {
-          setFieldValue('customer_id', customer.id);
-          setFieldValue('currency_code', customer?.currency_code);
-        }}
+        onItemChange={handleItemChange}
         allowCreate={true}
         fastField={true}
         shouldUpdate={customerNameFieldShouldUpdate}

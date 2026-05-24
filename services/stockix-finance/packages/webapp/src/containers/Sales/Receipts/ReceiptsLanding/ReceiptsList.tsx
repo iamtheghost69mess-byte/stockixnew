@@ -5,11 +5,10 @@ import { DashboardPageContent } from '@/components';
 import '@/style/pages/SaleReceipt/List.scss';
 
 import ReceiptActionsBar from './ReceiptActionsBar';
-import ReceiptViewTabs from './ReceiptViewTabs';
 import ReceiptsTable from './ReceiptsTable';
 
-import withReceipts from './withReceipts';
-import withReceiptsActions from './withReceiptsActions';
+import { withReceipts } from './withReceipts';
+import { withReceiptsActions } from './withReceiptsActions';
 
 import { ReceiptsListProvider } from './ReceiptsListProvider';
 import { transformTableStateToQuery, compose } from '@/utils';
@@ -42,7 +41,6 @@ function ReceiptsList({
         <ReceiptActionsBar />
 
         <DashboardPageContent>
-          <ReceiptViewTabs />
           <ReceiptsTable />
         </DashboardPageContent>
       </DashboardPageContent>

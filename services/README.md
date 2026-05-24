@@ -1,4 +1,4 @@
-# Services
+v# Services
 
 ## Stockix (`stockix/`)
 
@@ -22,5 +22,9 @@ Replace the contents of `services/stockix-finance` with a fresh export from upst
 
 | Area | Location |
 |------|----------|
-| Stockix product code | `apps/*`, `packages/*` |
-| Stockix upstream copy | `services/stockix-finance` only |
+| Platform (API, dashboard, workers, Postgres control plane) | `apps/*`, `packages/*`, `infra/*` |
+| Vendored finance runtime (Nest + webapp + tenant Docker stack) | `services/stockix-finance` only |
+
+Provisioning (`tenant.provision` jobs) uses **`REPO_ROOT`** and optional **`STOCKIX_TENANT_APP_ROOT`** from the **repo root** `.env` (see `infra/worker-service/domain/provision-paths.ts`). It writes per-tenant env under **`TENANT_ENV_ROOT`** / default `~/.stockix/tenants` — not `services/stockix-finance/.env`, which is for **local** finance dev only.
+
+The tenant compose file (`infra/tenant-stack/docker-compose.yml`) builds **nginx**, **server**, **webapp**, **mysql** (MariaDB), and **redis** from `${STOCKIX_TENANT_APP_ROOT}`; **mongo** uses the **`mongo:5.0`** image so a missing `docker/mongo` folder does not block provisioning. Bind mounts expect `docker/certbot/certs` and `data/logs/nginx` under that root (tracked as empty dirs in the clone).

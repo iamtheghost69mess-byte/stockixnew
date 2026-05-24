@@ -12,8 +12,8 @@ import ProfitLossSheetHeaderGeneralPane from './ProfitLossSheetHeaderGeneralPane
 import ProfitLossSheetHeaderComparisonPanel from './ProfitLossSheetHeaderComparisonPanel';
 import ProfitLossSheetHeaderDimensionsPanel from './ProfitLossSheetHeaderDimensionsPanel';
 
-import withProfitLoss from './withProfitLoss';
-import withProfitLossActions from './withProfitLossActions';
+import { withProfitLoss } from './withProfitLoss';
+import { withProfitLossActions } from './withProfitLossActions';
 
 import { useProfitLossHeaderValidationSchema } from './utils';
 import { useFeatureCan } from '@/hooks/state';
@@ -114,7 +114,7 @@ export default R.compose(
 )(ProfitLossHeader);
 
 const ProfitLossSheetHeader = styled(FinancialStatementHeader)`
-  .bp3-drawer {
+  .bp4-drawer {
     max-height: 520px;
   }
 `;

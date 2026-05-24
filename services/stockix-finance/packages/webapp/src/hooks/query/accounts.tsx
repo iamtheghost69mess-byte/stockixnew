@@ -3,10 +3,11 @@ import { useMutation, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
 import t from './types';
+import { transformToCamelCase } from '@/utils';
 
 // Transform the account.
 const transformAccount = (response) => {
-  return response.data.account;
+  return response.data;
 };
 
 const commonInvalidateQueries = (query) => {
@@ -58,9 +59,9 @@ export function useAccount(id, props) {
 export function useAccountsTypes(props) {
   return useRequestQuery(
     [t.ACCOUNTS_TYPES],
-    { method: 'get', url: 'account_types' },
+    { method: 'get', url: 'accounts/types' },
     {
-      select: (res) => res.data.account_types,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -91,7 +92,7 @@ export function useEditAccount(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`accounts/${id}`, values),
+    ([id, values]) => apiRequest.put(`accounts/${id}`, values),
     {
       onSuccess: () => {
         // Common invalidate queries.
@@ -119,7 +120,7 @@ export function useDeleteAccount(props) {
 }
 
 /**
- * Actiavte the give account.
+ * Activate the give account.
  */
 export function useActivateAccount(props) {
   const client = useQueryClient();
@@ -151,6 +152,52 @@ export function useInactivateAccount(props) {
 }
 
 /**
+ * Deletes multiple accounts in bulk.
+ */
+export function useBulkDeleteAccounts(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('accounts/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }),
+    {
+      onSuccess: () => {
+        // Common invalidate queries.
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Validates which accounts can be deleted in bulk.
+ */
+export function useValidateBulkDeleteAccounts(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest
+        .post('accounts/validate-bulk-delete', { ids })
+        .then((res) => transformToCamelCase(res.data)),
+    {
+      ...props,
+    },
+  );
+}
+
+/**
  * Retrieve account transactions.
  */
 export function useAccountTransactions(id, props) {
@@ -158,7 +205,7 @@ export function useAccountTransactions(id, props) {
     [t.ACCOUNT_TRANSACTION, id],
     { method: 'get', url: `accounts/transactions?account_id=${id}` },
     {
-      select: (res) => res.data.transactions,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },

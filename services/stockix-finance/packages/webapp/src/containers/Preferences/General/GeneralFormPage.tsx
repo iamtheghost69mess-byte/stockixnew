@@ -10,7 +10,7 @@ import { AppToaster } from '@/components';
 import GeneralForm from './GeneralForm';
 import { PreferencesGeneralSchema } from './General.schema';
 import { useGeneralFormContext } from './GeneralFormProvider';
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
 
 import { compose, transformToForm } from '@/utils';
 
@@ -23,6 +23,12 @@ const defaultValues = {
   fiscal_year: '',
   date_format: '',
   timezone: '',
+  tax_number: '',
+  address: {},
+  display_currencies: [],
+  secondary_currency: '',
+  from_email_address: '',
+  from_email_name: '',
 };
 
 /**

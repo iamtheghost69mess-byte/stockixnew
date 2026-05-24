@@ -5,11 +5,10 @@ import '@/style/pages/CreditNote/List.scss';
 
 import { DashboardPageContent } from '@/components';
 import CreditNotesActionsBar from './CreditNotesActionsBar';
-import CreditNotesViewTabs from './CreditNotesViewTabs';
 import CreditNotesDataTable from './CreditNotesDataTable';
 
-import withCreditNotes from './withCreditNotes';
-import withCreditNotesActions from './withCreditNotesActions';
+import { withCreditNotes } from './withCreditNotes';
+import { withCreditNotesActions } from './withCreditNotesActions';
 
 import { CreditNotesListProvider } from './CreditNotesListProvider';
 import { transformTableStateToQuery, compose } from '@/utils';
@@ -36,8 +35,8 @@ function CreditNotesList({
       tableStateChanged={creditNoteTableStateChanged}
     >
       <CreditNotesActionsBar />
+
       <DashboardPageContent>
-        <CreditNotesViewTabs />
         <CreditNotesDataTable />
       </DashboardPageContent>
     </CreditNotesListProvider>

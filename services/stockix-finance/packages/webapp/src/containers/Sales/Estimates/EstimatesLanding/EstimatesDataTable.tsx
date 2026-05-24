@@ -4,11 +4,12 @@ import { useHistory } from 'react-router-dom';
 
 import EstimatesEmptyStatus from './EstimatesEmptyStatus';
 
-import withEstimatesActions from './withEstimatesActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withEstimatesActions } from './withEstimatesActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withEstimates } from './withEstimates';
 
 import { TABLES } from '@/constants/tables';
 import {
@@ -22,6 +23,7 @@ import { useEstimatesListContext } from './EstimatesListProvider';
 import { useMemorizedColumnsWidths } from '@/hooks';
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Estimates datatable.
@@ -29,8 +31,9 @@ import { DRAWERS } from '@/constants/drawers';
 function EstimatesDataTable({
   // #withEstimatesActions
   setEstimatesTableState,
+  setEstimatesSelectedRows,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -41,6 +44,9 @@ function EstimatesDataTable({
 
   // #withSettings
   estimatesTableSize,
+
+  // #withEstimates
+  estimatesTableState
 }) {
   const history = useHistory();
 
@@ -100,6 +106,11 @@ function EstimatesDataTable({
     openDrawer(DRAWERS.ESTIMATE_DETAILS, { estimateId: cell.row.original.id });
   };
 
+  // Handle mail send estimate.
+  const handleMailSendEstimate = ({ id }) => {
+    openDrawer(DRAWERS.ESTIMATE_SEND_MAIL, { estimateId: id });
+  }
+
   // Local storage memorizing columns widths.
   const [initialColumnsWidths, , handleColumnResizing] =
     useMemorizedColumnsWidths(TABLES.ESTIMATES);
@@ -116,6 +127,15 @@ function EstimatesDataTable({
     [setEstimatesTableState],
   );
 
+  // Handle selected rows change.
+  const handleSelectedRowsChange = useCallback(
+    (selectedFlatRows) => {
+      const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+      setEstimatesSelectedRows(selectedIds);
+    },
+    [setEstimatesSelectedRows],
+  );
+
   // Display empty status instead of the table.
   if (isEmptyStatus) {
     return <EstimatesEmptyStatus />;
@@ -130,11 +150,14 @@ function EstimatesDataTable({
         headerLoading={isEstimatesLoading}
         progressBarLoading={isEstimatesFetching}
         onFetchData={handleFetchData}
+        onSelectedRowsChange={handleSelectedRowsChange}
+        autoResetSelectedRows={false}
         noInitialFetch={true}
         manualSortBy={true}
         selectionColumn={true}
         sticky={true}
         pagination={true}
+        initialPageSize={estimatesTableState.pageSize}
         manualPagination={true}
         pagesCount={pagination.pagesCount}
         TableLoadingRenderer={TableSkeletonRows}
@@ -153,6 +176,7 @@ function EstimatesDataTable({
           onConvert: handleConvertToInvoice,
           onViewDetails: handleViewDetailEstimate,
           onPrint: handlePrintEstimate,
+          onSendMail: handleMailSendEstimate,
         }}
       />
     </DashboardContentTable>
@@ -161,10 +185,11 @@ function EstimatesDataTable({
 
 export default compose(
   withEstimatesActions,
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
   withSettings(({ estimatesSettings }) => ({
     estimatesTableSize: estimatesSettings?.tableSize,
   })),
+  withEstimates(({ estimatesTableState }) => ({ estimatesTableState }))
 )(EstimatesDataTable);

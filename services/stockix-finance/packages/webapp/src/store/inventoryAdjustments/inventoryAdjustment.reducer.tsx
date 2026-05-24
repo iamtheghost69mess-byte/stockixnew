@@ -14,7 +14,7 @@ const initialState = {
   selectedRows: [],
 };
 
-const STORAGE_KEY = 'stockix:inventoryAdjustments';
+const STORAGE_KEY = 'bigcapital:inventoryAdjustments';
 
 const CONFIG = {
   key: STORAGE_KEY,

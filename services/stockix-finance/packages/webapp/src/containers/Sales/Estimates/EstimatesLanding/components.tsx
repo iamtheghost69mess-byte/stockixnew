@@ -22,27 +22,31 @@ import { safeCallback } from '@/utils';
 export const statusAccessor = (row) => (
   <Choose>
     <Choose.When condition={row.is_approved}>
-      <Tag minimal={true} intent={Intent.SUCCESS} round={true}>
+      <Tag intent={Intent.SUCCESS} round minimal>
         <T id={'approved'} />
       </Tag>
     </Choose.When>
+
     <Choose.When condition={row.is_rejected}>
-      <Tag minimal={true} intent={Intent.DANGER} round={true}>
+      <Tag intent={Intent.DANGER} round minimal>
         <T id={'rejected'} />
       </Tag>
     </Choose.When>
+
     <Choose.When condition={row.is_expired}>
-      <Tag minimal={true} intent={Intent.WARNING} round={true}>
+      <Tag intent={Intent.WARNING} round minimal>
         <T id={'estimate.status.expired'} />
       </Tag>
     </Choose.When>
+
     <Choose.When condition={row.is_delivered}>
-      <Tag minimal={true} intent={Intent.SUCCESS} round={true}>
+      <Tag intent={Intent.SUCCESS} round minimal>
         <T id={'delivered'} />
       </Tag>
     </Choose.When>
+
     <Choose.Otherwise>
-      <Tag minimal={true} round={true}>
+      <Tag round minimal>
         <T id={'draft'} />
       </Tag>
     </Choose.Otherwise>
@@ -64,6 +68,7 @@ export function ActionsMenu({
     onConvert,
     onViewDetails,
     onPrint,
+    onSendMail
   },
 }) {
   return (
@@ -130,6 +135,11 @@ export function ActionsMenu({
       </Can>
       <Can I={SaleEstimateAction.View} a={AbilitySubject.Estimate}>
         <MenuItem
+          icon={<Icon icon={'envelope'} iconSize={16} />}
+          text={'Send Mail'}
+          onClick={safeCallback(onSendMail, original)}
+        />
+        <MenuItem
           icon={<Icon icon={'print-16'} iconSize={16} />}
           text={intl.get('print')}
           onClick={safeCallback(onPrint, original)}
@@ -158,8 +168,7 @@ export function useEstiamtesTableColumns() {
       {
         id: 'estimate_date',
         Header: intl.get('estimate_date'),
-        accessor: 'estimate_date',
-        Cell: FormatDateCell,
+        accessor: 'formatted_estimate_date',
         width: 140,
         className: 'estimate_date',
         clickable: true,
@@ -202,6 +211,7 @@ export function useEstiamtesTableColumns() {
         align: 'right',
         clickable: true,
         className: clsx(CLASSES.FONT_BOLD),
+        money: true
       },
       {
         id: 'status',

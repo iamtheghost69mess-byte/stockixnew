@@ -1,15 +1,14 @@
 // @ts-nocheck
 import React from 'react';
-import { DashboardContentTable, DashboardPageContent } from '@/components';
+import { DashboardPageContent } from '@/components';
 
 import '@/style/pages/SaleEstimate/List.scss';
 
 import EstimatesActionsBar from './EstimatesActionsBar';
-import EstimatesViewTabs from './EstimatesViewTabs';
 import EstimatesDataTable from './EstimatesDataTable';
 
-import withEstimates from './withEstimates';
-import withEstimatesActions from './withEstimatesActions';
+import { withEstimates } from './withEstimates';
+import { withEstimatesActions } from './withEstimatesActions';
 
 import { EstimatesListProvider } from './EstimatesListProvider';
 import { compose, transformTableStateToQuery } from '@/utils';
@@ -41,7 +40,6 @@ function EstimatesList({
       <EstimatesActionsBar />
 
       <DashboardPageContent>
-        <EstimatesViewTabs />
         <EstimatesDataTable />
       </DashboardPageContent>
     </EstimatesListProvider>

@@ -7,7 +7,7 @@ import {
   useSetGlobalErrors,
   useAuthToken,
 } from './state';
-import { getCookie } from '../utils';
+import { getCookie, normalizeApiPath } from '../utils';
 
 export default function useApiRequest() {
   const setGlobalErrors = useSetGlobalErrors();
@@ -30,13 +30,13 @@ export default function useApiRequest() {
         const locale = currentLocale;
 
         if (token) {
-          request.headers.common['X-Access-Token'] = token;
+          request.headers['Authorization'] = `Bearer ${token}`;
         }
         if (organizationId) {
-          request.headers.common['organization-id'] = organizationId;
+          request.headers['organization-id'] = organizationId;
         }
         if (locale) {
-          request.headers.common['Accept-Language'] = locale;
+          request.headers['Accept-Language'] = locale;
         }
         return request;
       },
@@ -48,24 +48,52 @@ export default function useApiRequest() {
     instance.interceptors.response.use(
       (response) => response,
       (error) => {
-        const { status, data } = error.response;
+        const { status, data } = error.response ?? {};
+
+        if (!status) {
+          return Promise.reject(error);
+        }
 
         if (status >= 500) {
           setGlobalErrors({ something_wrong: true });
         }
         if (status === 401) {
+          const errorTypes = Array.isArray(data?.errors)
+            ? data.errors.map((e) => e?.type).filter(Boolean)
+            : [];
+          const isTenantSetupError = errorTypes.some((type) =>
+            [
+              'TENANT.DATABASE.NOT.INITALIZED',
+              'TENANT.DATABASE.NOT.SEED',
+              'TENANT.NOT.FOUND',
+            ].includes(type),
+          );
+          // Unauthenticated calls (e.g. global SuspendedOverlay) must not trigger logout loops.
+          if (!token || isTenantSetupError) {
+            return Promise.reject(error);
+          }
           setGlobalErrors({ session_expired: true });
           setLogout();
         }
         if (status === 403) {
-          setGlobalErrors({ access_denied: true });
+          setGlobalErrors({ access_denied: { message: data.message } });
         }
-        if (status === 400) {
+        if (status === 429) {
+          setGlobalErrors({ too_many_requests: true });
+        }
+        if (status === 400 && Array.isArray(data?.errors)) {
           const lockedError = data.errors.find(
             (error) => error.type === 'TRANSACTIONS_DATE_LOCKED',
           );
           if (lockedError) {
-            setGlobalErrors({ transactionsLocked: { ...lockedError.data } });
+            setGlobalErrors({ transactionsLocked: { ...lockedError.payload } });
+          }
+          if (
+            data.errors.find(
+              (e) => e.type === 'ORGANIZATION.SUBSCRIPTION.INACTIVE',
+            )
+          ) {
+            setGlobalErrors({ subscriptionInactive: true });
           }
           if (data.errors.find((e) => e.type === 'USER_INACTIVE')) {
             setGlobalErrors({ userInactive: true });
@@ -76,34 +104,66 @@ export default function useApiRequest() {
       },
     );
     return instance;
-  }, [token, organizationId, setGlobalErrors, setLogout]);
+  }, [token, organizationId, currentLocale, setGlobalErrors, setLogout]);
 
   return React.useMemo(
     () => ({
       http,
 
       get(resource, params) {
-        return http.get(`/api/${resource}`, params);
+        return http.get(`/api/${normalizeApiPath(resource)}`, params);
       },
 
       post(resource, params, config) {
-        return http.post(`/api/${resource}`, params, config);
+        return http.post(`/api/${normalizeApiPath(resource)}`, params, config);
       },
 
       update(resource, slug, params) {
-        return http.put(`/api/${resource}/${slug}`, params);
+        return http.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
       },
 
       put(resource, params) {
-        return http.put(`/api/${resource}`, params);
+        return http.put(`/api/${normalizeApiPath(resource)}`, params);
       },
 
       patch(resource, params, config) {
-        return http.patch(`/api/${resource}`, params, config);
+        return http.patch(`/api/${normalizeApiPath(resource)}`, params, config);
       },
 
       delete(resource, params) {
-        return http.delete(`/api/${resource}`, params);
+        return http.delete(`/api/${normalizeApiPath(resource)}`, params);
+      },
+    }),
+    [http],
+  );
+}
+
+export function useAuthApiRequest() {
+  const http = React.useMemo(() => {
+    // Axios instance.
+    return axios.create();
+  }, []);
+
+  return React.useMemo(
+    () => ({
+      http,
+      get(resource, params) {
+        return http.get(`/api/${normalizeApiPath(resource)}`, params);
+      },
+      post(resource, params, config) {
+        return http.post(`/api/${normalizeApiPath(resource)}`, params, config);
+      },
+      update(resource, slug, params) {
+        return http.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
+      },
+      put(resource, params) {
+        return http.put(`/api/${normalizeApiPath(resource)}`, params);
+      },
+      patch(resource, params, config) {
+        return http.patch(`/api/${normalizeApiPath(resource)}`, params, config);
+      },
+      delete(resource, params) {
+        return http.delete(`/api/${normalizeApiPath(resource)}`, params);
       },
     }),
     [http],

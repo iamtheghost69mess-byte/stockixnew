@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import * as Yup from 'yup';
+
 import styled from 'styled-components';
 import moment from 'moment';
 import { Formik, Form } from 'formik';
@@ -8,11 +8,12 @@ import { Tabs, Tab, Button, Intent } from '@blueprintjs/core';
 import { FormattedMessage as T } from '@/components';
 
 import FinancialStatementHeader from '../FinancialStatementHeader';
-import withCustomersBalanceSummary from './withCustomersBalanceSummary';
-import withCustomersBalanceSummaryActions from './withCustomersBalanceSummaryActions';
+import { withCustomersBalanceSummary } from './withCustomersBalanceSummary';
+import { withCustomersBalanceSummaryActions } from './withCustomersBalanceSummaryActions';
 import CustomersBalanceSummaryGeneralPanel from './CustomersBalanceSummaryGeneralPanel';
 
 import { compose, transformToForm } from '@/utils';
+import { getCustomersBalanceQuerySchema } from './utils';
 
 /**
  * Customers balance summary.
@@ -29,9 +30,8 @@ function CustomersBalanceSummaryHeader({
   toggleCustomerBalanceFilterDrawer,
 }) {
   // validation schema.
-  const validationSchema = Yup.object().shape({
-    asDate: Yup.date().required().label('asDate'),
-  });
+  const validationSchema = getCustomersBalanceQuerySchema();
+
   // Default form values.
   const defaultValues = {
     ...pageFilter,
@@ -100,7 +100,7 @@ export default compose(
 )(CustomersBalanceSummaryHeader);
 
 const CustomerBalanceDrawerHeader = styled(FinancialStatementHeader)`
-  .bp3-drawer {
+  .bp4-drawer {
     max-height: 450px;
   }
 `;

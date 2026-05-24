@@ -2,25 +2,26 @@
 import React from 'react';
 import { Formik } from 'formik';
 import { FormattedMessage as T } from '@/components';
-
-import '@/style/pages/Setup/Organization.scss';
+import { x } from '@xstyled/emotion';
 
 import SetupOrganizationForm from './SetupOrganizationForm';
 
 import { useOrganizationSetup } from '@/hooks/query';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
 
-import { setCookie, compose, transfromToSnakeCase } from '@/utils';
 import { getSetupOrganizationValidation } from './SetupOrganization.schema';
+import { setCookie, compose, transfromToSnakeCase } from '@/utils';
 
 // Initial values.
 const defaultValues = {
   name: '',
+  industry: '',
   location: '',
   baseCurrency: '',
   language: 'en',
   fiscalYear: '',
   timezone: '',
+  dateFormat: 'DD MMM YYYY',
 };
 
 /**
@@ -53,17 +54,22 @@ function SetupOrganizationPage({ wizard }) {
   };
 
   return (
-    <div className={'setup-organization'}>
+    <x.div
+      maxWidth={'600px'}
+      w="100%"
+      mx="auto"
+      pt={'45px'}
+      pb={'20px'}
+      px={'25px'}
+    >
       <Formik
         validationSchema={validationSchema}
         initialValues={initialValues}
         component={SetupOrganizationForm}
         onSubmit={handleSubmit}
       />
-    </div>
+    </x.div>
   );
 }
 
-export default compose(
-  withSettingsActions,
-)(SetupOrganizationPage);
+export default compose(withSettingsActions)(SetupOrganizationPage);

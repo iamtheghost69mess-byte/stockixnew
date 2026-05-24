@@ -3,8 +3,12 @@ import { useMutation, useQueryClient, useInfiniteQuery } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
 import t from './types';
+import { BANK_QUERY_KEY } from '@/constants/query-keys/banking';
 
 const commonInvalidateQueries = (queryClient) => {
+  // Invalidate settings.
+  queryClient.invalidateQueries([t.SETTING, t.SETTING_CASHFLOW]);
+
   // Invalidate accounts.
   queryClient.invalidateQueries(t.ACCOUNTS);
   queryClient.invalidateQueries(t.ACCOUNT);
@@ -33,9 +37,9 @@ const commonInvalidateQueries = (queryClient) => {
 export function useCashflowAccounts(query, props) {
   return useRequestQuery(
     [t.CASH_FLOW_ACCOUNTS, query],
-    { method: 'get', url: 'cashflow/accounts', params: query },
+    { method: 'get', url: 'banking/accounts', params: query },
     {
-      select: (res) => res.data.cashflow_accounts,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -50,11 +54,13 @@ export function useCreateCashflowTransaction(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (values) => apiRequest.post('cashflow/transactions', values),
+    (values) => apiRequest.post('banking/transactions', values),
     {
       onSuccess: () => {
         // Invalidate queries.
         commonInvalidateQueries(queryClient);
+
+        queryClient.invalidateQueries('BANK_TRANSACTION_MATCHES');
       },
       ...props,
     },
@@ -67,9 +73,9 @@ export function useCreateCashflowTransaction(props) {
 export function useCashflowTransaction(id, props) {
   return useRequestQuery(
     [t.CASH_FLOW_TRANSACTIONS, id],
-    { method: 'get', url: `cashflow/transactions/${id}` },
+    { method: 'get', url: `banking/transactions/${id}` },
     {
-      select: (res) => res.data.cashflow_transaction,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -83,7 +89,7 @@ export function useDeleteCashflowTransaction(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation((id) => apiRequest.delete(`cashflow/transactions/${id}`), {
+  return useMutation((id) => apiRequest.delete(`banking/transactions/${id}`), {
     onSuccess: (res, id) => {
       // Invalidate queries.
       commonInvalidateQueries(queryClient);
@@ -101,8 +107,8 @@ export function useDeleteCashflowTransaction(props) {
 export function useAccountTransactionsInfinity(
   accountId,
   query,
-  axios,
   infinityProps,
+  axios,
 ) {
   const apiRequest = useApiRequest();
 
@@ -112,7 +118,7 @@ export function useAccountTransactionsInfinity(
       const response = await apiRequest.http({
         ...axios,
         method: 'get',
-        url: `/api/financial_statements/cashflow-account-transactions`,
+        url: `/api/banking/transactions`,
         params: { page: pageParam, ...query },
       });
       return response.data;
@@ -132,16 +138,42 @@ export function useAccountTransactionsInfinity(
 }
 
 /**
- * Refresh cashflow transactions infinity.
+ * Retrieve account transactions infinity scrolling.
+ * @param {number} accountId
+ * @param {*} axios
+ * @returns
  */
-export function useRefreshCashflowTransactionsInfinity() {
-  const queryClient = useQueryClient();
+export function useAccountUncategorizedTransactionsInfinity(
+  accountId,
+  query,
+  infinityProps,
+  axios,
+) {
+  const apiRequest = useApiRequest();
 
-  return {
-    refresh: () => {
-      queryClient.invalidateQueries(t.CASHFLOW_ACCOUNT_TRANSACTIONS_INFINITY);
+  return useInfiniteQuery(
+    [t.CASHFLOW_ACCOUNT_UNCATEGORIZED_TRANSACTIONS_INFINITY, accountId, query],
+    async ({ pageParam = 1 }) => {
+      const response = await apiRequest.http({
+        ...axios,
+        method: 'get',
+        url: `/api/banking/uncategorized/accounts/${accountId}`,
+        params: { page: pageParam, ...query },
+      });
+      return response.data;
     },
-  };
+    {
+      getPreviousPageParam: (firstPage) => firstPage.pagination.page - 1,
+      getNextPageParam: (lastPage) => {
+        const { pagination } = lastPage;
+
+        return pagination.total > pagination.page_size * pagination.page
+          ? lastPage.pagination.page + 1
+          : undefined;
+      },
+      ...infinityProps,
+    },
+  );
 }
 
 /**
@@ -164,8 +196,97 @@ export function useRefreshCashflowTransactions() {
   const query = useQueryClient();
 
   return {
-    refresh: () => {
-      query.invalidateQueries(t.CASH_FLOW_TRANSACTIONS);
+    refresh: (accountId: number) => {
+      query.invalidateQueries(t.CASHFLOW_ACCOUNT_TRANSACTIONS_INFINITY);
+      query.invalidateQueries(
+        t.CASHFLOW_ACCOUNT_UNCATEGORIZED_TRANSACTIONS_INFINITY,
+      );
+      query.invalidateQueries(
+        BANK_QUERY_KEY.RECOGNIZED_BANK_TRANSACTIONS_INFINITY,
+      );
+      query.invalidateQueries(
+        BANK_QUERY_KEY.EXCLUDED_BANK_TRANSACTIONS_INFINITY,
+      );
+      query.invalidateQueries(
+        BANK_QUERY_KEY.PENDING_BANK_ACCOUNT_TRANSACTIONS_INFINITY,
+      );
+      query.invalidateQueries([
+        BANK_QUERY_KEY.BANK_ACCOUNT_SUMMARY_META,
+        accountId,
+      ]);
+      query.invalidateQueries([t.ACCOUNT, accountId]);
     },
   };
+}
+
+/**
+ * Retrieves specific uncategorized transaction.
+ * @param {number} uncategorizedTranasctionId -
+ */
+export function useUncategorizedTransaction(
+  uncategorizedTranasctionId: nunber,
+  props,
+) {
+  return useRequestQuery(
+    [t.CASHFLOW_UNCAATEGORIZED_TRANSACTION, uncategorizedTranasctionId],
+    {
+      method: 'get',
+      url: `banking/uncategorized/${uncategorizedTranasctionId}`,
+    },
+    {
+      select: (res) => res.data?.data,
+      ...props,
+    },
+  );
+}
+
+/**
+ * Categorize the cashflow transaction.
+ */
+export function useCategorizeTransaction(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (values) => apiRequest.post(`banking/categorize`, values),
+    {
+      onSuccess: (res, id) => {
+        // Invalidate queries.
+        commonInvalidateQueries(queryClient);
+        queryClient.invalidateQueries(t.CASHFLOW_UNCAATEGORIZED_TRANSACTION);
+        queryClient.invalidateQueries(
+          t.CASHFLOW_ACCOUNT_UNCATEGORIZED_TRANSACTIONS_INFINITY,
+        );
+
+        // Invalidate bank account summary.
+        queryClient.invalidateQueries('BANK_ACCOUNT_SUMMARY_META');
+      },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Uncategorize the cashflow transaction.
+ */
+export function useUncategorizeTransaction(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (id: number) => apiRequest.delete(`banking/categorize/${id}`),
+    {
+      onSuccess: (res, id) => {
+        // Invalidate queries.
+        commonInvalidateQueries(queryClient);
+        queryClient.invalidateQueries(t.CASHFLOW_UNCAATEGORIZED_TRANSACTION);
+        queryClient.invalidateQueries(
+          t.CASHFLOW_ACCOUNT_UNCATEGORIZED_TRANSACTIONS_INFINITY,
+        );
+        // Invalidate bank account summary.
+        queryClient.invalidateQueries('BANK_ACCOUNT_SUMMARY_META');
+      },
+      ...props,
+    },
+  );
 }

@@ -11,8 +11,8 @@ import { useBranchesTableColumns, ActionsMenu } from './components';
 import { useBranchesContext } from './BranchesProvider';
 import { useMarkBranchAsPrimary } from '@/hooks/query';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertActions from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
 
 import { compose } from '@/utils';
 
@@ -87,7 +87,7 @@ const BranchesTable = styled(DataTable)`
     min-height: 38px;
 
     .td.td-name {
-      .bp3-icon {
+      .bp4-icon {
         margin: 0;
         margin-left: 2px;
         vertical-align: top;

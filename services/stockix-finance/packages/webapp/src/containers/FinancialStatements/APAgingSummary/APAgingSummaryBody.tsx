@@ -7,7 +7,7 @@ import { FinancialReportBody } from '../FinancialReportPage';
 import { FinancialSheetSkeleton } from '@/components/FinancialSheet';
 import { useAPAgingSummaryContext } from './APAgingSummaryProvider';
 
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
 
 /**
@@ -18,11 +18,11 @@ function APAgingSummaryBodyJSX({
   // #withCurrentOrganization
   organizationName,
 }) {
-  const { isLoading } = useAPAgingSummaryContext();
+  const { isAPAgingLoading } = useAPAgingSummaryContext();
 
   return (
     <FinancialReportBody>
-      {isLoading ? (
+      {isAPAgingLoading ? (
         <FinancialSheetSkeleton />
       ) : (
         <APAgingSummaryTable organizationName={organizationName} />

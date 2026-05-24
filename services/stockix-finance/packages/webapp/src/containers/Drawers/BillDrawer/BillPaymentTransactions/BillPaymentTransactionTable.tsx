@@ -8,8 +8,8 @@ import { useBillPaymentTransactionsColumns, ActionsMenu } from './components';
 import { useBillDrawerContext } from '../BillDrawerProvider';
 import { useBillPaymentTransactions } from '@/hooks/query';
 
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
@@ -18,7 +18,7 @@ import { DRAWERS } from '@/constants/drawers';
  * Bill payment transactions datatable.
  */
 function BillPaymentTransactionTable({
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -48,7 +48,7 @@ function BillPaymentTransactionTable({
 
   // Handles edit  bill payment transactions.
   const handleEditBillPaymentTransactions = ({ bill_payment_id }) => {
-    history.push(`/payment-mades/${bill_payment_id}/edit`);
+    history.push(`/payments-made/${bill_payment_id}/edit`);
     closeDrawer(DRAWERS.BILL_DETAILS);
   };
 
@@ -73,6 +73,6 @@ function BillPaymentTransactionTable({
 }
 
 export default compose(
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
 )(BillPaymentTransactionTable);

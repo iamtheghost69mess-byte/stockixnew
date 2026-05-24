@@ -1,13 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import {
-  Intent,
-  Tag,
-  Menu,
-  MenuItem,
-  MenuDivider,
-  ProgressBar,
-} from '@blueprintjs/core';
+import { Intent, Tag, Menu, MenuItem, MenuDivider } from '@blueprintjs/core';
 import intl from 'react-intl-universal';
 import clsx from 'classnames';
 import { CLASSES } from '@/constants/classes';
@@ -19,8 +12,9 @@ import {
   If,
   Icon,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
-import { formattedAmount, safeCallback, calculateStatus } from '@/utils';
+import { formattedAmount, safeCallback } from '@/utils';
 import {
   SaleInvoiceAction,
   PaymentReceiveAction,
@@ -31,44 +25,33 @@ export function InvoiceStatus({ invoice }) {
   return (
     <Choose>
       <Choose.When condition={invoice.is_fully_paid && invoice.is_delivered}>
-        <span className={'fully-paid-icon'}>
-          <Icon icon="small-tick" iconSize={18} />
-        </span>
-        <span class="fully-paid-text">
+        <Tag intent={Intent.SUCCESS} round minimal>
           <T id={'paid'} />
-        </span>
+        </Tag>
       </Choose.When>
 
-      <Choose.When condition={invoice.is_delivered}>
-        <Choose>
-          <Choose.When condition={invoice.is_overdue}>
-            <span className={'overdue-status'}>
-              {intl.get('overdue_by', { overdue: invoice.overdue_days })}
-            </span>
-          </Choose.When>
-          <Choose.Otherwise>
-            <span className={'due-status'}>
-              {intl.get('due_in', { due: invoice.remaining_days })}
-            </span>
-          </Choose.Otherwise>
-        </Choose>
-
-        <If condition={invoice.is_partially_paid}>
-          <span class="partial-paid">
-            {intl.get('day_partially_paid', {
-              due: formattedAmount(invoice.due_amount, invoice.currency_code),
-            })}
-          </span>
-          <ProgressBar
-            animate={false}
-            stripes={false}
-            intent={Intent.PRIMARY}
-            value={calculateStatus(invoice.balance_amount, invoice.balance)}
-          />
-        </If>
+      <Choose.When condition={invoice.is_delivered && invoice.is_overdue}>
+        <Tag intent={Intent.DANGER} round minimal>
+          {intl.get('overdue_by', { overdue: invoice.overdue_days })}
+        </Tag>
       </Choose.When>
+
+      <Choose.When condition={invoice.is_delivered && !invoice.is_overdue}>
+        <Tag intent={Intent.WARNING} round minimal>
+          {intl.get('due_in', { due: invoice.remaining_days })}
+        </Tag>
+      </Choose.When>
+
+      <Choose.When condition={invoice.is_partially_paid}>
+        <Tag intent={Intent.PRIMARY} round minimal>
+          {intl.get('day_partially_paid', {
+            due: formattedAmount(invoice.due_amount, invoice.currency_code),
+          })}
+        </Tag>
+      </Choose.When>
+
       <Choose.Otherwise>
-        <Tag minimal={true} round={true}>
+        <Tag round minimal>
           <T id={'draft'} />
         </Tag>
       </Choose.Otherwise>
@@ -117,6 +100,12 @@ export const handleDeleteErrors = (errors) => {
       intent: Intent.DANGER,
     });
   }
+  if (errors.find((e) => e.type === 'CANNOT_DELETE_TRANSACTION_MATCHED')) {
+    AppToaster.show({
+      intent: Intent.DANGER,
+      message: 'Cannot delete a transaction matched with a bank transaction.',
+    });
+  }
 };
 
 export function ActionsMenu({
@@ -128,6 +117,7 @@ export function ActionsMenu({
     onQuick,
     onViewDetails,
     onPrint,
+    onSendMail,
   },
   row: { original },
 }) {
@@ -150,7 +140,6 @@ export function ActionsMenu({
           text={intl.get('invoice.convert_to_credit_note')}
           onClick={safeCallback(onConvert, original)}
         />
-
         <If condition={!original.is_delivered}>
           <MenuItem
             icon={<Icon icon="send" iconSize={16} />}
@@ -169,6 +158,11 @@ export function ActionsMenu({
         </If>
       </Can>
       <Can I={SaleInvoiceAction.View} a={AbilitySubject.Invoice}>
+        <MenuItem
+          icon={<Icon icon={'envelope'} iconSize={16} />}
+          text={'Send Mail'}
+          onClick={safeCallback(onSendMail, original)}
+        />
         <MenuItem
           icon={<Icon icon={'print-16'} iconSize={16} />}
           text={intl.get('print')}
@@ -197,8 +191,7 @@ export function useInvoicesTableColumns() {
       {
         id: 'invoice_date',
         Header: intl.get('invoice_date'),
-        accessor: 'invoice_date',
-        Cell: FormatDateCell,
+        accessor: 'invoice_date_formatted',
         width: 110,
         className: 'invoice_date',
         clickable: true,
@@ -219,18 +212,19 @@ export function useInvoicesTableColumns() {
         Header: intl.get('invoice_no__'),
         accessor: 'invoice_no',
         width: 100,
-        className: 'invoice_no',
         clickable: true,
         textOverview: true,
       },
       {
         id: 'amount',
-        Header: intl.get('balance'),
-        accessor: 'formatted_amount',
+        Header: intl.get('amount'),
+        accessor: 'total_formatted',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,
         textOverview: true,
+        money: true,
         className: clsx(CLASSES.FONT_BOLD),
       },
       {
@@ -256,7 +250,6 @@ export function useInvoicesTableColumns() {
         Header: intl.get('reference_no'),
         accessor: 'reference_no',
         width: 90,
-        className: 'reference_no',
         clickable: true,
         textOverview: true,
       },

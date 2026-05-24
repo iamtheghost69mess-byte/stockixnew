@@ -1,12 +1,11 @@
 // @ts-nocheck
 import React, { useMemo } from 'react';
 import intl from 'react-intl-universal';
-import classNames from 'classnames';
 import { Intent } from '@blueprintjs/core';
 import { defaultTo, sumBy, isEmpty } from 'lodash';
 import { Formik, Form } from 'formik';
 import { useHistory } from 'react-router-dom';
-import { CLASSES } from '@/constants/classes';
+import { css } from '@emotion/css';
 
 import ExpenseFormBody from './ExpenseFormBody';
 import ExpenseFormHeader from './ExpenseFormHeader';
@@ -16,11 +15,12 @@ import ExpenseFormTopBar from './ExpenseFormTopBar';
 
 import { useExpenseFormContext } from './ExpenseFormPageProvider';
 
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
-import { AppToaster } from '@/components';
+import { AppToaster, Box } from '@/components';
+import { PageForm } from '@/components/PageForm';
 import {
   CreateExpenseFormSchema,
   EditExpenseFormSchema,
@@ -48,7 +48,7 @@ function ExpenseForm({
     createExpenseMutate,
     expense,
     expenseId,
-    submitPayload,
+    submitPayloadRef,
   } = useExpenseFormContext();
 
   const isNewMode = !expenseId;
@@ -61,13 +61,13 @@ function ExpenseForm({
     () => ({
       ...(!isEmpty(expense)
         ? {
-            ...transformToEditForm(expense, defaultExpense),
-          }
+          ...transformToEditForm(expense, defaultExpense),
+        }
         : {
-            ...defaultExpense,
-            currency_code: base_currency,
-            payment_account_id: defaultTo(preferredPaymentAccount, ''),
-          }),
+          ...defaultExpense,
+          currency_code: base_currency,
+          payment_account_id: defaultTo(preferredPaymentAccount, ''),
+        }),
     }),
     [expense, base_currency, preferredPaymentAccount],
   );
@@ -82,12 +82,16 @@ function ExpenseForm({
         message: intl.get('amount_cannot_be_zero_or_empty'),
         intent: Intent.DANGER,
       });
+      setSubmitting(false);
       return;
     }
 
+    // Get submit payload from ref for synchronous access
+    const currentSubmitPayload = submitPayloadRef?.current || {};
+
     const form = {
       ...transformFormValuesToRequest(values),
-      publish: submitPayload.publish,
+      publish: currentSubmitPayload.publish,
     };
     // Handle request success.
     const handleSuccess = (response) => {
@@ -102,10 +106,10 @@ function ExpenseForm({
       });
       setSubmitting(false);
 
-      if (submitPayload.redirect) {
+      if (currentSubmitPayload.redirect) {
         history.push('/expenses');
       }
-      if (submitPayload.resetForm) {
+      if (currentSubmitPayload.resetForm) {
         resetForm();
       }
     };
@@ -129,29 +133,38 @@ function ExpenseForm({
   };
 
   return (
-    <div
-      className={classNames(
-        CLASSES.PAGE_FORM,
-        CLASSES.PAGE_FORM_STRIP_STYLE,
-        CLASSES.PAGE_FORM_EXPENSE,
-      )}
+    <Formik
+      validationSchema={
+        isNewMode ? CreateExpenseFormSchema : EditExpenseFormSchema
+      }
+      initialValues={initialValues}
+      onSubmit={handleSubmit}
     >
-      <Formik
-        validationSchema={
-          isNewMode ? CreateExpenseFormSchema : EditExpenseFormSchema
-        }
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
+      <Form
+        className={css({
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+        })}
       >
-        <Form>
-          <ExpenseFormTopBar />
-          <ExpenseFormHeader />
-          <ExpenseFormBody />
-          <ExpenseFormFooter />
-          <ExpenseFloatingFooter />
-        </Form>
-      </Formik>
-    </div>
+        <PageForm flex={1}>
+          <PageForm.Body>
+            <ExpenseFormTopBar />
+            <ExpenseFormHeader />
+
+            <Box p="18px 32px 0">
+              <ExpenseFormBody />
+            </Box>
+            <ExpenseFormFooter />
+          </PageForm.Body>
+
+          <PageForm.Footer>
+            <ExpenseFloatingFooter />
+          </PageForm.Footer>
+        </PageForm>
+      </Form>
+    </Formik>
   );
 }
 

@@ -1,11 +1,17 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import { Intent, Tag } from '@blueprintjs/core';
+import { Intent, Tag, Classes } from '@blueprintjs/core';
+import clsx from 'classnames';
 
 import { If, AppToaster } from '@/components';
-import { NormalCell, BalanceCell } from './components';
+import { NormalCell, BalanceCell, BankBalanceCell } from './components';
 import { transformTableStateToQuery, isBlank } from '@/utils';
+
+export const DeleteAccountTypeError = {
+  AccountPredefined: 'account_predefined',
+  AccountHasAssociatedTransactions: 'account_has_associated_transactions',
+};
 
 /**
  * Account name accessor.
@@ -25,13 +31,13 @@ export const accountNameAccessor = (account) => {
  * Handle delete errors in bulk and singular.
  */
 export const handleDeleteErrors = (errors) => {
-  if (errors.find((e) => e.type === 'ACCOUNT.PREDEFINED')) {
+  if (errors.find((e) => e.type === DeleteAccountTypeError.AccountPredefined)) {
     AppToaster.show({
-      message: intl.get('you_could_not_delete_predefined_accounts'),
+      message: intl.get('cannot_delete_predefined_accounts'),
       intent: Intent.DANGER,
     });
   }
-  if (errors.find((e) => e.type === 'ACCOUNT.HAS.ASSOCIATED.TRANSACTIONS')) {
+  if (errors.find((e) => e.type === DeleteAccountTypeError.AccountHasAssociatedTransactions)) {
     AppToaster.show({
       message: intl.get('cannot_delete_account_has_associated_transactions'),
       intent: Intent.DANGER,
@@ -41,7 +47,7 @@ export const handleDeleteErrors = (errors) => {
 
 export const AccountCodeAccessor = (row) =>
   !isBlank(row.code) ? (
-    <Tag minimal={true} round={true} intent={Intent.NONE}>
+    <Tag minimal round intent={Intent.NONE}>
       {row.code}
     </Tag>
   ) : null;
@@ -73,7 +79,7 @@ export const useAccountsTableColumns = () => {
         id: 'type',
         Header: intl.get('type'),
         accessor: 'account_type_label',
-        className: 'type',
+        className: clsx('type', Classes.TEXT_MUTED),
         width: 140,
         clickable: true,
         textOverview: true,
@@ -91,8 +97,19 @@ export const useAccountsTableColumns = () => {
         id: 'currency',
         Header: intl.get('currency'),
         accessor: 'currency_code',
+        className: clsx(Classes.TEXT_MUTED),
         width: 75,
         clickable: true,
+      },
+      {
+        id: 'bank_balance',
+        Header: 'Bank Balance',
+        accessor: 'bank_balance_formatted',
+        Cell: BankBalanceCell,
+        width: 150,
+        clickable: true,
+        align: 'right',
+        money: true,
       },
       {
         id: 'balance',
@@ -101,6 +118,7 @@ export const useAccountsTableColumns = () => {
         Cell: BalanceCell,
         width: 150,
         clickable: true,
+        money: true,
         align: 'right',
       },
     ],
@@ -118,6 +136,6 @@ export const rowClassNames = (row) => ({
 export const transformAccountsStateToQuery = (tableState) => {
   return {
     ...transformTableStateToQuery(tableState),
-    inactive_mode: tableState.inactiveMode,
-  }
-}
+    onlyInactive: tableState.inactiveMode,
+  };
+};

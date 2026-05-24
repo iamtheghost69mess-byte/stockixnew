@@ -43,6 +43,9 @@ const commonInvalidateQueries = (queryClient) => {
   // Invalidate financial reports.
   queryClient.invalidateQueries(t.FINANCIAL_REPORT);
 
+  // Invalidate the transactions by reference.
+  queryClient.invalidateQueries(t.TRANSACTIONS_BY_REFERENCE);
+
   // Invalidate mutate base currency abilities.
   queryClient.invalidateQueries(t.ORGANIZATION_MUTATE_BASE_CURRENCY_ABILITIES);
 };
@@ -55,7 +58,7 @@ export function useCreateVendorCredit(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (values) => apiRequest.post('purchases/vendor-credit', values),
+    (values) => apiRequest.post('vendor-credits', values),
     {
       onSuccess: (res, values) => {
         // Common invalidate queries.
@@ -74,7 +77,7 @@ export function useEditVendorCredit(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`purchases/vendor-credit/${id}`, values),
+    ([id, values]) => apiRequest.put(`vendor-credits/${id}`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Common invalidate queries.
@@ -96,7 +99,7 @@ export function useDeleteVendorCredit(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (id) => apiRequest.delete(`purchases/vendor-credit/${id}`),
+    (id) => apiRequest.delete(`vendor-credits/${id}`),
     {
       onSuccess: (res, id) => {
         // Common invalidate queries.
@@ -105,6 +108,49 @@ export function useDeleteVendorCredit(props) {
         // Invalidate vendor credit query.
         queryClient.invalidateQueries([t.VENDOR_CREDIT_NOTE, id]);
       },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Deletes multiple vendor credits in bulk.
+ */
+export function useBulkDeleteVendorCredits(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('vendor-credits/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }),
+    {
+      onSuccess: () => {
+        // Common invalidate queries.
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+export function useValidateBulkDeleteVendorCredits(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest
+        .post('vendor-credits/validate-bulk-delete', { ids })
+        .then((res) => transformToCamelCase(res.data)),
+    {
       ...props,
     },
   );
@@ -124,7 +170,7 @@ export function useVendorCredits(query, props) {
     [t.VENDOR_CREDITS, query],
     {
       method: 'get',
-      url: 'purchases/vendor-credit',
+      url: 'vendor-credits',
       params: query,
     },
     {
@@ -151,9 +197,9 @@ export function useVendorCredits(query, props) {
 export function useVendorCredit(id, props, requestProps) {
   return useRequestQuery(
     [t.VENDOR_CREDIT, id],
-    { method: 'get', url: `purchases/vendor-credit/${id}`, ...requestProps },
+    { method: 'get', url: `vendor-credits/${id}`, ...requestProps },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -179,7 +225,7 @@ export function useCreateRefundVendorCredit(props) {
 
   return useMutation(
     ([id, values]) =>
-      apiRequest.post(`purchases/vendor-credit/${id}/refund`, values),
+      apiRequest.post(`vendor-credits/${id}/refund`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Common invalidate queries.
@@ -201,7 +247,7 @@ export function useDeleteRefundVendorCredit(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (id) => apiRequest.delete(`purchases/vendor-credit/refunds/${id}`),
+    (id) => apiRequest.delete(`vendor-credits/refunds/${id}`),
     {
       onSuccess: (res, id) => {
         // Common invalidate queries.
@@ -225,11 +271,11 @@ export function useRefundVendorCredit(id, props, requestProps) {
     [t.REFUND_VENDOR_CREDIT, id],
     {
       method: 'get',
-      url: `purchases/vendor-credit/${id}/refund`,
+      url: `vendor-credits/${id}/refund`,
       ...requestProps,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -244,7 +290,7 @@ export function useOpenVendorCredit(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (id) => apiRequest.post(`purchases/vendor-credit/${id}/open`),
+    (id) => apiRequest.post(`vendor-credits/${id}/open`),
     {
       onSuccess: (res, id) => {
         // Common invalidate queries.
@@ -267,7 +313,7 @@ export function useCreateReconcileVendorCredit(props) {
 
   return useMutation(
     ([id, values]) =>
-      apiRequest.post(`purchases/vendor-credit/${id}/apply-to-bills`, values),
+      apiRequest.post(`vendor-credits/${id}/apply-to-bills`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Common invalidate queries.
@@ -291,11 +337,11 @@ export function useReconcileVendorCredit(id, props, requestProps) {
     [t.RECONCILE_VENDOR_CREDIT, id],
     {
       method: 'get',
-      url: `purchases/vendor-credit/${id}/apply-to-bills`,
+      url: `vendor-credits/${id}/apply-to-bills`,
       ...requestProps,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -310,11 +356,11 @@ export function useReconcileVendorCredits(id, props, requestProps) {
     [t.RECONCILE_VENDOR_CREDITS, id],
     {
       method: 'get',
-      url: `purchases/vendor-credit/${id}/applied-bills`,
+      url: `vendor-credits/${id}/applied-bills`,
       ...requestProps,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },
@@ -328,7 +374,7 @@ export function useDeleteReconcileVendorCredit(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (id) => apiRequest.delete(`purchases/vendor-credit/applied-to-bills/${id}`),
+    (id) => apiRequest.delete(`vendor-credits/applied-to-bills/${id}`),
     {
       onSuccess: (res, id) => {
         // Common invalidate queries.
@@ -352,11 +398,11 @@ export function useRefundVendorCreditTransaction(id, props, requestProps) {
     [t.REFUND_VENDOR_CREDIT_TRANSACTION, id],
     {
       method: 'get',
-      url: `purchases/vendor-credit/refunds/${id}`,
+      url: `vendor-credits/refunds/${id}`,
       ...requestProps,
     },
     {
-      select: (res) => res.data.refund_credit,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },

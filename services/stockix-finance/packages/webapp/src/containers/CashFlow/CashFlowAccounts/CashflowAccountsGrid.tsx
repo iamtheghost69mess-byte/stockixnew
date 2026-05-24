@@ -22,9 +22,9 @@ import {
 import { BankAccountsList, BankAccount, If, Icon, T, Can } from '@/components';
 import { useCashFlowAccountsContext } from './CashFlowAccountsProvider';
 
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
 import { AccountDialogAction } from '@/containers/Dialogs/AccountDialog/utils';
 import { safeCallback } from '@/utils';
@@ -54,7 +54,7 @@ function CashflowBankAccount({
   // #withAlertsDialog
   openAlert,
 
-  // #withDial
+  // #withDialog
   openDialog,
 
   // #withDrawerActions
@@ -82,7 +82,7 @@ function CashflowBankAccount({
   const handleEditAccount = () => {
     openDialog(DialogsName.AccountForm, {
       action: AccountDialogAction.Edit,
-      id: account.id,
+      accountId: account.id,
     });
   };
   // Handle money in menu item actions.
@@ -123,7 +123,12 @@ function CashflowBankAccount({
           code={account.code}
           balance={!isNull(account.amount) ? account.formatted_amount : '-'}
           type={account.account_type}
-          updatedBeforeText={getUpdatedBeforeText(account.createdAt)}
+          updatedBeforeText={
+            account.last_feeds_updated_from_now
+              ? `Updated ${account.last_feeds_updated_from_now} ago`
+              : ''
+          }
+          uncategorizedTransactionsCount={account.uncategorized_transactions}
         />
       </CashflowAccountAnchor>
     </ContextMenu2>
@@ -131,7 +136,7 @@ function CashflowBankAccount({
 }
 
 const CashflowBankAccountEnhanced = compose(
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
 )(CashflowBankAccount);
@@ -312,8 +317,13 @@ const AccountsEmptyStateBase = styled.div`
   margin: 2rem 0;
 `;
 const AccountsEmptyStateTitle = styled.h1`
-  font-size: 16px;
-  color: #626b76;
+  --x-text-color: #626b76;
+  
+  .bp4-dark & {
+    --x-text-color: rgba(255, 255, 255, 0.6);
+  }
+  font-size: 18px;
+  color: var(--x-text-color);
   opacity: 0.8;
   line-height: 1.6;
   font-weight: 500;

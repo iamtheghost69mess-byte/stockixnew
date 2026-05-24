@@ -13,12 +13,13 @@ import { useMemorizedColumnsWidths } from '@/hooks';
 
 import CreditNoteEmptyStatus from './CreditNotesEmptyStatus';
 
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withCreditNotesActions from './withCreditNotesActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withCreditNotesActions } from './withCreditNotesActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withCreditNotes } from './withCreditNotes';
 
 import { useCreditNoteTableColumns, ActionsMenu } from './components';
 import { useCreditNoteListContext } from './CreditNotesListProvider';
@@ -32,8 +33,9 @@ import { DRAWERS } from '@/constants/drawers';
 function CreditNotesDataTable({
   // #withCreditNotesActions
   setCreditNotesTableState,
+  setCreditNotesSelectedRows,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -44,6 +46,9 @@ function CreditNotesDataTable({
 
   // #withSettings
   creditNoteTableSize,
+
+  // #withCreditNotes
+  creditNoteTableState
 }) {
   const history = useHistory();
 
@@ -73,6 +78,15 @@ function CreditNotesDataTable({
       });
     },
     [setCreditNotesTableState],
+  );
+
+  // Handle selected rows change.
+  const handleSelectedRowsChange = React.useCallback(
+    (selectedFlatRows) => {
+      const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+      setCreditNotesSelectedRows(selectedIds);
+    },
+    [setCreditNotesSelectedRows],
   );
 
   // Display create note empty status instead of the table.
@@ -124,11 +138,14 @@ function CreditNotesDataTable({
         headerLoading={isCreditNotesLoading}
         progressBarLoading={isCreditNotesFetching}
         onFetchData={handleDataTableFetchData}
+        onSelectedRowsChange={handleSelectedRowsChange}
+        autoResetSelectedRows={false}
         manualSortBy={true}
         selectionColumn={true}
         noInitialFetch={true}
         sticky={true}
         pagination={true}
+        initialPageSize={creditNoteTableState.pageSize}
         pagesCount={pagination.pagesCount}
         TableLoadingRenderer={TableSkeletonRows}
         TableHeaderSkeletonRenderer={TableSkeletonHeader}
@@ -154,9 +171,10 @@ export default compose(
   withDashboardActions,
   withCreditNotesActions,
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
   withDialogActions,
   withSettings(({ creditNoteSettings }) => ({
     creditNoteTableSize: creditNoteSettings?.tableSize,
   })),
+  withCreditNotes(({ creditNoteTableState }) => ({ creditNoteTableState }))
 )(CreditNotesDataTable);

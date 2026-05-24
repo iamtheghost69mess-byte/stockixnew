@@ -6,10 +6,10 @@ import styled from 'styled-components';
 import { ReportDataTable, FinancialSheet } from '@/components';
 
 import { usePurchaseByItemsContext } from './PurchasesByItemsProvider';
-import { usePurchasesByItemsTableColumns } from './components';
 
 import { tableRowTypesToClassnames } from '@/utils';
 import { TableStyle } from '@/constants';
+import { usePurchasesByItemsTableColumns } from './dynamicColumns';
 
 /**
  * Purchases by items data table.
@@ -17,7 +17,7 @@ import { TableStyle } from '@/constants';
 export default function PurchasesByItemsTable({ companyName }) {
   // Purchases by items context.
   const {
-    purchaseByItems: { tableRows, query },
+    purchaseByItems: { table, query, meta },
   } = usePurchaseByItemsContext();
 
   // Purchases by items table columns.
@@ -27,12 +27,11 @@ export default function PurchasesByItemsTable({ companyName }) {
     <PurchasesByItemsSheet
       companyName={companyName}
       sheetType={intl.get('purchases_by_items')}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
     >
       <PurchasesByItemsDataTable
         columns={columns}
-        data={tableRows}
+        data={table.rows}
         expandable={true}
         expandToggleColumn={1}
         expandColumnSpace={1}
@@ -52,16 +51,31 @@ const PurchasesByItemsSheet = styled(FinancialSheet)`
 `;
 
 const PurchasesByItemsDataTable = styled(ReportDataTable)`
+  --x-table-total-border-bottom-color: #000;
+  --x-table-total-border-top-color: #bbb;
+  --x-table-total-border-bottom-color: var(
+    --color-datatable-constrant-cell-border
+  );
+  --x-table-total-border-top-color: var(
+    --color-datatable-constrant-cell-border
+  );
+
   .table {
     .tbody {
       .tr .td {
+        border-bottom-width: 0;
         padding-top: 0.36rem;
         padding-bottom: 0.36rem;
       }
-      .tr.row_type--total .td {
-        border-top: 1px solid #bbb;
+      .tr.row_type--TOTAL .td {
+        border-top-width: 1px;
         font-weight: 500;
-        border-bottom: 3px double #000;
+        border-top-width: 1px;
+        border-top-style: solid;
+        border-top-color: var(--x-table-total-border-top-color);
+        border-bottom-style: double;
+        border-bottom-width: 3px;
+        border-bottom-color: var(--x-table-total-border-bottom-color);
       }
     }
   }

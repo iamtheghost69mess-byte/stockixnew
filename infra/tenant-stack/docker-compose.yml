@@ -1,9 +1,11 @@
-# Stockix per-tenant Stockix stack (prod-shaped). Compose v2: `docker compose -p <project> ...`
-# Paths use STOCKIX_TENANT_APP_ROOT (vendored Stockix repo). Service name MUST be `mysql` (DB_HOST=mysql).
+# Stockix per-tenant stack (prod-shaped). Compose v2: `docker compose -p <project> ...`
+# STOCKIX_TENANT_APP_ROOT must point at the finance monorepo root (this repo: services/stockix-finance).
+# Service name MUST be `mysql` (DB_HOST=mysql).
 # Traefik terminates TLS; nginx here is HTTP only (WEB_SSL=false).
 
 services:
   nginx:
+    image: stockix-nginx:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/nginx
       args:
@@ -12,27 +14,51 @@ services:
         - SELF_SIGNED=false
     restart: unless-stopped
     volumes:
-      - ${STOCKIX_TENANT_APP_ROOT}/data/logs/nginx:/var/log/nginx
+      # Named volume: bind-mounting host logs under STOCKIX_TENANT_APP_ROOT often breaks on
+      # Docker Desktop (Windows/macOS) and nginx exits before publishing PUBLIC_PROXY_PORT.
+      - nginx_logs:/var/log/nginx
       - ${STOCKIX_TENANT_APP_ROOT}/docker/certbot/certs:/var/certs
     ports:
       - "${PUBLIC_PROXY_PORT}:80"
     tty: true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - server
       - webapp
 
   webapp:
+    image: stockix-webapp:local
+    # If src changes appear ignored: BuildKit may reuse COPY/RUN layers. Use:
+    #   node scripts/rebuild-tenant-webapp.mjs --tenant <slug>
+    # or: docker compose ... build --no-cache webapp && up -d --force-recreate webapp
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
 
   server:
+    image: stockix-server:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
       target: app
     restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       mysql:
         condition: service_healthy
@@ -51,12 +77,24 @@ services:
       - MAIL_SECURE=${MAIL_SECURE:-}
       - MAIL_FROM_NAME=${MAIL_FROM_NAME:-}
       - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
+      - QUEUE_HOST=${QUEUE_HOST:-redis}
+      - QUEUE_PORT=${QUEUE_PORT:-6379}
+      - S3_REGION=${S3_REGION:-}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_ENDPOINT=${S3_ENDPOINT:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_FORCE_PATH_STYLE=${S3_FORCE_PATH_STYLE:-false}
       - DB_HOST=mysql
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
-      - TENANT_DB_NAME_PERFIX=${TENANT_DB_NAME_PERFIX}
+      - TENANT_DB_NAME_PREFIX=${TENANT_DB_NAME_PREFIX:-${TENANT_DB_NAME_PERFIX}}
       - JWT_SECRET=${JWT_SECRET}
       - MONGODB_DATABASE_URL=mongodb://mongo/stockix
       - BASE_URL=${BASE_URL}
@@ -65,21 +103,51 @@ services:
       - SIGNUP_DISABLED=${SIGNUP_DISABLED}
       - SIGNUP_ALLOWED_DOMAINS=${SIGNUP_ALLOWED_DOMAINS:-}
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
+      - THROTTLE_GLOBAL_TTL=${THROTTLE_GLOBAL_TTL:-60000}
+      - THROTTLE_GLOBAL_LIMIT=${THROTTLE_GLOBAL_LIMIT:-2000}
+      - THROTTLE_AUTH_TTL=${THROTTLE_AUTH_TTL:-60000}
+      - THROTTLE_AUTH_LIMIT=${THROTTLE_AUTH_LIMIT:-200}
+    ports:
+      # Expose API on a random localhost-only port for worker health/bootstrap checks.
+      - "127.0.0.1::3000"
 
   database_migration:
+    image: stockix-database-migration:local
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
       target: migration
     environment:
+      - DB_CLIENT=mysql
       - DB_HOST=mysql
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET}
+      - SYSTEM_DB_CLIENT=${SYSTEM_DB_CLIENT:-mysql}
+      - SYSTEM_DB_HOST=${SYSTEM_DB_HOST:-mysql}
+      - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
+      - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
     depends_on:
       mysql:
         condition: service_healthy
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        export DB_CLIENT="$${DB_CLIENT:-mysql}"
+        export DB_HOST="$${DB_HOST:-mysql}"
+        export DB_USER="$${SYSTEM_DB_USER:-$${DB_USER}}"
+        export DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
+        export SYSTEM_DB_CLIENT="$${SYSTEM_DB_CLIENT:-mysql}"
+        export SYSTEM_DB_HOST="$${SYSTEM_DB_HOST:-mysql}"
+        export SYSTEM_DB_USER="$${SYSTEM_DB_USER:-$${DB_USER}}"
+        export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
+        echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
+        /wait-for-it/wait-for-it.sh mysql:3306 -- node ./dist/cli.js system:migrate:latest
+    security_opt:
+      - no-new-privileges:true
 
   mysql:
     build:
@@ -104,15 +172,25 @@ services:
       timeout: 5s
       retries: 30
       start_period: 90s
+    security_opt:
+      - no-new-privileges:true
 
   mongo:
-    build:
-      context: ${STOCKIX_TENANT_APP_ROOT}/docker/mongo
+    # Official image (same as former docker/mongo/Dockerfile). Avoids a custom build context
+    # so provisioning still works if docker/mongo is missing from a shallow clone.
+    image: mongo:5.0
     restart: unless-stopped
     expose:
       - "27017"
     volumes:
-      - mongo:/var/lib/mongodb
+      - mongo:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand({ ping: 1 })' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
 
   redis:
     build:
@@ -122,8 +200,20 @@ services:
       - "6379"
     volumes:
       - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   mysql:
+    # Explicit name per tenant (MYSQL_VOLUME_NAME in per-tenant .env). Fallback matches
+    # Compose legacy default when MYSQL_VOLUME_NAME is unset (already-provisioned stacks).
+    name: ${MYSQL_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_mysql}
+    driver: local
   mongo:
   redis:
+  nginx_logs:

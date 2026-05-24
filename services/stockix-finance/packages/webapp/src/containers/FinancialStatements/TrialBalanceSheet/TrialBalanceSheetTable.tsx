@@ -8,8 +8,7 @@ import { tableRowTypesToClassnames } from '@/utils';
 import { ReportDataTable, FinancialSheet } from '@/components';
 
 import { useTrialBalanceSheetContext } from './TrialBalanceProvider';
-import { useTrialBalanceTableColumns } from './components';
-
+import { useTrialBalanceSheetTableColumns } from './hooks';
 
 /**
  * Trial Balance sheet data table.
@@ -17,26 +16,25 @@ import { useTrialBalanceTableColumns } from './components';
 export default function TrialBalanceSheetTable({ companyName }) {
   // Trial balance sheet context.
   const {
-    trialBalanceSheet: { tableRows, query },
+    trialBalanceSheet: { table, query, meta },
     isLoading,
   } = useTrialBalanceSheetContext();
 
   // Trial balance sheet table columns.
-  const columns = useTrialBalanceTableColumns();
+  const columns = useTrialBalanceSheetTableColumns();
 
   return (
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('trial_balance_sheet')}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       name="trial-balance"
       loading={isLoading}
       basis={'cash'}
     >
       <TrialBalanceDataTable
         columns={columns}
-        data={tableRows}
+        data={table.rows}
         expandable={true}
         expandToggleColumn={1}
         expandColumnSpace={1}
@@ -49,20 +47,28 @@ export default function TrialBalanceSheetTable({ companyName }) {
 }
 
 const TrialBalanceDataTable = styled(ReportDataTable)`
+  --color-table-text-color: #252a31;
+  --color-table-total-text-color: #000;
+
+  .bp4-dark & {
+    --color-table-text-color: var(--color-light-gray1);
+    --color-table-total-text-color: var(--color-light-gray4);
+  }
   .table {
     .tbody {
       .tr .td {
-        border-bottom: 0;
+        border-bottom-width: 0;
         padding-top: 0.36rem;
         padding-bottom: 0.36rem;
+        color: var(--color-table-text-color);
       }
-      .balance.td {
-        border-top-color: #000;
-      }
-      .tr.row_type--total .td {
-        border-top: 1px solid #bbb;
+      .tr.row_type--TOTAL .td {
         font-weight: 500;
-        border-bottom: 3px double #000;
+        color: var(--color-table-total-text-color);
+        border-top-width: 1px;
+        border-top-style: solid;
+        border-bottom-width: 3px;
+        border-bottom-style: double;
       }
     }
   }

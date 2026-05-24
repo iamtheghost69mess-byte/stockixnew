@@ -18,10 +18,11 @@ import { useMemorizedColumnsWidths } from '@/hooks';
 import { TABLES } from '@/constants/tables';
 import { DialogsName } from '@/constants/dialogs';
 
-import withSettings from '@/containers/Settings/withSettings';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withAccountsTableActions } from './withAccountsTableActions';
 import { compose } from '@/utils';
 import { DRAWERS } from '@/constants/drawers';
 
@@ -32,7 +33,7 @@ function AccountsDataTable({
   // #withAlertsDialog
   openAlert,
 
-  // #withDial
+  // #withDialog
   openDialog,
 
   // #withDrawerActions
@@ -40,6 +41,9 @@ function AccountsDataTable({
 
   // #withSettings
   accountsTableSize,
+
+  // #withAccountsTableActions
+  setAccountsSelectedRows,
 }) {
   const { isAccountsLoading, isAccountsFetching, accounts } =
     useAccountsChartContext();
@@ -91,6 +95,12 @@ function AccountsDataTable({
   const [initialColumnsWidths, , handleColumnResizing] =
     useMemorizedColumnsWidths(TABLES.ACCOUNTS);
 
+  // Handle selected rows change.
+  const handleSelectedRowsChange = (selectedFlatRows) => {
+    const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+    setAccountsSelectedRows(selectedIds);
+  };
+
   return (
     <DataTable
       noInitialFetch={true}
@@ -118,6 +128,7 @@ function AccountsDataTable({
       vListrowHeight={accountsTableSize == 'small' ? 40 : 42}
       vListOverscanRowCount={0}
       onCellClick={handleCellClick}
+      onSelectedRowsChange={handleSelectedRowsChange}
       initialColumnsWidths={initialColumnsWidths}
       onColumnResizing={handleColumnResizing}
       size={accountsTableSize}
@@ -134,9 +145,10 @@ function AccountsDataTable({
 }
 
 export default compose(
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
+  withAccountsTableActions,
   withSettings(({ accountsSettings }) => ({
     accountsTableSize: accountsSettings.tableSize,
   })),

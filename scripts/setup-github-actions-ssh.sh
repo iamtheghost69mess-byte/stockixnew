@@ -22,11 +22,13 @@ if [[ -f "${KEY_PATH}" ]]; then
   exit 1
 fi
 
-ssh-keygen -t ed25519 -f "${KEY_PATH}" -N "" -C "stockix-github-actions-$(date +%Y%m%d)"
+ssh-keygen -t ed25519 -f "${KEY_PATH}" -C "stockix-github-actions-$(date +%Y%m%d)"
 
 echo ""
 echo "========== ADD THIS LINE TO THE VPS (one line) =========="
 echo "File: ${KEY_PATH}.pub — append to server ~/.ssh/authorized_keys"
+echo "Tip: prepend options for least privilege (example):"
+echo "command=\"/usr/bin/false\",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding <key>"
 echo ""
 cat "${KEY_PATH}.pub"
 echo ""
@@ -50,5 +52,5 @@ echo ""
 echo "Name: EC2_USER"
 echo "Value: SSH username (e.g. root or ubuntu)"
 echo ""
-echo "========== PRIVATE KEY — open file and copy to GitHub secret =========="
+echo "========== PRIVATE KEY — copy only to GitHub secret storage =========="
 echo "${KEY_PATH}"

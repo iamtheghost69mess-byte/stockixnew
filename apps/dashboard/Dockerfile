@@ -3,13 +3,7 @@ FROM node:20-alpine AS build
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/dashboard/package.json ./apps/dashboard/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/typescript-config ./packages/typescript-config
-COPY packages/eslint-config ./packages/eslint-config
-COPY packages/ui ./packages/ui
-COPY apps/dashboard ./apps/dashboard
+COPY . .
 
 RUN pnpm install --frozen-lockfile
 

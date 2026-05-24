@@ -1,0 +1,1 @@
+{"version":3,"file":"provision-paths.d.ts","sourceRoot":"","sources":["../../../../domain/provision-paths.ts"],"names":[],"mappings":"AAIA,MAAM,MAAM,gBAAgB,GAAG;IAC7B,QAAQ,EAAE,MAAM,CAAC;IACjB,kBAAkB,EAAE,MAAM,CAAC;IAC3B,iBAAiB,EAAE,MAAM,CAAC;CAC3B,CAAC;AAEF,wBAAgB,mBAAmB,IAAI,gBAAgB,CAQtD"}

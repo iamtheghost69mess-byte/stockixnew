@@ -1,0 +1,1 @@
+ALTER TABLE "licenses" ADD COLUMN "max_organizations" integer DEFAULT 1 NOT NULL;

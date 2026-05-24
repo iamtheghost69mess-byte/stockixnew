@@ -14,8 +14,8 @@ import classNames from 'classnames';
 
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
-import withRealizedGainOrLoss from './withRealizedGainOrLoss';
-import withRealizedGainOrLossActions from './withRealizedGainOrLossActions';
+import { withRealizedGainOrLoss } from './withRealizedGainOrLoss';
+import { withRealizedGainOrLossActions } from './withRealizedGainOrLossActions';
 
 import { compose, saveInvoke } from '@/utils';
 
@@ -91,11 +91,6 @@ function RealizedGainOrLossActionsBar({
           />
         </Popover>
 
-        <Button
-          className={classNames(Classes.MINIMAL, 'button--filter')}
-          text={<T id={'filter'} />}
-          icon={<Icon icon="filter-16" iconSize={16} />}
-        />
         <NavbarDivider />
 
         <Button

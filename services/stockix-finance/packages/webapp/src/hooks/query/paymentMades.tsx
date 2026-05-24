@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useMutation, useQueryClient } from 'react-query';
+import { useMutation, useQuery, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import { transformPagination } from '@/utils';
 import useApiRequest from '../useRequest';
@@ -42,7 +42,7 @@ const commonInvalidateQueries = (client) => {
 export function usePaymentMades(query, props) {
   return useRequestQuery(
     [t.PAYMENT_MADES, query],
-    { url: 'purchases/bill_payments', params: query },
+    { url: 'bill-payments', params: query },
     {
       select: (res) => ({
         paymentMades: res.data.bill_payments,
@@ -66,16 +66,13 @@ export function useCreatePaymentMade(props) {
   const client = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation(
-    (values) => apiRequest.post('purchases/bill_payments', values),
-    {
-      onSuccess: (res, values) => {
-        // Common invalidation queries.
-        commonInvalidateQueries(client);
-      },
-      ...props,
+  return useMutation((values) => apiRequest.post('bill-payments', values), {
+    onSuccess: (res, values) => {
+      // Common invalidation queries.
+      commonInvalidateQueries(client);
     },
-  );
+    ...props,
+  });
 }
 
 /**
@@ -86,7 +83,7 @@ export function useEditPaymentMade(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([id, values]) => apiRequest.post(`purchases/bill_payments/${id}`, values),
+    ([id, values]) => apiRequest.put(`bill-payments/${id}`, values),
     {
       onSuccess: (res, [id, values]) => {
         // Common invalidation queries.
@@ -107,42 +104,29 @@ export function useDeletePaymentMade(props) {
   const client = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation(
-    (id) => apiRequest.delete(`purchases/bill_payments/${id}`),
-    {
-      onSuccess: (res, id) => {
-        // Common invalidation queries.
-        commonInvalidateQueries(client);
+  return useMutation((id) => apiRequest.delete(`bill-payments/${id}`), {
+    onSuccess: (res, id) => {
+      // Common invalidation queries.
+      commonInvalidateQueries(client);
 
-        // Invalidate specific payment made.
-        client.invalidateQueries([t.PAYMENT_MADE, id]);
-      },
-      ...props,
+      // Invalidate specific payment made.
+      client.invalidateQueries([t.PAYMENT_MADE, id]);
     },
-  );
+    ...props,
+  });
 }
 
 /**
  * Retrieve specific payment made.
  */
-export function usePaymentMadeEditPage(id, props) {
-  return useRequestQuery(
-    [t.PAYMENT_MADE_EDIT_PAGE, id],
-    {
-      method: 'get',
-      url: `purchases/bill_payments/${id}/edit-page`,
-    },
-    {
-      select: (res) => ({
-        paymentMade: res.data.bill_payment,
-        entries: res.data.entries,
-      }),
-      defaultData: {
-        paymentMade: {},
-        entries: [],
-      },
-      ...props,
-    },
+export function usePaymentMadeEditPage(
+  id: number,
+  props?: UseQueryOptions<any, Error>,
+) {
+  const apiRequest = useApiRequest();
+  return useQuery([t.PAYMENT_MADE_EDIT_PAGE, id], () =>
+    apiRequest.get(`bill-payments/${id}/edit-page`).then((res) => res.data),
+    props
   );
 }
 
@@ -155,11 +139,11 @@ export function usePaymentMadeNewPageEntries(vendorId, props) {
     [t.PAYMENT_MADE_NEW_ENTRIES, vendorId],
     {
       method: 'get',
-      url: `purchases/bill_payments/new-page/entries`,
+      url: `bill-payments/new-page/entries`,
       params: { vendor_id: vendorId },
     },
     {
-      select: (res) => res.data.entries,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -183,9 +167,9 @@ export function useRefreshPaymentMades() {
 export function usePaymentMade(id, props) {
   return useRequestQuery(
     [t.PAYMENT_MADE, id],
-    { method: 'get', url: `purchases/bill_payments/${id}` },
+    { method: 'get', url: `bill-payments/${id}` },
     {
-      select: (res) => res.data.bill_payment,
+      select: (res) => res.data,
       defaultData: {},
       ...props,
     },

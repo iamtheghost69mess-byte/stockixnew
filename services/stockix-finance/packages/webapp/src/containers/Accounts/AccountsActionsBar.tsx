@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import { isEmpty } from 'lodash';
+import { isEmpty, isUndefined } from 'lodash';
 import {
   Button,
   NavbarGroup,
@@ -9,7 +9,11 @@ import {
   Intent,
   Switch,
   Alignment,
+  ProgressBar,
+  ToastProps,
+  Text,
 } from '@blueprintjs/core';
+import clsx from 'classnames';
 
 import {
   AdvancedFilterPopover,
@@ -20,21 +24,24 @@ import {
   DashboardActionViewsList,
   DashboardFilterButton,
   DashboardRowsHeightButton,
-  DashboardActionsBar
+  DashboardActionsBar,
 } from '@/components';
 
 import { AccountAction, AbilitySubject } from '@/constants/abilityOption';
 import { DialogsName } from '@/constants/dialogs';
 
+import { useHistory } from 'react-router-dom';
 import { useRefreshAccounts } from '@/hooks/query/accounts';
 import { useAccountsChartContext } from './AccountsChartProvider';
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
+import { useBulkDeleteAccountsDialog } from './hooks/use-bulk-delete-accounts-dialog';
 
-import withAccounts from './withAccounts';
-import withAccountsTableActions from './withAccountsTableActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertActions from '@/containers/Alert/withAlertActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
+import { withAccounts } from './withAccounts';
+import { withAccountsTableActions } from './withAccountsTableActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
 
 import { compose } from '@/utils';
 
@@ -56,61 +63,105 @@ function AccountsActionsBar({
   // #withAccountsTableActions
   setAccountsTableState,
 
-  // #ownProps
-  onFilterChanged,
-
   // #withSettings
   accountsTableSize,
 
   // #withSettingsActions
   addSetting,
 }) {
+  const history = useHistory();
+
   const { resourceViews, fields } = useAccountsChartContext();
 
-  const onClickNewAccount = () => {
-    openDialog(DialogsName.AccountForm, {});
-  };
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
 
   // Accounts refresh action.
   const { refresh } = useRefreshAccounts();
 
+  // Bulk delete accounts dialog.
+  const {
+    openBulkDeleteDialog,
+    isValidatingBulkDeleteAccounts,
+  } = useBulkDeleteAccountsDialog();
+
   // Handle bulk accounts delete.
   const handleBulkDelete = () => {
-    openAlert('accounts-bulk-delete', { accountsIds: accountsSelectedRows });
+    openBulkDeleteDialog(accountsSelectedRows);
   };
-
   // Handle bulk accounts activate.
   const handelBulkActivate = () => {
     openAlert('accounts-bulk-activate', { accountsIds: accountsSelectedRows });
   };
-
   // Handle bulk accounts inactivate.
   const handelBulkInactive = () => {
     openAlert('accounts-bulk-inactivate', {
       accountsIds: accountsSelectedRows,
     });
   };
-
   // Handle tab changing.
   const handleTabChange = (view) => {
     setAccountsTableState({ viewSlug: view ? view.slug : null });
   };
-
   // Handle inactive switch changing.
   const handleInactiveSwitchChange = (event) => {
     const checked = event.target.checked;
     setAccountsTableState({ inactiveMode: checked });
   };
-
   // Handle click a refresh accounts
   const handleRefreshBtnClick = () => {
     refresh();
   };
-
   // Handle table row size change.
   const handleTableRowSizeChange = (size) => {
     addSetting('accounts', 'tableSize', size);
   };
+  // handle the import button click.
+  const handleImportBtnClick = () => {
+    history.push('/accounts/import');
+  };
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'account' });
+  };
+  // Handle the print button click.
+  const handlePrintBtnClick = () => {
+    downloadExportPdf({ resource: 'Account' });
+  };
+  // Handle click new account.
+  const onClickNewAccount = () => {
+    openDialog(DialogsName.AccountForm, {});
+  };
+
+  if (!isEmpty(accountsSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="play-16" iconSize={16} />}
+            text={<T id={'activate'} />}
+            onClick={handelBulkActivate}
+          />
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="pause-16" iconSize={16} />}
+            text={<T id={'inactivate'} />}
+            onClick={handelBulkInactive}
+          />
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteAccounts}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
+
   return (
     <DashboardActionsBar>
       <NavbarGroup>
@@ -147,42 +198,23 @@ function AccountsActionsBar({
 
         <NavbarDivider />
 
-        <If condition={!isEmpty(accountsSelectedRows)}>
-          <Button
-            className={Classes.MINIMAL}
-            icon={<Icon icon="play-16" iconSize={16} />}
-            text={<T id={'activate'} />}
-            onClick={handelBulkActivate}
-          />
-          <Button
-            className={Classes.MINIMAL}
-            icon={<Icon icon="pause-16" iconSize={16} />}
-            text={<T id={'inactivate'} />}
-            onClick={handelBulkInactive}
-          />
-          <Button
-            className={Classes.MINIMAL}
-            icon={<Icon icon="trash-16" iconSize={16} />}
-            text={<T id={'delete'} />}
-            intent={Intent.DANGER}
-            onClick={handleBulkDelete}
-          />
-        </If>
-
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
-        />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
+          onClick={handlePrintBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-import-16" iconSize={16} />}
           text={<T id={'import'} />}
+          onClick={handleImportBtnClick}
+        />
+        <Button
+          className={Classes.MINIMAL}
+          icon={<Icon icon="file-export-16" iconSize={16} />}
+          text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
         <NavbarDivider />
         <DashboardRowsHeightButton

@@ -12,14 +12,14 @@ import {
 import { useItemDetailDrawerContext } from './ItemDetailDrawerProvider';
 import { ItemAction, AbilitySubject } from '@/constants/abilityOption';
 
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import {
-  DashboardActionsBar,
   Icon,
   FormattedMessage as T,
   Can,
+  DrawerActionsBar,
 } from '@/components';
 import { ItemDetailActionsMoreBtn } from './ItemDetailActionsMoreBtn';
 
@@ -30,7 +30,7 @@ import { DRAWERS } from '@/constants/drawers';
  * Item action-bar of readonly details drawer.
  */
 function ItemDetailActionsBar({
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -53,7 +53,7 @@ function ItemDetailActionsBar({
   };
 
   return (
-    <DashboardActionsBar>
+    <DrawerActionsBar>
       <NavbarGroup>
         <Can I={ItemAction.Edit} a={AbilitySubject.Item}>
           <Button
@@ -75,11 +75,11 @@ function ItemDetailActionsBar({
         </Can>
         <ItemDetailActionsMoreBtn />
       </NavbarGroup>
-    </DashboardActionsBar>
+    </DrawerActionsBar>
   );
 }
 
 export default compose(
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
 )(ItemDetailActionsBar);

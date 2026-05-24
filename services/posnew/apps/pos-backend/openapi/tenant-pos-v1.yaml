@@ -1,0 +1,2485 @@
+openapi: 3.1.0
+info:
+  title: Restaurant POS — Tenant (Store) REST API
+  version: 1.0.0
+  description: |
+    **Scope:** Authenticated restaurant operations — floors, kitchen, back office, inventory, and accounting — for a single
+    **organization** (tenant). This is **not** the multi-tenant **platform** control plane (`/api/platform/v1`); see
+    **Platform API** at `GET /api-docs/platform`.
+
+    ---
+
+    ### Authentication
+
+    - **JWT access token** with claim `aud: pos` (see `utils/authTokens.js`). Send as `Authorization: Bearer <token>`
+      or via HTTP-only cookie `accessToken` (same value).
+    - **Refresh:** `POST /api/auth/refresh` with **`refreshToken` in JSON body** or **`refreshToken` HTTP-only cookie** (see `authController.refresh`).
+    - **Rejected:** Platform JWTs (`aud: platform`) return **401** on POS routes.
+
+    Tokens may include `organizationId`; middleware attaches `req.tenantOrganizationId` for org-scoped data.
+
+    ---
+
+    ### Correlation & tracing
+
+    Send **`X-Request-Id`** (optional). CORS exposes `X-Request-Id` and `traceparent`. Aligns with platform guidance.
+
+    ---
+
+    ### Realtime (Socket.IO) — appendix
+
+    Connect to the same HTTP origin as the REST API (Socket.IO on the main Node server). **Handshake:** send the POS JWT
+    in `socket.handshake.auth.token` (string). **Rooms:** the server joins `org:{organizationId}` and optionally
+    `org:{organizationId}:loc:{locationId}` when `auth.locationId` is set and allowed for the user. **Events (names):**
+    `order:updated`, `order:new`, `table:status-changed`, `inventory:updated`, `inventory:low-stock`, `catalog:updated`.
+    Payloads are small JSON objects; see `apps/pos-backend/docs/REALTIME_POS_EVENTS.md` in the repo.
+
+    ---
+
+    ### Location scope (`X-Location-Id`)
+
+    Routes using **`authedTenantLocation`** resolve `req.locationScopeId`:
+
+    | User | Behavior |
+    |------|----------|
+    | Staff with **`user.location` set** | Always scoped to that branch; header ignored. |
+    | **`admin` / `manager`** without assigned location | Optional **`X-Location-Id`** (Mongo ObjectId). **Omit** = all locations (“super” scope). Invalid / foreign location → **403/404**. |
+    | Other roles | Typically `null` scope; list endpoints may return unscoped or empty depending on handler. |
+
+    **Affected examples:** `GET /api/tables`, `GET /api/orders`, `GET /api/printers`, `GET /api/reports/*`.
+
+    ---
+
+    ### RBAC model
+
+    Authorization uses `@rbac/rbac` + per-org config (`rbacConfig` / `services/rbacService.js`). Built-in role keys include
+    **`admin`**, **`manager`**, **`waiter`**, **`cashier`**, **`kitchen`**, **`hostess`**, plus **`accountant`** and **`accountant_readonly`**
+    for GL. **Custom roles** may be defined in RBAC config (admin-managed).
+
+    **Wildcard:** If a role’s effective `can` list contains `"*"`, it passes every permission check.
+
+    **Default built-in capabilities (summary):**
+
+    | Role | Floor POS | Back office | Kitchen | Accounting |
+    |------|-----------|------------|---------|------------|
+    | **admin** | Full (`*`) | Full | Full | Full |
+    | **manager** | Broad (`pos.*`, `backoffice.*`) | Yes | Yes | Via `backoffice.*` |
+    | **waiter** | Tables, catalog read, create/update **own** orders | No | No | No |
+    | **cashier** | Waiter + **payments** | No | No | No |
+    | **kitchen** | **Only** `pos.kitchen.read` / `pos.kitchen.write` | No | Yes | No |
+    | **hostess** | Tables + catalog read (no orders / payments) | No | No | No |
+    | **accountant** | No | No | No | `backoffice.accounting.read` + **write** |
+    | **accountant_readonly** | No | No | No | **Read-only** GL |
+
+    **Important order visibility:** `GET /api/orders` and single-order reads apply **`pos.order.read_all`** OR **waiter = current user**
+    OR **`pos.payment.use`** (cashier) for access to a given order. Without `read_all`, list filter forces **`waiter = me`**.
+
+    **Staff provisioning:** `GET|POST /api/users` requires **`backoffice.*`** and role **`admin` or `manager`**.
+
+    **RBAC admin API:** `GET|PUT /api/rbac/config` and `GET /api/rbac/catalog` require **`admin`** + **`admin.rbac.manage`**.
+
+    ---
+
+    ### Listing pagination (common)
+
+    Many list endpoints accept optional **`page`** and **`limit`** (both positive integers). When both present,
+    `limit` is clamped to **1–100** and responses may include `{ success, data, page, limit, total }`.
+    When omitted, handlers often return `{ success, data: [...] }` only.
+
+    **Orders:** supports same pattern; `limit` max **100** when paging.
+
+    ---
+
+    ### Report date range
+
+    Report endpoints use **`parseReportQuery`**: **`from`**, **`to`** (ISO dates). Defaults: `to` = now, `from` = 7 days before `to`.
+    **`groupBy`:** `hour` | `day` | `week` | `month` (default `day`). **`tz`:** IANA string, default **`UTC`**.
+    **`format=csv`:** some reports support CSV when implemented.
+
+    ---
+
+    ### Public / unauthenticated
+
+    **`GET /api/public/menu`** and **`POST /api/public/self-order`** are **unauthenticated** (rate-limited). No tenant JWT.
+    Tenant runtime access is blocked when organization license window is not currently valid.
+    In blocked scenarios, support operations remain available only through platform endpoints (`/api/platform/v1/*`).
+
+    ---
+
+    ### Path aliases (Express)
+
+    For legacy clients, **`/api/order`** mirrors **`/api/orders`** and **`/api/table`** mirrors **`/api/tables`** (same router).
+    This document lists the **`/api/orders`** and **`/api/tables`** paths only.
+
+    ---
+
+    ### What OpenAPI does **not** guarantee
+
+    - **Business rules** (inventory deduction timing, strict oversell, entitlement limits) live in services; behaviors may evolve.
+    - **Response body shapes** are generally `{ success: true, data }` but not every field is enumerated here.
+    - **WebSocket** events (`socket.io`, room `pos`) are **out of scope** for this spec.
+    - **File uploads** use `multipart/form-data` (multer); max size / MIME rules are enforced in middleware.
+
+    ---
+
+    **Swagger UI:** `GET /api-docs/pos`
+  contact:
+    name: API support
+
+servers:
+  - url: /
+    description: Backend root (e.g. http://localhost:8010)
+
+tags:
+  - name: Public
+    description: Anonymous; rate-limited. No bearer token.
+  - name: Auth
+    description: Login, refresh, registration, invitation acceptance.
+  - name: User session
+    description: Current user profile; logout alternate mount under `/api/user`.
+  - name: Staff users
+    description: CRUD staff (`/api/users`). Requires backoffice + admin/manager.
+  - name: RBAC
+    description: Effective permissions for current user; catalog/config for admins.
+  - name: Locations
+  - name: Tables
+  - name: Orders
+    description: Floor and kitchen. Order list scope depends on role and location.
+  - name: Payments
+  - name: Catalog
+    description: Categories + menu items.
+  - name: Recipes
+  - name: Upload
+  - name: Printers
+  - name: Customers
+  - name: Reports
+    description: Manager/admin back office; location-scoped queries.
+  - name: Config
+    description: Tax and public menu branding.
+  - name: Loyalty
+  - name: Inventory
+    description: Stock, movements, analytics; read vs write separated.
+  - name: Ingredients
+  - name: Ingredient categories
+  - name: Suppliers
+  - name: Ingredient supplier links
+  - name: Purchase orders
+  - name: Stock takes
+  - name: Accounting
+    description: GL, journals, exports, FX, periods — accountant or `backoffice.*`.
+  - name: Tenant tools
+    description: Isolation test listing; metering hooks.
+  - name: Warehouse
+    description: Zones and bins for granular storage tracking.
+  - name: Request for Quotations
+    description: Multi-supplier bidding and procurement workflows.
+
+paths:
+  /api/public/menu:
+    get:
+      tags: [Public]
+      summary: Public menu for QR / kiosk
+      description: |
+        Returns categories (with **`parentCategory`**, **`sortOrder`**, and optional **`menuNote`**) and all menu items for one organization.
+        Item rows include **`isAvailable`** so clients can render out-of-stock state instead of filtering server-side.
+        Provide **exactly one** of:
+        - **`table`** — opaque table token from QR (legacy table Mongo id still accepted); resolves org from the table; branding tries the table’s location scope then `default`.
+        - **`org`** — organization **`slug`** (venue browse link); org must be inside valid license window; branding uses optional **`location`** scope then `default`.
+
+        **Visitor analytics (optional):** send stable **`X-Visitor-Key`** (e.g. UUID in `localStorage`) so the venue can count **one menu open per visitor-key per UTC day** for the default dashboard. Optional **`X-Session-Id`** is stored with the event. Requests without **`X-Visitor-Key`** are not counted.
+      parameters:
+        - name: X-Visitor-Key
+          in: header
+          required: false
+          schema: { type: string }
+        - name: X-Session-Id
+          in: header
+          required: false
+          schema: { type: string }
+        - name: table
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque table token from QR (legacy table Mongo id accepted), mutually exclusive with `org`
+        - name: org
+          in: query
+          required: false
+          schema: { type: string }
+          description: Organization slug, lowercase (mutually exclusive with `table`)
+        - name: location
+          in: query
+          required: false
+          schema: { type: string }
+          description: Location Mongo id — only with **`org`**; optional branding scope before `default`
+      responses:
+        "200":
+          description: branding + categories + items
+        "400":
+          description: Missing / invalid query (e.g. both or neither of `table` and `org`)
+        "403":
+          description: Organization blocked by license window
+        "404":
+          description: Table or organization not found
+  /api/public/self-order:
+    post:
+      tags: [Public]
+      summary: Submit self-service order (unauthenticated)
+      description: |
+        Creates order from public context; subject to same inventory / validation rules as POS where applicable.
+      responses:
+        "200": { description: OK }
+        "400": { description: Validation / inventory error }
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      security: [{ PosBearer: [] }]
+      summary: Register user (existing admin session)
+      description: 'Requires **authenticated** tenant user with role **admin** only.'
+      responses:
+        "201": { description: Created }
+        "403": { description: Not admin }
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: POS login
+      security: []
+      description: |
+        Rate-limited. Returns JWT pair; may set cookies.
+        Fails with **403** when organization is outside its license window.
+        Response body may include codes such as **`LICENSE_NOT_STARTED`**, **`LICENSE_EXPIRED`**, or **`LICENSE_WINDOW_MISSING`**.
+      responses:
+        "200": { description: Token pair + user }
+        "401": { description: Invalid credentials }
+        "403": { description: Organization blocked by license window or not found }
+  /api/auth/invitations/accept:
+    post:
+      tags: [Auth]
+      summary: Accept staff invitation
+      security: []
+      description: Rate-limited.
+      responses:
+        "200": { description: OK }
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      description: Optional body `{ refreshToken }` or refresh cookie / header per implementation.
+      responses:
+        "200": { description: New tokens }
+        "401": { description: Invalid refresh }
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      security: [{ PosBearer: [] }]
+      summary: Logout (invalidate session cookies / tokens as implemented)
+      responses:
+        "200": { description: OK }
+
+  /api/user/login:
+    post:
+      tags: [User session]
+      summary: Alternate mount — same as `/api/auth/login`
+      security: []
+      responses:
+        "200": { description: OK }
+  /api/user/logout:
+    post:
+      tags: [User session]
+      security: [{ PosBearer: [] }]
+      summary: Common mount for SPA logout
+      responses:
+        "200": { description: OK }
+  /api/user/:
+    get:
+      tags: [User session]
+      security: [{ PosBearer: [] }]
+      summary: Current user payload / bootstrap
+      responses:
+        "200": { description: User profile }
+        "401": { description: Missing or invalid token }
+
+  /api/users:
+    get:
+      tags: [Staff users]
+      security: [{ PosBearer: [] }]
+      summary: List staff
+      description: 'Permission **`backoffice.*`**; roles **admin** or **manager** only. Supports optional `page`/`limit`.'
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Staff list or paginated envelope }
+        "403": { description: Forbidden }
+    post:
+      tags: [Staff users]
+      security: [{ PosBearer: [] }]
+      summary: Create staff member
+      description: Same gate as list.
+      responses:
+        "201": { description: Created }
+  /api/users/{id}:
+    get:
+      tags: [Staff users]
+      security: [{ PosBearer: [] }]
+      summary: Get staff by id
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    patch:
+      tags: [Staff users]
+      security: [{ PosBearer: [] }]
+      summary: Update staff
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Staff users]
+      security: [{ PosBearer: [] }]
+      summary: Delete / deactivate staff
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/rbac/me:
+    get:
+      tags: [RBAC]
+      security: [{ PosBearer: [] }]
+      summary: Effective RBAC view for current user
+      responses:
+        "200": { description: Role + resolved permissions }
+  /api/rbac/custom-roles:
+    get:
+      tags: [RBAC]
+      security: [{ PosBearer: [] }]
+      summary: List custom role definitions
+      description: '**`admin` or `manager`** with **`backoffice.*`**.'
+      responses:
+        "200": { description: OK }
+        "403": { description: Forbidden }
+  /api/rbac/catalog:
+    get:
+      tags: [RBAC]
+      security: [{ PosBearer: [] }]
+      summary: Permission catalog (admin RBAC)
+      description: 'Requires **`admin`** + **`admin.rbac.manage`**.'
+      responses:
+        "200": { description: Permission ids and labels }
+        "403": { description: Forbidden }
+  /api/rbac/config:
+    get:
+      tags: [RBAC]
+      security: [{ PosBearer: [] }]
+      summary: Get RBAC config document
+      description: '**`admin`** + **`admin.rbac.manage`**.'
+      responses:
+        "200": { description: Config }
+    put:
+      tags: [RBAC]
+      security: [{ PosBearer: [] }]
+      summary: Replace / update RBAC config (built-in overrides, custom roles)
+      description: '**`admin`** + **`admin.rbac.manage`**.'
+      responses:
+        "200": { description: Saved }
+
+  /api/locations/:
+    get:
+      tags: [Locations]
+      security: [{ PosBearer: [] }]
+      summary: List locations
+      description: 'Requires **`backoffice.*`**. Pagination optional (`page`/`limit`).'
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Locations }
+    post:
+      tags: [Locations]
+      security: [{ PosBearer: [] }]
+      summary: Create location
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "201": { description: Created }
+
+  /api/tables/:
+    get:
+      tags: [Tables]
+      security: [{ PosBearer: [] }]
+      summary: List tables
+      description: |
+        **`pos.table.read`**. Location scope applies (`X-Location-Id` for admin/manager). Pagination optional.
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Tables }
+    post:
+      tags: [Tables]
+      security: [{ PosBearer: [] }]
+      summary: Create table
+      description: '**`pos.table.write`** + location scope.'
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+      responses:
+        "201": { description: Created }
+  /api/tables/{id}/qr:
+    get:
+      tags: [Tables]
+      security: [{ PosBearer: [] }]
+      summary: QR payload / link for table
+      description: '**`pos.table.read`** (uses `authedTenant` without location middleware — ensure id is valid).'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: QR data }
+  /api/tables/{id}:
+    get:
+      tags: [Tables]
+      security: [{ PosBearer: [] }]
+      summary: Get table
+      description: '**`pos.table.read`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Table }
+    put:
+      tags: [Tables]
+      security: [{ PosBearer: [] }]
+      summary: Update table
+      description: '**`pos.table.write`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Tables]
+      security: [{ PosBearer: [] }]
+      summary: Delete table
+      description: |
+        **`pos.table.write`**. Fails with **400** if the table still has an open check (`currentOrder`).
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Deleted }
+
+  /api/orders/kitchen:
+    get:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Kitchen display queue
+      description: '**`pos.kitchen.read`** + location scope.'
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+      responses:
+        "200": { description: Orders for kitchen }
+  /api/orders/for-table/{tableId}:
+    get:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Open order for table (if any)
+      description: '**`pos.order.read`**.'
+      parameters:
+        - name: tableId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Order or empty }
+  /api/orders/:
+    get:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: List orders
+      description: |
+        **`pos.order.read`** + location scope. **Filter:** Without `pos.order.read_all`, results limited to **your** orders (`waiter`).
+        Optional **`page`**, **`limit`** (≤100) for pagination.
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Order array or paginated }
+    post:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Create order
+      description: '**`pos.order.create`**.'
+      responses:
+        "201": { description: Created }
+  /api/orders/sync:
+    post:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Offline batch sync
+      description: '**`pos.order.create`** + location scope (for device sync).'
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+      responses:
+        "200": { description: Sync result }
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Get order by id
+      description: |
+        **`pos.order.read`** plus **per-order** rule: `read_all` **or** assigned waiter **or** **`pos.payment.use`**.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Order }
+        "403": { description: Cannot access other waiter’s order }
+        "404": { description: Not found }
+    put:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Replace / update order (full update)
+      description: '**`pos.order.update`** + write access rule (same family as read).'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Cancel / delete open order
+      description: '**`pos.order.cancel`** (manager/admin default; not waiter default).'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Deleted }
+        "403": { description: Missing permission }
+  /api/orders/{id}/items/{itemId}/status:
+    patch:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Kitchen line status
+      description: '**`pos.kitchen.write`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}/items:
+    patch:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Patch order lines (add/remove/replace)
+      description: '**`pos.order.update`**; blocked when order **paid/cancelled**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+        "400": { description: Closed order }
+  /api/orders/{id}/status:
+    patch:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Patch order status
+      description: |
+        **`pos.order.update`**; may trigger stock / accounting side effects.
+        When setting **`orderStatus` → `paid`**, optional **`paymentSplits`**: `[{ "methodKey": "cash", "amount": 10 }, …]`
+        must sum to **`bills.totalWithTax`** (multi-tender). Not used with **`billingMode: on_account`**.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}/transfer:
+    patch:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Transfer to another table
+      description: '**`pos.order.transfer`** (managers typically; not waiter default).'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+        "403": { description: Missing permission }
+  /api/orders/{id}/manual-discount:
+    post:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Apply manual discount
+      description: '**`pos.order.update`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}/reprint/{printerId}:
+    post:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Reprint tickets to printer
+      description: '**`pos.order.update`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: printerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}/print:
+    post:
+      tags: [Orders]
+      security: [{ PosBearer: [] }]
+      summary: Print kitchen (station submit) or customer receipt
+      description: |
+        **`pos.order.update`**. JSON body: `type` = `kitchen` | `receipt`.
+        Kitchen runs the same flow as `PATCH .../status` with `submitStationTickets: true` (pending station lines, stock rules, mark sent).
+        Receipt requires `printerId` (Mongo id of a printer in scope); ESC/POS to network, ePOS HTTP, or print job for USB/Bluetooth.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [kitchen, receipt]
+                printerId:
+                  type: string
+                  description: Required when type is receipt
+      responses:
+        "200": { description: OK }
+        "400": { description: Bad request }
+        "403": { description: Missing permission }
+        "404": { description: Order or printer not found }
+        "502": { description: Receipt hardware dispatch failed }
+
+  /api/payment/create-order:
+    post:
+      tags: [Payments]
+      security: [{ PosBearer: [] }]
+      summary: Create payment provider order (e.g. Razorpay)
+      description: '**`pos.payment.use`**.'
+      responses:
+        "200": { description: Order / client payload }
+  /api/payment/verify-payment:
+    post:
+      tags: [Payments]
+      security: [{ PosBearer: [] }]
+      summary: Verify payment
+      description: '**`pos.payment.use`**.'
+      responses:
+        "200": { description: OK }
+  /api/payment/webhook-verification:
+    post:
+      tags: [Payments]
+      summary: Provider webhook (unauthenticated)
+      security: []
+      description: |
+        Called by payment provider; **no** POS bearer. Validate signatures in controller.
+      responses:
+        "200": { description: Ack }
+
+  /api/categories/:
+    get:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: List categories
+      description: '**`pos.catalog.read`**.'
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Categories }
+    post:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Create category
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "201": { description: Created }
+  /api/categories/{id}:
+    put:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Update category
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    patch:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Patch category
+      description: '**`admin` or `manager`** + **`backoffice.*`**. Supports partial updates, including `menuNote`.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Delete category
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/menu-items/:
+    get:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: List menu items
+      description: |
+        **`pos.catalog.read`**. Filters may include **`category`**, **`available`**, **`search`** (implementation-specific).
+        Pagination optional.
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: available
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Items }
+    post:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Create menu item
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "201": { description: Created }
+  /api/menu-items/{id}:
+    get:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Get menu item
+      description: '**`pos.catalog.read`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Item }
+    put:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Update menu item
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Delete menu item
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/menu-items/{id}/availability:
+    patch:
+      tags: [Catalog]
+      security: [{ PosBearer: [] }]
+      summary: Toggle item availability
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/upload/:
+    post:
+      tags: [Upload]
+      security: [{ PosBearer: [] }]
+      summary: Upload menu image
+      description: |
+        **`multipart/form-data`**. **`admin` or `manager`** + **`backoffice.*`**.
+      responses:
+        "200": { description: URL / metadata }
+        "400": { description: Multer / validation error }
+
+  /api/printers/:
+    get:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: List printers
+      description: '**`pos.printer.read`** + location scope. Pagination optional.'
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Printers }
+    post:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: Create printer
+      description: '**`admin` or `manager`** + **`backoffice.*`** + location scope.'
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+      responses:
+        "201": { description: Created }
+  /api/printers/{id}/status:
+    get:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: Printer device status
+      description: '**`pos.printer.read`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Status }
+  /api/printers/{id}/test:
+    post:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: Test print
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/printers/{id}:
+    get:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: Get printer
+      description: '**`pos.printer.read`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Printer }
+    put:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: Update printer
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Printers]
+      security: [{ PosBearer: [] }]
+      summary: Delete printer
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/customers/:
+    get:
+      tags: [Customers]
+      security: [{ PosBearer: [] }]
+      summary: List customers
+      description: |
+        **`admin` or `manager`** + **`backoffice.*`**. **`search`** query optional; pagination `page`/`limit`.
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Customers }
+    post:
+      tags: [Customers]
+      security: [{ PosBearer: [] }]
+      summary: Create customer
+      responses:
+        "201": { description: Created }
+  /api/customers/{id}/orders:
+    get:
+      tags: [Customers]
+      security: [{ PosBearer: [] }]
+      summary: Orders for customer
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Orders }
+  /api/customers/{id}:
+    patch:
+      tags: [Customers]
+      security: [{ PosBearer: [] }]
+      summary: Update customer
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/dashboard/default:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Default dashboard KPIs
+      description: |
+        **`admin` or `manager`** + **`backoffice.*`** + location scope (same as sales reports).
+
+        Aggregates **paid-order revenue** (`totalRevenue`), **COGS** (`totalCost`), **profit**, **QR menu visitor**
+        counts (requires guests to send **`X-Visitor-Key`** on `GET /api/public/menu`), prior-window **percent changes**,
+        and daily **`chartData`** for the selected **`range`**.
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - name: range
+          in: query
+          schema: { type: string, enum: [7d, 30d, 90d], default: 90d }
+        - name: tz
+          in: query
+          schema: { type: string, default: UTC }
+      responses:
+        "200": { description: Dashboard payload }
+        "400": { description: Invalid range }
+
+  /api/reports/sales:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Sales report
+      description: |
+        **`admin` or `manager`** + **`backoffice.*`** + location scope. **`from`**, **`to`**, **`groupBy`**, **`tz`**, optional **`format=csv`**.
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+        - $ref: "#/components/parameters/ReportGroupBy"
+        - $ref: "#/components/parameters/ReportTz"
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv] }
+      responses:
+        "200": { description: JSON or CSV }
+  /api/reports/top-items:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Top items
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+      responses:
+        "200": { description: OK }
+  /api/reports/payment-methods:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Payment method mix
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+      responses:
+        "200": { description: OK }
+  /api/reports/food-cost:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Food cost
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+      responses:
+        "200": { description: OK }
+  /api/reports/staff:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Staff performance
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid date range }
+  /api/reports/tables:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Table turnover / usage
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: OK }
+  /api/reports/discount-audit:
+    get:
+      tags: [Reports]
+      security: [{ PosBearer: [] }]
+      summary: Manual discount audit trail
+      parameters:
+        - $ref: "#/components/parameters/XLocationId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: OK }
+
+  /api/config/tax:
+    get:
+      tags: [Config]
+      security: [{ PosBearer: [] }]
+      summary: Get tax config
+      description: '**`pos.config.read`**.'
+      responses:
+        "200": { description: Tax config }
+    put:
+      tags: [Config]
+      security: [{ PosBearer: [] }]
+      summary: Update tax config
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "200": { description: OK }
+  /api/config/public-menu-branding:
+    get:
+      tags: [Config]
+      security: [{ PosBearer: [] }]
+      summary: Public menu branding (admin)
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "200": { description: Branding doc }
+    put:
+      tags: [Config]
+      security: [{ PosBearer: [] }]
+      summary: Update public menu branding
+      responses:
+        "200": { description: OK }
+
+  /api/config/self-order-venue-qr:
+    get:
+      tags: [Config]
+      security: [{ PosBearer: [] }]
+      summary: PNG QR for browse-only venue menu
+      description: |
+        **`admin` or `manager`** + **`backoffice.*`**. Returns a PNG encoding `{publicAppUrl}/self-order?org={tenant slug}`.
+      responses:
+        "200": { description: PNG image }
+        "400": { description: Missing organization context }
+        "404": { description: Organization not found }
+
+  /api/loyalty/config:
+    get:
+      tags: [Loyalty]
+      security: [{ PosBearer: [] }]
+      summary: Loyalty program config
+      description: '**`pos.loyalty.use`**.'
+      responses:
+        "200": { description: Config }
+    put:
+      tags: [Loyalty]
+      security: [{ PosBearer: [] }]
+      summary: Update loyalty config
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "200": { description: OK }
+  /api/loyalty/redeem:
+    post:
+      tags: [Loyalty]
+      security: [{ PosBearer: [] }]
+      summary: Redeem / preview redeem
+      description: '**`pos.loyalty.use`**.'
+      responses:
+        "200": { description: OK }
+  /api/loyalty/earn:
+    post:
+      tags: [Loyalty]
+      security: [{ PosBearer: [] }]
+      summary: Earn points from order
+      description: '**`pos.loyalty.use`**.'
+      responses:
+        "200": { description: OK }
+
+  /api/inventory/low-stock:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Low-stock SKUs
+      description: '**`backoffice.*`** OR **`backoffice.inventory.read`** (see `allowInventoryRead`).'
+      responses:
+        "200": { description: Alert list }
+        "403": { description: No inventory read }
+  /api/inventory/report:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Inventory valuation / report
+      description: |
+        Read permission. With **`page`** + **`limit`**, response includes **`page`**, **`limit`**, **`total`** (ingredient count) and **`data.ingredients`** is a slice; **`data.belowThreshold`** and **`data.portionsByDish`** remain org-wide summaries.
+        Without pagination, response is `{ success, data }` only.
+      parameters:
+        - name: locationId
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Report (optionally paginated ingredients) }
+  /api/inventory/report/valuation:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Detailed inventory valuation (extended value)
+      description: |
+        **`allowInventoryRead`** then **`allowInventoryCostRead`**: requires **`backoffice.*`** OR **`backoffice.inventory.cost.read`** (plus inventory read).
+      parameters:
+        - name: locationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/inventory/report/slow-moving:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Slow-moving stock report
+      description: |
+        **`allowInventoryRead`** + **`allowInventoryCostRead`** (stock value / cost-sensitive).
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 30 }
+      responses:
+        "200": { description: OK }
+  /api/inventory/forecast:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Stock-out demand forecasting
+      description: |
+        **`allowInventoryRead`** + **`allowInventoryCostRead`**.
+      responses:
+        "200": { description: OK }
+  /api/inventory/scan/{barcode}:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Scan barcode to resolve ingredient
+      parameters:
+        - name: barcode
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/inventory/movements:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Stock movements ledger
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: locationId
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Movements }
+  /api/inventory/pos-policy:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: POS-facing inventory policy hints
+      description: '**`pos.catalog.read`** OR inventory read OR **`backoffice.*`** (`allowPosCatalogOrInventoryRead`).'
+      responses:
+        "200": { description: Policy }
+  /api/inventory/menu-availability:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Menu availability from stock
+      description: Same gate as `pos-policy`.
+      responses:
+        "200": { description: Availability map }
+  /api/inventory/analytics/waste:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Waste analytics
+      description: |
+        **`allowInventoryRead`** + **`allowInventoryCostRead`** (includes cost totals).
+      parameters:
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+        - name: locationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/inventory/analytics/price-history:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Ingredient purchase price history
+      description: |
+        **`allowInventoryRead`** + **`allowInventoryCostRead`**.
+      parameters:
+        - name: ingredientId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }
+  /api/inventory/balances:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: List stock balances
+      parameters:
+        - name: locationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Balances }
+  /api/inventory/balances/planning:
+    patch:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Update planning fields on stock balances
+      description: '**`allowInventoryWrite`** (`backoffice.inventory.write` or **`backoffice.*`**).'
+      responses:
+        "200": { description: OK }
+  /api/inventory/adjust:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Stock adjustment
+      description: '**`allowInventoryWrite`**.'
+      responses:
+        "200": { description: OK }
+  /api/inventory/returns:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Restock from customer return
+      description: |
+        Increases stock for returned sellable items.
+        Requires **`allowInventoryWrite`**.
+      responses:
+        "200": { description: OK }
+  /api/inventory/bootstrap-balances:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Bootstrap opening balances
+      responses:
+        "200": { description: OK }
+  /api/inventory/transfer:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Inter-location transfer
+      responses:
+        "200": { description: OK }
+  /api/inventory/alerts/run:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Run inventory alert job manually
+      responses:
+        "200": { description: OK }
+
+  /api/vendor-returns:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: List vendor returns (RTV)
+      description: '**`allowInventoryRead`**.'
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: supplier
+          in: query
+          schema: { type: string }
+        - name: supplierId
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Create vendor return draft
+      description: '**`allowInventoryWrite`**.'
+      responses:
+        "201": { description: Created }
+
+  /api/vendor-returns/{id}:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Get vendor return by id
+      description: '**`allowInventoryRead`**.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+
+  /api/vendor-returns/{id}/lines:
+    put:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Replace return line items (draft only)
+      description: '**`allowInventoryWrite`**.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /api/vendor-returns/{id}/post:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Post vendor return (deduct stock)
+      description: '**`allowInventoryWrite`**.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /api/inventory/zones:
+    get:
+      tags: [Warehouse]
+      security: [{ PosBearer: [] }]
+      summary: List storage zones
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Warehouse]
+      security: [{ PosBearer: [] }]
+      summary: Create zone
+      responses:
+        "201": { description: Created }
+  /api/inventory/bins:
+    get:
+      tags: [Warehouse]
+      security: [{ PosBearer: [] }]
+      summary: List storage bins
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Warehouse]
+      security: [{ PosBearer: [] }]
+      summary: Create bin
+      responses:
+        "201": { description: Created }
+
+  /api/ingredients/:
+    get:
+      tags: [Ingredients]
+      security: [{ PosBearer: [] }]
+      summary: List ingredients
+      description: |
+        **`allowInventoryRead`**. Filters optional **`status`**, **`categoryId`**. Pagination `page`/`limit`.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Ingredients }
+    post:
+      tags: [Ingredients]
+      security: [{ PosBearer: [] }]
+      summary: Create ingredient
+      description: '**`allowInventoryWrite`** + admin/manager.'
+      responses:
+        "201": { description: Created }
+  /api/ingredients/{id}:
+    put:
+      tags: [Ingredients]
+      security: [{ PosBearer: [] }]
+      summary: Update ingredient
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Ingredients]
+      security: [{ PosBearer: [] }]
+      summary: Delete ingredient
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/ingredients/{ingredientId}/supplier-links/:
+    get:
+      tags: [Ingredient supplier links]
+      security: [{ PosBearer: [] }]
+      summary: List supplier links for ingredient
+      parameters:
+        - name: ingredientId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Links }
+    post:
+      tags: [Ingredient supplier links]
+      security: [{ PosBearer: [] }]
+      summary: Upsert supplier link
+      description: '**`allowInventoryWrite`** + admin/manager.'
+      parameters:
+        - name: ingredientId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/ingredients/{ingredientId}/supplier-links/{supplierId}:
+    delete:
+      tags: [Ingredient supplier links]
+      security: [{ PosBearer: [] }]
+      summary: Remove supplier link
+      parameters:
+        - name: ingredientId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: supplierId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /api/ingredient-categories/:
+    get:
+      tags: [Ingredient categories]
+      security: [{ PosBearer: [] }]
+      summary: List ingredient categories
+      description: '**`allowInventoryRead`**.'
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Ingredient categories]
+      security: [{ PosBearer: [] }]
+      summary: Create category
+      description: '**`allowInventoryWrite`** + admin/manager.'
+      responses:
+        "201": { description: OK }
+  /api/ingredient-categories/{id}:
+    put:
+      tags: [Ingredient categories]
+      security: [{ PosBearer: [] }]
+      summary: Update category
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Ingredient categories]
+      security: [{ PosBearer: [] }]
+      summary: Delete category
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/suppliers/:
+    get:
+      tags: [Suppliers]
+      security: [{ PosBearer: [] }]
+      summary: List suppliers
+      description: |
+        **`allowInventoryRead`**. Optional filter **`status`**. Pagination `page`/`limit`.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Suppliers }
+    post:
+      tags: [Suppliers]
+      security: [{ PosBearer: [] }]
+      summary: Create supplier
+      description: '**`allowSupplierManage`** + admin/manager (`backoffice.suppliers.manage` or `backoffice.*`).'
+      responses:
+        "201": { description: Created }
+  /api/suppliers/{id}:
+    put:
+      tags: [Suppliers]
+      security: [{ PosBearer: [] }]
+      summary: Update supplier
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Suppliers]
+      security: [{ PosBearer: [] }]
+      summary: Archive / delete supplier
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/recipes/:
+    get:
+      tags: [Recipes]
+      security: [{ PosBearer: [] }]
+      summary: List recipes
+      description: '**`backoffice.*`**. Pagination optional.'
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Recipes }
+    post:
+      tags: [Recipes]
+      security: [{ PosBearer: [] }]
+      summary: Upsert recipe
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      responses:
+        "200": { description: OK }
+  /api/recipes/by-menu-item/{menuItemId}:
+    get:
+      tags: [Recipes]
+      security: [{ PosBearer: [] }]
+      summary: Recipe for menu item
+      parameters:
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Recipe }
+    delete:
+      tags: [Recipes]
+      security: [{ PosBearer: [] }]
+      summary: Delete recipe by menu item
+      description: '**`admin` or `manager`** + **`backoffice.*`**.'
+      parameters:
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /api/purchase-orders/suggestions/reorder:
+    get:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Reorder suggestions
+      description: '**`allowInventoryRead`**.'
+      responses:
+        "200": { description: Suggestions }
+  /api/purchase-orders/from-suggestions:
+    post:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Create draft PO from suggestions
+      description: '**`allowInventoryWrite`** + admin/manager.'
+      responses:
+        "201": { description: Created }
+  /api/purchase-orders/:
+    get:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: List purchase orders
+      description: |
+        Filters optional **`status`**, **`supplierId`**, **`locationId`**. Pagination.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: supplierId
+          in: query
+          schema: { type: string }
+        - name: locationId
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: PO list }
+    post:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Create PO
+      responses:
+        "201": { description: Created }
+  /api/purchase-orders/{id}:
+    get:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Get PO
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: PO }
+    patch:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Patch draft PO
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/purchase-orders/{id}/confirm:
+    post:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Confirm PO
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/purchase-orders/{id}/cancel:
+    post:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Cancel PO
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/purchase-orders/{id}/receive:
+    post:
+      tags: [Purchase orders]
+      security: [{ PosBearer: [] }]
+      summary: Receive goods (GRN)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/goods-receipt-notes/:
+    get:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: List GRNs
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Create GRN
+      responses:
+        "201": { description: Created }
+  /api/goods-receipt-notes/{id}/confirm:
+    post:
+      tags: [Inventory]
+      security: [{ PosBearer: [] }]
+      summary: Confirm GRN (triggers stock/accounting)
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/request-for-quotations/:
+    get:
+      tags: [Request for Quotations]
+      security: [{ PosBearer: [] }]
+      summary: List RFQs
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Request for Quotations]
+      security: [{ PosBearer: [] }]
+      summary: Create RFQ
+      responses:
+        "201": { description: Created }
+  /api/request-for-quotations/{id}/send:
+    post:
+      tags: [Request for Quotations]
+      security: [{ PosBearer: [] }]
+      summary: Send RFQ to suppliers
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/request-for-quotations/{id}/responses:
+    post:
+      tags: [Request for Quotations]
+      security: [{ PosBearer: [] }]
+      summary: Log supplier response
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/request-for-quotations/{id}/convert-to-po:
+    post:
+      tags: [Request for Quotations]
+      security: [{ PosBearer: [] }]
+      summary: Convert RFQ response to Purchase Order
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "201": { description: Created }
+
+  /api/stock-takes/:
+    get:
+      tags: [Stock takes]
+      security: [{ PosBearer: [] }]
+      summary: List stock take sessions
+      parameters:
+        - name: locationId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Sessions }
+    post:
+      tags: [Stock takes]
+      security: [{ PosBearer: [] }]
+      summary: Create session
+      description: '**`allowInventoryWrite`** + admin/manager.'
+      responses:
+        "201": { description: Created }
+  /api/stock-takes/{id}:
+    get:
+      tags: [Stock takes]
+      security: [{ PosBearer: [] }]
+      summary: Get session
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Session }
+  /api/stock-takes/{id}/lines:
+    patch:
+      tags: [Stock takes]
+      security: [{ PosBearer: [] }]
+      summary: Patch counted quantities
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/stock-takes/{id}/post:
+    post:
+      tags: [Stock takes]
+      security: [{ PosBearer: [] }]
+      summary: Post session to inventory
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+
+  /api/accounting/ensure-defaults:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Seed default accounts + config
+      description: '**`requireAccountingWrite`** (`backoffice.accounting.write` or `backoffice.*`).'
+      responses:
+        "200": { description: OK }
+  /api/accounting/accounts:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List GL accounts
+      description: '**`requireAccountingRead`**. Query **`type`**, **`active`** (`true`/`false`).'
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: active
+          in: query
+          schema: { type: string, enum: ["true", "false"] }
+      responses:
+        "200": { description: Accounts }
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Create account
+      responses:
+        "201": { description: Created }
+  /api/accounting/accounts/{id}:
+    patch:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Update account
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/accounting/config:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Get accounting config (posting rules, defaults)
+      responses:
+        "200": { description: Config }
+    put:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Update accounting config (large payload; see controller)
+      responses:
+        "200": { description: OK }
+  /api/accounting/journal-entries:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List journal entries
+      description: |
+        Filters **`sourceType`**, **`orderId`**. Pagination `page`/`limit`.
+      parameters:
+        - name: sourceType
+          in: query
+          schema: { type: string }
+        - name: orderId
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { description: Entries }
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Post manual journal
+      responses:
+        "201": { description: Posted }
+  /api/accounting/journal-entries/{id}:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Get journal entry
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: Entry }
+  /api/accounting/trial-balance:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Trial balance
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: TB }
+  /api/accounting/reports/pnl:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Profit & loss
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string }
+        - name: end
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: PnL }
+  /api/accounting/reports/balance-sheet:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Balance sheet
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: BS }
+  /api/accounting/reports/ar-aging:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: AR aging
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/reports/cash-flow:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Cash flow statement (Operating, Investing, Financing)
+      parameters:
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+      responses:
+        "200": { description: OK }
+  /api/accounting/reports/budget-vs-actual:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Budget vs Actual performance report
+      parameters:
+        - name: fiscalYear
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: periodMonth
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }
+  /api/accounting/budgets:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List budgets
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Create budget
+      responses:
+        "201": { description: Created }
+  /api/accounting/budgets/{id}:
+    delete:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Delete budget
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/accounting/recurring-invoices:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List recurring invoice templates
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Create recurring invoice template
+      responses:
+        "201": { description: Created }
+  /api/accounting/recurring-invoices/{id}:
+    patch:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Update recurring invoice template
+      description: Partial update; send only fields to change (e.g. templateLines, nextIssueAt, isActive). Requires `backoffice.accounting.ar.write`.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                customer: { type: string }
+                frequency: { type: string, enum: [daily, weekly, monthly] }
+                nextIssueAt: { type: string, format: date-time }
+                isActive: { type: boolean }
+                currency: { type: string }
+                notes: { type: string }
+                templateLines:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200": { description: OK }
+        "400": { description: Bad request }
+        "404": { description: Not found }
+    delete:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Delete recurring invoice template
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/accounting/reports/session-summary:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Session summary (POS sessions vs GL)
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string }
+        - name: end
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/export/journals.csv:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Export journals CSV
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: text/csv }
+  /api/accounting/export/journals.pdf:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Export journals PDF (formatted; max 500 entries)
+      description: |
+        PDF includes document metadata (Title, Author, Subject, Keywords, CreationDate).
+        Requires `backoffice.accounting.gl.read`.
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: application/pdf
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+  /api/accounting/export/integration.json:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Integration bundle JSON
+      responses:
+        "200": { description: application/json }
+  /api/accounting/export/trial-balance.xlsx:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Trial balance Excel
+      responses:
+        "200": { description: binary }
+  /api/accounting/export/trial-balance.pdf:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Trial balance PDF
+      description: |
+        Styled trial balance with organization name, period, column layout, totals, balanced indicator,
+        and page footers. PDF document properties set via PDFKit (Title, Author, Subject, Keywords, dates).
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: application/pdf
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+  /api/accounting/audit-log:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Journal audit log
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: action
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Rows }
+  /api/accounting/sync/ack:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Acknowledge external sync
+      responses:
+        "200": { description: OK }
+  /api/accounting/post-order/{orderId}:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Re-post order to GL
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/reverse-order/{orderId}:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Reverse GL posting for order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/refunds/{orderId}:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Post refund entry
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/ar/payments:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Post AR payment
+      responses:
+        "200": { description: OK }
+  /api/accounting/fx/rates:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List FX rates
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string }
+        - name: to
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Rates }
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Create FX rate
+      responses:
+        "201": { description: Created }
+  /api/accounting/fx/rates/{id}:
+    patch:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Update FX rate
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Delete FX rate
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/accounting/fx/resolve:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Resolve rate for currency pair / date
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string }
+        - name: to
+          in: query
+          schema: { type: string }
+        - name: date
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Rate }
+  /api/accounting/inventory/bootstrap-cost-layers:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Bootstrap inventory cost layers for GL
+      responses:
+        "200": { description: OK }
+  /api/accounting/periods:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List accounting periods
+      responses:
+        "200": { description: Periods }
+  /api/accounting/periods/close:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Close current period
+      responses:
+        "200": { description: OK }
+  /api/accounting/closing/retained-earnings:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Post retained earnings closing entry
+      responses:
+        "200": { description: OK }
+  /api/accounting/invoices:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List invoices
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200": { description: Invoices }
+  /api/accounting/invoices/from-order/{orderId}:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Create invoice from paid order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Created }
+  /api/accounting/invoices/{id}/void:
+    patch:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Void invoice
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/accounting/sessions:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List accounting / POS sessions
+      parameters:
+        - name: sessionId
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/sessions/open:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Open accounting session
+      responses:
+        "201": { description: Created }
+  /api/accounting/sessions/{id}/close:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Close session
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { description: OK }
+  /api/accounting/gift-cards/issue:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Issue gift card liability
+      responses:
+        "200": { description: OK }
+  /api/accounting/gift-cards/redeem:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Redeem gift card
+      responses:
+        "200": { description: OK }
+  /api/accounting/bank/statements:
+    get:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: List bank statement imports
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string }
+        - name: end
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/accounting/bank/statements/import:
+    post:
+      tags: [Accounting]
+      security: [{ PosBearer: [] }]
+      summary: Import bank statement (stub)
+      responses:
+        "200": { description: OK }
+
+  /api/tenant/orders:
+    get:
+      tags: [Tenant tools]
+      security: [{ PosBearer: [] }]
+      summary: Org-scoped order listing (isolation / metering)
+      description: |
+        Requires `req.tenantOrganizationId`. Applies **`requireTenantOrganization`**, dynamic rate limit, usage metering.
+        Returns up to **50** recent orders for org.
+      responses:
+        "200": { description: Orders }
+        "403": { description: Org mismatch }
+
+components:
+  securitySchemes:
+    PosBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        POS access token — claim **`aud`** must be **`pos`**. Same secret family as `JWT_SECRET` / access token config.
+        **Do not** use platform tokens here.
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: MongoDB ObjectId string
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1 }
+      description: Page number when paginating (requires `limit`)
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100 }
+      description: Page size when paginating (requires `page`)
+    XLocationId:
+      name: X-Location-Id
+      in: header
+      required: false
+      schema: { type: string }
+      description: |
+        Branch filter for **admin/manager** without assigned `user.location`. Omit for all branches.
+    ReportFrom:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+      description: Report range start (ISO date)
+    ReportTo:
+      name: to
+      in: query
+      schema: { type: string, format: date }
+      description: Report range end (ISO date)
+    ReportGroupBy:
+      name: groupBy
+      in: query
+      schema: { type: string, enum: [hour, day, week, month] }
+    ReportTz:
+      name: tz
+      in: query
+      schema: { type: string }
+      description: Time zone (IANA), default UTC
+
+  schemas:
+    GoodsReceiptNote:
+      type: object
+      properties:
+        _id: { type: string }
+        purchaseOrderId: { type: string }
+        supplierId: { type: string }
+        locationId: { type: string }
+        status: { type: string, enum: [draft, confirmed] }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              ingredientId: { type: string }
+              receivedQty: { type: number }
+              rejectedQty: { type: number }
+              note: { type: string }
+    RequestForQuotation:
+      type: object
+      properties:
+        _id: { type: string }
+        status: { type: string, enum: [draft, sent, received, converted] }
+        supplierIds: { type: array, items: { type: string } }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              ingredientId: { type: string }
+              quantity: { type: number }
+    SerialNumber:
+      type: object
+      properties:
+        serial: { type: string }
+        status: { type: string, enum: [available, consumed, transferred, expired] }
+        ingredientId: { type: string }
+    Zone:
+      type: object
+      properties:
+        name: { type: string }
+        locationId: { type: string }
+    Bin:
+      type: object
+      properties:
+        name: { type: string }
+        zoneId: { type: string }
+    Budget:
+      type: object
+      properties:
+        accountId: { type: string }
+        fiscalYear: { type: number }
+        periodMonth: { type: number }
+        budgetedAmount: { type: number }
+    RecurringInvoiceTemplate:
+      type: object
+      properties:
+        customerId: { type: string }
+        frequency: { type: string, enum: [daily, weekly, monthly] }
+        isActive: { type: boolean }
+        templateLines: { type: array, items: { type: object } }

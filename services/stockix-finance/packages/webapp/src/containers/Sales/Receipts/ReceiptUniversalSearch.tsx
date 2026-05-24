@@ -1,12 +1,11 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
-import { MenuItem } from '@blueprintjs/core';
-
-import { Icon, Choose, T } from '@/components';
+import { MenuItem, Intent } from '@blueprintjs/core';
+import { Icon, Choose, T, TextStatus } from '@/components';
 import { RESOURCES_TYPES } from '@/constants/resourcesTypes';
 import { AbilitySubject, SaleReceiptAction } from '@/constants/abilityOption';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 import { DRAWERS } from '@/constants/drawers';
 
 /**
@@ -39,15 +38,15 @@ function ReceiptStatus({ receipt }) {
   return (
     <Choose>
       <Choose.When condition={receipt.is_closed}>
-        <span class="closed">
+        <TextStatus intent={Intent.SUCCESS}>
           <T id={'closed'} />
-        </span>
+        </TextStatus>
       </Choose.When>
 
       <Choose.Otherwise>
-        <span class="draft">
+        <TextStatus intent={Intent.NONE}>
           <T id={'draft'} />
-        </span>
+        </TextStatus>
       </Choose.Otherwise>
     </Choose>
   );
@@ -66,7 +65,7 @@ export function ReceiptUniversalSearchItem(
       text={
         <div>
           <div>{item.text}</div>
-          <span class="bp3-text-muted">
+          <span class="bp4-text-muted">
             {item.reference.receipt_number}{' '}
             <Icon icon={'caret-right-16'} iconSize={16} />
             {item.reference.formatted_receipt_date}
@@ -75,7 +74,7 @@ export function ReceiptUniversalSearchItem(
       }
       label={
         <>
-          <div class="amount">${item.reference.amount}</div>
+          <div class="amount">{item.reference.formatted_amount}</div>
           <ReceiptStatus receipt={item.reference} />
         </>
       }

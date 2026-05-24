@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import moment from 'moment';
 
 import { SalesByItemsBody } from './SalesByItemsBody';
@@ -9,10 +9,11 @@ import { FinancialStatement, DashboardPageContent } from '@/components';
 import SalesByItemsActionsBar from './SalesByItemsActionsBar';
 import SalesByItemsHeader from './SalesByItemsHeader';
 
-import withSalesByItemsActions from './withSalesByItemsActions';
+import { withSalesByItemsActions } from './withSalesByItemsActions';
 
-import { getDefaultSalesByItemsQuery } from './utils';
+import { useSalesByItemsQuery } from './utils';
 import { compose } from '@/utils';
+import { SalesByItemsDialogs } from './SalesByitemsDialogs';
 
 /**
  * Sales by items.
@@ -21,9 +22,7 @@ function SalesByItems({
   // #withSellsByItemsActions
   toggleSalesByItemsFilterDrawer,
 }) {
-  const [filter, setFilter] = useState({
-    ...getDefaultSalesByItemsQuery(),
-  });
+  const { query, setLocationQuery } = useSalesByItemsQuery();
 
   // Handle filter form submit.
   const handleFilterSubmit = useCallback(
@@ -33,30 +32,28 @@ function SalesByItems({
         fromDate: moment(filter.fromDate).format('YYYY-MM-DD'),
         toDate: moment(filter.toDate).format('YYYY-MM-DD'),
       };
-      setFilter(parsedFilter);
+      setLocationQuery(parsedFilter);
     },
-    [setFilter],
+    [setLocationQuery],
   );
 
   // Handle number format form submit.
   const handleNumberFormatSubmit = (numberFormat) => {
-    setFilter({
+    setLocationQuery({
       ...filter,
       numberFormat,
     });
   };
   // Hide the filter drawer once the page unmount.
   useEffect(
-    () => () => {
-      toggleSalesByItemsFilterDrawer(false);
-    },
+    () => () => toggleSalesByItemsFilterDrawer(false),
     [toggleSalesByItemsFilterDrawer],
   );
 
   return (
-    <SalesByItemProvider query={filter}>
+    <SalesByItemProvider query={query}>
       <SalesByItemsActionsBar
-        numberFormat={filter.numberFormat}
+        numberFormat={query.numberFormat}
         onNumberFormatSubmit={handleNumberFormatSubmit}
       />
       <SalesByItemsLoadingBar />
@@ -64,12 +61,14 @@ function SalesByItems({
       <DashboardPageContent>
         <FinancialStatement>
           <SalesByItemsHeader
-            pageFilter={filter}
+            pageFilter={query}
             onSubmitFilter={handleFilterSubmit}
           />
           <SalesByItemsBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <SalesByItemsDialogs />
     </SalesByItemProvider>
   );
 }

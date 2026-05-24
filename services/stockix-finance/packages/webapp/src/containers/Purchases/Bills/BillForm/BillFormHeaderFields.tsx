@@ -2,11 +2,11 @@
 import React from 'react';
 import styled from 'styled-components';
 import classNames from 'classnames';
-import { FastField, ErrorMessage, useFormikContext } from 'formik';
-import { FormGroup, InputGroup, Classes, Position } from '@blueprintjs/core';
-import { DateInput } from '@blueprintjs/datetime';
+import { useFormikContext } from 'formik';
+import { Classes, Position } from '@blueprintjs/core';
+import { css } from '@emotion/css';
 
-import { FeatureCan, FormattedMessage as T } from '@/components';
+import { FeatureCan, Stack, FormattedMessage as T } from '@/components';
 import { CLASSES } from '@/constants/classes';
 import {
   FFormGroup,
@@ -14,6 +14,8 @@ import {
   Icon,
   VendorDrawerLink,
   VendorsSelect,
+  FDateInput,
+  FInputGroup,
 } from '@/components';
 
 import { useBillFormContext } from './BillFormProvider';
@@ -23,15 +25,30 @@ import {
   BillProjectSelectButton,
 } from './components';
 import { ProjectsSelect } from '@/containers/Projects/components';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 import {
   momentFormatter,
   compose,
-  tansformDateValue,
-  handleDateChange,
-  inputIntent,
 } from '@/utils';
 import { Features } from '@/constants';
+import { useTheme } from '@emotion/react';
+
+const getBillFieldsStyle = (theme: Theme) => css`
+  .${theme.bpPrefix}-form-group {
+    margin-bottom: 0;
+
+    &.${theme.bpPrefix}-inline {
+      max-width: 450px;
+    }
+    .${theme.bpPrefix}-label {
+      min-width: 150px;
+      font-weight: 500;
+    }
+    .${theme.bpPrefix}-form-content {
+      width: 100%;
+    }
+  }
+`;
 
 /**
  * Fill form header.
@@ -40,8 +57,11 @@ function BillFormHeader() {
   // Bill form context.
   const { vendors, projects } = useBillFormContext();
 
+  const theme = useTheme();
+  const billFieldsClassName = getBillFieldsStyle(theme);
+
   return (
-    <div className={classNames(CLASSES.PAGE_FORM_HEADER_FIELDS)}>
+    <Stack spacing={18} flex={1} className={billFieldsClassName}>
       {/* ------- Vendor name ------ */}
       <BillFormVendorField />
 
@@ -52,87 +72,65 @@ function BillFormHeader() {
       />
 
       {/* ------- Bill date ------- */}
-      <FastField name={'bill_date'}>
-        {({ form, field: { value }, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'bill_date'} />}
-            inline={true}
-            labelInfo={<FieldRequiredHint />}
-            className={classNames(CLASSES.FILL)}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="bill_date" />}
-          >
-            <DateInput
-              {...momentFormatter('YYYY/MM/DD')}
-              value={tansformDateValue(value)}
-              onChange={handleDateChange((formattedDate) => {
-                form.setFieldValue('bill_date', formattedDate);
-              })}
-              popoverProps={{ position: Position.BOTTOM, minimal: true }}
-              inputProps={{ leftIcon: <Icon icon={'date-range'} /> }}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'bill_date'}
+        label={<T id={'bill_date'} />}
+        inline
+        labelInfo={<FieldRequiredHint />}
+        className={classNames(CLASSES.FILL)}
+        fastField
+      >
+        <FDateInput
+          name={'bill_date'}
+          {...momentFormatter('YYYY/MM/DD')}
+          popoverProps={{ position: Position.BOTTOM, minimal: true }}
+          inputProps={{ leftIcon: <Icon icon={'date-range'} /> }}
+          fill
+          fastField
+        />
+      </FFormGroup>
 
       {/* ------- Due date ------- */}
-      <FastField name={'due_date'}>
-        {({ form, field: { value }, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'due_date'} />}
-            inline={true}
-            className={classNames(
-              'form-group--due-date',
-              'form-group--select-list',
-              CLASSES.FILL,
-            )}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="due_date" />}
-          >
-            <DateInput
-              {...momentFormatter('YYYY/MM/DD')}
-              value={tansformDateValue(value)}
-              onChange={handleDateChange((formattedDate) => {
-                form.setFieldValue('due_date', formattedDate);
-              })}
-              popoverProps={{ position: Position.BOTTOM, minimal: true }}
-              inputProps={{
-                leftIcon: <Icon icon={'date-range'} />,
-              }}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'due_date'}
+        label={<T id={'due_date'} />}
+        inline
+        fill
+        fastField
+      >
+        <FDateInput
+          name={'due_date'}
+          {...momentFormatter('YYYY/MM/DD')}
+          popoverProps={{ position: Position.BOTTOM, minimal: true }}
+          inputProps={{
+            leftIcon: <Icon icon={'date-range'} />,
+          }}
+          fill
+          fastField
+        />
+      </FFormGroup>
 
       {/* ------- Bill number ------- */}
-      <FastField name={'bill_number'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'bill_number'} />}
-            inline={true}
-            className={('form-group--bill_number', CLASSES.FILL)}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="bill_number" />}
-          >
-            <InputGroup minimal={true} {...field} />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'bill_number'}
+        label={<T id={'bill_number'} />}
+        inline
+        fill
+        fastField
+      >
+        <FInputGroup name={'bill_number'} minimal={true} fastField />
+      </FFormGroup>
 
       {/* ------- Reference ------- */}
-      <FastField name={'reference_no'}>
-        {({ field, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'reference'} />}
-            inline={true}
-            className={classNames('form-group--reference', CLASSES.FILL)}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="reference" />}
-          >
-            <InputGroup minimal={true} {...field} />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'reference_no'}
+        label={<T id={'reference'} />}
+        inline={true}
+        fill
+        fastField
+      >
+        <FInputGroup name={'reference_no'} minimal={true} fastField />
+      </FFormGroup>
 
       {/*------------ Project name -----------*/}
       <FeatureCan feature={Features.Projects}>
@@ -150,7 +148,7 @@ function BillFormHeader() {
           />
         </FFormGroup>
       </FeatureCan>
-    </div>
+    </Stack>
   );
 }
 

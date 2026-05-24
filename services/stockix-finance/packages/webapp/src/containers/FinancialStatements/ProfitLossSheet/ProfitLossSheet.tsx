@@ -8,13 +8,14 @@ import ProfitLossActionsBar from './ProfitLossActionsBar';
 
 import { DashboardPageContent } from '@/components';
 
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withProfitLossActions from './withProfitLossActions';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withProfitLossActions } from './withProfitLossActions';
 
 import { useProfitLossSheetQuery } from './utils';
 import { ProfitLossSheetProvider } from './ProfitLossProvider';
-import { ProfitLossSheetLoadingBar } from './components';
+import { ProfitLossSheetAlerts, ProfitLossSheetLoadingBar } from './components';
 import { ProfitLossBody } from './ProfitLossBody';
+import { ProfitLossSheetDialogs } from './ProfitLossSheetDialogs';
 
 /**
  * Profit/Loss financial statement sheet.
@@ -58,7 +59,7 @@ function ProfitLossSheet({
         onNumberFormatSubmit={handleNumberFormatSubmit}
       />
       <ProfitLossSheetLoadingBar />
-      {/* <ProfitLossSheetAlerts /> */}
+      <ProfitLossSheetAlerts />
 
       <DashboardPageContent>
         <ProfitLossSheetHeader
@@ -67,6 +68,8 @@ function ProfitLossSheet({
         />
         <ProfitLossBody />
       </DashboardPageContent>
+
+      <ProfitLossSheetDialogs />
     </ProfitLossSheetProvider>
   );
 }

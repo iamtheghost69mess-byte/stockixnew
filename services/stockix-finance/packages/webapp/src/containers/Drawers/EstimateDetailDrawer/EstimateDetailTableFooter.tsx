@@ -8,7 +8,7 @@ import {
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
-  FormatNumber,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { useEstimateDetailDrawerContext } from './EstimateDetailDrawerProvider';
 
@@ -23,15 +23,34 @@ export default function EstimateDetailTableFooter() {
       <EstimateTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
         <TotalLine
           title={<T id={'estimate.details.subtotal'} />}
-          value={<FormatNumber value={estimate.amount} />}
+          value={estimate.formatted_subtotal}
           borderStyle={TotalLineBorderStyle.SingleDark}
         />
+        {estimate?.discount_amount_formatted && (
+          <TotalLine
+            title={
+              estimate.discount_percentage_formatted
+                ? `Discount [${estimate.discount_percentage_formatted}]`
+                : 'Discount'
+            }
+            value={estimate.discount_amount_formatted}
+            textStyle={TotalLineTextStyle.Regular}
+          />
+        )}
+        {estimate?.adjustment_formatted && (
+          <TotalLine
+            title="Adjustment"
+            value={estimate.adjustment_formatted}
+            textStyle={TotalLineTextStyle.Regular}
+          />
+        )}
         <TotalLine
           title={<T id={'estimate.details.total'} />}
-          value={estimate.formatted_amount}
+          value={estimate.total_formatted}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={estimate} />
       </EstimateTotalLines>
     </EstimateDetailsFooterRoot>
   );

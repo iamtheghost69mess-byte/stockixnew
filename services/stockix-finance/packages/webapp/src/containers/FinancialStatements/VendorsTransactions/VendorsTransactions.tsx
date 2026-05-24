@@ -10,9 +10,11 @@ import { VendorsTransactionsLoadingBar } from './components';
 import VendorsTransactionsHeader from './VendorsTransactionsHeader';
 import VendorsTransactionsActionsBar from './VendorsTransactionsActionsBar';
 
-import withVendorsTransactionsActions from './withVendorsTransactionsActions';
+import { withVendorsTransactionsActions } from './withVendorsTransactionsActions';
 
 import { compose } from '@/utils';
+import { useVendorsTransactionsQuery } from './_utils';
+import { VendorTransactionsDialogs } from './VendorTransactionsDialogs';
 
 /**
  * Vendors transactions.
@@ -22,11 +24,7 @@ function VendorsTransactions({
   toggleVendorsTransactionsFilterDrawer,
 }) {
   // filter
-  const [filter, setFilter] = useState({
-    fromDate: moment().startOf('year').format('YYYY-MM-DD'),
-    toDate: moment().endOf('year').format('YYYY-MM-DD'),
-    filterByOption: 'with-transactions',
-  });
+  const [filter, setFilter] = useVendorsTransactionsQuery();
 
   const handleFilterSubmit = (filter) => {
     const _filter = {
@@ -68,6 +66,8 @@ function VendorsTransactions({
           <VendorsTransactionsBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <VendorTransactionsDialogs />
     </VendorsTransactionsProvider>
   );
 }

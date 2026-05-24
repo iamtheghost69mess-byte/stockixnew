@@ -13,4 +13,6 @@ services:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
+      # Local fork: avoid stale BuildKit COPY/RUN cache when iterating on packages/webapp/src.
+      no_cache: true
     image: stockix-webapp:local

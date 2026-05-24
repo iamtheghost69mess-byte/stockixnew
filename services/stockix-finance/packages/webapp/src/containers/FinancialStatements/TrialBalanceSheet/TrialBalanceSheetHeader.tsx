@@ -13,8 +13,8 @@ import FinancialStatementHeader from '../FinancialStatementHeader';
 import TrialBalanceSheetHeaderGeneralPanel from './TrialBalanceSheetHeaderGeneralPanel';
 import TrialBalanceSheetHeaderDimensionsPanel from './TrialBalanceSheetHeaderDimensionsPanel';
 
-import withTrialBalance from './withTrialBalance';
-import withTrialBalanceActions from './withTrialBalanceActions';
+import { withTrialBalance } from './withTrialBalance';
+import { withTrialBalanceActions } from './withTrialBalanceActions';
 
 import { compose, transformToForm } from '@/utils';
 import { useFeatureCan } from '@/hooks/state';
@@ -52,6 +52,7 @@ function TrialBalanceSheetHeader({
     fromDate: moment().toDate(),
     toDate: moment().toDate(),
     branchesIds: [],
+    filterByOption: 'with-transactions',
   };
 
   // Initial values.
@@ -127,7 +128,7 @@ export default compose(
 )(TrialBalanceSheetHeader);
 
 const TrialBalanceSheetDrawerHeader = styled(FinancialStatementHeader)`
-  .bp3-drawer {
+  .bp4-drawer {
     max-height: 450px;
   }
 `;

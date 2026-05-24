@@ -1,6 +1,5 @@
 // @ts-nocheck
 import React from 'react';
-import * as Yup from 'yup';
 import moment from 'moment';
 import styled from 'styled-components';
 import { Formik, Form } from 'formik';
@@ -11,12 +10,16 @@ import { FormattedMessage as T } from '@/components';
 import FinancialStatementHeader from '@/containers/FinancialStatements/FinancialStatementHeader';
 import InventoryValuationHeaderGeneralPanel from './InventoryValuationHeaderGeneralPanel';
 import InventoryValuationHeaderDimensionsPanel from './InventoryValuationHeaderDimensionsPanel';
-import withInventoryValuation from './withInventoryValuation';
-import withInventoryValuationActions from './withInventoryValuationActions';
+import { withInventoryValuation } from './withInventoryValuation';
+import { withInventoryValuationActions } from './withInventoryValuationActions';
 
 import { compose, transformToForm } from '@/utils';
 import { useFeatureCan } from '@/hooks/state';
 import { Features } from '@/constants';
+import {
+  getInventoryValuationQuery,
+  getInventoryValuationQuerySchema,
+} from './utils';
 
 /**
  * inventory valuation header.
@@ -33,25 +36,17 @@ function InventoryValuationHeader({
   toggleInventoryValuationFilterDrawer,
 }) {
   // Form validation schema.
-  const validationSchema = Yup.object().shape({
-    asDate: Yup.date().required().label('asDate'),
-  });
+  const validationSchema = getInventoryValuationQuerySchema();
+  const defaultQuery = getInventoryValuationQuery();
 
-  // Default values.
-  const defaultValues = {
-    ...pageFilter,
-    asDate: moment().toDate(),
-    itemsIds: [],
-    warehousesIds: [],
-  };
   // Initial values.
   const initialValues = transformToForm(
     {
-      ...defaultValues,
+      ...defaultQuery,
       ...pageFilter,
       asDate: moment(pageFilter.asDate).toDate(),
     },
-    defaultValues,
+    defaultQuery,
   );
 
   // Handle the form of header submit.
@@ -71,6 +66,7 @@ function InventoryValuationHeader({
   // Detarmines the given feature whether is enabled.
   const { featureCan } = useFeatureCan();
 
+  // Detarmine if these feature are enabled.
   const isBranchesFeatureCan = featureCan(Features.Branches);
   const isWarehousesFeatureCan = featureCan(Features.Warehouses);
 
@@ -121,7 +117,7 @@ export default compose(
 )(InventoryValuationHeader);
 
 const InventoryValuationDrawerHeader = styled(FinancialStatementHeader)`
-  .bp3-drawer {
+  .bp4-drawer {
     max-height: 450px;
   }
 `;

@@ -7,7 +7,7 @@ import { TextStatus, Icon, Choose, T } from '@/components';
 import { RESOURCES_TYPES } from '@/constants/resourcesTypes';
 import { AbilitySubject, VendorCreditAction } from '@/constants/abilityOption';
 import { DRAWERS } from '@/constants/drawers';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 /**
  * Vendor credit universal search item select action.
@@ -22,7 +22,7 @@ function VendorCreditUniversalSearchSelectComponent({
   openDrawer,
 }) {
   if (resourceType === RESOURCES_TYPES.VENDOR_CREDIT) {
-    openDrawer(DRAWERS.VENDOR_CREDIT_DETAIL_DRAWER, {
+    openDrawer(DRAWERS.VENDOR_CREDIT_DETAILS, {
       vendorCreditId: resourceId,
     });
     onAction && onAction();
@@ -74,7 +74,7 @@ export function VendorCreditUniversalSearchItem(
       text={
         <div>
           <div>{item.text}</div>
-          <span class="bp3-text-muted">
+          <span class="bp4-text-muted">
             {item.reference.vendor_credit_number}{' '}
             <Icon icon={'caret-right-16'} iconSize={16} />
             {item.reference.formatted_vendor_credit_date}
@@ -83,7 +83,7 @@ export function VendorCreditUniversalSearchItem(
       }
       label={
         <>
-          <div class="amount">${item.reference.amount}</div>
+          <div class="amount">{item.reference.formatted_amount}</div>
           <VendorCreditUniversalSearchStatus receipt={item.reference} />
         </>
       }

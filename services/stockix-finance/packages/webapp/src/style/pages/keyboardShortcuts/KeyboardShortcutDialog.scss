@@ -1,19 +1,16 @@
 .dialog--keyboard-shortcuts {
-  .stockix-datatable {
+  .bigcapital-datatable {
     .table {
       max-height: 300px;
-      border: 1px solid #d1dee2;
+      border: 1px solid var(--color-datatable-cell-border);
       min-width: auto;
       margin: 15px;
-      .tbody,
-      .thead .tr .td,
-      .tr .th {
-        background: #fff;
-      }
+
       .tbody,
       .tbody-inner {
         height: 250px;
         scrollbar-width: none;
+
         &::-webkit-scrollbar {
           display: none;
         }
@@ -22,7 +19,10 @@
         .tr .td {
           padding: 0.4rem;
           margin-left: -1px;
-          border-left: 1px solid #ececec;
+          border-left: 1px solid var(--color-datatable-cell-border);
+        }
+        .tr:last-of-type .td {
+          border-bottom: 0;
         }
       }
     }
@@ -31,8 +31,8 @@
     text-align: right;
     margin: 0px 15px;
 
-    .bp3-button.bp3-small,
-    .bp3-button:not([class*='bp3-intent-']):not(.bp3-minimal).bp3-small {
+    .bp4-button.bp4-small,
+    .bp4-button:not([class*='bp4-intent-']):not(.bp4-minimal).bp4-small {
       min-width: 65px;
       height: 26px;
       min-height: 26px;

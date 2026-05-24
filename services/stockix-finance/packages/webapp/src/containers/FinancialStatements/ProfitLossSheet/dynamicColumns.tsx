@@ -370,6 +370,7 @@ const dynamicColumnMapper = R.curry((data, column) => {
     R.when(R.pathSatisfies(isMatchesDateRange, ['key']), indexDatePeriodMapper),
     R.when(R.pathEq(['key'], 'name'), indexAccountNameColumn),
     R.when(R.pathEq(['key'], 'total'), indexTotalColumn),
+    R.when(R.pathEq(['key'], 'secondary_total'), indexTotalColumn),
   )(column);
 });
 

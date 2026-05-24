@@ -18,7 +18,7 @@ export default function CustomersBalanceSummaryTable({
   companyName,
 }) {
   const {
-    CustomerBalanceSummary: { table },
+    CustomerBalanceSummary: { table, query, meta },
   } = useCustomersBalanceSummaryContext();
 
   // Retrieves the customers summary columns.
@@ -28,13 +28,14 @@ export default function CustomersBalanceSummaryTable({
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('customers_balance_summary')}
-      asDate={new Date()}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
     >
       <CustomerBalanceDataTable
         columns={columns}
-        data={table.data}
+        data={table.rows}
         rowClassNames={tableRowTypesToClassnames}
         noInitialFetch={true}
+        sticky={true}
         styleName={TableStyle.Constrant}
       />
     </FinancialSheet>
@@ -42,21 +43,34 @@ export default function CustomersBalanceSummaryTable({
 }
 
 const CustomerBalanceDataTable = styled(ReportDataTable)`
+  --x-table-total-border-bottom-color: #000;
+  --x-table-total-border-top-color: #bbb;
+  --x-table-total-border-bottom-color: var(
+    --color-datatable-constrant-cell-border
+  );
+  --x-table-total-border-top-color: var(
+    --color-datatable-constrant-cell-border
+  );
+
   .table {
     .tbody {
       .tr:not(.no-results) {
         .td {
-          border-bottom: 0;
+          border-bottom-width: 0;
           padding-top: 0.4rem;
           padding-bottom: 0.4rem;
         }
-
         &.row_type--TOTAL {
-          font-weight: 500;
-
           .td {
-            border-top: 1px solid #bbb;
-            border-bottom: 3px double #333;
+            font-weight: 500;
+            border-top-width: 1px;
+            font-weight: 500;
+            border-top-width: 1px;
+            border-top-style: solid;
+            border-top-color: var(--x-table-total-border-top-color);
+            border-bottom-style: double;
+            border-bottom-width: 3px;
+            border-bottom-color: var(--x-table-total-border-bottom-color);
           }
         }
       }

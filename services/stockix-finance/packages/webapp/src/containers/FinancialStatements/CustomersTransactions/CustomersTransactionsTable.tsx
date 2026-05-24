@@ -20,7 +20,7 @@ export default function CustomersTransactionsTable({
 }) {
   // Customers transactions context.
   const {
-    customersTransactions: { tableRows },
+    customersTransactions: { tableRows, meta },
     query,
   } = useCustomersTransactionsContext();
 
@@ -36,8 +36,7 @@ export default function CustomersTransactionsTable({
     <FinancialSheet
       companyName={companyName}
       sheetType={intl.get('customers_transactions')}
-      fromDate={query.from_date}
-      toDate={query.to_date}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
       fullWidth={true}
     >
       <CustomersTransactionsDataTable
@@ -47,6 +46,7 @@ export default function CustomersTransactionsTable({
         noInitialFetch={true}
         expandable={true}
         expanded={expandedRows}
+        sticky={true}
         expandToggleColumn={1}
         expandColumnSpace={0.8}
         styleName={TableStyle.Constrant}
@@ -56,6 +56,11 @@ export default function CustomersTransactionsTable({
 }
 
 const CustomersTransactionsDataTable = styled(DataTable)`
+  --color-table-border-left-color: #ececec;
+  --color-table-customer-border-color: #ddd;
+  --color-table-border-left-color: var(--color-dark-gray4);
+  --color-table-customer-border-color: var(--color-dark-gray4);
+
   .table {
     .tbody {
       .tr .td {
@@ -63,10 +68,10 @@ const CustomersTransactionsDataTable = styled(DataTable)`
         padding-bottom: 0.36rem;
       }
       .tr:not(.no-results) .td:not(:first-of-type) {
-        border-left: 1px solid #ececec;
+        border-left: 1px solid var(--color-table-border-left-color);
       }
       .tr:last-child .td {
-        border-bottom: 1px solid #e0e0e0;
+        border-bottom-width: 1px;
       }
 
       .tr.row_type {
@@ -82,7 +87,7 @@ const CustomersTransactionsDataTable = styled(DataTable)`
             }
           }
           &:not(:first-child).is-expanded .td {
-            border-top: 1px solid #ddd;
+            border-top: 1px solid var(--color-table-customer-border-color);
           }
         }
         &--OPENING_BALANCE,
@@ -96,12 +101,12 @@ const CustomersTransactionsDataTable = styled(DataTable)`
             }
           }
           &:not(:first-child).is-expanded .td {
-            border-top: 1px solid #ddd;
+            border-top: 1px solid var(--color-table-customer-border-color);
           }
         }
         &--CUSTOMER:last-child {
           .td {
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--color-table-customer-border-color);
           }
         }
       }

@@ -14,16 +14,15 @@ import {
   FormattedMessage as T,
   ExchangeRateMutedField,
   BranchSelect,
-  BranchSelectButton,
   FeatureCan,
   InputPrependText,
 } from '@/components';
-import { FMoneyInputGroup, FFormGroup } from '@/components/Forms';
+import { FMoneyInputGroup, FFormGroup, FDateInput } from '@/components/Forms';
 
 import { useVendorOpeningBalanceContext } from './VendorOpeningBalanceFormProvider';
 import { useSetPrimaryBranchToForm } from './utils';
 
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 import { compose } from '@/utils';
 
 /**
@@ -60,26 +59,24 @@ function VendorOpeningBalanceFormFields({
       </FFormGroup>
 
       {/*------------ Opening balance at -----------*/}
-      <FastField name={'opening_balance_at'}>
-        {({ form, field: { value } }) => (
-          <FormGroup
-            label={<T id={'vendor_opening_balance.label.opening_balance_at'} />}
-            className={Classes.FILL}
-          >
-            <DateInput
-              {...momentFormatter('YYYY/MM/DD')}
-              onChange={handleDateChange((formattedDate) => {
-                form.setFieldValue('opening_balance_at', formattedDate);
-              })}
-              value={tansformDateValue(value)}
-              popoverProps={{ position: Position.BOTTOM, minimal: true }}
-              inputProps={{
-                leftIcon: <Icon icon={'date-range'} />,
-              }}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      <FFormGroup
+        name={'opening_balance_at'}
+        label={<T id={'vendor_opening_balance.label.opening_balance_at'} />}
+        fill
+        fastField
+      >
+        <FDateInput
+          name={'opening_balance_at'}
+          formatDate={(date) => date.toLocaleDateString()}
+          parseDate={(str) => new Date(str)}
+          popoverProps={{ position: Position.BOTTOM, minimal: true }}
+          inputProps={{
+            leftIcon: <Icon icon={'date-range'} />,
+          }}
+          fill
+          fastField
+        />
+      </FFormGroup>
 
       <If condition={!isEqual(base_currency, vendor.currency_code)}>
         {/*------------ Opening balance exchange rate -----------*/}
@@ -98,12 +95,12 @@ function VendorOpeningBalanceFormFields({
         <FFormGroup
           label={<T id={'branch'} />}
           name={'opening_balance_branch_id'}
-          className={classNames('form-group--select-list', Classes.FILL)}
+          fill
+          fastField
         >
           <BranchSelect
             name={'opening_balance_branch_id'}
             branches={branches}
-            input={BranchSelectButton}
             popoverProps={{ minimal: true }}
           />
         </FFormGroup>

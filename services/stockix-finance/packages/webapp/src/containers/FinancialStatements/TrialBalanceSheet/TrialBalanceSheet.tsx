@@ -14,9 +14,9 @@ import {
   TrialBalanceSheetLoadingBar,
 } from './components';
 
-import withTrialBalanceActions from './withTrialBalanceActions';
-
+import { withTrialBalanceActions } from './withTrialBalanceActions';
 import { compose } from '@/utils';
+import { TrialBalanceSheetDialogs } from './TrialBalanceSheetDialogs';
 
 /**
  * Trial balance sheet.
@@ -72,6 +72,8 @@ function TrialBalanceSheet({
           <TrialBalanceSheetBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <TrialBalanceSheetDialogs />
     </TrialBalanceSheetProvider>
   );
 }

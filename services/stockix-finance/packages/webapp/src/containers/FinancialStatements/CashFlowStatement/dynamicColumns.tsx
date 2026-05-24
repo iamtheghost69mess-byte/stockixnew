@@ -58,6 +58,23 @@ const totalMapper = (data, index, column) => ({
 });
 
 /**
+ * Secondary total column mapper.
+ */
+const secondaryTotalMapper = (data, index, column) => ({
+  key: 'secondary_total',
+  Header: column.label,
+  accessor: `cells[${index}].value`,
+  textOverview: true,
+  Cell: CellTextSpan,
+  width: getColumnWidth(data, `cells[${index}].value`, {
+    magicSpacing: 10,
+    minWidth: 100,
+  }),
+  disableSortBy: true,
+  align: Align.Right,
+});
+
+/**
  * Detarmines the given string starts with `date-range` string.
  */
 const isMatchesDateRange = (r) => R.match(/^date-range/g, r).length > 0;
@@ -74,6 +91,7 @@ export const dynamicColumns = (columns, data) => {
       ),
       R.when(R.pathEq(['key'], 'name'), accountNameMapper),
       R.when(R.pathEq(['key'], 'total'), R.curry(totalMapper)(data, index)),
+      R.when(R.pathEq(['key'], 'secondary_total'), R.curry(secondaryTotalMapper)(data, index)),
     )(column);
   };
   return columns.map(mapper);

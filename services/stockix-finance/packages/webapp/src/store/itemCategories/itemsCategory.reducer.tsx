@@ -14,7 +14,7 @@ const initialState = {
   },
 };
 
-const STORAGE_KEY = 'stockix:itemCategories';
+const STORAGE_KEY = 'bigcapital:itemCategories';
 
 const CONFIG = {
   key: STORAGE_KEY,

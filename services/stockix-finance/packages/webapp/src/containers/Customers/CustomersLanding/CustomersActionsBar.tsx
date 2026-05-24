@@ -12,7 +12,6 @@ import {
 import { useHistory } from 'react-router-dom';
 
 import {
-  If,
   Icon,
   Can,
   FormattedMessage as T,
@@ -25,15 +24,19 @@ import {
 
 import { useCustomersListContext } from './CustomersListProvider';
 import { useRefreshCustomers } from '@/hooks/query/customers';
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
 
-import withCustomers from './withCustomers';
-import withCustomersActions from './withCustomersActions';
-import withAlertActions from '@/containers/Alert/withAlertActions';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withCustomers } from './withCustomers';
+import { withCustomersActions } from './withCustomersActions';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+
 import { CustomerAction, AbilitySubject } from '@/constants/abilityOption';
-
 import { compose } from '@/utils';
+import { DialogsName } from '@/constants/dialogs';
+import { isEmpty } from 'lodash';
+import { useBulkDeleteCustomersDialog } from './hooks/use-bulk-delete-customers-dialog';
 
 /**
  * Customers actions bar.
@@ -47,15 +50,18 @@ function CustomerActionsBar({
   setCustomersTableState,
   accountsInactiveMode,
 
-  // #withAlertActions
-  openAlert,
-
   // #withSettings
   customersTableSize,
 
   // #withSettingsActions
   addSetting,
+
+  // #withDialogActions
+  openDialog,
 }) {
+  const { openBulkDeleteDialog, isValidatingBulkDeleteCustomers } =
+    useBulkDeleteCustomersDialog();
+
   // History context.
   const history = useHistory();
 
@@ -65,13 +71,16 @@ function CustomerActionsBar({
   // Customers refresh action.
   const { refresh } = useRefreshCustomers();
 
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
+
   const onClickNewCustomer = () => {
     history.push('/customers/new');
   };
 
   // Handle Customers bulk delete button click.,
   const handleBulkDelete = () => {
-    openAlert('customers-bulk-delete', { customersIds: customersSelectedRows });
+    openBulkDeleteDialog(customersSelectedRows);
   };
 
   const handleTabChange = (view) => {
@@ -95,6 +104,37 @@ function CustomerActionsBar({
     addSetting('customers', 'tableSize', size);
   };
 
+  // Handle import button click.
+  const handleImportBtnClick = () => {
+    history.push('/customers/import');
+  };
+
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'customer' });
+  };
+  // Handle the print button click.
+  const handlePrintBtnClick = () => {
+    downloadExportPdf({ resource: 'Customer' });
+  };
+
+  if (!isEmpty(customersSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteCustomers}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
+
   return (
     <DashboardActionsBar>
       <NavbarGroup>
@@ -106,7 +146,7 @@ function CustomerActionsBar({
           onChange={handleTabChange}
         />
         <NavbarDivider />
-        <Can I={CustomerAction.Create} a={AbilitySubject.Item}>
+        <Can I={CustomerAction.Create} a={AbilitySubject.Customer}>
           <Button
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus'} />}
@@ -130,24 +170,23 @@ function CustomerActionsBar({
           />
         </AdvancedFilterPopover>
 
-        <If condition={customersSelectedRows.length}>
-          <Button
-            className={Classes.MINIMAL}
-            icon={<Icon icon="trash-16" iconSize={16} />}
-            text={<T id={'delete'} />}
-            intent={Intent.DANGER}
-            onClick={handleBulkDelete}
-          />
-        </If>
+        <Button
+          className={Classes.MINIMAL}
+          icon={<Icon icon="print-16" iconSize={16} />}
+          text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
+        />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-import-16" iconSize={16} />}
+          onClick={handleImportBtnClick}
           text={<T id={'import'} />}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-export-16" iconSize={16} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
         <NavbarDivider />
         <DashboardRowsHeightButton
@@ -185,5 +224,5 @@ export default compose(
   withSettings(({ customersSettings }) => ({
     customersTableSize: customersSettings?.tableSize,
   })),
-  withAlertActions,
+  withDialogActions,
 )(CustomerActionsBar);

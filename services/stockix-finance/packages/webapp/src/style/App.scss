@@ -1,20 +1,20 @@
-@import './normalize.scss';
+@import './normalize';
 
-@import './Base.scss';
+@import './_base.scss';
 
 // Blueprint framework.
 @import '@blueprintjs/core/src/blueprint.scss';
 @import '@blueprintjs/datetime/src/blueprint-datetime.scss';
 @import '@blueprintjs/popover2/src/blueprint-popover2.scss';
 
-@import 'basscss';
+@import 'basscss/css/basscss.css';
 
 // Objects
 @import 'objects/form';
 @import 'objects/switch';
 @import 'objects/typography';
 @import 'objects/buttons';
-@import 'objects/Stockix';
+@import 'objects/Bigcapital';
 
 // Components
 @import 'components/CustomScrollbar';
@@ -29,7 +29,6 @@
 @import 'components/Overlay';
 @import 'components/Menu';
 @import 'components/SidebarOverlay';
-@import 'components/UniversalSearch';
 
 // Pages
 @import 'pages/view-form';
@@ -104,22 +103,6 @@ body.hide-scrollbar .Pane2 {
   background-color: #0066ff;
 }
 
-.ReactVirtualized__Collection {}
-
-.ReactVirtualized__Collection__innerScrollContainer {}
-
-/* Grid default theme */
-
-.ReactVirtualized__Grid {}
-
-.ReactVirtualized__Grid__innerScrollContainer {}
-
-/* Table default theme */
-
-.ReactVirtualized__Table {}
-
-.ReactVirtualized__Table__Grid {}
-
 .ReactVirtualized__Table__headerRow {
   font-weight: 700;
   text-transform: uppercase;
@@ -180,8 +163,6 @@ body.hide-scrollbar .Pane2 {
 }
 
 /* List default theme */
-
-.ReactVirtualized__List {}
 
 .bp3-drawer {
   box-shadow: 0 0 0;

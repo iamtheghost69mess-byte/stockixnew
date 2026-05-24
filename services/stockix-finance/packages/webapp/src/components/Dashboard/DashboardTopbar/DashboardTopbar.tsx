@@ -10,18 +10,24 @@ import {
   Tooltip,
   Position,
 } from '@blueprintjs/core';
+
 import { FormattedMessage as T, Icon, Hint, If } from '@/components';
 
 import DashboardTopbarUser from '@/components/Dashboard/TopbarUser';
 import DashboardBreadcrumbs from '@/components/Dashboard/DashboardBreadcrumbs';
 import DashboardBackLink from '@/components/Dashboard/DashboardBackLink';
 
-import withUniversalSearchActions from '@/containers/UniversalSearch/withUniversalSearchActions';
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withDashboard from '@/containers/Dashboard/withDashboard';
+import { withUniversalSearchActions } from '@/containers/UniversalSearch/withUniversalSearchActions';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withDashboard } from '@/containers/Dashboard/withDashboard';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
 
 import QuickNewDropdown from '@/containers/QuickNewDropdown/QuickNewDropdown';
-import { DashboardHamburgerButton, DashboardQuickSearchButton } from './_components';
+import {
+  DashboardHamburgerButton,
+  DashboardQuickSearchButton,
+} from './_components';
+
 import { compose } from '@/utils';
 
 /**
@@ -41,6 +47,9 @@ function DashboardTopbar({
 
   // #withGlobalSearch
   openGlobalSearch,
+
+  // #withCurrentOrganization
+  organization,
 }) {
   const history = useHistory();
 
@@ -53,7 +62,7 @@ function DashboardTopbar({
   };
 
   return (
-    <div class="dashboard__topbar">
+    <div class="dashboard__topbar" data-testId={'dashboard-topbar'}>
       <div class="dashboard__topbar-left">
         <div class="dashboard__topbar-sidebar-toggle">
           <Tooltip
@@ -112,16 +121,26 @@ function DashboardTopbar({
               />
             </Tooltip>
 
-            <Button
-              className={Classes.MINIMAL}
-              icon={<Icon icon={'help-24'} iconSize={20} />}
-              text={<T id={'help'} />}
-            />
             <NavbarDivider />
           </NavbarGroup>
         </Navbar>
 
         <div class="dashboard__topbar-user">
+          {organization?.name ? (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                padding: '2px 8px',
+                borderRadius: 4,
+                background: '#e8f0fe',
+                color: '#1a56db',
+                marginRight: 8,
+              }}
+            >
+              {organization.name}
+            </span>
+          ) : null}
           <DashboardTopbarUser />
         </div>
       </div>
@@ -138,4 +157,5 @@ export default compose(
     pageHint,
   })),
   withDashboardActions,
+  withCurrentOrganization(({ organization }) => ({ organization })),
 )(DashboardTopbar);

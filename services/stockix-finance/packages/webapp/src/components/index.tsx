@@ -1,7 +1,7 @@
 // @ts-nocheck
 import MODIFIER from './modifiers';
 import ContextMenu from './ContextMenu';
-import AvaterCell from './AvaterCell';
+import AvatarCell from './AvatarCell';
 
 export * from './Money/Money';
 export * from './Dialog';
@@ -12,8 +12,8 @@ export * from './UniversalSearch/UniversalSearch';
 export * from './PdfPreview';
 export * from './Details';
 export * from './TotalLines/index';
+export * from './DualCurrencyTotalLines';
 export * from './Alert';
-export * from './Subscriptions';
 export * from './Dashboard';
 export * from './Drawer';
 export * from './Forms';
@@ -50,7 +50,6 @@ export * from './FlexGrid';
 export * from './Menu';
 export * from './Icon';
 export * from './Items';
-export * from './ItemsCategories';
 export * from './Select';
 export * from './FormattedMessage';
 export * from './MaterialProgressBar';
@@ -65,4 +64,4 @@ export * from './Postbox';
 export * from './AppToaster';
 export * from './Layout';
 
-export { MODIFIER, ContextMenu, AvaterCell };
+export { MODIFIER, ContextMenu, AvatarCell };

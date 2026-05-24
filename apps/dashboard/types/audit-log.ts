@@ -1,0 +1,20 @@
+export type AuditLogEntry = {
+  id: string;
+  action: string;
+  actionLabel: string;
+  actorId: string;
+  actorName: string | null;
+  actorEmail: string | null;
+  actorLabel: string;
+  targetTenantId: string | null;
+  targetTenantName: string | null;
+  targetTenantSlug: string | null;
+  targetOwnerId: string | null;
+  targetOwnerName: string | null;
+  targetOwnerEmail: string | null;
+  targetLabel: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};

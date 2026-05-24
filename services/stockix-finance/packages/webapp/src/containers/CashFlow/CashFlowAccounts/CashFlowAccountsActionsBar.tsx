@@ -1,5 +1,4 @@
 // @ts-nocheck
-import React from 'react';
 import {
   Button,
   NavbarGroup,
@@ -13,17 +12,20 @@ import {
   Can,
   Icon,
   FormattedMessage as T,
+  FeatureCan,
 } from '@/components';
 import { useRefreshCashflowAccounts } from '@/hooks/query';
+import { useOpenPlaidConnect } from '@/hooks/utils/useOpenPlaidConnect';
 import { CashflowAction, AbilitySubject } from '@/constants/abilityOption';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withCashflowAccountsTableActions from '../AccountTransactions/withCashflowAccountsTableActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withCashflowAccountsTableActions } from '../AccountTransactions/withCashflowAccountsTableActions';
 
 import { AccountDialogAction } from '@/containers/Dialogs/AccountDialog/utils';
 
-import { ACCOUNT_TYPE } from '@/constants';
+import { ACCOUNT_TYPE, Features } from '@/constants';
 import { DialogsName } from '@/constants/dialogs';
+import { CreditCard2Icon } from '@/icons/CreditCard2';
 
 import { compose } from '@/utils';
 
@@ -38,6 +40,9 @@ function CashFlowAccountsActionsBar({
   setCashflowAccountsTableState,
 }) {
   const { refresh } = useRefreshCashflowAccounts();
+
+  // Opens the Plaid popup.
+  const { openPlaidAsync, isPlaidLoading } = useOpenPlaidConnect();
 
   // Handle refresh button click.
   const handleRefreshBtnClick = () => {
@@ -62,6 +67,10 @@ function CashFlowAccountsActionsBar({
     const checked = event.target.checked;
     setCashflowAccountsTableState({ inactiveMode: checked });
   };
+  // Handle connect button click.
+  const handleConnectToBank = () => {
+    openPlaidAsync();
+  };
 
   return (
     <DashboardActionsBar>
@@ -70,32 +79,17 @@ function CashFlowAccountsActionsBar({
           <Button
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus-24'} iconSize={20} />}
-            text={<T id={'cash_flow.label.add_cash_account'} />}
+            text={<T id={'banking.label.add_cash_account'} />}
             onClick={handleAddBankAccount}
           />
           <Button
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus-24'} iconSize={20} />}
-            text={<T id={'cash_flow.label.add_bank_account'} />}
+            text={<T id={'banking.label.add_bank_account'} />}
             onClick={handleAddCashAccount}
           />
           <NavbarDivider />
         </Can>
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="print-16" iconSize={16} />}
-          text={<T id={'print'} />}
-        />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-import-16" iconSize={16} />}
-          text={<T id={'import'} />}
-        />
         <NavbarDivider />
         <Can I={CashflowAction.Edit} a={AbilitySubject.Cashflow}>
           <Switch
@@ -107,6 +101,16 @@ function CashFlowAccountsActionsBar({
       </NavbarGroup>
 
       <NavbarGroup align={Alignment.RIGHT}>
+        <FeatureCan feature={Features.BankSyncing}>
+          <Button
+            className={Classes.MINIMAL}
+            text={'Connect Bank/Credit Card'}
+            icon={<CreditCard2Icon />}
+            onClick={handleConnectToBank}
+            disabled={isPlaidLoading}
+          />
+          <NavbarDivider />
+        </FeatureCan>
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="refresh-16" iconSize={14} />}

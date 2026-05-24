@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useMutation, useQueryClient } from 'react-query';
-import { transformPagination, transformResponse } from '@/utils';
+import { transformPagination, transformResponse, transformToCamelCase } from '@/utils';
 import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
 import t from './types';
@@ -42,7 +42,7 @@ export function useEditItem(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation(([id, values]) => apiRequest.post(`items/${id}`, values), {
+  return useMutation(([id, values]) => apiRequest.put(`items/${id}`, values), {
     onSuccess: (res, [id, values]) => {
       // Invalidate specific item.
       queryClient.invalidateQueries([t.ITEM, id]);
@@ -71,6 +71,50 @@ export function useDeleteItem(props) {
     },
     ...props,
   });
+}
+
+/**
+ * Deletes multiple items in bulk.
+ */
+export function useBulkDeleteItems(props) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    ({
+      ids,
+      skipUndeletable = false,
+    }: {
+      ids: number[];
+      skipUndeletable?: boolean;
+    }) =>
+      apiRequest.post('items/bulk-delete', {
+        ids,
+        skip_undeletable: skipUndeletable,
+      }),
+    {
+      onSuccess: () => {
+        // Common invalidate queries.
+        commonInvalidateQueries(queryClient);
+      },
+      ...props,
+    },
+  );
+}
+
+/**
+ * Validates which items can be deleted in bulk.
+ */
+export function useValidateBulkDeleteItems(props) {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (ids: number[]) =>
+      apiRequest.post('items/validate-bulk-delete', { ids }).then((res) => transformToCamelCase(res.data)),
+    {
+      ...props,
+    },
+  );
 }
 
 /**
@@ -167,7 +211,7 @@ export function useItem(id, props) {
       url: `items/${id}`,
     },
     {
-      select: (response) => response.data.item,
+      select: (response) => response.data,
       defaultData: {},
       ...props,
     },
@@ -179,10 +223,10 @@ export function useItemAssociatedInvoiceTransactions(id, props) {
     [t.ITEM_ASSOCIATED_WITH_INVOICES, id],
     {
       method: 'get',
-      url: `items/${id}/transactions/invoices`,
+      url: `items/${id}/invoices`,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -194,10 +238,10 @@ export function useItemAssociatedEstimateTransactions(id, props) {
     [t.ITEM_ASSOCIATED_WITH_ESTIMATES, id],
     {
       method: 'get',
-      url: `items/${id}/transactions/estimates`,
+      url: `items/${id}/estimates`,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -209,10 +253,10 @@ export function useItemAssociatedReceiptTransactions(id, props) {
     [t.ITEM_ASSOCIATED_WITH_RECEIPTS, id],
     {
       method: 'get',
-      url: `items/${id}/transactions/receipts`,
+      url: `items/${id}/receipts`,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -223,10 +267,10 @@ export function useItemAssociatedBillTransactions(id, props) {
     [t.ITEMS_ASSOCIATED_WITH_BILLS, id],
     {
       method: 'get',
-      url: `items/${id}/transactions/bills`,
+      url: `items/${id}/bills`,
     },
     {
-      select: (res) => res.data.data,
+      select: (res) => res.data,
       defaultData: [],
       ...props,
     },
@@ -249,18 +293,18 @@ export function useItemWarehouseLocation(id, props) {
 }
 
 /**
- * 
- * @param {*} id 
- * @param {*} query 
- * @param {*} props 
- * @returns 
+ *
+ * @param {*} id
+ * @param {*} query
+ * @param {*} props
+ * @returns
  */
 export function useItemInventoryCost(query, props) {
   return useRequestQuery(
     [t.ITEM_INVENTORY_COST, query],
     {
       method: 'get',
-      url: `inventory/items-cost`,
+      url: `inventory-cost/items`,
       params: { ...query },
     },
     {
@@ -268,5 +312,5 @@ export function useItemInventoryCost(query, props) {
       defaultData: [],
       ...props,
     },
-  ); 
+  );
 }

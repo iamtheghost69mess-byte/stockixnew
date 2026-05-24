@@ -1,1 +1,1 @@
-# Stockix Finance Server
+## @stockix/server

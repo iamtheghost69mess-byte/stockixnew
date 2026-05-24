@@ -3,7 +3,7 @@ import React, { useMemo, useCallback } from 'react';
 import moment from 'moment';
 import intl from 'react-intl-universal';
 
-import { If, FormattedMessage as T } from '@/components';
+import { FormattedMessage as T } from '@/components';
 import {
   FinancialSheetRoot,
   FinancialSheetFooterCurrentTime,
@@ -23,9 +23,7 @@ import {
 export function FinancialSheet({
   companyName,
   sheetType,
-  fromDate,
-  toDate,
-  asDate,
+  dateText,
   children,
   accountingBasis,
   basis,
@@ -34,19 +32,6 @@ export function FinancialSheet({
   currentDate = true,
   className,
 }) {
-  const format = 'DD MMMM YYYY';
-  const formattedFromDate = useMemo(
-    () => moment(fromDate).format(format),
-    [fromDate],
-  );
-  const formattedToDate = useMemo(
-    () => moment(toDate).format(format),
-    [toDate],
-  );
-  const formattedAsDate = useMemo(
-    () => moment(asDate).format(format),
-    [asDate],
-  );
   const methodsLabels = useMemo(
     () => ({
       cash: intl.get('cash'),
@@ -69,15 +54,7 @@ export function FinancialSheet({
       {companyName && <FinancialSheetTitle>{companyName}</FinancialSheetTitle>}
       {sheetType && <FinancialSheetType>{sheetType}</FinancialSheetType>}
 
-      <FinancialSheetDate>
-        <If condition={asDate}>
-          <T id={'as'} /> {formattedAsDate}
-        </If>
-        <If condition={fromDate && toDate}>
-          <T id={'from'} /> {formattedFromDate} | <T id={'to'} />{' '}
-          {formattedToDate}
-        </If>
-      </FinancialSheetDate>
+      {dateText && <FinancialSheetDate>{dateText}</FinancialSheetDate>}
 
       <FinancialSheetTable>{children}</FinancialSheetTable>
       <FinancialSheetAccountingBasis>

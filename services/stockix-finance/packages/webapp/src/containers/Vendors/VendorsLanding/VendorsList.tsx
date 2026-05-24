@@ -7,11 +7,10 @@ import { DashboardPageContent } from '@/components';
 
 import { VendorsListProvider } from './VendorsListProvider';
 import VendorActionsBar from './VendorActionsBar';
-import VendorViewsTabs from './VendorViewsTabs';
 import VendorsTable from './VendorsTable';
 
-import withVendors from './withVendors';
-import withVendorsActions from './withVendorsActions';
+import { withVendors } from './withVendors';
+import { withVendorsActions } from './withVendorsActions';
 
 import { compose } from '@/utils';
 
@@ -25,13 +24,15 @@ function VendorsList({
 
   // #withVendorsActions
   resetVendorsTableState,
+  resetVendorsSelectedRows,
 }) {
   // Resets the vendors table state once the page unmount.
   useEffect(
     () => () => {
       resetVendorsTableState();
+      resetVendorsSelectedRows();
     },
-    [resetVendorsTableState],
+    [resetVendorsSelectedRows, resetVendorsTableState],
   );
 
   return (
@@ -42,7 +43,6 @@ function VendorsList({
       <VendorActionsBar />
 
       <DashboardPageContent>
-        <VendorViewsTabs />
         <VendorsTable />
       </DashboardPageContent>
     </VendorsListProvider>

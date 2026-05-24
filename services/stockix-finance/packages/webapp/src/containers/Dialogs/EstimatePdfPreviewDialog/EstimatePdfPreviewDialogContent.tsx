@@ -5,7 +5,7 @@ import { AnchorButton } from '@blueprintjs/core';
 import { DialogContent, PdfDocumentPreview, T } from '@/components';
 import { usePdfEstimate } from '@/hooks/query';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 import { compose } from '@/utils';
 
 function EstimatePdfPreviewDialogContent({
@@ -14,7 +14,7 @@ function EstimatePdfPreviewDialogContent({
   // #withDialogActions
   closeDialog,
 }) {
-  const { isLoading, pdfUrl } = usePdfEstimate(estimateId);
+  const { isLoading, pdfUrl, filename } = usePdfEstimate(estimateId);
 
   return (
     <DialogContent>
@@ -30,7 +30,7 @@ function EstimatePdfPreviewDialogContent({
 
         <AnchorButton
           href={pdfUrl}
-          download={'estimate.pdf'}
+          download={filename}
           minimal={true}
           outlined={true}
         >

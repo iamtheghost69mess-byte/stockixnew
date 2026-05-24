@@ -5,12 +5,13 @@ import {
   vendorsTableStateChangedFactory,
 } from '@/store/vendors/vendors.selectors';
 
-export default (mapState) => {
+export const withVendors = (mapState) => {
   const getVendorsTableState = getVendorsTableStateFactory();
   const vendorsTableStateChanged = vendorsTableStateChangedFactory();
 
   const mapStateToProps = (state, props) => {
     const mapped = {
+      vendorsSelectedRows: state.vendors.selectedRows,
       vendorsTableState: getVendorsTableState(state, props),
       vendorsTableStateChanged: vendorsTableStateChanged(state, props),
     };

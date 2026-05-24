@@ -7,29 +7,27 @@ import {
   MenuItem,
   MenuDivider,
   Tag,
-  ProgressBar,
 } from '@blueprintjs/core';
-
+import clsx from 'classnames';
 import {
   FormatDateCell,
   FormattedMessage as T,
   Icon,
   If,
   Choose,
-  Money,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import {
   formattedAmount,
   safeCallback,
-  isBlank,
-  calculateStatus,
 } from '@/utils';
 import {
   BillAction,
   PaymentMadeAction,
   AbilitySubject,
 } from '@/constants/abilityOption';
+import { CLASSES } from '@/constants';
 
 /**
  * Actions menu.
@@ -102,17 +100,6 @@ export function ActionsMenu({
 }
 
 /**
- * Amount accessor.
- */
-export function AmountAccessor(bill) {
-  return !isBlank(bill.amount) ? (
-    <Money amount={bill.amount} currency={bill.currency_code} />
-  ) : (
-    ''
-  );
-}
-
-/**
  * Status accessor.
  */
 export function StatusAccessor(bill) {
@@ -120,42 +107,35 @@ export function StatusAccessor(bill) {
     <div className={'status-accessor'}>
       <Choose>
         <Choose.When condition={bill.is_fully_paid && bill.is_open}>
-          <span className={'fully-paid-icon'}>
-            <Icon icon="small-tick" iconSize={18} />
-          </span>
-          <span class="fully-paid-text">
+          <Tag round minimal intent={Intent.SUCCESS}>
             <T id={'paid'} />
-          </span>
+          </Tag>
         </Choose.When>
+
         <Choose.When condition={bill.is_open}>
           <Choose>
             <Choose.When condition={bill.is_overdue}>
-              <span className={'overdue-status'}>
+              <Tag round minimal intent={Intent.DANGER}>
                 {intl.get('overdue_by', { overdue: bill.overdue_days })}
-              </span>
+              </Tag>
             </Choose.When>
             <Choose.Otherwise>
-              <span className={'due-status'}>
+              <Tag round minimal intent={Intent.WARNING}>
                 {intl.get('due_in', { due: bill.remaining_days })}
-              </span>
+              </Tag>
             </Choose.Otherwise>
           </Choose>
           <If condition={bill.is_partially_paid}>
-            <span className="partial-paid">
+            <Tag round minimal intent={Intent.PRIMARY}>
               {intl.get('day_partially_paid', {
                 due: formattedAmount(bill.due_amount, bill.currency_code),
               })}
-            </span>
-            <ProgressBar
-              animate={false}
-              stripes={false}
-              intent={Intent.PRIMARY}
-              value={calculateStatus(bill.balance, bill.amount)}
-            />
+            </Tag>
           </If>
         </Choose.When>
+
         <Choose.Otherwise>
-          <Tag minimal={true} round={true}>
+          <Tag round minimal>
             <T id={'draft'} />
           </Tag>
         </Choose.Otherwise>
@@ -173,8 +153,7 @@ export function useBillsTableColumns() {
       {
         id: 'bill_date',
         Header: intl.get('bill_date'),
-        accessor: 'bill_date',
-        Cell: FormatDateCell,
+        accessor: 'formatted_bill_date',
         width: 110,
         className: 'bill_date',
         clickable: true,
@@ -198,11 +177,13 @@ export function useBillsTableColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: AmountAccessor,
+        accessor: 'total_formatted',
+        Cell: DualCurrencyAmountCell,
         width: 120,
-        className: 'amount',
         align: 'right',
         clickable: true,
+        money: true,
+        className: clsx(CLASSES.FONT_BOLD),
       },
       {
         id: 'status',

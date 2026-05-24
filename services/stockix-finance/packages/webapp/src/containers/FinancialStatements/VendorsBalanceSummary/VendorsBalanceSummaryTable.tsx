@@ -9,7 +9,6 @@ import { tableRowTypesToClassnames } from '@/utils';
 import { useVendorsBalanceColumns } from './components';
 import { useVendorsBalanceSummaryContext } from './VendorsBalanceSummaryProvider';
 
-
 /**
  * Vendors balance summary table.
  */
@@ -18,7 +17,7 @@ export default function VendorsBalanceSummaryTable({
   organizationName,
 }) {
   const {
-    VendorBalanceSummary: { table },
+    VendorBalanceSummary: { table, query, meta },
   } = useVendorsBalanceSummaryContext();
 
   // vendors balance summary columns.
@@ -28,13 +27,14 @@ export default function VendorsBalanceSummaryTable({
     <VendorBalanceFinancialSheet
       companyName={organizationName}
       sheetType={intl.get('vendors_balance_summary')}
-      asDate={new Date()}
+      dateText={meta?.formatted_date_range ?? meta?.formatted_as_date}
     >
       <VendorBalanceDataTable
         columns={columns}
-        data={table.data}
+        data={table.rows}
         rowClassNames={tableRowTypesToClassnames}
         noInitialFetch={true}
+        sticky={true}
         styleName={TableStyle.Constrant}
       />
     </VendorBalanceFinancialSheet>
@@ -44,21 +44,34 @@ export default function VendorsBalanceSummaryTable({
 const VendorBalanceFinancialSheet = styled(FinancialSheet)``;
 
 const VendorBalanceDataTable = styled(ReportDataTable)`
+  --x-table-total-border-bottom-color: #333;
+  --x-table-total-border-top-color: #bbb;
+  --x-table-total-border-bottom-color: var(
+    --color-datatable-constrant-cell-border
+  );
+  --x-table-total-border-top-color: var(
+    --color-datatable-constrant-cell-border
+  );
+
   .table {
     .tbody {
       .tr:not(.no-results) {
         .td {
-          border-bottom: 0;
+          border-bottom-width: 0;
           padding-top: 0.4rem;
           padding-bottom: 0.4rem;
         }
-
         &.row_type--TOTAL {
-          font-weight: 500;
-
           .td {
-            border-top: 1px solid #bbb;
-            border-bottom: 3px double #333;
+            font-weight: 500;
+            border-top-width: 1px;
+            font-weight: 500;
+            border-top-width: 1px;
+            border-top-style: solid;
+            border-top-color: var(--x-table-total-border-top-color);
+            border-bottom-style: double;
+            border-bottom-width: 3px;
+            border-bottom-color: var(--x-table-total-border-bottom-color);
           }
         }
       }

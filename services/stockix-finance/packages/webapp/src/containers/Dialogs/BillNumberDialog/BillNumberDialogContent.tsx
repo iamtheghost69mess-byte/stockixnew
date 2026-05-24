@@ -1,14 +1,14 @@
 // @ts-nocheck
 import React from 'react';
 import { DialogContent } from '@/components';
-import { useQuery, queryCache } from 'react-query';
+import { useQuery, useQueryClient } from 'react-query';
 
 import ReferenceNumberForm from '@/containers/JournalNumber/ReferenceNumberForm';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withBillActions from '@/containers/Purchases/Bills/BillsLanding/withBillsActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withBillsActions } from '@/containers/Purchases/Bills/BillsLanding/withBillsActions';
 
 import { compose, optionsMapToArray } from '@/utils';
 
@@ -28,9 +28,10 @@ function BillNumberDialogContent({
   // #withDialogActions
   closeDialog,
 
-  // #withBillActions
+  // #withBillsActions
   setBillNumberChanged,
 }) {
+  const queryClient = useQueryClient();
   const fetchSettings = useQuery(['settings'], () => requestFetchOptions({}));
 
   const handleSubmitForm = (values, { setSubmitting }) => {
@@ -45,7 +46,7 @@ function BillNumberDialogContent({
         setBillNumberChanged(true);
 
         setTimeout(() => {
-          queryCache.invalidateQueries('settings');
+          queryClient.invalidateQueries('settings');
         }, 250);
       })
       .catch(() => {
@@ -76,5 +77,5 @@ export default compose(
     nextNumber: billsettings?.next_number,
     numberPrefix: billsettings?.number_prefix,
   })),
-  withBillActions,
+  withBillsActions,
 )(BillNumberDialogContent);

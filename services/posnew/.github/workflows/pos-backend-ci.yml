@@ -1,0 +1,63 @@
+name: pos-backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/pos-backend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/pos-backend-ci.yml"
+  pull_request:
+    paths:
+      - "apps/pos-backend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/pos-backend-ci.yml"
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JWT_SECRET: ci_jwt_secret_must_be_32_chars_min___
+  PLATFORM_JWT_SECRET: ci_platform_jwt_secret_32_char_min__
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: OpenAPI contract + unit tests
+        working-directory: apps/pos-backend
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/ci-pos
+        run: |
+          node --test tests/openapi-contract.test.js tests/tenant-openapi-contract.test.js
+          node --test tests/unit/*.test.js
+
+      - name: Isolation suite
+        working-directory: apps/pos-backend
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/ci-pos-isolation
+          RUN_ISOLATION: "1"
+        run: npm run test:isolation

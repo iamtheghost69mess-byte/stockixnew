@@ -1,1 +1,1 @@
-# Stockix Finance Webapp
+# @stockix/webapp

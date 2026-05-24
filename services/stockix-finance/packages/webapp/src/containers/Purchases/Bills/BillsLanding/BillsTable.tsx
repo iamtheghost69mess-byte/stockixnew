@@ -12,12 +12,12 @@ import {
 
 import BillsEmptyStatus from './BillsEmptyStatus';
 
-import withBills from './withBills';
-import withBillActions from './withBillsActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withBills } from './withBills';
+import { withBillsActions } from './withBillsActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { useBillsTableColumns, ActionsMenu } from './components';
 import { useBillsListContext } from './BillsListProvider';
@@ -32,6 +32,7 @@ import { DRAWERS } from '@/constants/drawers';
 function BillsDataTable({
   // #withBillsActions
   setBillsTableState,
+  setBillsSelectedRows,
 
   // #withBills
   billsTableState,
@@ -108,6 +109,12 @@ function BillsDataTable({
     openDrawer(DRAWERS.BILL_DETAILS, { billId: cell.row.original.id });
   };
 
+  // Handle selected rows change.
+  const handleSelectedRowsChange = (selectedFlatRows) => {
+    const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+    setBillsSelectedRows(selectedIds);
+  };
+
   // Local storage memorizing columns widths.
   const [initialColumnsWidths, , handleColumnResizing] =
     useMemorizedColumnsWidths(TABLES.BILLS);
@@ -130,6 +137,7 @@ function BillsDataTable({
         noInitialFetch={true}
         sticky={true}
         pagination={true}
+        initialPageSize={billsTableState.pageSize}
         pagesCount={pagination.pagesCount}
         TableLoadingRenderer={TableSkeletonRows}
         TableHeaderSkeletonRenderer={TableSkeletonHeader}
@@ -137,6 +145,7 @@ function BillsDataTable({
         onCellClick={handleCellClick}
         initialColumnsWidths={initialColumnsWidths}
         onColumnResizing={handleColumnResizing}
+        onSelectedRowsChange={handleSelectedRowsChange}
         size={billsTableSize}
         payload={{
           onDelete: handleDeleteBill,
@@ -154,8 +163,8 @@ function BillsDataTable({
 
 export default compose(
   withBills(({ billsTableState }) => ({ billsTableState })),
-  withBillActions,
-  withAlertsActions,
+  withBillsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
   withSettings(({ billsettings }) => ({

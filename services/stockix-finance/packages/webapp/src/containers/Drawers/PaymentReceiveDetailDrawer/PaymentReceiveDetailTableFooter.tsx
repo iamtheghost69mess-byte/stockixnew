@@ -3,12 +3,12 @@ import React from 'react';
 import styled from 'styled-components';
 
 import {
-  FormatNumber,
+  T,
   TotalLineTextStyle,
   TotalLineBorderStyle,
-  T,
   TotalLine,
   TotalLines,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { usePaymentReceiveDetailContext } from './PaymentReceiveDetailProvider';
 
@@ -27,7 +27,7 @@ export default function PaymentReceiveDetailTableFooter() {
       >
         <TotalLine
           title={<T id={'payment_receive.details.subtotal'} />}
-          value={<FormatNumber value={paymentReceive.amount} />}
+          value={paymentReceive.subtotal_formatted}
         />
         <TotalLine
           title={<T id={'payment_receive.details.total'} />}
@@ -35,6 +35,7 @@ export default function PaymentReceiveDetailTableFooter() {
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={paymentReceive} />
       </PaymentReceiveTotalLines>
     </PaymentReceiveDetailsFooterRoot>
   );

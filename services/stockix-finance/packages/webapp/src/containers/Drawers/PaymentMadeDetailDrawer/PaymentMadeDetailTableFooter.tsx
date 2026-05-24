@@ -8,6 +8,7 @@ import {
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  DualCurrencyTotalLinesView,
 } from '@/components';
 import { usePaymentMadeDetailContext } from './PaymentMadeDetailProvider';
 
@@ -31,6 +32,7 @@ export default function PaymentMadeDetailTableFooter() {
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={paymentMade} />
       </PaymentMadeTotalLines>
     </PaymentMadeFooterRoot>
   );

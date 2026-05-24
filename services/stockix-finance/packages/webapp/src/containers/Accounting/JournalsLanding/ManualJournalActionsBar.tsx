@@ -8,6 +8,7 @@ import {
   Intent,
   Alignment,
 } from '@blueprintjs/core';
+import { isEmpty } from 'lodash';
 import { useHistory } from 'react-router-dom';
 import {
   Icon,
@@ -18,19 +19,22 @@ import {
   Can,
   If,
   DashboardActionViewsList,
-  DashboardActionsBar
+  DashboardActionsBar,
 } from '@/components';
 import { useRefreshJournals } from '@/hooks/query/manualJournals';
 import { useManualJournalsContext } from './ManualJournalsListProvider';
 import { ManualJournalAction, AbilitySubject } from '@/constants/abilityOption';
 
-import withManualJournals from './withManualJournals';
-import withManualJournalsActions from './withManualJournalsActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
+import { withManualJournals } from './withManualJournals';
+import { withManualJournalsActions } from './withManualJournalsActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
 import { compose } from '@/utils';
+import { DialogsName } from '@/constants/dialogs';
+import { useBulkDeleteManualJournalsDialog } from './hooks/use-bulk-delete-manual-journals-dialog';
 
 /**
  * Manual journal actions bar.
@@ -41,18 +45,25 @@ function ManualJournalActionsBar({
 
   // #withManualJournals
   manualJournalsFilterConditions,
+  manualJournalsSelectedRows = [],
 
   // #withSettings
   manualJournalsTableSize,
 
   // #withSettingsActions
   addSetting,
+
+  // #withDialogActions
+  openDialog,
 }) {
   // History context.
   const history = useHistory();
 
   // Manual journals context.
   const { journalsViews, fields } = useManualJournalsContext();
+
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
 
   // Manual journals refresh action.
   const { refresh } = useRefreshJournals();
@@ -61,8 +72,14 @@ function ManualJournalActionsBar({
   const onClickNewManualJournal = () => {
     history.push('/make-journal-entry');
   };
-  // Handle delete button click.
-  const handleBulkDelete = () => {};
+  const {
+    openBulkDeleteDialog,
+    isValidatingBulkDeleteManualJournals,
+  } = useBulkDeleteManualJournalsDialog();
+
+  const handleBulkDelete = () => {
+    openBulkDeleteDialog(manualJournalsSelectedRows);
+  };
 
   // Handle tab change.
   const handleTabChange = (view) => {
@@ -72,11 +89,42 @@ function ManualJournalActionsBar({
   const handleRefreshBtnClick = () => {
     refresh();
   };
+  // Handle import button click.
+  const handleImportBtnClick = () => {
+    history.push('/manual-journals/import');
+  };
 
   // Handle table row size change.
   const handleTableRowSizeChange = (size) => {
     addSetting('manualJournals', 'tableSize', size);
   };
+
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'manual_journal' });
+  };
+
+  // Handle the pdf print button click.
+  const handlePdfPrintBtnSubmit = () => {
+    downloadExportPdf({ resource: 'ManualJournal' });
+  };
+
+  if (!isEmpty(manualJournalsSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteManualJournals}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
 
   return (
     <DashboardActionsBar>
@@ -121,20 +169,24 @@ function ManualJournalActionsBar({
           />
         </If>
 
+        <NavbarDivider />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePdfPrintBtnSubmit}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-import-16" iconSize={16} />}
           text={<T id={'import'} />}
+          onClick={handleImportBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-export-16" iconSize={16} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
         <NavbarDivider />
         <DashboardRowsHeightButton
@@ -158,8 +210,9 @@ export default compose(
   withDialogActions,
   withManualJournalsActions,
   withSettingsActions,
-  withManualJournals(({ manualJournalsTableState }) => ({
+  withManualJournals(({ manualJournalsTableState, manualJournalsSelectedRows }) => ({
     manualJournalsFilterConditions: manualJournalsTableState.filterRoles,
+    manualJournalsSelectedRows,
   })),
   withSettings(({ manualJournalsSettings }) => ({
     manualJournalsTableSize: manualJournalsSettings?.tableSize,

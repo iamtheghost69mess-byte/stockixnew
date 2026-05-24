@@ -83,7 +83,7 @@ export function TransactionLockingSkeletonList() {
  * Transactions locking skeleton item.
  * @returns {React.JSX}
  */
-export const TransactionLockingItemSkeleton = ({}) => {
+export const TransactionLockingItemSkeleton = ({ }) => {
   return (
     <TransactionLockingWrapp>
       <TransLockingInner>
@@ -329,16 +329,16 @@ const TransactionLockingWrapp = styled.div`
   display: flex;
   align-items: center;
   border-radius: 6px;
-  border: 1px solid #c4d2d7;
+  border: 1px solid var(--color-transaction-locking-item-border);
   padding: 16px 18px;
   margin-bottom: 25px;
-  background: #fff;
+  background: var(--color-transaction-locking-item-background);
   box-shadow: 0 4px 20px -5px rgb(0 8 36 / 5%);
 
   ${(props) =>
     props.isEnabled &&
     `
-    border-color: #fc8483; 
+    border-color: var(--color-transaction-locking-item-enabled-border);
 
     ${TransLockingIcon} {
       color: #ef6d6d;
@@ -364,15 +364,20 @@ const TransLockingItemDesc = styled.p`
 `;
 
 const TransLockingIcon = styled.div`
-  border: 1px solid #d2dde2;
+  --x-text-color: #93a1ba;
+
+  .bp4-dark & {
+    --x-text-color: rgba(255, 255, 255, 0.6);
+  }
+  border: 1px solid var(--color-transaction-locking-item-icon-border);
   height: 45px;
   width: 45px;
   text-align: center;
   line-height: 45px;
   border-radius: 8px;
-  color: #93a1ba;
+  color: var(--x-text-color);
 
-  .bp3-icon {
+  .bp4-icon {
     position: relative;
     top: 1px;
   }
@@ -381,7 +386,7 @@ const TransLockingIcon = styled.div`
 export const TransLockingActions = styled.div`
   display: flex;
 
-  .bp3-divider {
+  .bp4-divider {
     margin: 2px;
   }
 `;
@@ -395,15 +400,24 @@ export const TransLockingContent = styled.div`
 
 export const TransLockingReason = styled.div`
   font-size: 13px;
+  --x-text-color: #777;
 
+  .bp4-dark & {
+    --x-text-color: rgba(255, 255, 255, 0.6);
+  }
   strong {
-    color: #777;
+    color: var(--x-text-color);
   }
 `;
 
 const TransUnlockWrap = styled.div`
+  -x-border-color: #ddd;
+
+  .bp4-dark & {
+    --x-border-color: rgba(255, 255, 255, 0.1);
+  }
   padding-top: 10px;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--x-border-color);
   margin-top: 10px;
 
   ${TransLockingReason} {

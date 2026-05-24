@@ -1,105 +1,64 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Building2, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
-import { Logo } from "@/components/logo";
+import { usePathname } from "next/navigation";
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SiteHeader } from "@/components/site-header";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/tenants", label: "Tenants", icon: Building2 },
-  { href: "/owners", label: "Owners", icon: Users },
-  { href: "/settings", label: "Settings", icon: Settings },
-] as const;
+const ROUTE_TITLES: Record<string, string> = {
+  "/": "Overview",
+  "/tenants": "Tenants",
+  "/licenses": "Licenses",
+  "/plans": "Plans",
+  "/owners": "Team & access",
+  "/audit-log": "Audit log",
+  "/api-keys": "API keys",
+  "/settings": "Security & settings",
+};
 
-function LogoutButton() {
-  const router = useRouter();
+function getPageTitle(pathname: string): string {
+  const path = pathname.split("?")[0] ?? pathname;
+  if (ROUTE_TITLES[path]) return ROUTE_TITLES[path]!;
 
-  async function handleLogout() {
-    await fetch("/api/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+  if (/^\/tenants\/[^/]+\/organizations\/[^/]+/.test(path)) {
+    return "Organization detail";
+  }
+  if (/^\/tenants\/[^/]+/.test(path)) {
+    return "Tenant detail";
+  }
+  if (/^\/licenses\/[^/]+/.test(path)) {
+    return "License detail";
   }
 
-  return (
-    <button
-      onClick={handleLogout}
-      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-    >
-      <LogOut className="h-4 w-4" />
-      Sign out
-    </button>
-  );
+  return "Dashboard";
 }
 
-export function DashboardAppShell({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function DashboardAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const title = getPageTitle(pathname);
 
   return (
-    <SidebarProvider>
-      <Sidebar>
-
-        <SidebarHeader className="border-b border-sidebar-border p-3">
-          <div className="flex items-center gap-2">
-            <Logo className="h-6 w-auto text-sidebar-foreground" />
-          </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {navItems.map((item) => {
-                  const isActive =
-                    item.href === "/"
-                      ? pathname === "/"
-                      : pathname.startsWith(item.href);
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        render={<Link href={item.href} />}
-                        isActive={isActive}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter className="border-t border-sidebar-border p-2">
-          <LogoutButton />
-        </SidebarFooter>
-      </Sidebar>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "calc(var(--spacing) * 72)",
+          "--header-height": "calc(var(--spacing) * 12)",
+        } as React.CSSProperties
+      }
+    >
+      <AppSidebar variant="inset" />
       <SidebarInset className="flex max-h-svh flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
-          <SidebarTrigger />
-        </header>
-        <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+        <Toaster richColors closeButton />
+        <SiteHeader title={title} />
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 px-4 py-4 md:gap-6 md:py-6 lg:px-6">
+              {children}
+            </div>
+          </div>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

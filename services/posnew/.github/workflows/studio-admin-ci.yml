@@ -1,0 +1,52 @@
+name: studio-admin CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/pos-frontend2/**"
+      - "packages/ui/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/studio-admin-ci.yml"
+  pull_request:
+    paths:
+      - "apps/pos-frontend2/**"
+      - "packages/ui/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/studio-admin-ci.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: lint + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci --legacy-peer-deps
+
+      # Biome check covers formatting, lint and import sorting.
+      - name: Biome check
+        working-directory: apps/pos-frontend2
+        run: npx biome check --reporter=summary
+
+      - name: Next build
+        working-directory: apps/pos-frontend2
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build

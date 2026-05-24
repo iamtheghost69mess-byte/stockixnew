@@ -1,6 +1,9 @@
 /**
  * Copy *.env.example → real env files for local testing.
  *
+ * API + Dashboard both load from repo root via @repo/config (see packages/config, dashboard next.config).
+ * Do not use apps/api/.env or apps/dashboard/.env — they are ignored by runtime and cause drift.
+ *
  *   pnpm bootstrap:env           copy only if destination is missing
  *   pnpm bootstrap:env -- --force   overwrite from examples (local testing)
  */
@@ -14,8 +17,6 @@ const force = process.argv.includes("--force");
 const copies = [
   [".env.example", ".env"],
   ["packages/db/.env.example", "packages/db/.env"],
-  ["apps/api/.env.example", "apps/api/.env"],
-  ["apps/dashboard/.env.example", "apps/dashboard/.env.local"],
   ["services/stockix-finance/.env.example", "services/stockix-finance/.env"],
 ];
 
@@ -44,10 +45,13 @@ for (const [relSrc, relDest] of copies) {
 
 if (created + updated > 0) {
   console.log(
-    "\nLocal env synced from *.env.example. Values match infra/dev/docker-compose.yml.",
+    "\nLocal env synced from *.env.example. API and dashboard read repo root `.env` + `.env.local` only.",
   );
   if (!force && created === 0) {
     console.log("Tip: pnpm bootstrap:env -- --force  to refresh from templates.");
   }
 }
+console.log(
+  "\nOptional: copy `.env` → `.env.local` and put machine-only overrides there (gitignored).",
+);
 process.exit(0);

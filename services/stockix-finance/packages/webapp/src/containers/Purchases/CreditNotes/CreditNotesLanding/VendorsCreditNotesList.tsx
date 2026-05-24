@@ -5,11 +5,10 @@ import '@/style/pages/VendorsCreditNote/List.scss';
 
 import { DashboardPageContent } from '@/components';
 import VendorsCreditNoteActionsBar from './VendorsCreditNoteActionsBar';
-import VendorsCreditNoteViewTabs from './VendorsCreditNoteViewTabs';
 import VendorsCreditNoteDataTable from './VendorsCreditNoteDataTable';
 
-import withVendorsCreditNotes from './withVendorsCreditNotes';
-import withVendorsCreditNotesActions from './withVendorsCreditNotesActions';
+import { withVendorsCreditNotes } from './withVendorsCreditNotes';
+import { withVendorsCreditNotesActions } from './withVendorsCreditNotesActions';
 
 import { VendorsCreditNoteListProvider } from './VendorsCreditNoteListProvider';
 import { transformTableStateToQuery, compose } from '@/utils';
@@ -37,7 +36,6 @@ function VendorsCreditNotesList({
     >
       <VendorsCreditNoteActionsBar />
       <DashboardPageContent>
-        <VendorsCreditNoteViewTabs />
         <VendorsCreditNoteDataTable />
       </DashboardPageContent>
     </VendorsCreditNoteListProvider>

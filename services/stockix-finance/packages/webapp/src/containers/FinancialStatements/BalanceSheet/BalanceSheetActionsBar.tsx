@@ -1,5 +1,4 @@
 // @ts-nocheck
-import React from 'react';
 import {
   NavbarGroup,
   Button,
@@ -13,11 +12,14 @@ import classNames from 'classnames';
 import { DashboardActionsBar, FormattedMessage as T, Icon } from '@/components';
 
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
+import { BalanceSheetExportMenu } from './components';
 
-import { compose, saveInvoke } from '@/utils';
 import { useBalanceSheetContext } from './BalanceSheetProvider';
-import withBalanceSheet from './withBalanceSheet';
-import withBalanceSheetActions from './withBalanceSheetActions';
+import { withBalanceSheet } from './withBalanceSheet';
+import { withBalanceSheetActions } from './withBalanceSheetActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { compose, saveInvoke } from '@/utils';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Balance sheet - actions bar.
@@ -28,6 +30,9 @@ function BalanceSheetActionsBar({
 
   // #withBalanceSheetActions
   toggleBalanceSheetFilterDrawer: toggleFilterDrawer,
+
+  // #withDialogsActions
+  openDialog,
 
   // #ownProps
   numberFormat,
@@ -49,6 +54,11 @@ function BalanceSheetActionsBar({
   const handleNumberFormatSubmit = (values) => {
     saveInvoke(onNumberFormatSubmit, values);
   };
+
+  // Handles the pdf print button click.
+  const handlePdfPrintBtnSubmit = () => {
+    openDialog(DialogsName.BalanceSheetPdfPreview)
+  }
 
   return (
     <DashboardActionsBar>
@@ -75,7 +85,6 @@ function BalanceSheetActionsBar({
           active={balanceSheetDrawerFilter}
         />
         <NavbarDivider />
-
         <Popover
           content={
             <NumberFormatDropdown
@@ -95,30 +104,25 @@ function BalanceSheetActionsBar({
           />
         </Popover>
 
-        <Popover
-          // content={}
-          interactionKind={PopoverInteractionKind.CLICK}
-          position={Position.BOTTOM_LEFT}
-        >
-          <Button
-            className={classNames(Classes.MINIMAL, 'button--filter')}
-            text={<T id={'filter'} />}
-            icon={<Icon icon="filter-16" iconSize={16} />}
-          />
-        </Popover>
-
         <NavbarDivider />
-
         <Button
           className={Classes.MINIMAL}
+          onClick={handlePdfPrintBtnSubmit}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
         />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
+        <Popover
+          content={<BalanceSheetExportMenu />}
+          interactionKind={PopoverInteractionKind.CLICK}
+          placement="bottom-start"
+          minimal
+        >
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="file-export-16" iconSize={16} />}
+            text={<T id={'export'} />}
+          />
+        </Popover>
       </NavbarGroup>
     </DashboardActionsBar>
   );
@@ -129,4 +133,5 @@ export default compose(
     balanceSheetDrawerFilter,
   })),
   withBalanceSheetActions,
+  withDialogActions
 )(BalanceSheetActionsBar);

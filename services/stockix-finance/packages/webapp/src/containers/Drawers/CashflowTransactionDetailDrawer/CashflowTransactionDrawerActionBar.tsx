@@ -1,13 +1,20 @@
 // @ts-nocheck
 import React from 'react';
-import { Button, Classes, NavbarGroup, Intent } from '@blueprintjs/core';
+import {
+  Button,
+  Classes,
+  NavbarGroup,
+  Intent,
+  NavbarDivider,
+} from '@blueprintjs/core';
 import {
   Can,
   FormattedMessage as T,
   DrawerActionsBar,
   Icon,
+  If,
 } from '@/components';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
 import { useCashflowTransactionDrawerContext } from './CashflowTransactionDrawerProvider';
 import { AbilitySubject, CashflowAction } from '@/constants/abilityOption';
 import { compose } from '@/utils';
@@ -19,11 +26,20 @@ function CashflowTransactionDrawerActionBar({
   // #withAlertsDialog
   openAlert,
 }) {
-  const { referenceId } = useCashflowTransactionDrawerContext();
+  const { referenceId, cashflowTransaction } =
+    useCashflowTransactionDrawerContext();
 
   // Handle cashflow transaction delete action.
   const handleDeleteCashflowTransaction = () => {
     openAlert('account-transaction-delete', { referenceId });
+  };
+
+  // Handles the uncategorize button click.
+  const handleUncategorizeBtnClick = () => {
+    openAlert('cashflow-tranaction-uncategorize', {
+      uncategorizedTransactionId:
+        cashflowTransaction.uncategorized_transaction_id,
+    });
   };
 
   return (
@@ -37,10 +53,18 @@ function CashflowTransactionDrawerActionBar({
             intent={Intent.DANGER}
             onClick={handleDeleteCashflowTransaction}
           />
+          <If condition={cashflowTransaction.uncategorized_transaction_id}>
+            <NavbarDivider />
+            <Button
+              text={'Uncategorize'}
+              onClick={handleUncategorizeBtnClick}
+              className={Classes.MINIMAL}
+            />
+          </If>
         </NavbarGroup>
       </DrawerActionsBar>
     </Can>
   );
 }
 
-export default compose(withAlertsActions)(CashflowTransactionDrawerActionBar);
+export default compose(withAlertActions)(CashflowTransactionDrawerActionBar);

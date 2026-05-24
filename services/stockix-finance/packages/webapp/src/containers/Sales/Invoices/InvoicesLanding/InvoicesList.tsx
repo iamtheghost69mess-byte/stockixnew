@@ -6,13 +6,12 @@ import '@/style/pages/SaleInvoice/List.scss';
 import { DashboardPageContent } from '@/components';
 import { InvoicesListProvider } from './InvoicesListProvider';
 
-import InvoiceViewTabs from './InvoiceViewTabs';
 import InvoicesDataTable from './InvoicesDataTable';
 import InvoicesActionsBar from './InvoicesActionsBar';
 
-import withInvoices from './withInvoices';
-import withInvoiceActions from './withInvoiceActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
+import { withInvoices } from './withInvoices';
+import { withInvoiceActions } from './withInvoiceActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
 
 import { transformTableStateToQuery, compose } from '@/utils';
 
@@ -43,7 +42,6 @@ function InvoicesList({
       <InvoicesActionsBar />
 
       <DashboardPageContent>
-        <InvoiceViewTabs />
         <InvoicesDataTable />
       </DashboardPageContent>
     </InvoicesListProvider>
@@ -56,5 +54,5 @@ export default compose(
     invoicesTableStateChanged,
   })),
   withInvoiceActions,
-  withAlertsActions,
+  withAlertActions,
 )(InvoicesList);

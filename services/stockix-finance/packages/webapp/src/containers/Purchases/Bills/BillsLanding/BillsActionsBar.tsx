@@ -22,32 +22,45 @@ import {
   DashboardRowsHeightButton,
   DashboardActionsBar,
 } from '@/components';
+import { LicenseGatedButton } from '@/components/License/LicenseGatedButton';
 import { BillAction, AbilitySubject } from '@/constants/abilityOption';
 
-import withBills from './withBills';
-import withBillsActions from './withBillsActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
+import { withBills } from './withBills';
+import { withBillsActions } from './withBillsActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
 
 import { useBillsListContext } from './BillsListProvider';
-import { useRefreshBills } from '@/hooks/query/bills';
+import {
+  useRefreshBills,
+} from '@/hooks/query/bills';
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
+import { useBulkDeleteBillsDialog } from './hooks/use-bulk-delete-bills-dialog';
+
 import { compose } from '@/utils';
+import { DialogsName } from '@/constants/dialogs';
+import { isEmpty } from 'lodash';
 
 /**
  * Bills actions bar.
  */
 function BillActionsBar({
-  // #withBillActions
+  // #withBillsActions
   setBillsTableState,
 
   // #withBills
   billsConditionsRoles,
+  billsSelectedRows,
 
   // #withSettings
   billsTableSize,
 
   // #withSettingsActions
   addSetting,
+
+  // #withDialogActions
+  openDialog,
 }) {
   const history = useHistory();
 
@@ -57,11 +70,13 @@ function BillActionsBar({
   // Bills list context.
   const { billsViews, fields } = useBillsListContext();
 
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
+
   // Handle click a new bill.
   const handleClickNewBill = () => {
     history.push('/bills/new');
   };
-
   // Handle tab change.
   const handleTabChange = (view) => {
     setBillsTableState({
@@ -72,11 +87,48 @@ function BillActionsBar({
   const handleRefreshBtnClick = () => {
     refresh();
   };
-
   // Handle table row size change.
   const handleTableRowSizeChange = (size) => {
     addSetting('bills', 'tableSize', size);
   };
+  // Handle the import button click.
+  const handleImportBtnClick = () => {
+    history.push('/bills/import');
+  };
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'bill' });
+  };
+  // Handle the print button click.
+  const handlePrintBtnClick = () => {
+    downloadExportPdf({ resource: 'Bill' });
+  };
+  const {
+    openBulkDeleteDialog,
+    isValidatingBulkDeleteBills,
+  } = useBulkDeleteBillsDialog();
+
+  // Handle bulk delete.
+  const handleBulkDelete = () => {
+    openBulkDeleteDialog(billsSelectedRows);
+  };
+
+  if (!isEmpty(billsSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteBills}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
 
   return (
     <DashboardActionsBar>
@@ -90,7 +142,7 @@ function BillActionsBar({
         />
         <NavbarDivider />
         <Can I={BillAction.Create} a={AbilitySubject.Bill}>
-          <Button
+          <LicenseGatedButton
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus'} />}
             text={<T id={'new_bill'} />}
@@ -118,25 +170,27 @@ function BillActionsBar({
             icon={<Icon icon={'trash-16'} iconSize={16} />}
             text={<T id={'delete'} />}
             intent={Intent.DANGER}
-            // onClick={handleBulkDelete}
           />
         </If>
+        <NavbarDivider />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon={'print-16'} iconSize={'16'} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon={'file-import-16'} />}
           text={<T id={'import'} />}
+          onClick={handleImportBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon={'file-export-16'} iconSize={'16'} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
-
         <NavbarDivider />
         <DashboardRowsHeightButton
           initialValue={billsTableSize}
@@ -158,10 +212,12 @@ function BillActionsBar({
 export default compose(
   withBillsActions,
   withSettingsActions,
-  withBills(({ billsTableState }) => ({
+  withBills(({ billsTableState, billsSelectedRows }) => ({
     billsConditionsRoles: billsTableState.filterRoles,
+    billsSelectedRows,
   })),
   withSettings(({ billsettings }) => ({
     billsTableSize: billsettings?.tableSize,
   })),
+  withDialogActions,
 )(BillActionsBar);

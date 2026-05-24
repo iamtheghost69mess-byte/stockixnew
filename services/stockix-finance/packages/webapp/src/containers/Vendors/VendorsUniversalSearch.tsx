@@ -3,7 +3,7 @@ import intl from 'react-intl-universal';
 
 import { RESOURCES_TYPES } from '@/constants/resourcesTypes';
 import { AbilitySubject, VendorAction } from '@/constants/abilityOption';
-import withDrawerActions from '../Drawer/withDrawerActions';
+import { withDrawerActions } from '../Drawer/withDrawerActions';
 import { DRAWERS } from '@/constants/drawers';
 
 /**
@@ -34,7 +34,7 @@ const VendorUniversalSearchSelectAction = withDrawerActions(
 const vendorToSearch = (contact) => ({
   id: contact.id,
   text: contact.display_name,
-  label: contact.balance > 0 ? contact.formatted_balance + '' : '',
+  label: contact.formatted_balance,
   reference: contact,
 });
 

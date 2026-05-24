@@ -1,71 +1,134 @@
 // @ts-nocheck
-import General from '@/containers/Preferences/General/General';
-import Users from '../containers/Preferences/Users/Users';
-import Roles from '../containers/Preferences/Users/Roles/RolesForm/RolesFormPage';
-import Accountant from '@/containers/Preferences/Accountant/Accountant';
-import Currencies from '@/containers/Preferences/Currencies/Currencies';
-import Item from '@/containers/Preferences/Item';
-import SMSIntegration from '../containers/Preferences/SMSIntegration';
-import DefaultRoute from '../containers/Preferences/DefaultRoute';
-import Warehouses from '../containers/Preferences/Warehouses';
-import Branches from '../containers/Preferences/Branches';
+import { lazy } from 'react';
 
 const BASE_URL = '/preferences';
 
-export default [
+export const getPreferenceRoutes = () => [
   {
     path: `${BASE_URL}/general`,
-    component: General,
+    component: lazy(() => import('@/containers/Preferences/General/General')),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/branding`,
+    component: lazy(
+      () =>
+        import('../containers/Preferences/Branding/PreferencesBrandingPage'),
+    ),
     exact: true,
   },
   {
     path: `${BASE_URL}/users`,
-    component: Users,
+    component: lazy(() => import('../containers/Preferences/Users/Users')),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/invoices`,
+    component: lazy(
+      () => import('../containers/Preferences/Invoices/PreferencesInvoices'),
+    ),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/payment-methods`,
+    component: lazy(
+      () =>
+        import(
+          '../containers/Preferences/PaymentMethods/PreferencesPaymentMethodsPage'
+        ),
+    ),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/payment-methods/stripe/callback`,
+    component: lazy(
+      () =>
+        import(
+          '../containers/Preferences/PaymentMethods/PreferencesStripeCallback'
+        ),
+    ),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/credit-notes`,
+    component: lazy(() =>
+      import(
+        '../containers/Preferences/CreditNotes/PreferencesCreditNotes'
+      ).then((module) => ({ default: module.PreferencesCreditNotes })),
+    ),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/estimates`,
+    component: lazy(() =>
+      import('@/containers/Preferences/Estimates/PreferencesEstimates').then(
+        (module) => ({ default: module.PreferencesEstimates }),
+      ),
+    ),
+    exact: true,
+  },
+  {
+    path: `${BASE_URL}/receipts`,
+    component: lazy(() =>
+      import('@/containers/Preferences/Receipts/PreferencesReceipts').then(
+        (module) => ({ default: module.PreferencesReceipts }),
+      ),
+    ),
     exact: true,
   },
   {
     path: `${BASE_URL}/roles`,
-    component: Roles,
+    component: lazy(
+      () =>
+        import('../containers/Preferences/Users/Roles/RolesForm/RolesFormPage'),
+    ),
     exact: true,
   },
   {
     path: `${BASE_URL}/roles/:id`,
-    component: Roles,
+    component: lazy(
+      () =>
+        import('../containers/Preferences/Users/Roles/RolesForm/RolesFormPage'),
+    ),
     exact: true,
   },
   {
     path: `${BASE_URL}/currencies`,
-    component: Currencies,
+    component: lazy(
+      () => import('@/containers/Preferences/Currencies/Currencies'),
+    ),
     exact: true,
   },
   {
     path: `${BASE_URL}/warehouses`,
-    component: Warehouses,
+    component: lazy(() => import('../containers/Preferences/Warehouses')),
     exact: true,
   },
   {
     path: `${BASE_URL}/branches`,
-    component: Branches,
+    component: lazy(() => import('../containers/Preferences/Branches')),
     exact: true,
   },
   {
     path: `${BASE_URL}/accountant`,
-    component: Accountant,
+    component: lazy(
+      () => import('@/containers/Preferences/Accountant/Accountant'),
+    ),
     exact: true,
   },
   {
     path: `${BASE_URL}/items`,
-    component: Item,
+    component: lazy(() => import('@/containers/Preferences/Item')),
     exact: true,
   },
   {
-    path: `${BASE_URL}/sms-message`,
-    component: SMSIntegration,
+    path: `${BASE_URL}/api-keys`,
+    component: lazy(() => import('@/containers/Preferences/ApiKeys/ApiKeys')),
     exact: true,
   },
   {
     path: `${BASE_URL}/`,
-    component: DefaultRoute,
+    component: lazy(() => import('../containers/Preferences/DefaultRoute')),
     exact: true,
   },
 ];

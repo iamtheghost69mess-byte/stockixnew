@@ -2,28 +2,30 @@
 import React, { useEffect, useRef } from 'react';
 import {
   FormGroup,
-  InputGroup,
   RadioGroup,
   Classes,
   Radio,
   Position,
+  MenuItem,
 } from '@blueprintjs/core';
 import { ErrorMessage, FastField } from 'formik';
 import { CLASSES } from '@/constants/classes';
 import {
-  CategoriesSelectList,
   Hint,
   Col,
   Row,
   FieldRequiredHint,
   FormattedMessage as T,
   FormattedHTMLMessage,
+  FFormGroup,
+  FSelect,
+  FInputGroup,
 } from '@/components';
 import classNames from 'classnames';
 
 import { useItemFormContext } from './ItemFormProvider';
 import { handleStringChange, inputIntent } from '@/utils';
-import { categoriesFieldShouldUpdate } from './utils';
+// import { categoriesFieldShouldUpdate } from './utils';
 
 /**
  * Item form primary section.
@@ -92,69 +94,46 @@ export default function ItemFormPrimarySection() {
       <Row>
         <Col xs={7}>
           {/*----------- Item name ----------*/}
-          <FastField name={'name'}>
-            {({ field, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'item_name'} />}
-                labelInfo={<FieldRequiredHint />}
-                className={'form-group--item-name'}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name={'name'} />}
-                inline={true}
-              >
-                <InputGroup
-                  medium={true}
-                  {...field}
-                  intent={inputIntent({ error, touched })}
-                  inputRef={(ref) => (nameFieldRef.current = ref)}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'name'}
+            label={<T id={'item_name'} />}
+            labelInfo={<FieldRequiredHint />}
+            inline={true}
+            fastField
+          >
+            <FInputGroup
+              name={'name'}
+              medium={true}
+              inputRef={(ref) => (nameFieldRef.current = ref)}
+              fastField
+            />
+          </FFormGroup>
 
           {/*----------- SKU ----------*/}
-          <FastField name={'code'}>
-            {({ field, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'item_code'} />}
-                className={'form-group--item_code'}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name={'code'} />}
-                inline={true}
-              >
-                <InputGroup
-                  medium={true}
-                  intent={inputIntent({ error, touched })}
-                  {...field}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+          <FFormGroup
+            name={'code'}
+            label={<T id={'item_code'} />}
+            inline={true}
+            fastField
+          >
+            <FInputGroup name={'code'} medium={true} fastField />
+          </FFormGroup>
 
           {/*----------- Item category ----------*/}
-          <FastField
+          <FFormGroup
             name={'category_id'}
-            categories={itemsCategories}
-            shouldUpdate={categoriesFieldShouldUpdate}
+            label={<T id={'category'} />}
+            inline={true}
           >
-            {({ form, field: { value }, meta: { error, touched } }) => (
-              <FormGroup
-                label={<T id={'category'} />}
-                inline={true}
-                intent={inputIntent({ error, touched })}
-                helperText={<ErrorMessage name="category_id" />}
-                className={classNames('form-group--category', Classes.FILL)}
-              >
-                <CategoriesSelectList
-                  categories={itemsCategories}
-                  selecetedCategoryId={value}
-                  onCategorySelected={(category) => {
-                    form.setFieldValue('category_id', category.id);
-                  }}
-                />
-              </FormGroup>
-            )}
-          </FastField>
+            <FSelect
+              name={'category_id'}
+              items={itemsCategories}
+              valueAccessor={'id'}
+              textAccessor={'name'}
+              placeholder={<T id={'select_category'} />}
+              popoverProps={{ minimal: true, captureDismiss: true }}
+            />
+          </FFormGroup>
         </Col>
 
         <Col xs={3}>

@@ -15,6 +15,8 @@ export function CreditNoteFormFooterLeft() {
         <FEditableText
           name={'note'}
           placeholder={intl.get('credit_note.label_customer_note.placeholder')}
+          multiline
+          fastField
         />
       </CreditNoteMsgFormGroup>
       {/* --------- Terms and conditions --------- */}
@@ -27,6 +29,8 @@ export function CreditNoteFormFooterLeft() {
           placeholder={intl.get(
             'credit_note.label_terms_and_conditions.placeholder',
           )}
+          multiline
+          fastField
         />
       </TermsConditsFormGroup>
     </React.Fragment>
@@ -34,26 +38,26 @@ export function CreditNoteFormFooterLeft() {
 }
 
 const CreditNoteMsgFormGroup = styled(FFormGroup)`
-  &.bp3-form-group {
+  &.bp4-form-group {
     margin-bottom: 40px;
 
-    .bp3-label {
+    .bp4-label {
       font-size: 12px;
       margin-bottom: 12px;
     }
-    .bp3-form-content {
+    .bp4-form-content {
       margin-left: 10px;
     }
   }
 `;
 
 const TermsConditsFormGroup = styled(FFormGroup)`
-  &.bp3-form-group {
-    .bp3-label {
+  &.bp4-form-group {
+    .bp4-label {
       font-size: 12px;
       margin-bottom: 12px;
     }
-    .bp3-form-content {
+    .bp4-form-content {
       margin-left: 10px;
     }
   }

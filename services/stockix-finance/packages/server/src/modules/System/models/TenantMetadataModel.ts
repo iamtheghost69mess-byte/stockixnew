@@ -1,0 +1,110 @@
+import { BaseModel } from '@/models/Model';
+import {
+  defaultOrganizationAddressFormat,
+  organizationAddressTextFormat,
+} from '@/utils/address-text-format';
+import { findByIsoCountryCode } from '@stockix/utils';
+
+export class TenantMetadata extends BaseModel {
+  public baseCurrency!: string;
+  public name!: string;
+  public tenantId!: number;
+  public industry!: string;
+  public location!: string;
+  public language!: string;
+  public timezone!: string;
+  public dateFormat!: string;
+  public fiscalYear!: string;
+  public primaryColor!: string;
+  public logoKey!: string;
+  public logoUri!: string;
+  public address!: Record<string, any>;
+  public displayCurrencies!: string[];
+  public secondaryCurrency?: string | null;
+  public setupCompletedAt?: string | null;
+  public organizationNumber?: string | null;
+  public fromEmailAddress?: string | null;
+  public fromEmailName?: string | null;
+
+  /**
+   * Json schema.
+   */
+  static get jsonSchema() {
+    return {
+      type: 'object',
+      required: ['tenantId', 'name', 'baseCurrency'],
+      properties: {
+        tenantId: { type: 'integer' },
+        name: { type: 'string', maxLength: 255 },
+        industry: { type: 'string', maxLength: 255 },
+        location: { type: 'string', maxLength: 255 },
+        baseCurrency: { type: 'string', maxLength: 3 },
+        language: { type: 'string', maxLength: 255 },
+        timezone: { type: 'string', maxLength: 255 },
+        dateFormat: { type: 'string', maxLength: 255 },
+        fiscalYear: { type: 'string', maxLength: 255 },
+        primaryColor: { type: 'string', maxLength: 7 }, // Assuming hex color code
+        logoKey: { type: 'string', maxLength: 255 },
+        address: { type: 'object' },
+        displayCurrencies: { type: ['array', 'null'], items: { type: 'string' } },
+        secondaryCurrency: { type: ['string', 'null'], maxLength: 3 },
+      },
+    };
+  }
+
+  /**
+   * Parses display_currencies JSON from the database.
+   */
+  $parseDatabaseJson(json: Record<string, any>) {
+    const parsed = super.$parseDatabaseJson(json);
+    if (typeof parsed.displayCurrencies === 'string') {
+      try {
+        parsed.displayCurrencies = JSON.parse(parsed.displayCurrencies);
+      } catch {
+        parsed.displayCurrencies = [];
+      }
+    }
+    if (parsed.displayCurrencies == null) {
+      parsed.displayCurrencies = [];
+    }
+    return parsed;
+  }
+
+  /**
+   * Table name.
+   */
+  static tableName = 'tenants_metadata';
+
+  /**
+   * Timestamps columns.
+   */
+  get timestamps() {
+    return [];
+  }
+
+  /**
+   * Virtual attributes.
+   */
+  static get virtualAttributes() {
+    return ['logoUri'];
+  }
+
+  /**
+   * Retrieves the organization address formatted text.
+   * @returns {string}
+   */
+  public get addressTextFormatted() {
+    const addressCountry = findByIsoCountryCode(this.location);
+
+    return organizationAddressTextFormat(defaultOrganizationAddressFormat, {
+      organizationName: this.name,
+      address1: this.address?.address1,
+      address2: this.address?.address2,
+      state: this.address?.stateProvince,
+      city: this.address?.city,
+      postalCode: this.address?.postalCode,
+      phone: this.address?.phone,
+      country: addressCountry?.name ?? '',
+    });
+  }
+}

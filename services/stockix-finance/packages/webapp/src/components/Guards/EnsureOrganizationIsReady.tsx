@@ -4,22 +4,29 @@ import { connect } from 'react-redux';
 import { Redirect } from 'react-router-dom';
 import { compose } from '@/utils';
 
-import withAuthentication from '@/containers/Authentication/withAuthentication';
-import withOrganization from '@/containers/Organization/withOrganization';
+import { withAuthentication } from '@/containers/Authentication/withAuthentication';
+import { withOrganization } from '@/containers/Organization/withOrganization';
 
 function EnsureOrganizationIsReady({
   // #ownProps
   children,
   redirectTo = '/setup',
+  setupIncompleteRedirectTo = '/setup/complete',
+  requireSetupCompleted = true,
 
   // #withOrganizationByOrgId
   isOrganizationReady,
+  isOrganizationSetupCompleted,
 }) {
-  return isOrganizationReady ? (
-    children
-  ) : (
-    <Redirect to={{ pathname: redirectTo }} />
-  );
+  if (!isOrganizationReady) {
+    return <Redirect to={{ pathname: redirectTo }} />;
+  }
+
+  if (requireSetupCompleted && !isOrganizationSetupCompleted) {
+    return <Redirect to={{ pathname: setupIncompleteRedirectTo }} />;
+  }
+
+  return children;
 }
 
 export default compose(
@@ -27,5 +34,8 @@ export default compose(
   connect((state, props) => ({
     organizationId: props.currentOrganizationId,
   })),
-  withOrganization(({ isOrganizationReady }) => ({ isOrganizationReady })),
+  withOrganization(({ isOrganizationReady, isOrganizationSetupCompleted }) => ({
+    isOrganizationReady,
+    isOrganizationSetupCompleted,
+  })),
 )(EnsureOrganizationIsReady);

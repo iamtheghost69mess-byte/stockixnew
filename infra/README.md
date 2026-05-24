@@ -19,6 +19,24 @@ Run on the server from `infra/prod`:
 docker compose --env-file .env up -d --build
 ```
 
+Required auth env vars in `infra/prod/.env`:
+
+- `PLATFORM_API_SECRET`: shared secret used by dashboard -> API bearer auth.
+- `DASHBOARD_URL`: base URL used for invite links (for example `https://your-domain`).
+
+## First-time setup
+
+After running migrations, bootstrap the first activated super admin account once:
+
+```bash
+pnpm --filter api tsx src/scripts/bootstrap-admin.ts
+```
+
+Set these env vars before running the script:
+
+- `BOOTSTRAP_ADMIN_EMAIL`
+- `BOOTSTRAP_ADMIN_PASSWORD`
+
 Other layouts:
 
 - Local control-plane DB only: `infra/dev/docker-compose.yml`

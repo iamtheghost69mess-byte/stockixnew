@@ -1,12 +1,14 @@
 // @ts-nocheck
 import React from 'react';
+import intl from 'react-intl-universal';
 import styled from 'styled-components';
 import classNames from 'classnames';
-import { Form } from 'formik';
-import { Button, FormGroup, Intent } from '@blueprintjs/core';
-import { TimezonePicker } from '@blueprintjs/timezone';
-import { ErrorMessage, FastField } from 'formik';
+import { Form, useFormikContext } from 'formik';
+import { Button, FormGroup, Intent, MenuItem } from '@blueprintjs/core';
+import { TimezonePicker, getTimezoneMetadata } from '@blueprintjs/timezone';
+import { ErrorMessage } from 'formik';
 import { useHistory } from 'react-router-dom';
+import { getAllCountries } from '@stockix/utils';
 
 import {
   FieldRequiredHint,
@@ -14,6 +16,8 @@ import {
   FFormGroup,
   FInputGroup,
   FSelect,
+  Stack,
+  Group,
 } from '@/components';
 import { inputIntent } from '@/utils';
 import { CLASSES } from '@/constants/classes';
@@ -21,9 +25,10 @@ import { getAllCurrenciesOptions } from '@/constants/currencies';
 import { getFiscalYear } from '@/constants/fiscalYearOptions';
 import { getLanguages } from '@/constants/languagesOptions';
 import { useGeneralFormContext } from './GeneralFormProvider';
-import { getAllCountries } from '@/utils/countries';
 
 import { shouldBaseCurrencyUpdate } from './utils';
+import { SelectButton } from '@/components/Forms/Select';
+import { FMultiSelect } from '@/components/Forms/BlueprintFormik';
 
 const Countries = getAllCountries();
 /**
@@ -31,14 +36,25 @@ const Countries = getAllCountries();
  */
 export default function PreferencesGeneralForm({ isSubmitting }) {
   const history = useHistory();
+  const { values, setFieldValue } = useFormikContext();
 
   const FiscalYear = getFiscalYear();
   const Languages = getLanguages();
   const Currencies = getAllCurrenciesOptions();
 
-  const { dateFormats, baseCurrencyMutateAbility } = useGeneralFormContext();
+  const { dateFormats, baseCurrencyMutateAbility, currencies, organization } =
+    useGeneralFormContext();
+  const nonBaseCurrencies = (Array.isArray(currencies) ? currencies : []).filter(
+    (c) => !c.is_base_currency,
+  );
 
   const baseCurrencyDisabled = baseCurrencyMutateAbility.length > 0;
+
+  React.useEffect(() => {
+    if (!Array.isArray(values.display_currencies)) {
+      setFieldValue('display_currencies', []);
+    }
+  }, [values.display_currencies, setFieldValue]);
 
   // Handle close click.
   const handleCloseClick = () => {
@@ -47,6 +63,29 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
 
   return (
     <Form>
+      {/* ---------- Outbound email (Resend verified domain) ---------- */}
+      <FFormGroup
+        name={'from_email_name'}
+        label={'Sender display name'}
+        inline={true}
+        helperText={'Shown on invoices and estimates sent to customers.'}
+        fastField={true}
+      >
+        <FInputGroup medium={'true'} name={'from_email_name'} fastField={true} />
+      </FFormGroup>
+
+      <FFormGroup
+        name={'from_email_address'}
+        label={'Sender email address'}
+        inline={true}
+        helperText={
+          'Must use a domain verified in Resend. Leave empty to use the platform default.'
+        }
+        fastField={true}
+      >
+        <FInputGroup medium={'true'} name={'from_email_address'} fastField={true} />
+      </FFormGroup>
+
       {/* ---------- Organization name ----------  */}
       <FFormGroup
         name={'name'}
@@ -57,6 +96,29 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
         fastField={true}
       >
         <FInputGroup medium={'true'} name={'name'} fastField={true} />
+      </FFormGroup>
+
+      {organization?.organizationNumber ? (
+        <FFormGroup
+          name={'organization_number_display'}
+          label={'Organization Number'}
+          inline={true}
+        >
+          <OrgNumberBadge>
+            <code>{organization.organizationNumber}</code>
+          </OrgNumberBadge>
+        </FFormGroup>
+      ) : null}
+
+      {/* ---------- Organization Tax Number ----------  */}
+      <FFormGroup
+        name={'tax_number'}
+        label={<T id={'organization_tax_number'} />}
+        inline={true}
+        helperText={<T id={'shown_on_sales_forms_and_purchase_orders'} />}
+        fastField={true}
+      >
+        <FInputGroup medium={'true'} name={'tax_number'} fastField={true} />
       </FFormGroup>
 
       {/* ---------- Industry ----------  */}
@@ -88,6 +150,47 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
         />
       </FFormGroup>
 
+      {/* ---------- Address ---------- */}
+      <FFormGroup
+        name={'address'}
+        label={'Organization Address'}
+        inline
+        fastField
+      >
+        <Stack>
+          <FInputGroup
+            name={'address.address1'}
+            placeholder={'Address 1'}
+            fastField
+          />
+          <FInputGroup
+            name={'address.address2'}
+            placeholder={'Address 2'}
+            fastField
+          />
+          <Group spacing={15}>
+            <FInputGroup name={'address.city'} placeholder={'City'} fastField />
+            <FInputGroup
+              name={'address.postal_code'}
+              placeholder={'ZIP Code'}
+              fastField
+            />
+          </Group>
+          <Group spacing={15}>
+            <FInputGroup
+              name={'address.state_province'}
+              placeholder={'State or Province'}
+              fastField
+            />
+            <FInputGroup
+              name={'address.phone'}
+              placeholder={'Phone number'}
+              fastField
+            />
+          </Group>
+        </Stack>
+      </FFormGroup>
+
       {/* ----------  Base currency ----------  */}
       <FFormGroup
         name={'base_currency'}
@@ -116,6 +219,41 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
           shouldUpdate={shouldBaseCurrencyUpdate}
           baseCurrencyDisabled={baseCurrencyDisabled}
         />
+      </FFormGroup>
+
+      {/* ----------  Secondary currency ----------  */}
+      <FFormGroup
+        name={'secondary_currency'}
+        label={<T id={'secondary_currency'} />}
+        inline={true}
+        helperText={<T id={'secondary_currency_helper'} />}
+      >
+        <SecondaryCurrencyRow>
+          <SecondaryCurrencySelectWrap>
+            <FSelect
+              name={'secondary_currency'}
+              items={nonBaseCurrencies}
+              valueAccessor={(item) => item?.currency_code}
+              labelAccessor={(item) => item?.currency_code}
+              textAccessor={(item) =>
+                item ? `${item.currency_name} (${item.currency_code})` : ''
+              }
+              placeholder={<T id={'select_secondary_currency'} />}
+              popoverProps={{ minimal: true }}
+              filterable={true}
+              disabled={!nonBaseCurrencies.length}
+            />
+          </SecondaryCurrencySelectWrap>
+          {values.secondary_currency ? (
+            <Button
+              minimal
+              small
+              icon="cross"
+              onClick={() => setFieldValue('secondary_currency', '')}
+              title={intl.get('clear')}
+            />
+          ) : null}
+        </SecondaryCurrencyRow>
       </FFormGroup>
 
       {/* --------- Fiscal Year ----------- */}
@@ -157,32 +295,8 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
         />
       </FormGroup>
 
-      {/* ----------  Time zone ----------  */}
-      <FastField name={'timezone'}>
-        {({ form, field: { value }, meta: { error, touched } }) => (
-          <FormGroup
-            label={<T id={'time_zone'} />}
-            labelInfo={<FieldRequiredHint />}
-            inline={true}
-            className={classNames(
-              'form-group--time-zone',
-              CLASSES.FORM_GROUP_LIST_SELECT,
-              CLASSES.FILL,
-            )}
-            intent={inputIntent({ error, touched })}
-            helperText={<ErrorMessage name="timezone" />}
-          >
-            <TimezonePicker
-              value={value}
-              onChange={(timezone) => {
-                form.setFieldValue('timezone', timezone);
-              }}
-              valueDisplayFormat="composite"
-              placeholder={<T id={'select_time_zone'} />}
-            />
-          </FormGroup>
-        )}
-      </FastField>
+      {/* --------- Timezone ----------- */}
+      <TimezoneField />
 
       {/* --------- Data format ----------- */}
       <FFormGroup
@@ -204,6 +318,45 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
         />
       </FFormGroup>
 
+      {/* ---------- Display Currencies ---------- */}
+      {nonBaseCurrencies.length > 0 &&
+        Array.isArray(values.display_currencies) && (
+          <FFormGroup
+            name={'display_currencies'}
+            label={<T id={'display_currencies'} />}
+            inline={true}
+            helperText={<T id={'display_currencies_helper'} />}
+            fastField={false}
+          >
+            <FMultiSelect
+              name={'display_currencies'}
+              items={nonBaseCurrencies}
+              valueAccessor={(item) => item.currency_code}
+              labelAccessor={(item) => item.currency_code}
+              tagRenderer={(item) => item.currency_code}
+              itemRenderer={(item, { handleClick, modifiers }, { isSelected }) => (
+                <MenuItem
+                  key={item.currency_code}
+                  active={modifiers.active}
+                  icon={isSelected ? 'tick' : 'blank'}
+                  text={item.currency_name}
+                  label={item.currency_code}
+                  onClick={handleClick}
+                />
+              )}
+              itemPredicate={(query, item) => {
+                const q = query.toLowerCase();
+                return (
+                  item.currency_code.toLowerCase().includes(q) ||
+                  item.currency_name.toLowerCase().includes(q)
+                );
+              }}
+              popoverProps={{ minimal: true }}
+              placeholder={<T id={'select_display_currencies'} />}
+            />
+          </FFormGroup>
+        )}
+
       <CardFooterActions>
         <Button loading={isSubmitting} intent={Intent.PRIMARY} type="submit">
           <T id={'save'} />
@@ -216,16 +369,86 @@ export default function PreferencesGeneralForm({ isSubmitting }) {
   );
 }
 
+const OrgNumberBadge = styled.div`
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--x-color-surface-muted, #f0f3f5);
+  font-size: 13px;
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+`;
+
+const SecondaryCurrencyRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const SecondaryCurrencySelectWrap = styled.div`
+  flex: 1;
+`;
+
 const CardFooterActions = styled.div`
+  --x-color-border: #e0e7ea;
+  --x-color-border: rgba(255, 255, 255, 0.15);
+
   padding-top: 16px;
-  border-top: 1px solid #e0e7ea;
+  border-top: 1px solid var(--x-color-border);
   margin-top: 30px;
 
-  .bp3-button {
+  .bp4-button {
     min-width: 70px;
 
-    + .bp3-button {
+    + .bp4-button {
       margin-left: 10px;
     }
   }
 `;
+
+function TimezoneField() {
+  const { values, setFieldValue, touched, errors } = useFormikContext();
+  const value = values?.timezone;
+  const error = errors?.timezone;
+  const isTouched = touched?.timezone;
+
+  const compositeLabel = React.useMemo(() => {
+    const placeholder = <T id={'select_time_zone'} />;
+    if (!value) return placeholder;
+    try {
+      const { abbreviation, offsetAsString } = getTimezoneMetadata(
+        value,
+        new Date(),
+      );
+      return `${value}${abbreviation ? ` (${abbreviation})` : ''} ${offsetAsString}`;
+    } catch (e) {
+      return value; // fallback
+    }
+  }, [value]);
+
+  return (
+    <FFormGroup
+      name={'timezone'}
+      label={<T id={'time_zone'} />}
+      labelInfo={<FieldRequiredHint />}
+      inline={true}
+      intent={inputIntent({ error, touched: isTouched })}
+      helperText={<ErrorMessage name="timezone" />}
+    >
+      <TimezonePicker
+        value={value}
+        onChange={(timezone) => setFieldValue('timezone', timezone)}
+        popoverProps={{ minimal: true, fill: true }}
+        fill
+      >
+        <SelectButton
+          text={compositeLabel}
+          className={classNames({ 'is-selected': !!value })}
+          fill
+        />
+      </TimezonePicker>
+    </FFormGroup>
+  );
+}

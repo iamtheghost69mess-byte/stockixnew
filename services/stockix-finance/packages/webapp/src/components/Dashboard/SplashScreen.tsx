@@ -1,11 +1,10 @@
 // @ts-nocheck
-import React from 'react';
 import * as R from 'ramda';
-import StockixLoading from './StockixLoading';
-import withDashboard from '@/containers/Dashboard/withDashboard';
+import BigcapitalLoading from './BigcapitalLoading';
+import { withDashboard } from '@/containers/Dashboard/withDashboard';
 
 function SplashScreenComponent({ splashScreenLoading }) {
-  return splashScreenLoading ? <StockixLoading /> : null;
+  return splashScreenLoading ? <BigcapitalLoading /> : null;
 }
 
 export const SplashScreen = R.compose(

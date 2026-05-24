@@ -13,17 +13,18 @@ import { TABLES } from '@/constants/tables';
 
 import ReceiptsEmptyStatus from './ReceiptsEmptyStatus';
 
-import withReceipts from './withReceipts';
-import withReceiptsActions from './withReceiptsActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withReceipts } from './withReceipts';
+import { withReceiptsActions } from './withReceiptsActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { useReceiptsListContext } from './ReceiptsListProvider';
 import { useReceiptsTableColumns, ActionsMenu } from './components';
 import { useMemorizedColumnsWidths } from '@/hooks';
 import { DRAWERS } from '@/constants/drawers';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Sale receipts datatable.
@@ -31,11 +32,12 @@ import { DRAWERS } from '@/constants/drawers';
 function ReceiptsDataTable({
   // #withReceiptsActions
   setReceiptsTableState,
+  setReceiptsSelectedRows,
 
   // #withReceipts
   receiptTableState,
 
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -86,6 +88,11 @@ function ReceiptsDataTable({
     openDialog('receipt-pdf-preview', { receiptId: id });
   };
 
+  // Handle send mail receipt.
+  const handleSendMailReceipt = ({ id }) => {
+    openDrawer(DRAWERS.RECEIPT_SEND_MAIL, { receiptId: id });
+  };
+
   // Local storage memorizing columns widths.
   const [initialColumnsWidths, , handleColumnResizing] =
     useMemorizedColumnsWidths(TABLES.RECEIPTS);
@@ -101,14 +108,19 @@ function ReceiptsDataTable({
     },
     [setReceiptsTableState],
   );
-
-  if (isEmptyStatus) {
-    return <ReceiptsEmptyStatus />;
-  }
   // Handle cell click.
   const handleCellClick = (cell, event) => {
     openDrawer(DRAWERS.RECEIPT_DETAILS, { receiptId: cell.row.original.id });
   };
+  // Handle selected rows change.
+  const handleSelectedRowsChange = (selectedRows) => {
+    const selectedIds = selectedRows?.map((row) => row.original.id) || [];
+    setReceiptsSelectedRows(selectedIds);
+  };
+
+  if (isEmptyStatus) {
+    return <ReceiptsEmptyStatus />;
+  }
 
   return (
     <DashboardContentTable>
@@ -124,6 +136,7 @@ function ReceiptsDataTable({
         noInitialFetch={true}
         sticky={true}
         pagination={true}
+        initialPageSize={receiptTableState.pageSize}
         pagesCount={pagination.pagesCount}
         manualPagination={true}
         autoResetSortBy={false}
@@ -135,12 +148,14 @@ function ReceiptsDataTable({
         initialColumnsWidths={initialColumnsWidths}
         onColumnResizing={handleColumnResizing}
         size={receiptsTableSize}
+        onSelectedRowsChange={handleSelectedRowsChange}
         payload={{
           onEdit: handleEditReceipt,
           onDelete: handleDeleteReceipt,
           onClose: handleCloseReceipt,
           onViewDetails: handleViewDetailReceipt,
           onPrint: handlePrintInvoice,
+          onSendMail: handleSendMailReceipt,
         }}
       />
     </DashboardContentTable>
@@ -148,13 +163,11 @@ function ReceiptsDataTable({
 }
 
 export default compose(
-  withAlertsActions,
+  withAlertActions,
   withReceiptsActions,
   withDrawerActions,
   withDialogActions,
-  withReceipts(({ receiptTableState }) => ({
-    receiptTableState,
-  })),
+  withReceipts(({ receiptTableState }) => ({ receiptTableState })),
   withSettings(({ receiptSettings }) => ({
     receiptsTableSize: receiptSettings?.tableSize,
   })),

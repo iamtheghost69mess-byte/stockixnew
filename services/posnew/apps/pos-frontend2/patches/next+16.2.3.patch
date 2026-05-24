@@ -1,0 +1,25 @@
+diff --git a/node_modules/next/dist/bin/next b/node_modules/next/dist/bin/next
+index 1f31b83..1a2f867 100755
+--- a/node_modules/next/dist/bin/next
++++ b/node_modules/next/dist/bin/next
+@@ -143,7 +143,7 @@ program.command('dev', {
+         process.env.NEXT_CPU_PROF_DIR = join(dir, '.next', 'cpu-profiles');
+     }
+     const portSource = _optionValueSources.port;
+-    import('../cli/next-dev.js').then((mod)=>mod.nextDev(options, portSource, directory));
++    return import('../cli/next-dev.js').then((mod)=>mod.nextDev(options, portSource, directory));
+ }).usage('[directory] [options]');
+ program.command('export', {
+     hidden: true
+@@ -184,6 +184,9 @@ const internal = program.command('internal').description('Internal debugging com
+ internal.command('trace').alias('turbo-trace-server').argument('file', 'Trace file to serve.').addOption(new _commander.Option('-p, --port <port>', 'Override the port.').argParser(_utils.parseValidPositiveInteger)).action((file, options)=>{
+     return import('../cli/internal/turbo-trace-server.js').then((mod)=>mod.startTurboTraceServerCli(file, options.port));
+ });
+-program.parse(process.argv);
++program.parseAsync(process.argv).catch((err)=>{
++    console.error(err);
++    process.exit(1);
++});
+ 
+ //# sourceMappingURL=next.map
+\ No newline at end of file

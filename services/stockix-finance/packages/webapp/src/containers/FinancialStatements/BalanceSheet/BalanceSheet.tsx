@@ -12,7 +12,8 @@ import { BalanceSheetBody } from './BalanceSheetBody';
 import { useBalanceSheetQuery } from './utils';
 import { compose } from '@/utils';
 
-import withBalanceSheetActions from './withBalanceSheetActions';
+import { withBalanceSheetActions } from './withBalanceSheetActions';
+import { BalanceSheetDialogs } from './BalanceSheetDialogs';
 
 /**
  * Balance sheet.
@@ -67,6 +68,8 @@ function BalanceSheet({
           <BalanceSheetBody />
         </FinancialStatement>
       </DashboardPageContent>
+
+      <BalanceSheetDialogs />
     </BalanceSheetProvider>
   );
 }

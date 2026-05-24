@@ -12,15 +12,15 @@ import {
 
 import { usePaymentMadeDetailContext } from './PaymentMadeDetailProvider';
 
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
 
 import {
-  DashboardActionsBar,
   Can,
   Icon,
   FormattedMessage as T,
+  DrawerActionsBar,
 } from '@/components';
 import { PaymentMadeAction, AbilitySubject } from '@/constants/abilityOption';
 import { compose } from '@/utils';
@@ -30,7 +30,7 @@ import { DRAWERS } from '@/constants/drawers';
  * Payment made - Details panel - actions bar.
  */
 function PaymentMadeDetailActionsBar({
-  // #withAlertsActions
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -42,7 +42,7 @@ function PaymentMadeDetailActionsBar({
 
   // Handle edit payment made.
   const handleEditPaymentMade = () => {
-    history.push(`/payment-mades/${paymentMadeId}/edit`);
+    history.push(`/payments-made/${paymentMadeId}/edit`);
     closeDrawer(DRAWERS.PAYMENT_MADE_DETAILS);
   };
 
@@ -52,7 +52,7 @@ function PaymentMadeDetailActionsBar({
   };
 
   return (
-    <DashboardActionsBar>
+    <DrawerActionsBar>
       <NavbarGroup>
         <Can I={PaymentMadeAction.Edit} a={AbilitySubject.PaymentMade}>
           <Button
@@ -62,6 +62,7 @@ function PaymentMadeDetailActionsBar({
             onClick={handleEditPaymentMade}
           />
         </Can>
+
         <Can I={PaymentMadeAction.Delete} a={AbilitySubject.PaymentMade}>
           <NavbarDivider />
           <Button
@@ -73,12 +74,12 @@ function PaymentMadeDetailActionsBar({
           />
         </Can>
       </NavbarGroup>
-    </DashboardActionsBar>
+    </DrawerActionsBar>
   );
 }
 
 export default compose(
   withDialogActions,
   withDrawerActions,
-  withAlertsActions,
+  withAlertActions,
 )(PaymentMadeDetailActionsBar);

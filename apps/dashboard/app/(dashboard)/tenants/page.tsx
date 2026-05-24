@@ -1,57 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-  Loader2,
-  Trash2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2 } from "lucide-react";
 
+import TenantCreateWizard from "@/components/tenant-create-wizard";
+import { TenantList, type TenantSortOrder } from "@/components/tenant-list";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
-const apiBase =
-  process.env.NEXT_PUBLIC_STOCKIX_API_URL ?? "http://localhost:4000";
-
-const publicScheme =
-  process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME ?? "http";
-const publicRootDomain =
-  process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN ?? "localhost";
-
-function tenantPublicBaseUrl(slug: string) {
-  return `${publicScheme}://${slug}.${publicRootDomain}`;
-}
+import { tenantPublicBaseUrl } from "@/lib/tenant-url";
+import type { ProvisionEventRow, TenantDirectoryTotals, TenantRow } from "@/types/tenant";
+import { useMe } from "@/hooks/use-me";
+import { formatApiError } from "@/lib/api-errors";
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
-
-type Owner = { id: string; email: string; name: string };
-
-type TenantRow = {
-  tenantId: string;
-  slug: string;
-  name: string;
-  adminEmail: string;
-  deploymentStatus: string | null;
-  internalPort: number | null;
-  composeProject: string | null;
-  lastError: string | null;
-  registrationCompletedAt: string | null;
-};
-
-type ProvisionEventRow = {
-  id: string;
-  phase: string;
-  level: string;
-  message: string;
-  meta: Record<string, unknown> | null;
-  createdAt: string;
-};
 
 type ProvisionPollRunning = {
   status: "queued" | "running";
@@ -62,12 +34,17 @@ type ProvisionPollRunning = {
 
 type ProvisionPollComplete = {
   status: "complete";
+  ready?: boolean;
   correlationId: string;
   oneTimeAdminPassword?: string | null;
   internalPort?: number;
   baseUrl?: string;
   events?: ProvisionEventRow[];
   note?: string;
+  readiness?: {
+    status: "NOT_READY" | "READY" | "DEGRADED";
+    reasons: string[];
+  };
 };
 
 type ProvisionPollFailed = {
@@ -101,8 +78,15 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-export default function TenantsPage() {
-  const [owners, setOwners] = useState<Owner[]>([]);
+function TenantsPageContent() {
+  const me = useMe();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialListStatus = useMemo((): "all" | "active" | "suspended" | "provisioning" | "failed" => {
+    const s = searchParams.get("status");
+    if (s === "active" || s === "suspended" || s === "provisioning" || s === "failed") return s;
+    return "all";
+  }, [searchParams]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,82 +99,303 @@ export default function TenantsPage() {
   const [streamCorrelationId, setStreamCorrelationId] = useState<string | null>(
     null,
   );
+  const [stoppingProvision, setStoppingProvision] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteProgressMessage, setDeleteProgressMessage] = useState<string | null>(null);
+  const [suspendingId, setSuspendingId] = useState<string | null>(null);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [addTenantOpen, setAddTenantOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ tenantId: string; slug: string } | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteVolumesOpen, setDeleteVolumesOpen] = useState(false);
+  const [deleteSlugInput, setDeleteSlugInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "suspended" | "provisioning" | "failed"
+  >(initialListStatus);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [listTotal, setListTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [directoryTotals, setDirectoryTotals] = useState<TenantDirectoryTotals | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState<TenantSortOrder>("newest");
 
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFirstName, setAdminFirstName] = useState("");
   const [adminLastName, setAdminLastName] = useState("");
 
-  const copyText = useCallback(async (key: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey(null), 2000);
-    } catch {
-      setError("Could not copy to clipboard");
-    }
-  }, []);
+  const queryString = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("page", String(page));
+    p.set("pageSize", String(pageSize));
+    if (search.trim()) p.set("search", search.trim());
+    if (statusFilter !== "all") p.set("status", statusFilter);
+    p.set("sort", sortOrder);
+    return p.toString();
+  }, [page, pageSize, search, statusFilter, sortOrder]);
 
   const load = useCallback(async () => {
-    const [oRes, tRes] = await Promise.all([
-      fetch(`${apiBase}/owners`),
-      fetch(`${apiBase}/tenants`),
-    ]);
-    const o = (await readJson(oRes)) as { owners?: Owner[]; error?: string };
-    const t = (await readJson(tRes)) as { tenants?: TenantRow[]; error?: string };
-    if (!oRes.ok) {
-      throw new Error(o.error ?? `owners: HTTP ${oRes.status}`);
+    setListLoading(true);
+    try {
+      const tRes = await fetch(`/api/tenants?${queryString}`);
+      const t = (await readJson(tRes)) as {
+        tenants?: TenantRow[];
+        total?: number;
+        totalPages?: number;
+        directoryTotals?: TenantDirectoryTotals;
+        error?: string;
+      };
+      if (!tRes.ok) {
+        throw new Error(formatApiError(t, t.error ?? `tenants: HTTP ${tRes.status}`));
+      }
+      setTenants(t.tenants ?? []);
+      setListTotal(t.total ?? 0);
+      setTotalPages(t.totalPages ?? 1);
+      if (t.directoryTotals) setDirectoryTotals(t.directoryTotals);
+    } finally {
+      setListLoading(false);
     }
-    if (!tRes.ok) {
-      throw new Error(t.error ?? `tenants: HTTP ${tRes.status}`);
-    }
-    setOwners(o.owners ?? []);
-    setTenants(t.tenants ?? []);
+  }, [queryString]);
+
+  const statusParam = searchParams.get("status");
+  useEffect(() => {
+    const next =
+      statusParam === "active" ||
+      statusParam === "suspended" ||
+      statusParam === "provisioning" ||
+      statusParam === "failed"
+        ? statusParam
+        : "all";
+    setStatusFilter(next);
+  }, [statusParam]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setSearch(searchInput), 300);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, sortOrder]);
+
+  const requestTenantDelete = useCallback((tenantId: string, slug: string) => {
+    setDeleteTarget({ tenantId, slug });
+    setDeleteSlugInput("");
+    setDeleteConfirmOpen(true);
   }, []);
 
-  const removeTenant = useCallback(
-    async (tenantId: string, slug: string) => {
-      if (
-        !globalThis.confirm(
-          `Delete tenant "${slug}"?\n\nThis runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be undone.`,
-        )
-      ) {
-        return;
-      }
-      const wipeVolumes = globalThis.confirm(
-        "Also remove Docker volumes?\n\nOK = delete MySQL / Mongo / Redis data for this stack.\nCancel = keep data volumes (containers are still removed).",
-      );
+  const executeTenantDelete = useCallback(
+    async (tenantId: string, slug: string, wipeVolumes: boolean) => {
       setDeletingId(tenantId);
+      setDeleteProgressMessage(
+        wipeVolumes
+          ? "Deleting tenant and Docker volumes…"
+          : "Deleting tenant (keeping volumes)…",
+      );
       setError(null);
       try {
         const q = wipeVolumes ? "?volumes=true" : "";
-        const res = await fetch(`${apiBase}/tenants/${tenantId}${q}`, {
-          method: "DELETE",
-        });
-        const data = (await readJson(res)) as { error?: string };
-        if (!res.ok) {
-          throw new Error(data.error ?? `HTTP ${res.status}`);
+        const deleteOnce = async () => {
+          const res = await fetch(`/api/tenants/${tenantId}${q}`, {
+            method: "DELETE",
+          });
+          const data = (await readJson(res)) as {
+            error?: string;
+            message?: string;
+            tenantStatus?: string | null;
+            deploymentStatus?: string | null;
+          };
+          return { res, data };
+        };
+
+        setDeleteProgressMessage("Removing deployment…");
+        let { res, data } = await deleteOnce();
+        if (!res.ok && res.status === 409 && data.error === "tenant_busy") {
+          const provisioningBusy =
+            data.tenantStatus === "provisioning" ||
+            data.deploymentStatus === "provisioning";
+          setDeleteProgressMessage(
+            provisioningBusy
+              ? "Stopping provisioning…"
+              : "Suspending tenant before delete…",
+          );
+          const transitionPath = provisioningBusy
+            ? `/api/tenants/${tenantId}/provision-stop`
+            : `/api/tenants/${tenantId}/suspend`;
+          const transitionRes = await fetch(transitionPath, { method: "POST" });
+          const transitionData = (await readJson(transitionRes)) as {
+            error?: string;
+            message?: string;
+          };
+          const alreadyTransitioned =
+            !transitionRes.ok
+            && (transitionData.error === "tenant_not_active"
+              || transitionData.error === "tenant_not_provisioning");
+          if (!transitionRes.ok && !alreadyTransitioned) {
+            throw new Error(
+              formatApiError(
+                transitionData,
+                transitionData.message ??
+                  transitionData.error ??
+                  "Tenant is busy and automatic stop/suspend failed.",
+              ),
+            );
+          }
+
+          for (let i = 0; i < 15; i += 1) {
+            setDeleteProgressMessage(
+              `Waiting for tenant to stop… (${i + 1}/15)`,
+            );
+            await new Promise((r) => setTimeout(r, 2000));
+            setDeleteProgressMessage("Removing deployment…");
+            const attempt = await deleteOnce();
+            res = attempt.res;
+            data = attempt.data;
+            if (res.ok) break;
+            if (!(res.status === 409 && data.error === "tenant_busy")) break;
+          }
         }
+
+        if (!res.ok) {
+          throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
+        }
+        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         setTenantAccess(null);
         setOneTimePassword(null);
-        await load();
+        void load().catch(() => {});
       } catch (e) {
-        setError(String(e));
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setError(`Tenant "${slug}" was already removed.`);
+          void load().catch(() => {});
+          return;
+        }
+        setError(message);
       } finally {
         setDeletingId(null);
+        setDeleteProgressMessage(null);
+        setDeleteConfirmOpen(false);
+        setDeleteVolumesOpen(false);
+        setDeleteTarget(null);
+        setDeleteSlugInput("");
       }
     },
-    [apiBase, load],
+    [load],
+  );
+
+  const isDeletingTenant =
+    deleteTarget != null && deletingId === deleteTarget.tenantId;
+
+  const handleSuspend = useCallback(
+    async (tenantId: string, slug: string): Promise<boolean> => {
+      setSuspendingId(tenantId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/tenants/${tenantId}/suspend`, {
+          method: "POST",
+        });
+        const data = (await readJson(res)) as { error?: string };
+        if (!res.ok) throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.tenantId === tenantId
+              ? { ...t, deploymentStatus: "suspended", lastError: null }
+              : t,
+          ),
+        );
+        return true;
+      } catch (e) {
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setError(`Tenant "${slug}" no longer exists.`);
+          void load().catch(() => {});
+          return false;
+        }
+        setError(`Failed to suspend ${slug}: ${message}`);
+        return false;
+      } finally {
+        setSuspendingId(null);
+      }
+    },
+    [load],
+  );
+
+  const handleReactivate = useCallback(
+    async (tenantId: string, slug: string): Promise<boolean> => {
+      setReactivatingId(tenantId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/tenants/${tenantId}/reactivate`, {
+          method: "POST",
+        });
+        const data = (await readJson(res)) as { error?: string };
+        if (!res.ok) throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.tenantId === tenantId
+              ? { ...t, deploymentStatus: "active", lastError: null }
+              : t,
+          ),
+        );
+        return true;
+      } catch (e) {
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setError(`Tenant "${slug}" no longer exists.`);
+          void load().catch(() => {});
+          return false;
+        }
+        setError(`Failed to reactivate ${slug}: ${message}`);
+        return false;
+      } finally {
+        setReactivatingId(null);
+      }
+    },
+    [load],
+  );
+
+  const handleStopProvision = useCallback(
+    async (tenantId: string, slug: string): Promise<boolean> => {
+      setStoppingId(tenantId);
+      setError(null);
+      try {
+        const res = await fetch(`/api/tenants/${tenantId}/provision-stop`, {
+          method: "POST",
+        });
+        const data = (await readJson(res)) as { error?: string; status?: string };
+        if (!res.ok) throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
+        const statusLabel = data.status ?? "ok";
+        setError(`Provision stop requested for ${slug} (${statusLabel}).`);
+        await load();
+        return true;
+      } catch (e) {
+        setError(`Failed to stop provisioning for ${slug}: ${String(e)}`);
+        return false;
+      } finally {
+        setStoppingId(null);
+      }
+    },
+    [load],
   );
 
   useEffect(() => {
     load().catch((e) => setError(String(e)));
   }, [load]);
+
+  useEffect(() => {
+    if (searchParams.get("provision") !== "1") return;
+    setAddTenantOpen(true);
+    router.replace("/tenants", { scroll: false });
+  }, [searchParams, router]);
 
   // Refetch when coming back from other routes or tabs (list + access links stay current).
   useEffect(() => {
@@ -220,14 +425,8 @@ export default function TenantsPage() {
   }, [loading]);
 
   useEffect(() => {
-    if (!ownerId && owners.length > 0) {
-      setOwnerId(owners[0]!.id);
-    }
-  }, [owners, ownerId]);
-
-  useEffect(() => {
     if (!streamCorrelationId) return;
-    const url = `${apiBase}/tenants/provision-stream/${streamCorrelationId}`;
+    const url = `/api/tenants/provision-stream/${streamCorrelationId}`;
     const es = new EventSource(url);
     const onProvision = (ev: MessageEvent) => {
       try {
@@ -240,7 +439,14 @@ export default function TenantsPage() {
       }
     };
     es.addEventListener("provision", onProvision);
+    es.addEventListener("done", () => {
+      es.close();
+    });
+    es.addEventListener("ping", () => {
+      /* keep-alive; ignore payload */
+    });
     es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED) return;
       es.close();
     };
     return () => {
@@ -256,7 +462,7 @@ export default function TenantsPage() {
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_MS));
       const sr = await fetch(
-        `${apiBase}/tenants/provision-status/${correlationId}`,
+        `/api/tenants/provision-status/${correlationId}`,
       );
       const sj = (await readJson(sr)) as
         | ProvisionPollRunning
@@ -268,12 +474,12 @@ export default function TenantsPage() {
         const msg =
           (sj as { message?: string }).message ??
           "Provision status not found (API may have restarted). Check API logs and tenant list.";
-        throw new Error(msg);
+        throw new Error(formatApiError(sj, msg));
       }
 
       if (!sr.ok) {
         throw new Error(
-          (sj as { error?: string }).error ?? `status HTTP ${sr.status}`,
+          formatApiError(sj, (sj as { error?: string }).error ?? `status HTTP ${sr.status}`),
         );
       }
 
@@ -289,24 +495,105 @@ export default function TenantsPage() {
       if ("status" in sj && sj.status === "failed") {
         const f = sj as ProvisionPollFailed;
         throw new Error(
-          [f.error, f.cause].filter(Boolean).join(" — "),
+          formatApiError(
+            f,
+            [f.error, f.cause].filter(Boolean).join(" — "),
+          ),
         );
       }
 
       if ("status" in sj && sj.status === "complete") {
         const ok = sj as ProvisionPollComplete;
         setOneTimePassword((prev) => ok.oneTimeAdminPassword ?? prev ?? null);
-        await load();
-        return ok;
+        if (ok.ready === true) {
+          await load();
+          return ok;
+        }
+        const reasons = ok.readiness?.reasons?.length
+          ? ok.readiness.reasons.join(", ")
+          : "readiness checks still converging";
+        setError(
+          `Provisioning completed but tenant is not ready yet (${reasons}). Waiting for readiness...`,
+        );
       }
+    }
+    const finalRes = await fetch(`/api/tenants/provision-status/${correlationId}`);
+    const finalJson = (await readJson(finalRes)) as
+      | ProvisionPollFailed
+      | { error?: string; cause?: string; message?: string; status?: string };
+    if ("status" in finalJson && finalJson.status === "failed") {
+      const fail = finalJson as ProvisionPollFailed;
+      throw new Error(
+        formatApiError(fail, [fail.error, fail.cause].filter(Boolean).join(" — ")),
+      );
+    }
+    if ("error" in finalJson && typeof finalJson.error === "string" && finalJson.error.length > 0) {
+      throw new Error(formatApiError(finalJson, finalJson.error));
     }
     throw new Error(
       `Still provisioning after ${MAX_WAIT_MS / 60000} minutes — check Docker and the API terminal, then refresh this page.`,
     );
   };
 
-  const provision = async () => {
-    const adminEmailForLogin = adminEmail.trim();
+  const stopProvision = useCallback(async () => {
+    if (!streamCorrelationId) return;
+    setStoppingProvision(true);
+    try {
+      const res = await fetch(`/api/tenants/provision-stop/${streamCorrelationId}`, {
+        method: "POST",
+      });
+      const data = (await readJson(res)) as { error?: string; status?: string };
+      if (!res.ok) {
+        throw new Error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
+      }
+      setProvisionLog((prev) =>
+        mergeProvisionEvents(prev, [
+          {
+            id: `local-stop-${Date.now()}`,
+            phase: "cancel",
+            level: "warn",
+            message:
+              data.status === "cancellation_requested"
+                ? "Stop requested. Worker is stopping and rolling back."
+                : "Provisioning stopped.",
+            meta: null,
+            createdAt: new Date().toISOString(),
+          },
+        ]),
+      );
+      setError(
+        data.status === "cancellation_requested"
+          ? "Stop requested. Provisioning is aborting in background."
+          : "Provisioning stopped.",
+      );
+      setLoading(false);
+      setStreamCorrelationId(null);
+      await load();
+    } catch (e) {
+      setError(`Failed to stop provisioning: ${String(e)}`);
+    } finally {
+      setStoppingProvision(false);
+    }
+  }, [load, streamCorrelationId]);
+
+  const provision = async (payload?: {
+    slug: string;
+    name: string;
+    ownerId: string;
+    adminEmail: string;
+    adminFirstName: string;
+    adminLastName: string;
+    planSlug: string;
+    modules: ("accounting" | "pos" | "pms" | "chat")[];
+    assignExistingLicenseId: string | null;
+  }) => {
+    const nextSlug = payload?.slug ?? slug;
+    const nextName = payload?.name ?? name;
+    const nextOwnerId = payload?.ownerId ?? "";
+    const nextAdminEmail = payload?.adminEmail ?? adminEmail;
+    const nextAdminFirstName = payload?.adminFirstName ?? adminFirstName;
+    const nextAdminLastName = payload?.adminLastName ?? adminLastName;
+    const adminEmailForLogin = nextAdminEmail.trim();
     setError(null);
     setOneTimePassword(null);
     setTenantAccess(null);
@@ -314,16 +601,19 @@ export default function TenantsPage() {
     setStreamCorrelationId(null);
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/tenants`, {
+      const res = await fetch("/api/tenants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slug,
-          name,
-          owner_id: ownerId,
-          admin_email: adminEmail,
-          admin_first_name: adminFirstName,
-          admin_last_name: adminLastName,
+          slug: nextSlug,
+          name: nextName,
+          owner_id: nextOwnerId,
+          admin_email: nextAdminEmail,
+          admin_first_name: nextAdminFirstName,
+          admin_last_name: nextAdminLastName,
+          plan_slug: payload?.planSlug ?? "starter",
+          modules: payload?.modules ?? ["accounting"],
+          assign_existing_license_id: payload?.assignExistingLicenseId ?? undefined,
         }),
       });
 
@@ -338,8 +628,15 @@ export default function TenantsPage() {
       if (res.status === 202 && data.accepted && data.correlationId) {
         setStreamCorrelationId(data.correlationId);
         const ok = await pollUntilDone(data.correlationId);
+        const generatedPublicUrl = tenantPublicBaseUrl(nextSlug, ok.internalPort ?? null);
+        const reportedPublicUrl =
+          typeof ok.baseUrl === "string" &&
+          ok.baseUrl.includes("://") &&
+          !ok.baseUrl.match(/^https?:\/\/[^/]+\.localhost(\/|$)/i)
+            ? ok.baseUrl
+            : null;
         setTenantAccess({
-          publicUrl: ok.baseUrl ?? null,
+          publicUrl: generatedPublicUrl ?? reportedPublicUrl ?? null,
           adminEmail: adminEmailForLogin,
         });
         setSlug("");
@@ -351,12 +648,16 @@ export default function TenantsPage() {
       }
 
       if (!res.ok) {
+        const base = formatApiError(
+          data,
+          data.message ?? data.error ?? `HTTP ${res.status}`,
+        );
         const detail =
           data.detail && typeof data.detail === "object"
             ? JSON.stringify(data.detail)
             : "";
         setError(
-          [data.error, detail, data.correlationId ? `id:${data.correlationId}` : ""]
+          [base, detail, data.correlationId ? `id:${data.correlationId}` : ""]
             .filter(Boolean)
             .join(" — "),
         );
@@ -372,8 +673,11 @@ export default function TenantsPage() {
     }
   };
 
+  const from = listTotal === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, listTotal);
+
   return (
-    <div className="max-w-3xl space-y-8">
+    <div className="w-full space-y-8">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Tenants</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -418,6 +722,19 @@ export default function TenantsPage() {
                   </div>
                 ))
               )}
+            </div>
+          ) : null}
+          {streamCorrelationId ? (
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => void stopProvision()}
+                disabled={stoppingProvision}
+              >
+                {stoppingProvision ? "Stopping..." : "Stop provisioning"}
+              </Button>
             </div>
           ) : null}
         </div>
@@ -478,247 +795,267 @@ export default function TenantsPage() {
         </div>
       ) : null}
 
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-medium">New tenant</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Stockix owner</span>
-            <select
-              className="flex h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
-              value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
+      <TenantCreateWizard
+        dialog={{ open: addTenantOpen, onOpenChange: setAddTenantOpen }}
+        loading={loading}
+        provisionLog={provisionLog}
+        elapsedSec={elapsedSec}
+        oneTimePassword={oneTimePassword}
+        tenantAccess={tenantAccess}
+        onProvision={async (data) => {
+          if (!me?.id) {
+            setError("Unable to resolve current user. Please refresh and try again.");
+            return;
+          }
+          setSlug(data.slug);
+          setName(data.name);
+          setAdminEmail(data.adminEmail);
+          setAdminFirstName(data.adminFirstName);
+          setAdminLastName(data.adminLastName);
+          await provision({ ...data, ownerId: me.id });
+        }}
+        onReset={() => {
+          setOneTimePassword(null);
+          setTenantAccess(null);
+          setProvisionLog([]);
+        }}
+      />
+
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Existing tenants</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Filter, sort, and manage customer organizations from one directory.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (search.trim()) params.set("search", search.trim());
+                if (statusFilter !== "all") params.set("status", statusFilter);
+                params.set("sort", sortOrder);
+                const query = params.toString();
+                window.location.href = `/api/tenants/export.csv${query ? `?${query}` : ""}`;
+              }}
             >
-              {owners.length === 0 ? (
-                <option value="">No owners — insert one in Postgres</option>
-              ) : null}
-              {owners.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name} ({o.email})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Slug (DNS label)</span>
-            <Input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="acme-corp"
-              autoComplete="off"
-            />
-          </label>
-          <label className="space-y-1 text-xs sm:col-span-2">
-            <span className="text-muted-foreground">Display name</span>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Acme Corp"
-            />
-          </label>
-          <label className="space-y-1 text-xs sm:col-span-2">
-            <span className="text-muted-foreground">Tenant admin email</span>
-            <Input
-              type="email"
-              value={adminEmail}
-              onChange={(e) => setAdminEmail(e.target.value)}
-              placeholder="admin@acme.com"
-            />
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Admin first name</span>
-            <Input
-              value={adminFirstName}
-              onChange={(e) => setAdminFirstName(e.target.value)}
-            />
-          </label>
-          <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">Admin last name</span>
-            <Input
-              value={adminLastName}
-              onChange={(e) => setAdminLastName(e.target.value)}
-            />
-          </label>
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => load().catch((e) => setError(String(e)))}
+            >
+              Refresh
+            </Button>
+            <Button type="button" size="sm" className="h-9" onClick={() => setAddTenantOpen(true)}>
+              Add tenant
+            </Button>
+          </div>
         </div>
-        <Button
-          type="button"
-          disabled={loading || !ownerId || !slug || !name}
-          onClick={() => void provision()}
-        >
-          {loading ? `Provisioning… ${elapsedSec}s` : "Provision tenant"}
-        </Button>
+        <TenantList
+          tenants={tenants}
+          directoryTotals={directoryTotals}
+          listLoading={listLoading}
+          searchQuery={searchInput}
+          onSearchQueryChange={(v) => {
+            setSearchInput(v);
+            setPage(1);
+            if (v.trim() === "") {
+              setSearch("");
+            }
+          }}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+          sortOrder={sortOrder}
+          onSortOrderChange={(v) => {
+            setSortOrder(v);
+            setPage(1);
+          }}
+          onRequestDelete={requestTenantDelete}
+          onSuspend={handleSuspend}
+          onReactivate={handleReactivate}
+          onStopProvision={handleStopProvision}
+          deletingId={deletingId}
+          suspendingId={suspendingId}
+          reactivatingId={reactivatingId}
+          stoppingId={stoppingId}
+          onAddTenant={() => setAddTenantOpen(true)}
+        />
+        {directoryTotals && directoryTotals.total > 0 ? (
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {from}–{to} of {listTotal} tenants
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-sm font-medium">Existing tenants</h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => load().catch((e) => setError(String(e)))}
-          >
-            Refresh list
-          </Button>
-        </div>
-        <div className="grid gap-3">
-          {tenants.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-              No tenants yet. Provision one above — when it finishes, it appears
-              here with an <strong>Open login</strong> action (local URL uses the
-              allocated host port).
+      <Dialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          setDeleteConfirmOpen(open);
+          if (!open) {
+            setDeleteSlugInput("");
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete tenant</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be
+            undone. Type the tenant slug{" "}
+            {deleteTarget ? (
+              <span className="font-mono font-medium text-foreground">{deleteTarget.slug}</span>
+            ) : null}{" "}
+            to continue.
+          </p>
+          <Input
+            placeholder="Tenant slug"
+            value={deleteSlugInput}
+            onChange={(e) => setDeleteSlugInput(e.target.value)}
+            autoComplete="off"
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setDeleteSlugInput("");
+                setDeleteTarget(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!deleteTarget || deleteSlugInput !== deleteTarget.slug}
+              onClick={() => {
+                if (!deleteTarget || deleteSlugInput !== deleteTarget.slug) return;
+                setDeleteConfirmOpen(false);
+                setDeleteVolumesOpen(true);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteVolumesOpen}
+        onOpenChange={(open) => {
+          if (!open && isDeletingTenant) return;
+          setDeleteVolumesOpen(open);
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteSlugInput("");
+          }
+        }}
+      >
+        <DialogContent showCloseButton={!isDeletingTenant}>
+          {isDeletingTenant ? (
+            <div className="flex flex-col items-center gap-4 py-6 text-center">
+              <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
+              <DialogHeader className="space-y-2 text-center sm:text-center">
+                <DialogTitle>Deleting tenant</DialogTitle>
+              </DialogHeader>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                {deleteProgressMessage ?? "Removing deployment…"}
+              </p>
+              {deleteTarget ? (
+                <p className="font-mono text-xs text-muted-foreground">{deleteTarget.slug}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Do not close this window. This can take up to a minute if the tenant was still running.
+              </p>
             </div>
           ) : (
-            tenants.map((t) => {
-              const status = t.deploymentStatus ?? "unknown";
-              const statusChip =
-                status === "active"
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
-                  : status === "failed"
-                    ? "border-destructive/40 bg-destructive/10 text-destructive"
-                    : status === "provisioning" || status === "pending"
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
-                      : "border-border bg-muted/50 text-muted-foreground";
-              const port = t.internalPort;
-              const canOpen = status === "active";
-              const publicOrigin = tenantPublicBaseUrl(t.slug);
-              const loginHref = `${publicOrigin}/auth/login`;
-              return (
-                <div
-                  key={t.tenantId}
-                  className="rounded-xl border border-border bg-card p-4 shadow-sm"
+            <>
+              <DialogHeader>
+                <DialogTitle>Also delete Docker volumes?</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Delete volumes removes MySQL / Mongo / Redis data for this stack. Keep volumes if you may need the data
+                later (containers are still removed).
+              </p>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  disabled={!deleteTarget}
+                  onClick={() => {
+                    if (!deleteTarget) return;
+                    void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, false);
+                  }}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-foreground">
-                          {t.name}
-                        </span>
-                        <span className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                          {t.slug}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize",
-                            statusChip,
-                          )}
-                        >
-                          {status === "active" ? (
-                            <CheckCircle2 className="h-3 w-3" />
-                          ) : status === "failed" ? (
-                            <AlertCircle className="h-3 w-3" />
-                          ) : status === "provisioning" ||
-                            status === "pending" ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <AlertCircle className="h-3 w-3 opacity-60" />
-                          )}
-                          {status.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Admin:{" "}
-                        <span className="font-mono text-foreground/90">
-                          {t.adminEmail}
-                        </span>
-                        {port != null ? (
-                          <>
-                            {" "}
-                            · Host port{" "}
-                            <span className="font-mono">{port}</span>
-                          </>
-                        ) : null}
-                      </p>
-                      {t.registrationCompletedAt ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          Registered{" "}
-                          {new Date(
-                            t.registrationCompletedAt,
-                          ).toLocaleString()}
-                        </p>
-                      ) : null}
-                      {t.lastError ? (
-                        <p className="text-xs text-destructive">
-                          {t.lastError.slice(0, 280)}
-                          {t.lastError.length > 280 ? "…" : ""}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                      {canOpen ? (
-                        <a
-                          href={loginHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            buttonVariants({ variant: "default", size: "sm" }),
-                            "justify-center gap-1.5",
-                          )}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          Open login
-                        </a>
-                      ) : (
-                        <Button size="sm" variant="secondary" disabled>
-                          Open login{status !== "active" ? ` (${status})` : ""}
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs"
-                        onClick={() =>
-                          void copyText(`origin-${t.tenantId}`, publicOrigin)
-                        }
-                        disabled={deletingId !== null}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        {copiedKey === `origin-${t.tenantId}`
-                          ? "Copied"
-                          : "Copy URL"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="gap-1.5"
-                        disabled={loading || deletingId !== null}
-                        onClick={() => void removeTenant(t.tenantId, t.slug)}
-                      >
-                        {deletingId === t.tenantId ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Deleting…
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 className="h-4 w-4" />
-                            Delete tenant
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
-                    <span className="font-mono text-foreground/80">
-                      {publicOrigin}
-                    </span>
-                    {port != null ? (
-                      <span>host port <span className="font-mono">{port}</span></span>
-                    ) : null}
-                    {t.composeProject ? (
-                      <span className="font-mono">
-                        compose: {t.composeProject}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
+                  Keep volumes
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!deleteTarget}
+                  onClick={() => {
+                    if (!deleteTarget) return;
+                    void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, true);
+                  }}
+                >
+                  Delete volumes
+                </Button>
+              </DialogFooter>
+            </>
           )}
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+export default function TenantsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full space-y-8 p-6 text-sm text-muted-foreground">Loading tenants…</div>
+      }
+    >
+      <TenantsPageContent />
+    </Suspense>
   );
 }

@@ -21,18 +21,24 @@ import {
   AdvancedFilterPopover,
   FormattedMessage as T,
 } from '@/components';
+import { LicenseGatedButton } from '@/components/License/LicenseGatedButton';
 
 import { ExpenseAction, AbilitySubject } from '@/constants/abilityOption';
+import { DialogsName } from '@/constants/dialogs';
+
 import { useRefreshExpenses } from '@/hooks/query/expenses';
 import { useExpensesListContext } from './ExpensesListProvider';
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
 
-import withExpenses from './withExpenses';
-import withExpensesActions from './withExpensesActions';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withExpenses } from './withExpenses';
+import { withExpensesActions } from './withExpensesActions';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { compose } from '@/utils';
+import { isEmpty } from 'lodash';
+import { useBulkDeleteExpensesDialog } from './hooks/use-bulk-delete-expenses-dialog';
 
 /**
  * Expenses actions bar.
@@ -43,18 +49,25 @@ function ExpensesActionsBar({
 
   // #withExpenses
   expensesFilterConditions,
+  expensesSelectedRows = [],
 
   // #withSettings
   expensesTableSize,
 
   // #withSettingsActions
   addSetting,
+
+  // #withDialogActions
+  openDialog,
 }) {
   // History context.
   const history = useHistory();
 
   // Expenses list context.
   const { expensesViews, fields } = useExpensesListContext();
+
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
 
   // Expenses refresh action.
   const { refresh } = useRefreshExpenses();
@@ -63,9 +76,15 @@ function ExpensesActionsBar({
   const onClickNewExpense = () => {
     history.push('/expenses/new');
   };
+  const {
+    openBulkDeleteDialog,
+    isValidatingBulkDeleteExpenses,
+  } = useBulkDeleteExpensesDialog();
 
   // Handle delete button click.
-  const handleBulkDelete = () => {};
+  const handleBulkDelete = () => {
+    openBulkDeleteDialog(expensesSelectedRows);
+  };
 
   // Handles the tab chaning.
   const handleTabChange = (view) => {
@@ -73,16 +92,44 @@ function ExpensesActionsBar({
       viewSlug: view ? view.slug : null,
     });
   };
-
   // Handle click a refresh
   const handleRefreshBtnClick = () => {
     refresh();
   };
-
+  // Handle the import button click.
+  const handleImportBtnClick = () => {
+    history.push('/expenses/import');
+  };
   // Handle table row size change.
   const handleTableRowSizeChange = (size) => {
     addSetting('expenses', 'tableSize', size);
   };
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'expense' });
+  };
+  // Handles the print button click.
+  const handlePrintBtnClick = () => {
+    downloadExportPdf({ resource: 'Expense' });
+  };
+
+  if (!isEmpty(expensesSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteExpenses}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
+
   return (
     <DashboardActionsBar>
       <NavbarGroup>
@@ -94,7 +141,7 @@ function ExpensesActionsBar({
         />
         <NavbarDivider />
         <Can I={ExpenseAction.Create} a={AbilitySubject.Expense}>
-          <Button
+          <LicenseGatedButton
             className={Classes.MINIMAL}
             icon={<Icon icon="plus" />}
             text={<T id={'new_expense'} />}
@@ -125,21 +172,24 @@ function ExpensesActionsBar({
             onClick={handleBulkDelete}
           />
         </If>
-
+        <NavbarDivider />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-import-16" iconSize={16} />}
           text={<T id={'import'} />}
+          onClick={handleImportBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="file-export-16" iconSize={16} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
         <NavbarDivider />
         <DashboardRowsHeightButton
@@ -163,8 +213,9 @@ export default compose(
   withDialogActions,
   withExpensesActions,
   withSettingsActions,
-  withExpenses(({ expensesTableState }) => ({
+  withExpenses(({ expensesTableState, expensesSelectedRows }) => ({
     expensesFilterConditions: expensesTableState.filterRoles,
+    expensesSelectedRows,
   })),
   withSettings(({ expenseSettings }) => ({
     expensesTableSize: expenseSettings?.tableSize,

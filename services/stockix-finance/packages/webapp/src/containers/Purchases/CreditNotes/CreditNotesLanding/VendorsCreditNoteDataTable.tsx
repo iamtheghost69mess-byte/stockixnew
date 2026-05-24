@@ -12,12 +12,13 @@ import {
 import { TABLES } from '@/constants/tables';
 import { useMemorizedColumnsWidths } from '@/hooks';
 
-import withDashboardActions from '@/containers/Dashboard/withDashboardActions';
-import withAlertsActions from '@/containers/Alert/withAlertActions';
-import withDrawerActions from '@/containers/Drawer/withDrawerActions';
-import withDialogActions from '@/containers/Dialog/withDialogActions';
-import withVendorsCreditNotesActions from './withVendorsCreditNotesActions';
-import withSettings from '@/containers/Settings/withSettings';
+import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
+import { withAlertActions } from '@/containers/Alert/withAlertActions';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { withVendorsCreditNotesActions } from './withVendorsCreditNotesActions';
+import { withVendorsCreditNotes } from './withVendorsCreditNotes';
+import { withSettings } from '@/containers/Settings/withSettings';
 
 import { useVendorsCreditNoteTableColumns, ActionsMenu } from './components';
 import { useVendorsCreditNoteListContext } from './VendorsCreditNoteListProvider';
@@ -31,8 +32,12 @@ import { DRAWERS } from '@/constants/drawers';
 function VendorsCreditNoteDataTable({
   // #withVendorsCreditNotesActions
   setVendorsCreditNoteTableState,
+  setVendorsCreditNoteSelectedRows,
 
-  // #withAlertsActions
+  // #withVendorCredits
+  vendorsCreditNoteTableState,
+
+  // #withAlertActions
   openAlert,
 
   // #withDrawerActions
@@ -115,6 +120,11 @@ function VendorsCreditNoteDataTable({
     openDialog('reconcile-vendor-credit', { vendorCreditId: id });
   };
 
+  const handleSelectedRowsChange = (selectedFlatRows) => {
+    const selectedIds = selectedFlatRows?.map((row) => row.original.id) || [];
+    setVendorsCreditNoteSelectedRows(selectedIds);
+  };
+
   return (
     <DashboardContentTable>
       <DataTable
@@ -129,6 +139,7 @@ function VendorsCreditNoteDataTable({
         noInitialFetch={true}
         sticky={true}
         pagination={true}
+        initialPageSize={vendorsCreditNoteTableState.pageSize}
         pagesCount={pagination.pagesCount}
         TableLoadingRenderer={TableSkeletonRows}
         TableHeaderSkeletonRenderer={TableSkeletonHeader}
@@ -136,6 +147,7 @@ function VendorsCreditNoteDataTable({
         onCellClick={handleCellClick}
         initialColumnsWidths={initialColumnsWidths}
         onColumnResizing={handleColumnResizing}
+        onSelectedRowsChange={handleSelectedRowsChange}
         size={creditNoteTableSize}
         payload={{
           onViewDetails: handleViewDetailVendorCredit,
@@ -153,10 +165,13 @@ function VendorsCreditNoteDataTable({
 export default compose(
   withDashboardActions,
   withVendorsCreditNotesActions,
-  withAlertsActions,
+  withAlertActions,
   withDrawerActions,
   withDialogActions,
   withSettings(({ vendorsCreditNoteSetting }) => ({
     creditNoteTableSize: vendorsCreditNoteSetting?.tableSize,
+  })),
+  withVendorsCreditNotes(({ vendorsCreditNoteTableState }) => ({
+    vendorsCreditNoteTableState,
   })),
 )(VendorsCreditNoteDataTable);

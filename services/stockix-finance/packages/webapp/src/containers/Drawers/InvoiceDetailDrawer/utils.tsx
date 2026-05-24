@@ -19,6 +19,7 @@ import {
   FormattedMessage as T,
   Choose,
   Can,
+  If,
   TextOverviewTooltipCell,
 } from '@/components';
 import { SaleInvoiceAction, AbilitySubject } from '@/constants/abilityOption';
@@ -53,35 +54,44 @@ export const useInvoiceReadonlyEntriesColumns = () => {
       {
         Header: intl.get('quantity'),
         accessor: 'quantity',
-        Cell: FormatNumberCell,
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'quantity', {
+        width: getColumnWidth(entries, 'quantity_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),
       },
       {
         Header: intl.get('rate'),
-        accessor: 'rate',
-        Cell: FormatNumberCell,
+        accessor: 'rate_formatted',
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'rate', {
+        width: getColumnWidth(entries, 'rate_formatted', {
+          minWidth: 60,
+          magicSpacing: 5,
+        }),
+      },
+      {
+        id: 'discount',
+        Header: 'Discount',
+        accessor: 'discount_formatted',
+        align: 'right',
+        disableSortBy: true,
+        textOverview: true,
+        width: getColumnWidth(entries, 'discount_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),
       },
       {
         Header: intl.get('amount'),
-        accessor: 'amount',
-        Cell: FormatNumberCell,
+        accessor: 'total_formatted',
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'amount', {
+        width: getColumnWidth(entries, 'total_formatted', {
           minWidth: 60,
           magicSpacing: 5,
         }),
@@ -96,7 +106,7 @@ export const useInvoiceReadonlyEntriesColumns = () => {
  * @returns {React.JSX}
  */
 export const BadDebtMenuItem = ({
-  payload: { onCancelBadDebt, onBadDebt, onNotifyViaSMS, onConvert },
+  payload: { onCancelBadDebt, onBadDebt, onNotifyViaSMS, onConvert, onDeliver },
 }) => {
   const { invoice } = useInvoiceDetailDrawerContext();
 
@@ -110,6 +120,12 @@ export const BadDebtMenuItem = ({
       }}
       content={
         <Menu>
+          <If condition={!invoice.is_delivered}>
+            <MenuItem
+              onClick={onDeliver}
+              text={<T id={'mark_as_delivered'} />}
+            />
+          </If>
           <Choose>
             <Choose.When condition={!invoice.is_writtenoff}>
               <MenuItem

@@ -9,14 +9,20 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "pnpm exec drizzle-kit migrate",
-    "db:wait": "node scripts/wait-local-postgres.mjs",
-    "db:seed:local": "node scripts/seed-local-owner.mjs",
+    "db:migrate": "pnpm exec tsx scripts/migrate.ts",
+    "db:repair:baseline": "pnpm exec tsx scripts/migration-repair-baseline.ts",
+    "db:wait": "pnpm exec tsx scripts/wait-local-postgres.ts",
+    "db:seed:local": "pnpm exec tsx scripts/seed-local-owner.ts",
+    "db:seed:plans": "pnpm exec tsx scripts/ensure-default-plans.ts",
+    "db:ensure:sequences": "pnpm exec tsx scripts/ensure-tenant-port-seq.ts",
+    "verify-schema": "tsx scripts/verify-schema.ts",
     "db:studio": "drizzle-kit studio",
     "check-types": "tsc --noEmit",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@repo/config": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.1",
     "postgres": "^3.4.7"
   },
@@ -26,6 +32,7 @@
     "dotenv": "^16.6.1",
     "drizzle-kit": "^0.31.8",
     "eslint": "^9.39.1",
+    "tsx": "^4.20.6",
     "typescript": "5.9.2"
   }
 }

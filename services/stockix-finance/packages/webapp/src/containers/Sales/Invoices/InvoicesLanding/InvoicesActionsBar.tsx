@@ -7,6 +7,11 @@ import {
   NavbarGroup,
   Intent,
   Alignment,
+  Menu,
+  MenuItem,
+  Popover,
+  PopoverInteractionKind,
+  Position,
 } from '@blueprintjs/core';
 import { useHistory } from 'react-router-dom';
 import {
@@ -17,18 +22,26 @@ import {
   DashboardRowsHeightButton,
   DashboardActionsBar,
 } from '@/components';
+import { LicenseGatedButton } from '@/components/License/LicenseGatedButton';
 
 import { Can, If, DashboardActionViewsList } from '@/components';
 import { SaleInvoiceAction, AbilitySubject } from '@/constants/abilityOption';
 
 import { useRefreshInvoices } from '@/hooks/query/invoices';
 import { useInvoicesListContext } from './InvoicesListProvider';
+import { useDownloadExportPdf } from '@/hooks/query/FinancialReports/use-export-pdf';
+import { useBulkDeleteInvoicesDialog } from '../hooks/use-bulk-delete-accounts-dialog';
 
-import withInvoices from './withInvoices';
-import withInvoiceActions from './withInvoiceActions';
-import withSettings from '@/containers/Settings/withSettings';
-import withSettingsActions from '@/containers/Settings/withSettingsActions';
+import { withInvoices } from './withInvoices';
+import { withInvoiceActions } from './withInvoiceActions';
+import { withSettings } from '@/containers/Settings/withSettings';
+import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
 import { compose } from '@/utils';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { DialogsName } from '@/constants/dialogs';
+import { withDrawerActions } from '@/containers/Drawer/withDrawerActions';
+import { DRAWERS } from '@/constants/drawers';
+import { isEmpty } from 'lodash';
 
 /**
  * Invoices table actions bar.
@@ -39,17 +52,32 @@ function InvoiceActionsBar({
 
   // #withInvoices
   invoicesFilterRoles,
+  invoicesSelectedRows = [],
 
   // #withSettings
   invoicesTableSize,
 
   // #withSettingsActions
   addSetting,
+
+  // #withDialogsActions
+  openDialog,
+
+  // #withDrawerActions
+  openDrawer,
+
 }) {
   const history = useHistory();
+  const {
+    openBulkDeleteDialog,
+    isValidatingBulkDeleteInvoices,
+  } = useBulkDeleteInvoicesDialog();
 
   // Sale invoices list context.
   const { invoicesViews, invoicesFields } = useInvoicesListContext();
+
+  // Exports pdf document.
+  const { downloadAsync: downloadExportPdf } = useDownloadExportPdf();
 
   // Handle new invoice button click.
   const handleClickNewInvoice = () => {
@@ -74,6 +102,47 @@ function InvoiceActionsBar({
     addSetting('salesInvoices', 'tableSize', size);
   };
 
+  // Handle the import button click.
+  const handleImportBtnClick = () => {
+    history.push('/invoices/import');
+  };
+
+  // Handle the export button click.
+  const handleExportBtnClick = () => {
+    openDialog(DialogsName.Export, { resource: 'sale_invoice' });
+  };
+  // Handles the print button click.
+  const handlePrintBtnClick = () => {
+    downloadExportPdf({ resource: 'SaleInvoice' });
+  };
+
+  // Handles the invoice customize button click.
+  const handleCustomizeBtnClick = () => {
+    openDrawer(DRAWERS.BRANDING_TEMPLATES, { resource: 'SaleInvoice' });
+  };
+
+  // Handle bulk invoices delete.
+  const handleBulkDelete = () => {
+    openBulkDeleteDialog(invoicesSelectedRows);
+  };
+
+  if (!isEmpty(invoicesSelectedRows)) {
+    return (
+      <DashboardActionsBar>
+        <NavbarGroup>
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="trash-16" iconSize={16} />}
+            text={<T id={'delete'} />}
+            intent={Intent.DANGER}
+            onClick={handleBulkDelete}
+            disabled={isValidatingBulkDeleteInvoices}
+          />
+        </NavbarGroup>
+      </DashboardActionsBar>
+    );
+  }
+
   return (
     <DashboardActionsBar>
       <NavbarGroup>
@@ -85,7 +154,7 @@ function InvoiceActionsBar({
         />
         <NavbarDivider />
         <Can I={SaleInvoiceAction.Create} a={AbilitySubject.Invoice}>
-          <Button
+          <LicenseGatedButton
             className={Classes.MINIMAL}
             icon={<Icon icon={'plus'} />}
             text={<T id={'new_invoice'} />}
@@ -106,29 +175,23 @@ function InvoiceActionsBar({
         </AdvancedFilterPopover>
 
         <NavbarDivider />
-
-        <If condition={false}>
-          <Button
-            className={Classes.MINIMAL}
-            icon={<Icon icon={'trash-16'} iconSize={16} />}
-            text={<T id={'delete'} />}
-            intent={Intent.DANGER}
-          />
-        </If>
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon={'print-16'} iconSize={'16'} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon={'file-import-16'} />}
           text={<T id={'import'} />}
+          onClick={handleImportBtnClick}
         />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon={'file-export-16'} iconSize={'16'} />}
           text={<T id={'export'} />}
+          onClick={handleExportBtnClick}
         />
         <NavbarDivider />
         <DashboardRowsHeightButton
@@ -138,6 +201,25 @@ function InvoiceActionsBar({
         <NavbarDivider />
       </NavbarGroup>
       <NavbarGroup align={Alignment.RIGHT}>
+        <Popover
+          minimal={true}
+          interactionKind={PopoverInteractionKind.CLICK}
+          position={Position.BOTTOM_RIGHT}
+          modifiers={{
+            offset: { offset: '0, 4' },
+          }}
+          content={
+            <Menu>
+              <MenuItem
+                onClick={handleCustomizeBtnClick}
+                text={'Customize Templates'}
+              />
+            </Menu>
+          }
+        >
+          <Button icon={<Icon icon="cog-16" iconSize={16} />} minimal={true} />
+        </Popover>
+        <NavbarDivider />
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="refresh-16" iconSize={14} />}
@@ -151,10 +233,13 @@ function InvoiceActionsBar({
 export default compose(
   withInvoiceActions,
   withSettingsActions,
-  withInvoices(({ invoicesTableState }) => ({
+  withInvoices(({ invoicesTableState, invoicesSelectedRows }) => ({
     invoicesFilterRoles: invoicesTableState.filterRoles,
+    invoicesSelectedRows,
   })),
   withSettings(({ invoiceSettings }) => ({
     invoicesTableSize: invoiceSettings?.tableSize,
   })),
+  withDialogActions,
+  withDrawerActions,
 )(InvoiceActionsBar);

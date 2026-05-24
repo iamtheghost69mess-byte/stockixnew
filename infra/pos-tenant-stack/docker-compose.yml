@@ -1,0 +1,51 @@
+# Per-tenant POS stack (provisioned when tenant modules includes "pos").
+services:
+  pos-backend:
+    image: stockix-pos-backend:local
+    build:
+      context: ${POS_APP_ROOT}/apps/pos-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=${POS_PORT:-8010}
+      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}
+      - REDIS_URL=redis://pos-redis:6379
+      - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
+      - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
+      - TENANT_ID=${TENANT_ID}
+      - POS_BACKEND_URL=${POS_BACKEND_URL}
+      - POS_FRONTEND_URL=${POS_FRONTEND_URL}
+      - PUBLIC_APP_URL=${POS_FRONTEND_URL}
+    depends_on:
+      - pos-mongo
+      - pos-redis
+    ports:
+      - "127.0.0.1:${POS_HOST_PORT:-8010}:8010"
+
+  pos-frontend:
+    image: stockix-pos-frontend:local
+    build:
+      context: ${POS_APP_ROOT}/apps/pos-frontend2
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}
+    ports:
+      - "127.0.0.1:${POS_FRONTEND_HOST_PORT:-3001}:3000"
+
+  pos-mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    volumes:
+      - pos_mongo:/data/db
+
+  pos-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - pos_redis:/data
+
+volumes:
+  pos_mongo:
+    name: ${COMPOSE_PROJECT_NAME}_pos_mongo
+  pos_redis:
+    name: ${COMPOSE_PROJECT_NAME}_pos_redis

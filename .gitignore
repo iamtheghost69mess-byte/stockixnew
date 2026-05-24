@@ -4,16 +4,27 @@
 node_modules
 .pnp
 .pnp.js
-
+.pnpm-store/
+package-lock.json
+**/package-lock.json
 # Local env files
-#.env
-#.env.local
+.env
+.env.local
+.env.staging
+.env.production
+.env.*.local
+apps/api/.env
+apps/dashboard/.env
+infra/prod/.env
+services/**/.env
+**/.env
+!**/.env.example
 
 # Per-tenant Stockix env (provisioner)
 .stockix/
-#.env.development.local
-#.env.test.local
-#.env.production.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Testing
 coverage
@@ -39,3 +50,14 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Services — build artifacts (nested repos removed; tracked by root)
+services/posnew/node_modules/
+services/posnew/apps/pos-backend/dist/
+services/pmsfull/pesan-pms/.next/
+services/pmsfull/RentTools.io/.next/
+services/chatlive/node_modules/
+services/stockix-finance/node_modules/
+services/stockix-finance/packages/server/dist/
+services/stockix-finance/packages/webapp/dist/
+services/pms/node_modules/

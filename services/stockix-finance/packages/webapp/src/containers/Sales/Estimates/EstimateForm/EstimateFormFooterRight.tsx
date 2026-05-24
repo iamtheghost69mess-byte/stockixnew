@@ -1,35 +1,56 @@
 // @ts-nocheck
 import React from 'react';
 import styled from 'styled-components';
+import { useFormikContext } from 'formik';
+import { T, TotalLines, TotalLine, TotalLineTextStyle } from '@/components';
 import {
-  T,
-  TotalLines,
-  TotalLine,
-  TotalLineBorderStyle,
-  TotalLineTextStyle,
-} from '@/components';
-import { useEstimateTotals } from './utils';
+  useEstimateAdjustmentFormatted,
+  useEstimateDiscountFormatted,
+  useEstimateSubtotalFormatted,
+  useEstimateTotalFormatted,
+  useEstimateTotal,
+} from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
+import { AdjustmentTotalLine } from '../../Invoices/InvoiceForm/AdjustmentTotalLine';
+import { DiscountTotalLine } from '../../Invoices/InvoiceForm/DiscountTotalLine';
 
 export function EstimateFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = useEstimateTotals();
+  const {
+    values: { currency_code },
+  } = useFormikContext();
+  const subtotalFormatted = useEstimateSubtotalFormatted();
+  const totalFormatted = useEstimateTotalFormatted();
+  const discountAmountFormatted = useEstimateDiscountFormatted();
+  const adjustmentAmountFormatted = useEstimateAdjustmentFormatted();
+  const total = useEstimateTotal();
 
   return (
     <EstimateTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
       <TotalLine
         title={<T id={'estimate_form.label.subtotal'} />}
-        value={formattedSubtotal}
-        borderStyle={TotalLineBorderStyle.None}
+        value={subtotalFormatted}
       />
+      <DiscountTotalLine
+        currencyCode={currency_code}
+        discountAmount={discountAmountFormatted}
+      />
+      <AdjustmentTotalLine adjustmentAmount={adjustmentAmountFormatted} />
       <TotalLine
         title={<T id={'estimate_form.label.total'} />}
-        value={formattedTotal}
+        value={totalFormatted}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </EstimateTotalLines>
   );
 }
 
 const EstimateTotalLines = styled(TotalLines)`
+  --x-color-text: #555;
+
+  .bp4-dark & {
+    --x-color-text: var(--color-light-gray4);
+  }
   width: 100%;
-  color: #555555;
+  color: var(--x-color-text);
 `;

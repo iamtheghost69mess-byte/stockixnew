@@ -1,0 +1,14 @@
+{
+  "extends": "../../packages/typescript-config/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": "../../",
+    "paths": {
+      "@repo/config": ["packages/config/src/index.ts"],
+      "@repo/db": ["packages/db/src/index.ts"],
+      "@repo/db/*": ["packages/db/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "domain/**/*.ts"]
+}

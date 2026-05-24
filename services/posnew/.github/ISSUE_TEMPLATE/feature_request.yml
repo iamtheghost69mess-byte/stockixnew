@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a new capability or enhancement.
+title: "[feat] "
+labels: [enhancement, triage]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - pos-backend (tenant API)
+        - pos-backend (platform API)
+        - saas-dash
+        - pos-frontend2 / studio-admin
+        - packages/ui
+        - packages/platform-api
+        - infra / CI
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user need or pain point is this solving?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: RBAC / multi-tenancy impact
+      description: Who should see or use this, per role? Per school / branch / license?
+    validations:
+      required: true

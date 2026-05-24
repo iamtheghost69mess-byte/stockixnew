@@ -7,6 +7,7 @@ import { Intent } from '@blueprintjs/core';
 import { useHistory } from 'react-router-dom';
 import { isEmpty } from 'lodash';
 import { CLASSES } from '@/constants/classes';
+import { css } from '@emotion/css';
 
 import { EditBillFormSchema, CreateBillFormSchema } from './BillForm.schema';
 import BillFormHeader from './BillFormHeader';
@@ -15,7 +16,8 @@ import BillFormFooter from './BillFormFooter';
 import BillItemsEntriesEditor from './BillItemsEntriesEditor';
 import BillFormTopBar from './BillFormTopBar';
 
-import { AppToaster } from '@/components';
+import { AppToaster, Box } from '@/components';
+import { PageForm } from '@/components/PageForm';
 import { useBillFormContext } from './BillFormProvider';
 import { compose, safeSumBy } from '@/utils';
 import {
@@ -25,7 +27,8 @@ import {
   transformFormValuesToRequest,
   handleErrors,
 } from './utils';
-import withCurrentOrganization from '@/containers/Organization/withCurrentOrganization';
+import { withCurrentOrganization } from '@/containers/Organization/withCurrentOrganization';
+import { BillFormEntriesActions } from './BillFormEntriesActions';
 
 /**
  * Bill form.
@@ -82,7 +85,6 @@ function BillForm({
           isNewMode
             ? 'the_bill_has_been_created_successfully'
             : 'the_bill_has_been_edited_successfully',
-          { number: values.bill_number },
         ),
         intent: Intent.SUCCESS,
       });
@@ -112,27 +114,37 @@ function BillForm({
   };
 
   return (
-    <div
-      className={classNames(
-        CLASSES.PAGE_FORM,
-        CLASSES.PAGE_FORM_STRIP_STYLE,
-        CLASSES.PAGE_FORM_BILL,
-      )}
+    <Formik
+      validationSchema={isNewMode ? CreateBillFormSchema : EditBillFormSchema}
+      initialValues={initialValues}
+      onSubmit={handleFormSubmit}
     >
-      <Formik
-        validationSchema={isNewMode ? CreateBillFormSchema : EditBillFormSchema}
-        initialValues={initialValues}
-        onSubmit={handleFormSubmit}
+      <Form
+        className={css({
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+        })}
       >
-        <Form>
-          <BillFormTopBar />
-          <BillFormHeader />
-          <BillItemsEntriesEditor />
-          <BillFormFooter />
-          <BillFloatingActions />
-        </Form>
-      </Formik>
-    </div>
+        <PageForm flex={1}>
+          <PageForm.Body>
+            <BillFormTopBar />
+            <BillFormHeader />
+
+            <Box p="18px 32px 0">
+              <BillFormEntriesActions />
+              <BillItemsEntriesEditor />
+            </Box>
+            <BillFormFooter />
+          </PageForm.Body>
+
+          <PageForm.Footer>
+            <BillFloatingActions />
+          </PageForm.Footer>
+        </PageForm>
+      </Form>
+    </Formik>
   );
 }
 export default compose(withCurrentOrganization())(BillForm);

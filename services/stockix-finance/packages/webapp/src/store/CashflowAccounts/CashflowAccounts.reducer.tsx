@@ -6,6 +6,8 @@ import { createTableStateReducers } from '@/store/tableState.reducer';
 import t from '@/store/types';
 
 export const defaultTableQuery = {
+  pageSize: 9999,
+  pageIndex: 0,
   filterRoles: [],
 };
 
@@ -13,7 +15,7 @@ const initialState = {
   tableState: defaultTableQuery,
 };
 
-const STORAGE_KEY = 'stockix:cashflow_accounts';
+const STORAGE_KEY = 'bigcapital:cashflow_accounts';
 
 const CONFIG = {
   key: STORAGE_KEY,

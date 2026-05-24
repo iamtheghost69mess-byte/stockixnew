@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { useMemo } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import useApiRequest from '../useRequest';
@@ -21,15 +22,15 @@ export function useCreateCurrency(props) {
 }
 
 /**
- * Edits the given currency code.
+ * Edits the given currency by ID.
  */
 export function useEditCurrency(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ([currencyCode, values]) =>
-      apiRequest.post(`currencies/${currencyCode}`, values),
+    ([currencyId, values]) =>
+      apiRequest.put(`currencies/${currencyId}`, values),
     {
       onSuccess: () => {
         // Invalidate currencies.
@@ -67,9 +68,25 @@ export function useCurrencies(props) {
     [t.CURRENCIES],
     { method: 'get', url: 'currencies' },
     {
-      select: (res) => res.data.currencies,
+      select: (res) => res.data,
       defaultData: [],
       ...props
     },
   );
+}
+
+/**
+ * Returns the latest stored exchange rate for a currency from the currencies list.
+ */
+export function useLatestExchangeRateForCurrency(
+  currencyCode: string | null | undefined,
+): number | null {
+  const { data: currencies } = useCurrencies();
+  return useMemo(() => {
+    if (!currencyCode || !currencies?.length) {
+      return null;
+    }
+    const match = currencies.find((c) => c.currency_code === currencyCode);
+    return match?.latest_exchange_rate ?? null;
+  }, [currencies, currencyCode]);
 }

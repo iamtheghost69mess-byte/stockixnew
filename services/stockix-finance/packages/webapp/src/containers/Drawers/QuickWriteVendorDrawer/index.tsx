@@ -3,7 +3,7 @@ import React from 'react';
 import * as R from 'ramda';
 
 import { Drawer, DrawerSuspense } from '@/components';
-import withDrawers from '@/containers/Drawer/withDrawers';
+import { withDrawers } from '@/containers/Drawer/withDrawers';
 
 const QuickWriteVendorDrawerContent = React.lazy(() =>
   import('./QuickWriteVendorDrawerContent'),
@@ -17,7 +17,7 @@ function QuickWriteVendorDrawer({
 
   // #withDrawer
   isOpen,
-  payload,
+  payload: { displayName, autofillRef },
 }) {
   return (
     <Drawer
@@ -25,10 +25,9 @@ function QuickWriteVendorDrawer({
       name={name}
       style={{ minWidth: '700px', maxWidth: '900px' }}
       size={'80%'}
-      payload={payload}
     >
       <DrawerSuspense>
-        <QuickWriteVendorDrawerContent displayName={payload.displayName} />
+        <QuickWriteVendorDrawerContent displayName={displayName} autofillRef={autofillRef} />
       </DrawerSuspense>
     </Drawer>
   );

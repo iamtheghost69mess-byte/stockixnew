@@ -15,10 +15,13 @@ import classNames from 'classnames';
 import NumberFormatDropdown from '@/components/NumberFormatDropdown';
 
 import { useCashFlowStatementContext } from './CashFlowStatementProvider';
-import withCashFlowStatement from './withCashFlowStatement';
-import withCashFlowStatementActions from './withCashFlowStatementActions';
+import { withCashFlowStatement } from './withCashFlowStatement';
+import { withCashFlowStatementActions } from './withCashFlowStatementActions';
 
 import { compose, saveInvoke } from '@/utils';
+import { CashflowSheetExportMenu } from './components';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { DialogsName } from '@/constants/dialogs';
 
 /**
  * Cash flow statement actions bar.
@@ -29,6 +32,9 @@ function CashFlowStatementActionsBar({
 
   //#withCashStatementActions
   toggleCashFlowStatementFilterDrawer,
+
+  // #withDialogActions
+  openDialog,
 
   //#ownProps
   numberFormat,
@@ -49,6 +55,11 @@ function CashFlowStatementActionsBar({
   // handle number format form submit.
   const handleNumberFormatSubmit = (values) =>
     saveInvoke(onNumberFormatSubmit, values);
+
+  // Handle print button click.
+  const handlePrintBtnClick = () => {
+    openDialog(DialogsName.CashflowSheetPdfPreview);
+  };
 
   return (
     <DashboardActionsBar>
@@ -96,30 +107,26 @@ function CashFlowStatementActionsBar({
           />
         </Popover>
 
-        <Popover
-          // content={}
-          interactionKind={PopoverInteractionKind.CLICK}
-          position={Position.BOTTOM_LEFT}
-        >
-          <Button
-            className={classNames(Classes.MINIMAL, 'button--filter')}
-            text={<T id={'filter'} />}
-            icon={<Icon icon="filter-16" iconSize={16} />}
-          />
-        </Popover>
-
         <NavbarDivider />
 
         <Button
           className={Classes.MINIMAL}
           icon={<Icon icon="print-16" iconSize={16} />}
           text={<T id={'print'} />}
+          onClick={handlePrintBtnClick}
         />
-        <Button
-          className={Classes.MINIMAL}
-          icon={<Icon icon="file-export-16" iconSize={16} />}
-          text={<T id={'export'} />}
-        />
+        <Popover
+          content={<CashflowSheetExportMenu />}
+          interactionKind={PopoverInteractionKind.CLICK}
+          placement="bottom-start"
+          minimal
+        >
+          <Button
+            className={Classes.MINIMAL}
+            icon={<Icon icon="file-export-16" iconSize={16} />}
+            text={<T id={'export'} />}
+          />
+        </Popover>
       </NavbarGroup>
     </DashboardActionsBar>
   );
@@ -130,4 +137,5 @@ export default compose(
     isFilterDrawerOpen: cashFlowStatementDrawerFilter,
   })),
   withCashFlowStatementActions,
+  withDialogActions,
 )(CashFlowStatementActionsBar);

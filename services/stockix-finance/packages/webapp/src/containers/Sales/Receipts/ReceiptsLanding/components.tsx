@@ -16,7 +16,15 @@ import {
 
 import { CLASSES } from '@/constants/classes';
 import { safeCallback } from '@/utils';
-import { FormatDateCell, Choose, Money, Icon, If, Can } from '@/components';
+import {
+  FormatDateCell,
+  Choose,
+  Money,
+  Icon,
+  If,
+  Can,
+  DualCurrencyAmountCell,
+} from '@/components';
 import { SaleReceiptAction, AbilitySubject } from '@/constants/abilityOption';
 
 /**
@@ -24,7 +32,7 @@ import { SaleReceiptAction, AbilitySubject } from '@/constants/abilityOption';
  * @returns {React.JSX}
  */
 export function ActionsMenu({
-  payload: { onEdit, onDelete, onClose, onDrawer, onViewDetails, onPrint },
+  payload: { onEdit, onDelete, onClose, onSendMail, onViewDetails, onPrint },
   row: { original: receipt },
 }) {
   return (
@@ -51,6 +59,11 @@ export function ActionsMenu({
         </If>
       </Can>
       <Can I={SaleReceiptAction.View} a={AbilitySubject.Receipt}>
+        <MenuItem
+          icon={<Icon icon={'envelope'} iconSize={16} />}
+          text={'Send Mail'}
+          onClick={safeCallback(onSendMail, receipt)}
+        />
         <MenuItem
           icon={<Icon icon={'print-16'} iconSize={16} />}
           text={intl.get('print')}
@@ -91,13 +104,13 @@ export function StatusAccessor(receipt) {
   return (
     <Choose>
       <Choose.When condition={receipt.is_closed}>
-        <Tag minimal={true} intent={Intent.SUCCESS} round={true}>
+        <Tag intent={Intent.SUCCESS} round minimal>
           <T id={'closed'} />
         </Tag>
       </Choose.When>
 
       <Choose.Otherwise>
-        <Tag minimal={true} intent={Intent.WARNING} round={true}>
+        <Tag intent={Intent.WARNING} round minimal>
           <T id={'draft'} />
         </Tag>
       </Choose.Otherwise>
@@ -114,8 +127,7 @@ export function useReceiptsTableColumns() {
       {
         id: 'receipt_date',
         Header: intl.get('receipt_date'),
-        accessor: 'receipt_date',
-        Cell: FormatDateCell,
+        accessor: 'formatted_receipt_date',
         width: 140,
         className: 'receipt_date',
         clickable: true,
@@ -151,11 +163,13 @@ export function useReceiptsTableColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: (r) => <Money amount={r.amount} currency={r.currency_code} />,
+        accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 140,
         align: 'right',
         clickable: true,
         textOverview: true,
+        money: true,
         className: clsx(CLASSES.FONT_BOLD),
       },
       {

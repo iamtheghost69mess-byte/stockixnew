@@ -1,17 +1,29 @@
 // @ts-nocheck
 import React from 'react';
 import styled from 'styled-components';
+import { useFormikContext } from 'formik';
+import { T, TotalLines, TotalLine, TotalLineTextStyle } from '@/components';
 import {
-  T,
-  TotalLines,
-  TotalLine,
-  TotalLineBorderStyle,
-  TotalLineTextStyle,
-} from '@/components';
-import { useVendorCrditNoteTotals } from './utils';
+  useVendorCreditAdjustmentAmountFormatted,
+  useVendorCreditDiscountAmountFormatted,
+  useVendorCreditSubtotalFormatted,
+  useVendorCreditTotalFormatted,
+  useVendorCreditTotal,
+} from './utils';
+import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
+import { DiscountTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/DiscountTotalLine';
+import { AdjustmentTotalLine } from '@/containers/Sales/Invoices/InvoiceForm/AdjustmentTotalLine';
 
 export function VendorCreditNoteFormFooterRight() {
-  const { formattedSubtotal, formattedTotal } = useVendorCrditNoteTotals();
+  const {
+    values: { currency_code },
+  } = useFormikContext();
+  const totalFormatted = useVendorCreditTotalFormatted();
+  const subtotalFormatted = useVendorCreditSubtotalFormatted();
+
+  const discountAmountFormatted = useVendorCreditDiscountAmountFormatted();
+  const adjustmentAmountFormatted = useVendorCreditAdjustmentAmountFormatted();
+  const total = useVendorCreditTotal();
 
   return (
     <VendorCreditNoteTotalLines
@@ -20,19 +32,29 @@ export function VendorCreditNoteFormFooterRight() {
     >
       <TotalLine
         title={<T id={'vendor_credit_form.label.subtotal'} />}
-        value={formattedSubtotal}
-        borderStyle={TotalLineBorderStyle.None}
+        value={subtotalFormatted}
       />
+      <DiscountTotalLine
+        currencyCode={currency_code}
+        discountAmount={discountAmountFormatted}
+      />
+      <AdjustmentTotalLine adjustmentAmount={adjustmentAmountFormatted} />
       <TotalLine
         title={<T id={'vendor_credit_form.label.total'} />}
-        value={formattedTotal}
+        value={totalFormatted}
         textStyle={TotalLineTextStyle.Bold}
       />
+      <DualCurrencyTotalLines total={total} />
     </VendorCreditNoteTotalLines>
   );
 }
 
 const VendorCreditNoteTotalLines = styled(TotalLines)`
+  --x-color-text: #555;
+
+  .bp4-dark & {
+    --x-color-text: var(--color-light-gray4);
+  }
   width: 100%;
-  color: #555555;
+  color: var(--x-color-text);
 `;
