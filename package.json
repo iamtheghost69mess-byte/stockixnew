@@ -7,6 +7,7 @@
     "dev:all": "pnpm dev",
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
     "dev:pms": "node scripts/dev-pms.mjs",
+    "dev:pms:ui": "node scripts/dev-pms-frontend.mjs",
     "dev:pos": "node scripts/dev-pos-stack.mjs",
     "dev:pos:install": "npm install --prefix services/posnew",
     "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",

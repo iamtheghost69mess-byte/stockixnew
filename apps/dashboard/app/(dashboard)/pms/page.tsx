@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { PmsPageShell } from "@/components/pms-page-shell";
-import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -13,9 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
-import { pmsFetch } from "@/lib/pms-fetch";
-
-type TenantRow = { tenantId: string; name: string; slug: string; modules?: string };
+import { fetchPmsTenants, pmsJson, type PmsTenantOption } from "@/lib/pms-api";
 
 type OccupancyData = {
   totalRooms: number;
@@ -30,44 +28,63 @@ type RevenueData = {
   outstandingCents: number;
 };
 
+function formatPercent(rate: number | undefined): string {
+  if (typeof rate !== "number" || Number.isNaN(rate)) return "—";
+  return `${Math.round(rate * 100)}%`;
+}
+
+function formatMoney(cents: number | undefined): string {
+  if (typeof cents !== "number" || Number.isNaN(cents)) return "—";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    cents / 100,
+  );
+}
+
 export default function PmsOverviewPage() {
   const { tenantId, setTenantId } = usePmsTenant();
-  const [tenants, setTenants] = useState<TenantRow[]>([]);
+  const [tenants, setTenants] = useState<PmsTenantOption[]>([]);
+  const [tenantsLoading, setTenantsLoading] = useState(true);
   const [occupancy, setOccupancy] = useState<OccupancyData | null>(null);
   const [revenue, setRevenue] = useState<RevenueData | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const selectedTenant = tenants.find((t) => t.tenantId === tenantId);
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/tenants?pageSize=100");
-      const data = (await res.json()) as { tenants?: TenantRow[] };
-      const list = (data.tenants ?? []).filter((t) => {
-        try {
-          const mods = JSON.parse(t.modules ?? '["accounting"]') as string[];
-          return mods.includes("pms");
-        } catch {
-          return false;
-        }
-      });
+      setTenantsLoading(true);
+      const list = await fetchPmsTenants();
       setTenants(list);
+      setTenantsLoading(false);
       if (!tenantId && list[0]) setTenantId(list[0].tenantId);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   useEffect(() => {
     if (!tenantId) return;
     void (async () => {
+      setApiError(null);
+      setOccupancy(null);
+      setRevenue(null);
       const today = new Date().toISOString().slice(0, 10);
-      const [occRes, revRes] = await Promise.all([
-        pmsFetch(`reports/occupancy?from=${today}&to=${today}`, tenantId),
-        pmsFetch("reports/revenue", tenantId),
+      const [occ, rev] = await Promise.all([
+        pmsJson<OccupancyData>(
+          `reports/occupancy?from=${today}&to=${today}`,
+          tenantId,
+        ),
+        pmsJson<RevenueData>("reports/revenue", tenantId),
       ]);
-      setOccupancy((await occRes.json()) as OccupancyData);
-      setRevenue((await revRes.json()) as RevenueData);
+      if (!occ.ok || !rev.ok) {
+        setApiError(
+          "PMS API is not reachable. Restart with pnpm dev and confirm [pms] is listening (port 3003 or next free port).",
+        );
+        return;
+      }
+      setOccupancy(occ.data);
+      setRevenue(rev.data);
     })();
   }, [tenantId]);
-
-  const fmt = (cents: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
   return (
     <PmsPageShell
@@ -75,19 +92,33 @@ export default function PmsOverviewPage() {
       description="Property management for tenants with the PMS module licensed."
     >
       <div className="max-w-sm space-y-2">
-        <Select value={tenantId} onValueChange={setTenantId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select tenant" />
-          </SelectTrigger>
-          <SelectContent>
-            {tenants.map((t) => (
-              <SelectItem key={t.tenantId} value={t.tenantId}>
-                {t.name} <span className="text-muted-foreground">({t.slug})</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {tenants.length === 0 ? (
+        {tenantsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading tenants…</p>
+        ) : (
+          <Select
+            key={tenants.map((t) => t.tenantId).join(",")}
+            value={tenantId || undefined}
+            onValueChange={setTenantId}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={
+                  selectedTenant
+                    ? `${selectedTenant.name} (${selectedTenant.slug})`
+                    : "Select tenant"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {tenants.map((t) => (
+                <SelectItem key={t.tenantId} value={t.tenantId}>
+                  {t.name} <span className="text-muted-foreground">({t.slug})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {!tenantsLoading && tenants.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No tenants have the PMS module. Run{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">pnpm db:seed:pms-demo</code>{" "}
@@ -95,10 +126,17 @@ export default function PmsOverviewPage() {
             <a href="/tenants" className="font-medium text-primary underline-offset-4 hover:underline">
               Tenants
             </a>{" "}
-            → pick a tenant → add the PMS license under Licensed modules.
+            → add the PMS license.
           </p>
         ) : null}
       </div>
+
+      {apiError ? (
+        <Alert variant="destructive">
+          <AlertTitle>PMS API unavailable</AlertTitle>
+          <AlertDescription>{apiError}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {tenantId ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -112,10 +150,10 @@ export default function PmsOverviewPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Today's Occupancy</CardTitle>
+              <CardTitle className="text-sm font-medium">Today&apos;s Occupancy</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-semibold tabular-nums">
-              {occupancy ? `${Math.round(occupancy.averageOccupancyRate * 100)}%` : "—"}
+              {formatPercent(occupancy?.averageOccupancyRate)}
             </CardContent>
           </Card>
           <Card>
@@ -131,7 +169,7 @@ export default function PmsOverviewPage() {
               <CardTitle className="text-sm font-medium">Revenue</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-semibold tabular-nums">
-              {revenue ? fmt(revenue.totalRevenueCents) : "—"}
+              {formatMoney(revenue?.totalRevenueCents)}
             </CardContent>
           </Card>
         </div>

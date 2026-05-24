@@ -36,10 +36,11 @@ const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
 /** @param {number} preferred */
 const pick = (preferred) => (strict ? Promise.resolve(preferred) : findFreePort(preferred));
 
-const [apiPort, dashPort, pmsPort] = await Promise.all([
+const [apiPort, dashPort, pmsPort, pmsUiPort] = await Promise.all([
   pick(parseInt(process.env.PORT || "4000", 10)),
   pick(parseInt(process.env.DASHBOARD_PORT || "3000", 10)),
   pick(parseInt(process.env.PMS_PORT || "3003", 10)),
+  pick(parseInt(process.env.PMS_FRONTEND_PORT || "3004", 10)),
 ]);
 
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
@@ -52,6 +53,9 @@ const sharedEnv = {
   DASHBOARD_PORT: String(dashPort),
   PMS_PORT: String(pmsPort),
   PMS_BASE_URL: pmsOrigin,
+  PMS_FRONTEND_PORT: String(pmsUiPort),
+  NEXT_PUBLIC_PMS_API_URL: pmsOrigin,
+  NEXT_PUBLIC_PMS_TENANT_APP_URL: `http://localhost:${pmsUiPort}`,
   STOCKIX_API_URL: apiOrigin,
   NEXT_PUBLIC_STOCKIX_API_URL: apiOrigin,
 };
@@ -60,7 +64,9 @@ console.log("\n[dev] Stockix local stack");
 console.log(`  Dashboard   http://localhost:${dashPort}`);
 console.log(`  API         ${apiOrigin}`);
 console.log(`  PMS API     ${pmsOrigin}`);
-console.log(`  PMS UI      http://localhost:${dashPort}/pms`);
+console.log(`  PMS (platform admin)  http://localhost:${dashPort}/pms`);
+console.log(`  PMS (tenant app)      http://localhost:${pmsUiPort}`);
+console.log("  Login (platform): admin@localhost / admin (from .env)");
 console.log("  Tips: pnpm db:seed:pms-demo  |  STOCKIX_DEV_SKIP_POS=1 pnpm dev\n");
 
 console.log("[dev] Postgres + migrations…");
@@ -78,13 +84,14 @@ const posCmd =
 const concurrentlyArgs = [
   "--kill-others-on-fail",
   "-n",
-  "apps,worker,pos,pms",
+  "apps,worker,pos,pms,pms-ui",
   "-c",
-  "blue,magenta,green,cyan",
+  "blue,magenta,green,cyan,yellow",
   "pnpm exec turbo run dev --filter=dashboard --filter=api",
   "node infra/worker-service/.runtime/worker.js",
   posCmd,
   "node scripts/dev-pms.mjs",
+  "node scripts/dev-pms-frontend.mjs",
 ];
 
 console.log("[dev] Starting apps, worker, POS, PMS…\n");
