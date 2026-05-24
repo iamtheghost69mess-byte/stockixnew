@@ -7,7 +7,7 @@
     "dist"
   ],
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node ../../scripts/dev-api.mjs",
     "build": "tsup",
     "start": "node dist/index.js",
     "provision-smoke": "node scripts/provision-smoke.mjs",
