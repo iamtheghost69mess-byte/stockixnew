@@ -8,6 +8,7 @@
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
     "dev:pms": "node scripts/dev-pms.mjs",
     "dev:pms:ui": "node scripts/dev-pms-frontend.mjs",
+    "dev:pms:stack": "concurrently -n api,pms,pms-ui -c blue,cyan,yellow \"node scripts/dev-api.mjs\" \"node scripts/dev-pms.mjs\" \"node scripts/dev-pms-frontend.mjs\"",
     "dev:pos": "node scripts/dev-pos-stack.mjs",
     "dev:pos:install": "npm install --prefix services/posnew",
     "db:up": "docker compose -f infra/dev/docker-compose.yml up -d",

@@ -5,15 +5,9 @@ import { useEffect, useState } from "react";
 import { PmsPageShell } from "@/components/pms-page-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PmsTenantSelect } from "@/components/pms-tenant-select";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
-import { fetchPmsTenants, pmsJson, type PmsTenantOption } from "@/lib/pms-api";
+import { pmsJson } from "@/lib/pms-api";
 
 type OccupancyData = {
   totalRooms: number;
@@ -41,28 +35,13 @@ function formatMoney(cents: number | undefined): string {
 }
 
 export default function PmsOverviewPage() {
-  const { tenantId, setTenantId } = usePmsTenant();
-  const [tenants, setTenants] = useState<PmsTenantOption[]>([]);
-  const [tenantsLoading, setTenantsLoading] = useState(true);
+  const { tenantId, ready } = usePmsTenant();
   const [occupancy, setOccupancy] = useState<OccupancyData | null>(null);
   const [revenue, setRevenue] = useState<RevenueData | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const selectedTenant = tenants.find((t) => t.tenantId === tenantId);
-
   useEffect(() => {
-    void (async () => {
-      setTenantsLoading(true);
-      const list = await fetchPmsTenants();
-      setTenants(list);
-      setTenantsLoading(false);
-      if (!tenantId && list[0]) setTenantId(list[0].tenantId);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
-  }, []);
-
-  useEffect(() => {
-    if (!tenantId) return;
+    if (!ready || !tenantId) return;
     void (async () => {
       setApiError(null);
       setOccupancy(null);
@@ -84,52 +63,14 @@ export default function PmsOverviewPage() {
       setOccupancy(occ.data);
       setRevenue(rev.data);
     })();
-  }, [tenantId]);
+  }, [tenantId, ready]);
 
   return (
     <PmsPageShell
       title="PMS"
       description="Property management for tenants with the PMS module licensed."
     >
-      <div className="max-w-sm space-y-2">
-        {tenantsLoading ? (
-          <p className="text-sm text-muted-foreground">Loading tenants…</p>
-        ) : (
-          <Select
-            key={tenants.map((t) => t.tenantId).join(",")}
-            value={tenantId || undefined}
-            onValueChange={setTenantId}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  selectedTenant
-                    ? `${selectedTenant.name} (${selectedTenant.slug})`
-                    : "Select tenant"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {tenants.map((t) => (
-                <SelectItem key={t.tenantId} value={t.tenantId}>
-                  {t.name} <span className="text-muted-foreground">({t.slug})</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {!tenantsLoading && tenants.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No tenants have the PMS module. Run{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">pnpm db:seed:pms-demo</code>{" "}
-            for a local demo tenant, or open{" "}
-            <a href="/tenants" className="font-medium text-primary underline-offset-4 hover:underline">
-              Tenants
-            </a>{" "}
-            → add the PMS license.
-          </p>
-        ) : null}
-      </div>
+      <PmsTenantSelect />
 
       {apiError ? (
         <Alert variant="destructive">
