@@ -4218,7 +4218,8 @@ async function wirePosBigcapitalIntegration(input) {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
-      "X-Api-Key": apiKey
+      "X-Api-Key": apiKey,
+      "X-Forwarded-Proto": "https"
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(6e4)

@@ -82,6 +82,7 @@ export async function wirePosBigcapitalIntegration(
     headers: {
       "Content-Type": "application/json",
       "X-Api-Key": apiKey,
+      "X-Forwarded-Proto": "https",
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
