@@ -1,0 +1,195 @@
+import { tenantDeployments, tenants } from "@repo/db/schema";
+import { eq } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { Context } from "hono";
+import type { Hono } from "hono";
+import { z } from "zod";
+import * as schema from "@repo/db/schema";
+import { posProxyJson } from "./pos-proxy.js";
+import { logAudit } from "./audit.js";
+
+type ApiEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    requestId: string;
+    requestStartMs: number;
+  };
+};
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+const stockixTenantIdParam = z.string().uuid();
+
+const resetPinBody = z.object({
+  role: z.string().min(1).max(32),
+});
+
+export type PosCredentialRole = {
+  role: string;
+  username: string;
+  pin: string;
+};
+
+function canRevealPosCredentials(actorRole: string): boolean {
+  return actorRole === "super_admin" || actorRole === "support_agent";
+}
+
+function parsePosCredentialRoles(data: unknown): PosCredentialRole[] {
+  if (!data || typeof data !== "object") return [];
+  const root = data as Record<string, unknown>;
+  const payload = root.data && typeof root.data === "object" ? root.data : root;
+  if (!payload || typeof payload !== "object") return [];
+
+  const record = payload as Record<string, unknown>;
+  const rolesRaw =
+    record.roles ?? record.defaultCredentials ?? undefined;
+  if (!Array.isArray(rolesRaw)) return [];
+  return rolesRaw
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+    .map((row) => ({
+      role: String(row.role ?? "").toLowerCase().trim(),
+      username: String(row.username ?? row.name ?? row.role ?? "").toLowerCase().trim(),
+      pin: String(row.pin ?? ""),
+    }))
+    .filter((row) => row.role.length > 0 && row.pin.length > 0);
+}
+
+async function loadTenantPosOrgId(
+  db: Db,
+  stockixTenantId: string,
+): Promise<{ tenant: { id: string; slug: string }; posOrganizationId: string } | null> {
+  const [row] = await db
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      posOrganizationId: tenantDeployments.posOrganizationId,
+    })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(eq(tenants.id, stockixTenantId))
+    .limit(1);
+
+  if (!row?.posOrganizationId?.trim()) {
+    return null;
+  }
+
+  return {
+    tenant: { id: row.id, slug: row.slug },
+    posOrganizationId: row.posOrganizationId.trim(),
+  };
+}
+
+export function registerPosCredentialsRoutes(
+  app: Hono<ApiEnv>,
+  db: Db | null,
+): void {
+  app.get("/tenants/:tenantId/pos-credentials", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+    const actorRole = String(c.get("actorRole") ?? "");
+    if (!canRevealPosCredentials(actorRole)) {
+      return c.json({ error: "forbidden", message: "Insufficient role to view POS PINs" }, 403);
+    }
+
+    const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
+    if (!tenantParsed.success) {
+      return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    const loaded = await loadTenantPosOrgId(db, tenantParsed.data);
+    if (!loaded) {
+      return c.json(
+        { error: "pos_org_not_linked", message: "Tenant has no POS organization id" },
+        404,
+      );
+    }
+
+    const { data, status } = await posProxyJson(
+      `/organizations/${encodeURIComponent(loaded.posOrganizationId)}/credentials`,
+      "GET",
+    );
+
+    if (status < 200 || status >= 300) {
+      const message =
+        data && typeof data === "object" && "message" in data
+          ? String((data as { message?: unknown }).message)
+          : "POS platform credentials fetch failed";
+      return c.json({ error: "pos_credentials_failed", message, posStatus: status }, status as 502);
+    }
+
+    const roles = parsePosCredentialRoles(data);
+
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "tenant.pos_credentials_revealed",
+      targetTenantId: loaded.tenant.id,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { posOrganizationId: loaded.posOrganizationId, roleCount: roles.length },
+    });
+
+    return c.json({ roles, posOrganizationId: loaded.posOrganizationId });
+  });
+
+  app.post("/tenants/:tenantId/pos-credentials/reset-pin", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+    const actorRole = String(c.get("actorRole") ?? "");
+    if (!canRevealPosCredentials(actorRole)) {
+      return c.json({ error: "forbidden", message: "Insufficient role to reset POS PINs" }, 403);
+    }
+
+    const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
+    if (!tenantParsed.success) {
+      return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    const bodyParsed = resetPinBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!bodyParsed.success) {
+      return c.json({ error: "invalid_body", details: bodyParsed.error.flatten() }, 400);
+    }
+
+    const loaded = await loadTenantPosOrgId(db, tenantParsed.data);
+    if (!loaded) {
+      return c.json(
+        { error: "pos_org_not_linked", message: "Tenant has no POS organization id" },
+        404,
+      );
+    }
+
+    const role = bodyParsed.data.role.toLowerCase().trim();
+    const { data, status } = await posProxyJson(
+      `/organizations/${encodeURIComponent(loaded.posOrganizationId)}/reset-pin`,
+      "POST",
+      { role },
+    );
+
+    if (status < 200 || status >= 300) {
+      const message =
+        data && typeof data === "object" && "message" in data
+          ? String((data as { message?: unknown }).message)
+          : "POS PIN reset failed";
+      return c.json({ error: "pos_pin_reset_failed", message, posStatus: status }, status as 502);
+    }
+
+    const roles = parsePosCredentialRoles(data);
+    const resetRoleRow = roles.find((r) => r.role === role);
+
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "tenant.pos_pin_reset",
+      targetTenantId: loaded.tenant.id,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { posOrganizationId: loaded.posOrganizationId, role, pinReset: true },
+    });
+
+    return c.json({
+      role,
+      pin: resetRoleRow?.pin ?? "",
+      roles,
+      posOrganizationId: loaded.posOrganizationId,
+    });
+  });
+}

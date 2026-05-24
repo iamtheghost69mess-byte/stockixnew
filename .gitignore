@@ -54,6 +54,9 @@ yarn-error.log*
 # Services — build artifacts (nested repos removed; tracked by root)
 services/posnew/node_modules/
 services/posnew/apps/pos-backend/dist/
+# Legacy PMS trees removed from repo (local copies may linger until deleted)
+services/pmsfull/
+services/pms/chatlive/
 services/pmsfull/pesan-pms/.next/
 services/pmsfull/RentTools.io/.next/
 services/chatlive/node_modules/

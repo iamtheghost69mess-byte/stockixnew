@@ -14,6 +14,16 @@ Stockix is the **control plane** for a multi-tenant SaaS: owner dashboard, APIs,
 | `packages/eslint-config` / `typescript-config` | Shared tooling |
 | `infra/` | Docker Compose stacks and reverse proxy config |
 
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| [docs/PLATFORM_REFERENCE.md](docs/PLATFORM_REFERENCE.md) | Architecture, services, build history |
+| [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md) | All environment variables and setup |
+| [docs/INTEGRATION_REFERENCE.md](docs/INTEGRATION_REFERENCE.md) | POS + Bigcapital bridge, gaps, status |
+| [docs/PROVISIONING_REFERENCE.md](docs/PROVISIONING_REFERENCE.md) | Tenant provisioning, license, plans |
+| [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) | Pre-deploy checklist for operators |
+
 ## Prerequisites
 
 - Node.js 20.9+ (recommended: use [nvm](https://github.com/nvm-sh/nvm) — a `.nvmrc` is included, so `nvm use` picks the right version automatically)
@@ -35,14 +45,32 @@ pnpm bootstrap:env
 # 3. Start Postgres, wait for it, run migrations, and seed
 pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local
 
-# 4. Start API + Dashboard
+# 4. (Once) POS backend deps — npm workspaces under services/posnew
+pnpm dev:pos:install
+
+# 5. Start API + Dashboard + worker + PMS + POS (ports auto-shift if busy)
 pnpm dev
 ```
 
 | App | URL | Credentials |
 |-----|-----|-------------|
 | Dashboard | http://localhost:3000 | `admin@localhost` / `admin` |
+| Platform login | http://localhost:3000/login | `admin@localhost` / `admin` |
+| PMS (platform admin) | http://localhost:3000/pms | Same login; select **PMS Demo** tenant |
+| Tenant PMS app | http://localhost:3004 | Full property-manager UI (sidebar, properties, bookings) |
 | API | http://localhost:4000 | — |
+| PMS API (Hono) | http://localhost:3003 | Proxied via control-plane API `/pms/api/*` |
+| POS platform API | http://localhost:8010 | `POS_PLATFORM_API_KEY` in root `.env` |
+| POS restaurant UI | http://localhost:3001 | Provisioned tenants may use `{slug}-pos.localhost` via Traefik |
+
+`pnpm dev` runs `scripts/dev-stockix.mjs`: migrations, then **dashboard**, **API**, **worker**, **PMS** (`services/pms` on `PMS_PORT`), and **POS**. If a default port is taken, the next free port is used (see the startup banner).
+
+| Script | Purpose |
+|--------|---------|
+| `pnpm dev:pms` | PMS service only |
+| `pnpm db:seed:pms-demo` | Demo tenant with PMS license for `/pms` dropdown |
+
+Control-plane + PMS, no POS: `STOCKIX_DEV_SKIP_POS=1 pnpm dev`
 
 > To reset the database back to a clean state: `pnpm db:reset:local`
 
@@ -64,7 +92,7 @@ root .env  →  @repo/config  →  worker (provision)
          docker compose  →  Finance server + webapp containers
 ```
 
-**Deeper reference:** [docs/env-guide.md](docs/env-guide.md) · [docs/envexplanation.md](docs/envexplanation.md) · [env.md](env.md) (audit)
+**Deeper reference:** [docs/ENV_REFERENCE.md](docs/ENV_REFERENCE.md)
 
 ### First-time setup
 
@@ -154,7 +182,7 @@ Stripe, Plaid, and LemonSqueezy are **disabled** in Finance `.env` (commented bl
 3. Set `DATABASE_URL` / `POSTGRES_*`, domain URLs (`ROOT_DOMAIN`, `DASHBOARD_URL`, `NEXT_PUBLIC_*`), Traefik (`ACME_EMAIL`, `CF_DNS_API_TOKEN`), and provisioning paths (`STOCKIX_REPO`, `TENANT_ENV_ROOT`, `STOCKIX_TENANT_APP_ROOT`).
 4. Run production Compose from `infra/prod` with `--env-file .env` (not laptop root `.env`).
 
-See [docs/deployment-checklist.md](docs/deployment-checklist.md) for the full deploy flow.
+See [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) for the full deploy flow.
 
 ### Stockix Finance local dev (layer 3)
 

@@ -168,10 +168,10 @@ export default function TenantOrgAccessPanel({ tenantId }: { tenantId: string })
           <>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Support agent</Label>
+                <Label>Stockix support agent</Label>
                 <Select value={ownerId || undefined} onValueChange={(v) => setOwnerId(v ?? "")}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose owner" />
+                    <SelectValue placeholder="Choose support agent" />
                   </SelectTrigger>
                   <SelectContent>
                     {owners.map((o) => (

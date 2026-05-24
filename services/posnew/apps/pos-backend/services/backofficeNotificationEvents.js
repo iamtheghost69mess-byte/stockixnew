@@ -9,6 +9,7 @@ const NOTIFICATION_EVENTS = {
   REFUND_LARGE: "order.refund_large",
   RECURRING_INVOICE_FAILED: "accounting.recurring_invoice_failed",
   RECURRING_INVOICE_SKIPPED: "accounting.recurring_invoice_skipped",
+  INTEGRATION_SYNC_UNMAPPED: "integration.sync_unmapped_items",
 };
 
 function buildEventPayload(eventKey, input) {
@@ -114,6 +115,25 @@ function buildEventPayload(eventKey, input) {
         dedupeKey: `recurring_skipped:${input.templateId || "unknown"}`,
         dedupeWindowMs: 2 * 60 * 60 * 1000,
         metadata: { eventKey, templateId: input.templateId || "" },
+      };
+    case NOTIFICATION_EVENTS.INTEGRATION_SYNC_UNMAPPED:
+      return {
+        type: "integration",
+        title: "Finance sync skipped — unmapped items",
+        body:
+          input.body
+          || "A paid order had no Finance item mappings; the receipt was not created.",
+        severity: "warning",
+        href: "/dashboard/integrations",
+        sourceType: "order",
+        sourceId: input.orderId || "",
+        dedupeKey: `integration_unmapped:${input.orderId || "unknown"}`,
+        dedupeWindowMs: 60 * 60 * 1000,
+        metadata: {
+          eventKey,
+          orderId: input.orderId || "",
+          unmappedCount: Number(input.unmappedCount || 0),
+        },
       };
     default:
       return null;

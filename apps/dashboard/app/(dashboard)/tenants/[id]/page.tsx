@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
-import { AlertCircle, Copy, ExternalLink, History, Loader2, PauseCircle, PlayCircle, RotateCw, Square, Trash2, UserCheck } from "lucide-react";
+import { AlertCircle, Copy, ExternalLink, History, Loader2, Minus, PauseCircle, PlayCircle, Plus, RotateCw, Square, Trash2, UserCheck } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
 import { LicenseAssignDialog } from "@/components/license-assign-dialog";
@@ -41,6 +41,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -55,6 +63,7 @@ import { tenantProfileSchema, type TenantProfileValues } from "@/lib/schemas";
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { cn } from "@/lib/utils";
 import { moduleLabel } from "@/lib/tenant-modules";
+import type { StockixModuleId } from "@/lib/tenant-modules";
 import type { LicenseRow, LicenseStatus } from "@/types/license";
 import type { ProvisionEventRow, TenantDetail } from "@/types/tenant";
 
@@ -65,6 +74,9 @@ function moduleBadgeVariant(
   if (mod === "pos") return "secondary";
   return "outline";
 }
+
+const MAX_PROVISION_POLL_MS = 45 * 60 * 1000;
+const PROVISION_POLL_INTERVAL_MS = 2500;
 
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -107,6 +119,10 @@ export default function TenantDetailPage() {
   const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
   const [retryingProvision, setRetryingProvision] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
+  const [provisionPollTimedOut, setProvisionPollTimedOut] = useState(false);
+  const provisionPollStartedAtRef = useRef<number | null>(null);
+  const [clearingFinancePassword, setClearingFinancePassword] = useState(false);
+  const [repairingFinanceLink, setRepairingFinanceLink] = useState(false);
   const [assignPickOpen, setAssignPickOpen] = useState(false);
   const [unassignedPickLoading, setUnassignedPickLoading] = useState(false);
   const [unassignedList, setUnassignedList] = useState<LicenseRow[]>([]);
@@ -116,6 +132,18 @@ export default function TenantDetailPage() {
   const [licenseHistory, setLicenseHistory] = useState<LicenseRow[]>([]);
   const [licenseHistoryLoading, setLicenseHistoryLoading] = useState(false);
   const [licenseHistoryOpen, setLicenseHistoryOpen] = useState(false);
+  const [posCredentialsOpen, setPosCredentialsOpen] = useState(false);
+  const [posCredentialsLoading, setPosCredentialsLoading] = useState(false);
+  const [posCredentials, setPosCredentials] = useState<
+    { role: string; username: string; pin: string }[]
+  >([]);
+  const [posPinResettingRole, setPosPinResettingRole] = useState<string | null>(null);
+  const [addModuleOpen, setAddModuleOpen] = useState(false);
+  const [addModuleChoice, setAddModuleChoice] = useState<"pos" | "pms" | "chat">("pos");
+  const [addingModule, setAddingModule] = useState(false);
+  const [removeModuleOpen, setRemoveModuleOpen] = useState(false);
+  const [moduleToRemove, setModuleToRemove] = useState<"pos" | "pms" | "chat" | null>(null);
+  const [removingModule, setRemovingModule] = useState(false);
   const profileForm = useForm<TenantProfileValues>({
     resolver: zodResolver(tenantProfileSchema),
     defaultValues: {
@@ -212,17 +240,83 @@ export default function TenantDetailPage() {
   }, [licenseHistoryOpen, loadLicenseHistory]);
 
   const deploymentStatus = (tenant?.deployment?.status ?? tenant?.status ?? "").toLowerCase();
+  const tenantStatus = (tenant?.status ?? "").toLowerCase();
   const isProvisioning =
-    deploymentStatus === "provisioning" || deploymentStatus === "pending";
+    deploymentStatus === "provisioning"
+    || deploymentStatus === "pending"
+    || deploymentStatus === "queued"
+    || tenantStatus === "provisioning"
+    || tenantStatus === "queued";
+  const shouldPollProvisioning =
+    (deploymentStatus === "provisioning"
+      || deploymentStatus === "pending"
+      || deploymentStatus === "queued"
+      || tenantStatus === "provisioning"
+      || tenantStatus === "queued")
+    && !provisionPollTimedOut;
 
   useEffect(() => {
-    if (!tenant || !isProvisioning) return;
+    if (!tenant || !shouldPollProvisioning) {
+      provisionPollStartedAtRef.current = null;
+      if (!shouldPollProvisioning) {
+        setProvisionPollTimedOut(false);
+      }
+      return;
+    }
+    if (provisionPollStartedAtRef.current == null) {
+      provisionPollStartedAtRef.current = Date.now();
+    }
+
     const intervalId = window.setInterval(() => {
+      const startedAt = provisionPollStartedAtRef.current ?? Date.now();
+      if (Date.now() - startedAt >= MAX_PROVISION_POLL_MS) {
+        setProvisionPollTimedOut(true);
+        return;
+      }
       void loadTenant();
       void loadEvents();
-    }, 2500);
+    }, PROVISION_POLL_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
-  }, [tenant, isProvisioning]);
+  }, [tenant, shouldPollProvisioning]);
+
+  const clearFinancePassword = async () => {
+    if (!tenant) return;
+    setClearingFinancePassword(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenant.id}/finance-password`, {
+        method: "DELETE",
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not clear Finance credentials"));
+      }
+      toast.success("Finance credentials cleared from dashboard");
+      await loadTenant();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not clear Finance credentials");
+    } finally {
+      setClearingFinancePassword(false);
+    }
+  };
+
+  const repairFinanceLink = async () => {
+    if (!tenant) return;
+    setRepairingFinanceLink(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenant.id}/repair-finance-link`, {
+        method: "POST",
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        toast.error(formatApiError(body, "Could not link Finance tenant."));
+        return;
+      }
+      toast.success("Finance tenant linked.");
+      await loadTenant();
+    } finally {
+      setRepairingFinanceLink(false);
+    }
+  };
 
   useEffect(() => {
     if (!assignPickOpen || !isSuper) return;
@@ -258,6 +352,12 @@ export default function TenantDetailPage() {
   const hasPosModule = tenantModules.includes("pos");
   const hasAccountingModule = tenantModules.includes("accounting");
   const hasAccountingAndPos = hasAccountingModule && hasPosModule;
+  const addableModules = (["pos", "pms", "chat"] as const).filter(
+    (mod) => !tenantModules.includes(mod),
+  );
+  const canRevealPosPins = Boolean(
+    me?.capabilities.canManageTenants && tenant?.posOrganizationId,
+  );
 
   const posOrgHref = useMemo(() => {
     if (tenant?.posOrganizationId) {
@@ -273,6 +373,117 @@ export default function TenantDetailPage() {
       toast.success(`${label} copied`);
     } catch {
       toast.error(`Could not copy ${label}`);
+    }
+  };
+
+  const copyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Could not copy ${label}`);
+    }
+  };
+
+  const addModule = async () => {
+    if (!id) return;
+    setAddingModule(true);
+    try {
+      const res = await fetch(`/api/tenants/${id}/add-module`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module: addModuleChoice }),
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        throw new Error(formatApiError(body, `HTTP ${res.status}`));
+      }
+      toast.success(`Module ${moduleLabel(addModuleChoice)} added — provisioning started`);
+      setAddModuleOpen(false);
+      await loadTenant();
+      await loadEvents();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setAddingModule(false);
+    }
+  };
+
+  const removeModule = async () => {
+    if (!id || !moduleToRemove) return;
+    setRemovingModule(true);
+    try {
+      const res = await fetch(`/api/tenants/${id}/remove-module`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module: moduleToRemove }),
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        throw new Error(formatApiError(body, `HTTP ${res.status}`));
+      }
+      toast.success(`Module ${moduleLabel(moduleToRemove)} removed (data retained)`);
+      setRemoveModuleOpen(false);
+      setModuleToRemove(null);
+      await loadTenant();
+      await loadLicense();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setRemovingModule(false);
+    }
+  };
+
+  const openRemoveModule = (mod: "pos" | "pms" | "chat") => {
+    setModuleToRemove(mod);
+    setRemoveModuleOpen(true);
+  };
+
+  const loadPosCredentials = async () => {
+    if (!id) return;
+    setPosCredentialsLoading(true);
+    try {
+      const res = await fetch(`/api/tenants/${id}/pos-credentials`);
+      const body = (await readJson(res)) as {
+        roles?: { role: string; username: string; pin: string }[];
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not load POS credentials"));
+      }
+      setPosCredentials(Array.isArray(body.roles) ? body.roles : []);
+      setPosCredentialsOpen(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load POS credentials");
+    } finally {
+      setPosCredentialsLoading(false);
+    }
+  };
+
+  const resetPosPin = async (role: string) => {
+    if (!id) return;
+    setPosPinResettingRole(role);
+    try {
+      const res = await fetch(`/api/tenants/${id}/pos-credentials/reset-pin`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const body = (await readJson(res)) as {
+        roles?: { role: string; username: string; pin: string }[];
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not reset PIN"));
+      }
+      setPosCredentials(Array.isArray(body.roles) ? body.roles : []);
+      toast.success(`New PIN issued for ${role}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not reset PIN");
+    } finally {
+      setPosPinResettingRole(null);
     }
   };
 
@@ -338,15 +549,64 @@ export default function TenantDetailPage() {
         </BreadcrumbList>
       </Breadcrumb>
 
+      {provisionPollTimedOut && isProvisioning ? (
+        <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-50">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Provisioning is taking longer than expected</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>
+              Auto-refresh paused after {MAX_PROVISION_POLL_MS / 60000} minutes. Check provisioning
+              events below, worker logs, and Docker — then refresh manually or stop provisioning.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setProvisionPollTimedOut(false);
+                  provisionPollStartedAtRef.current = Date.now();
+                  void loadTenant();
+                  void loadEvents();
+                }}
+              >
+                <RotateCw className="mr-1 h-4 w-4" />
+                Resume auto-refresh
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void loadTenant();
+                  void loadEvents();
+                }}
+              >
+                Refresh now
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setStopProvisionOpen(true)}
+              >
+                <Square className="mr-1 h-4 w-4" />
+                Stop provisioning
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {provisionPartial ? (
         <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-50">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Finance is active — POS provisioning failed</AlertTitle>
+          <AlertTitle>Partial provisioning</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
               {tenant.deployment?.lastError
                 ? tenant.deployment.lastError
-                : "The Finance stack completed, but the POS stack did not provision successfully."}
+                : "Finance completed, but POS provisioning or Bigcapital integration wiring did not finish successfully."}
             </p>
             <Button
               type="button"
@@ -422,13 +682,47 @@ export default function TenantDetailPage() {
                   <p>Created: {formatDateTime(tenant.createdAt)}</p>
                 </div>
                 <div className="space-y-2 pt-1">
-                  <Label>Licensed modules</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Licensed modules</Label>
+                    {isSuper && addableModules.length > 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAddModuleChoice(addableModules[0] ?? "pos");
+                          setAddModuleOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Add module
+                      </Button>
+                    ) : null}
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {tenant.modules.length > 0 ? (
                       tenant.modules.map((mod) => (
-                        <Badge key={mod} variant={moduleBadgeVariant(mod)}>
-                          {moduleLabel(mod)}
-                        </Badge>
+                        <div key={mod} className="flex items-center gap-1">
+                          <Badge variant={moduleBadgeVariant(mod)}>
+                            {moduleLabel(mod as StockixModuleId)}
+                          </Badge>
+                          {isSuper &&
+                          (mod === "pos" || mod === "pms" || mod === "chat") &&
+                          tenant.modules.length > 1 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              title={`Remove ${moduleLabel(mod as StockixModuleId)}`}
+                              onClick={() =>
+                                openRemoveModule(mod as "pos" | "pms" | "chat")
+                              }
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                        </div>
                       ))
                     ) : (
                       <span className="text-sm text-muted-foreground">None configured</span>
@@ -654,6 +948,106 @@ export default function TenantDetailPage() {
           </CardContent>
         </Card>
 
+        {hasAccountingModule &&
+        (tenant.deployment?.status ?? "").toLowerCase() === "active" &&
+        tenant.deployment?.financeAdminPassword ? (
+          <Card className="md:col-span-3">
+            <CardHeader>
+              <CardTitle>Finance admin credentials</CardTitle>
+              <CardDescription>
+                This password works until the admin logs in and changes it. After first login it is
+                permanently invalidated. Clear it from the dashboard once the tenant admin confirms
+                they can sign in.
+                {isSuper ? " Super admins can use Impersonate for support access." : ""}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">Email</p>
+                  <p className="mt-1 font-mono text-xs">{tenant.adminEmail}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Copy admin email"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(tenant.adminEmail);
+                    toast.success("Copied admin email");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">Temporary password</p>
+                  <p className="mt-1 break-all font-mono text-xs">
+                    {tenant.deployment.financeAdminPassword}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Copy temporary password"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(tenant.deployment!.financeAdminPassword!);
+                    toast.success("Copied temporary password");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {tenant.deployment.publicUrl || baseUrl ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground">Login URL</p>
+                    <p className="mt-1 break-all font-mono text-xs">
+                      {tenant.deployment.publicUrl ?? baseUrl}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="Copy login URL"
+                    onClick={() => {
+                      const url = tenant.deployment?.publicUrl ?? baseUrl ?? "";
+                      void navigator.clipboard.writeText(url);
+                      toast.success("Copied login URL");
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : null}
+              <Alert>
+                <AlertDescription>
+                  Clear this password from the dashboard manually after the tenant admin confirms
+                  they have logged in.
+                </AlertDescription>
+              </Alert>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={clearingFinancePassword}
+                onClick={() => void clearFinancePassword()}
+              >
+                {clearingFinancePassword ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : null}
+                Mark credentials as delivered — clear from dashboard
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {hasPosModule ? (
           <Card className="md:col-span-3">
             <CardHeader>
@@ -692,10 +1086,26 @@ export default function TenantDetailPage() {
               )}
               {tenant.posBootstrapCredentials ? (
                 <div className="space-y-2 rounded-md border p-3">
-                  <p className="font-medium text-foreground">Bootstrap credentials</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-foreground">Bootstrap credentials</p>
+                    {canRevealPosPins ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={posCredentialsLoading}
+                        onClick={() => void loadPosCredentials()}
+                      >
+                        {posCredentialsLoading ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Reveal Staff PINs
+                      </Button>
+                    ) : null}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    PINs are masked. Values were captured at provision time from the worker secret
-                    store.
+                    PINs are masked here. Use Reveal Staff PINs to fetch live credentials from the
+                    POS platform (requires manage-tenant access).
                   </p>
                   <p>
                     Admin PIN:{" "}
@@ -711,6 +1121,28 @@ export default function TenantDetailPage() {
                     </ul>
                   ) : null}
                 </div>
+              ) : canRevealPosPins ? (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-foreground">Staff PINs</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={posCredentialsLoading}
+                      onClick={() => void loadPosCredentials()}
+                    >
+                      {posCredentialsLoading ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Reveal Staff PINs
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Provision-time PIN cache is unavailable. Reveal loads current PINs from the POS
+                    organization.
+                  </p>
+                </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   Bootstrap PINs are only available briefly after provisioning (from provision
@@ -724,21 +1156,48 @@ export default function TenantDetailPage() {
         {hasAccountingAndPos ? (
           <Card className="md:col-span-3">
             <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
-              <div>
+              <div className="min-w-0 flex-1">
                 <CardTitle>Finance ↔ POS integration</CardTitle>
                 <CardDescription>
-                  Bigcapital IDs seeded during provisioning — paste into POS integration settings.
+                  When both modules provision successfully, Bigcapital integration is enabled automatically
+                  in POS. Map menu items to Finance items in POS before paid orders sync. IDs below are
+                  for debugging.
                 </CardDescription>
               </div>
-              <Link
-                href={posOrgHref}
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-              >
-                POS organizations
-              </Link>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {(!tenant.deployment?.financeTenantId ||
+                  tenant.deployment.financeTenantId <= 0) &&
+                (tenant.deployment?.status ?? "").toLowerCase() === "active" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={repairingFinanceLink}
+                    onClick={() => void repairFinanceLink()}
+                  >
+                    {repairingFinanceLink ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCw className="mr-1 h-4 w-4" />
+                    )}
+                    Repair Finance link
+                  </Button>
+                ) : null}
+                <Link
+                  href={posOrgHref}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
+                >
+                  POS organizations
+                </Link>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {[
+                {
+                  label: "Finance tenant ID",
+                  value: tenant.deployment?.financeTenantId,
+                  configKey: "financeTenantId",
+                },
                 {
                   label: "Walk-in customer ID",
                   value: tenant.deployment?.financeWalkInCustomerId,
@@ -881,13 +1340,39 @@ export default function TenantDetailPage() {
                   <p>
                     Expires:{" "}
                     {tenantLicense.isPerpetual ? (
-                      <Badge variant="secondary">Perpetual</Badge>
+                      <Badge variant="secondary">Perpetual — no expiry</Badge>
                     ) : tenantLicense.expiresAt ? (
-                      format(new Date(tenantLicense.expiresAt), "PP")
+                      <>
+                        {format(new Date(tenantLicense.expiresAt), "PP")}
+                        {(() => {
+                          const days = Math.ceil(
+                            (new Date(tenantLicense.expiresAt!).getTime() - Date.now()) /
+                              (1000 * 60 * 60 * 24),
+                          );
+                          if (days > 0 && days <= 30 && tenantLicense.status === "active") {
+                            return (
+                              <Badge variant="destructive" className="ml-2">
+                                Expires in {days} day{days === 1 ? "" : "s"}
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </>
                     ) : (
                       "—"
                     )}
                   </p>
+                  {tenantLicense.modules && tenantLicense.modules.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground">License modules:</span>
+                      {tenantLicense.modules.map((mod) => (
+                        <Badge key={mod} variant="outline" className="capitalize">
+                          {moduleLabel(mod as StockixModuleId)}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                   <p>
                     Activations:{" "}
                     {tenantLicense.product === "platform"
@@ -994,6 +1479,80 @@ export default function TenantDetailPage() {
       />
 
       <Dialog
+        open={posCredentialsOpen}
+        onOpenChange={(open) => {
+          setPosCredentialsOpen(open);
+          if (!open) setPosCredentials([]);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>POS staff PINs</DialogTitle>
+          </DialogHeader>
+          <Alert>
+            <AlertDescription>
+              Store these securely. Share only with the tenant admin.
+            </AlertDescription>
+          </Alert>
+          {posCredentials.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No bootstrap credentials found on the POS organization.</p>
+          ) : (
+            <ScrollArea className="max-h-[360px] rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>PIN</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {posCredentials.map((row) => (
+                    <TableRow key={`${row.role}-${row.username}`}>
+                      <TableCell className="font-medium capitalize">{row.role}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.username}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.pin}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void copyText(`${row.role} PIN`, row.pin)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={posPinResettingRole === row.role}
+                            onClick={() => void resetPosPin(row.role)}
+                          >
+                            {posPinResettingRole === row.role ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Reset PIN"
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setPosCredentialsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={assignPickOpen}
         onOpenChange={(open) => {
           setAssignPickOpen(open);
@@ -1068,6 +1627,84 @@ export default function TenantDetailPage() {
           }}
         />
       ) : null}
+
+      <Dialog
+        open={addModuleOpen}
+        onOpenChange={(open) => {
+          setAddModuleOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add module</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Provisions the selected module stack for this tenant. Existing modules are unchanged.
+          </p>
+          <div className="space-y-2">
+            <Label>Module</Label>
+            <Select
+              value={addModuleChoice}
+              onValueChange={(v) => setAddModuleChoice(v as "pos" | "pms" | "chat")}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select module" />
+              </SelectTrigger>
+              <SelectContent>
+                {addableModules.map((mod) => (
+                  <SelectItem key={mod} value={mod}>
+                    {moduleLabel(mod)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddModuleOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={addingModule || addableModules.length === 0} onClick={() => void addModule()}>
+              {addingModule ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Add & provision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={removeModuleOpen}
+        onOpenChange={(open) => {
+          setRemoveModuleOpen(open);
+          if (!open) setModuleToRemove(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove module</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Removes{" "}
+            <span className="font-medium text-foreground">
+              {moduleToRemove ? moduleLabel(moduleToRemove) : "this module"}
+            </span>{" "}
+            from the license and stops its Docker stack. Data volumes are not destroyed — stacks can be
+            re-provisioned later by adding the module again.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRemoveModuleOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={removingModule || !moduleToRemove}
+              onClick={() => void removeModule()}
+            >
+              {removingModule ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Remove module
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={stopProvisionOpen}
@@ -1176,7 +1813,11 @@ export default function TenantDetailPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Provisioning History</CardTitle>
           <Button variant="ghost" size="sm" onClick={() => void loadEvents()}>
-            {isProvisioning ? "Live (auto-refreshing)" : "Refresh"}
+            {shouldPollProvisioning
+              ? "Live (auto-refreshing)"
+              : provisionPollTimedOut && isProvisioning
+                ? "Refresh (auto-refresh paused)"
+                : "Refresh"}
           </Button>
         </CardHeader>
         <CardContent>
@@ -1231,7 +1872,7 @@ export default function TenantDetailPage() {
         </CardHeader>
         {dangerOpen ? (
           <CardContent className="space-y-4">
-            {tenant.status === "active" ? (
+            {tenant.status === "active" || tenant.status === "partial" ? (
               <Button variant="outline" onClick={() => setSuspendOpen(true)}>
                 <PauseCircle className="mr-1 h-4 w-4" />
                 Suspend tenant
@@ -1405,11 +2046,16 @@ export default function TenantDetailPage() {
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
                 const body = await readJson(res);
-                const data = body as { error?: string; message?: string };
+                const data = body as { error?: string; message?: string; hardDeleted?: boolean };
                 if (!res.ok && res.status !== 404) {
                   setError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
                   return;
                 }
+                toast.success(
+                  data.hardDeleted
+                    ? `Tenant "${tenant.slug}" deleted.`
+                    : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
+                );
                 router.push("/tenants");
               }}
             >
@@ -1420,11 +2066,16 @@ export default function TenantDetailPage() {
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
                 const body = await readJson(res);
-                const data = body as { error?: string; message?: string };
+                const data = body as { error?: string; message?: string; hardDeleted?: boolean };
                 if (!res.ok && res.status !== 404) {
                   setError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
                   return;
                 }
+                toast.success(
+                  data.hardDeleted
+                    ? `Tenant "${tenant.slug}" deleted.`
+                    : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
+                );
                 router.push("/tenants");
               }}
             >

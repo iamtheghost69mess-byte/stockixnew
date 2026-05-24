@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const listUsersMock = vi.fn();
 const createUserMock = vi.fn();
+const inviteUserMock = vi.fn();
 
 vi.mock("@repo/config", () => ({
   apiConfig: {
@@ -15,6 +16,7 @@ vi.mock("../src/finance-users.client.js", () => ({
   createFinanceUsersClient: () => ({
     listUsers: listUsersMock,
     createUser: createUserMock,
+    inviteUser: inviteUserMock,
     updateUser: vi.fn(),
     deleteUser: vi.fn(),
     resetPassword: vi.fn(),
@@ -171,6 +173,46 @@ describe("finance-users-http", () => {
       42,
       expect.objectContaining({ email: "new@example.com", roleId: 1 }),
     );
+  });
+
+  it("invites user via finance client", async () => {
+    inviteUserMock.mockResolvedValue({
+      userId: 5,
+      email: "invite@example.com",
+      message: "Invitation queued for delivery",
+    });
+
+    const res = await app.request(
+      `http://local/tenants/${TENANT_UUID}/users/invite`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "invite@example.com", roleId: 2 }),
+      },
+    );
+
+    expect(res.status).toBe(201);
+    expect(inviteUserMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ email: "invite@example.com", roleId: 2 }),
+    );
+  });
+
+  it("returns 503 on invite when finance tenant is not linked", async () => {
+    const { registerTenantFinanceUsersApi } = await import("../src/finance-users-http.js");
+    const localApp = new Hono();
+    registerTenantFinanceUsersApi(localApp, mockDbRow({ financeTenantId: null }) as never);
+
+    const res = await localApp.request(
+      `http://local/tenants/${TENANT_UUID}/users/invite`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "invite@example.com", roleId: 1 }),
+      },
+    );
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("finance_tenant_not_linked");
   });
 
   it("returns 400 for invalid create body", async () => {

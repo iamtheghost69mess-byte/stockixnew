@@ -1,8 +1,5 @@
-const theme =
-  localStorage.getItem('theme') ||
-  (window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light');
+// Stockix default theme is dark (see index.html). Override via localStorage theme=light.
+const theme = localStorage.getItem('theme') || 'dark';
 
 if (theme === 'dark') {
   document.documentElement.classList.add('bp4-dark');

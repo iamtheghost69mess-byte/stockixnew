@@ -85,6 +85,21 @@ export async function getActiveLicenseForTenant(
   return null;
 }
 
+/** Stockix license end date for POS org provisioning (perpetual → far-future cap). */
+export async function getLicenseExpiry(
+  db: PlanLimitsDb,
+  tenantId: string,
+): Promise<Date | null> {
+  const lic = await getActiveLicenseForTenant(db, tenantId);
+  if (!lic) return null;
+  if (lic.isPerpetual) {
+    const far = new Date();
+    far.setUTCFullYear(far.getUTCFullYear() + 100);
+    return far;
+  }
+  return lic.expiresAt ?? null;
+}
+
 /**
  * Fetches maxOrganizations and maxActivations from the plans table
  * for a given planSlug. Returns safe defaults on miss.
@@ -92,11 +107,12 @@ export async function getActiveLicenseForTenant(
 export async function getPlanLimits(
   db: PlanLimitsDb,
   planSlug: string,
-): Promise<{ maxOrganizations: number; maxActivations: number }> {
+): Promise<{ maxOrganizations: number; maxActivations: number; maxUsers: number }> {
   const row = await db
     .select({
       maxOrganizations: plans.maxOrganizations,
       maxActivations: plans.maxActivations,
+      maxUsers: plans.maxUsers,
     })
     .from(plans)
     .where(eq(plans.slug, planSlug))
@@ -104,12 +120,13 @@ export async function getPlanLimits(
 
   if (!row[0]) {
     console.warn(`[getPlanLimits] Plan slug "${planSlug}" not found. Using defaults.`);
-    return { maxOrganizations: 1, maxActivations: 1 };
+    return { maxOrganizations: 1, maxActivations: 1, maxUsers: 999 };
   }
 
   return {
     maxOrganizations: row[0].maxOrganizations,
     maxActivations: row[0].maxActivations,
+    maxUsers: row[0].maxUsers,
   };
 }
 

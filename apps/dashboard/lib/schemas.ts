@@ -73,10 +73,15 @@ export const assignLicenseSchema = z.object({
 });
 export type AssignLicenseValues = z.infer<typeof assignLicenseSchema>;
 
+const licenseModuleSchema = z.enum(["accounting", "pos", "pms", "chat"]);
+
 export const generateLicenseSchema = z
   .object({
     product: z.enum(["platform", "pos_desktop", "bundle"]),
     planSlug: z.string().min(1, "Please select a plan"),
+    modules: z
+      .array(licenseModuleSchema)
+      .min(1, "Select at least one module"),
     term: z.enum(["perpetual", "fixed"]),
     expiresAt: z.string().optional(),
     maxActivations: z
@@ -120,6 +125,7 @@ export const planSchema = z.object({
   description: z.string().max(500, "Description must be at most 500 characters").optional(),
   maxOrganizations: z.coerce.number().int().min(-1, "Use -1 for unlimited").max(9999),
   maxActivations: z.coerce.number().int().min(1, "Must allow at least 1 activation").max(9999),
+  maxUsers: z.coerce.number().int().min(1, "Must allow at least 1 user").max(9999),
   isActive: z.boolean(),
   sortOrder: z.coerce.number().int().min(0).max(9999),
   priceMonthly: z.coerce.number().int().min(0).optional(),

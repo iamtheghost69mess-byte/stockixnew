@@ -1,3 +1,5 @@
+import { parseFinanceApiJsonText } from "@repo/shared/finance-api";
+
 export type SeedFinancePosDefaultsResult = {
   walkInCustomerId: number;
   cashAccountId: number;
@@ -26,12 +28,7 @@ export async function seedFinancePosDefaults(params: {
     signal: AbortSignal.timeout(120_000),
   });
   const text = await res.text();
-  let body: Record<string, unknown> = {};
-  try {
-    body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-  } catch {
-    body = { raw: text };
-  }
+  const body = parseFinanceApiJsonText(text);
   if (!res.ok) {
     const detail =
       typeof body.message === "string"

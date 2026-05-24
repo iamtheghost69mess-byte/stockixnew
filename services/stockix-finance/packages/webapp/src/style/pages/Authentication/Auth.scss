@@ -1,3 +1,14 @@
+body.authentication {
+  min-height: 100vh;
+  /* Stockix default — dark auth shell (matches index.html bp4-dark). */
+  background: var(--color-dark-gray1, #1c2127);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+html:has(body.authentication.bp4-dark) {
+  background: var(--color-dark-gray1, #1c2127);
+}
+
 .authTransition {
   &-enter {
     opacity: 0;

@@ -11,6 +11,12 @@ const ACCOUNT_SETTING_KEYS = new Set([
   'preferred_payment_account',
 ]);
 
+export type ChartOfAccountsExport = {
+  accounts: Array<Record<string, unknown>>;
+  taxRates: Array<Record<string, unknown>>;
+  settings: Array<Record<string, unknown>>;
+};
+
 @Injectable()
 export class CopyParentTenantSettingsService {
   constructor(private readonly tenantKnexFactory: TenantKnexFactory) {}
@@ -29,8 +35,9 @@ export class CopyParentTenantSettingsService {
     const parentKnex = await this.tenantKnexFactory.getKnexForTenantId(parentTenantId);
     const childKnex = await this.tenantKnexFactory.getKnexForTenantId(tenantId);
 
-    const { accountIdMap, accountsCopied } = await this.copyAccounts(
-      parentKnex,
+    const parentAccounts = await parentKnex('accounts').select('*');
+    const { accountIdMap, accountsCopied } = await this.copyAccountsFromRows(
+      parentAccounts,
       childKnex,
     );
     const taxRatesCopied = await this.copyTaxRates(parentKnex, childKnex);
@@ -47,14 +54,69 @@ export class CopyParentTenantSettingsService {
     };
   }
 
+  /**
+   * Exports chart of accounts, tax rates, and account-pointer settings for cross-stack copy.
+   */
+  async exportChartOfAccounts(tenantId: number): Promise<ChartOfAccountsExport> {
+    const knex = await this.tenantKnexFactory.getKnexForTenantId(tenantId);
+    const accounts = await knex('accounts').select('*');
+    const taxRates = await knex('tax_rates').select('*');
+    const settings = (await knex('settings').select('*')).filter((row) =>
+      ACCOUNT_SETTING_KEYS.has(String(row.key)),
+    );
+
+    return { accounts, taxRates, settings };
+  }
+
+  /**
+   * Imports chart of accounts payload exported from another Finance stack (cross-stack copy).
+   */
+  async importChartOfAccounts(
+    tenantId: number,
+    payload: ChartOfAccountsExport,
+  ): Promise<{
+    accountsCopied: number;
+    taxRatesCopied: number;
+    settingsCopied: number;
+  }> {
+    const childKnex = await this.tenantKnexFactory.getKnexForTenantId(tenantId);
+
+    const { accountIdMap, accountsCopied } = await this.copyAccountsFromRows(
+      payload.accounts,
+      childKnex,
+    );
+    const taxRatesCopied = await this.copyTaxRatesFromRows(
+      payload.taxRates,
+      childKnex,
+    );
+    const settingsCopied = await this.copyAccountSettingsFromRows(
+      payload.settings,
+      childKnex,
+      accountIdMap,
+    );
+
+    return {
+      accountsCopied,
+      taxRatesCopied,
+      settingsCopied,
+    };
+  }
+
   private async copyAccounts(
     parentKnex: Knex,
+    childKnex: Knex,
+  ): Promise<{ accountIdMap: Map<number, number>; accountsCopied: number }> {
+    const parentAccounts = await parentKnex('accounts').select('*');
+    return this.copyAccountsFromRows(parentAccounts, childKnex);
+  }
+
+  private async copyAccountsFromRows(
+    parentAccounts: Array<Record<string, unknown>>,
     childKnex: Knex,
   ): Promise<{ accountIdMap: Map<number, number>; accountsCopied: number }> {
     const accountIdMap = new Map<number, number>();
     let accountsCopied = 0;
 
-    const parentAccounts = await parentKnex('accounts').select('*');
     const childBefore = await childKnex('accounts').select('id', 'code', 'slug');
     const childByCode = new Map(
       childBefore.filter((a) => a.code).map((a) => [String(a.code), Number(a.id)]),
@@ -102,6 +164,13 @@ export class CopyParentTenantSettingsService {
 
   private async copyTaxRates(parentKnex: Knex, childKnex: Knex): Promise<number> {
     const taxRates = await parentKnex('tax_rates').select('*');
+    return this.copyTaxRatesFromRows(taxRates, childKnex);
+  }
+
+  private async copyTaxRatesFromRows(
+    taxRates: Array<Record<string, unknown>>,
+    childKnex: Knex,
+  ): Promise<number> {
     const countBefore = (await childKnex('tax_rates').select('id')).length;
 
     for (const row of taxRates) {
@@ -126,14 +195,24 @@ export class CopyParentTenantSettingsService {
       return 0;
     }
 
-    const parentSettings = await parentKnex('settings').select('*');
+    const parentSettings = (await parentKnex('settings').select('*')).filter((row) =>
+      ACCOUNT_SETTING_KEYS.has(String(row.key)),
+    );
+    return this.copyAccountSettingsFromRows(parentSettings, childKnex, accountIdMap);
+  }
+
+  private async copyAccountSettingsFromRows(
+    parentSettings: Array<Record<string, unknown>>,
+    childKnex: Knex,
+    accountIdMap: Map<number, number>,
+  ): Promise<number> {
+    if (accountIdMap.size === 0) {
+      return 0;
+    }
+
     let settingsCopied = 0;
 
     for (const row of parentSettings) {
-      if (!ACCOUNT_SETTING_KEYS.has(row.key)) {
-        continue;
-      }
-
       const parentAccountId = Number(row.value);
       const childAccountId = accountIdMap.get(parentAccountId);
       if (!childAccountId) {

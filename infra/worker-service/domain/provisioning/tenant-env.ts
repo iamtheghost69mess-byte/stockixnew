@@ -24,10 +24,18 @@ export type TenantEnvFileParams = {
   internalApiSecret?: string;
 };
 
-/** Shared signup policy for tenant .env — public register fully disabled. */
-export function buildTenantSignupEnv(): { SIGNUP_DISABLED: string } {
+import { apiConfig } from "@repo/config";
+
+/** Signup policy copied from repo root `.env` into each tenant Finance stack. */
+export function buildTenantSignupEnv(): {
+  SIGNUP_DISABLED: string;
+  SIGNUP_ALLOWED_DOMAINS: string;
+  SIGNUP_ALLOWED_EMAILS: string;
+} {
   return {
-    SIGNUP_DISABLED: "true",
+    SIGNUP_DISABLED: apiConfig.signupDisabled ? "true" : "false",
+    SIGNUP_ALLOWED_DOMAINS: apiConfig.signupAllowedDomains,
+    SIGNUP_ALLOWED_EMAILS: apiConfig.signupAllowedEmailsOverride,
   };
 }
 
@@ -65,7 +73,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     MONGODB_DATABASE_URL: env.MONGODB_DATABASE_URL ?? "mongodb://mongo/stockix",
     PUBLIC_PROXY_PORT: String(params.publicProxyPort),
     PUBLIC_PROXY_SSL_PORT: "443",
-    SIGNUP_DISABLED: signup.SIGNUP_DISABLED,
+    ...signup,
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
     MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",

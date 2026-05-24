@@ -13,6 +13,8 @@ export type TenantRow = {
   name: string;
   adminEmail: string;
   planSlug?: string;
+  /** Row in `tenants` (may differ from deployment when status is partial). */
+  tenantStatus?: string | null;
   deploymentStatus: string | null;
   internalPort: number | null;
   composeProject: string | null;
@@ -45,6 +47,10 @@ export type TenantDetail = {
     adminPinMasked: string;
     allRoles: { role: string; username: string; pinMasked: string }[];
   } | null;
+  latestProvision: {
+    correlationId: string;
+    jobStatus: string;
+  } | null;
   createdAt: string;
   deployment: {
     status: string;
@@ -57,6 +63,8 @@ export type TenantDetail = {
     financeWalkInCustomerId: number | null;
     financeCashAccountId: number | null;
     financeCardAccountId: number | null;
+    publicUrl: string | null;
+    financeAdminPassword: string | null;
     lastError: string | null;
     registrationCompletedAt: string | null;
     createdAt: string;

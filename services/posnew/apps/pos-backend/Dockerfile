@@ -1,23 +1,27 @@
-# Single-stage production build (more reliable for native modules)
+# Build context: Stockix repo root (STOCKIX_REPO_ROOT).
+# Requires: pnpm --filter @repo/auth build && packages/auth/dist present.
 FROM node:20
 
 WORKDIR /app
 
-# Install build tools and production utilities
 RUN apt-get update && apt-get install -y --no-install-recommends curl dumb-init \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifest and config
-COPY apps/pos-backend/package.json ./
-COPY .npmrc ./
+COPY packages/auth /packages/auth
+# @repo/auth is loaded from /packages/auth; install runtime deps there (not under /app/node_modules).
+RUN node -e "const fs=require('fs');const p='/packages/auth/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));delete j.devDependencies;fs.writeFileSync(p,JSON.stringify(j));" \
+    && cd /packages/auth && npm install --omit=dev --legacy-peer-deps --no-audit
+COPY services/posnew/packages/domain-access /packages/domain-access
+COPY services/posnew/.npmrc ./.npmrc
+COPY services/posnew/apps/pos-backend/package.json ./package.json
 
-# Install dependencies standalone
-RUN npm install --legacy-peer-deps --no-audit
+RUN npm pkg set \
+    dependencies.@repo/auth=file:/packages/auth \
+    dependencies.@restaurant-pos/domain-access=file:/packages/domain-access \
+    && npm install --legacy-peer-deps --no-audit
 
-# Copy application source
-COPY apps/pos-backend ./
+COPY services/posnew/apps/pos-backend ./
 
-# Ensure uploads directory exists and is writable
 RUN mkdir -p uploads && chown -R node:node /app
 
 USER node
@@ -25,7 +29,6 @@ USER node
 ENV NODE_ENV=production
 ENV PORT=8010
 EXPOSE 8010
-
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "app.js"]

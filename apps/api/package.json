@@ -7,12 +7,13 @@
     "dist"
   ],
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node ../../scripts/dev-api.mjs",
     "build": "tsup",
     "start": "node dist/index.js",
     "provision-smoke": "node scripts/provision-smoke.mjs",
     "provision-scenarios": "node scripts/provision-scenarios.mjs",
     "provision-diagnose": "node scripts/provision-diagnose.mjs",
+    "provision-modules": "node scripts/provision-module-matrix.mjs",
     "lint": "eslint .",
     "check-types": "tsc --noEmit",
     "test": "vitest run"

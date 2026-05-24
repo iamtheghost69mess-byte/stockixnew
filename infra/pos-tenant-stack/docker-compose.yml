@@ -1,14 +1,18 @@
 # Per-tenant POS stack (provisioned when tenant modules includes "pos").
+# Build: pnpm pos:images:build  (from repo root; sets STOCKIX_REPO_ROOT + POS_APP_ROOT)
 services:
   pos-backend:
     image: stockix-pos-backend:local
     build:
-      context: ${POS_APP_ROOT}/apps/pos-backend
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
       - PORT=${POS_PORT:-8010}
-      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}
+      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}?replicaSet=rs0
       - REDIS_URL=redis://pos-redis:6379
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
       - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
@@ -16,16 +20,62 @@ services:
       - POS_BACKEND_URL=${POS_BACKEND_URL}
       - POS_FRONTEND_URL=${POS_FRONTEND_URL}
       - PUBLIC_APP_URL=${POS_FRONTEND_URL}
+      - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
     depends_on:
       - pos-mongo
       - pos-redis
     ports:
       - "127.0.0.1:${POS_HOST_PORT:-8010}:8010"
 
+  pos-platform-worker:
+    image: stockix-pos-backend:local
+    build:
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-backend/Dockerfile
+    restart: unless-stopped
+    command: node workers/platformWorker.js
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}?replicaSet=rs0
+      - REDIS_URL=redis://pos-redis:6379
+      - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
+      - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
+      - TENANT_ID=${TENANT_ID}
+      - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
+    depends_on:
+      - pos-mongo
+      - pos-redis
+      - pos-backend
+
+  pos-bigcapital-worker:
+    image: stockix-pos-backend:local
+    build:
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-backend/Dockerfile
+    restart: unless-stopped
+    command: node workers/bigcapitalSyncWorker.js
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}?replicaSet=rs0
+      - REDIS_URL=redis://pos-redis:6379
+      - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
+      - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
+      - TENANT_ID=${TENANT_ID}
+      - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
+    depends_on:
+      - pos-mongo
+      - pos-redis
+      - pos-backend
+
   pos-frontend:
     image: stockix-pos-frontend:local
     build:
-      context: ${POS_APP_ROOT}/apps/pos-frontend2
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-frontend2/Dockerfile
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}
@@ -35,8 +85,31 @@ services:
   pos-mongo:
     image: mongo:7.0
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - pos_mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  pos-mongo-init:
+    image: mongo:7.0
+    depends_on:
+      pos-mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -ec
+      - |
+        mongosh --host pos-mongo:27017 --eval "
+        try { rs.status(); } catch (e) {
+          rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'pos-mongo:27017' }] });
+        }
+        "
 
   pos-redis:
     image: redis:7-alpine

@@ -12,8 +12,12 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { SwitchTenantDto } from './dtos/SwitchTenant.dto';
+import { AuthChangePasswordDto } from './dtos/AuthChangePassword.dto';
+import { SystemUser } from '../System/models/SystemUser';
 import { Throttle } from '@nestjs/throttler';
 import { TenantAgnosticRoute } from '../Tenancy/TenancyGlobal.guard';
 import { AuthenticationApplication } from './AuthApplication.sevice';
@@ -68,5 +72,17 @@ export class AuthedController {
   @ApiOperation({ summary: 'Switch active organization and issue a new JWT' })
   async switchTenant(@Body() body: SwitchTenantDto) {
     return this.authApp.switchTenant(body.organizationId);
+  }
+
+  @Post('/change_password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password for the authenticated user' })
+  @ApiBody({ type: AuthChangePasswordDto })
+  async changePassword(
+    @Req() req: Request & { user: SystemUser },
+    @Body() body: AuthChangePasswordDto,
+  ) {
+    await this.authApp.changePassword(req.user.id, body.password);
+    return { success: true };
   }
 }

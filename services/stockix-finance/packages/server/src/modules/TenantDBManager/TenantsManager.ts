@@ -14,6 +14,7 @@ import { SeedMigration } from '@/libs/migration-seed/SeedMigration';
 import { TenantRepository } from '../System/repositories/Tenant.repository';
 import { TenancyContext } from '../Tenancy/TenancyContext.service';
 import { TENANCY_DB_CONNECTION } from '../Tenancy/TenancyDB/TenancyDB.constants';
+import { LicenseService } from '../License/License.service';
 
 @Injectable()
 export class TenantsManagerService {
@@ -23,6 +24,7 @@ export class TenantsManagerService {
     private readonly eventEmitter: EventEmitter2,
     private readonly tenantRepository: TenantRepository,
     private readonly i18nService: I18nService,
+    private readonly licenseService: LicenseService,
 
     @Inject(TENANCY_DB_CONNECTION)
     private readonly tenantKnex: () => Knex,
@@ -33,6 +35,7 @@ export class TenantsManagerService {
    * @return {Promise<TenantModel>}
    */
   public async createTenant(): Promise<TenantModel> {
+    await this.licenseService.assertCanCreateOrganization();
     return this.tenantRepository.createWithUniqueOrgId();
   }
 
