@@ -3,6 +3,7 @@ import { isAbsolute, join } from "node:path";
 import { execa } from "execa";
 
 import { apiConfig, moduleGatingConfig, posConfig } from "@repo/config";
+import { publicConfig } from "@repo/config/public";
 
 import { allocateTenantPort } from "@repo/db";
 
@@ -213,20 +214,23 @@ function defaultPosFrontendPort(): number {
 
 
 
-function buildPosPublicUrls(slug: string): { posUrl: string; posApiUrl: string } {
-
+function buildPosPublicUrls(
+  slug: string,
+  ports: { backendPort: number; frontendPort: number },
+): { posUrl: string; posApiUrl: string } {
   const rootDomain = apiConfig.rootDomain || "example.com";
-
-  const scheme = apiConfig.publicBaseUrlScheme || "https";
-
+  const scheme = (apiConfig.publicBaseUrlScheme || "https").replace(/:+$/, "");
+  if (rootDomain === "localhost") {
+    const host = publicConfig.stockixLocalTenantHost || "127.0.0.1";
+    return {
+      posUrl: `${scheme}://${host}:${ports.frontendPort}`,
+      posApiUrl: `${scheme}://${host}:${ports.backendPort}`,
+    };
+  }
   return {
-
     posUrl: `${scheme}://${slug}-pos.${rootDomain}`,
-
     posApiUrl: `${scheme}://${slug}-pos-api.${rootDomain}`,
-
   };
-
 }
 
 
@@ -282,13 +286,11 @@ export async function provisionPosStack(
 
   const platformApiKey = posConfig.platformApiKey.trim();
 
-  const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug);
-
   const rootDomain = apiConfig.rootDomain || "example.com";
 
-
-
   const { backendPort, frontendPort } = await resolvePosPorts(opts.db, opts.log);
+
+  const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug, { backendPort, frontendPort });
 
   const financeInternalBaseUrl =
     opts.financeInternalPort && opts.financeInternalPort > 0
@@ -392,9 +394,14 @@ export async function provisionPosStack(
 
 
 
-  opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
-
-  await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
+  if (rootDomain === "localhost") {
+    opts.log(
+      `[provision][pos] localhost dev: skipping Traefik (open POS at ${posUrl})`,
+    );
+  } else {
+    opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
+    await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
+  }
 
 
 

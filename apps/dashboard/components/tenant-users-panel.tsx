@@ -216,8 +216,19 @@ export default function TenantUsersPanel({
         setUsers([]);
         return;
       }
-      const data = body as { users?: FinanceUserRow[] };
-      setUsers(data.users ?? []);
+      const raw = (body as { users?: Array<FinanceUserRow & { id?: number }> }).users ?? [];
+      setUsers(
+        raw
+          .map((row) => ({
+            userId: Number(row.userId ?? row.id),
+            email: row.email,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            roleName: row.roleName,
+            isActive: row.isActive,
+          }))
+          .filter((row) => Number.isFinite(row.userId) && row.userId > 0),
+      );
     } finally {
       setLoading(false);
     }
@@ -491,7 +502,7 @@ export default function TenantUsersPanel({
               </TableHeader>
               <TableBody>
                 {users.map((user) => (
-                  <TableRow key={user.userId}>
+                  <TableRow key={`${user.userId}-${user.email}`}>
                     <TableCell>
                       {user.firstName} {user.lastName}
                     </TableCell>

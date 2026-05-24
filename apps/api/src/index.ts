@@ -68,6 +68,7 @@ import {
 } from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
 import { registerPosCredentialsRoutes } from "./pos-credentials-http.js";
+import { effectivePosUrl } from "./pos-public-url.js";
 import { registerTenantModulesRoutes } from "./tenant-modules-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
@@ -4302,6 +4303,20 @@ app.get("/tenants/:tenantId", async (c) => {
     .orderBy(desc(tenantLifecycleJobs.createdAt))
     .limit(1);
 
+  let resolvedPosUrl = row.posUrl;
+  if (row.slug && row.posUrl) {
+    const effective = await effectivePosUrl(row.slug, row.posUrl);
+    if (effective && effective !== row.posUrl) {
+      resolvedPosUrl = effective;
+      await db
+        .update(tenantDeployments)
+        .set({ posUrl: effective, updatedAt: new Date() })
+        .where(eq(tenantDeployments.tenantId, parsed.data));
+    } else if (effective) {
+      resolvedPosUrl = effective;
+    }
+  }
+
   return c.json({
     tenant: {
       id: row.id,
@@ -4331,7 +4346,7 @@ app.get("/tenants/:tenantId", async (c) => {
               status: row.deploymentStatus,
               composeProjectName: row.composeProjectName,
               internalPort: row.internalPort,
-              posUrl: row.posUrl,
+              posUrl: resolvedPosUrl,
               financeTenantId: row.financeTenantId,
               financeOrganizationId: row.financeOrganizationId,
               financeDefaultWarehouseId: row.financeDefaultWarehouseId,
