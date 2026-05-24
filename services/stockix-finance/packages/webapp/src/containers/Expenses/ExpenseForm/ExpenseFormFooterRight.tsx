@@ -4,26 +4,27 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
 } from '@/components';
-import { useExpenseSubtotalFormatted, useExpenseTotalFormatted } from './utils';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
+import { useExpensesTotals } from './utils';
 
 export function ExpenseFormFooterRight() {
-  const totalFormatted = useExpenseTotalFormatted();
-  const subtotalFormatted = useExpenseSubtotalFormatted();
+  const { total, formattedSubtotal, formattedTotal } = useExpensesTotals();
 
   return (
     <ExpensesTotalLines>
-      <TotalLine
+      <DualCurrencyFormTotalLine
+        amount={total}
         title={<T id={'expense.label.subtotal'} />}
-        value={subtotalFormatted}
+        value={formattedSubtotal}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
+        amount={total}
         title={<T id={'expense.label.total'} />}
-        value={totalFormatted}
+        value={formattedTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
     </ExpensesTotalLines>
@@ -31,11 +32,6 @@ export function ExpenseFormFooterRight() {
 }
 
 const ExpensesTotalLines = styled(TotalLines)`
-  --x-color-text: #555555;
-
-  .bp4-dark & {
-    --x-color-text: var(--color-light-gray4);
-  }
   width: 100%;
-  color: var(--x-color-text);
+  color: #555555;
 `;

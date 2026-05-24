@@ -6,7 +6,6 @@ import { CLASSES } from '@/constants/classes';
 
 import DashboardTopbarUser from '@/components/Dashboard/TopbarUser';
 import UsersActions from '@/containers/Preferences/Users/UsersActions';
-import CurrenciesActions from '@/containers/Preferences/Currencies/CurrenciesActions';
 import WarehousesActions from '@/containers/Preferences/Warehouses/WarehousesActions';
 import BranchesActions from '@/containers/Preferences/Branches/BranchesActions';
 import ApiKeysActions from '@/containers/Preferences/ApiKeys/ApiKeysActions';
@@ -34,11 +33,6 @@ function PreferencesTopbar({ preferencesPageTitle }) {
         <Route pathname="/preferences">
           <Switch>
             <Route exact path={'/preferences/users'} component={UsersActions} />
-            <Route
-              exact
-              path={'/preferences/currencies'}
-              component={CurrenciesActions}
-            />
             <Route
               exact
               path={'/preferences/warehouses'}

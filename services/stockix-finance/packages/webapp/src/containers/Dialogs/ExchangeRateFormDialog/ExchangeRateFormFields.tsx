@@ -1,0 +1,101 @@
+// @ts-nocheck
+import React from 'react';
+import { Classes, FormGroup, InputGroup, Position } from '@blueprintjs/core';
+import { FastField } from 'formik';
+import { DateInput } from '@blueprintjs/datetime';
+import { FormattedMessage as T } from '@/components';
+import classNames from 'classnames';
+import {
+  momentFormatter,
+  tansformDateValue,
+  handleDateChange,
+  inputIntent,
+} from '@/utils';
+import {
+  ErrorMessage,
+  FieldRequiredHint,
+  CurrencySelectList,
+} from '@/components';
+import { useExchangeRateFromContext } from './ExchangeRateFormProvider';
+import { InverseExchangeRateInput } from '@/components';
+import { useCurrentOrganization } from '@/hooks/state';
+
+export default function ExchangeRateFormFields() {
+  const { action, currencies, currencyCode } = useExchangeRateFromContext();
+  const org = useCurrentOrganization();
+  const baseCurrency = org?.base_currency || 'Base';
+
+  // Lock the currency select when pre-filled via "Set Rate" or in edit mode.
+  const isCurrencyLocked = action === 'edit' || !!currencyCode;
+
+  return (
+    <div className={Classes.DIALOG_BODY}>
+      {/* ----------- Date ----------- */}
+      <FastField name={'date'}>
+        {({ form, field: { value }, meta: { error, touched } }) => (
+          <FormGroup
+            label={<T id={'date'} />}
+            labelInfo={FieldRequiredHint}
+            className={classNames('form-group--select-list', Classes.FILL)}
+            intent={inputIntent({ error, touched })}
+            helperText={<ErrorMessage name="date" />}
+            inline={true}
+          >
+            <DateInput
+              {...momentFormatter('YYYY/MM/DD')}
+              value={tansformDateValue(value)}
+              onChange={handleDateChange((formattedDate) => {
+                form.setFieldValue('date', formattedDate);
+              })}
+              popoverProps={{ position: Position.BOTTOM, minimal: true }}
+              disabled={action === 'edit'}
+            />
+          </FormGroup>
+        )}
+      </FastField>
+      {/* ----------- Currency Code ----------- */}
+      <FastField name={'currency_code'}>
+        {({ form, field: { value }, meta: { error, touched } }) => (
+          <FormGroup
+            label={<T id={'currency_code'} />}
+            labelInfo={<FieldRequiredHint />}
+            className={classNames('form-group--currency', Classes.FILL)}
+            intent={inputIntent({ error, touched })}
+            helperText={<ErrorMessage name="currency_code" />}
+            inline={true}
+          >
+            <CurrencySelectList
+              currenciesList={currencies}
+              selectedCurrencyCode={value}
+              onCurrencySelected={({ currency_code }) => {
+                form.setFieldValue('currency_code', currency_code);
+              }}
+              disabled={isCurrencyLocked}
+            />
+          </FormGroup>
+        )}
+      </FastField>
+
+      {/*------------ Exchange Rate  -----------*/}
+      <FastField name={'exchange_rate'}>
+        {({ form, field, meta: { error, touched } }) => {
+          const selectedCurrency = form.values.currency_code || 'Foreign';
+          return (
+            <FormGroup
+              label={`Exchange Rate (1 ${baseCurrency} = ? ${selectedCurrency})`}
+              labelInfo={<FieldRequiredHint />}
+              intent={inputIntent({ error, touched })}
+              helperText={<ErrorMessage name="exchange_rate" />}
+              inline={true}
+            >
+              <InverseExchangeRateInput 
+                name={'exchange_rate'}
+                intent={inputIntent({ error, touched })} 
+              />
+            </FormGroup>
+          );
+        }}
+      </FastField>
+    </div>
+  );
+}

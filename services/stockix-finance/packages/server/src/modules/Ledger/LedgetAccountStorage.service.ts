@@ -1,39 +1,25 @@
-import * as async from 'async';
+import { Service, Inject } from 'typedi';
+import async from 'async';
 import { Knex } from 'knex';
 import { uniq } from 'lodash';
-import {
-  ILedger,
-  ISaveAccountsBalanceQueuePayload,
-} from './types/Ledger.types';
-import { Inject, Injectable } from '@nestjs/common';
-import { Account } from '../Accounts/models/Account.model';
-import { AccountRepository } from '../Accounts/repositories/Account.repository';
-import { TenancyContext } from '../Tenancy/TenancyContext.service';
-import { TenantModelProxy } from '../System/models/TenantBaseModel';
+import { ILedger, ISaveAccountsBalanceQueuePayload } from '@/interfaces';
+import HasTenancyService from '@/services/Tenancy/TenancyService';
+import { TenantMetadata } from '@/system/models';
 
-@Injectable()
+@Service()
 export class LedegrAccountsStorage {
-  /**
-   * @param {typeof Account} accountModel
-   * @param {AccountRepository} accountRepository -
-   */
-  constructor(
-    private tenancyContext: TenancyContext,
-    private accountRepository: AccountRepository,
-
-    @Inject(Account.name)
-    private accountModel: TenantModelProxy<typeof Account>,
-  ) {}
+  @Inject()
+  tenancy: HasTenancyService;
 
   /**
    * Retrieve depepants ids of the give accounts ids.
-   * @param {number[]} accountsIds
-   * @param depGraph
+   * @param   {number[]} accountsIds
+   * @param   depGraph
    * @returns {number[]}
    */
   private getDependantsAccountsIds = (
     accountsIds: number[],
-    depGraph,
+    depGraph
   ): number[] => {
     const depAccountsIds = [];
 
@@ -45,44 +31,47 @@ export class LedegrAccountsStorage {
   };
 
   /**
-   * Finds the dependant accounts ids.
-   * @param {number[]} accountsIds
+   *
+   * @param   {number} tenantId
+   * @param   {number[]} accountsIds
    * @returns {number[]}
    */
   private findDependantsAccountsIds = async (
+    tenantId: number,
     accountsIds: number[],
-    trx?: Knex.Transaction,
+    trx?: Knex.Transaction
   ): Promise<number[]> => {
-    const accountsGraph = await this.accountRepository.getDependencyGraph(
-      null,
-      trx,
-    );
+    const { accountRepository } = this.tenancy.repositories(tenantId);
+    const accountsGraph = await accountRepository.getDependencyGraph(null, trx);
+
     return this.getDependantsAccountsIds(accountsIds, accountsGraph);
   };
 
   /**
    * Atomic mutation for accounts balances.
-   * @param {number} tenantId
-   * @param {ILedger} ledger
-   * @param {Knex.Transaction} trx -
+   * @param   {number} tenantId
+   * @param   {ILedger} ledger
+   * @param   {Knex.Transaction} trx -
    * @returns {Promise<void>}
    */
   public saveAccountsBalance = async (
+    tenantId: number,
     ledger: ILedger,
-    trx?: Knex.Transaction,
+    trx?: Knex.Transaction
   ): Promise<void> => {
     // Initiate a new queue for accounts balance mutation.
     const saveAccountsBalanceQueue = async.queue(
       this.saveAccountBalanceTask,
-      10,
+      10
     );
     const effectedAccountsIds = ledger.getAccountsIds();
     const dependAccountsIds = await this.findDependantsAccountsIds(
+      tenantId,
       effectedAccountsIds,
-      trx,
+      trx
     );
     dependAccountsIds.forEach((accountId: number) => {
-      saveAccountsBalanceQueue.push({ ledger, accountId, trx });
+      saveAccountsBalanceQueue.push({ tenantId, ledger, accountId, trx });
     });
     if (dependAccountsIds.length > 0) {
       await saveAccountsBalanceQueue.drain();
@@ -95,11 +84,11 @@ export class LedegrAccountsStorage {
    * @returns {Promise<void>}
    */
   private saveAccountBalanceTask = async (
-    task: ISaveAccountsBalanceQueuePayload,
+    task: ISaveAccountsBalanceQueuePayload
   ): Promise<void> => {
-    const { ledger, accountId, trx } = task;
+    const { tenantId, ledger, accountId, trx } = task;
 
-    await this.saveAccountBalanceFromLedger(ledger, accountId, trx);
+    await this.saveAccountBalanceFromLedger(tenantId, ledger, accountId, trx);
   };
 
   /**
@@ -111,21 +100,22 @@ export class LedegrAccountsStorage {
    * @returns {Promise<void>}
    */
   private saveAccountBalanceFromLedger = async (
+    tenantId: number,
     ledger: ILedger,
     accountId: number,
-    trx?: Knex.Transaction,
+    trx?: Knex.Transaction
   ): Promise<void> => {
-    const account = await this.accountModel().query(trx).findById(accountId);
+    const { Account } = this.tenancy.models(tenantId);
+    const account = await Account.query(trx).findById(accountId);
 
-    // Filters the ledger entries by the current account.
+    // Filters the ledger entries by the current acount.
     const accountLedger = ledger.whereAccountId(accountId);
 
     // Retrieves the given tenant metadata.
-    const tenant = await this.tenancyContext.getTenant(true);
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
 
     // Detarmines whether the account has foreign currency.
-    const isAccountForeign =
-      account.currencyCode !== tenant.metadata?.baseCurrency;
+    const isAccountForeign = account.currencyCode !== tenantMeta.baseCurrency;
 
     // Calculates the closing foreign balance by the given currency if account was has
     // foreign currency otherwise get closing balance.
@@ -135,30 +125,31 @@ export class LedegrAccountsStorage {
           .getForeignClosingBalance()
       : accountLedger.getClosingBalance();
 
-    await this.saveAccountBalance(accountId, closingBalance, trx);
+    await this.saveAccountBalance(tenantId, accountId, closingBalance, trx);
   };
 
   /**
    * Saves the account balance.
-   * @param {number} accountId
-   * @param {number} change
-   * @param {Knex.Transaction} trx -
+   * @param   {number} tenantId
+   * @param   {number} accountId
+   * @param   {number} change
+   * @param   {Knex.Transaction} trx -
    * @returns {Promise<void>}
    */
   private saveAccountBalance = async (
+    tenantId: number,
     accountId: number,
     change: number,
-    trx?: Knex.Transaction,
+    trx?: Knex.Transaction
   ) => {
+    const { Account } = this.tenancy.models(tenantId);
+
     // Ensure the account has atleast zero in amount.
-    await this.accountModel()
-      .query(trx)
+    await Account.query(trx)
       .findById(accountId)
       .whereNull('amount')
       .patch({ amount: 0 });
 
-    await this.accountModel()
-      .query(trx)
-      .changeAmount({ id: accountId }, 'amount', change);
+    await Account.changeAmount({ id: accountId }, 'amount', change, trx);
   };
 }

@@ -1,29 +1,16 @@
 // @ts-nocheck
-import React, { useRef } from 'react';
+import React from 'react';
 import intl from 'react-intl-universal';
-import {
-  Button,
-  Classes,
-  Intent,
-  Menu,
-  MenuItem,
-  ProgressBar,
-  Text,
-} from '@blueprintjs/core';
-import classNames from 'classnames';
+import { Button } from '@blueprintjs/core';
 
 import { Align } from '@/constants';
 import { getColumnWidth, formattedAmount } from '@/utils';
 import { CellTextSpan } from '@/components/Datatable/Cells';
-import { AppToaster, If, Icon, Stack, FormattedMessage as T } from '@/components';
+import { If, Icon, FormattedMessage as T } from '@/components';
 import { useTrialBalanceSheetContext } from './TrialBalanceProvider';
 import FinancialLoadingBar from '../FinancialLoadingBar';
 import { useCurrentOrganization, useSecondaryCurrency } from '@/hooks/state';
 import { useExchangeRateByDate } from '@/hooks/query/exchangeRates';
-import {
-  useTrialBalanceSheetCsvExport,
-  useTrialBalanceSheetXlsxExport,
-} from '@/hooks/query';
 
 
 /**
@@ -186,69 +173,3 @@ export function TrialBalanceSheetAlerts() {
     </If>
   );
 }
-
-/**
- * Trial balance sheet export menu.
- */
-export const TrialBalanceSheetExportMenu = () => {
-  const toastKey = useRef(null);
-  const commonToastConfig = {
-    isCloseButtonShown: true,
-    timeout: 2000,
-  };
-  const { httpQuery } = useTrialBalanceSheetContext();
-
-  const openProgressToast = (amount: number) => {
-    return (
-      <Stack spacing={8}>
-        <Text>The report has been exported successfully.</Text>
-        <ProgressBar
-          className={classNames('toast-progress', {
-            [Classes.PROGRESS_NO_STRIPES]: amount >= 100,
-          })}
-          intent={amount < 100 ? Intent.PRIMARY : Intent.SUCCESS}
-          value={amount / 100}
-        />
-      </Stack>
-    );
-  };
-
-  const { mutateAsync: xlsxExport } = useTrialBalanceSheetXlsxExport(httpQuery, {
-    onDownloadProgress: (progress: number) => {
-      if (!toastKey.current) {
-        toastKey.current = AppToaster.show({
-          message: openProgressToast(progress),
-          ...commonToastConfig,
-        });
-      } else {
-        AppToaster.show(
-          { message: openProgressToast(progress), ...commonToastConfig },
-          toastKey.current,
-        );
-      }
-    },
-  });
-
-  const { mutateAsync: csvExport } = useTrialBalanceSheetCsvExport(httpQuery, {
-    onDownloadProgress: (progress: number) => {
-      if (!toastKey.current) {
-        toastKey.current = AppToaster.show({
-          message: openProgressToast(progress),
-          ...commonToastConfig,
-        });
-      } else {
-        AppToaster.show(
-          { message: openProgressToast(progress), ...commonToastConfig },
-          toastKey.current,
-        );
-      }
-    },
-  });
-
-  return (
-    <Menu>
-      <MenuItem text={'XLSX (Microsoft Excel)'} onClick={() => xlsxExport()} />
-      <MenuItem text={'CSV'} onClick={() => csvExport()} />
-    </Menu>
-  );
-};

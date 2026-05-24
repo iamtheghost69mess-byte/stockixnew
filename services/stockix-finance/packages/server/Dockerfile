@@ -1,4 +1,4 @@
-FROM node:20-alpine as deps
+FROM node:14.21.3 as deps
 
 USER root
 
@@ -80,54 +80,45 @@ ENV MAIL_HOST=$MAIL_HOST \
 
 WORKDIR /app
 
-RUN chown node:node /
+RUN npm install -g pnpm@7 && chown node:node /
 
 # Migration / API images do not run Puppeteer in these containers; skipping Chromium
 # saves hundreds of MB and avoids install timeouts or Alpine glibc mismatches during `npm install`.
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json ./
-COPY packages/server/package.json ./packages/server/
-COPY shared/bigcapital-utils/package.json ./shared/bigcapital-utils/
-COPY shared/email-components/package.json ./shared/email-components/
-COPY shared/pdf-templates/package.json ./shared/pdf-templates/
-COPY shared/sdk-ts/package.json ./shared/sdk-ts/
+COPY ./package*.json ./
+COPY ./packages/server/package*.json ./packages/server/
+COPY ./packages/webapp/package*.json ./packages/webapp/
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY ./.npmrc ./.npmrc
 
-# Pin pnpm to satisfy root package.json "pnpm": "^9.0.5" (Corepack activates this exact minor).
-RUN corepack enable \
-  && corepack prepare pnpm@9.0.5 --activate \
-  && pnpm --version \
-  && pnpm install --frozen-lockfile --filter @stockix/server...
+COPY ./lerna.json ./lerna.json
+
+RUN pnpm install --frozen-lockfile
 
 # -----------------------------------------------------------------------------
-# Migration image: Nest CLI build emits dist/cli.js (nest-commander).
+# Migration image: only the CLI webpack bundle (`commands.js`). Skips Gulp/Sass
+# and the main app webpack build — those often fail on musl/Alpine or OOM on small VPS.
 # -----------------------------------------------------------------------------
 FROM deps AS build-migration
 COPY --chown=node:node ./packages/server ./packages/server
-COPY --chown=node:node ./shared ./shared
-RUN pnpm --filter @stockix/utils run build \
-  && pnpm --filter @stockix/pdf-templates run build \
-  && pnpm --filter @stockix/email-components run build \
-  && pnpm --filter @stockix/server run build
+RUN cd packages/server && pnpm run build:commands
 
 FROM build-migration AS migration
 USER root
-RUN apk add --no-cache bash git \
-  && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
+ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /wait-for-it.sh
+RUN chmod +x /wait-for-it.sh
+
 WORKDIR /app/packages/server
-CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./dist/cli.js", "system:migrate:latest"]
+# Use a robust retry loop for the migration to handle DB startup delays
+CMD ["/bin/bash", "-c", "until (node ./build/commands.js system:migrate:unlock 2>/dev/null; node ./build/commands.js system:migrate:latest); do echo 'Waiting for database to be ready...'; sleep 5; done"]
 
 # -----------------------------------------------------------------------------
 # Full API server image: resources + app + CLI bundles.
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
-COPY --chown=node:node ./shared ./shared
-RUN pnpm --filter @stockix/utils run build \
-  && pnpm --filter @stockix/pdf-templates run build \
-  && pnpm --filter @stockix/email-components run build \
-  && pnpm --filter @stockix/server run build
+RUN pnpm run build:server --skip-nx-cache
 
 FROM build-app AS app
-WORKDIR /app/packages/server
-CMD [ "node", "dist/main.js" ]
+CMD [ "node", "./packages/server/build/index.js" ]

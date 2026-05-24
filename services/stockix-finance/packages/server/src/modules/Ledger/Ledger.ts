@@ -22,7 +22,7 @@ export class Ledger implements ILedger {
    * @param callback
    * @returns {ILedger}
    */
-  public filter(callback): ILedger {
+  public filter(callback: (entry: ILedgerEntry) => boolean): ILedger {
     const entries = this.entries.filter(callback);
     return new Ledger(entries);
   }
@@ -171,9 +171,9 @@ export class Ledger implements ILedger {
       const exchangeRate = entry.exchangeRate || 1;
 
       if (entry.accountNormal === 'credit') {
-        closingBalance += (entry.credit - entry.debit) / exchangeRate;
+        closingBalance += (entry.credit - entry.debit) * exchangeRate;
       } else if (entry.accountNormal === 'debit') {
-        closingBalance += (entry.debit - entry.credit) / exchangeRate;
+        closingBalance += (entry.debit - entry.credit) * exchangeRate;
       }
     });
     return closingBalance;

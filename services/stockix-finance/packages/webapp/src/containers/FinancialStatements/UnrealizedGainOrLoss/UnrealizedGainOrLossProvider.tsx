@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import FinancialReportPage from '../FinancialReportPage';
-import { useUnrealizedGainOrLoss } from '@/hooks/query/FinancialReports';
+import { useUnrealizedGainOrLoss } from '@/hooks/query/financialReports';
 
 const UnrealizedGainOrLossContext = React.createContext();
 

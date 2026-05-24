@@ -99,6 +99,11 @@ function BillsDataTable({
     openDialog('allocate-landed-cost', { billId: id });
   };
 
+  // Handle print bill as PDF.
+  const handlePrintBill = ({ id }) => {
+    openDialog('bill-pdf-preview', { billId: id });
+  };
+
   // Handle view detail bill.
   const handleViewDetailBill = ({ id }) => {
     openDrawer(DRAWERS.BILL_DETAILS, { billId: id });
@@ -155,6 +160,7 @@ function BillsDataTable({
           onAllocateLandedCost: handleAllocateLandedCost,
           onViewDetails: handleViewDetailBill,
           onConvert: handleConvertToVendorCredit,
+          onPrint: handlePrintBill,
         }}
       />
     </DashboardContentTable>

@@ -14,6 +14,7 @@ export enum DialogsName {
   QuickPaymentMadeForm = 'quick-payment-made',
   AllocateLandedCostForm = 'allocate-landed-cost',
   InvoicePdfForm = 'invoice-pdf-preview',
+  BillPdfForm = 'bill-pdf-preview',
   EstimatePdfForm = 'estimate-pdf-preview',
   ReceiptPdfForm = 'receipt-pdf-preview',
   CreditNotePdfForm = 'credit-note-pdf-preview',

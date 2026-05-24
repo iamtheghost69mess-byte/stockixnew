@@ -1,71 +1,74 @@
+import { Service, Inject } from 'typedi';
 import { Knex } from 'knex';
 import { omit, sumBy } from 'lodash';
-import * as moment from 'moment';
-import { Inject, Injectable } from '@nestjs/common';
+import moment from 'moment';
 import {
+  IManualJournalDTO,
+  ISystemUser,
+  IManualJournal,
   IManualJournalEventEditedPayload,
   IManualJournalEditingPayload,
-} from '../types/ManualJournals.types';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { UnitOfWork } from '@/modules/Tenancy/TenancyDB/UnitOfWork.service';
-import { CommandManualJournalValidators } from './CommandManualJournalValidators.service';
-import { events } from '@/common/events/events';
-import { ManualJournal } from '../models/ManualJournal';
-import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
-import { EditManualJournalDto } from '../dtos/ManualJournal.dto';
-import { ExchangeRateValidator } from '@/modules/Currencies/ExchangeRateValidator';
-import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+} from '@/interfaces';
+import TenancyService from '@/services/Tenancy/TenancyService';
+import events from '@/subscribers/events';
+import UnitOfWork from '@/services/UnitOfWork';
+import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
+import { CommandManualJournalValidators } from './CommandManualJournalValidators';
+import { TenantMetadata } from '@/system/models';
+import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 
-@Injectable()
+@Service()
 export class EditManualJournal {
-  constructor(
-    private eventPublisher: EventEmitter2,
-    private uow: UnitOfWork,
-    private validator: CommandManualJournalValidators,
-    private tenancyContext: TenancyContext,
-    private exchangeRateValidator: ExchangeRateValidator,
+  @Inject()
+  private tenancy: TenancyService;
 
-    @Inject(ManualJournal.name)
-    private manualJournalModel: TenantModelProxy<typeof ManualJournal>,
-  ) {}
+  @Inject()
+  private eventPublisher: EventPublisher;
+
+  @Inject()
+  private uow: UnitOfWork;
+
+  @Inject()
+  private validator: CommandManualJournalValidators;
 
   /**
    * Authorize the manual journal editing.
-   * @param {number} manualJournalId - Manual journal id.
-   * @param {IManualJournalDTO} manualJournalDTO - Manual journal DTO.
+   * @param {number} tenantId
+   * @param {number} manualJournalId
+   * @param {IManualJournalDTO} manualJournalDTO
    */
   private authorize = async (
+    tenantId: number,
     manualJournalId: number,
-    manualJournalDTO: EditManualJournalDto,
+    manualJournalDTO: IManualJournalDTO,
+    baseCurrency: string
   ) => {
     // Validates the total credit and debit to be equals.
     this.validator.valdiateCreditDebitTotalEquals(manualJournalDTO);
 
     // Validate the contacts existance.
-    await this.validator.validateContactsExistance(manualJournalDTO);
+    await this.validator.validateContactsExistance(tenantId, manualJournalDTO);
 
     // Validates entries accounts existance.
-    await this.validator.validateAccountsExistance(manualJournalDTO);
+    await this.validator.validateAccountsExistance(tenantId, manualJournalDTO);
 
     // Validates the manual journal number uniquiness.
     if (manualJournalDTO.journalNumber) {
       await this.validator.validateManualJournalNoUnique(
+        tenantId,
         manualJournalDTO.journalNumber,
-        manualJournalId,
+        manualJournalId
       );
     }
     // Validate accounts with contact type from the given config.
     await this.validator.dynamicValidateAccountsWithContactType(
-      manualJournalDTO.entries,
+      tenantId,
+      manualJournalDTO.entries
     );
-
-    const tenant = await this.tenancyContext.getTenant(true);
-    const currencyCode =
-      manualJournalDTO.currencyCode || tenant.metadata.baseCurrency;
-    this.exchangeRateValidator.validate(
-      currencyCode,
-      tenant.metadata.baseCurrency,
-      manualJournalDTO.exchangeRate,
+    validateForeignCurrencyExchangeRate(
+      manualJournalDTO.currencyCode,
+      baseCurrency,
+      manualJournalDTO.exchangeRate
     );
   };
 
@@ -75,15 +78,15 @@ export class EditManualJournal {
    * @param {IManualJournal} oldManualJournal
    */
   private transformEditDTOToModel = (
-    manualJournalDTO: EditManualJournalDto,
-    oldManualJournal: ManualJournal,
+    manualJournalDTO: IManualJournalDTO,
+    oldManualJournal: IManualJournal
   ) => {
     const amount = sumBy(manualJournalDTO.entries, 'credit') || 0;
-    const date = moment(manualJournalDTO.date).toDate();
+    const date = moment(manualJournalDTO.date).format('YYYY-MM-DD');
 
     return {
       id: oldManualJournal.id,
-      ...omit(manualJournalDTO, ['publish', 'attachments']),
+      ...omit(manualJournalDTO, ['publish']),
       ...(manualJournalDTO.publish && !oldManualJournal.publishedAt
         ? { publishedAt: moment().toMySqlDateTime() }
         : {}),
@@ -94,57 +97,67 @@ export class EditManualJournal {
 
   /**
    * Edits jouranl entries.
-   * @param {number} manualJournalId - Manual journal id.
-   * @param {IMakeJournalDTO} manualJournalDTO - Manual journal DTO.
+   * @param {number} tenantId
+   * @param {number} manualJournalId
+   * @param {IMakeJournalDTO} manualJournalDTO
+   * @param {ISystemUser} authorizedUser
    */
   public async editJournalEntries(
+    tenantId: number,
     manualJournalId: number,
-    manualJournalDTO: EditManualJournalDto,
+    manualJournalDTO: IManualJournalDTO,
+    authorizedUser: ISystemUser
   ): Promise<{
-    manualJournal: ManualJournal;
-    oldManualJournal: ManualJournal;
+    manualJournal: IManualJournal;
+    oldManualJournal: IManualJournal;
   }> {
+    const { ManualJournal } = this.tenancy.models(tenantId);
+
     // Validates the manual journal existance on the storage.
-    const oldManualJournal = await this.manualJournalModel()
-      .query()
+    const oldManualJournal = await ManualJournal.query()
       .findById(manualJournalId)
       .throwIfNotFound();
 
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+
     // Authorize manual journal editing.
-    await this.authorize(manualJournalId, manualJournalDTO);
+    await this.authorize(
+      tenantId,
+      manualJournalId,
+      manualJournalDTO,
+      tenantMeta.baseCurrency
+    );
 
     // Transform manual journal DTO to model.
     const manualJournalObj = this.transformEditDTOToModel(
       manualJournalDTO,
-      oldManualJournal,
+      oldManualJournal
     );
     // Edits the manual journal transactions with associated transactions
     // under unit-of-work envirement.
-    return this.uow.withTransaction(async (trx: Knex.Transaction) => {
+    return this.uow.withTransaction(tenantId, async (trx: Knex.Transaction) => {
       // Triggers `onManualJournalEditing` event.
       await this.eventPublisher.emitAsync(events.manualJournals.onEditing, {
+        tenantId,
         manualJournalDTO,
         oldManualJournal,
         trx,
       } as IManualJournalEditingPayload);
 
       // Upserts the manual journal graph to the storage.
-      await this.manualJournalModel()
-        .query(trx)
-        .upsertGraph({
-          ...manualJournalObj,
-        });
+      await ManualJournal.query(trx).upsertGraph({
+        ...manualJournalObj,
+      });
       // Retrieve the given manual journal with associated entries after modifications.
-      const manualJournal = await this.manualJournalModel()
-        .query(trx)
+      const manualJournal = await ManualJournal.query(trx)
         .findById(manualJournalId)
         .withGraphFetched('entries');
 
       // Triggers `onManualJournalEdited` event.
       await this.eventPublisher.emitAsync(events.manualJournals.onEdited, {
+        tenantId,
         manualJournal,
         oldManualJournal,
-        manualJournalDTO,
         trx,
       } as IManualJournalEventEditedPayload);
 

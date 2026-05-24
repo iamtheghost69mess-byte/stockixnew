@@ -6,9 +6,6 @@ const Schema = Yup.object().shape({
   name: Yup.string()
     .required()
     .label(intl.get('organization_name_')),
-  tax_number: Yup.string()
-    .nullable()
-    .label(intl.get('organization_tax_number_')),
   industry: Yup.string()
     .nullable()
     .label(intl.get('organization_industry_')),
@@ -37,10 +34,6 @@ const Schema = Yup.object().shape({
       [Yup.ref('base_currency')],
       intl.get('secondary_currency_must_differ_from_base'),
     ),
-  from_email_address: Yup.string()
-    .nullable()
-    .email(intl.get('invalid_email_address') || 'Invalid email'),
-  from_email_name: Yup.string().nullable(),
 });
 
 export const PreferencesGeneralSchema = Schema;

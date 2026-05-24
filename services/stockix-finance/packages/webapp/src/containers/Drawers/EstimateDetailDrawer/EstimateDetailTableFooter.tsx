@@ -5,11 +5,12 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  FormatNumber,
   DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { useEstimateDetailDrawerContext } from './EstimateDetailDrawerProvider';
 
 /**
@@ -18,35 +19,26 @@ import { useEstimateDetailDrawerContext } from './EstimateDetailDrawerProvider';
 export default function EstimateDetailTableFooter() {
   const { estimate } = useEstimateDetailDrawerContext();
 
+  const estimateDate = estimate.estimate_date;
+  const estimateCurrency = estimate.currency_code;
+
   return (
     <EstimateDetailsFooterRoot>
       <EstimateTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'estimate.details.subtotal'} />}
-          value={estimate.formatted_subtotal}
+          value={<FormatNumber value={estimate.amount} />}
+          amount={estimate.amount}
+          invoiceDate={estimateDate}
+          invoiceCurrency={estimateCurrency}
           borderStyle={TotalLineBorderStyle.SingleDark}
         />
-        {estimate?.discount_amount_formatted && (
-          <TotalLine
-            title={
-              estimate.discount_percentage_formatted
-                ? `Discount [${estimate.discount_percentage_formatted}]`
-                : 'Discount'
-            }
-            value={estimate.discount_amount_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        {estimate?.adjustment_formatted && (
-          <TotalLine
-            title="Adjustment"
-            value={estimate.adjustment_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'estimate.details.total'} />}
-          value={estimate.total_formatted}
+          value={estimate.formatted_amount}
+          amount={estimate.amount}
+          invoiceDate={estimateDate}
+          invoiceCurrency={estimateCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />

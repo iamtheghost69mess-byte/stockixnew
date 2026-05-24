@@ -150,6 +150,7 @@ export function useCreditNoteTableColumns() {
         id: 'balance',
         Header: intl.get('balance'),
         accessor: 'formatted_credits_remaining',
+        Cell: DualCurrencyAmountCell,
         width: 120,
         align: 'right',
         clickable: true,

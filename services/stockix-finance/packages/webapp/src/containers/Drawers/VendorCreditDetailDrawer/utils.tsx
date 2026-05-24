@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import intl from 'react-intl-universal';
+import styled from 'styled-components';
 import {
   Button,
   Popover,
@@ -16,17 +17,28 @@ import {
   Icon,
   FormattedMessage as T,
   TextOverviewTooltipCell,
+  FormatNumberCell,
   Choose,
 } from '@/components';
 import { useVendorCreditDetailDrawerContext } from './VendorCreditDetailDrawerProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import {
+  DualCurrencyTableCurrencyCell,
+  DualCurrencyTableValueCell,
+} from '@/components/DualCurrencyTotalLines';
 
 /**
  * Retrieve vendor credit readonly details entries table columns.
  */
 export const useVendorCreditReadonlyEntriesTableColumns = () => {
   const {
-    vendorCredit: { entries },
+    vendorCredit: { entries, vendor_credit_date, currency_code },
   } = useVendorCreditDetailDrawerContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
+
   return React.useMemo(
     () => [
       {
@@ -48,57 +60,57 @@ export const useVendorCreditReadonlyEntriesTableColumns = () => {
       },
       {
         Header: intl.get('quantity'),
-        accessor: 'quantity_formatted',
-        width: getColumnWidth(entries, 'quantity_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        accessor: 'quantity',
+        Cell: FormatNumberCell,
+        width: getColumnWidth(entries, 'quantity', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
       },
+      ...(hasSecondary
+        ? [
+            {
+              Header: intl.get('currency'),
+              id: 'currency',
+              accessor: () => null,
+              Cell: DualCurrencyTableCurrencyCell,
+              disableSortBy: true,
+              width: 110,
+              invoiceCurrency: currency_code,
+              invoiceDate: vendor_credit_date,
+            },
+          ]
+        : []),
       {
         Header: intl.get('rate'),
-        accessor: 'rate_formatted',
-        width: getColumnWidth(entries, 'rate_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        accessor: 'rate',
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'rate', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-      },
-      {
-        id: 'discount',
-        Header: 'Discount',
-        accessor: 'discount_formatted',
-        width: getColumnWidth(entries, 'discount_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
-        align: 'right',
-        disableSortBy: true,
-        textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: vendor_credit_date,
       },
       {
         Header: intl.get('amount'),
-        accessor: 'total_formatted',
-        width: getColumnWidth(entries, 'total_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        accessor: 'amount',
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
+        width: getColumnWidth(entries, 'amount', { minWidth: 60, magicSpacing: 5 }),
         align: 'right',
         disableSortBy: true,
         textOverview: true,
+        invoiceCurrency: currency_code,
+        invoiceDate: vendor_credit_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, vendor_credit_date, currency_code],
   );
 };
 
 /**
  * Vendor note more actions menu.
- * @returns {React.JSX}
  */
 export const VendorCreditMenuItem = ({ payload: { onReconcile } }) => {
   return (
@@ -125,7 +137,6 @@ export const VendorCreditMenuItem = ({ payload: { onReconcile } }) => {
 
 /**
  * Vendor Credit details status.
- * @returns {React.JSX}
  */
 export function VendorCreditDetailsStatus({ vendorCredit }) {
   return (

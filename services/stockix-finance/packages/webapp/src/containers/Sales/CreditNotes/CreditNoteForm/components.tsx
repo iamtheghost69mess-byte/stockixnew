@@ -1,49 +1,54 @@
 // @ts-nocheck
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
+import intl from 'react-intl-universal';
+import { Callout } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
 import * as R from 'ramda';
 import { ExchangeRateInputGroup } from '@/components';
 import { useCurrentOrganization } from '@/hooks/state';
-import { useCreditNoteIsForeignCustomer, useCreditNoteSubtotal } from './utils';
-import { withSettings } from '@/containers/Settings/withSettings';
+import { useCreditNoteIsForeignCustomer } from './utils';
+import withSettings from '@/containers/Settings/withSettings';
 import { transactionNumber } from '@/utils';
-import {
-  useSyncExRateToForm,
-  withExchangeRateFetchingLoading,
-  withExchangeRateItemEntriesPriceRecalc,
-} from '@/containers/Entries/withExRateItemEntriesPriceRecalc';
-import { withDialogActions } from '@/containers/Dialog/withDialogActions';
-import { DialogsName } from '@/constants/dialogs';
+import { useUpdateEffect } from '@/hooks';
+import { useLatestExchangeRateForCurrency } from '@/hooks/query/currencies';
 
 /**
  * Credit note exchange rate input field.
+ * Auto-fills the exchange rate from the latest known rate when currency changes.
  * @returns {JSX.Element}
  */
-function CreditNoteExchangeRateInputFieldRoot({ ...props }) {
+export function CreditNoteExchangeRateInputField({ ...props }) {
   const currentOrganization = useCurrentOrganization();
-  const { values } = useFormikContext();
+  const { values, setFieldValue } = useFormikContext();
+
   const isForeignCustomer = useCreditNoteIsForeignCustomer();
+  const latestRate = useLatestExchangeRateForCurrency(values.currency_code);
+
+  useUpdateEffect(() => {
+    if (latestRate != null) {
+      setFieldValue('exchange_rate', latestRate);
+    }
+  }, [values.currency_code]);
 
   // Can't continue if the customer is not foreign.
   if (!isForeignCustomer) {
     return null;
   }
   return (
-    <ExchangeRateInputGroup
-      name={'exchange_rate'}
-      fromCurrency={values.currency_code}
-      toCurrency={currentOrganization.base_currency}
-      formGroupProps={{ label: ' ', inline: true }}
-      withPopoverRecalcConfirm
-      {...props}
-    />
+    <>
+      {latestRate === null && values.currency_code && (
+        <Callout intent="warning" style={{ marginBottom: 8, fontSize: 12 }}>
+          {intl.get('exchange_rate_not_set_warning', { currency: values.currency_code })}
+        </Callout>
+      )}
+      <ExchangeRateInputGroup
+        fromCurrency={values.currency_code}
+        toCurrency={currentOrganization.base_currency}
+        {...props}
+      />
+    </>
   );
 }
-
-export const CreditNoteExchangeRateInputField = R.compose(
-  withExchangeRateFetchingLoading,
-  withExchangeRateItemEntriesPriceRecalc,
-)(CreditNoteExchangeRateInputFieldRoot);
 
 /**
  * Syncs credit note auto-increment settings to form.
@@ -70,28 +75,3 @@ export const CreditNoteSyncIncrementSettingsToForm = R.compose(
 
   return null;
 });
-
-/**
- * Syncs the realtime exchange rate to the credit note form and shows up popup to the user
- * as an indication the entries rates have been re-calculated.
- * @returns {React.ReactNode}
- */
-export const CreditNoteExchangeRateSync = R.compose(withDialogActions)(
-  ({ openDialog }) => {
-    const subtotal = useCreditNoteSubtotal();
-    const timeout = useRef();
-
-    useSyncExRateToForm({
-      onSynced: () => {
-        // If the total bigger then zero show alert to the user after adjusting entries.
-        if (subtotal > 0) {
-          clearTimeout(timeout.current);
-          timeout.current = setTimeout(() => {
-            openDialog(DialogsName.InvoiceExchangeRateChangeNotice);
-          }, 500);
-        }
-      },
-    });
-    return null;
-  },
-);

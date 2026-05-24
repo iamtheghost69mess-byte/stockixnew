@@ -3,13 +3,14 @@ import React from 'react';
 import styled from 'styled-components';
 
 import {
-  T,
+  FormatNumber,
   TotalLineTextStyle,
   TotalLineBorderStyle,
-  TotalLine,
+  T,
   TotalLines,
   DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { usePaymentReceiveDetailContext } from './PaymentReceiveDetailProvider';
 
 /**
@@ -19,19 +20,28 @@ import { usePaymentReceiveDetailContext } from './PaymentReceiveDetailProvider';
 export default function PaymentReceiveDetailTableFooter() {
   const { paymentReceive } = usePaymentReceiveDetailContext();
 
+  const paymentDate = paymentReceive.payment_date;
+  const paymentCurrency = paymentReceive.currency_code;
+
   return (
     <PaymentReceiveDetailsFooterRoot>
       <PaymentReceiveTotalLines
         labelColWidth={'180px'}
         amountColWidth={'180px'}
       >
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'payment_receive.details.subtotal'} />}
-          value={paymentReceive.subtotal_formatted}
+          value={<FormatNumber value={paymentReceive.amount} />}
+          amount={paymentReceive.amount}
+          invoiceDate={paymentDate}
+          invoiceCurrency={paymentCurrency}
         />
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'payment_receive.details.total'} />}
           value={paymentReceive.formatted_amount}
+          amount={paymentReceive.amount}
+          invoiceDate={paymentDate}
+          invoiceCurrency={paymentCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />

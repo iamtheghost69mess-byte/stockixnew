@@ -1,56 +1,38 @@
 // @ts-nocheck
 import React from 'react';
 import styled from 'styled-components';
-import { useFormikContext } from 'formik';
-import { T, TotalLines, TotalLine, TotalLineTextStyle } from '@/components';
 import {
-  useEstimateAdjustmentFormatted,
-  useEstimateDiscountFormatted,
-  useEstimateSubtotalFormatted,
-  useEstimateTotalFormatted,
-  useEstimateTotal,
-} from './utils';
-import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
-import { AdjustmentTotalLine } from '../../Invoices/InvoiceForm/AdjustmentTotalLine';
-import { DiscountTotalLine } from '../../Invoices/InvoiceForm/DiscountTotalLine';
+  T,
+  TotalLines,
+  TotalLine,
+  TotalLineBorderStyle,
+  TotalLineTextStyle,
+} from '@/components';
+import { useEstimateTotals } from './utils';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
 
 export function EstimateFormFooterRight() {
-  const {
-    values: { currency_code },
-  } = useFormikContext();
-  const subtotalFormatted = useEstimateSubtotalFormatted();
-  const totalFormatted = useEstimateTotalFormatted();
-  const discountAmountFormatted = useEstimateDiscountFormatted();
-  const adjustmentAmountFormatted = useEstimateAdjustmentFormatted();
-  const total = useEstimateTotal();
+  const { total, formattedSubtotal, formattedTotal } = useEstimateTotals();
 
   return (
     <EstimateTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'estimate_form.label.subtotal'} />}
-        value={subtotalFormatted}
+        value={formattedSubtotal}
+        amount={total}
+        borderStyle={TotalLineBorderStyle.None}
       />
-      <DiscountTotalLine
-        currencyCode={currency_code}
-        discountAmount={discountAmountFormatted}
-      />
-      <AdjustmentTotalLine adjustmentAmount={adjustmentAmountFormatted} />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'estimate_form.label.total'} />}
-        value={totalFormatted}
+        value={formattedTotal}
+        amount={total}
         textStyle={TotalLineTextStyle.Bold}
       />
-      <DualCurrencyTotalLines total={total} />
     </EstimateTotalLines>
   );
 }
 
 const EstimateTotalLines = styled(TotalLines)`
-  --x-color-text: #555;
-
-  .bp4-dark & {
-    --x-color-text: var(--color-light-gray4);
-  }
   width: 100%;
-  color: var(--x-color-text);
+  color: #555555;
 `;

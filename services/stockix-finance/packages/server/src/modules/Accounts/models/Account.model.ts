@@ -1,44 +1,34 @@
 /* eslint-disable global-require */
+import { mixin, Model } from 'objection';
 import { castArray } from 'lodash';
-import { Model } from 'objection';
-import DependencyGraph from '@/libs/dependency-graph';
+import TenantModel from '@/models/TenantModel';
+import { buildFilterQuery, buildSortColumnQuery } from '@/lib/ViewRolesBuilder';
+import { flatToNestedArray } from 'utils';
+import DependencyGraph from '@/lib/DependencyGraph';
+import AccountTypesUtils from '@/lib/AccountTypes';
+import AccountSettings from './Account.Settings';
+import ModelSettings from './ModelSetting';
 import {
   ACCOUNT_TYPES,
   getAccountsSupportsMultiCurrency,
-} from '@/constants/accounts';
-import { AccountTypesUtils } from '@/libs/accounts-utils/AccountTypesUtils';
-import { PlaidItem } from '@/modules/BankingPlaid/models/PlaidItem';
-import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
-import { flatToNestedArray } from '@/utils/flat-to-nested-array';
-import { ExportableModel } from '../../Export/decorators/ExportableModel.decorator';
-import { AccountMeta } from './Account.meta';
-import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
-import { ImportableModel } from '@/modules/Import/decorators/Import.decorator';
-import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { AccountDefaultViews } from '../constants';
+} from '@/data/AccountTypes';
+import CustomViewBaseModel from './CustomViewBaseModel';
+import { DEFAULT_VIEWS } from '@/services/Accounts/constants';
+import ModelSearchable from './ModelSearchable';
 
-@ExportableModel()
-@ImportableModel()
-@InjectModelMeta(AccountMeta)
-@InjectModelDefaultViews(AccountDefaultViews)
-export class Account extends TenantBaseModel {
-  public name!: string;
-  public slug!: string;
-  public code!: string;
-  public index!: number;
-  public accountType!: string;
-  public parentAccountId!: number | null;
-  public predefined!: boolean;
-  public currencyCode!: string;
-  public active!: boolean;
-  public bankBalance!: number;
-  public lastFeedsUpdatedAt!: string | Date | null;
-  public amount!: number;
-  public plaidItemId!: string;
-  public plaidAccountId!: string | null;
-  public isFeedsActive!: boolean;
-  public isSyncingOwner!: boolean;
-  public plaidItem!: PlaidItem;
+export default class Account extends mixin(TenantModel,
+  ModelSettings as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any,
+) {
+  id: number;
+  name: string;
+  code: string;
+  accountType: string;
+  parentAccountId?: number;
+  active: boolean;
+  seededAt?: Date | null;
+  currencyCode?: string;
 
   /**
    * Table name.
@@ -72,11 +62,11 @@ export class Account extends TenantBaseModel {
   /**
    * Account normal.
    */
-  get accountNormal(): string {
+  get accountNormal() {
     return AccountTypesUtils.getType(this.accountType, 'normal');
   }
 
-  get accountNormalFormatted(): string {
+  get accountNormalFormatted() {
     const paris = {
       credit: 'Credit',
       debit: 'Debit',
@@ -87,35 +77,35 @@ export class Account extends TenantBaseModel {
   /**
    * Retrieve account type label.
    */
-  get accountTypeLabel(): string {
+  get accountTypeLabel() {
     return AccountTypesUtils.getType(this.accountType, 'label');
   }
 
   /**
    * Retrieve account parent type.
    */
-  get accountParentType(): string {
+  get accountParentType() {
     return AccountTypesUtils.getType(this.accountType, 'parentType');
   }
 
   /**
    * Retrieve account root type.
    */
-  get accountRootType(): string {
+  get accountRootType() {
     return AccountTypesUtils.getType(this.accountType, 'rootType');
   }
 
   /**
    * Retrieve whether the account is balance sheet account.
    */
-  get isBalanceSheetAccount(): boolean {
+  get isBalanceSheetAccount() {
     return this.isBalanceSheet();
   }
 
   /**
    * Retrieve whether the account is profit/loss sheet account.
    */
-  get isPLSheet(): boolean {
+  get isPLSheet() {
     return this.isProfitLossSheet();
   }
   /**
@@ -146,14 +136,14 @@ export class Account extends TenantBaseModel {
       },
       filterAccountTypes(query, typesIds) {
         if (typesIds.length > 0) {
-          query.whereIn('account_types.account_type_id', typesIds);
+          query.whereIn('account_types.accoun_type_id', typesIds);
         }
       },
       viewRolesBuilder(query, conditionals, expression) {
-        // buildFilterQuery(Account.tableName, conditionals, expression)(query);
+        buildFilterQuery(Account as any, conditionals, expression)(query);
       },
       sortColumnBuilder(query, columnKey, direction) {
-        // buildSortColumnQuery(Account.tableName, columnKey, direction)(query);
+        buildSortColumnQuery(Account as any, columnKey, direction)(query);
       },
 
       /**
@@ -161,7 +151,7 @@ export class Account extends TenantBaseModel {
        */
       filterByRootType(query, rootType) {
         const filterTypes = ACCOUNT_TYPES.filter(
-          (accountType) => accountType.rootType === rootType,
+          (accountType) => accountType.rootType === rootType
         ).map((accountType) => accountType.key);
 
         query.whereIn('account_type', filterTypes);
@@ -172,7 +162,7 @@ export class Account extends TenantBaseModel {
        */
       filterByAccountNormal(query, accountNormal) {
         const filterTypes = ACCOUNT_TYPES.filter(
-          (accountType) => accountType.normal === accountNormal,
+          (accountType) => accountType.normal === accountNormal
         ).map((accountType) => accountType.key);
 
         query.whereIn('account_type', filterTypes);
@@ -208,15 +198,13 @@ export class Account extends TenantBaseModel {
    * Relationship mapping.
    */
   static get relationMappings() {
-    const { AccountTransaction } = require('./AccountTransaction.model');
-    const { Item } = require('../../Items/models/Item');
-    // const InventoryAdjustment = require('models/InventoryAdjustment');
-    // const ManualJournalEntry = require('models/ManualJournalEntry');
-    // const Expense = require('models/Expense');
-    // const ExpenseEntry = require('models/ExpenseCategory');
-    // const ItemEntry = require('models/ItemEntry');
-    // const UncategorizedTransaction = require('models/UncategorizedCashflowTransaction');
-    const { PlaidItem } = require('../../BankingPlaid/models/PlaidItem');
+    const AccountTransaction = require('models/AccountTransaction');
+    const Item = require('models/Item');
+    const InventoryAdjustment = require('models/InventoryAdjustment');
+    const ManualJournalEntry = require('models/ManualJournalEntry');
+    const Expense = require('models/Expense');
+    const ExpenseEntry = require('models/ExpenseCategory');
+    const ItemEntry = require('models/ItemEntry');
 
     return {
       /**
@@ -224,7 +212,7 @@ export class Account extends TenantBaseModel {
        */
       transactions: {
         relation: Model.HasManyRelation,
-        modelClass: AccountTransaction,
+        modelClass: AccountTransaction.default,
         join: {
           from: 'accounts.id',
           to: 'accounts_transactions.accountId',
@@ -232,116 +220,98 @@ export class Account extends TenantBaseModel {
       },
 
       /**
-       * Account may has many items as cost account.
+       *
        */
       itemsCostAccount: {
         relation: Model.HasManyRelation,
-        modelClass: Item,
+        modelClass: Item.default,
         join: {
           from: 'accounts.id',
           to: 'items.costAccountId',
         },
       },
+
       /**
-       * Account may has many items as sell account.
+       *
        */
       itemsSellAccount: {
         relation: Model.HasManyRelation,
-        modelClass: Item,
+        modelClass: Item.default,
         join: {
           from: 'accounts.id',
           to: 'items.sellAccountId',
         },
       },
-      //   /**
-      //    *
-      //    */
-      //   inventoryAdjustments: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: InventoryAdjustment.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'inventory_adjustments.adjustmentAccountId',
-      //     },
-      //   },
-      //   /**
-      //    *
-      //    */
-      //   manualJournalEntries: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: ManualJournalEntry.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'manual_journals_entries.accountId',
-      //     },
-      //   },
-      //   /**
-      //    *
-      //    */
-      //   expensePayments: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: Expense.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'expenses_transactions.paymentAccountId',
-      //     },
-      //   },
-      //   /**
-      //    *
-      //    */
-      //   expenseEntries: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: ExpenseEntry.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'expense_transaction_categories.expenseAccountId',
-      //     },
-      //   },
-      //   /**
-      //    *
-      //    */
-      //   entriesCostAccount: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: ItemEntry.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'items_entries.costAccountId',
-      //     },
-      //   },
-      //   /**
-      //    *
-      //    */
-      //   entriesSellAccount: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: ItemEntry.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'items_entries.sellAccountId',
-      //     },
-      //   },
-      //   /**
-      //    * Associated uncategorized transactions.
-      //    */
-      //   uncategorizedTransactions: {
-      //     relation: Model.HasManyRelation,
-      //     modelClass: UncategorizedTransaction.default,
-      //     join: {
-      //       from: 'accounts.id',
-      //       to: 'uncategorized_cashflow_transactions.accountId',
-      //     },
-      //     filter: (query) => {
-      //       query.where('categorized', false);
-      //     },
-      //   },
+
       /**
-       * Account model may belongs to a Plaid item.
+       *
        */
-      plaidItem: {
-        relation: Model.BelongsToOneRelation,
-        modelClass: PlaidItem,
+      inventoryAdjustments: {
+        relation: Model.HasManyRelation,
+        modelClass: InventoryAdjustment.default,
         join: {
-          from: 'accounts.plaidItemId',
-          to: 'plaid_items.plaidItemId',
+          from: 'accounts.id',
+          to: 'inventory_adjustments.adjustmentAccountId',
+        },
+      },
+
+      /**
+       *
+       */
+      manualJournalEntries: {
+        relation: Model.HasManyRelation,
+        modelClass: ManualJournalEntry.default,
+        join: {
+          from: 'accounts.id',
+          to: 'manual_journals_entries.accountId',
+        },
+      },
+
+      /**
+       *
+       */
+      expensePayments: {
+        relation: Model.HasManyRelation,
+        modelClass: Expense.default,
+        join: {
+          from: 'accounts.id',
+          to: 'expenses_transactions.paymentAccountId',
+        },
+      },
+
+      /**
+       *
+       */
+      expenseEntries: {
+        relation: Model.HasManyRelation,
+        modelClass: ExpenseEntry.default,
+        join: {
+          from: 'accounts.id',
+          to: 'expense_transaction_categories.expenseAccountId',
+        },
+      },
+
+      /**
+       *
+       */
+      entriesCostAccount: {
+        relation: Model.HasManyRelation,
+        modelClass: ItemEntry.default,
+        join: {
+          from: 'accounts.id',
+          to: 'items_entries.costAccountId',
+        },
+      },
+
+      /**
+       *
+       */
+      entriesSellAccount: {
+        relation: Model.HasManyRelation,
+        modelClass: ItemEntry.default,
+        join: {
+          from: 'accounts.id',
+          to: 'items_entries.sellAccountId',
         },
       },
     };
@@ -374,7 +344,7 @@ export class Account extends TenantBaseModel {
   isParentType(parentType) {
     return AccountTypesUtils.isParentTypeEqualsKey(
       this.accountType,
-      parentType,
+      parentType
     );
   }
 
@@ -423,6 +393,20 @@ export class Account extends TenantBaseModel {
       itemId: 'id',
       parentItemId: 'parentAccountId',
     });
+  }
+
+  /**
+   * Model settings.
+   */
+  static get meta() {
+    return AccountSettings;
+  }
+
+  /**
+   * Retrieve the default custom views, roles and columns.
+   */
+  static get defaultViews() {
+    return DEFAULT_VIEWS;
   }
 
   /**

@@ -1,16 +1,11 @@
 // @ts-nocheck
+import { omit } from 'lodash';
 import { useMutation, useQueryClient } from 'react-query';
 import { batch } from 'react-redux';
-import { omit } from 'lodash';
 import t from './types';
 import useApiRequest from '../useRequest';
 import { useRequestQuery } from '../useQueryRequest';
-import { useSetOrganizations, useSetSubscriptions } from '../state';
-
-const OrganizationRoute = {
-  Current: '/organization/current',
-  Build: '/organization/build',
-};
+import { useSetOrganizations } from '../state';
 
 /**
  * Retrieve organizations of the authenticated user.
@@ -37,26 +32,21 @@ export function useOrganizations(props) {
  */
 export function useCurrentOrganization(props) {
   const setOrganizations = useSetOrganizations();
-  const setSubscriptions = useSetSubscriptions();
 
   return useRequestQuery(
     [t.ORGANIZATION_CURRENT],
-    { method: 'get', url: OrganizationRoute.Current },
+    { method: 'get', url: `organization` },
     {
-      select: (res) => res.data,
+      select: (res) => res.data.organization,
       defaultData: {},
       onSuccess: (data) => {
         const organization = omit(data, ['subscriptions']);
-        const flat = {
-          ...organization,
-          ...(organization.metadata ?? {}),
-        };
+        // Flatten metadata into top-level so org.display_currencies,
+        // org.secondary_currency, org.base_currency etc. are accessible directly.
+        const flat = { ...organization, ...(organization.metadata ?? {}) };
 
         batch(() => {
-          // Sets subscriptions.
-          setSubscriptions(data.subscriptions);
-
-          // Sets organizations (flatten metadata for display/secondary currency).
+          // Sets organizations.
           setOrganizations([flat]);
         });
       },
@@ -73,7 +63,7 @@ export function useOrganizationSetup() {
   const queryClient = useQueryClient();
 
   return useMutation(
-    (values) => apiRequest.post(OrganizationRoute.Build, values),
+    (values) => apiRequest.post(`organization/build`, values),
     {
       onSuccess: (res) => {
         queryClient.invalidateQueries(t.ORGANIZATION_CURRENT);
@@ -86,31 +76,12 @@ export function useOrganizationSetup() {
 /**
  * Saves the settings.
  */
-export function useUpdateOrganization(props = {}) {
+export function useUpdateOrganization(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (information: any) => apiRequest.put('organization', information),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(t.ORGANIZATION_CURRENT);
-        queryClient.invalidateQueries(t.ORGANIZATIONS);
-      },
-      ...props,
-    },
-  );
-}
-
-/**
- * Marks organization setup profile as complete (persists setup_completed_at).
- */
-export function useCompleteOrganizationSetup(props = {}) {
-  const queryClient = useQueryClient();
-  const apiRequest = useApiRequest();
-
-  return useMutation(
-    () => apiRequest.post('organization/setup/complete'),
+    (information) => apiRequest.put('organization', information),
     {
       onSuccess: () => {
         queryClient.invalidateQueries(t.ORGANIZATION_CURRENT);
@@ -124,7 +95,7 @@ export function useCompleteOrganizationSetup(props = {}) {
 export function useOrgBaseCurrencyMutateAbilities(props) {
   return useRequestQuery(
     [t.ORGANIZATION_MUTATE_BASE_CURRENCY_ABILITIES],
-    { method: 'get', url: `organization/base-currency-mutate` },
+    { method: 'get', url: `organization/base_currency_mutate` },
     {
       select: (res) => res.data.abilities,
       defaultData: [],

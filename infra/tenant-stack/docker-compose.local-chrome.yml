@@ -1,0 +1,19 @@
+# Adds a headless Chrome service for server-side PDF generation (Puppeteer).
+# Usage: include this file alongside the main compose:
+#   docker compose -f docker-compose.yml -f docker-compose.local-chrome.yml up -d
+#
+# The server connects to it via BROWSER_WS_ENDPOINT=ws://chrome:3000
+
+services:
+  chrome:
+    image: browserless/chrome:1-chrome-stable
+    restart: unless-stopped
+    environment:
+      - MAX_CONCURRENT_SESSIONS=5
+      - CONNECTION_TIMEOUT=60000
+    expose:
+      - "3000"
+
+  server:
+    environment:
+      - BROWSER_WS_ENDPOINT=ws://chrome:3000

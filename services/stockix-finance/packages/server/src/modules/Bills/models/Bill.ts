@@ -1,326 +1,36 @@
-import * as moment from 'moment';
-import * as R from 'ramda';
-import type { Knex } from 'knex';
-import { Model, raw } from 'objection';
-import { castArray, difference, defaultTo } from 'lodash';
-import { BaseModel, PaginationQueryBuilderType } from '@/models/Model';
-import { ItemEntry } from '@/modules/TransactionItemEntry/models/ItemEntry';
-import { BillLandedCost } from '@/modules/BillLandedCosts/models/BillLandedCost';
-import { DiscountType } from '@/common/types/Discount';
-import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
-import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.decorator';
-import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
-import { BillMeta } from './Bill.meta';
-import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { BillDefaultViews } from '../Bills.constants';
-import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
+import { Model, raw, mixin } from 'objection';
+import { castArray, difference } from 'lodash';
+import moment from 'moment';
+import TenantModel from 'models/TenantModel';
+import BillSettings from './Bill.Settings';
+import ModelSetting from './ModelSetting';
+import CustomViewBaseModel from './CustomViewBaseModel';
+import { DEFAULT_VIEWS } from '@/services/Purchases/constants';
+import ModelSearchable from './ModelSearchable';
 
-@InjectAttachable()
-@ExportableModel()
-@InjectModelMeta(BillMeta)
-@InjectModelDefaultViews(BillDefaultViews)
-export class Bill extends TenantBaseModel {
-  public amount: number;
-  public paymentAmount: number;
-  public landedCostAmount: number;
-  public allocatedCostAmount: number;
-  public isInclusiveTax: boolean;
-  public taxAmountWithheld: number;
-  public exchangeRate: number;
-  public vendorId: number;
-  public billNumber: string;
-  public billDate: Date;
-  public dueDate: Date;
-  public referenceNo: string;
-  public status: string;
-  public note: string;
-  public currencyCode: string;
-  public creditedAmount: number;
-  public invLotNumber: string;
-  public invoicedAmount: number;
-  public openedAt: Date | string;
-  public userId: number;
-
-  public discountType: DiscountType;
-  public discount: number;
-  public adjustment: number;
-
-  public branchId: number;
-  public warehouseId: number;
-  public projectId: number;
-
-  public createdAt: Date;
-  public updatedAt: Date | null;
-
-  public entries?: ItemEntry[];
-  public attachments!: Document[];
-  public locatedLandedCosts?: BillLandedCost[];
-  /**
-   * Timestamps columns.
-   */
-  get timestamps() {
-    return ['createdAt', 'updatedAt'];
-  }
-
-  /**
-   * Virtual attributes.
-   */
-  static get virtualAttributes() {
-    return [
-      'balance',
-      'dueAmount',
-      'isOpen',
-      'isPartiallyPaid',
-      'isFullyPaid',
-      'isPaid',
-      'remainingDays',
-      'overdueDays',
-      'isOverdue',
-      'unallocatedCostAmount',
-      'localAmount',
-      'localAllocatedCostAmount',
-      'billableAmount',
-      'amountLocal',
-
-      'discountAmount',
-      'discountAmountLocal',
-      'discountPercentage',
-
-      'adjustmentLocal',
-
-      'subtotal',
-      'subtotalLocal',
-      'subtotalExludingTax',
-      'taxAmountWithheldLocal',
-      'total',
-      'totalLocal',
-    ];
-  }
-
-  /**
-   * Invoice amount in base currency.
-   * @returns {number}
-   */
-  get amountLocal(): number {
-    return this.amount * this.exchangeRate;
-  }
-
-  /**
-   * Subtotal. (Tax inclusive) if the tax inclusive is enabled.
-   * @returns {number}
-   */
-  get subtotal(): number {
-    return this.amount;
-  }
-
-  /**
-   * Subtotal in base currency. (Tax inclusive) if the tax inclusive is enabled.
-   * @returns {number}
-   */
-  get subtotalLocal(): number {
-    return this.amountLocal;
-  }
-
-  /**
-   * Sale invoice amount excluding tax.
-   * @returns {number}
-   */
-  get subtotalExcludingTax(): number {
-    return this.isInclusiveTax
-      ? this.subtotal - this.taxAmountWithheld
-      : this.subtotal;
-  }
-
-  /**
-   * Tax amount withheld in base currency.
-   * @returns {number}
-   */
-  get taxAmountWithheldLocal(): number {
-    return this.taxAmountWithheld * this.exchangeRate;
-  }
-
-  /**
-   * Discount amount.
-   * @returns {number}
-   */
-  get discountAmount(): number {
-    return this.discountType === DiscountType.Amount
-      ? this.discount
-      : this.subtotal * (this.discount / 100);
-  }
-
-  /**
-   * Discount amount in local currency.
-   * @returns {number | null}
-   */
-  get discountAmountLocal(): number | null {
-    return this.discountAmount ? this.discountAmount * this.exchangeRate : null;
-  }
-
-  /**
-  /**
-   * Discount percentage.
-   * @returns {number | null}
-   */
-  get discountPercentage(): number | null {
-    return this.discountType === DiscountType.Percentage ? this.discount : null;
-  }
-
-  /**
-   * Adjustment amount in local currency.
-   * @returns {number | null}
-   */
-  get adjustmentLocal(): number | null {
-    return this.adjustment ? this.adjustment * this.exchangeRate : null;
-  }
-
-  /**
-   * Invoice total. (Tax included)
-   * @returns {number}
-   */
-  get total(): number {
-    const adjustmentAmount = defaultTo(this.adjustment, 0);
-
-    return R.compose(
-      R.add(adjustmentAmount),
-      R.subtract(R.__, this.discountAmount),
-      R.when(R.always(this.isInclusiveTax), R.add(this.taxAmountWithheld)),
-    )(this.subtotal);
-  }
-
-  /**
-   * Invoice total in local currency. (Tax included)
-   * @returns {number}
-   */
-  get totalLocal(): number {
-    return this.total * this.exchangeRate;
-  }
-
-  /**
-   * Invoice amount in organization base currency.
-   * @deprecated
-   * @returns {number}
-   */
-  get localAmount(): number {
-    return this.amountLocal;
-  }
-
-  /**
-   * Retrieves the local allocated cost amount.
-   * @returns {number}
-   */
-  get localAllocatedCostAmount(): number {
-    return this.allocatedCostAmount * this.exchangeRate;
-  }
-
-  /**
-   * Retrieves the local landed cost amount.
-   * @returns {number}
-   */
-  get localLandedCostAmount(): number {
-    return this.landedCostAmount * this.exchangeRate;
-  }
-
-  /**
-   * Retrieves the local unallocated cost amount.
-   * @returns {number}
-   */
-  get localUnallocatedCostAmount(): number {
-    return this.unallocatedCostAmount * this.exchangeRate;
-  }
-
-  /**
-   * Retrieve the balance of bill.
-   * @return {number}
-   */
-  get balance(): number {
-    return this.paymentAmount + this.creditedAmount;
-  }
-
-  /**
-   * Due amount of the given.
-   * @return {number}
-   */
-  get dueAmount(): number {
-    return Math.max(this.total - this.balance, 0);
-  }
-
-  /**
-   * Detarmine whether the bill is open.
-   * @return {boolean}
-   */
-  get isOpen(): boolean {
-    return !!this.openedAt;
-  }
-
-  /**
-   * Deetarmine whether the bill paid partially.
-   * @return {boolean}
-   */
-  get isPartiallyPaid(): boolean {
-    return this.dueAmount !== this.total && this.dueAmount > 0;
-  }
-
-  /**
-   * Deetarmine whether the bill paid fully.
-   * @return {boolean}
-   */
-  get isFullyPaid(): boolean {
-    return this.dueAmount === 0;
-  }
-
-  /**
-   * Detarmines whether the bill paid fully or partially.
-   * @return {boolean}
-   */
-  get isPaid(): boolean {
-    return this.isPartiallyPaid || this.isFullyPaid;
-  }
-
-  /**
-   * Retrieve the remaining days in number
-   * @return {number|null}
-   */
-  get remainingDays(): number | null {
-    const currentMoment = moment();
-    const dueDateMoment = moment(this.dueDate);
-
-    return Math.max(dueDateMoment.diff(currentMoment, 'days'), 0);
-  }
-
-  /**
-   * Retrieve the overdue days in number.
-   * @return {number|null}
-   */
-  get overdueDays(): number | null {
-    const currentMoment = moment();
-    const dueDateMoment = moment(this.dueDate);
-
-    return Math.max(currentMoment.diff(dueDateMoment, 'days'), 0);
-  }
-
-  /**
-   * Detarmines the due date is over.
-   * @return {boolean}
-   */
-  get isOverdue(): boolean {
-    return this.overdueDays > 0;
-  }
-
-  /**
-   * Retrieve the unallocated cost amount.
-   * @return {number}
-   */
-  get unallocatedCostAmount(): number {
-    return Math.max(this.landedCostAmount - this.allocatedCostAmount, 0);
-  }
-
-  /**
-   * Retrieves the calculated amount which have not been invoiced.
-   */
-  get billableAmount(): number {
-    return Math.max(this.total - this.invoicedAmount, 0);
-  }
+export default class Bill extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  vendorId: number;
+  amount: number;
+  exchangeRate: number;
+  billDate: Date | string;
+  billNumber: string;
+  referenceNo?: string;
+  note?: string;
+  openedAt: Date | string | null;
+  paymentAmount: number;
+  creditedAmount: number;
+  dueDate: Date | string;
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
+  landedCostAmount: number;
+  allocatedCostAmount: number;
+  invoicedAmount: number;
 
   /**
    * Table name
@@ -368,7 +78,7 @@ export class Bill extends TenantBaseModel {
           raw(`COALESCE(AMOUNT, 0) -
             COALESCE(PAYMENT_AMOUNT, 0) -
             COALESCE(CREDITED_AMOUNT, 0) > 0
-          `),
+          `)
         );
       },
       /**
@@ -468,38 +178,192 @@ export class Bill extends TenantBaseModel {
   }
 
   /**
+   * Timestamps columns.
+   */
+  get timestamps() {
+    return ['createdAt', 'updatedAt'];
+  }
+
+  /**
+   * Virtual attributes.
+   */
+  static get virtualAttributes() {
+    return [
+      'balance',
+      'dueAmount',
+      'isOpen',
+      'isPartiallyPaid',
+      'isFullyPaid',
+      'isPaid',
+      'remainingDays',
+      'overdueDays',
+      'isOverdue',
+      'unallocatedCostAmount',
+      'localAmount',
+      'localDueAmount',
+      'localAllocatedCostAmount',
+      'billableAmount',
+    ];
+  }
+
+  /**
+   * Invoice amount in organization base currency.
+   * @returns {number}
+   */
+  get localAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.amount / this.exchangeRate;
+  }
+
+  /**
+   * Bill due amount in organization base currency.
+   * @returns {number}
+   */
+  get localDueAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.dueAmount / this.exchangeRate;
+  }
+
+  /**
+   * Retrieves the local allocated cost amount.
+   * @returns {number}
+   */
+  get localAllocatedCostAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.allocatedCostAmount / this.exchangeRate;
+  }
+
+  /**
+   * Retrieves the local landed cost amount.
+   * @returns {number}
+   */
+  get localLandedCostAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.landedCostAmount / this.exchangeRate;
+  }
+
+  /**
+   * Retrieves the local unallocated cost amount.
+   * @returns {number}
+   */
+  get localUnallocatedCostAmount() {
+    if (!this.exchangeRate || this.exchangeRate <= 0) return null;
+    return this.unallocatedCostAmount / this.exchangeRate;
+  }
+
+  /**
+   * Retrieve the balance of bill.
+   * @return {number}
+   */
+  get balance() {
+    return this.paymentAmount + this.creditedAmount;
+  }
+
+  /**
+   * Due amount of the given.
+   * @return {number}
+   */
+  get dueAmount() {
+    return Math.max(this.amount - this.balance, 0);
+  }
+
+  /**
+   * Detarmine whether the bill is open.
+   * @return {boolean}
+   */
+  get isOpen() {
+    return !!this.openedAt;
+  }
+
+  /**
+   * Deetarmine whether the bill paid partially.
+   * @return {boolean}
+   */
+  get isPartiallyPaid() {
+    return this.dueAmount !== this.amount && this.dueAmount > 0;
+  }
+
+  /**
+   * Deetarmine whether the bill paid fully.
+   * @return {boolean}
+   */
+  get isFullyPaid() {
+    return this.dueAmount === 0;
+  }
+
+  /**
+   * Detarmines whether the bill paid fully or partially.
+   * @return {boolean}
+   */
+  get isPaid() {
+    return this.isPartiallyPaid || this.isFullyPaid;
+  }
+
+  /**
+   * Retrieve the remaining days in number
+   * @return {number|null}
+   */
+  get remainingDays() {
+    const currentMoment = moment();
+    const dueDateMoment = moment(this.dueDate);
+
+    return Math.max(dueDateMoment.diff(currentMoment, 'days'), 0);
+  }
+
+  /**
+   * Retrieve the overdue days in number.
+   * @return {number|null}
+   */
+  get overdueDays() {
+    const currentMoment = moment();
+    const dueDateMoment = moment(this.dueDate);
+
+    return Math.max(currentMoment.diff(dueDateMoment, 'days'), 0);
+  }
+
+  /**
+   * Detarmines the due date is over.
+   * @return {boolean}
+   */
+  get isOverdue() {
+    return this.overdueDays > 0;
+  }
+
+  /**
+   * Retrieve the unallocated cost amount.
+   * @return {number}
+   */
+  get unallocatedCostAmount() {
+    return Math.max(this.landedCostAmount - this.allocatedCostAmount, 0);
+  }
+
+  /**
+   * Retrieves the calculated amount which have not been invoiced.
+   */
+  get billableAmount() {
+    return Math.max(this.amount - this.invoicedAmount, 0);
+  }
+
+  /**
    * Bill model settings.
    */
-  // static get meta() {
-  //   return BillSettings;
-  // }
+  static get meta() {
+    return BillSettings;
+  }
 
   /**
    * Relationship mapping.
    */
   static get relationMappings() {
-    const { Vendor } = require('../../Vendors/models/Vendor');
-    const {
-      ItemEntry,
-    } = require('../../TransactionItemEntry/models/ItemEntry');
-    const {
-      BillLandedCost,
-    } = require('../../BillLandedCosts/models/BillLandedCost');
-    const { Branch } = require('../../Branches/models/Branch.model');
-    const { Warehouse } = require('../../Warehouses/models/Warehouse.model');
-    const { TaxRateModel } = require('../../TaxRates/models/TaxRate.model');
-    const {
-      TaxRateTransaction,
-    } = require('../../TaxRates/models/TaxRateTransaction.model');
-    const { Document } = require('../../ChromiumlyTenancy/models/Document');
-    const {
-      MatchedBankTransaction,
-    } = require('../../BankingMatching/models/MatchedBankTransaction');
+    const Vendor = require('models/Vendor');
+    const ItemEntry = require('models/ItemEntry');
+    const BillLandedCost = require('models/BillLandedCost');
+    const Branch = require('models/Branch');
 
     return {
       vendor: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Vendor,
+        modelClass: Vendor.default,
         join: {
           from: 'bills.vendorId',
           to: 'contacts.id',
@@ -511,7 +375,7 @@ export class Bill extends TenantBaseModel {
 
       entries: {
         relation: Model.HasManyRelation,
-        modelClass: ItemEntry,
+        modelClass: ItemEntry.default,
         join: {
           from: 'bills.id',
           to: 'items_entries.referenceId',
@@ -524,7 +388,7 @@ export class Bill extends TenantBaseModel {
 
       locatedLandedCosts: {
         relation: Model.HasManyRelation,
-        modelClass: BillLandedCost,
+        modelClass: BillLandedCost.default,
         join: {
           from: 'bills.id',
           to: 'bill_located_costs.billId',
@@ -536,71 +400,10 @@ export class Bill extends TenantBaseModel {
        */
       branch: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Branch,
+        modelClass: Branch.default,
         join: {
           from: 'bills.branchId',
           to: 'branches.id',
-        },
-      },
-
-      /**
-       * Bill may has associated warehouse.
-       */
-      warehouse: {
-        relation: Model.BelongsToOneRelation,
-        modelClass: Warehouse,
-        join: {
-          from: 'bills.warehouseId',
-          to: 'warehouses.id',
-        },
-      },
-
-      /**
-       * Bill may has associated tax rate transactions.
-       */
-      taxes: {
-        relation: Model.HasManyRelation,
-        modelClass: TaxRateTransaction,
-        join: {
-          from: 'bills.id',
-          to: 'tax_rate_transactions.referenceId',
-        },
-        filter(builder) {
-          builder.where('reference_type', 'Bill');
-        },
-      },
-
-      /**
-       * Bill may has many attached attachments.
-       */
-      attachments: {
-        relation: Model.ManyToManyRelation,
-        modelClass: Document,
-        join: {
-          from: 'bills.id',
-          through: {
-            from: 'document_links.modelId',
-            to: 'document_links.documentId',
-          },
-          to: 'documents.id',
-        },
-        filter(query) {
-          query.where('model_ref', 'Bill');
-        },
-      },
-
-      /**
-       * Bill may belongs to matched bank transaction.
-       */
-      matchedBankTransaction: {
-        relation: Model.HasManyRelation,
-        modelClass: MatchedBankTransaction,
-        join: {
-          from: 'bills.id',
-          to: 'matched_bank_transactions.referenceId',
-        },
-        filter(query) {
-          query.where('reference_type', 'Bill');
         },
       },
     };
@@ -621,22 +424,24 @@ export class Bill extends TenantBaseModel {
       }
     });
 
-    const storedBillsIds = storedBills.map((t) => t.id);
+    const storedBillsIds = storedBills.map((t: any) => t.id);
 
     const notFoundBillsIds = difference(billsIds, storedBillsIds);
     return notFoundBillsIds;
   }
 
-  static changePaymentAmount(
-    billId: number,
-    amount: number,
-    trx: Knex.Transaction,
-  ) {
+  static changePaymentAmount(billId, amount) {
     const changeMethod = amount > 0 ? 'increment' : 'decrement';
-
-    return this.query(trx)
+    return this.query()
       .where('id', billId)
-    [changeMethod]('payment_amount', Math.abs(amount));
+      [changeMethod]('payment_amount', Math.abs(amount));
+  }
+
+  /**
+   * Retrieve the default custom views, roles and columns.
+   */
+  static get defaultViews() {
+    return DEFAULT_VIEWS;
   }
 
   /**

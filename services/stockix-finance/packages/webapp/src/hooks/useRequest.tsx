@@ -7,7 +7,7 @@ import {
   useSetGlobalErrors,
   useAuthToken,
 } from './state';
-import { getCookie, normalizeApiPath } from '../utils';
+import { getCookie } from '../utils';
 
 export default function useApiRequest() {
   const setGlobalErrors = useSetGlobalErrors();
@@ -30,13 +30,13 @@ export default function useApiRequest() {
         const locale = currentLocale;
 
         if (token) {
-          request.headers['Authorization'] = `Bearer ${token}`;
+          request.headers.common['X-Access-Token'] = token;
         }
         if (organizationId) {
-          request.headers['organization-id'] = organizationId;
+          request.headers.common['organization-id'] = organizationId;
         }
         if (locale) {
-          request.headers['Accept-Language'] = locale;
+          request.headers.common['Accept-Language'] = locale;
         }
         return request;
       },
@@ -48,52 +48,29 @@ export default function useApiRequest() {
     instance.interceptors.response.use(
       (response) => response,
       (error) => {
-        const { status, data } = error.response ?? {};
-
-        if (!status) {
-          return Promise.reject(error);
-        }
+        const { status, data } = error.response;
 
         if (status >= 500) {
           setGlobalErrors({ something_wrong: true });
         }
         if (status === 401) {
-          const errorTypes = Array.isArray(data?.errors)
-            ? data.errors.map((e) => e?.type).filter(Boolean)
-            : [];
-          const isTenantSetupError = errorTypes.some((type) =>
-            [
-              'TENANT.DATABASE.NOT.INITALIZED',
-              'TENANT.DATABASE.NOT.SEED',
-              'TENANT.NOT.FOUND',
-            ].includes(type),
-          );
-          // Unauthenticated calls (e.g. global SuspendedOverlay) must not trigger logout loops.
-          if (!token || isTenantSetupError) {
-            return Promise.reject(error);
+          // Only treat as session-expired when the request included an organization-id.
+          // Without it we're on the setup page and the 401 just means "no org context yet".
+          const hadOrgHeader = !!error.config?.headers?.['organization-id'];
+          if (hadOrgHeader) {
+            setGlobalErrors({ session_expired: true });
+            setLogout();
           }
-          setGlobalErrors({ session_expired: true });
-          setLogout();
         }
         if (status === 403) {
-          setGlobalErrors({ access_denied: { message: data.message } });
+          setGlobalErrors({ access_denied: true });
         }
-        if (status === 429) {
-          setGlobalErrors({ too_many_requests: true });
-        }
-        if (status === 400 && Array.isArray(data?.errors)) {
+        if (status === 400) {
           const lockedError = data.errors.find(
             (error) => error.type === 'TRANSACTIONS_DATE_LOCKED',
           );
           if (lockedError) {
-            setGlobalErrors({ transactionsLocked: { ...lockedError.payload } });
-          }
-          if (
-            data.errors.find(
-              (e) => e.type === 'ORGANIZATION.SUBSCRIPTION.INACTIVE',
-            )
-          ) {
-            setGlobalErrors({ subscriptionInactive: true });
+            setGlobalErrors({ transactionsLocked: { ...lockedError.data } });
           }
           if (data.errors.find((e) => e.type === 'USER_INACTIVE')) {
             setGlobalErrors({ userInactive: true });
@@ -104,66 +81,34 @@ export default function useApiRequest() {
       },
     );
     return instance;
-  }, [token, organizationId, currentLocale, setGlobalErrors, setLogout]);
+  }, [token, organizationId, setGlobalErrors, setLogout]);
 
   return React.useMemo(
     () => ({
       http,
 
       get(resource, params) {
-        return http.get(`/api/${normalizeApiPath(resource)}`, params);
+        return http.get(`/api/${resource}`, params);
       },
 
       post(resource, params, config) {
-        return http.post(`/api/${normalizeApiPath(resource)}`, params, config);
+        return http.post(`/api/${resource}`, params, config);
       },
 
       update(resource, slug, params) {
-        return http.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
+        return http.put(`/api/${resource}/${slug}`, params);
       },
 
       put(resource, params) {
-        return http.put(`/api/${normalizeApiPath(resource)}`, params);
+        return http.put(`/api/${resource}`, params);
       },
 
       patch(resource, params, config) {
-        return http.patch(`/api/${normalizeApiPath(resource)}`, params, config);
+        return http.patch(`/api/${resource}`, params, config);
       },
 
       delete(resource, params) {
-        return http.delete(`/api/${normalizeApiPath(resource)}`, params);
-      },
-    }),
-    [http],
-  );
-}
-
-export function useAuthApiRequest() {
-  const http = React.useMemo(() => {
-    // Axios instance.
-    return axios.create();
-  }, []);
-
-  return React.useMemo(
-    () => ({
-      http,
-      get(resource, params) {
-        return http.get(`/api/${normalizeApiPath(resource)}`, params);
-      },
-      post(resource, params, config) {
-        return http.post(`/api/${normalizeApiPath(resource)}`, params, config);
-      },
-      update(resource, slug, params) {
-        return http.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
-      },
-      put(resource, params) {
-        return http.put(`/api/${normalizeApiPath(resource)}`, params);
-      },
-      patch(resource, params, config) {
-        return http.patch(`/api/${normalizeApiPath(resource)}`, params, config);
-      },
-      delete(resource, params) {
-        return http.delete(`/api/${normalizeApiPath(resource)}`, params);
+        return http.delete(`/api/${resource}`, params);
       },
     }),
     [http],

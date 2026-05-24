@@ -5,69 +5,67 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  FormatNumber,
   TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  FormatNumber,
   DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { useInvoiceDetailDrawerContext } from './InvoiceDetailDrawerProvider';
 
 /**
- * Invoice details footer.
+ * Invoice details footer — shows subtotal / total / payment / due with
+ * a secondary-currency row beneath each line for every configured display
+ * currency.
+ *
+ * Numeric fields used for conversion (all returned by the invoice API):
+ *   invoice.balance        – total / subtotal amount
+ *   invoice.payment_amount – amount already paid
+ *   invoice.due_amount     – remaining balance
  */
 export function InvoiceDetailTableFooter() {
   const { invoice } = useInvoiceDetailDrawerContext();
 
+  const invoiceDate = invoice.invoice_date;
+  const invoiceCurrency = invoice.currency_code;
+
   return (
     <InvoiceDetailsFooterRoot>
       <InvoiceTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'invoice.details.subtotal'} />}
-          value={invoice.subtotal_formatted}
+          value={<FormatNumber value={invoice.balance} />}
+          amount={invoice.balance}
+          invoiceDate={invoiceDate}
+          invoiceCurrency={invoiceCurrency}
           borderStyle={TotalLineBorderStyle.SingleDark}
         />
-        {invoice?.discount_amount > 0 && (
-          <TotalLine
-            title={
-              invoice.discount_percentage_formatted
-                ? `Discount [${invoice.discount_percentage_formatted}]`
-                : 'Discount'
-            }
-            value={invoice.discount_amount_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        {invoice?.adjustment_formatted && (
-          <TotalLine
-            title="Adjustment"
-            value={invoice.adjustment_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        {invoice?.taxes?.map((taxRate) => (
-          <TotalLine
-            key={taxRate.id}
-            title={`${taxRate.name} [${taxRate.tax_rate}%]`}
-            value={taxRate.tax_rate_amount_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        ))}
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'invoice.details.total'} />}
-          value={invoice.total_formatted}
+          value={invoice.formatted_amount}
+          amount={invoice.balance}
+          invoiceDate={invoiceDate}
+          invoiceCurrency={invoiceCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'invoice.details.payment_amount'} />}
-          value={invoice.payment_amount_formatted}
+          value={invoice.formatted_payment_amount}
+          amount={invoice.payment_amount}
+          invoiceDate={invoiceDate}
+          invoiceCurrency={invoiceCurrency}
         />
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'invoice.details.due_amount'} />}
-          value={invoice.due_amount_formatted}
+          value={invoice.formatted_due_amount}
+          amount={invoice.due_amount}
+          invoiceDate={invoiceDate}
+          invoiceCurrency={invoiceCurrency}
           textStyle={TotalLineTextStyle.Bold}
         />
+        {/* Base-currency rows for foreign-currency invoices (server-computed) */}
         <DualCurrencyTotalLinesView invoice={invoice} />
       </InvoiceTotalLines>
     </InvoiceDetailsFooterRoot>
