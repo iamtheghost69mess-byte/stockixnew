@@ -341,12 +341,12 @@ export default function TenantDetailPage() {
       {provisionPartial ? (
         <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-50">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Finance is active — POS provisioning failed</AlertTitle>
+          <AlertTitle>Partial provisioning</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
               {tenant.deployment?.lastError
                 ? tenant.deployment.lastError
-                : "The Finance stack completed, but the POS stack did not provision successfully."}
+                : "Finance completed, but POS provisioning or Bigcapital integration wiring did not finish successfully."}
             </p>
             <Button
               type="button"
@@ -727,7 +727,9 @@ export default function TenantDetailPage() {
               <div>
                 <CardTitle>Finance ↔ POS integration</CardTitle>
                 <CardDescription>
-                  Bigcapital IDs seeded during provisioning — paste into POS integration settings.
+                  When both modules provision successfully, Bigcapital integration is enabled automatically
+                  in POS. Map menu items to Finance items in POS before paid orders sync. IDs below are
+                  for debugging.
                 </CardDescription>
               </div>
               <Link
@@ -739,6 +741,11 @@ export default function TenantDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {[
+                {
+                  label: "Finance tenant ID",
+                  value: tenant.deployment?.financeTenantId,
+                  configKey: "financeTenantId",
+                },
                 {
                   label: "Walk-in customer ID",
                   value: tenant.deployment?.financeWalkInCustomerId,

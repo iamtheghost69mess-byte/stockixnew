@@ -26,6 +26,8 @@ import {
 
 } from "../domain/provisioning/adapters/bootstrap-pos-org.js";
 
+import { buildFinanceInternalUrlForPos } from "../domain/provisioning/build-finance-internal-url.js";
+
 import {
 
   removePosTraefikConfig,
@@ -158,6 +160,10 @@ export type ProvisionPosStackInput = {
 
   db?: PostgresJsDatabase<typeof dbSchema>;
 
+  /** Finance stack host port (for POS container → Finance URL). */
+
+  financeInternalPort?: number;
+
 };
 
 
@@ -167,6 +173,8 @@ export type ProvisionPosStackResult = BootstrapPosOrgResult & {
   posUrl: string;
 
   posApiUrl: string;
+
+  posHostPort: number;
 
 };
 
@@ -270,6 +278,14 @@ export async function provisionPosStack(
 
   const { backendPort, frontendPort } = await resolvePosPorts(opts.db, opts.log);
 
+  const financeInternalBaseUrl =
+    opts.financeInternalPort && opts.financeInternalPort > 0
+      ? buildFinanceInternalUrlForPos({
+          slug: opts.slug,
+          internalPort: opts.financeInternalPort,
+        })
+      : "";
+
 
 
   opts.log(`[provision][pos] compose up project=${project}`);
@@ -305,6 +321,10 @@ export async function provisionPosStack(
         POS_FRONTEND_URL: posUrl,
 
         ROOT_DOMAIN: rootDomain,
+
+        ...(financeInternalBaseUrl
+          ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
+          : {}),
 
       },
 
@@ -375,6 +395,8 @@ export async function provisionPosStack(
     posUrl,
 
     posApiUrl,
+
+    posHostPort: backendPort,
 
   };
 

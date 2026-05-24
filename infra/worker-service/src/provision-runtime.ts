@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { execa } from "execa";
 
-import { apiConfig } from "@repo/config";
+import { apiConfig, posConfig } from "@repo/config";
 import { allocateOrganizationNumber, allocateTenantPort } from "@repo/db";
 import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -27,6 +27,7 @@ import {
 } from "../domain/provisioning/tenant-env.js";
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
+import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
 import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
@@ -47,8 +48,26 @@ type PosProvisionOutcome = {
   posOrganizationId?: string;
   posUrl?: string;
   posApiUrl?: string;
+  posHostPort?: number;
+  integrationWired?: boolean;
   posDefaultCredentials?: import("../domain/provisioning/types.js").PosDefaultCredentials;
 };
+
+function assertProvisionModuleEnv(modules: string[]): void {
+  if (modules.includes("pos")) {
+    const key = posConfig.platformApiKey.trim();
+    if (key.length < 10) {
+      throw new Error(
+        "POS_PLATFORM_API_KEY is required for POS provisioning (min 10 characters)",
+      );
+    }
+  }
+  if (modules.includes("accounting") && !apiConfig.internalApiSecret?.trim()) {
+    throw new Error(
+      "INTERNAL_API_SECRET is required when provisioning the accounting module",
+    );
+  }
+}
 
 async function runPosProvisionStep(params: {
   licensedModules: string[];
@@ -56,6 +75,7 @@ async function runPosProvisionStep(params: {
   tenantId: string | undefined;
   tenantName: string;
   adminEmail: string;
+  financeInternalPort?: number;
   db: PostgresJsDatabase<typeof dbSchema>;
   log: (m: string) => void;
   trace: ReturnType<typeof createProvisionTracer>;
@@ -72,6 +92,7 @@ async function runPosProvisionStep(params: {
         adminEmail: params.adminEmail,
         db: params.db,
         log: params.log,
+        financeInternalPort: params.financeInternalPort,
       },
       params.trace,
     );
@@ -80,6 +101,7 @@ async function runPosProvisionStep(params: {
       posOrganizationId: posResult.posOrganizationId,
       posUrl: posResult.posUrl,
       posApiUrl: posResult.posApiUrl,
+      posHostPort: posResult.posHostPort,
       posDefaultCredentials: posResult.posDefaultCredentials,
     };
   } catch (posErr) {
@@ -87,6 +109,108 @@ async function runPosProvisionStep(params: {
     params.log(`[provision][pos] failed: ${posError}`);
     return { posStatus: "failed", posError };
   }
+}
+
+async function runWirePosIntegrationStep(params: {
+  licensedModules: string[];
+  slug: string;
+  posOrganizationId: string;
+  posHostPort: number;
+  financeInternalPort: number;
+  workerInternalUrl?: string;
+  financeTenantId: number;
+  walkInCustomerId: number;
+  cashAccountId: number;
+  cardAccountId: number;
+  financeDefaultWarehouseId?: number;
+  log: (m: string) => void;
+  trace: ReturnType<typeof createProvisionTracer>;
+  markOp: (
+    operationKey: string,
+    message: string,
+    meta?: Record<string, unknown>,
+  ) => Promise<void>;
+  hasOp: (key: string) => boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasAccountingAndPos(params.licensedModules)) {
+    return { ok: true };
+  }
+  if (params.hasOp("tenant.wire_pos_integration")) {
+    await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
+      meta: { operationKey: "tenant.wire_pos_integration" },
+    });
+    return { ok: true };
+  }
+  try {
+    params.log("[provision] step start: tenant.wire_pos_integration");
+    await params.trace.event("progress", "Wiring POS Bigcapital integration", {
+      meta: {
+        operationKey: "tenant.wire_pos_integration",
+        posOrganizationId: params.posOrganizationId,
+      },
+    });
+    const wired = await wirePosBigcapitalIntegration({
+      posOrganizationId: params.posOrganizationId,
+      posHostPort: params.posHostPort,
+      slug: params.slug,
+      internalPort: params.financeInternalPort,
+      workerInternalUrl: params.workerInternalUrl,
+      financeTenantId: params.financeTenantId,
+      walkInCustomerId: params.walkInCustomerId,
+      cashAccountId: params.cashAccountId,
+      cardAccountId: params.cardAccountId,
+      defaultWarehouseId: params.financeDefaultWarehouseId,
+      log: params.log,
+    });
+    await params.markOp("tenant.wire_pos_integration", "POS Bigcapital integration wired", {
+      internalBaseUrl: wired.internalBaseUrl,
+      posOrganizationId: params.posOrganizationId,
+    });
+    params.log("[provision] step done: tenant.wire_pos_integration");
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await params.trace.event("pos.integration.wire_failed", `Integration wire failed: ${msg}`, {
+      level: "error",
+      meta: { error: msg },
+    });
+    return { ok: false, error: msg };
+  }
+}
+
+async function persistFinanceDeploymentIds(
+  db: PostgresJsDatabase<typeof dbSchema>,
+  deploymentId: string | undefined,
+  ids: {
+    financeTenantId?: number;
+    financeDefaultWarehouseId?: number;
+    walkInCustomerId?: number;
+    cashAccountId?: number;
+    cardAccountId?: number;
+  },
+): Promise<void> {
+  if (!deploymentId) return;
+  const patch: Record<string, number> = {};
+  if (ids.financeTenantId && ids.financeTenantId > 0) {
+    patch.financeTenantId = ids.financeTenantId;
+  }
+  if (ids.financeDefaultWarehouseId && ids.financeDefaultWarehouseId > 0) {
+    patch.financeDefaultWarehouseId = ids.financeDefaultWarehouseId;
+  }
+  if (ids.walkInCustomerId && ids.walkInCustomerId > 0) {
+    patch.financeWalkInCustomerId = ids.walkInCustomerId;
+  }
+  if (ids.cashAccountId && ids.cashAccountId > 0) {
+    patch.financeCashAccountId = ids.cashAccountId;
+  }
+  if (ids.cardAccountId && ids.cardAccountId > 0) {
+    patch.financeCardAccountId = ids.cardAccountId;
+  }
+  if (Object.keys(patch).length === 0) return;
+  await db
+    .update(tenantDeployments)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(tenantDeployments.id, deploymentId));
 }
 
 function encryptDeploymentSecret(plaintext: string): string {
@@ -319,6 +443,7 @@ export async function executeProvisionRuntime(
       log("[provision] S3 not configured — provisioning without object storage (attachments disabled).");
     }
     const licensedModulesEarly = resolveTenantModules(input.modules);
+    assertProvisionModuleEnv(licensedModulesEarly);
     const posOnlyRetry =
       input.retryModules?.length === 1 && input.retryModules[0] === "pos";
 
@@ -347,6 +472,7 @@ export async function executeProvisionRuntime(
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        financeInternalPort: port,
         db,
         log,
         trace,
@@ -451,6 +577,7 @@ export async function executeProvisionRuntime(
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        financeInternalPort: port,
         db,
         log,
         trace,
@@ -688,6 +815,9 @@ export async function executeProvisionRuntime(
         trace,
       });
       financeTenantId = bootstrapResult.tenantId;
+      await persistFinanceDeploymentIds(db, deploymentId, {
+        financeTenantId: bootstrapResult.tenantId,
+      });
       await markOp("tenant.bootstrap_admin", "Tenant bootstrap admin registered", {
         internalBaseUrl: internalUrl,
         adminEmail: input.adminEmail,
@@ -971,6 +1101,13 @@ export async function executeProvisionRuntime(
           walkInCustomerId = seeded.walkInCustomerId;
           cashAccountId = seeded.cashAccountId;
           cardAccountId = seeded.cardAccountId;
+          await persistFinanceDeploymentIds(db, deploymentId, {
+            financeTenantId,
+            financeDefaultWarehouseId,
+            walkInCustomerId,
+            cashAccountId,
+            cardAccountId,
+          });
           await markOp("tenant.seed_pos_defaults", "Finance POS defaults seeded", {
             financeTenantId,
             walkInCustomerId,
@@ -1049,15 +1186,82 @@ export async function executeProvisionRuntime(
       tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      financeInternalPort: port,
       db,
       log,
       trace,
     });
+    let integrationWired = false;
     if (posOutcome.posStatus === "ok") {
       posOrganizationId = posOutcome.posOrganizationId;
       posUrl = posOutcome.posUrl;
       posApiUrl = posOutcome.posApiUrl;
       posDefaultCredentials = posOutcome.posDefaultCredentials;
+
+      if (
+        posOrganizationId
+        && posOutcome.posHostPort
+        && financeTenantId
+        && walkInCustomerId
+        && cashAccountId
+        && cardAccountId
+        && port
+      ) {
+        const wireResult = await runWirePosIntegrationStep({
+          licensedModules,
+          slug: input.slug,
+          posOrganizationId,
+          posHostPort: posOutcome.posHostPort,
+          financeInternalPort: port,
+          workerInternalUrl: internalUrl,
+          financeTenantId,
+          walkInCustomerId,
+          cashAccountId,
+          cardAccountId,
+          financeDefaultWarehouseId,
+          log,
+          trace,
+          markOp,
+          hasOp,
+        });
+        if (!wireResult.ok) {
+          const wireError = wireResult.error;
+          if (hasAccountingAndPos(licensedModules) && tenantId) {
+            await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
+            await db
+              .update(tenantDeployments)
+              .set({ status: "active", lastError: wireError, updatedAt: new Date() })
+              .where(eq(tenantDeployments.tenantId, tenantId));
+            log(
+              `[provision] Finance+POS active but integration wire failed — tenant partial slug=${input.slug}`,
+            );
+            return {
+              ok: true,
+              tenantId: tenantId!,
+              deploymentId: deploymentId!,
+              composeProjectName: project,
+              internalPort: port,
+              baseUrl,
+              oneTimeAdminPassword: oneTimeAdminPassword!,
+              financeOrganizationId,
+              financeTenantId,
+              financeDefaultWarehouseId,
+              walkInCustomerId,
+              cashAccountId,
+              cardAccountId,
+              posOrganizationId,
+              posUrl,
+              posApiUrl,
+              posDefaultCredentials,
+              posStatus: "ok",
+              posError: wireError,
+              tenantStatus: "partial",
+            };
+          }
+        } else {
+          integrationWired = true;
+        }
+      }
     }
     if (posOutcome.posStatus === "failed" && tenantId) {
       const posError = posOutcome.posError ?? "POS provisioning failed";

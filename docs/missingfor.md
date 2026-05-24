@@ -268,6 +268,8 @@ Processor loads mappings for order menu item IDs; **unmapped lines are dropped**
 
 ### 2.9 Separate worker process required
 
+Per-tenant POS stack (`infra/pos-tenant-stack/docker-compose.yml`) includes a **`pos-bigcapital-worker`** service that runs `workers/bigcapitalSyncWorker.js` alongside `pos-backend`. For local dev without Docker tenant stacks, use:
+
 ```bash
 npm run worker:bigcapital   # services/posnew — bigcapitalSyncWorker.js
 ```
@@ -425,7 +427,7 @@ If Redis down or worker not running: `addJob` may no-op or queue unavailable; **
 | IntegrationConfig model | ✅ | Mongo |
 | Item mapping model + API | ✅ | Mongo + REST |
 | Native GL suppression when enabled | ✅ | `accountingService.js` |
-| **Auto-enable integration on provision** | ❌ | **Build** |
+| **Auto-enable integration on provision** | ✅ | Worker `tenant.wire_pos_integration` + platform API |
 | **Auto item mapping** | ❌ | **Build** |
 | **Auto internalBaseUrl from provision** | ❌ | **Build** |
 | **Single worker in tenant compose** | ❌ | Run `worker:bigcapital` separately |

@@ -32,6 +32,7 @@ const {
   resetCredentialRolePin,
   retryProvisioning,
 } = require("../controllers/platformOrgController");
+const { wireBigcapitalIntegration } = require("../controllers/platformIntegrationController");
 const {
   summary,
   kpis,
@@ -164,6 +165,11 @@ router.get(
   getOrgObservability
 );
 router.get("/organizations/:id", requirePlatformPermission(P.ORG_READ), getOrg);
+router.put(
+  "/organizations/:id/integration/bigcapital",
+  requirePlatformPermission(P.ORG_WRITE),
+  wireBigcapitalIntegration
+);
 router.patch(
   "/organizations/:id/lifecycle",
   requirePlatformPermission(P.ORG_WRITE),
