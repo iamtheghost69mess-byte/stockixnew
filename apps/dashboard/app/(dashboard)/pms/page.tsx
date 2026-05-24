@@ -56,7 +56,7 @@ export default function PmsOverviewPage() {
       ]);
       if (!occ.ok || !rev.ok) {
         setApiError(
-          "PMS API is not reachable. Restart with pnpm dev and confirm [pms] is listening (port 3003 or next free port).",
+          "PMS API is not reachable. Run pnpm dev in the repo root (starts PMS on port 3003 and tenant UI on 3004), then refresh.",
         );
         return;
       }

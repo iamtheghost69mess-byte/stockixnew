@@ -260,6 +260,13 @@
       "when": 1780600000000,
       "tag": "0036_finance_admin_password",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1780700000000,
+      "tag": "0037_pms_schema_upgrade",
+      "breakpoints": true
     }
   ]
 }
