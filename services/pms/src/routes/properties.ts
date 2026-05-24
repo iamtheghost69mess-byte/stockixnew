@@ -1,0 +1,109 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { and, desc, eq } from "drizzle-orm";
+import { pmsProperties } from "@repo/db/schema";
+import { db } from "../db.js";
+import { tenantId, errors } from "./_utils.js";
+import type { PmsEnv } from "../types.js";
+import { randomBytes } from "node:crypto";
+
+export const propertiesRouter = new Hono<PmsEnv>();
+
+const createSchema = z.object({
+  name: z.string().min(1),
+  type: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().optional(),
+  description: z.string().optional(),
+  checkInTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  checkOutTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  minNights: z.number().int().min(1).optional(),
+  bookingWindow: z.number().int().min(1).optional(),
+  cleaningEnabled: z.boolean().optional(),
+});
+
+const updateSchema = z.object({
+  name: z.string().min(1).optional(),
+  type: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().optional(),
+  description: z.string().optional(),
+  checkInTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  checkOutTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  minNights: z.number().int().min(1).optional(),
+  bookingWindow: z.number().int().min(1).optional(),
+  cleaningEnabled: z.boolean().optional(),
+});
+
+// GET /api/properties
+propertiesRouter.get("/", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const rows = await db
+    .select()
+    .from(pmsProperties)
+    .where(eq(pmsProperties.tenantId, tenantId(c)))
+    .orderBy(desc(pmsProperties.createdAt));
+  return c.json({ properties: rows });
+});
+
+// POST /api/properties
+propertiesRouter.post("/", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const body = createSchema.parse(await c.req.json());
+  const feedSlug = `p-${randomBytes(8).toString("base64url")}`;
+  const [row] = await db
+    .insert(pmsProperties)
+    .values({
+      tenantId: tenantId(c),
+      name: body.name,
+      type: body.type ?? "hotel",
+      address: body.address,
+      city: body.city,
+      country: body.country,
+      description: body.description,
+      checkInTime: body.checkInTime ?? "14:00",
+      checkOutTime: body.checkOutTime ?? "12:00",
+      minNights: body.minNights ?? 1,
+      bookingWindow: body.bookingWindow ?? 365,
+      cleaningEnabled: body.cleaningEnabled ?? true,
+      feedSlug,
+    })
+    .returning();
+  return c.json({ property: row }, 201);
+});
+
+// GET /api/properties/:id
+propertiesRouter.get("/:id", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const [row] = await db
+    .select()
+    .from(pmsProperties)
+    .where(and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))))
+    .limit(1);
+  if (!row) return errors.notFound(c, "property");
+  return c.json({ property: row });
+});
+
+// PATCH /api/properties/:id
+propertiesRouter.patch("/:id", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const body = updateSchema.parse(await c.req.json());
+  const [row] = await db
+    .update(pmsProperties)
+    .set({ ...body, updatedAt: new Date() })
+    .where(and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))))
+    .returning();
+  if (!row) return errors.notFound(c, "property");
+  return c.json({ property: row });
+});
+
+// DELETE /api/properties/:id
+propertiesRouter.delete("/:id", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  await db.delete(pmsProperties).where(
+    and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))),
+  );
+  return c.json({ ok: true });
+});

@@ -1,0 +1,46 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { and, desc, eq } from "drizzle-orm";
+import { pmsPayments } from "@repo/db/schema";
+import { db } from "../db.js";
+import { tenantId, errors } from "./_utils.js";
+import type { PmsEnv } from "../types.js";
+
+export const paymentsRouter = new Hono<PmsEnv>();
+
+const createSchema = z.object({
+  bookingId: z.string().uuid(),
+  amountCents: z.number().int().min(0),
+  method: z.enum(["cash", "card", "bank_transfer", "online", "other"]).optional(),
+  status: z.enum(["completed", "pending", "refunded", "failed"]).optional(),
+  transactionId: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+paymentsRouter.get("/", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const bookingId = c.req.query("bookingId");
+  const conditions = [eq(pmsPayments.tenantId, tenantId(c))];
+  if (bookingId) conditions.push(eq(pmsPayments.bookingId, bookingId));
+  const rows = await db.select().from(pmsPayments).where(and(...conditions)).orderBy(desc(pmsPayments.createdAt));
+  return c.json({ payments: rows });
+});
+
+paymentsRouter.post("/", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const body = createSchema.parse(await c.req.json());
+  const [row] = await db.insert(pmsPayments).values({
+    tenantId: tenantId(c), bookingId: body.bookingId, amountCents: body.amountCents,
+    method: body.method ?? "cash", status: body.status ?? "completed",
+    transactionId: body.transactionId, notes: body.notes,
+  }).returning();
+  return c.json({ payment: row }, 201);
+});
+
+paymentsRouter.get("/:id", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const [row] = await db.select().from(pmsPayments)
+    .where(and(eq(pmsPayments.id, c.req.param("id")), eq(pmsPayments.tenantId, tenantId(c)))).limit(1);
+  if (!row) return errors.notFound(c, "payment");
+  return c.json({ payment: row });
+});
