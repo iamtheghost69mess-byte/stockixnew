@@ -70,6 +70,10 @@ Same as A without steps 8–10 (no POS stack).
 
 If POS fails after Finance succeeds → tenant status **`partial`**, Finance deployment `active`, `last_error` set. Monitor dashboard.
 
+### Finance internal API responses (snake_case)
+
+Finance applies a global HTTP serializer: JSON bodies use **snake_case** keys (e.g. `primary_warehouse_id`, `walk_in_customer_id`). The worker and API **must** normalize responses via `@repo/shared/finance-api` (`normalizeFinanceApiJson` / `parseFinanceApiJsonText`) before validating camelCase fields. Without this, provision can fail with `activate_warehouses_failed:missing_primaryWarehouseId` even when Finance succeeded.
+
 ---
 
 ## 2. Module Scenarios
@@ -271,8 +275,8 @@ pnpm cli:tenants:migrate:latest
 | Docker Finance stack | ✅ | `stockix-tenant-{slug}` |
 | Finance DB tenant + admin | ✅ | `provision-user`; password = HMAC bootstrap |
 | Organization + COA | ✅ | `build_organization` |
-| Default warehouse | ❌ | Only when multi-warehouse activated |
-| Walk-in customer | ❌ on standard build | Seeded for accounting+pos bundle via `seed-pos-defaults` |
+| Default warehouse | ✅ (accounting+pos path) | `tenant.activate_warehouses` → Finance `POST /api/internal/tenants/:id/activate-warehouses` |
+| Walk-in customer | ❌ on standard build | Seeded for accounting+pos bundle via `tenant.seed_pos_defaults` |
 | Traefik route | ✅ | `{slug}.{ROOT_DOMAIN}` |
 | License row | ✅ | On job complete if none assigned |
 | `finance_tenant_id` | ✅ | When bootstrap succeeds |

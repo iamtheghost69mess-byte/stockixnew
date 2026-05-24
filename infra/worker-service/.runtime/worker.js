@@ -4016,6 +4016,49 @@ async function writeTenantEnvFileAtomic(tenantEnvDir, map) {
   return target;
 }
 
+// ../../packages/shared/src/finance-api.ts
+function snakeCaseKeyToCamel(key) {
+  if (!key.includes("_")) {
+    return key;
+  }
+  const converted = key.replace(/([-_]\w)/g, (group) => group[1].toUpperCase());
+  return converted.charAt(0).toLowerCase() + converted.slice(1);
+}
+function normalizeFinanceApiJson(value) {
+  if (value === null || value === void 0) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeFinanceApiJson(item));
+  }
+  if (typeof value !== "object") {
+    return value;
+  }
+  const record = value;
+  const out = {};
+  for (const [key, val] of Object.entries(record)) {
+    out[snakeCaseKeyToCamel(key)] = normalizeFinanceApiJson(val);
+  }
+  return out;
+}
+function parseFinanceApiJsonText(text2) {
+  const trimmed = text2.trim();
+  if (!trimmed) {
+    return {};
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { raw: text2 };
+  }
+  const normalized = normalizeFinanceApiJson(parsed);
+  if (typeof normalized === "object" && normalized !== null && !Array.isArray(normalized)) {
+    return normalized;
+  }
+  return { value: normalized };
+}
+
 // ../../infra/worker-service/domain/provisioning/adapters/activate-finance-warehouses.ts
 async function activateFinanceWarehouses(params) {
   const base = params.internalBaseUrl.replace(/\/+$/, "");
@@ -4030,12 +4073,7 @@ async function activateFinanceWarehouses(params) {
     signal: AbortSignal.timeout(12e4)
   });
   const text2 = await res.text();
-  let body = {};
-  try {
-    body = text2 ? JSON.parse(text2) : {};
-  } catch {
-    body = { raw: text2 };
-  }
+  const body = parseFinanceApiJsonText(text2);
   if (!res.ok) {
     const detail = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : text2.slice(0, 300);
     throw new Error(`activate_warehouses_failed:${res.status}:${detail}`);
@@ -4067,12 +4105,7 @@ async function seedFinancePosDefaults(params) {
     signal: AbortSignal.timeout(12e4)
   });
   const text2 = await res.text();
-  let body = {};
-  try {
-    body = text2 ? JSON.parse(text2) : {};
-  } catch {
-    body = { raw: text2 };
-  }
+  const body = parseFinanceApiJsonText(text2);
   if (!res.ok) {
     const detail = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : text2.slice(0, 300);
     throw new Error(`seed_pos_defaults_failed:${res.status}:${detail}`);
@@ -6095,7 +6128,7 @@ async function signin(base, email, password, correlationId) {
   });
   let json;
   try {
-    json = await res.json();
+    json = normalizeFinanceApiJson(await res.json());
   } catch {
     return null;
   }
@@ -6117,12 +6150,12 @@ async function currentHasBuiltAt(base, accessToken, organizationId, correlationI
   if (!res.ok) return false;
   let json;
   try {
-    json = await res.json();
+    json = normalizeFinanceApiJson(await res.json());
   } catch {
     return false;
   }
   if (!isRecord3(json)) return false;
-  const builtAt = json.builtAt ?? json.built_at;
+  const builtAt = json.builtAt;
   return builtAt !== null && builtAt !== void 0 && builtAt !== "";
 }
 async function fetchBuildOrganization(input, log) {
@@ -6158,12 +6191,7 @@ async function fetchBuildOrganization(input, log) {
     signal: AbortSignal.timeout(1e4)
   });
   const buildText = await buildRes.text();
-  let buildJson;
-  try {
-    buildJson = buildText ? JSON.parse(buildText) : {};
-  } catch {
-    buildJson = { raw: buildText };
-  }
+  const buildJson = buildText ? normalizeFinanceApiJson(JSON.parse(buildText)) : {};
   if (!buildRes.ok) {
     if (isTenantAlreadyBuilt(buildText, buildJson)) {
       log("Organization already built (TENANT_ALREADY_BUILT), treating as success");
@@ -6187,7 +6215,7 @@ async function fetchBuildOrganization(input, log) {
       });
       let jobJson;
       try {
-        jobJson = await jobRes.json();
+        jobJson = normalizeFinanceApiJson(await jobRes.json());
       } catch {
         jobJson = {};
       }
@@ -6292,16 +6320,9 @@ var FetchStockixFinanceBootstrap = class {
         });
         if (res.ok) {
           const text3 = await res.text();
-          let json = {};
-          try {
-            json = text3 ? JSON.parse(text3) : {};
-          } catch {
-            json = {};
-          }
-          const tenantId = Number(json.tenantId ?? json.tenant_id);
-          const organizationId = String(
-            json.organizationId ?? json.organization_id ?? ""
-          );
+          const json = parseFinanceApiJsonText(text3);
+          const tenantId = Number(json.tenantId);
+          const organizationId = String(json.organizationId ?? "");
           if (!tenantId || !organizationId) {
             lastFailure = "provision_user_missing_tenant_or_organization_id";
           } else {
@@ -6456,19 +6477,12 @@ async function registerNewFinanceOrg(base, params) {
     signal: AbortSignal.timeout(1e4)
   });
   const text2 = await res.text();
-  let json;
-  try {
-    json = text2 ? JSON.parse(text2) : {};
-  } catch {
-    json = { raw: text2 };
-  }
   if (!res.ok) {
     throw new Error(`register_failed_http_${res.status}: ${text2.slice(0, 500)}`);
   }
+  const json = parseFinanceApiJsonText(text2);
   const organizationId = parseSignupOrganizationId(json);
-  const tenantId = Number(
-    isRecord4(json) ? json.tenantId ?? json.tenant_id : NaN
-  );
+  const tenantId = Number(json.tenantId);
   if (!organizationId || !tenantId) {
     throw new Error("register_missing_organization_or_tenant_id");
   }
@@ -6486,16 +6500,12 @@ async function signin2(base, email, password, correlationId) {
     signal: AbortSignal.timeout(1e4)
   });
   const text2 = await res.text();
-  let json;
-  try {
-    json = text2 ? JSON.parse(text2) : {};
-  } catch {
-    json = { raw: text2 };
-  }
   if (!res.ok) {
     throw new Error(`signin_failed_http_${res.status}: ${text2.slice(0, 500)}`);
   }
-  const session = parseAuthSession(json);
+  const session = parseAuthSession(
+    text2 ? normalizeFinanceApiJson(JSON.parse(text2)) : {}
+  );
   if (!session) {
     throw new Error("signin_missing_token");
   }
@@ -6514,16 +6524,12 @@ async function switchTenant(base, accessToken, organizationId, correlationId) {
     signal: AbortSignal.timeout(1e4)
   });
   const text2 = await res.text();
-  let json;
-  try {
-    json = text2 ? JSON.parse(text2) : {};
-  } catch {
-    json = { raw: text2 };
-  }
   if (!res.ok) {
     throw new Error(`switch_tenant_failed_http_${res.status}: ${text2.slice(0, 500)}`);
   }
-  const session = parseAuthSession(json);
+  const session = parseAuthSession(
+    text2 ? normalizeFinanceApiJson(JSON.parse(text2)) : {}
+  );
   if (!session) {
     throw new Error("switch_tenant_missing_token");
   }
