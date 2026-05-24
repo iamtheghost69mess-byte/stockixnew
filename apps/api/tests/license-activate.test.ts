@@ -24,6 +24,7 @@ vi.mock("../src/license-utils.js", async (importOriginal) => {
   return {
     ...mod,
     signOfflineToken: signOfflineTokenMock,
+    insertLicenseHistory: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -122,6 +123,7 @@ describe("POST /licenses/activate", () => {
   });
 
   it("returns 403 when license status is unassigned", async () => {
+    vi.resetModules();
     const { registerLicenseApi } = await import("../src/license-http.js");
     const testApp = new Hono();
     registerLicenseApi(

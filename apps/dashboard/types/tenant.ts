@@ -20,6 +20,8 @@ export type TenantRow = {
   composeProject: string | null;
   lastError: string | null;
   registrationCompletedAt: string | null;
+  /** Assigned license status (active, expired, suspended, revoked), or null if none. */
+  licenseStatus?: string | null;
 };
 
 /** Full-directory counts (child-org filter only), for headers and dashboard stats. */

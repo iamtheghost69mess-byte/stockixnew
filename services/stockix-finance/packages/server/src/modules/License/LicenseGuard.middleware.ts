@@ -9,18 +9,12 @@ import { LicenseService } from './License.service';
 import { TenantModel } from '@/modules/System/models/TenantModel';
 import { Inject } from '@nestjs/common';
 import { LicenseStatus } from './License.types';
+import {
+  getLicenseCacheTtlMs,
+  licenseCache,
+} from './LicenseGuard.cache';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
-const LICENSE_CACHE_TTL_MS = 60_000;
-
-type LicenseCacheEntry = {
-  effectiveStatus: LicenseStatus | null;
-  cachedAt: number;
-};
-
-/** In-memory license status cache per tenant (hot path — avoids DB hit every request). */
-const licenseCache = new Map<number, LicenseCacheEntry>();
 
 const PUBLIC_PATH_PREFIXES = [
   '/api/internal',
@@ -29,6 +23,8 @@ const PUBLIC_PATH_PREFIXES = [
   '/api/health',
   '/swagger',
 ];
+
+export { clearLicenseCache } from './LicenseGuard.cache';
 
 @Injectable()
 export class LicenseGuardMiddleware implements NestMiddleware {
@@ -63,7 +59,17 @@ export class LicenseGuardMiddleware implements NestMiddleware {
     }
 
     const effectiveStatus = await this.resolveEffectiveStatusCached(tenant.id);
+    const isWrite = WRITE_METHODS.has(req.method.toUpperCase());
+
     if (!effectiveStatus) {
+      if (isWrite) {
+        res.status(HttpStatus.PAYMENT_REQUIRED).json({
+          error: 'LICENSE_NOT_CONFIGURED',
+          message: 'No license is configured for this tenant. Contact your provider.',
+          statusCode: HttpStatus.PAYMENT_REQUIRED,
+        });
+        return;
+      }
       return next();
     }
 
@@ -102,7 +108,7 @@ export class LicenseGuardMiddleware implements NestMiddleware {
     }
 
     if (effectiveStatus === 'grace') {
-      if (!WRITE_METHODS.has(req.method.toUpperCase())) {
+      if (!isWrite) {
         return next();
       }
 
@@ -121,7 +127,7 @@ export class LicenseGuardMiddleware implements NestMiddleware {
     tenantId: number,
   ): Promise<LicenseStatus | null> {
     const cached = licenseCache.get(tenantId);
-    if (cached && Date.now() - cached.cachedAt < LICENSE_CACHE_TTL_MS) {
+    if (cached && Date.now() - cached.cachedAt < getLicenseCacheTtlMs()) {
       return cached.effectiveStatus;
     }
 

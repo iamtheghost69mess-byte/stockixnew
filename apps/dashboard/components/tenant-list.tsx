@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import TenantStatusBadge from "@/components/tenant-status-badge";
+import LicenseStatusBadge from "@/components/license-status-badge";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,20 @@ import {
 import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import { formatDateTime } from "@/lib/date-format";
 import type { TenantDirectoryTotals, TenantRow } from "@/types/tenant";
+import type { LicenseStatus } from "@/types/license";
+
+function parseLicenseStatus(raw: string | null | undefined): LicenseStatus | null {
+  if (
+    raw === "active"
+    || raw === "expired"
+    || raw === "revoked"
+    || raw === "unassigned"
+    || raw === "suspended"
+  ) {
+    return raw;
+  }
+  return null;
+}
 
 type StatusFilter = "all" | "active" | "suspended" | "provisioning" | "failed";
 export type TenantSortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
@@ -352,6 +367,7 @@ export function TenantList(props: Props) {
               <TableHead className="min-w-[200px] pl-4 whitespace-normal">Organization</TableHead>
               <TableHead className="whitespace-normal">Admin</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="hidden sm:table-cell">License</TableHead>
               <TableHead className="hidden md:table-cell">Registered</TableHead>
               <TableHead className="hidden min-w-[140px] whitespace-normal lg:table-cell">
                 Public URL
@@ -363,7 +379,7 @@ export function TenantList(props: Props) {
             {listLoading && tenants.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-12 text-center text-sm text-muted-foreground"
                 >
                   Loading tenants…
@@ -375,7 +391,7 @@ export function TenantList(props: Props) {
                 {tenants.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell
-                      colSpan={6}
+                      colSpan={7}
                       className="h-[min(50vh,22rem)] align-top whitespace-normal px-4 py-10 md:py-14"
                     >
                       <div className="flex max-w-lg flex-col gap-3 text-left">
@@ -457,6 +473,13 @@ export function TenantList(props: Props) {
                           </Badge>
                         ) : null}
                       </div>
+                    </TableCell>
+                    <TableCell className="hidden align-top sm:table-cell">
+                      {parseLicenseStatus(t.licenseStatus) ? (
+                        <LicenseStatusBadge status={parseLicenseStatus(t.licenseStatus)!} />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden align-top text-muted-foreground md:table-cell">
                       {t.registrationCompletedAt ? formatDateTime(t.registrationCompletedAt) : "—"}

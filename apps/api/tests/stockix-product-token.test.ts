@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const VALID_SECRET = "super-secret-key-for-tests-only-32chars!!";
 
+vi.mock("@repo/config", () => ({
+  apiConfig: {
+    authTokenSecret: VALID_SECRET,
+    licenseSigningSecret: "test-license-signing-secret-32chars",
+  },
+}));
+
 function setSecret(value: string | undefined) {
   if (value === undefined) {
     delete process.env.AUTH_TOKEN_SECRET;

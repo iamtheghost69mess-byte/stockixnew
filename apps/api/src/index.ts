@@ -60,6 +60,7 @@ import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
 import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
+import { DEFAULT_GRACE_PERIOD_DAYS } from "./license-constants.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import {
@@ -1492,8 +1493,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               isPerpetual: true,
               maxOrganizations: planLimits.maxOrganizations,
               maxActivations: planLimits.maxActivations,
+              maxUsers: planLimits.maxUsers,
               activationCount: 0,
-              gracePeriodDays: 7,
+              gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
               createdById: provisionRequestedById ?? null,
             });
           }
@@ -2620,6 +2622,24 @@ app.get("/tenants", async (c) => {
   const total = Number(countResult[0]?.c ?? 0);
   const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
 
+  const tenantIds = rows.map((r) => r.tenantId);
+  const licenseStatusByTenant = new Map<string, string>();
+  if (tenantIds.length > 0) {
+    const licRows = await db
+      .select({
+        tenantId: licenses.tenantId,
+        status: licenses.status,
+      })
+      .from(licenses)
+      .where(and(inArray(licenses.tenantId, tenantIds), ne(licenses.status, "unassigned")))
+      .orderBy(desc(licenses.updatedAt));
+    for (const lr of licRows) {
+      if (lr.tenantId && !licenseStatusByTenant.has(lr.tenantId)) {
+        licenseStatusByTenant.set(lr.tenantId, lr.status);
+      }
+    }
+  }
+
   const directoryTotals = {
     total: Number(totalAllRow[0]?.c ?? 0),
     active: Number(activeRow[0]?.c ?? 0),
@@ -2629,7 +2649,10 @@ app.get("/tenants", async (c) => {
   };
 
   return c.json({
-    tenants: rows,
+    tenants: rows.map((r) => ({
+      ...r,
+      licenseStatus: licenseStatusByTenant.get(r.tenantId) ?? null,
+    })),
     total,
     page,
     pageSize,

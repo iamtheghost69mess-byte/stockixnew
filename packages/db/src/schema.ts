@@ -365,6 +365,7 @@ export const licenses = pgTable(
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),
     maxOrganizations: integer("max_organizations").notNull().default(1),
+    maxUsers: integer("max_users"),
     // -1 = unlimited
     activationCount: integer("activation_count").notNull().default(0),
     gracePeriodDays: integer("grace_period_days").notNull().default(7),

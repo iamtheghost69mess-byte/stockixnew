@@ -1,8 +1,8 @@
-import { tenants } from "@repo/db/schema";
+import { licenses, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
-import { getActiveLicenseForTenant } from "../license-utils.js";
+import { getActiveLicenseForTenant, insertLicenseHistory } from "../license-utils.js";
 import { sendMail } from "./mailer.js";
 import { renderTenantWelcome } from "./templates/tenant-welcome.js";
 import { renderOwnerInvite } from "./templates/owner-invite.js";
@@ -238,6 +238,7 @@ export async function sendLicenseExpiredEmail(opts: {
 export async function sendLicenseExpiredEmailForTenant(
   db: MailDb,
   tenantId: string,
+  opts?: { licenseId?: string },
 ): Promise<void> {
   try {
     const [tenant] = await db
@@ -256,7 +257,20 @@ export async function sendLicenseExpiredEmailForTenant(
       return;
     }
 
-    const license = await getActiveLicenseForTenant(db, tenantId);
+    const license =
+      opts?.licenseId != null
+        ? (
+            await db
+              .select({
+                id: licenses.id,
+                expiresAt: licenses.expiresAt,
+                gracePeriodDays: licenses.gracePeriodDays,
+              })
+              .from(licenses)
+              .where(eq(licenses.id, opts.licenseId))
+              .limit(1)
+          )[0]
+        : await getActiveLicenseForTenant(db, tenantId);
     const expiredAt = license?.expiresAt ?? new Date();
     const gracePeriodDays = license?.gracePeriodDays ?? 7;
     const graceEndsAt = new Date(expiredAt);
@@ -270,6 +284,15 @@ export async function sendLicenseExpiredEmailForTenant(
       gracePeriodDays,
       graceEndsAt,
     });
+
+    const historyLicenseId = opts?.licenseId ?? license?.id;
+    if (historyLicenseId) {
+      await insertLicenseHistory(db, {
+        licenseId: historyLicenseId,
+        action: "expired_email_sent",
+        newValues: { to: tenant.adminEmail, expiredAt: expiredAt.toISOString() },
+      });
+    }
   } catch (err) {
     console.error(
       "[sendLicenseExpiredEmail] Failed for tenant",
@@ -282,7 +305,7 @@ export async function sendLicenseExpiredEmailForTenant(
 export async function sendLicenseExpiringEmailForTenant(
   db: MailDb,
   tenantId: string,
-  opts: { expiresAt: Date; gracePeriodDays: number },
+  opts: { expiresAt: Date; gracePeriodDays: number; licenseId?: string },
 ): Promise<void> {
   try {
     const [tenant] = await db
@@ -307,6 +330,24 @@ export async function sendLicenseExpiringEmailForTenant(
       tenantId,
       expiresAt: opts.expiresAt,
     });
+
+    const license =
+      opts.licenseId != null
+        ? (
+            await db.select({ id: licenses.id }).from(licenses).where(eq(licenses.id, opts.licenseId)).limit(1)
+          )[0]
+        : await getActiveLicenseForTenant(db, tenantId);
+
+    if (license?.id) {
+      await insertLicenseHistory(db, {
+        licenseId: license.id,
+        action: "expiry_warning_sent",
+        newValues: {
+          to: tenant.adminEmail,
+          expiresAt: opts.expiresAt.toISOString(),
+        },
+      });
+    }
   } catch (err) {
     console.error(
       "[sendLicenseExpiringEmail] Failed for tenant",

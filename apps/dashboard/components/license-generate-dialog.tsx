@@ -514,7 +514,7 @@ export default function LicenseGenerateDialog({
               name="gracePeriodDays"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Offline grace period (days)</FormLabel>
+                  <FormLabel>Post-expiry grace (read-only period, days)</FormLabel>
                   <FormControl>
                     <Input
                       className="mt-1"
