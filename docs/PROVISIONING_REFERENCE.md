@@ -148,7 +148,7 @@ pnpm pos:images:build -- --backend-only   # API/worker only
 pnpm pos:images:build -- --full-frontend  # real Next.js image (slow; optional)
 ```
 
-Provision starts `pos-mongo`, `pos-redis`, `pos-backend`, `pos-bigcapital-worker`, and `pos-frontend` only when `stockix-pos-frontend:local` exists (stub satisfies compose/Traefik). The worker runs `docker compose up -d` **without** `--build` so it uses these tags only; run `pnpm pos:images:build` before the first POS tenant.
+Provision starts `pos-mongo`, `pos-redis`, `pos-backend`, `pos-platform-worker` (BullMQ `org_bootstrap`), `pos-bigcapital-worker`, and `pos-frontend` only when `stockix-pos-frontend:local` exists (stub satisfies compose/Traefik). The worker runs `docker compose up -d` **without** `--build` so it uses these tags only; run `pnpm pos:images:build` before the first POS tenant.
 
 **Finance API keys:** Internal HTTP responses use snake_case; workers normalize via `@repo/shared/finance-api` (`parseFinanceApiJsonText`).
 

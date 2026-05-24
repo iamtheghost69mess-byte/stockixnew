@@ -4366,6 +4366,8 @@ var BOOTSTRAP_POLL_TIMEOUT_MS = 6e4;
 var BOOTSTRAP_POLL_INTERVAL_MS = 1500;
 var POS_HEALTH_TIMEOUT_MS = 9e4;
 var POS_HEALTH_INTERVAL_MS = 2e3;
+var PLATFORM_AUTH_TIMEOUT_MS = 3e4;
+var PLATFORM_AUTH_INTERVAL_MS = 1e3;
 function posApiBase2(input) {
   const port = input.posHostPort ?? Number(process.env.POS_HOST_PORT ?? 8010);
   const fromEnv = input.posBaseUrl ?? posConfig.platformBaseUrl;
@@ -4426,7 +4428,7 @@ async function sleep(ms) {
 }
 async function waitForPosBackend(base, log) {
   const started = Date.now();
-  const paths = ["/api/ping", "/api/health"];
+  const paths = ["/health", "/ready"];
   while (Date.now() - started < POS_HEALTH_TIMEOUT_MS) {
     for (const path2 of paths) {
       try {
@@ -4444,12 +4446,36 @@ async function waitForPosBackend(base, log) {
   }
   throw new Error(`POS backend not ready within ${POS_HEALTH_TIMEOUT_MS}ms (${base})`);
 }
+async function waitForPlatformApiAuth(base, apiKey, log) {
+  const started = Date.now();
+  while (Date.now() - started < PLATFORM_AUTH_TIMEOUT_MS) {
+    const probe = await platformFetch(base, "/api/platform/v1/organizations/health-summary", {
+      method: "GET",
+      apiKey
+    });
+    if (probe.ok) {
+      log("[provision][pos] platform API key accepted");
+      return;
+    }
+    if (probe.status !== 401) {
+      throw new Error(
+        `POS platform auth probe failed (${probe.status}): ${probe.text.slice(0, 200)}`
+      );
+    }
+    await sleep(PLATFORM_AUTH_INTERVAL_MS);
+  }
+  throw new Error(
+    `POS platform API key not accepted within ${PLATFORM_AUTH_TIMEOUT_MS}ms (${base})`
+  );
+}
 async function platformFetch(base, path2, init) {
   const res = await fetch(`${base}${path2}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
       "X-Api-Key": init.apiKey,
+      // Per-tenant stack is reached over loopback HTTP; Traefik terminates TLS in production.
+      "X-Forwarded-Proto": "https",
       ...init.headers ?? {}
     },
     signal: AbortSignal.timeout(3e4)
@@ -4462,6 +4488,7 @@ async function bootstrapPosOrganization(input) {
   const base = posApiBase2(input);
   const log = input.log;
   await waitForPosBackend(base, log);
+  await waitForPlatformApiAuth(base, apiKey, log);
   const licenseStartsAt = (/* @__PURE__ */ new Date()).toISOString();
   const licenseEndsAt = new Date(
     Date.now() + 365 * 24 * 60 * 60 * 1e3
@@ -4511,9 +4538,8 @@ async function bootstrapPosOrganization(input) {
         );
       }
       const data = isRecord2(statusRes.json) && isRecord2(statusRes.json.data) ? statusRes.json.data : null;
-      const lifecycle = data && typeof data.lifecycle === "string" ? data.lifecycle : "";
       const readyForPinLogin = data?.readyForPinLogin === true;
-      if (lifecycle === "active" || readyForPinLogin) {
+      if (readyForPinLogin) {
         bootstrapReady = true;
         log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
         break;
@@ -4736,8 +4762,10 @@ async function provisionPosStack(opts) {
   }
   const upServices = [
     "pos-mongo",
+    "pos-mongo-init",
     "pos-redis",
     "pos-backend",
+    "pos-platform-worker",
     "pos-bigcapital-worker"
   ];
   if (await dockerImageExists("stockix-pos-frontend:local")) {

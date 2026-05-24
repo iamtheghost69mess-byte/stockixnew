@@ -450,7 +450,10 @@ async function verifyPosOrg(orgId, backendPort) {
       ? `http://127.0.0.1:${backendPort}`
       : POS_BASE;
   const url = `${base}/api/platform/v1/organizations/${orgId}`;
-  const headers = { Accept: "application/json" };
+  const headers = {
+    Accept: "application/json",
+    "X-Forwarded-Proto": "https",
+  };
   if (POS_API_KEY) headers["X-Api-Key"] = POS_API_KEY;
   try {
     const res = await fetch(url, { headers, signal: AbortSignal.timeout(8_000) });

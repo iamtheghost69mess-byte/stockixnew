@@ -32,6 +32,8 @@ const BOOTSTRAP_POLL_TIMEOUT_MS = 60_000;
 const BOOTSTRAP_POLL_INTERVAL_MS = 1_500;
 const POS_HEALTH_TIMEOUT_MS = 90_000;
 const POS_HEALTH_INTERVAL_MS = 2_000;
+const PLATFORM_AUTH_TIMEOUT_MS = 30_000;
+const PLATFORM_AUTH_INTERVAL_MS = 1_000;
 
 function posApiBase(input: BootstrapPosOrgInput): string {
   const port = input.posHostPort ?? Number(process.env.POS_HOST_PORT ?? 8010);
@@ -106,7 +108,8 @@ async function sleep(ms: number): Promise<void> {
 
 async function waitForPosBackend(base: string, log: BootstrapPosOrgInput["log"]): Promise<void> {
   const started = Date.now();
-  const paths = ["/api/ping", "/api/health"];
+  // /health and /ready are exempt from production HTTPS enforcement (see pos-backend app.js).
+  const paths = ["/health", "/ready"];
   while (Date.now() - started < POS_HEALTH_TIMEOUT_MS) {
     for (const path of paths) {
       try {
@@ -126,6 +129,34 @@ async function waitForPosBackend(base: string, log: BootstrapPosOrgInput["log"])
   throw new Error(`POS backend not ready within ${POS_HEALTH_TIMEOUT_MS}ms (${base})`);
 }
 
+/** Wait until provision API key is synced into the tenant stack Mongo (runs after DB connect). */
+async function waitForPlatformApiAuth(
+  base: string,
+  apiKey: string,
+  log: BootstrapPosOrgInput["log"],
+): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < PLATFORM_AUTH_TIMEOUT_MS) {
+    const probe = await platformFetch(base, "/api/platform/v1/organizations/health-summary", {
+      method: "GET",
+      apiKey,
+    });
+    if (probe.ok) {
+      log("[provision][pos] platform API key accepted");
+      return;
+    }
+    if (probe.status !== 401) {
+      throw new Error(
+        `POS platform auth probe failed (${probe.status}): ${probe.text.slice(0, 200)}`,
+      );
+    }
+    await sleep(PLATFORM_AUTH_INTERVAL_MS);
+  }
+  throw new Error(
+    `POS platform API key not accepted within ${PLATFORM_AUTH_TIMEOUT_MS}ms (${base})`,
+  );
+}
+
 async function platformFetch(
   base: string,
   path: string,
@@ -136,6 +167,8 @@ async function platformFetch(
     headers: {
       "Content-Type": "application/json",
       "X-Api-Key": init.apiKey,
+      // Per-tenant stack is reached over loopback HTTP; Traefik terminates TLS in production.
+      "X-Forwarded-Proto": "https",
       ...(init.headers ?? {}),
     },
     signal: AbortSignal.timeout(30_000),
@@ -155,6 +188,7 @@ export async function bootstrapPosOrganization(
   const log = input.log;
 
   await waitForPosBackend(base, log);
+  await waitForPlatformApiAuth(base, apiKey, log);
 
   const licenseStartsAt = new Date().toISOString();
   const licenseEndsAt = new Date(
@@ -219,10 +253,9 @@ export async function bootstrapPosOrganization(
         isRecord(statusRes.json) && isRecord(statusRes.json.data)
           ? statusRes.json.data
           : null;
-      const lifecycle =
-        data && typeof data.lifecycle === "string" ? data.lifecycle : "";
       const readyForPinLogin = data?.readyForPinLogin === true;
-      if (lifecycle === "active" || readyForPinLogin) {
+      // lifecycle is "active" on create before org_bootstrap finishes — wait for PIN readiness only.
+      if (readyForPinLogin) {
         bootstrapReady = true;
         log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
         break;

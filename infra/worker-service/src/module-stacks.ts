@@ -329,8 +329,10 @@ export async function provisionPosStack(
 
   const upServices = [
     "pos-mongo",
+    "pos-mongo-init",
     "pos-redis",
     "pos-backend",
+    "pos-platform-worker",
     "pos-bigcapital-worker",
   ];
   if (await dockerImageExists("stockix-pos-frontend:local")) {
