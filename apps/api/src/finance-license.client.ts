@@ -9,6 +9,10 @@ import {
   insertLicenseHistory,
   isLicenseLimitsConsistentWithPlan,
 } from "./license-utils.js";
+import {
+  DEFAULT_GRACE_PERIOD_DAYS,
+  DEFAULT_MAX_USERS,
+} from "./license-constants.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -26,8 +30,8 @@ export type FinanceLicenseSyncPayload = {
   featureFlags: Record<string, boolean> | null;
 };
 
-/** Staff user cap in finance when Stockix licenses do not track maxUsers separately. */
-export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
+/** Staff user cap in finance when plan/license does not specify maxUsers. */
+export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = DEFAULT_MAX_USERS;
 
 /**
  * Field mapping — Stockix control plane → Finance tenant_licenses
@@ -46,6 +50,7 @@ export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
 type FinanceLicenseLimitSource = {
   maxActivations?: number;
   maxOrganizations?: number;
+  maxUsers?: number | null;
 };
 
 /**
@@ -67,7 +72,7 @@ export function resolveFinanceLicenseLimitFields(
   }
 
   return {
-    maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxUsers: license?.maxUsers ?? planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxOrganizations,
     maxActivations,
   };
@@ -110,6 +115,9 @@ export function mapStockixLicenseStatus(
   }
   if (license.status === "revoked") {
     return "revoked";
+  }
+  if (license.status === "suspended") {
+    return "suspended";
   }
   if (license.isPerpetual) {
     return "active";
@@ -211,7 +219,7 @@ export async function syncFinanceLicenseForStockixTenant(
     ),
     validFrom: (license?.validFrom ?? new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
-    gracePeriodDays: license?.gracePeriodDays ?? 30,
+    gracePeriodDays: license?.gracePeriodDays ?? DEFAULT_GRACE_PERIOD_DAYS,
     ...resolveFinanceLicenseLimitFields(license, planLimits),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,

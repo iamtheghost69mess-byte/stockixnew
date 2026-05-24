@@ -71,7 +71,7 @@ export async function processLicenseExpiryFollowUp(
     }
 
     try {
-      await sendLicenseExpiredEmailForTenant(db, license.tenantId);
+      await sendLicenseExpiredEmailForTenant(db, license.tenantId, { licenseId: license.id });
     } catch (err) {
       console.error(
         "[expireDueLicenses] Email failed for tenant",
@@ -156,6 +156,7 @@ async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
       await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
         expiresAt: license.expiresAt,
         gracePeriodDays: license.gracePeriodDays ?? 7,
+        licenseId: license.id,
       });
     } catch (err) {
       console.error(

@@ -29,6 +29,35 @@ export function parseLicenseModulesJson(raw: string | null | undefined): License
   }
 }
 
+/** Ensures every module on the license is enabled on the tenant. */
+export function validateLicenseModulesForTenant(
+  tenantModulesJson: string | null | undefined,
+  licenseModules: LicenseModuleId[],
+): { ok: true } | { ok: false; message: string } {
+  let tenantModules: LicenseModuleId[];
+  try {
+    const parsed = JSON.parse(tenantModulesJson ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) {
+      tenantModules = ["accounting"];
+    } else {
+      tenantModules = parsed.filter(
+        (m): m is LicenseModuleId =>
+          typeof m === "string" && (LICENSE_MODULE_IDS as readonly string[]).includes(m),
+      );
+      if (tenantModules.length === 0) tenantModules = ["accounting"];
+    }
+  } catch {
+    tenantModules = ["accounting"];
+  }
+  const tenantSet = new Set(tenantModules);
+  const missing = licenseModules.filter((m) => !tenantSet.has(m));
+  if (missing.length === 0) return { ok: true };
+  return {
+    ok: false,
+    message: `License modules [${missing.join(", ")}] are not enabled on this tenant`,
+  };
+}
+
 /**
  * Returns the single canonical license for a tenant.
  *
@@ -83,6 +112,19 @@ export async function getActiveLicenseForTenant(
   if (expired[0]) return expired[0];
 
   return null;
+}
+
+/** True when tenant already has at least one license with status `active`. */
+export async function tenantHasActiveLicense(
+  db: PlanLimitsDb,
+  tenantId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: licenses.id })
+    .from(licenses)
+    .where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "active")))
+    .limit(1);
+  return Boolean(row);
 }
 
 /** Stockix license end date for POS org provisioning (perpetual → far-future cap). */
@@ -156,6 +198,10 @@ export type LicenseHistoryAction =
   | "limits_changed"
   | "synced_to_finance"
   | "expired_by_worker"
+  | "expiry_warning_sent"
+  | "expired_email_sent"
+  | "suspended"
+  | "reactivated"
   | "notes_updated";
 
 export interface LicenseHistoryEntry {

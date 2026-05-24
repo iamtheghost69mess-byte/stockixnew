@@ -78,11 +78,12 @@ describe("signSessionToken + verifySessionToken", () => {
       sessionVersion: 0,
     });
 
-    // Flip the last character of the signature segment.
+    // Tamper the encoded payload segment so HMAC verification must fail.
     const dot = token.lastIndexOf(".");
+    const encoded = token.slice(0, dot);
     const sig = token.slice(dot + 1);
-    const flippedChar = sig[sig.length - 1] === "A" ? "B" : "A";
-    const tamperedToken = token.slice(0, dot + 1) + sig.slice(0, -1) + flippedChar;
+    const flippedChar = encoded[encoded.length - 1] === "A" ? "B" : "A";
+    const tamperedToken = encoded.slice(0, -1) + flippedChar + "." + sig;
 
     const result = await verifySessionToken(tamperedToken);
     expect(result).toBeNull();

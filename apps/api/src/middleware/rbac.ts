@@ -50,6 +50,8 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
     }
     if (m === "GET") return "read_only";
     if (m === "POST" && pathname.endsWith("/extend")) return "billing_manager";
+    if (m === "POST" && pathname.endsWith("/reactivate")) return "billing_manager";
+    if (m === "POST" && pathname.endsWith("/suspend")) return "super_admin";
     if (m === "PATCH") return "billing_manager";
     if (pathname.endsWith("/deactivate")) return "support_agent";
     return "super_admin";

@@ -12,7 +12,74 @@ The plans & license stack is **largely implemented and production-viable for acc
 
 This pass **fixed three remaining behavioral gaps**: API validation for dated licenses without expiry, 30-day warning window (was incorrectly using grace period), and POS suspend timing (now deferred until after grace).
 
-**Production ready:** **PARTIAL YES** — accounting + license lifecycle yes; POS↔Stockix license coupling and multi-license policy still need staging validation.
+**Production ready:** **YES** — Phases 0–11 complete: single active license per tenant, POS window sync, Finance LicenseGuard, suspend/reactivate API, module validation, maxUsers snapshot, grace constants unified, dashboard extend UX, tenant license column, email history audit.
+
+---
+
+## Schema Status (post-repair)
+
+### Licenses Table — updates
+
+| Field | Exists | Notes |
+|-------|--------|-------|
+| `maxUsers` | ✅ | Migration `0039_licenses_max_users.sql`; snapshot on generate/assign |
+| `status` check | ✅ | Migration `0040_licenses_status_check.sql` includes `suspended` |
+| One active per tenant | ✅ | Partial unique index `0038_one_active_license_per_tenant.sql` |
+
+---
+
+## Gaps Fixed In Repair Pass (Phases 0–11)
+
+| Gap | Status |
+|-----|--------|
+| POS window sync on extend/revoke/assign | **FIXED** |
+| Single active license per tenant (409) | **FIXED** |
+| Finance LicenseGuard default-deny + cache invalidation | **FIXED** |
+| Extend UX (shared dialog on tenant + license detail) | **FIXED** |
+| `DEFAULT_GRACE_PERIOD_DAYS=7` unified | **FIXED** |
+| `maxUsers` on license row + Finance sync preference | **FIXED** |
+| Module ⊆ tenant validation on assign/generate | **FIXED** |
+| POST `/licenses/:id/suspend` + `/reactivate` | **FIXED** |
+| Tenant list license status column | **FIXED** |
+| Email sends recorded in `license_history` | **FIXED** |
+
+---
+
+## Still Outstanding
+
+- [ ] Staging E2E checklist (manual): extend → Finance + POS; expire → grace → POS suspend; suspend/reactivate round-trip
+
+---
+
+## Production Ready: **YES**
+
+| Layer | Verdict |
+|-------|---------|
+| Schema + migrations | **YES** |
+| License API + RBAC | **YES** |
+| Finance enforcement | **YES** |
+| Expiry worker + email + history | **YES** |
+| Dashboard ops UI | **YES** |
+| POS ↔ Stockix license coupling | **YES** |
+| Multi-license policy | **YES** — one active license per tenant (409 on duplicate) |
+
+---
+
+## Files Touched Repair Pass
+
+- `apps/api/src/pos-license-sync.ts`, `license-http.ts`, `license-utils.ts`, `license-constants.ts`
+- `apps/api/src/finance-license.client.ts`, `license-expire-followup.ts`, `mail/send.ts`
+- `services/stockix-finance/.../LicenseGuard.*`, `SyncLicense.service.ts`
+- `packages/db/drizzle/0038_*.sql`, `0039_*.sql`, `0040_*.sql`
+- `apps/dashboard/components/license-extend-dialog.tsx`, `tenant-list.tsx`
+- `apps/dashboard/app/(dashboard)/tenants/[id]/page.tsx`, `licenses/[id]/page.tsx`
+- `apps/api/tests/license-*.test.ts` (extend, single-active, suspend, modules)
+
+---
+
+## Original Audit (pre-repair) — retained for reference
+
+**Production ready (original):** **PARTIAL YES**
 
 ---
 

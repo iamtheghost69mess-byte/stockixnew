@@ -11,6 +11,7 @@ import { toast } from "@/components/reusabletoast";
 
 import { LicenseAssignDialog } from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";
+import { LicenseExtendDialog } from "@/components/license-extend-dialog";
 import LicenseStatusBadge from "@/components/license-status-badge";
 import { OrgSwitcher } from "@/components/org-switcher";
 import TenantOrgAccessPanel from "@/components/tenant-org-access-panel";
@@ -98,6 +99,7 @@ export default function TenantDetailPage() {
   const [licenseLoading, setLicenseLoading] = useState(true);
   const [genLicenseOpen, setGenLicenseOpen] = useState(false);
   const [revokeLicenseOpen, setRevokeLicenseOpen] = useState(false);
+  const [extendLicenseOpen, setExtendLicenseOpen] = useState(false);
   const [revokeLicenseReason, setRevokeLicenseReason] = useState("");
   const [events, setEvents] = useState<ProvisionEventRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1393,9 +1395,14 @@ export default function TenantDetailPage() {
                   View full license details
                 </Link>
                 {isSuper && tenantLicense.status === "active" ? (
-                  <Button variant="outline" size="sm" onClick={() => setRevokeLicenseOpen(true)}>
-                    Revoke
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setExtendLicenseOpen(true)}>
+                      Extend
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setRevokeLicenseOpen(true)}>
+                      Revoke
+                    </Button>
+                  </>
                 ) : null}
               </div>
               <div className="border-t pt-4">
@@ -1475,6 +1482,13 @@ export default function TenantDetailPage() {
         open={genLicenseOpen}
         onOpenChange={setGenLicenseOpen}
         defaultTenantId={tenant.id}
+        onSuccess={() => void loadLicense()}
+      />
+
+      <LicenseExtendDialog
+        open={extendLicenseOpen}
+        onOpenChange={setExtendLicenseOpen}
+        licenseId={tenantLicense?.id ?? null}
         onSuccess={() => void loadLicense()}
       />
 
