@@ -1340,13 +1340,39 @@ export default function TenantDetailPage() {
                   <p>
                     Expires:{" "}
                     {tenantLicense.isPerpetual ? (
-                      <Badge variant="secondary">Perpetual</Badge>
+                      <Badge variant="secondary">Perpetual — no expiry</Badge>
                     ) : tenantLicense.expiresAt ? (
-                      format(new Date(tenantLicense.expiresAt), "PP")
+                      <>
+                        {format(new Date(tenantLicense.expiresAt), "PP")}
+                        {(() => {
+                          const days = Math.ceil(
+                            (new Date(tenantLicense.expiresAt!).getTime() - Date.now()) /
+                              (1000 * 60 * 60 * 24),
+                          );
+                          if (days > 0 && days <= 30 && tenantLicense.status === "active") {
+                            return (
+                              <Badge variant="destructive" className="ml-2">
+                                Expires in {days} day{days === 1 ? "" : "s"}
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </>
                     ) : (
                       "—"
                     )}
                   </p>
+                  {tenantLicense.modules && tenantLicense.modules.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground">License modules:</span>
+                      {tenantLicense.modules.map((mod) => (
+                        <Badge key={mod} variant="outline" className="capitalize">
+                          {moduleLabel(mod as StockixModuleId)}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                   <p>
                     Activations:{" "}
                     {tenantLicense.product === "platform"

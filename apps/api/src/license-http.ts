@@ -352,21 +352,26 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     return c.json({ ok: true });
   });
 
-  const generateBody = z.object({
-    product: z.enum(["platform", "pos_desktop", "bundle"]),
-    modules: z
-      .array(z.enum(["accounting", "pos", "pms", "chat"]))
-      .default(["accounting"]),
-    planSlug: z.string().min(1),
-    count: z.number().int().min(1).max(100).default(1),
-    isPerpetual: z.boolean().default(true),
-    expiresAt: z.string().datetime().optional(),
-    validFrom: z.string().datetime().optional(),
-    maxActivations: z.number().int().min(1).max(50).default(1),
-    gracePeriodDays: z.number().int().min(0).max(365).default(7),
-    notes: z.string().max(500).optional(),
-    tenantId: z.string().uuid().optional(),
-  });
+  const generateBody = z
+    .object({
+      product: z.enum(["platform", "pos_desktop", "bundle"]),
+      modules: z
+        .array(z.enum(["accounting", "pos", "pms", "chat"]))
+        .default(["accounting"]),
+      planSlug: z.string().min(1),
+      count: z.number().int().min(1).max(100).default(1),
+      isPerpetual: z.boolean().default(true),
+      expiresAt: z.string().datetime().optional(),
+      validFrom: z.string().datetime().optional(),
+      maxActivations: z.number().int().min(1).max(50).default(1),
+      gracePeriodDays: z.number().int().min(0).max(365).default(7),
+      notes: z.string().max(500).optional(),
+      tenantId: z.string().uuid().optional(),
+    })
+    .refine((data) => data.isPerpetual || data.expiresAt !== undefined, {
+      message: "expiresAt is required when isPerpetual is false",
+      path: ["expiresAt"],
+    });
 
   app.post("/licenses/generate", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
