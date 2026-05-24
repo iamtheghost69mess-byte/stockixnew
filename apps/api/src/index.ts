@@ -327,10 +327,9 @@ const platformApiSecret = apiConfig.platformApiSecret;
 const workerSecret = apiConfig.workerSecret;
 apiConfig.validateRequiredEnv();
 
-// In-memory store for one-time admin passwords produced during tenant provisioning.
-// Passwords are intentionally never written to the database (CRIT-02).
-// They are held here for at most 15 minutes after job completion and served once
-// via GET /tenants/provision-status/:correlationId.
+// In-memory cache for one-time admin passwords (fast path during provisioning).
+// Passwords are also persisted encrypted on tenant_deployments.finance_admin_password.
+// Cache TTL is 15 minutes; GET /tenants/:id reads the DB column when authorized.
 const PROVISION_PASSWORD_TTL_MS = 15 * 60 * 1000;
 const provisionPasswordCache = new Map<string, { password: string; expiresAt: number }>();
 type PosDefaultCredentialsPayload = {
@@ -405,6 +404,54 @@ async function loadLatestPosBootstrapCredentials(
     }
   }
   return null;
+}
+
+async function loadLatestFinanceAdminPasswordFromEvents(
+  tenantId: string,
+): Promise<string | null> {
+  if (!db) return null;
+  const secretRows = await db
+    .select({ meta: tenantProvisionEvents.meta })
+    .from(tenantProvisionEvents)
+    .where(
+      and(
+        eq(tenantProvisionEvents.tenantId, tenantId),
+        eq(tenantProvisionEvents.phase, "secret"),
+      ),
+    )
+    .orderBy(desc(tenantProvisionEvents.createdAt))
+    .limit(30);
+  for (const secretRow of secretRows) {
+    const meta = secretRow.meta;
+    if (!meta || typeof meta !== "object" || meta.type !== "bootstrap_admin_otp") continue;
+    const cipher = meta.cipher as string | undefined;
+    if (typeof cipher !== "string") continue;
+    const decrypted = decryptProvisionSecret(cipher);
+    if (decrypted) return decrypted;
+  }
+  return null;
+}
+
+function decryptFinanceAdminPasswordStored(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  const decrypted = decryptProvisionSecret(stored);
+  if (decrypted) return decrypted;
+  if (!stored.startsWith("enc:")) return stored;
+  return null;
+}
+
+async function resolveFinanceAdminPasswordForTenant(
+  tenantId: string,
+  stored: string | null | undefined,
+): Promise<string | null> {
+  const fromDb = decryptFinanceAdminPasswordStored(stored);
+  if (fromDb) return fromDb;
+  return loadLatestFinanceAdminPasswordFromEvents(tenantId);
+}
+
+function canViewFinanceAdminPassword(actorRole: string): boolean {
+  const rank = ROLE_RANK[actorRole as Role];
+  return Number.isFinite(rank) && rank >= ROLE_RANK.support_agent;
 }
 
 function composeProjectFromSlug(slug: string): string {
@@ -1176,7 +1223,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
   // oneTimeAdminPassword is passed by the worker for tenant.provision jobs.
-  // It is stored only in memory (never in the DB) — CRIT-02.
+  // Persisted encrypted on tenant_deployments; also cached in memory for 15 minutes.
   const oneTimeAdminPassword =
     typeof (body as { oneTimeAdminPassword?: unknown }).oneTimeAdminPassword === "string"
       ? (body as { oneTimeAdminPassword: string }).oneTimeAdminPassword
@@ -1362,6 +1409,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           lastError: deploymentLastError,
           registrationCompletedAt: new Date(),
           updatedAt: new Date(),
+          ...(oneTimeAdminPassword
+            ? { financeAdminPassword: encryptProvisionSecret(oneTimeAdminPassword) }
+            : {}),
         })
         .where(eq(tenantDeployments.tenantId, targetTenantId));
 
@@ -1586,6 +1636,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               adminEmail: tenants.adminEmail,
               organizationNumber: tenants.organizationNumber,
               slug: tenants.slug,
+              modules: tenants.modules,
             })
             .from(tenants)
             .where(eq(tenants.id, targetTenantId))
@@ -1597,21 +1648,34 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               ? completeResult.baseUrl
               : null;
           const root = rootDomainForOrganizationSubdomain();
-          const loginUrl =
+          const financeUrl =
             baseUrlFromResult ??
             (root && tenant.slug
               ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
               : apiConfig.dashboardUrl);
+          const provisionModules = parseTenantModules(tenant.modules);
 
-          await sendTenantWelcomeEmail({
-            to: tenant.adminEmail,
-            tenantName: tenant.name,
-            organizationNumber:
-              tenant.organizationNumber ??
-              financeOrganizationIdFromResult ??
-              "—",
-            loginUrl,
-          });
+          if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
+            const { sendFinanceWelcomeEmail } = await import("./mail/send.js");
+            await sendFinanceWelcomeEmail({
+              to: tenant.adminEmail,
+              tenantName: tenant.name,
+              financeUrl,
+              adminEmail: tenant.adminEmail,
+              oneTimePassword: oneTimeAdminPassword,
+              modules: provisionModules,
+            });
+          } else {
+            await sendTenantWelcomeEmail({
+              to: tenant.adminEmail,
+              tenantName: tenant.name,
+              organizationNumber:
+                tenant.organizationNumber ??
+                financeOrganizationIdFromResult ??
+                "—",
+              loginUrl: financeUrl,
+            });
+          }
         } catch (welcomeErr) {
           console.error(
             "[provision] welcome email failed (non-fatal)",
@@ -4225,10 +4289,37 @@ app.delete("/tenants/:tenantId/organization-access/:accessId", async (c) => {
   return c.json({ ok: true });
 });
 
+app.delete("/tenants/:tenantId/finance-password", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const actorRole = c.get("actorRole");
+  if (!canViewFinanceAdminPassword(actorRole)) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const [row] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
+
+  await db
+    .update(tenantDeployments)
+    .set({ financeAdminPassword: null, updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, parsed.data));
+
+  return c.json({ ok: true });
+});
+
 app.get("/tenants/:tenantId", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const actorRole = c.get("actorRole");
 
   const rows = await db
     .select({
@@ -4253,6 +4344,7 @@ app.get("/tenants/:tenantId", async (c) => {
       financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
       financeCashAccountId: tenantDeployments.financeCashAccountId,
       financeCardAccountId: tenantDeployments.financeCardAccountId,
+      financeAdminPasswordStored: tenantDeployments.financeAdminPassword,
       financeOrganizationId: organizations.financeOrganizationId,
       deploymentLastError: tenantDeployments.lastError,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
@@ -4303,6 +4395,20 @@ app.get("/tenants/:tenantId", async (c) => {
     .orderBy(desc(tenantLifecycleJobs.createdAt))
     .limit(1);
 
+  const root = rootDomainForOrganizationSubdomain();
+  const publicUrl =
+    root && row.slug
+      ? `${apiConfig.publicBaseUrlScheme}://${row.slug}.${root}`
+      : null;
+
+  let financeAdminPassword: string | null = null;
+  if (canViewFinanceAdminPassword(actorRole)) {
+    financeAdminPassword = await resolveFinanceAdminPasswordForTenant(
+      parsed.data,
+      row.financeAdminPasswordStored,
+    );
+  }
+
   let resolvedPosUrl = row.posUrl;
   if (row.slug && row.posUrl) {
     const effective = await effectivePosUrl(row.slug, row.posUrl);
@@ -4347,12 +4453,14 @@ app.get("/tenants/:tenantId", async (c) => {
               composeProjectName: row.composeProjectName,
               internalPort: row.internalPort,
               posUrl: resolvedPosUrl,
+              publicUrl,
               financeTenantId: row.financeTenantId,
               financeOrganizationId: row.financeOrganizationId,
               financeDefaultWarehouseId: row.financeDefaultWarehouseId,
               financeWalkInCustomerId: row.financeWalkInCustomerId,
               financeCashAccountId: row.financeCashAccountId,
               financeCardAccountId: row.financeCardAccountId,
+              financeAdminPassword,
               lastError: row.deploymentLastError,
               registrationCompletedAt: row.registrationCompletedAt
                 ? row.registrationCompletedAt.toISOString()

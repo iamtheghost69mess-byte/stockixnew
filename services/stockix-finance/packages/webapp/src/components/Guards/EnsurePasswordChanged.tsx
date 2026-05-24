@@ -14,7 +14,7 @@ export function EnsurePasswordChanged({ children }: EnsurePasswordChangedProps) 
   const mustChange = getCookie('must_change_password') === '1';
 
   if (mustChange) {
-    return <Redirect to="/auth/change-password" />;
+    return <Redirect to="/auth/change-password?required=true" />;
   }
 
   return <>{children}</>;

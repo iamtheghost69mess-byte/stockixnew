@@ -177,6 +177,8 @@ export const tenantDeployments = pgTable(
     posOrganizationId: text("pos_organization_id"),
     /** Public POS web app URL (Traefik: https://{slug}-pos.{domain}). */
     posUrl: text("pos_url"),
+    /** Encrypted bootstrap Finance admin password (`enc:v1:*`) until cleared by operator. */
+    financeAdminPassword: text("finance_admin_password"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

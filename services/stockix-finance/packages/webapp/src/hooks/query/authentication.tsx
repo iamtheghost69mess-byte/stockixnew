@@ -72,6 +72,19 @@ export const useAuthLogin = (props) => {
           setLocale(res.data.tenant.metadata.language);
         }
       });
+
+      if (res.data?.must_change_password) {
+        window.location.href = '/auth/change-password?required=true';
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect');
+      if (redirect) {
+        window.location.href = decodeURIComponent(redirect);
+        return;
+      }
+
       props?.onSuccess?.(res);
     },
     ...props,

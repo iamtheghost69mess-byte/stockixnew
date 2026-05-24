@@ -25,8 +25,18 @@ export function EnsureAuthNotAuthenticated({
     mustChangePassword &&
     location.pathname !== '/auth/change-password'
   ) {
-    return <Redirect to={{ pathname: '/auth/change-password' }} />;
+    return (
+      <Redirect
+        to={{ pathname: '/auth/change-password', search: '?required=true' }}
+      />
+    );
   }
 
-  return <Redirect to={{ pathname: redirectTo }} />;
+  const params = new URLSearchParams(location.search);
+  const redirectParam = params.get('redirect');
+  const destination = redirectParam
+    ? decodeURIComponent(redirectParam)
+    : redirectTo;
+
+  return <Redirect to={destination} />;
 }

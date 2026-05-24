@@ -3,7 +3,7 @@ import React from 'react';
 import intl from 'react-intl-universal';
 import { Formik } from 'formik';
 import { Intent, Position } from '@blueprintjs/core';
-import { useHistory } from 'react-router-dom';
+import { useHistory, useLocation } from 'react-router-dom';
 
 import { AppToaster, FormattedMessage as T } from '@/components';
 import { useAuthChangePassword } from '@/hooks/query';
@@ -23,7 +23,9 @@ const initialValues = {
  */
 export default function ChangePassword() {
   const history = useHistory();
+  const location = useLocation();
   const { mutateAsync: changePasswordMutate } = useAuthChangePassword();
+  const isRequired = new URLSearchParams(location.search).get('required') === 'true';
 
   const handleSubmit = (values, { setSubmitting }) => {
     changePasswordMutate({ password: values.password })
@@ -46,13 +48,18 @@ export default function ChangePassword() {
     <AuthInsider>
       <AuthInsiderCard>
         <p style={{ marginBottom: '1rem' }}>
-          <T id={'change_password_required_hint'} />
+          {isRequired ? (
+            'You must set a new password before continuing.'
+          ) : (
+            <T id={'change_password_required_hint'} />
+          )}
         </p>
         <Formik
           initialValues={initialValues}
           validationSchema={ResetPasswordSchema}
           onSubmit={handleSubmit}
           component={ChangePasswordForm}
+          isRequired={isRequired}
         />
       </AuthInsiderCard>
     </AuthInsider>

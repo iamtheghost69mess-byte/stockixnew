@@ -43,7 +43,23 @@ export async function sendTenantWelcomeEmail(opts: {
   });
 }
 
-export async function sendFinanceCredentialsEmail(opts: {
+function formatModuleLabel(moduleId: string): string {
+  if (moduleId === "accounting") return "Accounting";
+  if (moduleId === "pos") return "Point of Sale";
+  if (moduleId === "pms") return "Property Management";
+  if (moduleId === "chat") return "Chat";
+  return moduleId;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export async function sendFinanceWelcomeEmail(opts: {
   to: string;
   tenantName: string;
   financeUrl: string;
@@ -51,23 +67,49 @@ export async function sendFinanceCredentialsEmail(opts: {
   oneTimePassword: string;
   modules: string[];
 }) {
-  const brandName = "Stockix";
-  const modulesLabel = opts.modules.length > 0 ? opts.modules.join(", ") : "accounting";
+  const brandName = process.env.BRAND_NAME ?? "Stockix";
+  const loginUrl = opts.financeUrl.replace(/\/+$/, "");
+  const moduleNames = opts.modules.map(formatModuleLabel).join(", ");
+  const safeTenant = escapeHtml(opts.tenantName);
+  const safeEmail = escapeHtml(opts.adminEmail);
+  const safePassword = escapeHtml(opts.oneTimePassword);
+  const safeLoginUrl = escapeHtml(loginUrl);
+
   return sendMail({
     to: opts.to,
-    subject: `Your ${brandName} accounting access is ready`,
-    html: `
-        <h2>Your accounting platform is ready</h2>
-        <p>Tenant: ${opts.tenantName}</p>
-        <p>Login URL: <a href="${opts.financeUrl}">${opts.financeUrl}</a></p>
-        <p>Email: ${opts.adminEmail}</p>
-        <p>Temporary password: <strong>${opts.oneTimePassword}</strong></p>
-        <p>You will be asked to change your password on first login.</p>
-        <p>Modules: ${modulesLabel}</p>
-      `,
-    idempotencyKey: `finance-credentials/${opts.adminEmail}/${opts.financeUrl}`,
+    subject: `Your ${brandName} account is ready`,
+    html: `<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
+  <h1 style="font-size: 22px;">Your account is ready</h1>
+  <p>Hello,</p>
+  <p>Your <strong>${safeTenant}</strong> account has been set up successfully.</p>
+  <div style="background: #f4f4f5; border-radius: 8px; padding: 16px; margin: 20px 0;">
+    <h2 style="font-size: 16px; margin: 0 0 12px;">Finance login details</h2>
+    <p style="margin: 8px 0;"><strong>Login URL</strong><br />
+      <a href="${safeLoginUrl}/auth/login">${safeLoginUrl}/auth/login</a></p>
+    <p style="margin: 8px 0;"><strong>Email</strong><br />${safeEmail}</p>
+    <p style="margin: 8px 0;"><strong>Temporary password</strong><br />
+      <code style="font-size: 15px;">${safePassword}</code></p>
+  </div>
+  <p style="color: #b45309;"><strong>Important:</strong> You will be asked to create a new password on first login.
+  The temporary password above will no longer work after you set a new one.</p>
+  <p>Modules included: ${escapeHtml(moduleNames || "Accounting")}</p>
+  <p style="margin: 24px 0;">
+    <a href="${safeLoginUrl}/auth/login"
+       style="display: inline-block; background: #111; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none;">
+      Log in to your account
+    </a>
+  </p>
+  <p style="color: #666; font-size: 14px;">If you have questions, contact your account manager.</p>
+</body>
+</html>`,
+    idempotencyKey: `finance-welcome/${opts.adminEmail}/${loginUrl}`,
   });
 }
+
+/** @deprecated Use sendFinanceWelcomeEmail */
+export const sendFinanceCredentialsEmail = sendFinanceWelcomeEmail;
 
 export type PosCredentialEmailRow = {
   role: string;
@@ -75,20 +117,22 @@ export type PosCredentialEmailRow = {
   pin: string;
 };
 
-export async function sendPosCredentialsEmail(opts: {
+export async function sendPosWelcomeEmail(opts: {
   to: string;
   tenantName: string;
   posUrl: string;
   credentials: PosCredentialEmailRow[];
 }) {
-  const brandName = "Stockix";
+  const brandName = process.env.BRAND_NAME ?? "Stockix";
+  const safeTenant = escapeHtml(opts.tenantName);
+  const safePosUrl = escapeHtml(opts.posUrl);
   const credentialRows = opts.credentials
     .map(
       (c) =>
         `<tr>
-        <td>${c.role}</td>
-        <td>${c.username}</td>
-        <td><strong>${c.pin}</strong></td>
+        <td>${escapeHtml(c.role)}</td>
+        <td>${escapeHtml(c.username)}</td>
+        <td><strong>${escapeHtml(c.pin)}</strong></td>
       </tr>`,
     )
     .join("");
@@ -96,22 +140,35 @@ export async function sendPosCredentialsEmail(opts: {
   return sendMail({
     to: opts.to,
     subject: `Your ${brandName} POS staff credentials`,
-    html: `
-        <h2>POS Staff Login Credentials</h2>
-        <p>Tenant: ${opts.tenantName}</p>
-        <p>POS URL: <a href="${opts.posUrl}">${opts.posUrl}</a></p>
-        <p>Staff login uses 6-digit PIN codes:</p>
-        <table>
-          <tr><th>Role</th><th>Username</th><th>PIN</th></tr>
-          ${credentialRows}
-        </table>
-        <p><strong>Please store these securely.</strong>
-        Share each PIN only with the relevant staff member.</p>
-        <p>PINs can be changed from the POS admin panel.</p>
-      `,
-    idempotencyKey: `pos-credentials/${opts.to}/${opts.posUrl}`,
+    html: `<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 600px;">
+  <h1 style="font-size: 22px;">POS staff login credentials</h1>
+  <p>Hello,</p>
+  <p>Your <strong>${safeTenant}</strong> Point of Sale system is ready.</p>
+  <p><strong>POS URL:</strong> <a href="${safePosUrl}">${safePosUrl}</a></p>
+  <p>Staff log in using their role PIN code:</p>
+  <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+    <thead>
+      <tr style="background: #f4f4f5;">
+        <th align="left">Role</th>
+        <th align="left">Username</th>
+        <th align="left">PIN</th>
+      </tr>
+    </thead>
+    <tbody>${credentialRows}</tbody>
+  </table>
+  <p style="color: #b45309;"><strong>Security:</strong> Share each PIN only with the relevant staff member.
+  PINs can be changed from the admin panel. Do not forward this email to staff directly.</p>
+  <p style="color: #666; font-size: 14px;">To reset a PIN, log in as admin and go to Settings → Staff Management.</p>
+</body>
+</html>`,
+    idempotencyKey: `pos-welcome/${opts.to}/${opts.posUrl}`,
   });
 }
+
+/** @deprecated Use sendPosWelcomeEmail */
+export const sendPosCredentialsEmail = sendPosWelcomeEmail;
 
 export async function sendLicenseExpiringEmail(opts: {
   to: string;

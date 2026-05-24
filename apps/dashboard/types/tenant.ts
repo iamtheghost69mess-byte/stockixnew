@@ -63,6 +63,8 @@ export type TenantDetail = {
     financeWalkInCustomerId: number | null;
     financeCashAccountId: number | null;
     financeCardAccountId: number | null;
+    publicUrl: string | null;
+    financeAdminPassword: string | null;
     lastError: string | null;
     registrationCompletedAt: string | null;
     createdAt: string;

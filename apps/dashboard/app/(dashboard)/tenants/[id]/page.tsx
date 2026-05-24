@@ -121,8 +121,7 @@ export default function TenantDetailPage() {
   const [impersonating, setImpersonating] = useState(false);
   const [provisionPollTimedOut, setProvisionPollTimedOut] = useState(false);
   const provisionPollStartedAtRef = useRef<number | null>(null);
-  const [bootstrapPassword, setBootstrapPassword] = useState<string | null>(null);
-  const [bootstrapPasswordLoading, setBootstrapPasswordLoading] = useState(false);
+  const [clearingFinancePassword, setClearingFinancePassword] = useState(false);
   const [repairingFinanceLink, setRepairingFinanceLink] = useState(false);
   const [assignPickOpen, setAssignPickOpen] = useState(false);
   const [unassignedPickLoading, setUnassignedPickLoading] = useState(false);
@@ -241,20 +240,32 @@ export default function TenantDetailPage() {
   }, [licenseHistoryOpen, loadLicenseHistory]);
 
   const deploymentStatus = (tenant?.deployment?.status ?? tenant?.status ?? "").toLowerCase();
+  const tenantStatus = (tenant?.status ?? "").toLowerCase();
   const isProvisioning =
-    deploymentStatus === "provisioning" || deploymentStatus === "pending";
-  const shouldPollProvisioning = isProvisioning && !provisionPollTimedOut;
+    deploymentStatus === "provisioning"
+    || deploymentStatus === "pending"
+    || deploymentStatus === "queued"
+    || tenantStatus === "provisioning"
+    || tenantStatus === "queued";
+  const shouldPollProvisioning =
+    (deploymentStatus === "provisioning"
+      || deploymentStatus === "pending"
+      || deploymentStatus === "queued"
+      || tenantStatus === "provisioning"
+      || tenantStatus === "queued")
+    && !provisionPollTimedOut;
 
   useEffect(() => {
-    if (!tenant || !isProvisioning) {
+    if (!tenant || !shouldPollProvisioning) {
       provisionPollStartedAtRef.current = null;
-      setProvisionPollTimedOut(false);
+      if (!shouldPollProvisioning) {
+        setProvisionPollTimedOut(false);
+      }
       return;
     }
     if (provisionPollStartedAtRef.current == null) {
       provisionPollStartedAtRef.current = Date.now();
     }
-    if (!shouldPollProvisioning) return;
 
     const intervalId = window.setInterval(() => {
       const startedAt = provisionPollStartedAtRef.current ?? Date.now();
@@ -266,34 +277,27 @@ export default function TenantDetailPage() {
       void loadEvents();
     }, PROVISION_POLL_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
-  }, [tenant, isProvisioning, shouldPollProvisioning]);
+  }, [tenant, shouldPollProvisioning]);
 
-  const loadBootstrapPassword = useCallback(async () => {
-    const correlationId = tenant?.latestProvision?.correlationId;
-    if (!correlationId) return;
-    setBootstrapPasswordLoading(true);
-    try {
-      const res = await fetch(`/api/tenants/provision-status/${correlationId}`);
-      const data = (await readJson(res)) as {
-        oneTimeAdminPassword?: string | null;
-        status?: string;
-      };
-      if (res.ok && data.oneTimeAdminPassword) {
-        setBootstrapPassword(data.oneTimeAdminPassword);
-      }
-    } finally {
-      setBootstrapPasswordLoading(false);
-    }
-  }, [tenant?.latestProvision?.correlationId]);
-
-  useEffect(() => {
+  const clearFinancePassword = async () => {
     if (!tenant) return;
-    const active =
-      (tenant.deployment?.status ?? "").toLowerCase() === "active" ||
-      tenant.status === "active";
-    if (!active || !tenant.latestProvision?.correlationId) return;
-    void loadBootstrapPassword();
-  }, [tenant, loadBootstrapPassword]);
+    setClearingFinancePassword(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenant.id}/finance-password`, {
+        method: "DELETE",
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        throw new Error(formatApiError(body, "Could not clear Finance credentials"));
+      }
+      toast.success("Finance credentials cleared from dashboard");
+      await loadTenant();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not clear Finance credentials");
+    } finally {
+      setClearingFinancePassword(false);
+    }
+  };
 
   const repairFinanceLink = async () => {
     if (!tenant) return;
@@ -945,53 +949,101 @@ export default function TenantDetailPage() {
         </Card>
 
         {hasAccountingModule &&
-        (tenant.deployment?.status ?? "").toLowerCase() === "active" ? (
+        (tenant.deployment?.status ?? "").toLowerCase() === "active" &&
+        tenant.deployment?.financeAdminPassword ? (
           <Card className="md:col-span-3">
             <CardHeader>
-              <CardTitle>Bootstrap access (Finance)</CardTitle>
+              <CardTitle>Finance admin credentials</CardTitle>
               <CardDescription>
-                The bootstrap password is derived per tenant slug (not single-use). It is shown here
-                for about 15 minutes after provisioning while the control plane cache is warm. Tell
-                the tenant admin to sign in at Finance login and change the password immediately.
+                This password works until the admin logs in and changes it. After first login it is
+                permanently invalidated. Clear it from the dashboard once the tenant admin confirms
+                they can sign in.
                 {isSuper ? " Super admins can use Impersonate for support access." : ""}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <p>
-                Admin email:{" "}
-                <span className="font-mono text-xs">{tenant.adminEmail}</span>
-              </p>
-              {bootstrapPasswordLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading bootstrap password…
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">Email</p>
+                  <p className="mt-1 font-mono text-xs">{tenant.adminEmail}</p>
                 </div>
-              ) : bootstrapPassword ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Copy admin email"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(tenant.adminEmail);
+                    toast.success("Copied admin email");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">Temporary password</p>
+                  <p className="mt-1 break-all font-mono text-xs">
+                    {tenant.deployment.financeAdminPassword}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Copy temporary password"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(tenant.deployment!.financeAdminPassword!);
+                    toast.success("Copied temporary password");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {tenant.deployment.publicUrl || baseUrl ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-foreground">Bootstrap password (shown once)</p>
-                    <p className="mt-1 break-all font-mono text-xs">{bootstrapPassword}</p>
+                    <p className="font-medium text-foreground">Login URL</p>
+                    <p className="mt-1 break-all font-mono text-xs">
+                      {tenant.deployment.publicUrl ?? baseUrl}
+                    </p>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     className="h-8 w-8 shrink-0"
-                    aria-label="Copy bootstrap password"
+                    aria-label="Copy login URL"
                     onClick={() => {
-                      void navigator.clipboard.writeText(bootstrapPassword);
-                      toast.success("Copied bootstrap password");
+                      const url = tenant.deployment?.publicUrl ?? baseUrl ?? "";
+                      void navigator.clipboard.writeText(url);
+                      toast.success("Copied login URL");
                     }}
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-              ) : (
-                <p className="text-muted-foreground">
-                  Bootstrap password is no longer in the short-lived cache. Use Impersonate (super
-                  admin) or reset flows if the admin cannot sign in.
-                </p>
-              )}
+              ) : null}
+              <Alert>
+                <AlertDescription>
+                  Clear this password from the dashboard manually after the tenant admin confirms
+                  they have logged in.
+                </AlertDescription>
+              </Alert>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={clearingFinancePassword}
+                onClick={() => void clearFinancePassword()}
+              >
+                {clearingFinancePassword ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : null}
+                Mark credentials as delivered — clear from dashboard
+              </Button>
             </CardContent>
           </Card>
         ) : null}

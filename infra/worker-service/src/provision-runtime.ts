@@ -33,7 +33,7 @@ import {
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
 import { getLicenseExpiry, getPlanLimits } from "../../../apps/api/src/license-utils.js";
-import { sendFinanceCredentialsEmail, sendPosCredentialsEmail } from "../../../apps/api/src/mail/send.js";
+import { sendPosWelcomeEmail } from "../../../apps/api/src/mail/send.js";
 import {
   FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
   syncFinanceLicense,
@@ -117,7 +117,7 @@ async function runPosProvisionStep(params: {
     const credentials = posResult.posDefaultCredentials?.allRoles ?? [];
     if (credentials.length > 0 && posResult.posUrl) {
       try {
-        await sendPosCredentialsEmail({
+        await sendPosWelcomeEmail({
           to: params.adminEmail,
           tenantName: params.tenantName,
           posUrl: posResult.posUrl,
@@ -935,25 +935,6 @@ export async function executeProvisionRuntime(
         elapsedMs: elapsedMs(),
       });
       log("[provision] step done: tenant.bootstrap_admin");
-      if (oneTimeAdminPassword && input.adminEmail.trim()) {
-        try {
-          await sendFinanceCredentialsEmail({
-            to: input.adminEmail,
-            tenantName: input.name,
-            financeUrl: baseUrl,
-            adminEmail: input.adminEmail,
-            oneTimePassword: oneTimeAdminPassword,
-            modules: resolveTenantModules(input.modules),
-          });
-          log(`[provision] Finance credentials email sent to ${input.adminEmail}`);
-        } catch (emailErr) {
-          log(
-            `[provision] Finance credentials email failed (non-fatal): ${
-              emailErr instanceof Error ? emailErr.message : String(emailErr)
-            }`,
-          );
-        }
-      }
     } else {
       await trace.event("resume", "Skipping bootstrap admin registration (already journaled)", {
         meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail },

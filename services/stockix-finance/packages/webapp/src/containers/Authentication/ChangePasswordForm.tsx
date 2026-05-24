@@ -5,7 +5,7 @@ import { Form } from 'formik';
 import { FFormGroup, FInputGroup, FormattedMessage as T } from '@/components';
 import { AuthSubmitButton } from './_components';
 
-export default function ChangePasswordForm({ isSubmitting }) {
+export default function ChangePasswordForm({ isSubmitting, isRequired }) {
   return (
     <Form>
       <FFormGroup name={'password'} label={<T id={'new_password'} />}>

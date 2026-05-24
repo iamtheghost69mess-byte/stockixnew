@@ -3,6 +3,7 @@ import axios from 'axios';
 import { store } from '@/store/createStore';
 import { removeCookie } from '@/utils';
 import { setGlobalErrors } from '@/store/globalErrors/globalErrors.actions';
+import { getAppQueryClient } from '@/services/queryClientHolder';
 
 const http = axios.create();
 
@@ -38,8 +39,12 @@ function redirectToLogin() {
     return;
   }
   handlingUnauthorized = true;
+  getAppQueryClient()?.clear();
   clearAuthSession();
-  window.location.href = '/auth/login';
+  const returnUrl = encodeURIComponent(
+    `${window.location.pathname}${window.location.search}`,
+  );
+  window.location.href = `/auth/login?redirect=${returnUrl}`;
 }
 
 http.interceptors.request.use((request) => {

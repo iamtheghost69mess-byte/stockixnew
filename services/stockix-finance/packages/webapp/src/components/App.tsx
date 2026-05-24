@@ -16,6 +16,7 @@ import SuspendedOverlay from '@/components/License/SuspendedOverlay';
 
 import { SplashScreen, DashboardThemeProvider } from '../components';
 import { queryConfig } from '../hooks/query/base';
+import { setAppQueryClient } from '@/services/queryClientHolder';
 import { EnsureUserEmailNotVerified } from './Guards/EnsureUserEmailNotVerified';
 
 const DashboardPrivatePages = lazy(
@@ -93,6 +94,7 @@ export default function App() {
 
   // Query client.
   const queryClient = new QueryClient(queryConfig);
+  setAppQueryClient(queryClient);
 
   return (
     <QueryClientProvider client={queryClient}>

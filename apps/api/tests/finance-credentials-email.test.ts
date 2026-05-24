@@ -8,12 +8,12 @@ vi.mock("../src/mail/mailer.js", () => ({
 
 import { sendFinanceCredentialsEmail } from "../src/mail/send.js";
 
-describe("sendFinanceCredentialsEmail", () => {
+describe("sendFinanceWelcomeEmail", () => {
   beforeEach(() => {
     sendMailMock.mockClear();
   });
 
-  it("sends accounting access email with login URL and temporary password", async () => {
+  it("sends welcome email with login URL and temporary password", async () => {
     await sendFinanceCredentialsEmail({
       to: "admin@demo.test",
       tenantName: "Demo Restaurant",
@@ -27,14 +27,14 @@ describe("sendFinanceCredentialsEmail", () => {
     expect(sendMailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "admin@demo.test",
-        subject: "Your Stockix accounting access is ready",
+        subject: "Your Stockix account is ready",
       }),
     );
     const html = sendMailMock.mock.calls[0]![0]!.html as string;
     expect(html).toContain("Demo Restaurant");
-    expect(html).toContain("https://demo.stockix.app");
+    expect(html).toContain("https://demo.stockix.app/auth/login");
     expect(html).toContain("admin@demo.test");
     expect(html).toContain("temp-secret-123");
-    expect(html).toContain("accounting, pos");
+    expect(html).toContain("Accounting, Point of Sale");
   });
 });
