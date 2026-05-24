@@ -5,6 +5,8 @@
  * Usage:
  *   pnpm pos:images:build
  *   pnpm pos:images:build -- --force
+ *   pnpm pos:images:build -- --backend-only
+ *   pnpm pos:images:build -- --full-frontend   # build real Next.js image (slow)
  *
  * Run before first POS provision or after POS / @repo/auth changes.
  */
@@ -18,6 +20,9 @@ import { loadRootEnv } from "./load-root-env.mjs";
 
 const ROOT = loadRootEnv(import.meta.url);
 const FORCE = process.argv.includes("--force");
+const BACKEND_ONLY = process.argv.includes("--backend-only");
+const FULL_FRONTEND = process.argv.includes("--full-frontend");
+const STUB_FRONTEND = !FULL_FRONTEND;
 const posAppRaw = process.env.POS_APP_ROOT?.trim() || path.join("services", "posnew");
 const POS_ROOT = path.isAbsolute(posAppRaw) ? posAppRaw : path.join(ROOT, posAppRaw);
 const COMPOSE = path.join(ROOT, "infra", "pos-tenant-stack", "docker-compose.yml");
@@ -78,8 +83,17 @@ const services = [];
 if (!skipBackend) {
   services.push("pos-backend", "pos-bigcapital-worker");
 }
-if (!skipFrontend) {
-  services.push("pos-frontend");
+if (!BACKEND_ONLY && !skipFrontend) {
+  if (FULL_FRONTEND) {
+    services.push("pos-frontend");
+  } else if (STUB_FRONTEND) {
+    const stubDockerfile = path.join(ROOT, "infra", "pos-tenant-stack", "Dockerfile.pos-frontend-stub");
+    run(
+      "Build stub stockix-pos-frontend:local",
+      `docker build -t stockix-pos-frontend:local -f "${stubDockerfile}" "${ROOT}"`,
+      ROOT,
+    );
+  }
 }
 
 if (services.length === 0) {
@@ -94,7 +108,10 @@ if (services.length === 0) {
 }
 
 console.log("\n[pos:images] Verify");
-for (const tag of POS_IMAGES) {
+const requiredImages = BACKEND_ONLY
+  ? ["stockix-pos-backend:local"]
+  : POS_IMAGES;
+for (const tag of requiredImages) {
   if (imageExists(tag)) {
     console.log(`[pos:images] ok ${tag}`);
   } else {

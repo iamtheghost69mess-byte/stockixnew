@@ -44,6 +44,15 @@ function repoRoot(): string {
 
 }
 
+async function dockerImageExists(tag: string): Promise<boolean> {
+  try {
+    await execa("docker", ["image", "inspect", tag], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 
 const DEFAULT_MODULES = ["accounting"] as const;
@@ -312,10 +321,31 @@ export async function provisionPosStack(
       : {}),
   };
 
+  if (!(await dockerImageExists("stockix-pos-backend:local"))) {
+    throw new Error(
+      "stockix-pos-backend:local not found — run pnpm pos:images:build before POS provision",
+    );
+  }
+
+  const upServices = [
+    "pos-mongo",
+    "pos-redis",
+    "pos-backend",
+    "pos-bigcapital-worker",
+  ];
+  if (await dockerImageExists("stockix-pos-frontend:local")) {
+    upServices.push("pos-frontend");
+  } else {
+    opts.log(
+      "[provision][pos] stockix-pos-frontend:local not found — skipping frontend container (pnpm pos:images:build)",
+    );
+  }
+
+  // Use pre-built images only — do not pass --build (would rebuild pos-frontend from the full Next Dockerfile).
   try {
     const composeRun = await execa(
       "docker",
-      ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+      ["compose", "-f", composeFile, "-p", project, "up", "-d", ...upServices],
       { env: composeEnv, stdio: "pipe", reject: false },
     );
     if (composeRun.stdout) {

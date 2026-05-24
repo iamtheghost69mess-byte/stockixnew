@@ -86,7 +86,11 @@ Rails container env names (mapped in compose): `INSTALLATION_NAME`, `BRAND_NAME`
 
 ```bash
 docker build -t stockix-chatlive:local -f services/chatlive/docker/Dockerfile services/chatlive/
-docker compose -f infra/prod/docker-compose.yml up chatwoot chatwoot-postgres chatwoot-redis -d
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env up -d chatwoot-postgres chatwoot-redis
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env run --rm chatwoot bundle exec rails db:chatwoot_prepare   # first time
+CHATWOOT_FRONTEND_URL=http://localhost:3200 docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env up -d chatwoot
 ```
+
+Open **http://localhost:3200**. See **`README.md`** (Stockix local testing) for Windows Docker port binding, stop/reset, and platform `.env` wiring.
 
 Manual checklist: browser title, favicon, login logo, sidebar logo, no `chatwoot.com` links, no widget powered-by, email sender name, PWA name.

@@ -40,7 +40,7 @@ export async function checkRequiredTenantImages(): Promise<void> {
     }
   }
   if (missingPos.length > 0) {
-    console.warn("[worker] POS module images not pre-built (POS provision will build on first job):");
+    console.warn("[worker] POS module images not pre-built (POS provision will fail until built):");
     for (const img of missingPos) {
       console.warn(`[worker]   - ${img}`);
     }

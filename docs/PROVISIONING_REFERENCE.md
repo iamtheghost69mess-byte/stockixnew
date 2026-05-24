@@ -87,6 +87,19 @@ Finance applies a global HTTP serializer: JSON bodies use **snake_case** keys (e
 | Chat only | ✅ | Chatwoot account id | Shared Chatwoot stack account | **Partial** |
 | All modules | ✅ | All stacks | Combined above | Staging validation required |
 
+### Local Chatwoot (`services/chatlive`)
+
+Run the shared Chat stack on **http://localhost:3200** for manual or provisioning tests (dashboard stays on port 3000):
+
+```bash
+docker build -t stockix-chatlive:local -f services/chatlive/docker/Dockerfile services/chatlive/
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env up -d chatwoot-postgres chatwoot-redis
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env run --rm chatwoot bundle exec rails db:chatwoot_prepare   # first time
+CHATWOOT_FRONTEND_URL=http://localhost:3200 docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env up -d chatwoot
+```
+
+Set `CHATWOOT_BASE_URL=http://localhost:3200` and `CHATWOOT_API_ACCESS_TOKEN` in root `.env` after Super Admin onboarding. Full steps, Windows Docker port workaround, and stop/reset commands: **`services/chatlive/README.md`** (Stockix local testing section).
+
 ### `PROVISION_MODULE_GATING`
 
 ```ts
@@ -127,7 +140,15 @@ Requires: API + worker, Docker, seeded owners, `PROVISION_MODULE_GATING=1` for t
 
 **Worker bundle reload:** `pnpm dev` starts `infra/worker-service/.runtime/worker.js` once. After changing worker code, run `pnpm infra:worker:build` and **restart the worker** (or restart `pnpm dev`). Otherwise an old bundle can still fail steps like `activate_warehouses` even though source is fixed. Startup logs include `runtimeBundleMtime`.
 
-**POS images:** Set `POS_APP_ROOT` to `services/posnew` (default). Build base images before provisioning: `pnpm pos:images:build`.
+**POS images:** Set `POS_APP_ROOT` to `services/posnew` (default). Before provisioning POS modules:
+
+```bash
+pnpm pos:images:build              # stockix-pos-backend:local + stub frontend (fast; needs packages/auth/dist — see .dockerignore)
+pnpm pos:images:build -- --backend-only   # API/worker only
+pnpm pos:images:build -- --full-frontend  # real Next.js image (slow; optional)
+```
+
+Provision starts `pos-mongo`, `pos-redis`, `pos-backend`, `pos-bigcapital-worker`, and `pos-frontend` only when `stockix-pos-frontend:local` exists (stub satisfies compose/Traefik). The worker runs `docker compose up -d` **without** `--build` so it uses these tags only; run `pnpm pos:images:build` before the first POS tenant.
 
 **Finance API keys:** Internal HTTP responses use snake_case; workers normalize via `@repo/shared/finance-api` (`parseFinanceApiJsonText`).
 

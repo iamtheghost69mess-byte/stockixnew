@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl dumb-init 
     && rm -rf /var/lib/apt/lists/*
 
 COPY packages/auth /packages/auth
+# @repo/auth is loaded from /packages/auth; install runtime deps there (not under /app/node_modules).
+RUN cd /packages/auth && npm install jose@^5.0.0 --omit=dev --legacy-peer-deps --no-audit
 COPY services/posnew/packages/domain-access /packages/domain-access
 COPY services/posnew/.npmrc ./.npmrc
 COPY services/posnew/apps/pos-backend/package.json ./package.json
