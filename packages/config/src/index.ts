@@ -518,10 +518,12 @@ export const chatwootConfig = {
 
 export const moduleGatingConfig = {
   /**
-   * When true, worker provisions only the Docker stacks matching
+   * When true (default), worker provisions only the Docker stacks matching
    * the tenant's modules[] array.
-   * When false (default), Finance stack always provisioned (safe default).
+   * Set PROVISION_MODULE_GATING=0 for legacy mode (always provisions Finance).
    */
-  enabled: process.env.PROVISION_MODULE_GATING === "1",
+  get enabled() {
+    return process.env.PROVISION_MODULE_GATING !== "0";
+  },
 } as const;
 

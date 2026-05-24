@@ -25,13 +25,17 @@ const {
   getOrgObservability,
   getOrgProvisioningStatus,
   patchOrgLifecycle,
+  suspendOrg,
   patchOrgLicense,
   patchOrgLocationSupport,
   patchEntitlements,
   deleteOrg,
+  getOrgCredentials,
   resetCredentialRolePin,
+  resetOrgPin,
   retryProvisioning,
 } = require("../controllers/platformOrgController");
+const { wireBigcapitalIntegration } = require("../controllers/platformIntegrationController");
 const {
   summary,
   kpis,
@@ -153,6 +157,16 @@ router.post(
   requirePlatformPermission(P.ORG_WRITE),
   retryProvisioning
 );
+router.get(
+  "/organizations/:id/credentials",
+  requirePlatformPermission(P.ORG_READ),
+  getOrgCredentials
+);
+router.post(
+  "/organizations/:id/reset-pin",
+  requirePlatformPermission(P.ORG_WRITE),
+  resetOrgPin
+);
 router.patch(
   "/organizations/:id/credentials/:role/reset-pin",
   requirePlatformPermission(P.ORG_WRITE),
@@ -164,10 +178,20 @@ router.get(
   getOrgObservability
 );
 router.get("/organizations/:id", requirePlatformPermission(P.ORG_READ), getOrg);
+router.put(
+  "/organizations/:id/integration/bigcapital",
+  requirePlatformPermission(P.ORG_WRITE),
+  wireBigcapitalIntegration
+);
 router.patch(
   "/organizations/:id/lifecycle",
   requirePlatformPermission(P.ORG_WRITE),
   patchOrgLifecycle
+);
+router.post(
+  "/organizations/:id/suspend",
+  requirePlatformPermission(P.ORG_WRITE),
+  suspendOrg
 );
 router.patch(
   "/organizations/:id/license",

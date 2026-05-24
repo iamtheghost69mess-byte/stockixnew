@@ -1,6 +1,7 @@
 export type OfflineMutationKind =
   | "create_order"
   | "patch_order_items"
+  | "pay_order"
   | "inventory_adjust";
 
 export type OfflineMutation = {

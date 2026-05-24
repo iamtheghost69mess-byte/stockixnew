@@ -177,6 +177,8 @@ export const tenantDeployments = pgTable(
     posOrganizationId: text("pos_organization_id"),
     /** Public POS web app URL (Traefik: https://{slug}-pos.{domain}). */
     posUrl: text("pos_url"),
+    /** Encrypted bootstrap Finance admin password (`enc:v1:*`) until cleared by operator. */
+    financeAdminPassword: text("finance_admin_password"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -323,6 +325,7 @@ export const plans = pgTable(
     description: text("description"),
     maxOrganizations: integer("max_organizations").notNull().default(1),
     maxActivations: integer("max_activations").notNull().default(1),
+    maxUsers: integer("max_users").notNull().default(999),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     /** Price in smallest currency unit (e.g. cents). Null = custom / not set. */

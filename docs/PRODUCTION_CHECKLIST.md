@@ -1,14 +1,34 @@
-# Production checklist — multi-product platform
+# Production Deployment Checklist
 
-## Docker image pre-build (required before first tenant provision)
+Run through this in order before going live.
 
-- [ ] Run: `pnpm docker:prebuild`
-- [ ] Verify: `pnpm docker:check` shows all four Finance images
-- [ ] Set `WORKER_JOB_EXECUTION_TIMEOUT_MS=2700000` in root `.env`
-- [ ] Rebuild worker after worker changes: `pnpm infra:worker:build`
-- [ ] After Finance code changes: `pnpm docker:prebuild:force`
+---
 
-### Images required
+## Pre-Deploy
+
+- [ ] `pnpm docker:prebuild` (builds all tenant images)
+- [ ] `pnpm docker:check` (verify all 4 Finance images exist)
+- [ ] `pnpm db:migrate` (run on production Postgres)
+- [ ] Finance: `pnpm cli:system:migrate:latest` + `pnpm cli:tenants:migrate:latest` on prod MariaDB
+- [ ] All env vars set in `infra/prod/.env` (see [ENV_REFERENCE.md](./ENV_REFERENCE.md))
+- [ ] `pnpm env:sync-prod --confirm-server` on deploy host
+- [ ] `PROVISION_MODULE_GATING=1`
+- [ ] `AUTH_TOKEN_SECRET` identical in root + POS + PMS tenant stacks
+- [ ] `INTERNAL_API_SECRET` set (≠ `WORKER_SECRET` in prod); matches each tenant Finance `.env`
+- [ ] `POS_PLATFORM_API_KEY` set (min 10 chars)
+- [ ] `PLATFORM_API_SECRET`, `WORKER_SECRET`, `SESSION_SECRET`, `DEPLOYMENT_SECRET_KEY`, `LICENSE_SIGNING_SECRET` rotated for prod
+- [ ] `CF_DNS_API_TOKEN` set (Cloudflare DNS for Traefik ACME)
+- [ ] `MAIL_PASSWORD` set (Resend API key, starts with `re_`)
+- [ ] `MAIL_FROM_ADDRESS` on verified Resend domain
+- [ ] `CHATWOOT_SECRET_KEY_BASE` set (`openssl rand -hex 64`)
+- [ ] `CHATWOOT_DB_PASSWORD` set
+- [ ] `S3_*` set if tenant file uploads enabled
+- [ ] `WORKER_JOB_EXECUTION_TIMEOUT_MS=2700000` in prod env
+- [ ] `pnpm infra:worker:build` after worker changes; redeploy worker container
+- [ ] `cd infra/prod && docker compose --env-file .env config` — no errors
+- [ ] `cd infra/prod && docker compose --env-file .env up -d --build`
+
+## Docker Images Required
 
 | Image | Built from |
 |-------|------------|
@@ -17,48 +37,47 @@
 | `stockix-database-migration:local` | `services/stockix-finance/packages/server/Dockerfile` (target: `migration`) |
 | `stockix-nginx:local` | `services/stockix-finance/docker/nginx/` |
 
-Provisioning uses cached images (`docker compose up` without `--build`) except `database_migration`, which may rebuild when migrations change.
+## First Provision Test
 
-## Control plane
+- [ ] Provision accounting-only tenant → Finance accessible at `{slug}.{ROOT_DOMAIN}`
+- [ ] Provision pos-only tenant → POS accessible (no Finance stack when gating on)
+- [ ] Provision accounting+pos tenant → both accessible
+- [ ] `finance_tenant_id` set on `tenant_deployments`
+- [ ] `pos_organization_id` and `pos_url` set when POS module selected
+- [ ] IntegrationConfig auto-wired for accounting+pos
+- [ ] Bootstrap password captured or impersonate works
+- [ ] Admin changes Finance password after first login
 
-- [ ] `packages/auth` deployed; `AUTH_TOKEN_SECRET` shared with POS/PMS tenant stacks
-- [ ] Postgres migrations through `0030_chatwoot_account_id.sql` applied
-- [ ] Owner dashboard at `apps/dashboard`; API at `apps/api`
-- [ ] Tenant provision form persists `modules` JSON on tenants and job payload
+## Email
 
-## Finance (default)
+- [ ] Test email sends from control plane (owner invite or welcome)
+- [ ] Finance password reset sends (tenant SMTP)
+- [ ] License expiry warning email sends
+- [ ] Resend dashboard shows delivery
 
-- [ ] `modules` includes `accounting` (default) — existing `infra/tenant-stack` provision unchanged
-- [ ] `PROVISION_MODULE_GATING` unset or `0` until non-Finance tenants are tested
+## License
 
-## POS
+- [ ] Plan limits enforced in Finance (`maxOrganizations`, users)
+- [ ] License sync working after provision (`tenant_licenses` in Finance)
+- [ ] Suspended license → HTTP 402 on Finance API
+- [ ] Revoke propagates to Finance within cache window (~60s)
 
-- [ ] `POS_PLATFORM_BASE_URL` and `POS_PLATFORM_API_KEY` set on control-plane API
-- [ ] POS sections in dashboard load via `/api/pos/*` proxy
-- [ ] POS backend validates Stockix JWT with `pos` module (`@repo/auth`)
-- [ ] `saas-dash` removed; operators use main dashboard only
+## Integration (accounting + pos)
 
-## PMS
+- [ ] `pos-bigcapital-worker` running in POS tenant compose
+- [ ] Map at least one menu item to Finance item
+- [ ] Paid order → `accountingSaleStatus: ok` + Finance receipt
+- [ ] Reverse order → Finance receipt voided
 
-- [ ] `PMS_BASE_URL` / `PMS_PORT=3003` for API proxy and service
-- [ ] `@stockix/pms` service running with `DATABASE_URL`
-- [ ] iCal sync interval active (10 minutes)
-- [ ] Dashboard PMS pages use `tenantId` query when proxying
+## Monitoring
 
-## Chatwoot
+- [ ] `PROVISION_MODULE_GATING=1` confirmed in prod env
+- [ ] Worker processing jobs (`tenant.provision` completes)
+- [ ] Traefik routing Finance (`{slug}.{domain}`) and POS (`{slug}-pos.{domain}`)
+- [ ] API `GET /health` → `{"status":"ok"}`
+- [ ] Postgres, api, dashboard, traefik healthchecks passing
 
-- [ ] Shared `chatwoot` stack in `infra/prod/docker-compose.yml`
-- [ ] `CHATWOOT_*` env vars set
-- [ ] Tenants with `chat` module receive `chatwoot_account_id` after provision
-
-## Module-gated provisioning (optional)
-
-- [ ] Set `PROVISION_MODULE_GATING=1` only after validating:
-  - `accounting` only → Finance stack only
-  - `pos` only → POS stack (`infra/pos-tenant-stack`)
-  - `pms` only → PMS stack (`infra/pms-tenant-stack`)
-
-## Verification commands
+## Type / Test Gate (pre-merge baseline)
 
 ```bash
 pnpm --filter @repo/auth check-types
@@ -66,5 +85,16 @@ pnpm --filter api check-types
 pnpm --filter dashboard check-types
 pnpm --filter @stockix/pms check-types
 pnpm --filter api test
-pnpm db:migrate
 ```
+
+## Post-Deploy Smoke
+
+- [ ] Dashboard login + MFA if enabled
+- [ ] Create tenant via wizard with module selection
+- [ ] Finance users CRUD from tenant detail
+- [ ] POS organizations visible via dashboard `/pos/*` proxy (if POS enabled)
+- [ ] Chatwoot account id set for tenant with `chat` module
+
+---
+
+**Full references:** [ENV_REFERENCE.md](./ENV_REFERENCE.md) · [PROVISIONING_REFERENCE.md](./PROVISIONING_REFERENCE.md) · [INTEGRATION_REFERENCE.md](./INTEGRATION_REFERENCE.md) · [PLATFORM_REFERENCE.md](./PLATFORM_REFERENCE.md)

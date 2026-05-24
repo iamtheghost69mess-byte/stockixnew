@@ -17,6 +17,8 @@ export type BootstrapPosOrgInput = {
   tenantId: string;
   adminEmail: string;
   log: (message: string) => void;
+  /** Stockix license expiry (defaults to +1 year when omitted). */
+  licenseExpiresAt?: Date | string | number | null;
   /** Override base URL (default: posConfig.platformBaseUrl). */
   posBaseUrl?: string;
   posHostPort?: number;
@@ -32,6 +34,8 @@ const BOOTSTRAP_POLL_TIMEOUT_MS = 60_000;
 const BOOTSTRAP_POLL_INTERVAL_MS = 1_500;
 const POS_HEALTH_TIMEOUT_MS = 90_000;
 const POS_HEALTH_INTERVAL_MS = 2_000;
+const PLATFORM_AUTH_TIMEOUT_MS = 30_000;
+const PLATFORM_AUTH_INTERVAL_MS = 1_000;
 
 function posApiBase(input: BootstrapPosOrgInput): string {
   const port = input.posHostPort ?? Number(process.env.POS_HOST_PORT ?? 8010);
@@ -92,6 +96,19 @@ function normalizeCredentials(raw: unknown): PosRoleCredential[] {
   return out;
 }
 
+function readFullCredentialsFromJson(body: unknown): PosRoleCredential[] {
+  if (!isRecord(body)) return [];
+  if (Array.isArray(body.fullCredentials)) {
+    const fromTop = normalizeCredentials(body.fullCredentials);
+    if (fromTop.length > 0) return fromTop;
+  }
+  const data = body.data;
+  if (isRecord(data) && Array.isArray(data.fullCredentials)) {
+    return normalizeCredentials(data.fullCredentials);
+  }
+  return [];
+}
+
 function toPosDefaultCredentials(creds: PosRoleCredential[]): PosDefaultCredentials {
   const admin = creds.find((c) => c.role === "admin");
   return {
@@ -106,7 +123,8 @@ async function sleep(ms: number): Promise<void> {
 
 async function waitForPosBackend(base: string, log: BootstrapPosOrgInput["log"]): Promise<void> {
   const started = Date.now();
-  const paths = ["/api/ping", "/api/health"];
+  // /health and /ready are exempt from production HTTPS enforcement (see pos-backend app.js).
+  const paths = ["/health", "/ready"];
   while (Date.now() - started < POS_HEALTH_TIMEOUT_MS) {
     for (const path of paths) {
       try {
@@ -126,6 +144,34 @@ async function waitForPosBackend(base: string, log: BootstrapPosOrgInput["log"])
   throw new Error(`POS backend not ready within ${POS_HEALTH_TIMEOUT_MS}ms (${base})`);
 }
 
+/** Wait until provision API key is synced into the tenant stack Mongo (runs after DB connect). */
+async function waitForPlatformApiAuth(
+  base: string,
+  apiKey: string,
+  log: BootstrapPosOrgInput["log"],
+): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < PLATFORM_AUTH_TIMEOUT_MS) {
+    const probe = await platformFetch(base, "/api/platform/v1/organizations/health-summary", {
+      method: "GET",
+      apiKey,
+    });
+    if (probe.ok) {
+      log("[provision][pos] platform API key accepted");
+      return;
+    }
+    if (probe.status !== 401) {
+      throw new Error(
+        `POS platform auth probe failed (${probe.status}): ${probe.text.slice(0, 200)}`,
+      );
+    }
+    await sleep(PLATFORM_AUTH_INTERVAL_MS);
+  }
+  throw new Error(
+    `POS platform API key not accepted within ${PLATFORM_AUTH_TIMEOUT_MS}ms (${base})`,
+  );
+}
+
 async function platformFetch(
   base: string,
   path: string,
@@ -136,6 +182,8 @@ async function platformFetch(
     headers: {
       "Content-Type": "application/json",
       "X-Api-Key": init.apiKey,
+      // Per-tenant stack is reached over loopback HTTP; Traefik terminates TLS in production.
+      "X-Forwarded-Proto": "https",
       ...(init.headers ?? {}),
     },
     signal: AbortSignal.timeout(30_000),
@@ -155,10 +203,13 @@ export async function bootstrapPosOrganization(
   const log = input.log;
 
   await waitForPosBackend(base, log);
+  await waitForPlatformApiAuth(base, apiKey, log);
 
   const licenseStartsAt = new Date().toISOString();
   const licenseEndsAt = new Date(
-    Date.now() + 365 * 24 * 60 * 60 * 1000,
+    input.licenseExpiresAt != null
+      ? new Date(input.licenseExpiresAt).getTime()
+      : Date.now() + 365 * 24 * 60 * 60 * 1000,
   ).toISOString();
 
   const idempotencyKey = `stockix-provision-${input.tenantId}`;
@@ -199,6 +250,9 @@ export async function bootstrapPosOrganization(
       ? createRes.json.data.defaultCredentials
       : null,
   );
+  if (credentials.length === 0) {
+    credentials = readFullCredentialsFromJson(createRes.json);
+  }
 
   if (bootstrapMode !== "sync_fallback") {
     const pollStarted = Date.now();
@@ -219,10 +273,13 @@ export async function bootstrapPosOrganization(
         isRecord(statusRes.json) && isRecord(statusRes.json.data)
           ? statusRes.json.data
           : null;
-      const lifecycle =
-        data && typeof data.lifecycle === "string" ? data.lifecycle : "";
       const readyForPinLogin = data?.readyForPinLogin === true;
-      if (lifecycle === "active" || readyForPinLogin) {
+      // lifecycle is "active" on create before org_bootstrap finishes — wait for PIN readiness only.
+      if (readyForPinLogin) {
+        const fromStatus = readFullCredentialsFromJson(statusRes.json);
+        if (fromStatus.length > 0) {
+          credentials = fromStatus;
+        }
         bootstrapReady = true;
         log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
         break;
@@ -236,24 +293,9 @@ export async function bootstrapPosOrganization(
     }
   }
 
-  const getRes = await platformFetch(base, `/api/platform/v1/organizations/${orgId}`, {
-    method: "GET",
-    apiKey,
-  });
-  if (!getRes.ok) {
-    throw new Error(
-      `POS org fetch failed (${getRes.status}): ${getRes.text.slice(0, 300)}`,
-    );
-  }
-  const orgData =
-    isRecord(getRes.json) && isRecord(getRes.json.data) ? getRes.json.data : null;
-  if (orgData?.defaultCredentials) {
-    credentials = normalizeCredentials(orgData.defaultCredentials);
-  }
-
   if (credentials.length === 0) {
     throw new Error(
-      `POS org bootstrap finished but defaultCredentials missing for orgId=${orgId}`,
+      `POS org bootstrap finished but fullCredentials missing for orgId=${orgId}`,
     );
   }
 

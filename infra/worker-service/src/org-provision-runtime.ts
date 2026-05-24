@@ -1,4 +1,8 @@
 import { apiConfig } from "@repo/config";
+import {
+  normalizeFinanceApiJson,
+  parseFinanceApiJsonText,
+} from "@repo/shared/finance-api";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 
@@ -87,19 +91,12 @@ async function registerNewFinanceOrg(
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  let json: unknown;
-  try {
-    json = text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    json = { raw: text };
-  }
   if (!res.ok) {
     throw new Error(`register_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
+  const json = parseFinanceApiJsonText(text);
   const organizationId = parseSignupOrganizationId(json);
-  const tenantId = Number(
-    isRecord(json) ? (json.tenantId ?? json.tenant_id) : NaN,
-  );
+  const tenantId = Number(json.tenantId);
   if (!organizationId || !tenantId) {
     throw new Error("register_missing_organization_or_tenant_id");
   }
@@ -123,16 +120,12 @@ async function signin(
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  let json: unknown;
-  try {
-    json = text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    json = { raw: text };
-  }
   if (!res.ok) {
     throw new Error(`signin_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
-  const session = parseAuthSession(json);
+  const session = parseAuthSession(
+    text ? normalizeFinanceApiJson(JSON.parse(text) as unknown) : {},
+  );
   if (!session) {
     throw new Error("signin_missing_token");
   }
@@ -157,16 +150,12 @@ async function switchTenant(
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  let json: unknown;
-  try {
-    json = text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    json = { raw: text };
-  }
   if (!res.ok) {
     throw new Error(`switch_tenant_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
-  const session = parseAuthSession(json);
+  const session = parseAuthSession(
+    text ? normalizeFinanceApiJson(JSON.parse(text) as unknown) : {},
+  );
   if (!session) {
     throw new Error("switch_tenant_missing_token");
   }

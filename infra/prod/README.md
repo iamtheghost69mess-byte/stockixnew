@@ -51,4 +51,4 @@ Use the **repo root** `.env` (`NODE_ENV=development`, `localhost`). Do **not** r
 - **Compose** passes env into `api` and `infra-worker` (`STOCKIX_LOAD_ROOT_ENV=0` disables accidental dotenv override).
 - **Worker** still writes per-tenant `~/.stockix/tenants/{slug}/.env` using `MAIL_*` from `@repo/config` — keep root `.env` synced on the server via `pnpm env:sync-prod`.
 
-See [docs/ENV_MAP.md](../../docs/ENV_MAP.md) for the full variable glossary.
+See [docs/ENV_REFERENCE.md](../../docs/ENV_REFERENCE.md) for the full variable glossary.

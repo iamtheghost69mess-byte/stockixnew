@@ -1,3 +1,5 @@
+import { parseFinanceApiJsonText } from "@repo/shared/finance-api";
+
 export type ActivateFinanceWarehousesResult = {
   primaryWarehouseId: number;
   alreadyActivated: boolean;
@@ -26,12 +28,7 @@ export async function activateFinanceWarehouses(params: {
     signal: AbortSignal.timeout(120_000),
   });
   const text = await res.text();
-  let body: Record<string, unknown> = {};
-  try {
-    body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-  } catch {
-    body = { raw: text };
-  }
+  const body = parseFinanceApiJsonText(text);
   if (!res.ok) {
     const detail =
       typeof body.message === "string"
@@ -41,8 +38,13 @@ export async function activateFinanceWarehouses(params: {
           : text.slice(0, 300);
     throw new Error(`activate_warehouses_failed:${res.status}:${detail}`);
   }
-  const primaryWarehouseId = Number(body.primaryWarehouseId);
+  const primaryWarehouseId = Number(
+    body.primaryWarehouseId ?? body.primary_warehouse_id,
+  );
   if (!Number.isFinite(primaryWarehouseId) || primaryWarehouseId <= 0) {
+    params.log?.(
+      `[provision] activate-warehouses unexpected body (HTTP ${res.status}): ${text.slice(0, 400)}`,
+    );
     throw new Error("activate_warehouses_failed:missing_primaryWarehouseId");
   }
   params.log?.(

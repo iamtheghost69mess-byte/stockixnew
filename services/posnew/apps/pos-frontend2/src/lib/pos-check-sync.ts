@@ -5,7 +5,12 @@ import {
   type OfflineMutation,
   removeOfflineMutation,
 } from "@/lib/offline-queue";
-import { posCreateOrder, posPatchOrderItems, posPatchOrderReplaceLines } from "@/lib/pos-order-api";
+import {
+  posCreateOrder,
+  posMarkOrderPaid,
+  posPatchOrderItems,
+  posPatchOrderReplaceLines,
+} from "@/lib/pos-order-api";
 import { adjustInventory, type InventoryAdjustParams } from "@/lib/inventory-api";
 import { cartToReplaceLines, usePosOrderStore } from "@/stores/pos-order-store";
 
@@ -81,6 +86,23 @@ export async function persistPosCheckToServer(): Promise<void> {
 async function processMutation(mutation: OfflineMutation): Promise<void> {
   if (mutation.kind === "create_order") {
     await posCreateOrder(mutation.payload as Parameters<typeof posCreateOrder>[0]);
+    return;
+  }
+
+  if (mutation.kind === "pay_order") {
+    const { orderId, paymentMethod, paymentData, paymentSplits } = mutation.payload as {
+      orderId?: string;
+      paymentMethod?: string;
+      paymentData?: { amountReceived?: number; reference?: string; note?: string };
+      paymentSplits?: { methodKey: string; amount: number }[];
+    };
+    if (!orderId || !paymentMethod) {
+      throw new Error("Invalid offline pay_order payload");
+    }
+    await posMarkOrderPaid(orderId, paymentMethod, {
+      paymentData,
+      paymentSplits,
+    });
     return;
   }
 

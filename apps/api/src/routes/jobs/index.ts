@@ -80,6 +80,8 @@ export function buildJobsRouter(db: Db) {
     return c.json({ job: claimed });
   });
 
+  // Minimal job-complete handler for the jobs sub-router. Production workers use the
+  // full handler in apps/api/src/index.ts (welcome email, deployment status, finance IDs).
   router.post("/:jobId/complete", async (c) => {
     const jobId = c.req.param("jobId");
     const body = await c.req.json().catch(() => ({}));

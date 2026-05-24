@@ -33,14 +33,15 @@ const organizationSchema = new mongoose.Schema(
     timezone: { type: String, trim: true, default: "Asia/Beirut" },
     /** Last 2 digits masked (e.g. ••••56) after bootstrap or PIN reset—PIN itself is only stored hashed on User. */
     initialAdminPinHint: { type: String, trim: true, default: "" },
-    /** Plain-text default staff PINs from bootstrap (owner dashboard only). */
+    /** Masked bootstrap staff PIN hints (full PINs only returned once via provision flow). */
     defaultCredentials: {
       type: [
         {
           role: { type: String, trim: true },
           name: { type: String, trim: true },
           username: { type: String, trim: true, lowercase: true },
-          pin: { type: String, trim: true },
+          pinMasked: { type: String, trim: true },
+          pinLastTwo: { type: String, trim: true },
         },
       ],
       default: undefined,

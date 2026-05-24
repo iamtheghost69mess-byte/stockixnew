@@ -85,6 +85,13 @@ type FinanceUserRow = {
   isActive: boolean;
 };
 
+const inviteUserSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().max(255).optional(),
+  lastName: z.string().max(255).optional(),
+  roleId: z.coerce.number().int().positive(),
+});
+
 const createUserSchema = z.object({
   email: z.string().email(),
   firstName: z.string().min(1).max(255),
@@ -103,6 +110,7 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(256),
 });
 
+type InviteUserValues = z.infer<typeof inviteUserSchema>;
 type CreateUserValues = z.infer<typeof createUserSchema>;
 type EditUserValues = z.infer<typeof editUserSchema>;
 type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
@@ -140,6 +148,8 @@ export default function TenantUsersPanel({
   const [loadErrorCode, setLoadErrorCode] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
 
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -153,6 +163,16 @@ export default function TenantUsersPanel({
   const [deleting, setDeleting] = useState(false);
 
   const [actionUserId, setActionUserId] = useState<number | null>(null);
+
+  const inviteForm = useForm<InviteUserValues>({
+    resolver: zodResolver(inviteUserSchema),
+    defaultValues: {
+      email: "",
+      firstName: "",
+      lastName: "",
+      roleId: 2,
+    },
+  });
 
   const createForm = useForm<CreateUserValues>({
     resolver: zodResolver(createUserSchema),
@@ -196,8 +216,19 @@ export default function TenantUsersPanel({
         setUsers([]);
         return;
       }
-      const data = body as { users?: FinanceUserRow[] };
-      setUsers(data.users ?? []);
+      const raw = (body as { users?: Array<FinanceUserRow & { id?: number }> }).users ?? [];
+      setUsers(
+        raw
+          .map((row) => ({
+            userId: Number(row.userId ?? row.id),
+            email: row.email,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            roleName: row.roleName,
+            isActive: row.isActive,
+          }))
+          .filter((row) => Number.isFinite(row.userId) && row.userId > 0),
+      );
     } finally {
       setLoading(false);
     }
@@ -231,6 +262,33 @@ export default function TenantUsersPanel({
       roleId: editTarget.roleName?.toLowerCase().includes("admin") ? 1 : 2,
     });
   }, [editTarget, editForm]);
+
+  const onInvite = async (values: InviteUserValues) => {
+    setInviting(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/users/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: values.email,
+          roleId: values.roleId,
+          ...(values.firstName?.trim() ? { firstName: values.firstName.trim() } : {}),
+          ...(values.lastName?.trim() ? { lastName: values.lastName.trim() } : {}),
+        }),
+      });
+      const body = await readJson(res);
+      if (!res.ok) {
+        toast.error(formatApiError(body, "Could not send invitation."));
+        return;
+      }
+      toast.success("Invitation sent");
+      setInviteOpen(false);
+      inviteForm.reset();
+      await load();
+    } finally {
+      setInviting(false);
+    }
+  };
 
   const onCreate = async (values: CreateUserValues) => {
     setCreating(true);
@@ -392,10 +450,15 @@ export default function TenantUsersPanel({
             </CardDescription>
           </div>
           {canMutate ? (
-            <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add user
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Invite user
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+                Set password directly
+              </Button>
+            </div>
           ) : null}
         </CardHeader>
         <CardContent>
@@ -439,7 +502,7 @@ export default function TenantUsersPanel({
               </TableHeader>
               <TableBody>
                 {users.map((user) => (
-                  <TableRow key={user.userId}>
+                  <TableRow key={`${user.userId}-${user.email}`}>
                     <TableCell>
                       {user.firstName} {user.lastName}
                     </TableCell>
@@ -516,12 +579,104 @@ export default function TenantUsersPanel({
         </CardContent>
       </Card>
 
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite finance user</DialogTitle>
+            <DialogDescription>
+              Sends an invitation email from this tenant&apos;s Finance stack. The user sets their
+              password when accepting the invite.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...inviteForm}>
+            <form onSubmit={inviteForm.handleSubmit(onInvite)} className="space-y-4">
+              <FormField
+                control={inviteForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={inviteForm.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First name (optional)</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={inviteForm.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last name (optional)</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={inviteForm.control}
+                name="roleId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select
+                      value={String(field.value)}
+                      onValueChange={(v) => field.onChange(Number(v))}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {FINANCE_ROLES.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={inviting}>
+                  {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send invitation"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add finance user</DialogTitle>
+            <DialogTitle>Create user with password</DialogTitle>
             <DialogDescription>
-              Creates a user in the finance tenant database and links them to this organization.
+              Break-glass: creates the user immediately with a password (no invitation email).
             </DialogDescription>
           </DialogHeader>
           <Form {...createForm}>

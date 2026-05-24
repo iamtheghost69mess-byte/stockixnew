@@ -49,6 +49,25 @@ test("resolveDepositAccountId uses largest split method", () => {
   assert.equal(id, 10002);
 });
 
+test("buildMappedEntries passes line discount amount", () => {
+  const menuId = new mongoose.Types.ObjectId();
+  const itemMap = { [String(menuId)]: { id: 9 } };
+  const order = {
+    items: [
+      {
+        menuItem: menuId,
+        name: "Burger",
+        quantity: 1,
+        pricePerQuantity: 10,
+        discount: { amount: 2 },
+      },
+    ],
+  };
+  const entries = buildMappedEntries(order, itemMap);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].discount, 2);
+});
+
 test("buildMappedEntries skips unmapped lines", () => {
   const order = {
     items: [

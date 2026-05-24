@@ -11,21 +11,19 @@ import { Box, FormattedMessage as T } from '@/components';
 import { AuthMetaBootProvider } from './AuthMetaBoot';
 
 import '@/style/pages/Authentication/Auth.scss';
-import { useIsDarkMode } from '@/hooks/useDarkMode';
 import { StockixLogo } from '@/components/Icons/StockixLogo';
 
 export function Authentication() {
-  const isDarkMode = useIsDarkMode();
-
+  // BodyClassName replaces body.className — always restore Stockix dark default on auth routes.
   return (
-    <BodyClassName className={'authentication'}>
+    <BodyClassName className="authentication bp4-dark">
       <AuthPage>
         <AuthInsider>
           <AuthLogo>
             <StockixLogo
               height={37}
               width={214}
-              color={isDarkMode ? 'rgba(255, 255, 255, 0.6)' : undefined}
+              color="rgba(255, 255, 255, 0.6)"
             />
           </AuthLogo>
 

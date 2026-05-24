@@ -129,9 +129,25 @@ export function registerPosProxyRoutes(
 
   app.get("/pos/status", async (c) => {
     const base = process.env.POS_PLATFORM_BASE_URL ?? "http://localhost:8010";
+    const frontendUrl = process.env.POS_FRONTEND_URL ?? "http://localhost:3001";
+    let reachable = false;
+    let pingError: string | undefined;
+    try {
+      // pos-backend mounts `routes/healthRoute` at `/health` (not Nest `/api/ping`).
+      const res = await fetch(`${base.replace(/\/+$/, "")}/health`, {
+        signal: AbortSignal.timeout(4_000),
+      });
+      reachable = res.ok;
+      if (!reachable) pingError = `HTTP ${res.status}`;
+    } catch (err) {
+      pingError = err instanceof Error ? err.message : String(err);
+    }
     return c.json({
-      configured: true,
+      configured: base.length > 0,
+      reachable,
       baseUrl: base,
+      frontendUrl,
+      ...(pingError ? { pingError } : {}),
     });
   });
 }

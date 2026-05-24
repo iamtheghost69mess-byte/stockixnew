@@ -42,19 +42,50 @@ describe("resolveTenantModules", () => {
 });
 
 describe("isModuleGatingEnabled", () => {
-  it("is true only when PROVISION_MODULE_GATING=1", () => {
+  it("is enabled by default and when PROVISION_MODULE_GATING=1", () => {
     withGating("1", () => {
       expect(isModuleGatingEnabled()).toBe(true);
     });
+    withGating(undefined, () => {
+      expect(isModuleGatingEnabled()).toBe(true);
+    });
+  });
+
+  it("is disabled only when PROVISION_MODULE_GATING=0", () => {
     withGating("0", () => {
       expect(isModuleGatingEnabled()).toBe(false);
     });
-    withGating(undefined, () => {
-      expect(isModuleGatingEnabled()).toBe(false);
-    });
-    withGating("true", () => {
-      expect(isModuleGatingEnabled()).toBe(false);
-    });
+  });
+});
+
+describe("provision stack plan (default gating — on unless PROVISION_MODULE_GATING=0)", () => {
+  beforeEach(() => {
+    delete process.env.PROVISION_MODULE_GATING;
+  });
+
+  afterEach(() => {
+    delete process.env.PROVISION_MODULE_GATING;
+  });
+
+  it("modules=['pos'] → Finance stack NOT started, POS started", () => {
+    const plan = getProvisionStackPlan(["pos"]);
+    expect(shouldProvisionFinanceStack(["pos"])).toBe(false);
+    expect(plan.finance).toBe(false);
+    expect(plan.pos).toBe(true);
+    expect(plan.pms).toBe(false);
+    expect(plan.chat).toBe(false);
+  });
+
+  it("modules=['accounting'] → Finance stack started, POS not started", () => {
+    const plan = getProvisionStackPlan(["accounting"]);
+    expect(plan.finance).toBe(true);
+    expect(plan.pos).toBe(false);
+  });
+
+  it("modules=['accounting','pos'] → both Finance and POS started", () => {
+    const plan = getProvisionStackPlan(["accounting", "pos"]);
+    expect(plan.finance).toBe(true);
+    expect(plan.pos).toBe(true);
   });
 });
 

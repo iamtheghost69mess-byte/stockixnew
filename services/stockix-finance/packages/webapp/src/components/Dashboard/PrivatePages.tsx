@@ -7,6 +7,7 @@ import Dashboard from '@/components/Dashboard/Dashboard';
 import { PrivatePagesProvider } from './PrivatePagesProvider';
 import EnsureOrganizationIsReady from '../Guards/EnsureOrganizationIsReady';
 import { EnsureAuthenticated } from '../Guards/EnsureAuthenticated';
+import { EnsurePasswordChanged } from '../Guards/EnsurePasswordChanged';
 import { EnsureUserEmailVerified } from '../Guards/EnsureUserEmailVerified';
 
 import '@/style/pages/Dashboard/Dashboard.scss';
@@ -23,6 +24,7 @@ const SetupCompleteProfile = lazy(
 export default function DashboardPrivatePages() {
   return (
     <EnsureAuthenticated>
+      <EnsurePasswordChanged>
       <EnsureUserEmailVerified>
         <PrivatePagesProvider>
           <Switch>
@@ -40,6 +42,7 @@ export default function DashboardPrivatePages() {
           </Switch>
         </PrivatePagesProvider>
       </EnsureUserEmailVerified>
+      </EnsurePasswordChanged>
     </EnsureAuthenticated>
   );
 }

@@ -1,6 +1,8 @@
 **/node_modules
 **/.next
 **/dist
+# POS backend image copies packages/auth with file: dependency (pnpm pos:images:build)
+!packages/auth/dist
 .git
 .github
 .turbo

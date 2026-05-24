@@ -35,6 +35,13 @@ const createUserBody = z.object({
   roleId: z.coerce.number().int().positive(),
 });
 
+const inviteUserBody = z.object({
+  email: z.string().email(),
+  roleId: z.coerce.number().int().positive(),
+  firstName: z.string().min(1).max(255).optional(),
+  lastName: z.string().min(1).max(255).optional(),
+});
+
 const updateUserBody = z
   .object({
     roleId: z.coerce.number().int().positive().optional(),
@@ -198,6 +205,32 @@ export function registerTenantFinanceUsersApi(app: Hono<ApiEnv>, db: Db | null):
     return withFinanceUsersContext(c, db, tenantParsed.data, async (ctx) => {
       const result = await ctx.client.listUsers(ctx.financeTenantId);
       return c.json(result);
+    });
+  });
+
+  app.post("/tenants/:tenantId/users/invite", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
+    if (!tenantParsed.success) {
+      return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    let body: z.infer<typeof inviteUserBody>;
+    try {
+      body = inviteUserBody.parse(await c.req.json());
+    } catch (e) {
+      return c.json(
+        {
+          error: "invalid_body",
+          detail: e instanceof z.ZodError ? e.flatten() : String(e),
+        },
+        400,
+      );
+    }
+
+    return withFinanceUsersContext(c, db, tenantParsed.data, async (ctx) => {
+      const result = await ctx.client.inviteUser(ctx.financeTenantId, body);
+      return c.json(result, 201);
     });
   });
 

@@ -38,7 +38,6 @@ import {
   desc,
   eq,
   and,
-  desc,
   or,
   isNotNull,
   sql,
@@ -68,9 +67,12 @@ import {
   resolveAndPersistFinanceTenantId,
 } from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
+import { registerPosCredentialsRoutes } from "./pos-credentials-http.js";
+import { effectivePosUrl } from "./pos-public-url.js";
+import { registerTenantModulesRoutes } from "./tenant-modules-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
-import { sendTenantWelcomeEmail } from "./mail/send.js";
+import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
 
 import {
   createProvisionTracer,
@@ -325,10 +327,9 @@ const platformApiSecret = apiConfig.platformApiSecret;
 const workerSecret = apiConfig.workerSecret;
 apiConfig.validateRequiredEnv();
 
-// In-memory store for one-time admin passwords produced during tenant provisioning.
-// Passwords are intentionally never written to the database (CRIT-02).
-// They are held here for at most 15 minutes after job completion and served once
-// via GET /tenants/provision-status/:correlationId.
+// In-memory cache for one-time admin passwords (fast path during provisioning).
+// Passwords are also persisted encrypted on tenant_deployments.finance_admin_password.
+// Cache TTL is 15 minutes; GET /tenants/:id reads the DB column when authorized.
 const PROVISION_PASSWORD_TTL_MS = 15 * 60 * 1000;
 const provisionPasswordCache = new Map<string, { password: string; expiresAt: number }>();
 type PosDefaultCredentialsPayload = {
@@ -403,6 +404,54 @@ async function loadLatestPosBootstrapCredentials(
     }
   }
   return null;
+}
+
+async function loadLatestFinanceAdminPasswordFromEvents(
+  tenantId: string,
+): Promise<string | null> {
+  if (!db) return null;
+  const secretRows = await db
+    .select({ meta: tenantProvisionEvents.meta })
+    .from(tenantProvisionEvents)
+    .where(
+      and(
+        eq(tenantProvisionEvents.tenantId, tenantId),
+        eq(tenantProvisionEvents.phase, "secret"),
+      ),
+    )
+    .orderBy(desc(tenantProvisionEvents.createdAt))
+    .limit(30);
+  for (const secretRow of secretRows) {
+    const meta = secretRow.meta;
+    if (!meta || typeof meta !== "object" || meta.type !== "bootstrap_admin_otp") continue;
+    const cipher = meta.cipher as string | undefined;
+    if (typeof cipher !== "string") continue;
+    const decrypted = decryptProvisionSecret(cipher);
+    if (decrypted) return decrypted;
+  }
+  return null;
+}
+
+function decryptFinanceAdminPasswordStored(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  const decrypted = decryptProvisionSecret(stored);
+  if (decrypted) return decrypted;
+  if (!stored.startsWith("enc:")) return stored;
+  return null;
+}
+
+async function resolveFinanceAdminPasswordForTenant(
+  tenantId: string,
+  stored: string | null | undefined,
+): Promise<string | null> {
+  const fromDb = decryptFinanceAdminPasswordStored(stored);
+  if (fromDb) return fromDb;
+  return loadLatestFinanceAdminPasswordFromEvents(tenantId);
+}
+
+function canViewFinanceAdminPassword(actorRole: string): boolean {
+  const rank = ROLE_RANK[actorRole as Role];
+  return Number.isFinite(rank) && rank >= ROLE_RANK.support_agent;
 }
 
 function composeProjectFromSlug(slug: string): string {
@@ -1174,7 +1223,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
   // oneTimeAdminPassword is passed by the worker for tenant.provision jobs.
-  // It is stored only in memory (never in the DB) — CRIT-02.
+  // Persisted encrypted on tenant_deployments; also cached in memory for 15 minutes.
   const oneTimeAdminPassword =
     typeof (body as { oneTimeAdminPassword?: unknown }).oneTimeAdminPassword === "string"
       ? (body as { oneTimeAdminPassword: string }).oneTimeAdminPassword
@@ -1360,6 +1409,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           lastError: deploymentLastError,
           registrationCompletedAt: new Date(),
           updatedAt: new Date(),
+          ...(oneTimeAdminPassword
+            ? { financeAdminPassword: encryptProvisionSecret(oneTimeAdminPassword) }
+            : {}),
         })
         .where(eq(tenantDeployments.tenantId, targetTenantId));
 
@@ -1399,17 +1451,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             .where(eq(licenses.id, assignExistingLicenseId))
             .limit(1);
           if (lic?.status === "unassigned") {
-            const assignSet: {
-              tenantId: string;
-              status: string;
-              activatedAt: Date;
-              validFrom: Date;
-              updatedAt: Date;
-              planSlug: string;
-              modules: string;
-              maxOrganizations?: number;
-              maxActivations?: number;
-            } = {
+            const assignSet = {
               tenantId: targetTenantId,
               status: "active",
               activatedAt: new Date(),
@@ -1417,13 +1459,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               updatedAt: new Date(),
               planSlug,
               modules: modulesSerialized,
+              maxOrganizations: planLimits.maxOrganizations,
+              maxActivations: planLimits.maxActivations,
             };
-            if (lic.maxOrganizations === 1) {
-              assignSet.maxOrganizations = planLimits.maxOrganizations;
-            }
-            if (lic.maxActivations === 1) {
-              assignSet.maxActivations = planLimits.maxActivations;
-            }
             await db
               .update(licenses)
               .set(assignSet)
@@ -1598,6 +1636,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               adminEmail: tenants.adminEmail,
               organizationNumber: tenants.organizationNumber,
               slug: tenants.slug,
+              modules: tenants.modules,
             })
             .from(tenants)
             .where(eq(tenants.id, targetTenantId))
@@ -1609,21 +1648,34 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               ? completeResult.baseUrl
               : null;
           const root = rootDomainForOrganizationSubdomain();
-          const loginUrl =
+          const financeUrl =
             baseUrlFromResult ??
             (root && tenant.slug
               ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
               : apiConfig.dashboardUrl);
+          const provisionModules = parseTenantModules(tenant.modules);
 
-          await sendTenantWelcomeEmail({
-            to: tenant.adminEmail,
-            tenantName: tenant.name,
-            organizationNumber:
-              tenant.organizationNumber ??
-              financeOrganizationIdFromResult ??
-              "—",
-            loginUrl,
-          });
+          if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
+            const { sendFinanceWelcomeEmail } = await import("./mail/send.js");
+            await sendFinanceWelcomeEmail({
+              to: tenant.adminEmail,
+              tenantName: tenant.name,
+              financeUrl,
+              adminEmail: tenant.adminEmail,
+              oneTimePassword: oneTimeAdminPassword,
+              modules: provisionModules,
+            });
+          } else {
+            await sendTenantWelcomeEmail({
+              to: tenant.adminEmail,
+              tenantName: tenant.name,
+              organizationNumber:
+                tenant.organizationNumber ??
+                financeOrganizationIdFromResult ??
+                "—",
+              loginUrl: financeUrl,
+            });
+          }
         } catch (welcomeErr) {
           console.error(
             "[provision] welcome email failed (non-fatal)",
@@ -1680,6 +1732,74 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           .set({ status: orgLifecycleStatus, updatedAt: new Date() })
           .where(eq(organizations.slug, childTenantRow.slug));
       }
+    }
+  }
+  if (currentJob?.type === "add_module" && currentJob.tenantId) {
+    if (currentJob.correlationId && posDefaultCredentials) {
+      provisionPosCredentialsCache.set(currentJob.correlationId, {
+        credentials: posDefaultCredentials,
+        expiresAt: Date.now() + PROVISION_PASSWORD_TTL_MS,
+      });
+      await appendProvisionEventSafe({
+        correlationId: currentJob.correlationId,
+        phase: "secret",
+        level: "info",
+        message: "POS bootstrap PIN credentials persisted (add module)",
+        tenantId: currentJob.tenantId,
+        meta: {
+          type: "pos_bootstrap_pins",
+          cipher: encryptProvisionSecret(JSON.stringify(posDefaultCredentials)),
+          posOrganizationId:
+            completeResult && typeof completeResult.posOrganizationId === "string"
+              ? completeResult.posOrganizationId
+              : undefined,
+        },
+      });
+    }
+    const tenantStatusFromResult =
+      completeResult && typeof completeResult.tenantStatus === "string"
+        ? completeResult.tenantStatus
+        : null;
+    const posStatusFromResult =
+      completeResult && typeof completeResult.posStatus === "string"
+        ? completeResult.posStatus
+        : null;
+    const posErrorFromResult =
+      completeResult && typeof completeResult.posError === "string"
+        ? completeResult.posError
+        : null;
+    const finalTenantStatus =
+      tenantStatusFromResult === "partial" || tenantStatusFromResult === "active"
+        ? tenantStatusFromResult
+        : posStatusFromResult === "failed"
+          ? "partial"
+          : "active";
+    await db
+      .update(tenants)
+      .set({ status: finalTenantStatus })
+      .where(eq(tenants.id, currentJob.tenantId));
+    if (posOrganizationIdFromResult || posUrlFromResult || posErrorFromResult) {
+      await db
+        .update(tenantDeployments)
+        .set({
+          ...(posOrganizationIdFromResult
+            ? { posOrganizationId: posOrganizationIdFromResult }
+            : {}),
+          ...(posUrlFromResult ? { posUrl: posUrlFromResult } : {}),
+          lastError: finalTenantStatus === "partial" ? (posErrorFromResult ?? null) : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantDeployments.tenantId, currentJob.tenantId));
+    }
+    if (currentJob.correlationId) {
+      await appendProvisionEventSafe({
+        correlationId: currentJob.correlationId,
+        phase: "add_module.completed",
+        level: "info",
+        message: "Add-module worker job completed",
+        tenantId: currentJob.tenantId,
+        meta: { jobId: currentJob.id },
+      });
     }
   }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
@@ -1760,6 +1880,17 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       noRetry,
       workerId: workerId || null,
     });
+
+    if (
+      updated.status === "dead"
+      && updated.type === "add_module"
+      && updated.tenantId
+    ) {
+      await db
+        .update(tenants)
+        .set({ status: "active" })
+        .where(eq(tenants.id, updated.tenantId));
+    }
 
     if (
       updated.status === "dead"
@@ -1960,6 +2091,17 @@ app.post("/owners/invite", async (c) => {
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
     metadata: { role: owner.role, email: owner.email },
+  });
+  void sendOwnerInviteEmail({
+    to: owner.email,
+    name: owner.name,
+    role: owner.role,
+    inviteUrl,
+  }).catch((err) => {
+    console.error(
+      "[owners] invite email failed (non-fatal)",
+      err instanceof Error ? err.message : String(err),
+    );
   });
   return c.json({ inviteToken, inviteUrl, owner }, 201);
 });
@@ -2423,6 +2565,7 @@ app.get("/tenants", async (c) => {
       adminEmail: tenants.adminEmail,
       planSlug: tenants.planSlug,
       modules: tenants.modules,
+      tenantStatus: tenants.status,
       deploymentStatus: tenantDeployments.status,
       internalPort: tenantDeployments.internalPort,
       composeProject: tenantDeployments.composeProjectName,
@@ -2616,7 +2759,7 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
   }
-  const removeVolumes = true;
+  const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
   const existing = await db
     .select({
       id: tenants.id,
@@ -2640,28 +2783,6 @@ app.delete("/tenants/:tenantId", async (c) => {
   }
   const isFailedTenant =
     target.tenantStatus === "failed" || target.deploymentStatus === "failed";
-  const requiresForceStop =
-    target.tenantStatus === "provisioning"
-    || target.tenantStatus === "active"
-    || target.deploymentStatus === "provisioning"
-    || target.deploymentStatus === "active";
-  const [childOrgProvisionArtifact] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(and(eq(organizations.slug, target.slug), ne(organizations.tenantId, target.id)))
-    .limit(1);
-  const isChildOrgTenant = childOrgProvisionArtifact !== undefined;
-  if (requiresForceStop && !isChildOrgTenant) {
-    return c.json(
-      {
-        error: "tenant_busy",
-        message: `Tenant is currently busy (tenant=${target.tenantStatus ?? "unknown"}, deployment=${target.deploymentStatus ?? "unknown"}). Stop or suspend it before deletion.`,
-        tenantStatus: target.tenantStatus ?? null,
-        deploymentStatus: target.deploymentStatus ?? null,
-      },
-      409,
-    );
-  }
   const jobRows = await db
     .select({ correlationId: tenantLifecycleJobs.correlationId })
     .from(tenantLifecycleJobs)
@@ -3461,7 +3582,9 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       readiness,
       correlationId,
       jobId: lastJob.id,
-      tenantId: typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null,
+      tenantId:
+        (typeof lastJob.tenantId === "string" ? lastJob.tenantId : null)
+        ?? (typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null),
       deploymentId: typeof eventMeta.deploymentId === "string" ? eventMeta.deploymentId : null,
       composeProjectName:
         typeof eventMeta.composeProjectName === "string" ? eventMeta.composeProjectName : null,
@@ -4166,10 +4289,37 @@ app.delete("/tenants/:tenantId/organization-access/:accessId", async (c) => {
   return c.json({ ok: true });
 });
 
+app.delete("/tenants/:tenantId/finance-password", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const actorRole = c.get("actorRole");
+  if (!canViewFinanceAdminPassword(actorRole)) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const [row] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+  if (!row) return c.json({ error: "tenant_not_found" }, 404);
+
+  await db
+    .update(tenantDeployments)
+    .set({ financeAdminPassword: null, updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, parsed.data));
+
+  return c.json({ ok: true });
+});
+
 app.get("/tenants/:tenantId", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const actorRole = c.get("actorRole");
 
   const rows = await db
     .select({
@@ -4194,6 +4344,7 @@ app.get("/tenants/:tenantId", async (c) => {
       financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
       financeCashAccountId: tenantDeployments.financeCashAccountId,
       financeCardAccountId: tenantDeployments.financeCardAccountId,
+      financeAdminPasswordStored: tenantDeployments.financeAdminPassword,
       financeOrganizationId: organizations.financeOrganizationId,
       deploymentLastError: tenantDeployments.lastError,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
@@ -4229,6 +4380,49 @@ app.get("/tenants/:tenantId", async (c) => {
       }
     : null;
 
+  const [latestProvisionJob] = await db
+    .select({
+      correlationId: tenantLifecycleJobs.correlationId,
+      jobStatus: tenantLifecycleJobs.status,
+    })
+    .from(tenantLifecycleJobs)
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, parsed.data),
+        eq(tenantLifecycleJobs.type, "tenant.provision"),
+      ),
+    )
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+
+  const root = rootDomainForOrganizationSubdomain();
+  const publicUrl =
+    root && row.slug
+      ? `${apiConfig.publicBaseUrlScheme}://${row.slug}.${root}`
+      : null;
+
+  let financeAdminPassword: string | null = null;
+  if (canViewFinanceAdminPassword(actorRole)) {
+    financeAdminPassword = await resolveFinanceAdminPasswordForTenant(
+      parsed.data,
+      row.financeAdminPasswordStored,
+    );
+  }
+
+  let resolvedPosUrl = row.posUrl;
+  if (row.slug && row.posUrl) {
+    const effective = await effectivePosUrl(row.slug, row.posUrl);
+    if (effective && effective !== row.posUrl) {
+      resolvedPosUrl = effective;
+      await db
+        .update(tenantDeployments)
+        .set({ posUrl: effective, updatedAt: new Date() })
+        .where(eq(tenantDeployments.tenantId, parsed.data));
+    } else if (effective) {
+      resolvedPosUrl = effective;
+    }
+  }
+
   return c.json({
     tenant: {
       id: row.id,
@@ -4243,6 +4437,13 @@ app.get("/tenants/:tenantId", async (c) => {
       modules: parseTenantModules(row.modules),
       posOrganizationId: row.posOrganizationId,
       posBootstrapCredentials,
+      latestProvision:
+        latestProvisionJob?.correlationId
+          ? {
+              correlationId: latestProvisionJob.correlationId,
+              jobStatus: latestProvisionJob.jobStatus,
+            }
+          : null,
       createdAt: row.createdAt.toISOString(),
       deployment:
         row.deploymentStatus === null
@@ -4251,13 +4452,15 @@ app.get("/tenants/:tenantId", async (c) => {
               status: row.deploymentStatus,
               composeProjectName: row.composeProjectName,
               internalPort: row.internalPort,
-              posUrl: row.posUrl,
+              posUrl: resolvedPosUrl,
+              publicUrl,
               financeTenantId: row.financeTenantId,
               financeOrganizationId: row.financeOrganizationId,
               financeDefaultWarehouseId: row.financeDefaultWarehouseId,
               financeWalkInCustomerId: row.financeWalkInCustomerId,
               financeCashAccountId: row.financeCashAccountId,
               financeCardAccountId: row.financeCardAccountId,
+              financeAdminPassword,
               lastError: row.deploymentLastError,
               registrationCompletedAt: row.registrationCompletedAt
                 ? row.registrationCompletedAt.toISOString()
@@ -4508,6 +4711,11 @@ async function loadTenantForLifecycle(tenantId: string) {
   return rows[0] ?? null;
 }
 
+/** Running stacks: full active or partial (Finance up, POS incomplete). */
+function tenantCanStopOrSuspend(tenantStatus: string | null | undefined): boolean {
+  return tenantStatus === "active" || tenantStatus === "partial";
+}
+
 app.post("/tenants/:tenantId/suspend", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
@@ -4524,7 +4732,17 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
       alreadySuspended: true,
     }, 200);
   }
-  if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
+  if (!tenantCanStopOrSuspend(row.tenantStatus)) {
+    return c.json(
+      {
+        error: "tenant_not_active",
+        message: `Tenant cannot be suspended (status=${row.tenantStatus ?? "unknown"}). Only active or partial tenants can be suspended.`,
+        tenantStatus: row.tenantStatus ?? null,
+        deploymentStatus: row.deploymentStatus ?? null,
+      },
+      409,
+    );
+  }
   const job = await insertTenantJob(db, {
     type: "tenant.lifecycle",
     tenantId: parsed.data,
@@ -4707,7 +4925,17 @@ app.post("/tenants/:tenantId/stop", async (c) => {
 
   const row = await loadTenantForLifecycle(parsed.data);
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
-  if (row.tenantStatus !== "active") return c.json({ error: "tenant_not_active" }, 409);
+  if (!tenantCanStopOrSuspend(row.tenantStatus)) {
+    return c.json(
+      {
+        error: "tenant_not_active",
+        message: `Tenant cannot be stopped (status=${row.tenantStatus ?? "unknown"}). Only active or partial tenants can be stopped.`,
+        tenantStatus: row.tenantStatus ?? null,
+        deploymentStatus: row.deploymentStatus ?? null,
+      },
+      409,
+    );
+  }
   const job = await insertTenantJob(db, {
     type: "tenant.lifecycle",
     tenantId: parsed.data,
@@ -5027,6 +5255,8 @@ function startReadinessReconciler() {
 
 registerLicenseApi(app, db);
 registerTenantFinanceUsersApi(app, db);
+registerPosCredentialsRoutes(app, db);
+registerTenantModulesRoutes(app, db);
 registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);
 

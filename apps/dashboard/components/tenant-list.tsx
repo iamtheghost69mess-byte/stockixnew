@@ -395,9 +395,17 @@ export function TenantList(props: Props) {
                 ) : null}
                 {tenants.length > 0
                   ? tenants.map((t) => {
-                const status = t.deploymentStatus ?? "unknown";
+                const tenantStatus = (t.tenantStatus ?? "").toLowerCase();
+                const deploymentStatus = (t.deploymentStatus ?? "unknown").toLowerCase();
+                const status =
+                  tenantStatus === "partial"
+                    ? "partial"
+                    : deploymentStatus;
+                const canSuspend =
+                  (tenantStatus === "active" || tenantStatus === "partial")
+                  && deploymentStatus !== "suspended";
                 const publicOrigin = tenantPublicBaseUrl(t.slug, t.internalPort);
-                const canOpen = status === "active" && Boolean(publicOrigin);
+                const canOpen = deploymentStatus === "active" && Boolean(publicOrigin);
                 const loginHref = publicOrigin ? `${publicOrigin}/auth/login` : null;
                 const busy =
                   deletingId === t.tenantId ||
@@ -500,7 +508,7 @@ export function TenantList(props: Props) {
                             {copiedKey === `origin-${t.tenantId}` ? "Copied URL" : "Copy public URL"}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          {status === "active" ? (
+                          {canSuspend ? (
                             <DropdownMenuItem
                               onClick={() => {
                                 setSuspendSlugInput("");
@@ -515,7 +523,7 @@ export function TenantList(props: Props) {
                               Suspend
                             </DropdownMenuItem>
                           ) : null}
-                          {status === "suspended" ? (
+                          {deploymentStatus === "suspended" ? (
                             <DropdownMenuItem
                               onClick={() => {
                                 setReactivateTarget({ tenantId: t.tenantId, slug: t.slug, name: t.name });
@@ -529,7 +537,7 @@ export function TenantList(props: Props) {
                               Reactivate
                             </DropdownMenuItem>
                           ) : null}
-                          {status === "provisioning" || status === "pending" ? (
+                          {deploymentStatus === "provisioning" || deploymentStatus === "pending" ? (
                             <DropdownMenuItem
                               onClick={() => {
                                 setStopProvisionSlugInput("");

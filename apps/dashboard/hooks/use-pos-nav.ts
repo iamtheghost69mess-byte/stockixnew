@@ -9,8 +9,8 @@ export function usePosNavVisible(): boolean {
     void (async () => {
       try {
         const res = await fetch("/api/pos/status");
-        const data = (await res.json()) as { configured?: boolean };
-        setVisible(Boolean(data.configured));
+        const data = (await res.json()) as { configured?: boolean; reachable?: boolean };
+        setVisible(Boolean(data.configured && data.reachable));
       } catch {
         setVisible(false);
       }

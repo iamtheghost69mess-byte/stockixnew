@@ -5,6 +5,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import {
   getActiveLicenseForTenant,
+  getPlanLimits,
   insertLicenseHistory,
   isLicenseLimitsConsistentWithPlan,
 } from "./license-utils.js";
@@ -32,8 +33,7 @@ export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
  * Field mapping — Stockix control plane → Finance tenant_licenses
  *
  * maxUsers:       How many staff users (accountants, managers) can be
- *                 created in the finance app. Not tracked on Stockix licenses —
- *                 defaults to FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS.
+ *                 created in the finance app. Sourced from plans.maxUsers.
  *
  * maxActivations: How many POS desktop/device activations are allowed.
  *                 Maps to license.maxActivations on Stockix control plane.
@@ -43,9 +43,47 @@ export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
  * maxOrganizations: How many sub-organizations a tenant can create in finance.
  *                   Maps to license.maxOrganizations; enforced in plan-limits.ts.
  */
-export function buildFinanceLicenseLimitFields(
-  license: { maxActivations?: number; maxOrganizations?: number } | null | undefined,
+type FinanceLicenseLimitSource = {
+  maxActivations?: number;
+  maxOrganizations?: number;
+};
+
+/**
+ * Merges Stockix license limits with plan limits. Treats `1` on the license row as an
+ * unset sentinel when the plan allows more (matches provision assign / auto-license).
+ */
+export function resolveFinanceLicenseLimitFields(
+  license: FinanceLicenseLimitSource | null | undefined,
+  planLimits: { maxActivations: number; maxOrganizations: number; maxUsers: number },
 ): Pick<FinanceLicenseSyncPayload, "maxUsers" | "maxActivations" | "maxOrganizations"> {
+  let maxOrganizations = license?.maxOrganizations ?? planLimits.maxOrganizations;
+  let maxActivations = license?.maxActivations ?? planLimits.maxActivations;
+
+  if (license?.maxOrganizations === 1 && planLimits.maxOrganizations !== 1) {
+    maxOrganizations = planLimits.maxOrganizations;
+  }
+  if (license?.maxActivations === 1 && planLimits.maxActivations !== 1) {
+    maxActivations = planLimits.maxActivations;
+  }
+
+  return {
+    maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxOrganizations,
+    maxActivations,
+  };
+}
+
+export function buildFinanceLicenseLimitFields(
+  license: FinanceLicenseLimitSource | null | undefined,
+  planLimits?: { maxActivations: number; maxOrganizations: number; maxUsers?: number } | null,
+): Pick<FinanceLicenseSyncPayload, "maxUsers" | "maxActivations" | "maxOrganizations"> {
+  if (planLimits) {
+    return resolveFinanceLicenseLimitFields(license, {
+      maxOrganizations: planLimits.maxOrganizations,
+      maxActivations: planLimits.maxActivations,
+      maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    });
+  }
   return {
     maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxActivations: license?.maxActivations ?? 1,
@@ -146,12 +184,13 @@ export async function syncFinanceLicenseForStockixTenant(
     .limit(1);
 
   const planSlug = license?.planSlug ?? tenantRow?.planSlug ?? "owner-managed";
+  const planLimits = await getPlanLimits(db, planSlug);
 
   if (license) {
     const isConsistent = await isLicenseLimitsConsistentWithPlan(db, license);
     if (!isConsistent) {
       log(
-        `[LicenseSync] License limits differ from plan limits for license ${license.id}, tenant ${license.tenantId ?? "none"} — license values will be used for sync`,
+        `[LicenseSync] License limits differ from plan limits for license ${license.id}, tenant ${license.tenantId ?? "none"} — plan limits will be applied for sync`,
       );
     }
   }
@@ -173,7 +212,7 @@ export async function syncFinanceLicenseForStockixTenant(
     validFrom: (license?.validFrom ?? new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
     gracePeriodDays: license?.gracePeriodDays ?? 30,
-    ...buildFinanceLicenseLimitFields(license),
+    ...resolveFinanceLicenseLimitFields(license, planLimits),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,
   };

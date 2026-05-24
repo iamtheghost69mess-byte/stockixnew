@@ -65,6 +65,10 @@ export class ProvisionUserService {
     let user: SystemUser;
     if (existingUser) {
       user = existingUser;
+      await this.systemUserModel.query().findById(user.id).patch({
+        password: hashedPassword,
+        mustChangePassword: true,
+      });
     } else {
       user = await this.systemUserModel.query().insert({
         firstName: dto.firstName,
@@ -76,6 +80,7 @@ export class ProvisionUserService {
         password: hashedPassword,
         tenantId: tenant.id,
         inviteAcceptedAt,
+        mustChangePassword: true,
       });
     }
 

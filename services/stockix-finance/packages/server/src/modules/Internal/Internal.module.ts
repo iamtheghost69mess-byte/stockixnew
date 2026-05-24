@@ -23,11 +23,13 @@ import { InternalSecretGuard } from './guards/InternalSecret.guard';
 import { TenantDBManagerModule } from '@/modules/TenantDBManager/TenantDBManager.module';
 import { TenantKnexFactory } from '@/modules/Tenancy/TenantKnexFactory';
 import { CopyParentTenantSettingsService } from '@/modules/Organization/CopyParentTenantSettings.service';
+import { UsersModule } from '@/modules/UsersModule/Users.module';
 
 @Module({
   imports: [
     ConfigModule,
     TenantDBManagerModule,
+    UsersModule,
     SaleReceiptsModule,
     WarehousesModule,
     CustomersModule,

@@ -1,6 +1,10 @@
 const IntegrationConfig = require("../models/integrationConfigModel");
 const IntegrationItemMapping = require("../models/integrationItemMappingModel");
 const Order = require("../models/orderModel");
+const {
+  NOTIFICATION_EVENTS,
+  createBackofficeNotificationFromEvent,
+} = require("./backofficeNotificationEvents");
 
 function modifierSuffix(line) {
   const groups = line.selectedModifiers;
@@ -73,12 +77,13 @@ function buildMappedEntries(order, itemMap) {
       const rate =
         Number(item.pricePerQuantity) ||
         (Number(item.price) > 0 ? Number(item.price) / qty : 0);
+      const lineDiscount = Number(item.discount?.amount);
       return {
         itemId: mapped?.id ?? null,
         description: `${item.name || "Item"}${modifierSuffix(item)}`,
         quantity: qty,
         rate,
-        discount: 0,
+        discount: lineDiscount > 0 ? lineDiscount : 0,
       };
     })
     .filter((e) => e.itemId != null);
@@ -202,10 +207,15 @@ async function processBigcapitalSyncJob(job) {
   const payload = await buildSaleReceiptPayload(order, integrationConfig);
 
   if (!payload) {
+    await notifyUnmappedBigcapitalSync(order, organizationId);
     await IntegrationConfig.findOneAndUpdate(
       { organization: organizationId },
       { "bigcapital.syncStatus": "idle", "bigcapital.lastSyncError": null }
     );
+    await Order.findByIdAndUpdate(orderId, {
+      accountingSaleStatus: "failed",
+      accountingSaleError: "No mapped items — Finance receipt not created",
+    }).catch(() => {});
     return {
       skipped: true,
       reason: "No mapped items in order — nothing to push",
@@ -232,6 +242,64 @@ async function processBigcapitalSyncJob(job) {
     success: true,
     bigcapitalReceiptId: result?.data?.id ?? result?.data?.receipt?.id,
   };
+}
+
+/**
+ * DELETE Finance sale receipt by POS order id (referenceNo).
+ * @param {string} orderId
+ * @param {string} organizationId
+ */
+async function voidFinanceReceipt(orderId, organizationId) {
+  const integrationConfig = await IntegrationConfig.findOne({
+    organization: organizationId,
+  });
+
+  if (!integrationConfig?.bigcapital?.enabled) {
+    return { skipped: true, reason: "Bigcapital not enabled for org" };
+  }
+
+  const cfg = integrationConfig.bigcapital;
+  const baseUrl = String(cfg.internalBaseUrl || "").replace(/\/$/, "");
+  if (!baseUrl) {
+    throw new Error("Bigcapital internalBaseUrl is not configured");
+  }
+
+  const response = await fetch(
+    `${baseUrl}/api/internal/pos/receipts/by-reference/${encodeURIComponent(orderId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": cfg.internalSecret || "",
+      },
+      body: JSON.stringify({ tenantId: cfg.financeTenantId }),
+    }
+  );
+
+  if (response.status === 404) {
+    return { skipped: true, reason: "Receipt not found in Finance" };
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Finance void failed ${response.status}: ${errorText}`);
+  }
+
+  await Order.findByIdAndUpdate(orderId, {
+    accountingSaleStatus: "skipped",
+    accountingSaleError: "",
+  }).catch(() => {});
+
+  return { success: true };
+}
+
+/**
+ * BullMQ job processor for void_receipt jobs.
+ * @param {{ data: { orderId: string, organizationId: string } }} job
+ */
+async function processBigcapitalVoidJob(job) {
+  const { orderId, organizationId } = job.data;
+  return voidFinanceReceipt(orderId, organizationId);
 }
 
 async function onBigcapitalSyncFailed(job, error) {
@@ -263,5 +331,7 @@ module.exports = {
   isCardMethodKey,
   postToBigcapital,
   processBigcapitalSyncJob,
+  processBigcapitalVoidJob,
+  voidFinanceReceipt,
   onBigcapitalSyncFailed,
 };
