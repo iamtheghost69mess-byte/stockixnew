@@ -2627,7 +2627,7 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
   }
-  const removeVolumes = true;
+  const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
   const existing = await db
     .select({
       id: tenants.id,
@@ -2651,28 +2651,6 @@ app.delete("/tenants/:tenantId", async (c) => {
   }
   const isFailedTenant =
     target.tenantStatus === "failed" || target.deploymentStatus === "failed";
-  const requiresForceStop =
-    target.tenantStatus === "provisioning"
-    || target.tenantStatus === "active"
-    || target.deploymentStatus === "provisioning"
-    || target.deploymentStatus === "active";
-  const [childOrgProvisionArtifact] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(and(eq(organizations.slug, target.slug), ne(organizations.tenantId, target.id)))
-    .limit(1);
-  const isChildOrgTenant = childOrgProvisionArtifact !== undefined;
-  if (requiresForceStop && !isChildOrgTenant) {
-    return c.json(
-      {
-        error: "tenant_busy",
-        message: `Tenant is currently busy (tenant=${target.tenantStatus ?? "unknown"}, deployment=${target.deploymentStatus ?? "unknown"}). Stop or suspend it before deletion.`,
-        tenantStatus: target.tenantStatus ?? null,
-        deploymentStatus: target.deploymentStatus ?? null,
-      },
-      409,
-    );
-  }
   const jobRows = await db
     .select({ correlationId: tenantLifecycleJobs.correlationId })
     .from(tenantLifecycleJobs)

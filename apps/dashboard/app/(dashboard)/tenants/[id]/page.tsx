@@ -1606,11 +1606,16 @@ export default function TenantDetailPage() {
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
                 const body = await readJson(res);
-                const data = body as { error?: string; message?: string };
+                const data = body as { error?: string; message?: string; hardDeleted?: boolean };
                 if (!res.ok && res.status !== 404) {
                   setError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
                   return;
                 }
+                toast.success(
+                  data.hardDeleted
+                    ? `Tenant "${tenant.slug}" deleted.`
+                    : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
+                );
                 router.push("/tenants");
               }}
             >
@@ -1621,11 +1626,16 @@ export default function TenantDetailPage() {
               onClick={async () => {
                 const res = await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
                 const body = await readJson(res);
-                const data = body as { error?: string; message?: string };
+                const data = body as { error?: string; message?: string; hardDeleted?: boolean };
                 if (!res.ok && res.status !== 404) {
                   setError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
                   return;
                 }
+                toast.success(
+                  data.hardDeleted
+                    ? `Tenant "${tenant.slug}" deleted.`
+                    : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
+                );
                 router.push("/tenants");
               }}
             >

@@ -21,6 +21,7 @@ import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import type { ProvisionEventRow, TenantDirectoryTotals, TenantRow } from "@/types/tenant";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
+import { toast } from "@/components/reusabletoast";
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 45 * 60 * 1000;
@@ -195,88 +196,44 @@ function TenantsPageContent() {
       setDeletingId(tenantId);
       setDeleteProgressMessage(
         wipeVolumes
-          ? "Deleting tenant and Docker volumes…"
-          : "Deleting tenant (keeping volumes)…",
+          ? "Stopping stack and deleting volumes…"
+          : "Stopping stack and removing tenant…",
       );
       setError(null);
       try {
         const q = wipeVolumes ? "?volumes=true" : "";
-        const deleteOnce = async () => {
-          const res = await fetch(`/api/tenants/${tenantId}${q}`, {
-            method: "DELETE",
-          });
-          const data = (await readJson(res)) as {
-            error?: string;
-            message?: string;
-            tenantStatus?: string | null;
-            deploymentStatus?: string | null;
-          };
-          return { res, data };
+        setDeleteProgressMessage("Queuing removal (Docker compose down)…");
+        const res = await fetch(`/api/tenants/${tenantId}${q}`, {
+          method: "DELETE",
+        });
+        const data = (await readJson(res)) as {
+          error?: string;
+          message?: string;
+          hardDeleted?: boolean;
         };
-
-        setDeleteProgressMessage("Removing deployment…");
-        let { res, data } = await deleteOnce();
-        if (!res.ok && res.status === 409 && data.error === "tenant_busy") {
-          const provisioningBusy =
-            data.tenantStatus === "provisioning" ||
-            data.deploymentStatus === "provisioning";
-          setDeleteProgressMessage(
-            provisioningBusy
-              ? "Stopping provisioning…"
-              : "Suspending tenant before delete…",
-          );
-          const transitionPath = provisioningBusy
-            ? `/api/tenants/${tenantId}/provision-stop`
-            : `/api/tenants/${tenantId}/suspend`;
-          const transitionRes = await fetch(transitionPath, { method: "POST" });
-          const transitionData = (await readJson(transitionRes)) as {
-            error?: string;
-            message?: string;
-          };
-          const alreadyTransitioned =
-            !transitionRes.ok
-            && (transitionData.error === "tenant_not_active"
-              || transitionData.error === "tenant_not_provisioning");
-          if (!transitionRes.ok && !alreadyTransitioned) {
-            throw new Error(
-              formatApiError(
-                transitionData,
-                transitionData.message ??
-                  transitionData.error ??
-                  "Tenant is busy and automatic stop/suspend failed.",
-              ),
-            );
-          }
-
-          for (let i = 0; i < 15; i += 1) {
-            setDeleteProgressMessage(
-              `Waiting for tenant to stop… (${i + 1}/15)`,
-            );
-            await new Promise((r) => setTimeout(r, 2000));
-            setDeleteProgressMessage("Removing deployment…");
-            const attempt = await deleteOnce();
-            res = attempt.res;
-            data = attempt.data;
-            if (res.ok) break;
-            if (!(res.status === 409 && data.error === "tenant_busy")) break;
-          }
-        }
-
         if (!res.ok) {
           throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
         }
+        setDeleteProgressMessage("Removal queued. Finishing up…");
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         setTenantAccess(null);
         setOneTimePassword(null);
+        toast.success(
+          data.hardDeleted
+            ? `Tenant "${slug}" deleted.`
+            : `Tenant "${slug}" removal started. Docker cleanup may take up to a minute.`,
+        );
         void load().catch(() => {});
+        await new Promise((r) => setTimeout(r, 600));
       } catch (e) {
         const message = String(e);
         if (message.includes("tenant_not_found")) {
           setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-          setError(`Tenant "${slug}" was already removed.`);
+          toast.success(`Tenant "${slug}" was already removed.`);
           void load().catch(() => {});
           return;
         }
+        toast.error(`Could not delete "${slug}": ${message}`);
         setError(message);
       } finally {
         setDeletingId(null);
@@ -1016,7 +973,8 @@ function TenantsPageContent() {
                 <p className="font-mono text-xs text-muted-foreground">{deleteTarget.slug}</p>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                Do not close this window. This can take up to a minute if the tenant was still running.
+                The stack is stopped and removal is queued. This dialog closes when the request is accepted;
+                Docker cleanup may continue for up to a minute in the background.
               </p>
             </div>
           ) : (
