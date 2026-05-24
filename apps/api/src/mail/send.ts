@@ -5,10 +5,29 @@ import * as schema from "@repo/db/schema";
 import { getActiveLicenseForTenant } from "../license-utils.js";
 import { sendMail } from "./mailer.js";
 import { renderTenantWelcome } from "./templates/tenant-welcome.js";
+import { renderOwnerInvite } from "./templates/owner-invite.js";
 import { renderLicenseExpiring } from "./templates/license-expiring.js";
 import { renderLicenseExpired } from "./templates/license-expired.js";
 
 type MailDb = PostgresJsDatabase<typeof schema>;
+
+export async function sendOwnerInviteEmail(opts: {
+  to: string;
+  name: string;
+  role: string;
+  inviteUrl: string;
+}) {
+  return sendMail({
+    to: opts.to,
+    subject: "You're invited to Stockix",
+    html: renderOwnerInvite({
+      name: opts.name,
+      role: opts.role,
+      inviteUrl: opts.inviteUrl,
+    }),
+    idempotencyKey: `owner-invite/${opts.to}/${opts.inviteUrl.slice(-12)}`,
+  });
+}
 
 export async function sendTenantWelcomeEmail(opts: {
   to: string;

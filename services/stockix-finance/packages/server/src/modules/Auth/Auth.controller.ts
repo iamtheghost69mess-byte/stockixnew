@@ -193,10 +193,11 @@ export class AuthController {
       res.status(400).json({ error: 'Invalid token' });
       return;
     }
+    // Match JWT signOptions.expiresIn ('1d' in Auth.module) so the cookie outlives the session.
     res.cookie('token', t, {
       httpOnly: false,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 1000,
+      maxAge: 24 * 60 * 60 * 1000,
       path: '/',
     });
     res.redirect('/');

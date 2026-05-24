@@ -1,6 +1,8 @@
 import * as moment from 'moment';
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { TenantLicense } from '@/modules/System/models/TenantLicense';
+import { TenantModel } from '@/modules/System/models/TenantModel';
+import { ServiceError } from '@/modules/Items/ServiceError';
 import { LicenseStatus, LicenseStatusMeta } from './License.types';
 
 @Injectable()
@@ -8,6 +10,9 @@ export class LicenseService {
   constructor(
     @Inject(TenantLicense.name)
     private readonly tenantLicenseModel: typeof TenantLicense,
+
+    @Inject(TenantModel.name)
+    private readonly tenantModel: typeof TenantModel,
   ) {}
 
   async findByTenantId(tenantId: number): Promise<TenantLicense | undefined> {
@@ -44,6 +49,34 @@ export class LicenseService {
     return moment(license.expiresAt)
       .add(license.gracePeriodDays ?? 30, 'days')
       .toISOString();
+  }
+
+  /**
+   * Blocks creating another Finance organization when tenant_licenses.maxOrganizations is reached.
+   * Uses the synced license row (typically tenant id 1 from Stockix provision).
+   */
+  async assertCanCreateOrganization(): Promise<void> {
+    const countRow = await this.tenantModel.query().count('id as count').first();
+    const orgCount = Number((countRow as { count?: number })?.count ?? 0);
+    const license = await this.tenantLicenseModel
+      .query()
+      .orderBy('tenantId', 'asc')
+      .first();
+    if (!license) {
+      return;
+    }
+    const limit = license.maxOrganizations;
+    if (limit < 0) {
+      return;
+    }
+    if (orgCount >= limit) {
+      throw new ServiceError(
+        'ORGANIZATION_LIMIT_REACHED',
+        'Organization limit reached for current plan',
+        undefined,
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
   }
 
   async getLicenseStatusMeta(tenantId: number): Promise<LicenseStatusMeta> {

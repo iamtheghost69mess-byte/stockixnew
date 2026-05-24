@@ -829,6 +829,18 @@ export async function executeProvisionRuntime(
       await trace.event("resume", "Skipping bootstrap admin registration (already journaled)", {
         meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail },
       });
+      if (!financeTenantId && deploymentId) {
+        const [deployRow] = await db
+          .select({ financeTenantId: tenantDeployments.financeTenantId })
+          .from(tenantDeployments)
+          .where(eq(tenantDeployments.id, deploymentId))
+          .limit(1);
+        const fromDb = deployRow?.financeTenantId;
+        if (fromDb != null && fromDb > 0) {
+          financeTenantId = fromDb;
+          log(`[provision] Restored financeTenantId=${financeTenantId} from tenant_deployments on resume`);
+        }
+      }
     }
     await checkNotCancelled();
 

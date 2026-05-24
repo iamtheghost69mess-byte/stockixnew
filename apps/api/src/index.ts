@@ -69,7 +69,7 @@ import {
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
-import { sendTenantWelcomeEmail } from "./mail/send.js";
+import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
 
 import {
   createProvisionTracer,
@@ -1959,6 +1959,17 @@ app.post("/owners/invite", async (c) => {
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
     metadata: { role: owner.role, email: owner.email },
+  });
+  void sendOwnerInviteEmail({
+    to: owner.email,
+    name: owner.name,
+    role: owner.role,
+    inviteUrl,
+  }).catch((err) => {
+    console.error(
+      "[owners] invite email failed (non-fatal)",
+      err instanceof Error ? err.message : String(err),
+    );
   });
   return c.json({ inviteToken, inviteUrl, owner }, 201);
 });

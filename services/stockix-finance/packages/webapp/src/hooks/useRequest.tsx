@@ -72,8 +72,9 @@ export default function useApiRequest() {
           if (!token || isTenantSetupError) {
             return Promise.reject(error);
           }
+          // axios interceptor clears cookies and redirects to /auth/login — avoid setLogout()
+          // reload here, which caused session-expired refresh loops with the redirect.
           setGlobalErrors({ session_expired: true });
-          setLogout();
         }
         if (status === 403) {
           setGlobalErrors({ access_denied: { message: data.message } });
