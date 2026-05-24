@@ -82,7 +82,6 @@ const posCmd =
     : "node scripts/dev-pos-stack.mjs";
 
 const concurrentlyArgs = [
-  "--kill-others-on-fail",
   "-n",
   "apps,worker,pos,pms,pms-ui",
   "-c",
