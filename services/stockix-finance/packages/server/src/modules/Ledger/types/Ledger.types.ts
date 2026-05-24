@@ -1,6 +1,4 @@
 import { Knex } from 'knex';
-import * as moment from 'moment';
-
 export interface ILedger {
   entries: ILedgerEntry[];
 
@@ -9,65 +7,46 @@ export interface ILedger {
   filter(cb: (entry: ILedgerEntry) => boolean): ILedger;
 
   whereAccountId(accountId: number): ILedger;
-  whereAccountsIds(accountsIds: number[]): ILedger;
   whereContactId(contactId: number): ILedger;
   whereFromDate(fromDate: Date | string): ILedger;
   whereToDate(toDate: Date | string): ILedger;
   whereCurrencyCode(currencyCode: string): ILedger;
   whereBranch(branchId: number): ILedger;
   whereItem(itemId: number): ILedger;
-  whereProject(projectId: number): ILedger;
 
   getClosingBalance(): number;
   getForeignClosingBalance(): number;
-  getClosingDebit(): number;
-  getClosingCredit(): number;
 
   getContactsIds(): number[];
   getAccountsIds(): number[];
-
-  reverse(): ILedger;
-  isEmpty(): boolean;
 }
 
-export interface ILedgerEntry {
-  id?: number;
-
+export interface ICommonLedgerEntry {
   credit: number;
   debit: number;
-
   currencyCode: string;
   exchangeRate: number;
+  transactionType: string;
+  transactionId: number;
+  date: Date | string;
+  userId?: number;
+  branchId?: number;
+  transactionNumber?: string;
+  referenceNumber?: string;
+  createdAt?: Date;
+  indexGroup?: number;
+}
 
+export interface ILedgerEntry extends ICommonLedgerEntry {
   accountId?: number;
   accountNormal: string;
   contactId?: number;
-  date: moment.MomentInput;
-
-  transactionType: string;
-  transactionSubType?: string;
-
-  transactionId: number;
-
-  transactionNumber?: string;
-
-  referenceNumber?: string;
   index: number;
-  indexGroup?: number;
-
   note?: string;
-
-  userId?: number;
   itemId?: number;
-  branchId?: number;
   projectId?: number;
-
-  taxRateId?: number;
-  taxRate?: number;
-
+  itemQuantity?: number;
   entryId?: number;
-  createdAt?: Date | string;
-
   costable?: boolean;
 }
 

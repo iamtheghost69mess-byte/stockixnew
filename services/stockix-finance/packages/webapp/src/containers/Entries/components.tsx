@@ -7,6 +7,7 @@ import { Popover2 } from '@blueprintjs/popover2';
 import { Align, CellType, Features } from '@/constants';
 import { Hint, Icon, FormattedMessage as T } from '@/components';
 import { formattedAmount } from '@/utils';
+import { DualCurrencyFormTotalCell } from '@/components/DualCurrencyTotalLines';
 import {
   InputGroupCell,
   MoneyFieldCell,
@@ -154,7 +155,7 @@ export function useEditableItemsEntriesColumns() {
       {
         Header: intl.get('total'),
         accessor: 'amount',
-        Cell: TotalCell,
+        Cell: DualCurrencyFormTotalCell,
         disableSortBy: true,
         width: 100,
         align: Align.Right,

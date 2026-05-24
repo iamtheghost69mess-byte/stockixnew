@@ -5,10 +5,12 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  FormatNumber,
+  DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { useVendorCreditDetailDrawerContext } from './VendorCreditDetailDrawerProvider';
 
 /**
@@ -17,38 +19,30 @@ import { useVendorCreditDetailDrawerContext } from './VendorCreditDetailDrawerPr
 export default function VendorCreditDetailDrawerFooter() {
   const { vendorCredit } = useVendorCreditDetailDrawerContext();
 
+  const vendorCreditDate = vendorCredit.vendor_credit_date;
+  const vendorCreditCurrency = vendorCredit.currency_code;
+
   return (
     <VendorCreditFooterRoot>
       <VendorCreditTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'vendor_credit.drawer.label_subtotal'} />}
-          value={vendorCredit.formatted_subtotal}
+          value={<FormatNumber value={vendorCredit.amount} />}
+          amount={vendorCredit.amount}
+          invoiceDate={vendorCreditDate}
+          invoiceCurrency={vendorCreditCurrency}
           borderStyle={TotalLineBorderStyle.SingleDark}
         />
-        {vendorCredit?.discount_amount_formatted && (
-          <TotalLine
-            title={
-              vendorCredit.discount_percentage_formatted
-                ? `Discount [${vendorCredit.discount_percentage_formatted}]`
-                : 'Discount'
-            }
-            value={vendorCredit.discount_amount_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        {vendorCredit?.adjustment_formatted && (
-          <TotalLine
-            title={'Adjustment'}
-            value={vendorCredit.adjustment_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'vendor_credit.drawer.label_total'} />}
-          value={vendorCredit.total_formatted}
+          value={vendorCredit.formatted_amount}
+          amount={vendorCredit.amount}
+          invoiceDate={vendorCreditDate}
+          invoiceCurrency={vendorCreditCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
+        <DualCurrencyTotalLinesView invoice={vendorCredit} />
       </VendorCreditTotalLines>
     </VendorCreditFooterRoot>
   );

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import styled from 'styled-components';
-import { useFormikContext } from 'formik';
+
 import {
   T,
   TotalLines,
@@ -9,60 +9,45 @@ import {
   TotalLineBorderStyle,
   TotalLineTextStyle,
 } from '@/components';
-import {
-  useReceiptAdjustmentFormatted,
-  useReceiptDiscountAmountFormatted,
-  useReceiptDueAmountFormatted,
-  useReceiptPaidAmountFormatted,
-  useReceiptSubtotalFormatted,
-  useReceiptTotalFormatted,
-  useReceiptTotal,
-} from './utils';
-import { DualCurrencyTotalLines } from '@/components/DualCurrencyTotalLines';
-import { DiscountTotalLine } from '../../Invoices/InvoiceForm/DiscountTotalLine';
-import { AdjustmentTotalLine } from '../../Invoices/InvoiceForm/AdjustmentTotalLine';
+import { useReceiptTotals } from './utils';
+import { DualCurrencyFormTotalLine } from '@/components/DualCurrencyTotalLines';
 
 export function ReceiptFormFooterRight() {
   const {
-    values: { currency_code },
-  } = useFormikContext();
-
-  const paidAmountFormatted = useReceiptPaidAmountFormatted();
-  const dueAmountFormatted = useReceiptDueAmountFormatted();
-
-  const subtotalFormatted = useReceiptSubtotalFormatted();
-  const totalFormatted = useReceiptTotalFormatted();
-
-  const discountAmount = useReceiptDiscountAmountFormatted();
-  const adjustmentAmount = useReceiptAdjustmentFormatted();
-  const total = useReceiptTotal();
+    total,
+    paymentTotal,
+    dueTotal,
+    formattedSubtotal,
+    formattedTotal,
+    formattedDueTotal,
+    formattedPaymentTotal,
+  } = useReceiptTotals();
 
   return (
     <ReceiptTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.subtotal'} />}
-        value={subtotalFormatted}
+        value={formattedSubtotal}
+        amount={total}
+        borderStyle={TotalLineBorderStyle.None}
       />
-      <DiscountTotalLine
-        currencyCode={currency_code}
-        discountAmount={discountAmount}
-      />
-      <AdjustmentTotalLine adjustmentAmount={adjustmentAmount} />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.total'} />}
-        value={totalFormatted}
+        value={formattedTotal}
+        amount={total}
         borderStyle={TotalLineBorderStyle.SingleDark}
         textStyle={TotalLineTextStyle.Bold}
       />
-      <DualCurrencyTotalLines total={total} />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.payment_amount'} />}
-        value={paidAmountFormatted}
+        value={formattedPaymentTotal}
+        amount={paymentTotal}
         borderStyle={TotalLineBorderStyle.None}
       />
-      <TotalLine
+      <DualCurrencyFormTotalLine
         title={<T id={'receipt_form.label.due_amount'} />}
-        value={dueAmountFormatted}
+        value={formattedDueTotal}
+        amount={dueTotal}
         textStyle={TotalLineTextStyle.Bold}
       />
     </ReceiptTotalLines>
@@ -70,11 +55,6 @@ export function ReceiptFormFooterRight() {
 }
 
 const ReceiptTotalLines = styled(TotalLines)`
-  --x-color-text: #555;
-
-  .bp4-dark & {
-    --x-color-text: var(--color-light-gray4);
-  }
   width: 100%;
-  color: var(--x-color-text);
+  color: #555555;
 `;

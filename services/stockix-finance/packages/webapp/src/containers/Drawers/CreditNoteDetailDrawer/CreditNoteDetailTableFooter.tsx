@@ -1,13 +1,16 @@
 // @ts-nocheck
+import React from 'react';
 import styled from 'styled-components';
+
 import {
   T,
   TotalLines,
-  TotalLine,
+  FormatNumber,
   TotalLineBorderStyle,
   TotalLineTextStyle,
   DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { useCreditNoteDetailDrawerContext } from './CreditNoteDetailDrawerProvider';
 
 /**
@@ -16,33 +19,25 @@ import { useCreditNoteDetailDrawerContext } from './CreditNoteDetailDrawerProvid
 export default function CreditNoteDetailTableFooter() {
   const { creditNote } = useCreditNoteDetailDrawerContext();
 
+  const creditNoteDate = creditNote.credit_note_date;
+  const creditNoteCurrency = creditNote.currency_code;
+
   return (
     <CreditNoteDetailsFooterRoot>
       <CreditNoteTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'credit_note.drawer.label_subtotal'} />}
-          value={creditNote.formatted_subtotal}
-          borderStyle={TotalLineBorderStyle.SingleDark}
+          value={<FormatNumber value={creditNote.amount} />}
+          amount={creditNote.amount}
+          invoiceDate={creditNoteDate}
+          invoiceCurrency={creditNoteCurrency}
         />
-        {creditNote.discount_amount > 0 && (
-          <TotalLine
-            title={
-              creditNote.discount_percentage_formatted
-                ? `Discount [${creditNote.discount_percentage_formatted}]`
-                : 'Discount'
-            }
-            value={creditNote.discount_amount_formatted}
-          />
-        )}
-        {creditNote.adjustment_formatted && (
-          <TotalLine
-            title={'Adjustment'}
-            value={creditNote.adjustment_formatted}
-          />
-        )}
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'credit_note.drawer.label_total'} />}
-          value={creditNote.total_formatted}
+          value={creditNote.formatted_amount}
+          amount={creditNote.amount}
+          invoiceDate={creditNoteDate}
+          invoiceCurrency={creditNoteCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />

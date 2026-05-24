@@ -18,10 +18,6 @@ import {
   formattedAmount,
 } from '@/utils';
 import { useCurrentOrganization } from '@/hooks/state';
-import {
-  transformAttachmentsToForm,
-  transformAttachmentsToRequest,
-} from '@/containers/Attachments/utils';
 
 const ERROR = {
   EXPENSE_ALREADY_PUBLISHED: 'EXPENSE.ALREADY.PUBLISHED',
@@ -50,7 +46,6 @@ export const defaultExpense = {
   branch_id: '',
   exchange_rate: 1,
   categories: [...repeatValue(defaultExpenseEntry, MIN_LINES_NUMBER)],
-  attachments: [],
 };
 
 /**
@@ -98,12 +93,9 @@ export const transformToEditForm = (
     ensureEntriesHasEmptyLine(MIN_LINES_NUMBER, expenseEntry),
   )(initialEntries);
 
-  const attachments = transformAttachmentsToForm(expense);
-
   return {
     ...transformToForm(expense, defaultExpense),
     categories,
-    attachments,
   };
 };
 
@@ -141,77 +133,54 @@ export const filterNonZeroEntries = (categories) => {
  */
 export const transformFormValuesToRequest = (values) => {
   const categories = filterNonZeroEntries(values.categories);
-  const attachments = transformAttachmentsToRequest(values);
 
   return {
     ...values,
     categories: R.compose(orderingLinesIndexes)(categories),
-    attachments,
   };
 };
 
 export const useSetPrimaryBranchToForm = () => {
   const { setFieldValue } = useFormikContext();
-  const { branches, isBranchesSuccess, isNewMode } = useExpenseFormContext();
+  const { branches, isBranchesSuccess } = useExpenseFormContext();
 
   React.useEffect(() => {
-    if (isBranchesSuccess && isNewMode) {
+    if (isBranchesSuccess) {
       const primaryBranch = branches.find((b) => b.primary) || first(branches);
 
       if (primaryBranch) {
         setFieldValue('branch_id', primaryBranch.id);
       }
     }
-  }, [isBranchesSuccess, setFieldValue, branches, isNewMode]);
+  }, [isBranchesSuccess, setFieldValue, branches]);
 };
 
 /**
- * Retrieves the expense subtotal.
- * @returns {number}
+ * Retreives the Journal totals.
  */
-export const useExpenseSubtotal = () => {
+export const useExpensesTotals = () => {
   const {
-    values: { categories },
+    values: { categories, currency_code: currencyCode },
   } = useFormikContext();
 
-  // Calculates the expense entries amount.
-  return React.useMemo(() => sumBy(categories, 'amount'), [categories]);
-};
+  const total = sumBy(categories, 'amount');
 
-/**
- * Retrieves the expense subtotal formatted.
- * @returns {string}
- */
-export const useExpenseSubtotalFormatted = () => {
-  const subtotal = useExpenseSubtotal();
-  const {
-    values: { currency_code },
-  } = useFormikContext();
+  // Retrieves the formatted total money.
+  const formattedTotal = React.useMemo(
+    () => formattedAmount(total, currencyCode),
+    [total, currencyCode],
+  );
+  // Retrieves the formatted subtotal.
+  const formattedSubtotal = React.useMemo(
+    () => formattedAmount(total, currencyCode, { money: false }),
+    [total, currencyCode],
+  );
 
-  return formattedAmount(subtotal, currency_code);
-};
-
-/**
- * Retrieves the expense total.
- * @returns {number}
- */
-export const useExpenseTotal = () => {
-  const subtotal = useExpenseSubtotal();
-
-  return subtotal;
-};
-
-/**
- * Retrieves the expense total formatted.
- * @returns {string}
- */
-export const useExpenseTotalFormatted = () => {
-  const total = useExpenseTotal();
-  const {
-    values: { currency_code },
-  } = useFormikContext();
-
-  return formattedAmount(total, currency_code);
+  return {
+    total,
+    formattedTotal,
+    formattedSubtotal,
+  };
 };
 
 /**

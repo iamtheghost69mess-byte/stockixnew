@@ -1,42 +1,31 @@
-import { Model, raw } from 'objection';
-import * as moment from 'moment';
-import { ExpenseCategory } from './ExpenseCategory.model';
-import { Account } from '@/modules/Accounts/models/Account.model';
-import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
-import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.decorator';
-import { ImportableModel } from '@/modules/Import/decorators/Import.decorator';
-import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
-import { ExpenseMeta } from './Expense.meta';
-import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { ExpenseDefaultViews } from '../constants';
-import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
+import { Model, mixin, raw } from 'objection';
+import TenantModel from 'models/TenantModel';
+import { buildFilterQuery } from '@/lib/ViewRolesBuilder';
+import ModelSetting from './ModelSetting';
+import ExpenseSettings from './Expense.Settings';
+import CustomViewBaseModel from './CustomViewBaseModel';
+import { DEFAULT_VIEWS } from '@/services/Expenses/constants';
+import ModelSearchable from './ModelSearchable';
+import moment from 'moment';
 
-@InjectAttachable()
-@ExportableModel()
-@ImportableModel()
-@InjectModelMeta(ExpenseMeta)
-@InjectModelDefaultViews(ExpenseDefaultViews)
-export class Expense extends TenantBaseModel {
-  totalAmount!: number;
-  currencyCode!: string;
-  exchangeRate!: number;
+export default class Expense extends mixin(TenantModel,
+  ModelSetting as any,
+  CustomViewBaseModel as any,
+  ModelSearchable as any
+) {
+  id: number;
+  totalAmount: number;
+  exchangeRate: number;
+  date: Date | string;
+  referenceNo?: string;
   description?: string;
-  paymentAccountId!: number;
-  peyeeId!: number;
-  referenceNo!: string;
-  publishedAt!: Date | null;
-  userId!: number;
-  paymentDate!: Date;
-  payeeId!: number;
-  landedCostAmount!: number;
-  allocatedCostAmount!: number;
+  publishedAt: Date | string | null;
+  landedCostAmount: number;
+  allocatedCostAmount: number;
   invoicedAmount: number;
-  branchId!: number;
-  createdAt!: Date;
-
-  categories!: ExpenseCategory[];
-  paymentAccount!: Account;
-  attachments!: Document[];
+  branchId?: number;
+  userId: number;
+  createdAt: Date;
 
   /**
    * Table name
@@ -79,7 +68,7 @@ export class Expense extends TenantBaseModel {
    * @returns {number}
    */
   get localAmount() {
-    return this.totalAmount * this.exchangeRate;
+    return this.totalAmount / this.exchangeRate;
   }
 
   /**
@@ -87,7 +76,7 @@ export class Expense extends TenantBaseModel {
    * @returns {number}
    */
   get localLandedCostAmount() {
-    return this.landedCostAmount * this.exchangeRate;
+    return this.landedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -95,7 +84,7 @@ export class Expense extends TenantBaseModel {
    * @returns {number}
    */
   get localAllocatedCostAmount() {
-    return this.allocatedCostAmount * this.exchangeRate;
+    return this.allocatedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -111,7 +100,7 @@ export class Expense extends TenantBaseModel {
    * @returns {number}
    */
   get localUnallocatedCostAmount() {
-    return this.unallocatedCostAmount * this.exchangeRate;
+    return this.unallocatedCostAmount / this.exchangeRate;
   }
 
   /**
@@ -160,9 +149,9 @@ export class Expense extends TenantBaseModel {
           query.where('payment_account_id', accountId);
         }
       },
-      // viewRolesBuilder(query, conditionals, expression) {
-      //   viewRolesBuilder(conditionals, expression)(query);
-      // },
+      viewRolesBuilder(query, conditionals, expression) {
+        buildFilterQuery(Expense, conditionals, expression)(query);
+      },
 
       filterByDraft(query) {
         query.where('published_at', null);
@@ -203,33 +192,23 @@ export class Expense extends TenantBaseModel {
    * Relationship mapping.
    */
   static get relationMappings() {
-    const { Account } = require('../../Accounts/models/Account.model');
-    const { ExpenseCategory } = require('./ExpenseCategory.model');
-    const { Document } = require('../../ChromiumlyTenancy/models/Document');
-    const { Branch } = require('../../Branches/models/Branch.model');
-    const {
-      MatchedBankTransaction,
-    } = require('../../BankingMatching/models/MatchedBankTransaction');
+    const Account = require('models/Account');
+    const ExpenseCategory = require('models/ExpenseCategory');
+    const Media = require('models/Media');
+    const Branch = require('models/Branch');
 
     return {
-      /**
-       * Expense transaction may belongs to a payment account.
-       */
       paymentAccount: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Account,
+        modelClass: Account.default,
         join: {
           from: 'expenses_transactions.paymentAccountId',
           to: 'accounts.id',
         },
       },
-
-      /**
-       * Expense transaction may has many expense categories.
-       */
       categories: {
         relation: Model.HasManyRelation,
-        modelClass: ExpenseCategory,
+        modelClass: ExpenseCategory.default,
         join: {
           from: 'expenses_transactions.id',
           to: 'expense_transaction_categories.expenseId',
@@ -244,47 +223,39 @@ export class Expense extends TenantBaseModel {
        */
       branch: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Branch,
+        modelClass: Branch.default,
         join: {
           from: 'expenses_transactions.branchId',
           to: 'branches.id',
         },
       },
-
-      /**
-       * Expense transaction may has many attached attachments.
-       */
-      attachments: {
+      media: {
         relation: Model.ManyToManyRelation,
-        modelClass: Document,
+        modelClass: Media.default,
         join: {
           from: 'expenses_transactions.id',
           through: {
-            from: 'document_links.modelId',
-            to: 'document_links.documentId',
+            from: 'media_links.model_id',
+            to: 'media_links.media_id',
           },
-          to: 'documents.id',
+          to: 'media.id',
         },
         filter(query) {
-          query.where('model_ref', 'Expense');
-        },
-      },
-
-      /**
-       * Expense may belongs to matched bank transaction.
-       */
-      matchedBankTransaction: {
-        relation: Model.HasManyRelation,
-        modelClass: MatchedBankTransaction,
-        join: {
-          from: 'expenses_transactions.id',
-          to: 'matched_bank_transactions.referenceId',
-        },
-        filter(query) {
-          query.where('reference_type', 'Expense');
+          query.where('model_name', 'Expense');
         },
       },
     };
+  }
+
+  static get meta() {
+    return ExpenseSettings;
+  }
+
+  /**
+   * Retrieve the default custom views, roles and columns.
+   */
+  static get defaultViews() {
+    return DEFAULT_VIEWS;
   }
 
   /**

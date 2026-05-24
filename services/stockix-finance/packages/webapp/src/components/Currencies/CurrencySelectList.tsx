@@ -1,28 +1,110 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { FormattedMessage as T } from '@/components';
-import { FSelect } from '../Forms';
+import { CLASSES } from '@/constants/classes';
+import classNames from 'classnames';
+import { MenuItem, Button, Icon } from '@blueprintjs/core';
+import { Select } from '@blueprintjs/select';
 
-/**
- * Currency select field.
- * @returns {React.ReactNode}
- */
 export function CurrencySelectList({
-  // #ownProps
-  items,
-  name,
-  placeholder = <T id={'select_currency_code'} />,
-  ...props
+  currenciesList,
+  selectedCurrencyCode,
+  defaultSelectText = <T id={'select_currency_code'} />,
+  onCurrencySelected,
+  popoverFill = false,
+  disabled = false,
+  placeholder,
+  allowClear = false,
 }) {
+  const [selectedCurrency, setSelectedCurrency] = useState(null);
+
+  // Filters currencies list.
+  const filterCurrencies = (query, currency, _index, exactMatch) => {
+    const normalizedTitle = currency.currency_code.toLowerCase();
+    const normalizedQuery = query.toLowerCase();
+
+    if (exactMatch) {
+      return normalizedTitle === normalizedQuery;
+    } else {
+      return (
+        `${currency.currency_code} ${normalizedTitle}`.indexOf(
+          normalizedQuery,
+        ) >= 0
+      );
+    }
+  };
+
+  const onCurrencySelect = useCallback((currency) => {
+    setSelectedCurrency({ ...currency });
+    onCurrencySelected && onCurrencySelected(currency);
+  });
+
+  const currencyCodeRenderer = useCallback((CurrencyCode, { handleClick }) => {
+    return (
+      <MenuItem
+        key={CurrencyCode.id}
+        text={CurrencyCode.currency_code}
+        onClick={handleClick}
+      />
+    );
+  }, []);
+
+  useEffect(() => {
+    if (typeof selectedCurrencyCode !== 'undefined') {
+      const list = Array.isArray(currenciesList) ? currenciesList : [];
+      const currency = selectedCurrencyCode
+        ? list.find((a) => a.currency_code === selectedCurrencyCode)
+        : null;
+      setSelectedCurrency(currency ?? null);
+    }
+  }, [selectedCurrencyCode, currenciesList]);
+
+  const handleClear = useCallback(
+    (e) => {
+      e.stopPropagation();
+      setSelectedCurrency(null);
+      if (onCurrencySelected) {
+        onCurrencySelected(null);
+      }
+    },
+    [onCurrencySelected],
+  );
+
+  const buttonText = selectedCurrency
+    ? selectedCurrency.currency_code
+    : placeholder ?? defaultSelectText;
+
   return (
-    <FSelect
-      name={name}
-      items={items}
-      textAccessor={'currency_code'}
-      valueAccessor={'currency_code'}
-      placeholder={placeholder}
-      popoverProps={{ minimal: true, usePortal: true, inline: false }}
-      {...props}
-    />
+    <Select
+      items={Array.isArray(currenciesList) ? currenciesList : []}
+      itemRenderer={currencyCodeRenderer}
+      itemPredicate={filterCurrencies}
+      onItemSelect={onCurrencySelect}
+      filterable={true}
+      popoverProps={{
+        minimal: true,
+        usePortal: !popoverFill,
+        inline: popoverFill,
+      }}
+      className={classNames('form-group--select-list', {
+        [CLASSES.SELECT_LIST_FILL_POPOVER]: popoverFill,
+      })}
+    >
+      <Button
+        disabled={disabled}
+        text={buttonText}
+        rightIcon={
+          allowClear && selectedCurrency ? (
+            <Icon
+              icon="cross"
+              iconSize={12}
+              onClick={handleClear}
+              title="Clear"
+              style={{ cursor: 'pointer' }}
+            />
+          ) : undefined
+        }
+      />
+    </Select>
   );
 }

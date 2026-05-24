@@ -5,11 +5,11 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
   DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { usePaymentMadeDetailContext } from './PaymentMadeDetailProvider';
 
 /**
@@ -18,17 +18,26 @@ import { usePaymentMadeDetailContext } from './PaymentMadeDetailProvider';
 export default function PaymentMadeDetailTableFooter() {
   const { paymentMade } = usePaymentMadeDetailContext();
 
+  const paymentDate = paymentMade.payment_date;
+  const paymentCurrency = paymentMade.currency_code;
+
   return (
     <PaymentMadeFooterRoot>
       <PaymentMadeTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'payment_made.details.subtotal'} />}
-          value={paymentMade.amount}
+          value={paymentMade.formatted_amount}
+          amount={paymentMade.amount}
+          invoiceDate={paymentDate}
+          invoiceCurrency={paymentCurrency}
           borderStyle={TotalLineBorderStyle.SingleDark}
         />
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'payment_made.details.total'} />}
           value={paymentMade.formatted_amount}
+          amount={paymentMade.amount}
+          invoiceDate={paymentDate}
+          invoiceCurrency={paymentCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />

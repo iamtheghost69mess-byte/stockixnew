@@ -5,11 +5,12 @@ import styled from 'styled-components';
 import {
   T,
   TotalLines,
-  TotalLine,
   TotalLineBorderStyle,
   TotalLineTextStyle,
+  FormatNumber,
   DualCurrencyTotalLinesView,
 } from '@/components';
+import { DualCurrencyDetailTotalLine } from '@/components/DualCurrencyTotalLines';
 import { useReceiptDetailDrawerContext } from './ReceiptDetailDrawerProvider';
 
 /**
@@ -18,45 +19,42 @@ import { useReceiptDetailDrawerContext } from './ReceiptDetailDrawerProvider';
 export default function ReceiptDetailTableFooter() {
   const { receipt } = useReceiptDetailDrawerContext();
 
+  const receiptDate = receipt.receipt_date;
+  const receiptCurrency = receipt.currency_code;
+
   return (
     <ReceiptDetailsFooterRoot>
       <ReceiptTotalLines labelColWidth={'180px'} amountColWidth={'180px'}>
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'receipt.details.subtotal'} />}
-          value={receipt.subtotal_formatted}
+          value={<FormatNumber value={receipt.amount} />}
+          amount={receipt.amount}
+          invoiceDate={receiptDate}
+          invoiceCurrency={receiptCurrency}
         />
-        {receipt.discount_amount > 0 && (
-          <TotalLine
-            title={
-              receipt.discount_percentage_formatted
-                ? `Discount [${invoice.discount_percentage_formatted}]`
-                : 'Discount'
-            }
-            value={receipt.discount_amount_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        {receipt.adjustment_formatted && (
-          <TotalLine
-            title={'Adjustment'}
-            value={receipt.adjustment_formatted}
-            textStyle={TotalLineTextStyle.Regular}
-          />
-        )}
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'receipt.details.total'} />}
-          value={receipt.total_formatted}
+          value={receipt.formatted_amount}
+          amount={receipt.amount}
+          invoiceDate={receiptDate}
+          invoiceCurrency={receiptCurrency}
           borderStyle={TotalLineBorderStyle.DoubleDark}
           textStyle={TotalLineTextStyle.Bold}
         />
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'receipt.details.payment_amount'} />}
-          value={receipt.paid_formatted}
-          borderStyle={TotalLineBorderStyle.SingleDark}
+          value={receipt.formatted_amount}
+          amount={receipt.amount}
+          invoiceDate={receiptDate}
+          invoiceCurrency={receiptCurrency}
+          borderStyle={TotalLineBorderStyle.DoubleDark}
         />
-        <TotalLine
+        <DualCurrencyDetailTotalLine
           title={<T id={'receipt.details.due_amount'} />}
           value={'0'}
+          amount={0}
+          invoiceDate={receiptDate}
+          invoiceCurrency={receiptCurrency}
         />
         <DualCurrencyTotalLinesView invoice={receipt} />
       </ReceiptTotalLines>

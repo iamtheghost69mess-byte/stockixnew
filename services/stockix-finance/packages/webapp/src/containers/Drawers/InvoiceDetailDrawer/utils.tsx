@@ -19,20 +19,29 @@ import {
   FormattedMessage as T,
   Choose,
   Can,
-  If,
   TextOverviewTooltipCell,
 } from '@/components';
 import { SaleInvoiceAction, AbilitySubject } from '@/constants/abilityOption';
 import { useInvoiceDetailDrawerContext } from './InvoiceDetailDrawerProvider';
+import { useCurrentOrganization } from '@/hooks/state';
+import {
+  DualCurrencyTableCurrencyCell,
+  DualCurrencyTableValueCell,
+} from '@/components/DualCurrencyTotalLines';
 
 /**
  * Retrieve invoice readonly details table columns.
+ * Includes a Currency column and dual-currency (base + secondary) stacked
+ * values for Rate and Amount when display currencies are configured.
  */
 export const useInvoiceReadonlyEntriesColumns = () => {
-  // Invoice details drawer context.
   const {
-    invoice: { entries },
+    invoice: { entries, invoice_date, currency_code },
   } = useInvoiceDetailDrawerContext();
+
+  const org = useCurrentOrganization();
+  const displayCurrencies = Array.isArray(org?.display_currencies) ? org.display_currencies : [];
+  const hasSecondary = displayCurrencies.length > 0;
 
   return React.useMemo(
     () => [
@@ -54,50 +63,53 @@ export const useInvoiceReadonlyEntriesColumns = () => {
       {
         Header: intl.get('quantity'),
         accessor: 'quantity',
+        Cell: FormatNumberCell,
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'quantity_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'quantity', { minWidth: 60, magicSpacing: 5 }),
       },
+      // Currency column — only shown when secondary currencies are configured
+      ...(hasSecondary
+        ? [
+            {
+              Header: intl.get('currency'),
+              id: 'currency',
+              accessor: () => null,
+              Cell: DualCurrencyTableCurrencyCell,
+              disableSortBy: true,
+              width: 110,
+              // custom data forwarded to the Cell component via column object
+              invoiceCurrency: currency_code,
+              invoiceDate: invoice_date,
+            },
+          ]
+        : []),
       {
         Header: intl.get('rate'),
-        accessor: 'rate_formatted',
+        accessor: 'rate',
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'rate_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
-      },
-      {
-        id: 'discount',
-        Header: 'Discount',
-        accessor: 'discount_formatted',
-        align: 'right',
-        disableSortBy: true,
-        textOverview: true,
-        width: getColumnWidth(entries, 'discount_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'rate', { minWidth: 60, magicSpacing: 5 }),
+        invoiceCurrency: currency_code,
+        invoiceDate: invoice_date,
       },
       {
         Header: intl.get('amount'),
-        accessor: 'total_formatted',
+        accessor: 'amount',
+        Cell: hasSecondary ? DualCurrencyTableValueCell : FormatNumberCell,
         align: 'right',
         disableSortBy: true,
         textOverview: true,
-        width: getColumnWidth(entries, 'total_formatted', {
-          minWidth: 60,
-          magicSpacing: 5,
-        }),
+        width: getColumnWidth(entries, 'amount', { minWidth: 60, magicSpacing: 5 }),
+        invoiceCurrency: currency_code,
+        invoiceDate: invoice_date,
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, hasSecondary, invoice_date, currency_code],
   );
 };
 
@@ -106,7 +118,7 @@ export const useInvoiceReadonlyEntriesColumns = () => {
  * @returns {React.JSX}
  */
 export const BadDebtMenuItem = ({
-  payload: { onCancelBadDebt, onBadDebt, onNotifyViaSMS, onConvert, onDeliver },
+  payload: { onCancelBadDebt, onBadDebt, onNotifyViaSMS, onConvert },
 }) => {
   const { invoice } = useInvoiceDetailDrawerContext();
 
@@ -120,12 +132,6 @@ export const BadDebtMenuItem = ({
       }}
       content={
         <Menu>
-          <If condition={!invoice.is_delivered}>
-            <MenuItem
-              onClick={onDeliver}
-              text={<T id={'mark_as_delivered'} />}
-            />
-          </If>
           <Choose>
             <Choose.When condition={!invoice.is_writtenoff}>
               <MenuItem

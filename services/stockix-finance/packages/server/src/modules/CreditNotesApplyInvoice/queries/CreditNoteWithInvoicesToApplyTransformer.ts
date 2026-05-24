@@ -10,7 +10,9 @@ export class CreditNoteWithInvoicesToApplyTransformer extends Transformer {
       'formattedInvoiceDate',
       'formattedDueDate',
       'formattedAmount',
+      'formattedLocalAmount',
       'formattedDueAmount',
+      'formattedLocalDueAmount',
       'formattedPaymentAmount',
     ];
   };
@@ -53,6 +55,26 @@ export class CreditNoteWithInvoicesToApplyTransformer extends Transformer {
     return this.formatNumber(invoice.dueAmount, {
       currencyCode: invoice.currencyCode,
     });
+  };
+
+  /**
+   * Retrieve formatted invoice local amount.
+   * @param {ISaleInvoice} invoice
+   * @returns {string}
+   */
+  protected formattedLocalAmount = (invoice): string => {
+    if (invoice.localAmount == null) return '';
+    return this.formatMoney(invoice.localAmount);
+  };
+
+  /**
+   * Retrieve formatted invoice local due amount.
+   * @param {ISaleInvoice} invoice
+   * @returns {string}
+   */
+  protected formattedLocalDueAmount = (invoice): string => {
+    if (invoice.localDueAmount == null) return '';
+    return this.formatMoney(invoice.localDueAmount);
   };
 
   /**

@@ -3,6 +3,7 @@ import { useQueryClient, useMutation } from 'react-query';
 import { useRequestQuery } from '../useQueryRequest';
 import { transformPagination } from '@/utils';
 import useApiRequest from '../useRequest';
+import { useRequestPdf } from '../utils';
 import t from './types';
 
 const commonInvalidateQueries = (queryClient) => {
@@ -246,4 +247,8 @@ export function useBillPaymentTransactions(id, props) {
       ...props,
     },
   );
+}
+
+export function usePdfBill(billId) {
+  return useRequestPdf(`purchases/bills/${billId}`);
 }

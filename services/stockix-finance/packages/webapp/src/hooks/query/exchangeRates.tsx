@@ -131,28 +131,6 @@ export function useExchangeRateLookup() {
  * Fetches the most recent exchange rate on or before a given date.
  * Used by form footers for transaction-date dual-currency conversion.
  */
-/**
- * Latest exchange rate (Open Exchange or stored rate).
- */
-export function useLatestExchangeRate(params = {}, props?) {
-  const apiRequest = useApiRequest();
-
-  return useQueryTenant(
-    ['EXCHANGE_RATE_LATEST', params],
-    () =>
-      apiRequest.get('exchange-rates/latest', {
-        params: {
-          from_currency: params.fromCurrency,
-          to_currency: params.toCurrency,
-        },
-      }),
-    {
-      select: (res) => res.data,
-      ...props,
-    },
-  );
-}
-
 export function useExchangeRateByDate(currencyCode: string, date: string, props?) {
   const apiRequest = useApiRequest();
 

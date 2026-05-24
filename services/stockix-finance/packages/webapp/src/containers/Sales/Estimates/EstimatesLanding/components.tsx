@@ -13,6 +13,7 @@ import {
   Icon,
   If,
   Can,
+  DualCurrencyAmountCell,
 } from '@/components';
 import { safeCallback } from '@/utils';
 
@@ -206,7 +207,8 @@ export function useEstiamtesTableColumns() {
       {
         id: 'amount',
         Header: intl.get('amount'),
-        accessor: AmountAccessor,
+        accessor: 'formatted_amount',
+        Cell: DualCurrencyAmountCell,
         width: 140,
         align: 'right',
         clickable: true,

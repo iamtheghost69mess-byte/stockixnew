@@ -89,6 +89,7 @@ function TenantsPageContent() {
   }, [searchParams]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oneTimePassword, setOneTimePassword] = useState<string | null>(null);
   const [tenantAccess, setTenantAccess] = useState<{
@@ -388,6 +389,7 @@ function TenantsPageContent() {
   );
 
   useEffect(() => {
+    setMounted(true);
     load().catch((e) => setError(String(e)));
   }, [load]);
 
@@ -1041,7 +1043,7 @@ function TenantsPageContent() {
                 </Button>
               </DialogFooter>
             </>
-          )}
+          )
         </DialogContent>
       </Dialog>
     </div>

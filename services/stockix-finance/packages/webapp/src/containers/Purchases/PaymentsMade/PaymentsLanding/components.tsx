@@ -11,7 +11,7 @@ import {
   Position,
 } from '@blueprintjs/core';
 
-import { Icon, Money, Can, DualCurrencyAmountCell } from '@/components';
+import { Icon, Money, FormatDateCell, Can, DualCurrencyAmountCell } from '@/components';
 import { PaymentMadeAction, AbilitySubject } from '@/constants/abilityOption';
 
 import { safeCallback } from '@/utils';
@@ -29,7 +29,7 @@ export function ActionsMenu({
 }) {
   return (
     <Menu>
-    <MenuItem
+      <MenuItem
         icon={<Icon icon="reader-18" />}
         text={intl.get('view_details')}
         onClick={safeCallback(onViewDetails, original)}
@@ -79,7 +79,8 @@ export function usePaymentMadesTableColumns() {
       {
         id: 'payment_date',
         Header: intl.get('payment_date'),
-        accessor: 'formatted_payment_date',
+        Cell: FormatDateCell,
+        accessor: 'payment_date',
         width: 140,
         className: 'payment_date',
         clickable: true,
@@ -118,7 +119,6 @@ export function usePaymentMadesTableColumns() {
         className: 'amount',
         align: 'right',
         clickable: true,
-        money: true,
       },
       {
         id: 'reference_no',

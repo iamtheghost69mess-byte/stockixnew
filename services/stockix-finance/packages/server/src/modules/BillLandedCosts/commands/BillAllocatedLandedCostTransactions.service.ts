@@ -1,88 +1,72 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { I18nService } from 'nestjs-i18n';
+import { Inject, Service } from 'typedi';
 import { omit } from 'lodash';
 import * as R from 'ramda';
-import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
-import { Bill } from '@/modules/Bills/models/Bill';
-import { BillLandedCost } from '../models/BillLandedCost';
-import { IBillLandedCostTransaction } from '../types/BillLandedCosts.types';
-import { ModelObject } from 'objection';
-import { formatNumber } from '@/utils/format-number';
+import * as qim from 'qim';
+import { IBillLandedCostTransaction } from '@/interfaces';
+import HasTenancyService from '@/services/Tenancy/TenancyService';
+import { formatNumber } from 'utils';
+import I18nService from '@/services/I18n/I18nService';
+import { TenantMetadata } from '@/system/models';
 
-@Injectable()
-export class BillAllocatedLandedCostTransactions {
-  constructor(
-    private readonly i18nService: I18nService,
+@Service()
+export default class BillAllocatedLandedCostTransactions {
+  @Inject()
+  private tenancy: HasTenancyService;
 
-    @Inject(Bill.name)
-    private readonly billModel: TenantModelProxy<typeof Bill>,
-
-    @Inject(BillLandedCost.name)
-    private readonly billLandedCostModel: TenantModelProxy<
-      typeof BillLandedCost
-    >,
-  ) { }
+  @Inject()
+  private i18nService: I18nService;
 
   /**
    * Retrieve the bill associated landed cost transactions.
+   * @param  {number} tenantId - Tenant id.
    * @param  {number} billId - Bill id.
    * @return {Promise<IBillLandedCostTransaction>}
    */
   public getBillLandedCostTransactions = async (
-    billId: number,
-  ): Promise<Array<IBillLandedCostTransaction>> => {
+    tenantId: number,
+    billId: number
+  ): Promise<IBillLandedCostTransaction> => {
+    const { BillLandedCost, Bill } = this.tenancy.models(tenantId);
+
     // Retrieve the given bill id or throw not found service error.
-    const bill = await this.billModel()
-      .query()
-      .findById(billId)
-      .throwIfNotFound();
+    const bill = await Bill.query().findById(billId).throwIfNotFound();
+
     // Retrieve the bill associated allocated landed cost with bill and expense entry.
-    const landedCostTransactions = await this.billLandedCostModel()
-      .query()
+    const landedCostTransactions = await BillLandedCost.query()
       .where('bill_id', billId)
       .withGraphFetched('allocateEntries')
       .withGraphFetched('allocatedFromBillEntry.item')
       .withGraphFetched('allocatedFromExpenseEntry.expenseAccount')
       .withGraphFetched('bill');
 
-    const transactionsJson = landedCostTransactions.map((a) => a.toJSON());
-
-    return this.transformBillLandedCostTransactions(transactionsJson);
+    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    const transactionsJson = this.i18nService.i18nApply(
+      [[qim.$each, 'allocationMethodFormatted']],
+      landedCostTransactions.map((a) => a.toJSON()),
+      tenantId
+    );
+    return this.transformBillLandedCostTransactions(transactionsJson, tenantMeta.baseCurrency);
   };
 
-  /**
-   *
-   * @param {IBillLandedCostTransaction[]} landedCostTransactions
-   * @returns
-   */
   private transformBillLandedCostTransactions = (
-    landedCostTransactions: ModelObject<BillLandedCost>[],
+    landedCostTransactions: IBillLandedCostTransaction[],
+    baseCurrency: string
   ) => {
-    return landedCostTransactions.map(this.transformBillLandedCostTransaction);
+    return landedCostTransactions.map((t) =>
+      this.transformBillLandedCostTransaction(t, baseCurrency)
+    );
   };
 
-  /**
-   *
-   * @param {IBillLandedCostTransaction} transaction
-   * @returns
-   */
   private transformBillLandedCostTransaction = (
-    transaction: ModelObject<BillLandedCost>,
-  ): IBillLandedCostTransaction => {
-    const name = this.condBillLandedTransactionName(
-      transaction.fromTransactionType,
-      transaction,
+    transaction: IBillLandedCostTransaction,
+    baseCurrency: string
+  ) => {
+    const getTransactionName = R.curry(this.condBillLandedTransactionName)(
+      transaction.fromTransactionType
     );
-    const description = this.condBillLandedTransactionDescription(
-      transaction.fromTransactionType,
-      transaction,
-    );
-    const allocationMethodFormattedKey = transaction.allocationMethodFormatted;
-    const allocationMethodFormatted = allocationMethodFormattedKey
-      ? this.i18nService.t(allocationMethodFormattedKey, {
-        defaultValue: allocationMethodFormattedKey,
-      })
-      : '';
+    const getTransactionDesc = R.curry(
+      this.condBillLandedTransactionDescription
+    )(transaction.fromTransactionType);
 
     return {
       formattedAmount: formatNumber(transaction.amount, {
@@ -91,15 +75,13 @@ export class BillAllocatedLandedCostTransactions {
       ...omit(transaction, [
         'allocatedFromBillEntry',
         'allocatedFromExpenseEntry',
-        'allocationMethodFormatted',
       ]),
-      name,
-      description,
+      name: getTransactionName(transaction),
+      description: getTransactionDesc(transaction),
       formattedLocalAmount: formatNumber(transaction.localAmount, {
-        currencyCode: 'USD',
+        currencyCode: baseCurrency,
       }),
-      allocationMethodFormatted,
-    } as IBillLandedCostTransaction;
+    };
   };
 
   /**
@@ -110,7 +92,7 @@ export class BillAllocatedLandedCostTransactions {
    */
   private condBillLandedTransactionName = (
     transactionType: string,
-    transaction,
+    transaction
   ) => {
     return R.cond([
       [
@@ -168,7 +150,7 @@ export class BillAllocatedLandedCostTransactions {
    */
   private condBillLandedTransactionDescription = (
     tranasctionType: string,
-    transaction,
+    transaction
   ) => {
     return R.cond([
       [

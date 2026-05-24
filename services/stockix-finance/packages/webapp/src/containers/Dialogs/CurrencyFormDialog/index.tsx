@@ -38,6 +38,7 @@ function CurrencyFormDialog({
           dialogName={dialogName}
           currencyCode={payload.currency}
           action={payload.action}
+          isOpen={isOpen}
         />
       </DialogSuspense>
     </Dialog>

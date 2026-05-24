@@ -1,5 +1,4 @@
 // @ts-nocheck
-export {};
 
 // Pure logic extracted from useDisplayCurrencies / useSecondaryCurrency hooks.
 // Tests run without a Redux store — the hook logic is tested as a plain function.

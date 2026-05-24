@@ -1,58 +1,53 @@
-// @ts-nocheck
 import * as R from 'ramda';
 import {
   IProfitLossSheetQuery,
+  ITableColumn,
   IProfitLossSheetAccountsNode,
+  ITableColumnAccessor,
+  ITableRow,
   ProfitLossNodeType,
   ProfitLossSheetRowType,
   IProfitLossSheetNode,
   IProfitLossSheetEquationNode,
   IProfitLossSheetAccountNode,
-} from './ProfitLossSheet.types';
-import {
-  ITableColumn,
-  ITableColumnAccessor,
-  ITableRow,
-} from '../../types/Table.types';
+} from '@/interfaces';
+import { tableRowMapper } from 'utils';
+import { FinancialTable } from '../FinancialTable';
 import { ProfitLossSheetBase } from './ProfitLossSheetBase';
 import { ProfitLossSheetTablePercentage } from './ProfitLossSheetTablePercentage';
 import { ProfitLossSheetQuery } from './ProfitLossSheetQuery';
 import { ProfitLossTablePreviousPeriod } from './ProfitLossTablePreviousPeriod';
 import { ProfitLossTablePreviousYear } from './ProfitLossTablePreviousYear';
+import { FinancialSheetStructure } from '../FinancialSheetStructure';
 import { ProfitLossSheetTableDatePeriods } from './ProfitLossSheetTableDatePeriods';
-import { I18nService } from 'nestjs-i18n';
-import { FinancialSheetStructure } from '../../common/FinancialSheetStructure';
-import { FinancialTable } from '../../common/FinancialTable';
-import { tableRowMapper } from '../../utils/Table.utils';
 
-export class ProfitLossSheetTable extends R.pipe(
+export class ProfitLossSheetTable extends R.compose(
   ProfitLossTablePreviousPeriod,
   ProfitLossTablePreviousYear,
   ProfitLossSheetTablePercentage,
   ProfitLossSheetTableDatePeriods,
   ProfitLossSheetBase,
   FinancialSheetStructure,
-  FinancialTable,
+  FinancialTable
 )(class {}) {
   readonly query: ProfitLossSheetQuery;
-  readonly i18n: I18nService;
-
-  private baseCurrency: string;
-  private secondaryCurrency: string;
-  private secondaryRate: number;
 
   /**
    * Constructor method.
    * @param {} date
    * @param {IProfitLossSheetQuery} query
    */
+  private baseCurrency: string;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
+
   constructor(
     data: any,
     query: IProfitLossSheetQuery,
-    i18n: I18nService,
+    i18n: any,
     baseCurrency?: string,
     secondaryCurrency?: string,
-    secondaryRate?: number,
+    secondaryRate?: number
   ) {
     super();
 
@@ -65,22 +60,14 @@ export class ProfitLossSheetTable extends R.pipe(
   }
 
   private decorateNodeSecondary = (node: any): any => {
-    if (
-      !this.secondaryCurrency ||
-      !this.secondaryRate ||
-      node.total?.amount == null
-    ) {
+    if (!this.secondaryCurrency || !this.secondaryRate || node.total?.amount == null) {
       return node;
     }
-
     const converted = node.total.amount * this.secondaryRate;
-
     return {
       ...node,
       secondary: {
-        formattedAmount: this.formatTotalNumber(converted, {
-          currencyCode: this.secondaryCurrency,
-        }),
+        formattedAmount: this.formatTotalNumber(converted, { currencyCode: this.secondaryCurrency }),
       },
     };
   };
@@ -93,26 +80,23 @@ export class ProfitLossSheetTable extends R.pipe(
    * @return {ITableColumnAccessor[]}
    */
   private totalColumnAccessor = (): ITableColumnAccessor[] => {
-    const primaryAccessor = [
-      { key: 'total', accessor: 'total.formattedAmount' },
-    ];
+    const primaryAccessor = [{ key: 'total', accessor: 'total.formattedAmount' }];
     const secondaryAccessor =
       this.secondaryCurrency && this.secondaryRate
         ? [{ key: 'secondary_total', accessor: 'secondary.formattedAmount' }]
         : [];
-
     return R.pipe(
       R.when(
         this.query.isPreviousPeriodActive,
-        R.concat(this.previousPeriodColumnAccessor()),
+        R.concat(this.previousPeriodColumnAccessor())
       ),
       R.when(
         this.query.isPreviousYearActive,
-        R.concat(this.previousYearColumnAccessor()),
+        R.concat(this.previousYearColumnAccessor())
       ),
       R.concat(this.percentageColumnsAccessor()),
       R.concat(primaryAccessor),
-      R.concat(secondaryAccessor),
+      R.concat(secondaryAccessor)
     )([]);
   };
 
@@ -126,8 +110,8 @@ export class ProfitLossSheetTable extends R.pipe(
       R.ifElse(
         this.query.isDatePeriodsColumnsType,
         R.concat(this.datePeriodsColumnsAccessors()),
-        R.concat(this.totalColumnAccessor()),
-      ),
+        R.concat(this.totalColumnAccessor())
+      )
     )([]);
   };
 
@@ -137,7 +121,7 @@ export class ProfitLossSheetTable extends R.pipe(
    * @returns {ITableRow}
    */
   private accountNodeToTableRow = (
-    node: IProfitLossSheetAccountNode,
+    node: IProfitLossSheetAccountNode
   ): ITableRow => {
     const columns = this.commonColumnsAccessors();
     const meta = {
@@ -153,7 +137,7 @@ export class ProfitLossSheetTable extends R.pipe(
    * @returns {ITableRow}
    */
   private accountsNodeToTableRow = (
-    node: IProfitLossSheetAccountsNode,
+    node: IProfitLossSheetAccountsNode
   ): ITableRow => {
     const columns = this.commonColumnsAccessors();
     const meta = {
@@ -169,7 +153,7 @@ export class ProfitLossSheetTable extends R.pipe(
    * @returns {ITableRow}
    */
   private equationNodeToTableRow = (
-    node: IProfitLossSheetEquationNode,
+    node: IProfitLossSheetEquationNode
   ): ITableRow => {
     const columns = this.commonColumnsAccessors();
 
@@ -205,7 +189,7 @@ export class ProfitLossSheetTable extends R.pipe(
    * @returns {ITableRow}
    */
   private nodesToTableRowsCompose = (
-    nodes: IProfitLossSheetNode[],
+    nodes: IProfitLossSheetNode[]
   ): ITableRow[] => {
     return this.mapNodesDeep(nodes, this.nodeToTableRowCompose);
   };
@@ -217,7 +201,7 @@ export class ProfitLossSheetTable extends R.pipe(
   public tableRows = (): ITableRow[] => {
     return R.compose(
       this.addTotalRows,
-      this.nodesToTableRowsCompose,
+      this.nodesToTableRowsCompose
     )(this.reportData);
   };
 
@@ -229,28 +213,22 @@ export class ProfitLossSheetTable extends R.pipe(
    * @returns {ITableColumn[]}
    */
   private tableColumnChildren = (): ITableColumn[] => {
-    const totalChildren: ITableColumn[] = [
-      { key: 'total', label: this.i18n.t('profit_loss_sheet.total') },
-    ];
-
-    if (this.secondaryCurrency && this.secondaryRate) {
-      totalChildren.push({
-        key: 'secondary_total',
-        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('profit_loss_sheet.total')}`,
-      });
-    }
-
     return R.compose(
-      R.unless(R.isEmpty, R.concat(totalChildren)),
+      R.unless(
+        R.isEmpty,
+        R.concat([
+          { key: 'total', label: this.i18n.__('profit_loss_sheet.total') },
+        ])
+      ),
       R.concat(this.percentageColumns()),
       R.when(
         this.query.isPreviousYearActive,
-        R.concat(this.getPreviousYearColumns()),
+        R.concat(this.getPreviousYearColumns())
       ),
       R.when(
         this.query.isPreviousPeriodActive,
-        R.concat(this.getPreviousPeriodColumns()),
-      ),
+        R.concat(this.getPreviousPeriodColumns())
+      )
     )([]);
   };
 
@@ -260,8 +238,8 @@ export class ProfitLossSheetTable extends R.pipe(
    */
   private totalColumn = (): ITableColumn[] => {
     const label = this.baseCurrency
-      ? `${this.i18n.t('profit_loss_sheet.total')} (${this.baseCurrency})`
-      : this.i18n.t('profit_loss_sheet.total');
+      ? `${this.i18n.__('profit_loss_sheet.total')} (${this.baseCurrency})`
+      : this.i18n.__('profit_loss_sheet.total');
     const columns: ITableColumn[] = [
       {
         key: 'total',
@@ -269,14 +247,12 @@ export class ProfitLossSheetTable extends R.pipe(
         children: this.tableColumnChildren(),
       },
     ];
-
     if (this.secondaryCurrency && this.secondaryRate) {
       columns.push({
         key: 'secondary_total',
-        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('profit_loss_sheet.total')}`,
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.__('profit_loss_sheet.total')}`,
       });
     }
-
     return columns;
   };
 
@@ -288,13 +264,13 @@ export class ProfitLossSheetTable extends R.pipe(
     return R.compose(
       this.tableColumnsCellIndexing,
       R.concat([
-        { key: 'name', label: this.i18n.t('profit_loss_sheet.account_name') },
+        { key: 'name', label: this.i18n.__('profit_loss_sheet.account_name') },
       ]),
       R.ifElse(
         this.query.isDatePeriodsColumnsType,
         R.concat(this.datePeriodsColumns()),
-        R.concat(this.totalColumn()),
-      ),
+        R.concat(this.totalColumn())
+      )
     )([]);
   };
 }

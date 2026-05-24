@@ -1,13 +1,8 @@
 node_modules/
-
-# Docker volumes data directory
+.pnpm-store/
+.pnpm-debug.log
+package-lock.json
+# Runtime / host data at repo root only — do not ignore packages/server/src/data (required for builds).
 /data
-
-# Production env file 
 .env
-
 test-results/
-.qodo
-
-
-.pnpm-store

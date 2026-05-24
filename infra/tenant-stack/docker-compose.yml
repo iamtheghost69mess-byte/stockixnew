@@ -63,9 +63,9 @@ services:
       mysql:
         condition: service_healthy
       mongo:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       # Official image loads newrelic; without these it logs bootstrap errors locally.
       - NEW_RELIC_ENABLED=false
