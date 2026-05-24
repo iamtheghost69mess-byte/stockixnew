@@ -55,7 +55,9 @@ pnpm dev
 | App | URL | Credentials |
 |-----|-----|-------------|
 | Dashboard | http://localhost:3000 | `admin@localhost` / `admin` |
-| PMS (in dashboard) | http://localhost:3000/pms | Select **PMS Demo** tenant (seeded by `setup:local`) |
+| Platform login | http://localhost:3000/login | `admin@localhost` / `admin` |
+| PMS (platform admin) | http://localhost:3000/pms | Same login; select **PMS Demo** tenant |
+| Tenant PMS app | http://localhost:3004 | Full property-manager UI (sidebar, properties, bookings) |
 | API | http://localhost:4000 | — |
 | PMS API (Hono) | http://localhost:3003 | Proxied via control-plane API `/pms/api/*` |
 | POS platform API | http://localhost:8010 | `POS_PLATFORM_API_KEY` in root `.env` |

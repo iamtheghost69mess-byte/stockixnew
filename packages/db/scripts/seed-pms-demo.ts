@@ -92,8 +92,55 @@ try {
     `;
   }
 
+  const existingProperty = await sql`
+    SELECT id FROM pms_properties WHERE tenant_id = ${tenantId} LIMIT 1
+  `;
+  if (existingProperty.length === 0) {
+    await sql`
+      INSERT INTO pms_properties (tenant_id, name, type, address, city, country, description)
+      VALUES (
+        ${tenantId},
+        ${"Grand Horizon Demo Hotel"},
+        ${"hotel"},
+        ${"102 Ocean Drive"},
+        ${"Miami"},
+        ${"USA"},
+        ${"Sample property for local PMS development."}
+      )
+    `;
+    console.log("Created demo property for", DEMO_SLUG);
+  }
+
+  const prop = await sql`
+    SELECT id FROM pms_properties WHERE tenant_id = ${tenantId} LIMIT 1
+  `;
+  if (prop.length > 0) {
+    const propertyId = prop[0]!.id as string;
+    const existingRoom = await sql`
+      SELECT id FROM pms_rooms WHERE tenant_id = ${tenantId} LIMIT 1
+    `;
+    if (existingRoom.length === 0) {
+      await sql`
+        INSERT INTO pms_rooms (
+          tenant_id, property_id, name, type, capacity, rate_cents, status
+        )
+        VALUES (
+          ${tenantId},
+          ${propertyId},
+          ${"Ocean View Suite"},
+          ${"suite"},
+          ${4},
+          ${25000},
+          ${"available"}
+        )
+      `;
+      console.log("Created demo room for", DEMO_SLUG);
+    }
+  }
+
   console.log("\nPMS demo tenant ready.");
-  console.log("Open http://localhost:3000/pms and select", DEMO_NAME);
+  console.log("Platform admin UI: http://localhost:3000/pms → select", DEMO_NAME);
+  console.log("Tenant PMS app:    http://localhost:3004 (after pnpm dev)");
   console.log("Tenant id:", tenantId);
 } catch (e) {
   console.error(e);
