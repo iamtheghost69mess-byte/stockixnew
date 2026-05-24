@@ -109,6 +109,30 @@ process.env.PROVISION_MODULE_GATING === "1"
 | POS | `infra/pos-tenant-stack/docker-compose.yml` | `stockix-pos-{slug}` |
 | PMS | `infra/pms-tenant-stack/docker-compose.yml` | `stockix-pms-{slug}` |
 
+### Module matrix test (`pnpm provision:modules`)
+
+End-to-end gate for **accounting only**, **POS only**, and **accounting+POS**:
+
+```bash
+pnpm infra:worker:build          # then restart worker (see below)
+pnpm pos:images:build            # first time / after POS Dockerfile changes
+pnpm provision:modules -- --preflight
+pnpm provision:modules -- --only accounting
+pnpm provision:modules -- --only pos
+pnpm provision:modules -- --only both
+pnpm provision:modules
+```
+
+Requires: API + worker, Docker, seeded owners, `PROVISION_MODULE_GATING=1` for true POS-only (no Finance). Script: `apps/api/scripts/provision-module-matrix.mjs`.
+
+**Worker bundle reload:** `pnpm dev` starts `infra/worker-service/.runtime/worker.js` once. After changing worker code, run `pnpm infra:worker:build` and **restart the worker** (or restart `pnpm dev`). Otherwise an old bundle can still fail steps like `activate_warehouses` even though source is fixed. Startup logs include `runtimeBundleMtime`.
+
+**POS images:** Set `POS_APP_ROOT` to `services/posnew` (default). Build base images before provisioning: `pnpm pos:images:build`.
+
+**Finance API keys:** Internal HTTP responses use snake_case; workers normalize via `@repo/shared/finance-api` (`parseFinanceApiJsonText`).
+
+Test tenants use slug prefix `mod-*`; remove rows and `docker compose -p stockix-mod-*` projects when cleaning up.
+
 ---
 
 ## 3. License System
@@ -400,6 +424,7 @@ Run after deploy with live Finance stack, worker, and API.
 ### Worker (Phase 0)
 
 - [x] `pnpm infra:worker:build` → `infra/worker-service/.runtime/worker.js`
+- [x] **Restart worker after rebuild** when using `pnpm dev` (stale bundle otherwise)
 - [x] `buildTenantSignupEnv()` writes only `SIGNUP_DISABLED=true` (unit test)
 - [ ] Redeploy worker on **staging/prod**
 

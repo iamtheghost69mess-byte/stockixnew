@@ -125,7 +125,7 @@ Root scripts orchestrate Postgres + Redis (`db:up`, `db:migrate`), `@repo/auth` 
 | `infra/dev/docker-compose.yml` | Postgres only (port 54330) |
 | `infra/prod/docker-compose.yml` | Traefik, postgres, api, dashboard, worker, Chatwoot |
 | `infra/tenant-stack/docker-compose.yml` | Per-tenant **Finance** stack |
-| `infra/pos-tenant-stack/docker-compose.yml` | Per-tenant POS + `pos-bigcapital-worker` |
+| `infra/pos-tenant-stack/docker-compose.yml` | Per-tenant POS + `pos-bigcapital-worker` (build: `pnpm pos:images:build`) |
 | `infra/pms-tenant-stack/docker-compose.yml` | Per-tenant PMS |
 
 ### Pattern inconsistencies (by design today)
@@ -387,3 +387,5 @@ Double-entry GL, trial balance, P&L, balance sheet, cash flow, AR/AP aging, sale
 | Finance license sync | `apps/api/src/finance-license.client.ts` |
 | Dashboard tenant wizard | `apps/dashboard/components/tenant-create-wizard.tsx` |
 | Org provision | `apps/api/src/org-provision.ts`, `infra/worker-service/src/org-provision-runtime.ts` |
+| Module provision test | `pnpm provision:modules` — see [PROVISIONING_REFERENCE.md](./PROVISIONING_REFERENCE.md) |
+| POS image prebuild | `pnpm pos:images:build` → `scripts/build-pos-tenant-images.mjs` |

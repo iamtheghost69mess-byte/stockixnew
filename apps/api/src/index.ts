@@ -3471,7 +3471,9 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       readiness,
       correlationId,
       jobId: lastJob.id,
-      tenantId: typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null,
+      tenantId:
+        (typeof lastJob.tenantId === "string" ? lastJob.tenantId : null)
+        ?? (typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null),
       deploymentId: typeof eventMeta.deploymentId === "string" ? eventMeta.deploymentId : null,
       composeProjectName:
         typeof eventMeta.composeProjectName === "string" ? eventMeta.composeProjectName : null,

@@ -1,6 +1,9 @@
 import { execa } from "execa";
 
-import { REQUIRED_STOCKIX_TENANT_IMAGES } from "./required-tenant-images.js";
+import {
+  RECOMMENDED_POS_TENANT_IMAGES,
+  REQUIRED_STOCKIX_TENANT_IMAGES,
+} from "./required-tenant-images.js";
 
 async function imageExists(tag: string): Promise<boolean> {
   try {
@@ -29,4 +32,18 @@ export async function checkRequiredTenantImages(): Promise<void> {
     return;
   }
   console.log("[worker] All tenant images pre-built and ready.");
+
+  const missingPos: string[] = [];
+  for (const image of RECOMMENDED_POS_TENANT_IMAGES) {
+    if (!(await imageExists(image))) {
+      missingPos.push(image);
+    }
+  }
+  if (missingPos.length > 0) {
+    console.warn("[worker] POS module images not pre-built (POS provision will build on first job):");
+    for (const img of missingPos) {
+      console.warn(`[worker]   - ${img}`);
+    }
+    console.warn("[worker] Run: pnpm pos:images:build");
+  }
 }

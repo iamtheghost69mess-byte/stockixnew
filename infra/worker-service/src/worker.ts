@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { execa } from "execa";
 import { apiConfig } from "@repo/config";
 import {
@@ -64,10 +67,20 @@ const apiReadyMaxWaitMs = 180_000;
 const apiUnreachableLogIntervalMs = 30_000;
 let shuttingDown = false;
 let lastApiUnreachableLogMs = 0;
+function runtimeBundleMtime(): string | null {
+  try {
+    const bundlePath = join(dirname(fileURLToPath(import.meta.url)), "worker.js");
+    return statSync(bundlePath).mtime.toISOString();
+  } catch {
+    return null;
+  }
+}
+
 const runtimeFingerprint = {
   workerId,
   startedAt: new Date().toISOString(),
   entrypoint: import.meta.url,
+  runtimeBundleMtime: runtimeBundleMtime(),
   nodeVersion: process.version,
 };
 

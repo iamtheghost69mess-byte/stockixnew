@@ -6,6 +6,9 @@ var __export = (target, all) => {
 
 // ../../infra/worker-service/src/worker.ts
 import { randomUUID } from "crypto";
+import { statSync } from "fs";
+import { dirname as dirname2, join as join9 } from "path";
+import { fileURLToPath as fileURLToPath3 } from "url";
 import { execa as execa5 } from "execa";
 
 // ../../packages/config/src/index.ts
@@ -3676,6 +3679,10 @@ var REQUIRED_STOCKIX_TENANT_IMAGES = [
   "stockix-database-migration:local",
   "stockix-nginx:local"
 ];
+var RECOMMENDED_POS_TENANT_IMAGES = [
+  "stockix-pos-backend:local",
+  "stockix-pos-frontend:local"
+];
 
 // ../../infra/worker-service/domain/provisioning/check-tenant-images.ts
 async function imageExists(tag) {
@@ -3703,6 +3710,19 @@ async function checkRequiredTenantImages() {
     return;
   }
   console.log("[worker] All tenant images pre-built and ready.");
+  const missingPos = [];
+  for (const image of RECOMMENDED_POS_TENANT_IMAGES) {
+    if (!await imageExists(image)) {
+      missingPos.push(image);
+    }
+  }
+  if (missingPos.length > 0) {
+    console.warn("[worker] POS module images not pre-built (POS provision will build on first job):");
+    for (const img of missingPos) {
+      console.warn(`[worker]   - ${img}`);
+    }
+    console.warn("[worker] Run: pnpm pos:images:build");
+  }
 }
 
 // ../../infra/worker-service/domain/provisioner.ts
@@ -4337,7 +4357,7 @@ async function provisionChatwootAccount(opts) {
 }
 
 // ../../infra/worker-service/src/module-stacks.ts
-import { join as join6 } from "path";
+import { isAbsolute, join as join6 } from "path";
 import { execa as execa2 } from "execa";
 import { eq as eq7 } from "drizzle-orm";
 
@@ -4674,7 +4694,8 @@ async function resolvePosPorts(db, log) {
 async function provisionPosStack(opts) {
   const composeFile = join6(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
   const project = `stockix-pos-${opts.slug}`;
-  const posAppRoot = process.env.POS_APP_ROOT ?? join6(repoRoot(), "services", "posnew");
+  const posAppRootRaw = process.env.POS_APP_ROOT ?? join6("services", "posnew");
+  const posAppRoot = isAbsolute(posAppRootRaw) ? posAppRootRaw : join6(repoRoot(), posAppRootRaw);
   const platformApiKey = posConfig.platformApiKey.trim();
   const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug);
   const rootDomain = apiConfig.rootDomain || "example.com";
@@ -4684,27 +4705,48 @@ async function provisionPosStack(opts) {
     internalPort: opts.financeInternalPort
   }) : "";
   opts.log(`[provision][pos] compose up project=${project}`);
-  await execa2(
-    "docker",
-    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
-    {
-      env: {
-        ...process.env,
-        COMPOSE_PROJECT_NAME: project,
-        POS_APP_ROOT: posAppRoot,
-        POS_HOST_PORT: String(backendPort),
-        POS_FRONTEND_HOST_PORT: String(frontendPort),
-        TENANT_ID: opts.tenantId,
-        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
-        POS_PLATFORM_API_KEY: platformApiKey,
-        POS_BACKEND_URL: posApiUrl,
-        POS_FRONTEND_URL: posUrl,
-        ROOT_DOMAIN: rootDomain,
-        ...financeInternalBaseUrl ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl } : {}
-      },
-      stdio: "inherit"
+  const stockixRepoRoot = repoRoot();
+  const composeEnv = {
+    ...process.env,
+    COMPOSE_PROJECT_NAME: project,
+    STOCKIX_REPO_ROOT: stockixRepoRoot,
+    POS_APP_ROOT: posAppRoot,
+    POS_HOST_PORT: String(backendPort),
+    POS_FRONTEND_HOST_PORT: String(frontendPort),
+    TENANT_ID: opts.tenantId,
+    AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+    POS_PLATFORM_API_KEY: platformApiKey,
+    POS_BACKEND_URL: posApiUrl,
+    POS_FRONTEND_URL: posUrl,
+    ROOT_DOMAIN: rootDomain,
+    ...financeInternalBaseUrl ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl } : {}
+  };
+  try {
+    const composeRun = await execa2(
+      "docker",
+      ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+      { env: composeEnv, stdio: "pipe", reject: false }
+    );
+    if (composeRun.stdout) {
+      for (const line of composeRun.stdout.split("\n").slice(-20)) {
+        if (line.trim()) opts.log(`[provision][pos][compose] ${line}`);
+      }
     }
-  );
+    if (composeRun.exitCode !== 0) {
+      const stderrTail = (composeRun.stderr ?? "").slice(-2048);
+      opts.log(`[provision][pos][compose] stderr (tail):
+${stderrTail}`);
+      throw new Error(
+        `docker compose exit ${composeRun.exitCode}: ${stderrTail.slice(0, 400) || "see worker logs"}`
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("docker compose exit")) {
+      throw error;
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`POS compose failed: ${msg}`);
+  }
   const bootstrap = await bootstrapPosOrganization({
     slug: opts.slug,
     tenantName: opts.tenantName,
@@ -6756,10 +6798,19 @@ var apiReadyMaxWaitMs = 18e4;
 var apiUnreachableLogIntervalMs = 3e4;
 var shuttingDown = false;
 var lastApiUnreachableLogMs = 0;
+function runtimeBundleMtime() {
+  try {
+    const bundlePath = join9(dirname2(fileURLToPath3(import.meta.url)), "worker.js");
+    return statSync(bundlePath).mtime.toISOString();
+  } catch {
+    return null;
+  }
+}
 var runtimeFingerprint = {
   workerId,
   startedAt: (/* @__PURE__ */ new Date()).toISOString(),
   entrypoint: import.meta.url,
+  runtimeBundleMtime: runtimeBundleMtime(),
   nodeVersion: process.version
 };
 function timeoutSignal(ms) {

@@ -13,15 +13,22 @@
  *   - Worker: `pnpm infra:worker:dev` (or included in `pnpm dev`)
  *   - Docker running; Finance/POS images available (first run can take 15–45m)
  *   - DB seeded: pnpm --filter @repo/db db:seed:local
- *   - For POS scenarios: shared POS backend on :8010 OR per-tenant pos compose
+ *   - For POS: pnpm pos:images:build then per-tenant stockix-pos-{slug} compose
  *
  * Env: STOCKIX_API_URL, OWNER_ID, PROVISION_ADMIN_EMAIL, PROVISION_POLL_MS,
  *      PROVISION_MAX_MS, POS_PLATFORM_BASE_URL, POS_PLATFORM_API_KEY,
  *      PROVISION_MODULE_GATING (0 default — POS-only still provisions Finance unless gating=1)
  */
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { env } from "@repo/config";
 import { execa } from "execa";
+
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const posAppRaw = process.env.POS_APP_ROOT?.trim() || path.join("services", "posnew");
+const POS_APP_ROOT = path.isAbsolute(posAppRaw) ? posAppRaw : path.join(REPO_ROOT, posAppRaw);
+const POS_COMPOSE = path.join(REPO_ROOT, "infra", "pos-tenant-stack", "docker-compose.yml");
 
 const API = env.STOCKIX_API_URL.replace(/\/$/, "");
 const POLL_MS = env.PROVISION_POLL_MS;
@@ -218,6 +225,27 @@ async function preflight() {
 
   if (!POS_API_KEY) {
     warn("POS_PLATFORM_API_KEY unset — org API verification will be skipped");
+  }
+
+  try {
+    await execa(
+      "docker",
+      ["compose", "-f", POS_COMPOSE, "config"],
+      {
+        env: {
+          ...process.env,
+          STOCKIX_REPO_ROOT: REPO_ROOT,
+          POS_APP_ROOT,
+          COMPOSE_PROJECT_NAME: "stockix-pos-preflight",
+        },
+        stdio: "pipe",
+      },
+    );
+    ok(`POS compose config valid (POS_APP_ROOT=${POS_APP_ROOT})`);
+  } catch (e) {
+    fail("POS docker-compose config invalid — run pnpm pos:images:build", {
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 
@@ -576,12 +604,27 @@ async function runScenario(scenario, ownerId) {
     else if (!POS_API_KEY) warn(`Skipped POS org API check: ${orgCheck.reason}`);
     else checks.push(`POS org API: ${orgCheck.reason}`);
 
+    const posStackFailed = events.some(
+      (e) =>
+        e.phase === "pos.stack.failed"
+        || (e.meta?.operationKey === "pos.stack" && e.level === "error"),
+    );
+    if (posStackFailed) {
+      checks.push("pos.stack.failed in provision events");
+    } else if (eventsForOp(events, "pos.stack").length || events.some((e) => e.phase === "pos.stack.completed")) {
+      ok("pos.stack traced");
+    }
+
     const posProblems = assertNoFailedOps(events, [
       "tenant.provision_pos_stack",
       "tenant.bootstrap_pos",
+      "tenant.wire_pos_integration",
     ]);
     if (posProblems.length) {
       checks.push(`POS provision errors: ${JSON.stringify(posProblems)}`);
+    }
+    if (scenario.id === "both" && eventsForOp(events, "tenant.wire_pos_integration").length === 0) {
+      checks.push("expected tenant.wire_pos_integration for accounting+pos");
     }
   } else {
     if (!tenant.posOrganizationId) ok("No POS organization (accounting-only)");
@@ -609,7 +652,9 @@ async function runScenario(scenario, ownerId) {
 
   if (tenant.status === "active") ok(`tenant.status=active`);
   else if (expectPos && tenant.status === "partial") {
-    warn(`tenant.status=partial (deployment may still list POS — check deployment.status)`);
+    checks.push(
+      `tenant.status=partial — POS required but incomplete (retry POS or check deployment.lastError: ${dep.lastError ?? "n/a"})`,
+    );
   } else {
     checks.push(`unexpected tenant.status=${tenant.status}`);
   }

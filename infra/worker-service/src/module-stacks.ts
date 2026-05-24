@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import { execa } from "execa";
 
@@ -266,7 +266,10 @@ export async function provisionPosStack(
 
   const project = `stockix-pos-${opts.slug}`;
 
-  const posAppRoot = process.env.POS_APP_ROOT ?? join(repoRoot(), "services", "posnew");
+  const posAppRootRaw = process.env.POS_APP_ROOT ?? join("services", "posnew");
+  const posAppRoot = isAbsolute(posAppRootRaw)
+    ? posAppRootRaw
+    : join(repoRoot(), posAppRootRaw);
 
   const platformApiKey = posConfig.platformApiKey.trim();
 
@@ -290,49 +293,50 @@ export async function provisionPosStack(
 
   opts.log(`[provision][pos] compose up project=${project}`);
 
-  await execa(
+  const stockixRepoRoot = repoRoot();
+  const composeEnv = {
+    ...process.env,
+    COMPOSE_PROJECT_NAME: project,
+    STOCKIX_REPO_ROOT: stockixRepoRoot,
+    POS_APP_ROOT: posAppRoot,
+    POS_HOST_PORT: String(backendPort),
+    POS_FRONTEND_HOST_PORT: String(frontendPort),
+    TENANT_ID: opts.tenantId,
+    AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+    POS_PLATFORM_API_KEY: platformApiKey,
+    POS_BACKEND_URL: posApiUrl,
+    POS_FRONTEND_URL: posUrl,
+    ROOT_DOMAIN: rootDomain,
+    ...(financeInternalBaseUrl
+      ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
+      : {}),
+  };
 
-    "docker",
-
-    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
-
-    {
-
-      env: {
-
-        ...process.env,
-
-        COMPOSE_PROJECT_NAME: project,
-
-        POS_APP_ROOT: posAppRoot,
-
-        POS_HOST_PORT: String(backendPort),
-
-        POS_FRONTEND_HOST_PORT: String(frontendPort),
-
-        TENANT_ID: opts.tenantId,
-
-        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
-
-        POS_PLATFORM_API_KEY: platformApiKey,
-
-        POS_BACKEND_URL: posApiUrl,
-
-        POS_FRONTEND_URL: posUrl,
-
-        ROOT_DOMAIN: rootDomain,
-
-        ...(financeInternalBaseUrl
-          ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
-          : {}),
-
-      },
-
-      stdio: "inherit",
-
-    },
-
-  );
+  try {
+    const composeRun = await execa(
+      "docker",
+      ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+      { env: composeEnv, stdio: "pipe", reject: false },
+    );
+    if (composeRun.stdout) {
+      for (const line of composeRun.stdout.split("\n").slice(-20)) {
+        if (line.trim()) opts.log(`[provision][pos][compose] ${line}`);
+      }
+    }
+    if (composeRun.exitCode !== 0) {
+      const stderrTail = (composeRun.stderr ?? "").slice(-2048);
+      opts.log(`[provision][pos][compose] stderr (tail):\n${stderrTail}`);
+      throw new Error(
+        `docker compose exit ${composeRun.exitCode}: ${stderrTail.slice(0, 400) || "see worker logs"}`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("docker compose exit")) {
+      throw error;
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`POS compose failed: ${msg}`);
+  }
 
 
 

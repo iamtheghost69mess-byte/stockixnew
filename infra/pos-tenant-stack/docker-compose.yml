@@ -1,9 +1,11 @@
 # Per-tenant POS stack (provisioned when tenant modules includes "pos").
+# Build: pnpm pos:images:build  (from repo root; sets STOCKIX_REPO_ROOT + POS_APP_ROOT)
 services:
   pos-backend:
     image: stockix-pos-backend:local
     build:
-      context: ${POS_APP_ROOT}/apps/pos-backend
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -28,7 +30,8 @@ services:
   pos-bigcapital-worker:
     image: stockix-pos-backend:local
     build:
-      context: ${POS_APP_ROOT}/apps/pos-backend
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
     command: node workers/bigcapitalSyncWorker.js
     extra_hosts:
@@ -49,7 +52,8 @@ services:
   pos-frontend:
     image: stockix-pos-frontend:local
     build:
-      context: ${POS_APP_ROOT}/apps/pos-frontend2
+      context: ${STOCKIX_REPO_ROOT}
+      dockerfile: services/posnew/apps/pos-frontend2/Dockerfile
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}

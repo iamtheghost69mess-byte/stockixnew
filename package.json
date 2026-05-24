@@ -26,6 +26,7 @@
     "db:reset:local": "docker compose -f infra/dev/docker-compose.yml down -v && pnpm setup:local",
     "cleanup:tenant-local": "node scripts/cleanup-tenant-docker-local.mjs",
     "docker:prebuild": "node scripts/prebuild-tenant-images.mjs",
+    "pos:images:build": "node scripts/build-pos-tenant-images.mjs",
     "docker:prebuild:force": "node scripts/prebuild-tenant-images.mjs --force",
     "docker:check": "node scripts/prebuild-tenant-images.mjs --verify",
     "provision:diagnose": "pnpm --filter api exec node scripts/provision-diagnose.mjs --",
