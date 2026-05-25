@@ -12,6 +12,8 @@ export type WirePosBigcapitalIntegrationInput = {
   walkInCustomerId: number;
   cashAccountId: number;
   cardAccountId: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
   defaultWarehouseId?: number;
   log: (message: string) => void;
   posBaseUrl?: string;
@@ -73,6 +75,12 @@ export async function wirePosBigcapitalIntegration(
     defaultCashDepositAccountId: input.cashAccountId,
     defaultCardDepositAccountId: input.cardAccountId,
   };
+  if (input.serviceChargeItemId && input.serviceChargeItemId > 0) {
+    body.serviceChargeItemId = input.serviceChargeItemId;
+  }
+  if (input.discountItemId && input.discountItemId > 0) {
+    body.discountItemId = input.discountItemId;
+  }
   if (input.defaultWarehouseId && input.defaultWarehouseId > 0) {
     body.defaultWarehouseId = input.defaultWarehouseId;
   }

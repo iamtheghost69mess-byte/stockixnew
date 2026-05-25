@@ -64,6 +64,10 @@ const wireBigcapitalIntegration = async (req, res, next) => {
         prior.defaultCardDepositAccountId,
       defaultWarehouseId:
         parsePositiveInt(body.defaultWarehouseId) ?? prior.defaultWarehouseId,
+      serviceChargeItemId:
+        parsePositiveInt(body.serviceChargeItemId) ?? prior.serviceChargeItemId,
+      discountItemId:
+        parsePositiveInt(body.discountItemId) ?? prior.discountItemId,
       syncStatus: "idle",
       lastSyncError: null,
     };

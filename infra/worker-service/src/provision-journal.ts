@@ -11,6 +11,8 @@ export type ProvisionJournalState = {
   walkInCustomerId?: number;
   cashAccountId?: number;
   cardAccountId?: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
 };
 
 function readPositiveInt(value: unknown): number | undefined {
@@ -66,6 +68,12 @@ export async function loadProvisionJournalState(
 
     const card = readPositiveInt(meta?.cardAccountId);
     if (card) state.cardAccountId = card;
+
+    const serviceCharge = readPositiveInt(meta?.serviceChargeItemId);
+    if (serviceCharge) state.serviceChargeItemId = serviceCharge;
+
+    const discount = readPositiveInt(meta?.discountItemId);
+    if (discount) state.discountItemId = discount;
   }
 
   return state;
