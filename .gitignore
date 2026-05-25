@@ -52,6 +52,7 @@ yarn-error.log*
 *.pem
 
 # Services — build artifacts (nested repos removed; tracked by root)
+services/posnew/.nx/
 services/posnew/node_modules/
 services/posnew/apps/pos-backend/dist/
 # Legacy PMS trees removed from repo (local copies may linger until deleted)

@@ -37,6 +37,7 @@ import {
   posCreateSplitBill,
   posGetOpenOrderForTable,
   posMarkOrderPaid,
+  posPatchOrderItems,
   posPaySplitBillSplit,
   posPrintOrder,
 } from "@/lib/pos-order-api";

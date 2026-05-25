@@ -2,20 +2,6 @@
   "name": "studio-admin",
   "version": "2.2.0",
   "private": true,
-  "nx": {
-    "tags": [
-      "type:app",
-      "scope:studio"
-    ],
-    "targets": {
-      "build": {
-        "executor": "nx:run-script",
-        "options": {
-          "script": "build"
-        }
-      }
-    }
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -25,7 +11,8 @@
     "check": "biome check",
     "check:fix": "biome check --write",
     "prepare": "husky",
-    "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts"
+    "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts",
+    "postinstall": "patch-package"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx}": [
@@ -39,7 +26,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@hookform/resolvers": "^5.2.2",
     "@point-of-sale/receipt-printer-encoder": "^3.0.3",
-    "@restaurant-pos/ui": "*",
+    "@restaurant-pos/ui": "workspace:*",
     "@tanstack/react-query": "^5.97.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
@@ -78,6 +65,7 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
+    "patch-package": "^8.0.1",
     "postcss": "^8.5.9",
     "tailwindcss": "^4.1.5",
     "ts-node": "^10.9.2",
