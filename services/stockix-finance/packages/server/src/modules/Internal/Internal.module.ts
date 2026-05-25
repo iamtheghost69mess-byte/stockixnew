@@ -13,6 +13,7 @@ import { SaleReceiptsModule } from '@/modules/SaleReceipts/SaleReceipts.module';
 import { WarehousesModule } from '@/modules/Warehouses/Warehouses.module';
 import { CustomersModule } from '@/modules/Customers/Customers.module';
 import { AccountsModule } from '@/modules/Accounts/Accounts.module';
+import { ItemsModule } from '@/modules/Items/Items.module';
 import { AttachUserToTenantService } from './commands/AttachUserToTenant.service';
 import { InternalActivateWarehousesService } from './commands/InternalActivateWarehouses.service';
 import { InternalSeedPosDefaultsService } from './commands/InternalSeedPosDefaults.service';
@@ -34,6 +35,7 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     WarehousesModule,
     CustomersModule,
     AccountsModule,
+    ItemsModule,
   ],
   controllers: [
     InternalController,
