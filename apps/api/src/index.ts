@@ -1862,11 +1862,19 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         ? String((currentJob.payload as { module: string }).module)
         : null;
     if (moduleFromPayload) {
-      notifyModuleAdded(db, {
-        tenantId: currentJob.tenantId,
-        module: moduleFromPayload,
-        correlationId: currentJob.correlationId,
-      });
+      if (finalTenantStatus === "partial") {
+        notifyProvisionOutcome(db, {
+          tenantId: currentJob.tenantId,
+          finalStatus: "partial",
+          correlationId: currentJob.correlationId,
+        });
+      } else {
+        notifyModuleAdded(db, {
+          tenantId: currentJob.tenantId,
+          module: moduleFromPayload,
+          correlationId: currentJob.correlationId,
+        });
+      }
     }
   }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
