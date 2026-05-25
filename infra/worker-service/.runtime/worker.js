@@ -2561,6 +2561,8 @@ __export(schema_exports, {
   pmsCleaners: () => pmsCleaners,
   pmsCleaningTasks: () => pmsCleaningTasks,
   pmsDateOverrides: () => pmsDateOverrides,
+  pmsGuestFormSubmissions: () => pmsGuestFormSubmissions,
+  pmsGuestFormTemplates: () => pmsGuestFormTemplates,
   pmsGuests: () => pmsGuests,
   pmsIcalChannels: () => pmsIcalChannels,
   pmsMessageTemplates: () => pmsMessageTemplates,
@@ -2874,6 +2876,7 @@ var licenses = pgTable(
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),
     maxOrganizations: integer("max_organizations").notNull().default(1),
+    maxUsers: integer("max_users"),
     // -1 = unlimited
     activationCount: integer("activation_count").notNull().default(0),
     gracePeriodDays: integer("grace_period_days").notNull().default(7),
@@ -3341,6 +3344,46 @@ var pmsMessageTemplates = pgTable(
     index("pms_message_templates_property_idx").on(t.propertyId)
   ]
 );
+var pmsGuestFormTemplates = pgTable(
+  "pms_guest_form_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => pmsProperties.id, {
+      onDelete: "cascade"
+    }),
+    name: text("name").notNull(),
+    /** JSON array of {id,type,label,required,helpText?,options?} */
+    fields: text("fields").notNull().default("[]"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("pms_guest_form_templates_tenant_idx").on(t.tenantId),
+    index("pms_guest_form_templates_property_idx").on(t.propertyId)
+  ]
+);
+var pmsGuestFormSubmissions = pgTable(
+  "pms_guest_form_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id").notNull().references(() => pmsBookings.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id").notNull().references(() => pmsGuestFormTemplates.id, { onDelete: "cascade" }),
+    /** Unguessable 32-char base64url — possession is the only auth. */
+    shareToken: text("share_token").notNull(),
+    /** JSON array of {fieldId,type,label,value} — null until submitted. */
+    answers: text("answers"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("pms_guest_form_submissions_tenant_idx").on(t.tenantId),
+    index("pms_guest_form_submissions_booking_idx").on(t.bookingId),
+    uniqueIndex("pms_guest_form_submissions_token_unique").on(t.shareToken)
+  ]
+);
 
 // ../../packages/db/src/allocate-tenant-port.ts
 import { sql } from "drizzle-orm";
@@ -3387,10 +3430,10 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { and as and3, eq as eq12, sql as sql2, isNotNull as isNotNull2, lte } from "drizzle-orm";
+import { and as and3, eq as eq12, sql as sql2, isNotNull as isNotNull2, lte as lte2 } from "drizzle-orm";
 
 // src/license-expire-followup.ts
-import { and as and2, eq as eq6, gte, isNotNull } from "drizzle-orm";
+import { and as and2, eq as eq6, gte, isNotNull, lte } from "drizzle-orm";
 
 // src/license-utils.ts
 import { randomBytes } from "crypto";
@@ -3485,7 +3528,13 @@ import { eq as eq4 } from "drizzle-orm";
 
 // src/finance-license.client.ts
 import { eq as eq2 } from "drizzle-orm";
-var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
+
+// src/license-constants.ts
+var DEFAULT_GRACE_PERIOD_DAYS = 7;
+var DEFAULT_MAX_USERS = 999;
+
+// src/finance-license.client.ts
+var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = DEFAULT_MAX_USERS;
 function resolveFinanceLicenseLimitFields(license, planLimits) {
   let maxOrganizations = license?.maxOrganizations ?? planLimits.maxOrganizations;
   let maxActivations = license?.maxActivations ?? planLimits.maxActivations;
@@ -3496,7 +3545,7 @@ function resolveFinanceLicenseLimitFields(license, planLimits) {
     maxActivations = planLimits.maxActivations;
   }
   return {
-    maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxUsers: license?.maxUsers ?? planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxOrganizations,
     maxActivations
   };
@@ -3510,6 +3559,9 @@ function mapStockixLicenseStatus(license, tenantStatus) {
   }
   if (license.status === "revoked") {
     return "revoked";
+  }
+  if (license.status === "suspended") {
+    return "suspended";
   }
   if (license.isPerpetual) {
     return "active";
@@ -3577,7 +3629,7 @@ async function syncFinanceLicenseForStockixTenant(db, params, log = () => {
     ),
     validFrom: (license?.validFrom ?? /* @__PURE__ */ new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
-    gracePeriodDays: license?.gracePeriodDays ?? 30,
+    gracePeriodDays: license?.gracePeriodDays ?? DEFAULT_GRACE_PERIOD_DAYS,
     ...resolveFinanceLicenseLimitFields(license, planLimits),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null
@@ -3832,7 +3884,7 @@ async function sendLicenseExpiredEmail(opts) {
     );
   }
 }
-async function sendLicenseExpiredEmailForTenant(db, tenantId) {
+async function sendLicenseExpiredEmailForTenant(db, tenantId, opts) {
   try {
     const [tenant] = await db.select({ name: tenants.name, adminEmail: tenants.adminEmail }).from(tenants).where(eq3(tenants.id, tenantId)).limit(1);
     if (!tenant) {
@@ -3843,7 +3895,11 @@ async function sendLicenseExpiredEmailForTenant(db, tenantId) {
       console.warn("[sendLicenseExpiredEmail] No admin email for tenant", tenantId);
       return;
     }
-    const license = await getActiveLicenseForTenant(db, tenantId);
+    const license = opts?.licenseId != null ? (await db.select({
+      id: licenses.id,
+      expiresAt: licenses.expiresAt,
+      gracePeriodDays: licenses.gracePeriodDays
+    }).from(licenses).where(eq3(licenses.id, opts.licenseId)).limit(1))[0] : await getActiveLicenseForTenant(db, tenantId);
     const expiredAt = license?.expiresAt ?? /* @__PURE__ */ new Date();
     const gracePeriodDays = license?.gracePeriodDays ?? 7;
     const graceEndsAt = new Date(expiredAt);
@@ -3856,6 +3912,14 @@ async function sendLicenseExpiredEmailForTenant(db, tenantId) {
       gracePeriodDays,
       graceEndsAt
     });
+    const historyLicenseId = opts?.licenseId ?? license?.id;
+    if (historyLicenseId) {
+      await insertLicenseHistory(db, {
+        licenseId: historyLicenseId,
+        action: "expired_email_sent",
+        newValues: { to: tenant.adminEmail, expiredAt: expiredAt.toISOString() }
+      });
+    }
   } catch (err) {
     console.error(
       "[sendLicenseExpiredEmail] Failed for tenant",
@@ -3881,6 +3945,17 @@ async function sendLicenseExpiringEmailForTenant(db, tenantId, opts) {
       tenantId,
       expiresAt: opts.expiresAt
     });
+    const license = opts.licenseId != null ? (await db.select({ id: licenses.id }).from(licenses).where(eq3(licenses.id, opts.licenseId)).limit(1))[0] : await getActiveLicenseForTenant(db, tenantId);
+    if (license?.id) {
+      await insertLicenseHistory(db, {
+        licenseId: license.id,
+        action: "expiry_warning_sent",
+        newValues: {
+          to: tenant.adminEmail,
+          expiresAt: opts.expiresAt.toISOString()
+        }
+      });
+    }
   } catch (err) {
     console.error(
       "[sendLicenseExpiringEmail] Failed for tenant",
@@ -3993,28 +4068,33 @@ async function posProxyJson(path2, method, body, query) {
 }
 
 // src/pos-license-sync.ts
-async function suspendPosOrgForLicense(db, tenantId, reason, log) {
+async function getPosTenantLink(db, tenantId) {
   const [row] = await db.select({
     modules: tenants.modules,
     posOrganizationId: tenantDeployments.posOrganizationId
   }).from(tenants).leftJoin(tenantDeployments, eq5(tenantDeployments.tenantId, tenants.id)).where(eq5(tenants.id, tenantId)).limit(1);
   const posOrgId = row?.posOrganizationId?.trim();
-  if (!posOrgId) return;
+  if (!posOrgId) return null;
   const modules = parseLicenseModulesJson(row?.modules);
-  if (!modules.includes("pos")) return;
+  if (!modules.includes("pos")) return null;
+  return { posOrgId, modules };
+}
+async function suspendPosOrgForLicense(db, tenantId, reason, log) {
+  const link = await getPosTenantLink(db, tenantId);
+  if (!link) return;
   const { data, status } = await posProxyJson(
-    `/organizations/${encodeURIComponent(posOrgId)}/suspend`,
+    `/organizations/${encodeURIComponent(link.posOrgId)}/suspend`,
     "POST",
     { reason }
   );
   if (status < 200 || status >= 300) {
     const message = data && typeof data === "object" && "message" in data ? String(data.message) : `HTTP ${status}`;
-    const line = `[pos-license-sync] suspend failed tenantId=${tenantId} posOrgId=${posOrgId}: ${message}`;
+    const line = `[pos-license-sync] suspend failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`;
     if (log) log(line);
     else console.error(line);
     return;
   }
-  const okLine = `[pos-license-sync] suspended POS org tenantId=${tenantId} posOrgId=${posOrgId} reason=${reason}`;
+  const okLine = `[pos-license-sync] suspended POS org tenantId=${tenantId} posOrgId=${link.posOrgId} reason=${reason}`;
   if (log) log(okLine);
   else console.log(okLine);
 }
@@ -4041,17 +4121,23 @@ async function processLicenseExpiryFollowUp(db, opts) {
         err
       );
     }
-    try {
-      await suspendPosOrgForLicense(db, license.tenantId, "license_expired", log);
-    } catch (err) {
-      console.error(
-        "[expireDueLicenses] POS suspend failed for tenant",
-        license.tenantId,
-        err
-      );
+    if (license.expiresAt) {
+      const graceEnd = new Date(license.expiresAt);
+      graceEnd.setDate(graceEnd.getDate() + (license.gracePeriodDays ?? 7));
+      if (now > graceEnd) {
+        try {
+          await suspendPosOrgForLicense(db, license.tenantId, "license_expired", log);
+        } catch (err) {
+          console.error(
+            "[expireDueLicenses] POS suspend failed for tenant",
+            license.tenantId,
+            err
+          );
+        }
+      }
     }
     try {
-      await sendLicenseExpiredEmailForTenant(db, license.tenantId);
+      await sendLicenseExpiredEmailForTenant(db, license.tenantId, { licenseId: license.id });
     } catch (err) {
       console.error(
         "[expireDueLicenses] Email failed for tenant",
@@ -4061,6 +4147,37 @@ async function processLicenseExpiryFollowUp(db, opts) {
     }
   }
   await processExpiringSoonWarnings(db, now);
+  await processPostGracePosSuspensions(db, now, log);
+}
+async function processPostGracePosSuspensions(db, now, log) {
+  const candidates = await db.select({
+    id: licenses.id,
+    tenantId: licenses.tenantId,
+    expiresAt: licenses.expiresAt,
+    gracePeriodDays: licenses.gracePeriodDays
+  }).from(licenses).where(
+    and2(
+      eq6(licenses.status, "expired"),
+      isNotNull(licenses.tenantId),
+      isNotNull(licenses.expiresAt),
+      lte(licenses.expiresAt, now)
+    )
+  );
+  for (const license of candidates) {
+    if (!license.tenantId || !license.expiresAt) continue;
+    const graceEnd = new Date(license.expiresAt);
+    graceEnd.setDate(graceEnd.getDate() + (license.gracePeriodDays ?? 7));
+    if (now <= graceEnd) continue;
+    try {
+      await suspendPosOrgForLicense(db, license.tenantId, "license_grace_ended", log);
+    } catch (err) {
+      console.error(
+        "[expireDueLicenses] Post-grace POS suspend failed for tenant",
+        license.tenantId,
+        err
+      );
+    }
+  }
 }
 async function processExpiringSoonWarnings(db, now) {
   const candidates = await db.select({
@@ -4079,13 +4196,14 @@ async function processExpiringSoonWarnings(db, now) {
   );
   for (const license of candidates) {
     if (!license.tenantId || !license.expiresAt) continue;
-    const windowEnd = new Date(now);
-    windowEnd.setDate(windowEnd.getDate() + (license.gracePeriodDays ?? 7));
-    if (license.expiresAt > windowEnd) continue;
+    const warningWindowEnd = new Date(now);
+    warningWindowEnd.setDate(warningWindowEnd.getDate() + 30);
+    if (license.expiresAt > warningWindowEnd) continue;
     try {
       await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
         expiresAt: license.expiresAt,
-        gracePeriodDays: license.gracePeriodDays ?? 7
+        gracePeriodDays: license.gracePeriodDays ?? 7,
+        licenseId: license.id
       });
     } catch (err) {
       console.error(
@@ -4994,6 +5112,22 @@ function readFullCredentialsFromJson(body) {
   }
   return [];
 }
+function readDefaultCredentialsFromOrgJson(body) {
+  if (!isRecord2(body)) return [];
+  const data = body.data;
+  if (isRecord2(data) && Array.isArray(data.defaultCredentials)) {
+    return normalizeCredentials(data.defaultCredentials);
+  }
+  return [];
+}
+async function fetchCredentialsFromOrg(base, orgId, apiKey) {
+  const orgRes = await platformFetch(base, `/api/platform/v1/organizations/${orgId}`, {
+    method: "GET",
+    apiKey
+  });
+  if (!orgRes.ok) return [];
+  return readDefaultCredentialsFromOrgJson(orgRes.json);
+}
 function toPosDefaultCredentials(creds) {
   const admin = creds.find((c) => c.role === "admin");
   return {
@@ -5124,12 +5258,31 @@ async function bootstrapPosOrganization(input) {
         const fromStatus = readFullCredentialsFromJson(statusRes.json);
         if (fromStatus.length > 0) {
           credentials = fromStatus;
+          bootstrapReady = true;
+          log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
+          break;
         }
-        bootstrapReady = true;
-        log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
-        break;
+        const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
+        if (fromOrg.length > 0) {
+          credentials = fromOrg;
+          bootstrapReady = true;
+          log(
+            `[provision][pos] org bootstrap ready (legacy defaultCredentials) orgId=${orgId}`
+          );
+          break;
+        }
       }
       await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
+    }
+    if (!bootstrapReady) {
+      const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
+      if (fromOrg.length > 0) {
+        credentials = fromOrg;
+        bootstrapReady = true;
+        log(
+          `[provision][pos] org bootstrap credentials recovered from org record orgId=${orgId}`
+        );
+      }
     }
     if (!bootstrapReady) {
       throw new Error(
@@ -7738,7 +7891,7 @@ async function expireDueLicenses(db) {
       eq12(licenses.status, "active"),
       eq12(licenses.isPerpetual, false),
       isNotNull2(licenses.expiresAt),
-      lte(licenses.expiresAt, now)
+      lte2(licenses.expiresAt, now)
     )
   ).returning({
     id: licenses.id,

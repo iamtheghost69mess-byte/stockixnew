@@ -76,6 +76,73 @@ describe("bootstrapPosOrganization", () => {
     globalThis.fetch = originalFetch;
   });
 
+  it("falls back to org defaultCredentials when provisioning-status omits fullCredentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/health") || url.endsWith("/ready") || url.endsWith("/api/ping")) {
+          return new Response("ok", { status: 200 });
+        }
+        if (url.includes("/organizations/health-summary")) {
+          return new Response(JSON.stringify({ success: true }), { status: 200 });
+        }
+        if (url.endsWith("/api/platform/v1/organizations") && init?.method === "POST") {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              bootstrapMode: "queue",
+              data: { _id: "507f1f77bcf86cd799439011" },
+            }),
+            { status: 201 },
+          );
+        }
+        if (url.includes("/provisioning-status")) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: {
+                lifecycle: "active",
+                readyForPinLogin: true,
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.includes("/api/platform/v1/organizations/507f1f77bcf86cd799439011")) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: {
+                _id: "507f1f77bcf86cd799439011",
+                defaultCredentials: [
+                  { role: "admin", username: "admin", pin: "842351" },
+                  { role: "cashier", username: "cashier", pin: "490964" },
+                ],
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      }),
+    );
+
+    const { bootstrapPosOrganization } = await import(
+      "../../../infra/worker-service/domain/provisioning/adapters/bootstrap-pos-org.js"
+    );
+    const result = await bootstrapPosOrganization({
+      slug: "legacy-pos",
+      tenantName: "Legacy POS",
+      tenantId: "660e8400-e29b-41d4-a716-446655440002",
+      adminEmail: "admin@legacy.test",
+      log: () => {},
+      posHostPort: 8010,
+    });
+    expect(result.posDefaultCredentials.adminPin).toBe("842351");
+    expect(result.posDefaultCredentials.allRoles).toHaveLength(2);
+  });
+
   it("creates org and returns PIN credentials", async () => {
     const { bootstrapPosOrganization } = await import(
       "../../../infra/worker-service/domain/provisioning/adapters/bootstrap-pos-org.js"
