@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const mongoose = require("mongoose");
 const {
   buildMappedEntries,
+  appendFinanceAdjustmentEntries,
   resolveDepositAccountId,
   resolveLocationMapping,
   isCardMethodKey,
@@ -191,6 +192,53 @@ test("buildSaleReceiptPayload includes warehouseId when mapping exists", async (
   assert.ok(payload);
   assert.equal(payload.warehouseId, 55);
   assert.equal(payload.branchId, 3);
+  findMock.mock.restore();
+});
+
+test("appendFinanceAdjustmentEntries adds service charge and discount lines", () => {
+  const entries = [];
+  appendFinanceAdjustmentEntries(
+    {
+      bills: { serviceChargeAmount: 5.5 },
+      manualDiscountAmount: 2,
+    },
+    { serviceChargeItemId: 88, discountItemId: 99 },
+    entries
+  );
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].itemId, 88);
+  assert.equal(entries[0].rate, 5.5);
+  assert.equal(entries[1].itemId, 99);
+  assert.equal(entries[1].discount, 2);
+});
+
+test("buildSaleReceiptPayload includes service charge entry when configured", async () => {
+  const IntegrationItemMapping = require("../../models/integrationItemMappingModel");
+  const findMock = mock.method(IntegrationItemMapping, "find", () => ({
+    lean: async () => [
+      { posMenuItemId: menuBurger, bigcapitalItemId: 5, bigcapitalItemName: "Burger" },
+    ],
+  }));
+
+  const orderId = new mongoose.Types.ObjectId();
+  const order = {
+    _id: orderId,
+    organization: orgId,
+    paymentMethod: "cash",
+    paidAt: new Date("2026-05-23T12:00:00Z"),
+    bills: { serviceChargeAmount: 3.25 },
+    items: [
+      { menuItem: menuBurger, name: "Burger", quantity: 1, pricePerQuantity: 12 },
+    ],
+  };
+
+  const payload = await buildSaleReceiptPayload(order, {
+    bigcapital: { ...baseCfg, serviceChargeItemId: 77 },
+  });
+  assert.ok(payload);
+  assert.equal(payload.entries.length, 2);
+  assert.equal(payload.entries[1].itemId, 77);
+  assert.equal(payload.entries[1].rate, 3.25);
   findMock.mock.restore();
 });
 

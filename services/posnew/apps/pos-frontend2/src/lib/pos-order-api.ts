@@ -108,6 +108,8 @@ export type PosOrderListItem = {
   orderStatus?: string;
   customer?: string | null;
   bills?: { total?: number; tax?: number; serviceChargeRate?: number; serviceChargeAmount?: number; totalWithTax?: number };
+  accountingSaleStatus?: "ok" | "failed" | "skipped" | null;
+  accountingSaleError?: string;
   createdAt?: string;
 };
 

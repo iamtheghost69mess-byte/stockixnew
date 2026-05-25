@@ -55,6 +55,8 @@ export type DashboardRecentOrderRow = {
   waiterName: string;
   totalAmount: number;
   status: string;
+  accountingSaleStatus?: "ok" | "failed" | "skipped" | null;
+  accountingSaleError?: string;
   createdAt: string;
 };
 
