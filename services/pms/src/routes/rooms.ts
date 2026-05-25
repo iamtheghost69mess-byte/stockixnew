@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { pmsRooms } from "@repo/db/schema";
+import { pmsRooms, pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
@@ -45,10 +45,17 @@ roomsRouter.get("/", async (c) => {
 roomsRouter.post("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const body = createSchema.parse(await c.req.json());
+  const tid = tenantId(c);
+  const [property] = await db
+    .select({ id: pmsProperties.id })
+    .from(pmsProperties)
+    .where(and(eq(pmsProperties.id, body.propertyId), eq(pmsProperties.tenantId, tid)))
+    .limit(1);
+  if (!property) return errors.notFound(c, "property");
   const [row] = await db
     .insert(pmsRooms)
     .values({
-      tenantId: tenantId(c),
+      tenantId: tid,
       propertyId: body.propertyId,
       name: body.name,
       type: body.type ?? "standard",

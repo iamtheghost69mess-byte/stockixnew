@@ -1,9 +1,13 @@
-import { pmsBookings, pmsPayments, tenantDeployments } from "@repo/db/schema";
+import { pmsBookings, tenantDeployments } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+if (!process.env.FINANCE_INTERNAL_BASE_URL) {
+  console.warn("[pms][finance-sync] FINANCE_INTERNAL_BASE_URL is not set — finance sync will fail at runtime");
+}
 
 interface BookingRow {
   id: string;
@@ -98,7 +102,7 @@ export async function syncBookingToFinance(
       await db
         .update(pmsBookings)
         .set({ financeReceiptId: receiptId, accountingSyncStatus: "synced", updatedAt: new Date() })
-        .where(eq(pmsBookings.id, booking.id));
+        .where(and(eq(pmsBookings.id, booking.id), eq(pmsBookings.tenantId, booking.tenantId)));
     }
 
     return { receiptId };
@@ -107,7 +111,7 @@ export async function syncBookingToFinance(
     await db
       .update(pmsBookings)
       .set({ accountingSyncStatus: "failed", updatedAt: new Date() })
-      .where(eq(pmsBookings.id, booking.id));
+      .where(and(eq(pmsBookings.id, booking.id), eq(pmsBookings.tenantId, booking.tenantId)));
     return { receiptId: null, error };
   }
 }

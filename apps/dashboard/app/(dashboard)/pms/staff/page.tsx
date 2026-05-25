@@ -53,7 +53,8 @@ export default function PmsStaffPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [staffOpen, setStaffOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [staffSaving, setStaffSaving] = useState(false);
+  const [inviteSaving, setInviteSaving] = useState(false);
   const [staffForm, setStaffForm] = useState({ name: "", role: "receptionist", email: "" });
   const [inviteForm, setInviteForm] = useState({ propertyId: "", expiresInDays: "7" });
   const [copied, setCopied] = useState<string | null>(null);
@@ -74,9 +75,9 @@ export default function PmsStaffPage() {
 
   async function handleCreateStaff() {
     if (!tenantId || !staffForm.name) return;
-    setSaving(true);
+    setStaffSaving(true);
     await pmsFetch("staff", tenantId, { method: "POST", body: JSON.stringify(staffForm) });
-    setSaving(false);
+    setStaffSaving(false);
     setStaffOpen(false);
     void load();
   }
@@ -89,12 +90,12 @@ export default function PmsStaffPage() {
 
   async function handleCreateInvite() {
     if (!tenantId || !inviteForm.propertyId) return;
-    setSaving(true);
+    setInviteSaving(true);
     await pmsFetch("staff/invites", tenantId, {
       method: "POST",
       body: JSON.stringify({ propertyId: inviteForm.propertyId, expiresInDays: parseInt(inviteForm.expiresInDays, 10) }),
     });
-    setSaving(false);
+    setInviteSaving(false);
     setInviteOpen(false);
     void load();
   }
@@ -282,8 +283,8 @@ export default function PmsStaffPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStaffOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateStaff()} disabled={saving || !staffForm.name}>
-              {saving ? "Saving…" : "Add"}
+            <Button onClick={() => void handleCreateStaff()} disabled={staffSaving || !staffForm.name}>
+              {staffSaving ? "Saving…" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -304,8 +305,8 @@ export default function PmsStaffPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateInvite()} disabled={saving || !inviteForm.propertyId}>
-              {saving ? "Creating…" : "Create invite"}
+            <Button onClick={() => void handleCreateInvite()} disabled={inviteSaving || !inviteForm.propertyId}>
+              {inviteSaving ? "Creating…" : "Create invite"}
             </Button>
           </DialogFooter>
         </DialogContent>

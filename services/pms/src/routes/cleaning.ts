@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { pmsCleaningTasks, pmsCleaners, pmsCleanerAssignments } from "@repo/db/schema";
+import { pmsCleaningTasks, pmsCleaners, pmsCleanerAssignments, pmsRooms } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
@@ -27,8 +27,15 @@ cleaningRouter.post("/tasks", async (c) => {
     scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     cleanerId: z.string().uuid().optional(), notes: z.string().optional(),
   }).parse(await c.req.json());
+  const tid = tenantId(c);
+  const [room] = await db
+    .select({ id: pmsRooms.id, propertyId: pmsRooms.propertyId })
+    .from(pmsRooms)
+    .where(and(eq(pmsRooms.id, body.roomId), eq(pmsRooms.tenantId, tid)))
+    .limit(1);
+  if (!room) return errors.notFound(c, "room");
   const [row] = await db.insert(pmsCleaningTasks).values({
-    tenantId: tenantId(c), propertyId: body.propertyId, roomId: body.roomId,
+    tenantId: tid, propertyId: body.propertyId, roomId: body.roomId,
     scheduledDate: body.scheduledDate, cleanerId: body.cleanerId, notes: body.notes ?? "",
   }).returning();
   return c.json({ task: row }, 201);

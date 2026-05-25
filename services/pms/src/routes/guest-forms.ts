@@ -140,21 +140,22 @@ guestFormsRouter.post("/booking/:bookingId/share", async (c) => {
       and(
         eq(pmsGuestFormSubmissions.bookingId, bookingId),
         eq(pmsGuestFormSubmissions.templateId, template.id),
+        eq(pmsGuestFormSubmissions.tenantId, tid),
       ),
     )
     .limit(1);
 
-  const submission =
-    existing ??
-    (
-      await db
+  const newSub = existing
+    ? null
+    : (await db
         .insert(pmsGuestFormSubmissions)
         .values({ tenantId: tid, bookingId, templateId: template.id, shareToken: mintToken() })
-        .returning()
-    )[0];
+        .returning())[0] ?? null;
+  const submission = existing ?? newSub;
+  if (!submission) return c.json({ error: "failed_to_create_submission" }, 500);
 
   return c.json({
-    shareToken: submission!.shareToken,
-    submittedAt: submission!.submittedAt,
+    shareToken: submission.shareToken,
+    submittedAt: submission.submittedAt,
   });
 });
