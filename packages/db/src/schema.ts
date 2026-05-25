@@ -945,3 +945,56 @@ export const pmsMessageTemplates = pgTable(
     index("pms_message_templates_property_idx").on(t.propertyId),
   ],
 );
+
+// ─── PMS: Guest pre-arrival forms ────────────────────────────────────────────
+
+export const pmsGuestFormTemplates = pgTable(
+  "pms_guest_form_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => pmsProperties.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    /** JSON array of {id,type,label,required,helpText?,options?} */
+    fields: text("fields").notNull().default("[]"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_guest_form_templates_tenant_idx").on(t.tenantId),
+    index("pms_guest_form_templates_property_idx").on(t.propertyId),
+  ],
+);
+
+/** One submission per booking — holds the share token and captured answers. */
+export const pmsGuestFormSubmissions = pgTable(
+  "pms_guest_form_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => pmsBookings.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => pmsGuestFormTemplates.id, { onDelete: "cascade" }),
+    /** Unguessable 32-char base64url — possession is the only auth. */
+    shareToken: text("share_token").notNull(),
+    /** JSON array of {fieldId,type,label,value} — null until submitted. */
+    answers: text("answers"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_guest_form_submissions_tenant_idx").on(t.tenantId),
+    index("pms_guest_form_submissions_booking_idx").on(t.bookingId),
+    uniqueIndex("pms_guest_form_submissions_token_unique").on(t.shareToken),
+  ],
+);

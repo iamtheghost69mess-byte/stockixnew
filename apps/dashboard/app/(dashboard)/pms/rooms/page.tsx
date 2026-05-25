@@ -110,7 +110,7 @@ export default function PmsRoomsPage() {
   return (
     <PmsPageShell title="Rooms" description="Manage rooms by property.">
       <div className="flex items-center gap-3">
-        <Select value={propertyId} onValueChange={setPropertyId}>
+        <Select value={propertyId} onValueChange={(v) => setPropertyId(v ?? "")}>
           <SelectTrigger className="w-[260px]">
             <SelectValue placeholder="Select property" />
           </SelectTrigger>

@@ -75,7 +75,7 @@ export function PmsPageShell({
       </div>
       <nav className="flex flex-wrap gap-2 border-b pb-3">
         {PMS_LINKS.map((link) => {
-          const isActive = link.exact ? pathname === link.href : pathname.startsWith(link.href);
+          const isActive = "exact" in link && link.exact ? pathname === link.href : pathname.startsWith(link.href);
           return (
             <Link
               key={link.href}
