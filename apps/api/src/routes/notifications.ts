@@ -15,10 +15,14 @@ import {
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-type AuthEnv = {
+type ApiEnv = {
   Variables: {
     actorId: string;
     actorRole: string;
+    actorEffectiveRole?: string;
+    apiKeyId?: string;
+    requestId: string;
+    requestStartMs: number;
   };
 };
 
@@ -30,7 +34,7 @@ function serializeNotification(row: OwnerNotification) {
   };
 }
 
-export function registerNotificationsApi(app: Hono<AuthEnv>, db: Db | null): void {
+export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void {
   app.get("/notifications", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
     const ownerId = c.get("actorId");
