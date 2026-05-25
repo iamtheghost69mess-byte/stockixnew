@@ -45,10 +45,7 @@ pnpm bootstrap:env
 # 3. Start Postgres, wait for it, run migrations, and seed
 pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local
 
-# 4. (Once) POS backend deps — npm workspaces under services/posnew
-pnpm dev:pos:install
-
-# 5. Start API + Dashboard + worker + PMS + POS (ports auto-shift if busy)
+# 4. Start API + Dashboard + worker + PMS + POS (ports auto-shift if busy)
 pnpm dev
 ```
 
@@ -68,6 +65,11 @@ pnpm dev
 | Script | Purpose |
 |--------|---------|
 | `pnpm dev:pms` | PMS service only |
+| `pnpm dev:pos` | POS API + restaurant UI (see `scripts/dev-pos-stack.mjs`) |
+| `pnpm dev:pos:backend` | POS API only (`pos-backend`) |
+| `pnpm dev:pos:frontend` | POS UI only (`studio-admin`) |
+| `pnpm build:pos` | Production Next.js build for POS UI |
+| `pnpm test:pos` | POS backend unit tests |
 | `pnpm db:seed:pms-demo` | Demo tenant with PMS license for `/pms` dropdown |
 
 Control-plane + PMS, no POS: `STOCKIX_DEV_SKIP_POS=1 pnpm dev`

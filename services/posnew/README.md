@@ -1,6 +1,6 @@
 # Restaurant POS monorepo
 
-Multi-tenant POS platform: **tenant API** (Express + MongoDB), **Studio + staff POS** (Next.js), and **platform operator dashboard** (Next.js). Workspaces live under `apps/*` and `packages/*`.
+Multi-tenant POS platform: **tenant API** (Express + MongoDB), **Studio + staff POS** (Next.js). Workspaces live under `apps/*` and `packages/*`. POS packages are members of the **root** Stockix pnpm workspace (`pnpm-workspace.yaml`).
 
 ## Documentation
 
@@ -10,40 +10,53 @@ That file is the consolidated audit and architecture narrative for **Accounting*
 
 ## Apps
 
-| App | Path | Role |
-|-----|------|------|
-| Tenant API | `apps/pos-backend` | REST + realtime POS, RBAC, accounting, inventory, orders |
-| Studio + POS shell | `apps/pos-frontend2` | Back office (`/dashboard/*`) and staff POS (`/pos/*`) |
-| Platform dashboard | `apps/saas-dash` | Operator / platform-level UI |
+| App | Path | Package name | Role |
+|-----|------|--------------|------|
+| Tenant API | `apps/pos-backend` | `pos-backend` | REST + realtime POS, RBAC, accounting, inventory, orders |
+| Studio + POS shell | `apps/pos-frontend2` | `studio-admin` | Back office (`/dashboard/*`) and staff POS (`/pos/*`) |
 
 ## Quick start
 
-From the repository root:
+From the **Stockix repository root** (install once with the rest of the monorepo):
 
 ```bash
-npm install
+pnpm install
 ```
 
-Run backend + Studio + SaaS dashboard together:
+Run backend + Studio together from root:
 
 ```bash
-npm run dev:all
+pnpm dev:pos
+# or only API / only UI:
+pnpm dev:pos:backend
+pnpm dev:pos:frontend
 ```
 
-Nx graph and builds:
+From `services/posnew` (uses root workspace via pnpm):
 
 ```bash
-npm run graph
-npm run build:all
+pnpm run dev:all
+```
+
+Production build (frontend):
+
+```bash
+pnpm build:pos
+# or from this directory:
+pnpm run build:all
 ```
 
 Typecheck (selected packages):
 
 ```bash
-npm run typecheck
+pnpm run typecheck
 ```
 
 Backend **unit tests** and **staff seat-cap selftest** (MongoDB) are documented in [`apps/pos-backend/README.md`](./apps/pos-backend/README.md#testing).
+
+```bash
+pnpm test:pos
+```
 
 ## Environment
 
