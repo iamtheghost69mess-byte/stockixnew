@@ -71,11 +71,15 @@ export default function PmsRoomsPage() {
     if (!propertyId && list[0]) setPropertyId(list[0].id);
   }
 
-  async function loadRooms() {
+  async function loadRooms(signal?: AbortSignal) {
     if (!tenantId || !propertyId) return;
-    const res = await pmsFetch(`rooms?propertyId=${propertyId}`, tenantId);
-    const data = (await res.json()) as { rooms?: Room[] };
-    setRooms(data.rooms ?? []);
+    try {
+      const res = await pmsFetch(`rooms?propertyId=${propertyId}`, tenantId, { signal });
+      const data = (await res.json()) as { rooms?: Room[] };
+      setRooms(data.rooms ?? []);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+    }
   }
 
   useEffect(() => {
@@ -84,7 +88,12 @@ export default function PmsRoomsPage() {
   }, [tenantId]);
 
   useEffect(() => { void loadProperties(); }, [tenantId]);
-  useEffect(() => { void loadRooms(); }, [tenantId, propertyId]);
+  useEffect(() => {
+    if (!tenantId || !propertyId) return;
+    const ctrl = new AbortController();
+    void loadRooms(ctrl.signal);
+    return () => ctrl.abort();
+  }, [tenantId, propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate() {
     if (!tenantId || !propertyId || !form.name) return;
