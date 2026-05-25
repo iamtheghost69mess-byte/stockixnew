@@ -27,6 +27,7 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
   const m = method.toUpperCase();
   if (pathname === "/health") return null;
   if (pathname.startsWith("/auth")) return null;
+  if (pathname.startsWith("/webhooks/")) return null;
   if (pathname.startsWith("/internal/jobs")) return null;
   if (pathname.startsWith("/internal/organizations")) return null;
   if (m === "POST" && pathname === "/licenses/activate") return null;

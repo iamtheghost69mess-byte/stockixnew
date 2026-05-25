@@ -8,7 +8,7 @@ import {
 } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { serve } from "@hono/node-server";
-import { apiConfig } from "@repo/config";
+import { apiConfig, getMailHealthStatus } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
 import {
   createDb,
@@ -79,7 +79,14 @@ import { effectivePosUrl } from "./pos-public-url.js";
 import { registerTenantModulesRoutes } from "./tenant-modules-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
+import {
+  mailSendSucceeded,
+} from "./mail/mailer.js";
+import { initEmailLogging } from "./mail/email-log.js";
 import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
+import { resendOwnerInvite } from "./services/invites/invites.js";
+import { registerResendWebhook } from "./routes/webhooks/resend.js";
+import { safeCreateNotification } from "./notification-service.js";
 
 import {
   createProvisionTracer,
@@ -596,7 +603,9 @@ function readCookie(req: Request, name: string): string {
 }
 
 if (db) {
+  initEmailLogging(db);
   app.route("/auth", buildAuthRoutes(db));
+  registerResendWebhook(app, db);
 }
 
 function isTransientDbError(err: unknown): boolean {
@@ -745,6 +754,7 @@ app.use("/*", async (c, next) => {
   if (
     path === "/health"
     || path.startsWith("/auth")
+    || path.startsWith("/webhooks/")
     || path.startsWith("/internal/jobs")
     || path.startsWith("/internal/organizations")
   ) {
@@ -982,7 +992,12 @@ app.use("/*", async (c, next) => {
   await next();
 });
 
-app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/health", (c) =>
+  c.json({
+    status: "ok",
+    mail: getMailHealthStatus(),
+  }),
+);
 
 app.get("/public/tenant-orgs/:tenantId", async (c) => {
   const tenantIdParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
@@ -1708,18 +1723,20 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               : apiConfig.dashboardUrl);
           const provisionModules = parseTenantModules(tenant.modules);
 
+          let mailResult;
           if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
             const { sendFinanceWelcomeEmail } = await import("./mail/send.js");
-            await sendFinanceWelcomeEmail({
+            mailResult = await sendFinanceWelcomeEmail({
               to: tenant.adminEmail,
               tenantName: tenant.name,
               financeUrl,
               adminEmail: tenant.adminEmail,
               oneTimePassword: oneTimeAdminPassword,
               modules: provisionModules,
+              tenantId: targetTenantId,
             });
           } else {
-            await sendTenantWelcomeEmail({
+            mailResult = await sendTenantWelcomeEmail({
               to: tenant.adminEmail,
               tenantName: tenant.name,
               organizationNumber:
@@ -1727,7 +1744,35 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
                 financeOrganizationIdFromResult ??
                 "—",
               loginUrl: financeUrl,
+              tenantId: targetTenantId,
             });
+          }
+
+          if (!mailSendSucceeded(mailResult)) {
+            const mailDetail =
+              mailResult.status === "failed"
+                ? mailResult.error
+                : mailResult.status;
+            console.error(
+              `[provision] welcome email not sent for tenant ${targetTenantId}: ${mailDetail}`,
+            );
+            const [tenantRow] = await db
+              .select({ ownerId: tenants.ownerId })
+              .from(tenants)
+              .where(eq(tenants.id, targetTenantId))
+              .limit(1);
+            if (tenantRow?.ownerId) {
+              safeCreateNotification(db, {
+                ownerId: tenantRow.ownerId,
+                type: "provision.partial",
+                severity: "warning",
+                title: "Welcome email not sent",
+                body: `Tenant ${tenant.name} is ready but the welcome email could not be delivered (${mailDetail}). Check MAIL_* configuration.`,
+                tenantId: targetTenantId,
+                actionUrl: `/tenants/${targetTenantId}`,
+                actionLabel: "View tenant",
+              });
+            }
           }
         } catch (welcomeErr) {
           console.error(
@@ -2112,7 +2157,7 @@ app.post("/owners", async (c) => {
   if (!row) return c.json({ error: "email_already_exists" }, 409);
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
-    action: "owner.invite",
+    action: "owner.create",
     targetOwnerId: row.id,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
@@ -2176,18 +2221,57 @@ app.post("/owners/invite", async (c) => {
     userAgent: c.req.header("user-agent") ?? null,
     metadata: { role: owner.role, email: owner.email },
   });
-  void sendOwnerInviteEmail({
+  const mailResult = await sendOwnerInviteEmail({
     to: owner.email,
     name: owner.name,
     role: owner.role,
     inviteUrl,
-  }).catch((err) => {
-    console.error(
-      "[owners] invite email failed (non-fatal)",
-      err instanceof Error ? err.message : String(err),
-    );
+    ownerId: owner.id,
   });
-  return c.json({ inviteToken, inviteUrl, owner }, 201);
+  const emailSent = mailSendSucceeded(mailResult);
+  if (!emailSent) {
+    console.error(
+      "[owners] invite email not sent",
+      owner.email,
+      mailResult.status === "failed" ? mailResult.error : mailResult.status,
+    );
+  }
+  return c.json(
+    {
+      owner,
+      emailSent,
+      inviteUrl: emailSent ? undefined : inviteUrl,
+    },
+    201,
+  );
+});
+
+app.post("/owners/:ownerId/resend-invite", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
+  if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
+
+  const result = await resendOwnerInvite(db, parsed.data);
+  if (!result.success) {
+    return c.json(
+      { error: result.error },
+      (result.status ?? 400) as 400 | 404,
+    );
+  }
+
+  await logAudit(db, {
+    actorId: (c.get("actorId") as string | undefined) ?? "",
+    action: "owner.invite_resend",
+    targetOwnerId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: {
+      email: result.data.owner.email,
+      emailSent: result.data.emailSent,
+    },
+  });
+
+  return c.json(result.data, 200);
 });
 
 app.delete("/owners/:ownerId", async (c) => {
