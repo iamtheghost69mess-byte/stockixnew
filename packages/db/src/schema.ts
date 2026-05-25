@@ -422,6 +422,7 @@ export const ownerNotifications = pgTable(
     index("owner_notifications_owner_id_idx").on(t.ownerId),
     index("owner_notifications_owner_unread_idx").on(t.ownerId, t.readAt),
     index("owner_notifications_created_at_idx").on(t.createdAt),
+    index("owner_notifications_owner_created_idx").on(t.ownerId, t.createdAt),
   ],
 );
 

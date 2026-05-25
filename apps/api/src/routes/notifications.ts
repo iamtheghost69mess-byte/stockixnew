@@ -5,12 +5,15 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 
-import { notificationBus } from "../notification-bus.js";
 import {
   getNotifications,
   getUnreadCount,
+  listNotificationsForStream,
   markAllAsRead,
   markAsRead,
+  NOTIFICATION_STREAM_PING_MS,
+  NOTIFICATION_STREAM_POLL_MS,
+  NOTIFICATION_STREAM_PRIME_LIMIT,
 } from "../notification-service.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -82,10 +85,20 @@ export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void
     const ownerId = c.get("actorId");
 
     return streamSSE(c, async (stream) => {
+      const sent = new Set<string>();
       let closed = false;
       stream.onAbort(() => {
         closed = true;
       });
+
+      const streamStartedAt = new Date(Date.now() - 1000);
+
+      const primed = await getNotifications(db, ownerId, {
+        limit: NOTIFICATION_STREAM_PRIME_LIMIT,
+      });
+      for (const row of primed) {
+        sent.add(row.id);
+      }
 
       const unread = await getUnreadCount(db, ownerId);
       await stream.writeSSE({
@@ -93,30 +106,31 @@ export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void
         data: JSON.stringify({ unread }),
       });
 
-      const unsubscribe = notificationBus.subscribeOwner(ownerId, async (notification) => {
-        if (closed) return;
-        await stream.writeSSE({
-          event: "notification",
-          data: JSON.stringify(serializeNotification(notification)),
-        });
-      });
-
       let lastPingAt = 0;
-      const PING_MS = 15_000;
 
       while (!closed) {
+        const rows = await listNotificationsForStream(db, ownerId, streamStartedAt);
+
+        for (const row of rows) {
+          if (sent.has(row.id)) continue;
+          sent.add(row.id);
+          await stream.writeSSE({
+            event: "notification",
+            data: JSON.stringify(serializeNotification(row)),
+          });
+        }
+
         const now = Date.now();
-        if (now - lastPingAt >= PING_MS) {
+        if (now - lastPingAt >= NOTIFICATION_STREAM_PING_MS) {
           await stream.writeSSE({
             event: "ping",
             data: new Date(now).toISOString(),
           });
           lastPingAt = now;
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
 
-      unsubscribe();
+        await new Promise((resolve) => setTimeout(resolve, NOTIFICATION_STREAM_POLL_MS));
+      }
     });
   });
 }

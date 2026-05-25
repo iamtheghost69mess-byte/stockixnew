@@ -281,6 +281,13 @@
       "when": 1780900000000,
       "tag": "0041_owner_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0042_owner_notifications_owner_created_idx",
+      "breakpoints": true
     }
   ]
 }

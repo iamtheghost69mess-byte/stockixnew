@@ -1,11 +1,16 @@
 import { ownerNotifications, type OwnerNotification } from "@repo/db/schema";
-import { and, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
-import { notificationBus } from "./notification-bus.js";
-
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Poll interval for GET /notifications/stream (multi-instance safe). */
+export const NOTIFICATION_STREAM_POLL_MS = 2500;
+export const NOTIFICATION_STREAM_PING_MS = 15_000;
+/** Rows already in inbox at connect — primed into sent set without SSE emit. */
+export const NOTIFICATION_STREAM_PRIME_LIMIT = 50;
+export const NOTIFICATION_STREAM_POLL_ROW_LIMIT = 100;
 
 export type NotificationType =
   | "provision.complete"
@@ -57,10 +62,25 @@ export async function createNotification(
     })
     .returning();
 
-  if (notification) {
-    notificationBus.emitNotification(input.ownerId, notification);
-  }
   return notification ?? null;
+}
+
+export async function listNotificationsForStream(
+  db: Db,
+  ownerId: string,
+  since: Date,
+): Promise<OwnerNotification[]> {
+  return db
+    .select()
+    .from(ownerNotifications)
+    .where(
+      and(
+        eq(ownerNotifications.ownerId, ownerId),
+        gte(ownerNotifications.createdAt, since),
+      ),
+    )
+    .orderBy(asc(ownerNotifications.createdAt), asc(ownerNotifications.id))
+    .limit(NOTIFICATION_STREAM_POLL_ROW_LIMIT);
 }
 
 /** Fire-and-forget — never throws to callers. */
