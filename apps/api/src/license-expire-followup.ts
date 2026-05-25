@@ -9,6 +9,8 @@ import {
   sendLicenseExpiredEmailForTenant,
   sendLicenseExpiringEmailForTenant,
 } from "./mail/send.js";
+import { hasRecentNotification } from "./notification-service.js";
+import { notifyLicenseForTenant } from "./notification-helpers.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -79,6 +81,13 @@ export async function processLicenseExpiryFollowUp(
         err,
       );
     }
+
+    notifyLicenseForTenant(db, {
+      tenantId: license.tenantId,
+      licenseId: license.id,
+      type: "license.expired",
+      body: "Finance access is now restricted. Renew the license to restore full access.",
+    });
   }
 
   await processExpiringSoonWarnings(db, now);
@@ -164,6 +173,25 @@ async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
         license.tenantId,
         err,
       );
+    }
+
+    const alreadyNotified = await hasRecentNotification(db, {
+      type: "license.expiring",
+      licenseId: license.id,
+      withinHours: 24,
+    });
+    if (!alreadyNotified) {
+      const daysLeft = Math.max(
+        1,
+        Math.ceil((license.expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+      notifyLicenseForTenant(db, {
+        tenantId: license.tenantId,
+        licenseId: license.id,
+        type: "license.expiring",
+        body: `License expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
+        daysLeft,
+      });
     }
   }
 }
