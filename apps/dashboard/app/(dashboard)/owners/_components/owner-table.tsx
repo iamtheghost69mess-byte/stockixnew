@@ -4,6 +4,7 @@ import {
   Copy,
   Loader2,
   MoreHorizontal,
+  Send,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -106,6 +107,8 @@ export type OwnerTableProps = {
   onOpenDelete: (owner: Owner) => void;
   onCopyOwnerId: (id: string) => void;
   onOpenRoleDialog: (owner: Owner, nextRole: Role) => void;
+  resendingId: string | null;
+  onResendInvitation: (owner: Owner) => void;
 };
 
 export function OwnerTable({
@@ -125,6 +128,8 @@ export function OwnerTable({
   onOpenDelete,
   onCopyOwnerId,
   onOpenRoleDialog,
+  resendingId,
+  onResendInvitation,
 }: OwnerTableProps) {
   if (loading) {
     return (
@@ -285,6 +290,15 @@ export function OwnerTable({
                           <Copy className="mr-2 h-4 w-4" />
                           Copy ID
                         </DropdownMenuItem>
+                        {!o.hasPassword && canManageOwners ? (
+                          <DropdownMenuItem
+                            disabled={resendingId === o.id}
+                            onClick={() => void onResendInvitation(o)}
+                          >
+                            <Send className="mr-2 h-4 w-4" />
+                            {resendingId === o.id ? "Sending…" : "Resend invitation"}
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"

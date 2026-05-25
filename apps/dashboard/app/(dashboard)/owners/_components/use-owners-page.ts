@@ -52,6 +52,7 @@ export function useOwnersPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Owner | null>(null);
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,13 +110,22 @@ export function useOwnersPage() {
       const data = (await res.json()) as {
         owner?: Owner;
         inviteUrl?: string;
+        emailSent?: boolean;
         error?: string;
       };
       if (!res.ok) {
         setAddErr(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         return;
       }
-      setInviteUrl(data.inviteUrl ?? "");
+      if (data.emailSent === false) {
+        setInviteUrl(data.inviteUrl ?? "");
+        toast.warning(
+          "Invitation created but email was not sent. Copy the invite link below.",
+        );
+      } else {
+        setInviteUrl("");
+        toast.success("Invitation email sent");
+      }
       setCopiedInvite(false);
       setInviteOpen(false);
       inviteForm.reset();
@@ -261,6 +271,34 @@ export function useOwnersPage() {
     setDeleteConfirmEmail("");
   }
 
+  async function resendInvitation(owner: Owner) {
+    setResendingId(owner.id);
+    try {
+      const res = await fetch(`/api/owners/${owner.id}/resend-invite`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as {
+        emailSent?: boolean;
+        inviteUrl?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast.error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
+        return;
+      }
+      if (data.emailSent === false && data.inviteUrl) {
+        setInviteUrl(data.inviteUrl);
+        toast.warning("Email not sent. Copy the invite link from the banner above.");
+      } else {
+        toast.success("Invitation resent");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResendingId(null);
+    }
+  }
+
   return {
     me,
     canManageOwners,
@@ -298,5 +336,7 @@ export function useOwnersPage() {
     handleDeleteOpenChange,
     cancelDeleteDialog,
     copyOwnerId,
+    resendingId,
+    resendInvitation,
   };
 }

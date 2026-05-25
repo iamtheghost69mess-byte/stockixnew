@@ -35,6 +35,27 @@ cd infra/prod
 docker compose --env-file .env up -d
 ```
 
+## Mail (control plane + tenants)
+
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `MAIL_HOST` | API, worker, tenant Finance stacks | `smtp.resend.com` |
+| `MAIL_USERNAME` | same | `resend` |
+| `MAIL_PASSWORD` | same | Resend API key |
+| `MAIL_FROM_ADDRESS` | same | Verified sender domain |
+| `RESEND_WEBHOOK_SECRET` | API | Optional delivery webhooks (`POST /webhooks/resend`) |
+
+Tenant `.env` files receive the same `MAIL_*` values at provision time (`tenant-env.ts`).
+
+## Mail (POS)
+
+POS uses the Resend HTTP API (not SMTP):
+
+| Variable | Service |
+|----------|---------|
+| `RESEND_API_KEY` | `pos-backend` / `platformWorker.js` |
+| `RESEND_FROM_EMAIL` | POS outbound from address |
+
 ## Local development
 
 Use the **repo root** `.env` (`NODE_ENV=development`, `localhost`). Do **not** run `pnpm env:sync-prod` on your laptop — it overwrites local `.env` with production values.
