@@ -4,7 +4,7 @@ import {
   pmsProperties,
   pmsSyncLogs,
 } from "@repo/db/schema";
-import { and, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lt } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
 import { parseICal, type ICalEvent } from "./ical.js";
@@ -209,6 +209,7 @@ export async function syncCalendars(
               .where(
                 and(
                   eq(pmsCalendarEvents.id, row.id),
+                  eq(pmsCalendarEvents.tenantId, tenantId),
                   gte(pmsCalendarEvents.endDate, today),
                 ),
               );
@@ -245,18 +246,18 @@ export async function syncCalendars(
     summary.propertiesSynced++;
   }
 
-  // Prune oldest sync logs — keep last 1000 per tenant
+  // Prune oldest sync logs — keep last 1000 per tenant (bulk delete)
   try {
     const cutoff = await db
-      .select({ id: pmsSyncLogs.id })
+      .select({ createdAt: pmsSyncLogs.createdAt })
       .from(pmsSyncLogs)
       .where(eq(pmsSyncLogs.tenantId, tenantId))
-      .orderBy(pmsSyncLogs.id)
+      .orderBy(desc(pmsSyncLogs.createdAt))
       .limit(1)
-      .offset(1000);
-    if (cutoff.length > 0) {
+      .offset(999);
+    if (cutoff.length > 0 && cutoff[0]!.createdAt) {
       await db.delete(pmsSyncLogs).where(
-        and(eq(pmsSyncLogs.tenantId, tenantId), eq(pmsSyncLogs.id, cutoff[0]!.id)),
+        and(eq(pmsSyncLogs.tenantId, tenantId), lt(pmsSyncLogs.createdAt, cutoff[0]!.createdAt)),
       );
     }
   } catch {

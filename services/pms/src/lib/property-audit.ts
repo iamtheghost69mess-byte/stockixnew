@@ -144,6 +144,7 @@ export async function auditProperty(db: Db, tenantId: string, propertyId: string
     const a = bookings[i]!;
     for (let j = i + 1; j < bookings.length; j++) {
       const b = bookings[j]!;
+      if (a.roomId !== b.roomId) continue;
       if (overlaps(a.checkIn, a.checkOut, b.checkIn, b.checkOut) &&
           a.bookingStatus !== "cancelled" && b.bookingStatus !== "cancelled") {
         findings.push({

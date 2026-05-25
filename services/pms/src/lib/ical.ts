@@ -9,6 +9,15 @@ export interface ICalEvent {
   endDate: string;
 }
 
+function stableUid(startDate: string, endDate: string, summary: string): string {
+  let h = 0x811c9dc5;
+  for (const ch of `${startDate}|${endDate}|${summary}`) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `parsed-${startDate}-${h.toString(16).padStart(8, "0")}`;
+}
+
 /** Parse an iCal (.ics) string into a list of events. */
 export function parseICal(icalText: string): ICalEvent[] {
   const events: ICalEvent[] = [];
@@ -37,7 +46,7 @@ export function parseICal(icalText: string): ICalEvent[] {
 
     if (startDate) {
       if (!endDate) endDate = startDate;
-      if (!uid) uid = `parsed-${startDate}-${i}`;
+      if (!uid) uid = stableUid(startDate, endDate, summary);
       events.push({ uid, summary, startDate, endDate });
     }
   }

@@ -1,3 +1,4 @@
+import { lookup } from "node:dns/promises";
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq, like } from "drizzle-orm";
@@ -8,6 +9,20 @@ import { generateExportToken } from "../ical/sync.js";
 import { syncCalendars } from "../lib/calendar-sync.js";
 import { PLATFORM_PRESETS } from "../lib/platforms.js";
 import type { PmsEnv } from "../types.js";
+
+function isPrivateIp(ip: string): boolean {
+  const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return true; // IPv6 or unrecognised — block to be safe
+  const a = Number(m[1]), b = Number(m[2]);
+  return (
+    a === 127 ||
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    a === 0
+  );
+}
 
 export const channelsRouter = new Hono<PmsEnv>();
 
@@ -90,10 +105,14 @@ channelsRouter.get("/alerts", async (c) => {
     eq(pmsSyncLogs.level, "error"),
     like(pmsSyncLogs.message, "[ALERT]%"),
   ];
+  const sinceDate = since ? new Date(since) : null;
+  if (since && (!sinceDate || isNaN(sinceDate.getTime()))) {
+    return c.json({ error: "invalid_since_parameter" }, 400);
+  }
   const rows = await db.select().from(pmsSyncLogs)
     .where(and(...conds)).orderBy(desc(pmsSyncLogs.createdAt)).limit(20);
-  const alerts = since
-    ? rows.filter((r) => r.createdAt && r.createdAt > new Date(since))
+  const alerts = sinceDate
+    ? rows.filter((r) => r.createdAt && r.createdAt > sinceDate)
     : rows;
   return c.json({ alerts });
 });
@@ -113,6 +132,17 @@ channelsRouter.post("/validate-url", async (c) => {
     return c.json({ ok: false, reason: "bad_url" });
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return c.json({ ok: false, reason: "bad_url" });
+  }
+  // SSRF protection: resolve hostname and block private/internal ranges
+  let resolvedIp: string;
+  try {
+    const { address } = await lookup(url.hostname);
+    resolvedIp = address;
+  } catch {
+    return c.json({ ok: false, reason: "unreachable" });
+  }
+  if (isPrivateIp(resolvedIp)) {
     return c.json({ ok: false, reason: "bad_url" });
   }
   const controller = new AbortController();

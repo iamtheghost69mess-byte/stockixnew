@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { z } from "zod";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
-import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsGuests } from "@repo/db/schema";
+import { ZodError, z } from "zod";
+import { and, desc, eq, gt, lt, gte, lte } from "drizzle-orm";
+import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsProperties, pmsGuests } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import { syncBookingToFinance } from "../lib/finance-sync.js";
@@ -10,8 +10,7 @@ import type { PmsEnv } from "../types.js";
 function escCsv(v: unknown): string {
   if (v === null || v === undefined) return "";
   const s = String(v);
-  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 function stripBom(s: string): string {
@@ -68,140 +67,15 @@ const updateSchema = z.object({
   notes: z.string().optional(),
 });
 
-// GET /api/bookings?propertyId=...&status=...
-bookingsRouter.get("/", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const propertyId = c.req.query("propertyId");
-  const status = c.req.query("status");
-  const conditions = [eq(pmsBookings.tenantId, tenantId(c))];
-  if (propertyId) conditions.push(eq(pmsBookings.propertyId, propertyId));
-  if (status) conditions.push(eq(pmsBookings.bookingStatus, status));
-  const rows = await db.select().from(pmsBookings).where(and(...conditions)).orderBy(desc(pmsBookings.checkIn));
-  return c.json({ bookings: rows });
-});
+// ─── Literal routes first (Hono matches in registration order) ────────────────
 
-// POST /api/bookings
-bookingsRouter.post("/", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const body = createSchema.parse(await c.req.json());
-  const [row] = await db
-    .insert(pmsBookings)
-    .values({
-      tenantId: tenantId(c),
-      propertyId: body.propertyId,
-      roomId: body.roomId,
-      guestId: body.guestId,
-      checkIn: body.checkIn,
-      checkOut: body.checkOut,
-      totalAmountCents: body.totalAmountCents ?? 0,
-      adults: body.adults ?? 1,
-      children: body.children ?? 0,
-      platform: body.platform ?? "direct",
-      specialRequests: body.specialRequests,
-      notes: body.notes,
-    })
-    .returning();
-  return c.json({ booking: row }, 201);
-});
-
-// GET /api/bookings/:id
-bookingsRouter.get("/:id", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const [row] = await db
-    .select()
-    .from(pmsBookings)
-    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c))))
-    .limit(1);
-  if (!row) return errors.notFound(c, "booking");
-  return c.json({ booking: row });
-});
-
-// PATCH /api/bookings/:id
-bookingsRouter.patch("/:id", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const body = updateSchema.parse(await c.req.json());
-  const [row] = await db
-    .update(pmsBookings)
-    .set({ ...body, updatedAt: new Date() } as typeof pmsBookings.$inferInsert)
-    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c))))
-    .returning();
-  if (!row) return errors.notFound(c, "booking");
-  return c.json({ booking: row });
-});
-
-// POST /api/bookings/:id/check-in — Mark guest as checked in
-bookingsRouter.post("/:id/check-in", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const [row] = await db
-    .update(pmsBookings)
-    .set({ bookingStatus: "checked_in", checkInActualAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c))))
-    .returning();
-  if (!row) return errors.notFound(c, "booking");
-  // Mark room as occupied
-  await db.update(pmsRooms).set({ status: "occupied", updatedAt: new Date() }).where(eq(pmsRooms.id, row.roomId));
-  return c.json({ booking: row });
-});
-
-// POST /api/bookings/:id/check-out — Mark guest as checked out + trigger Finance sync
-bookingsRouter.post("/:id/check-out", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const [row] = await db
-    .update(pmsBookings)
-    .set({ bookingStatus: "checked_out", checkOutActualAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c))))
-    .returning();
-  if (!row) return errors.notFound(c, "booking");
-
-  // Mark room as cleaning and auto-create a cleaning task for today
-  await db.update(pmsRooms).set({ status: "cleaning", updatedAt: new Date() }).where(eq(pmsRooms.id, row.roomId));
-  const today = new Date().toISOString().slice(0, 10);
-  await db.insert(pmsCleaningTasks).values({
-    tenantId: row.tenantId,
-    propertyId: row.propertyId,
-    roomId: row.roomId,
-    scheduledDate: today,
-    notes: `Auto-created on checkout of booking ${row.id}`,
-  }).onConflictDoNothing();
-
-  // Trigger Finance sync (async, non-blocking)
-  const financeResult = await syncBookingToFinance(db, {
-    id: row.id,
-    tenantId: row.tenantId,
-    roomId: row.roomId,
-    guestId: row.guestId,
-    checkIn: row.checkIn,
-    checkOut: row.checkOut,
-    totalAmountCents: row.totalAmountCents,
-    platform: row.platform,
-    financeReceiptId: row.financeReceiptId,
-  });
-
-  return c.json({ booking: row, finance: financeResult });
-});
-
-// POST /api/bookings/:id/cancel
-bookingsRouter.post("/:id/cancel", async (c) => {
-  if (!db) return errors.dbUnavailable(c);
-  const [row] = await db
-    .update(pmsBookings)
-    .set({ bookingStatus: "cancelled", updatedAt: new Date() })
-    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c))))
-    .returning();
-  if (!row) return errors.notFound(c, "booking");
-  // Free up the room
-  await db.update(pmsRooms).set({ status: "available", updatedAt: new Date() }).where(eq(pmsRooms.id, row.roomId));
-  return c.json({ booking: row });
-});
-
-// GET /api/bookings/export — download bookings as CSV
-// Query: ?propertyId=&from=YYYY-MM-DD&to=YYYY-MM-DD
+// GET /api/bookings/export — CSV download
 bookingsRouter.get("/export", async (c) => {
   if (!db) return errors.dbUnavailable(c);
+  const tid = tenantId(c);
   const propertyId = c.req.query("propertyId");
   const from = c.req.query("from");
   const to = c.req.query("to");
-  const tid = tenantId(c);
 
   const conds = [eq(pmsBookings.tenantId, tid)];
   if (propertyId) conds.push(eq(pmsBookings.propertyId, propertyId));
@@ -210,40 +84,50 @@ bookingsRouter.get("/export", async (c) => {
 
   const rows = await db.select().from(pmsBookings).where(and(...conds)).orderBy(desc(pmsBookings.checkIn));
 
-  const COLS = ["id", "propertyId", "roomId", "guestId", "checkIn", "checkOut",
-    "platform", "bookingStatus", "paymentStatus", "totalAmountCents", "adults", "children", "createdAt"] as const;
+  type BookingKey = keyof typeof rows[0];
+  const COLS: BookingKey[] = ["id", "propertyId", "roomId", "guestId", "checkIn", "checkOut",
+    "platform", "bookingStatus", "paymentStatus", "totalAmountCents", "adults", "children", "createdAt"];
 
   const lines = [COLS.join(",")];
   for (const r of rows) {
-    lines.push(COLS.map((k) => escCsv((r as Record<string, unknown>)[k])).join(","));
+    lines.push(COLS.map((k) => escCsv(r[k])).join(","));
   }
-  const csv = lines.join("\r\n");
-  return c.text(csv, 200, {
+  return c.text(lines.join("\r\n"), 200, {
     "Content-Type": "text/csv; charset=utf-8",
     "Content-Disposition": `attachment; filename="bookings-${tid.slice(0, 8)}.csv"`,
   });
 });
 
-// POST /api/bookings/import — bulk CSV import with overlap detection
-// Query: ?dryRun=true to validate without writing
+// POST /api/bookings/import — bulk CSV import with overlap detection + dry-run
 bookingsRouter.post("/import", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const dryRun = c.req.query("dryRun") === "true";
   const tid = tenantId(c);
+
   const csvText = stripBom(await c.req.text());
   if (!csvText.trim()) return errors.badRequest(c, "empty body");
 
   const csvRows = parseCsvRows(csvText);
   if (csvRows.length < 2) return errors.badRequest(c, "need header + at least one row");
 
-  const headers = (csvRows[0]!).map((h) => h.trim());
+  const headers = csvRows[0]!.map((h) => h.trim());
   const idx: Record<string, number> = {};
-  headers.forEach((h, i) => (idx[h] = i));
+  headers.forEach((h, i) => { idx[h] = i; });
 
-  const REQUIRED = ["propertyId", "roomId", "guestId", "checkIn", "checkOut"] as const;
-  for (const f of REQUIRED) {
+  for (const f of ["propertyId", "roomId", "guestId", "checkIn", "checkOut"] as const) {
     if (idx[f] === undefined) return errors.badRequest(c, `Missing column: ${f}`);
   }
+
+  // Pre-load valid tenant-owned IDs to prevent IDOR (fix #5)
+  const ownedProperties = new Set(
+    (await db.select({ id: pmsProperties.id }).from(pmsProperties).where(eq(pmsProperties.tenantId, tid))).map((r) => r.id),
+  );
+  const ownedRooms = new Set(
+    (await db.select({ id: pmsRooms.id }).from(pmsRooms).where(eq(pmsRooms.tenantId, tid))).map((r) => r.id),
+  );
+  const ownedGuests = new Set(
+    (await db.select({ id: pmsGuests.id }).from(pmsGuests).where(eq(pmsGuests.tenantId, tid))).map((r) => r.id),
+  );
 
   type ImportRow = { rowNumber: number; status: "created" | "skipped" | "error"; reason?: string; bookingId?: string };
   const results: ImportRow[] = [];
@@ -267,14 +151,27 @@ bookingsRouter.post("/import", async (c) => {
       results.push({ rowNumber: n, status: "error", reason: "checkOut must be after checkIn" });
       continue;
     }
+    // Tenant ownership check (fix #5)
+    if (!ownedProperties.has(propertyId)) {
+      results.push({ rowNumber: n, status: "error", reason: "Property not found or not accessible" });
+      continue;
+    }
+    if (!ownedRooms.has(roomId)) {
+      results.push({ rowNumber: n, status: "error", reason: "Room not found or not accessible" });
+      continue;
+    }
+    if (!ownedGuests.has(guestId)) {
+      results.push({ rowNumber: n, status: "error", reason: "Guest not found or not accessible" });
+      continue;
+    }
 
-    // Overlap detection
+    // Half-open interval overlap: [checkIn, checkOut) — consecutive bookings do not overlap (fix #20)
     const overlap = await db.select({ id: pmsBookings.id }).from(pmsBookings).where(
       and(
         eq(pmsBookings.tenantId, tid),
         eq(pmsBookings.roomId, roomId),
-        lte(pmsBookings.checkIn, checkOut),
-        gte(pmsBookings.checkOut, checkIn),
+        lt(pmsBookings.checkIn, checkOut),
+        gt(pmsBookings.checkOut, checkIn),
       ),
     ).limit(1);
     if (overlap.length > 0) {
@@ -287,7 +184,8 @@ bookingsRouter.post("/import", async (c) => {
     const [created] = await db.insert(pmsBookings).values({
       tenantId: tid, propertyId, roomId, guestId, checkIn, checkOut, platform,
     }).returning();
-    results.push({ rowNumber: n, status: "created", bookingId: created!.id });
+    if (!created) { results.push({ rowNumber: n, status: "error", reason: "Insert failed" }); continue; }
+    results.push({ rowNumber: n, status: "created", bookingId: created.id });
   }
 
   return c.json({
@@ -299,4 +197,148 @@ bookingsRouter.post("/import", async (c) => {
     },
     results,
   });
+});
+
+// ─── Collection routes ─────────────────────────────────────────────────────────
+
+bookingsRouter.get("/", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const propertyId = c.req.query("propertyId");
+  const status = c.req.query("status");
+  const conditions = [eq(pmsBookings.tenantId, tenantId(c))];
+  if (propertyId) conditions.push(eq(pmsBookings.propertyId, propertyId));
+  if (status) conditions.push(eq(pmsBookings.bookingStatus, status));
+  const rows = await db.select().from(pmsBookings).where(and(...conditions)).orderBy(desc(pmsBookings.checkIn));
+  return c.json({ bookings: rows });
+});
+
+bookingsRouter.post("/", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const body = createSchema.parse(await c.req.json());
+  const tid = tenantId(c);
+
+  // Verify all FK fields belong to this tenant (fix #4: IDOR prevention)
+  const [property] = await db.select({ id: pmsProperties.id }).from(pmsProperties)
+    .where(and(eq(pmsProperties.id, body.propertyId), eq(pmsProperties.tenantId, tid))).limit(1);
+  if (!property) return errors.notFound(c, "property");
+
+  const [room] = await db.select({ id: pmsRooms.id }).from(pmsRooms)
+    .where(and(eq(pmsRooms.id, body.roomId), eq(pmsRooms.tenantId, tid))).limit(1);
+  if (!room) return errors.notFound(c, "room");
+
+  const [guest] = await db.select({ id: pmsGuests.id }).from(pmsGuests)
+    .where(and(eq(pmsGuests.id, body.guestId), eq(pmsGuests.tenantId, tid))).limit(1);
+  if (!guest) return errors.notFound(c, "guest");
+
+  const [row] = await db.insert(pmsBookings).values({
+    tenantId: tid,
+    propertyId: body.propertyId,
+    roomId: body.roomId,
+    guestId: body.guestId,
+    checkIn: body.checkIn,
+    checkOut: body.checkOut,
+    totalAmountCents: body.totalAmountCents ?? 0,
+    adults: body.adults ?? 1,
+    children: body.children ?? 0,
+    platform: body.platform ?? "direct",
+    specialRequests: body.specialRequests,
+    notes: body.notes,
+  }).returning();
+  return c.json({ booking: row }, 201);
+});
+
+// ─── Item routes ───────────────────────────────────────────────────────────────
+
+bookingsRouter.get("/:id", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const [row] = await db.select().from(pmsBookings)
+    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c)))).limit(1);
+  if (!row) return errors.notFound(c, "booking");
+  return c.json({ booking: row });
+});
+
+bookingsRouter.patch("/:id", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const body = updateSchema.parse(await c.req.json());
+  const [row] = await db.update(pmsBookings)
+    .set({ ...body, updatedAt: new Date() } as typeof pmsBookings.$inferInsert)
+    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tenantId(c))))
+    .returning();
+  if (!row) return errors.notFound(c, "booking");
+  return c.json({ booking: row });
+});
+
+bookingsRouter.post("/:id/check-in", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const tid = tenantId(c);
+  const [row] = await db.update(pmsBookings)
+    .set({ bookingStatus: "checked_in", checkInActualAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tid)))
+    .returning();
+  if (!row) return errors.notFound(c, "booking");
+  // Tenant-scoped room update (fix #11)
+  await db.update(pmsRooms).set({ status: "occupied", updatedAt: new Date() })
+    .where(and(eq(pmsRooms.id, row.roomId), eq(pmsRooms.tenantId, tid)));
+  return c.json({ booking: row });
+});
+
+bookingsRouter.post("/:id/check-out", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const tid = tenantId(c);
+  const [row] = await db.update(pmsBookings)
+    .set({ bookingStatus: "checked_out", checkOutActualAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tid)))
+    .returning();
+  if (!row) return errors.notFound(c, "booking");
+
+  // Tenant-scoped room update (fix #11)
+  await db.update(pmsRooms).set({ status: "cleaning", updatedAt: new Date() })
+    .where(and(eq(pmsRooms.id, row.roomId), eq(pmsRooms.tenantId, tid)));
+
+  // Auto-create cleaning task — skip if one already exists for this room today (fix #10)
+  const today = new Date().toISOString().slice(0, 10);
+  const [existing] = await db.select({ id: pmsCleaningTasks.id }).from(pmsCleaningTasks)
+    .where(and(
+      eq(pmsCleaningTasks.roomId, row.roomId),
+      eq(pmsCleaningTasks.scheduledDate, today),
+      eq(pmsCleaningTasks.tenantId, tid),
+    )).limit(1);
+  if (!existing) {
+    await db.insert(pmsCleaningTasks).values({
+      tenantId: tid,
+      propertyId: row.propertyId,
+      roomId: row.roomId,
+      scheduledDate: today,
+      notes: `Auto-created on checkout of booking ${row.id}`,
+    });
+  }
+
+  // Fire Finance sync without blocking the HTTP response (fix #12)
+  void syncBookingToFinance(db, {
+    id: row.id,
+    tenantId: tid,
+    roomId: row.roomId,
+    guestId: row.guestId,
+    checkIn: row.checkIn,
+    checkOut: row.checkOut,
+    totalAmountCents: row.totalAmountCents,
+    platform: row.platform,
+    financeReceiptId: row.financeReceiptId,
+  });
+
+  return c.json({ booking: row, finance: { queued: true } });
+});
+
+bookingsRouter.post("/:id/cancel", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const tid = tenantId(c);
+  const [row] = await db.update(pmsBookings)
+    .set({ bookingStatus: "cancelled", updatedAt: new Date() })
+    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tid)))
+    .returning();
+  if (!row) return errors.notFound(c, "booking");
+  // Tenant-scoped room update (fix #11)
+  await db.update(pmsRooms).set({ status: "available", updatedAt: new Date() })
+    .where(and(eq(pmsRooms.id, row.roomId), eq(pmsRooms.tenantId, tid)));
+  return c.json({ booking: row });
 });
