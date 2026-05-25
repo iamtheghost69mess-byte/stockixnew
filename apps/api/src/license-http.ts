@@ -1840,4 +1840,3 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     return c.json({ blacklisted: true, deactivatedCount: deactivated.length });
   });
 }
-                                                                             
