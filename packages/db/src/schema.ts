@@ -395,6 +395,39 @@ export const licenses = pgTable(
   ],
 );
 
+/** In-app alerts for SaaS owners (provision, license, job lifecycle). */
+export const ownerNotifications = pgTable(
+  "owner_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    licenseId: uuid("license_id").references(() => licenses.id, { onDelete: "set null" }),
+    correlationId: text("correlation_id"),
+    actionUrl: text("action_url"),
+    actionLabel: text("action_label"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("owner_notifications_owner_id_idx").on(t.ownerId),
+    index("owner_notifications_owner_unread_idx").on(t.ownerId, t.readAt),
+    index("owner_notifications_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export type OwnerNotification = typeof ownerNotifications.$inferSelect;
+export type NewOwnerNotification = typeof ownerNotifications.$inferInsert;
+
 export const licenseHistory = pgTable(
   "license_history",
   {

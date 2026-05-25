@@ -26,6 +26,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { z } from "zod";
 import { logAudit } from "./audit.js";
+import { notifyLicenseForTenant } from "./notification-helpers.js";
 import {
   generateLicenseKey,
   getActiveLicenseForTenant,
@@ -1625,6 +1626,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     });
 
     if (lic.tenantId) {
+      notifyLicenseForTenant(db, {
+        tenantId: lic.tenantId,
+        licenseId: lic.id,
+        type: "license.revoked",
+        body: body.reason?.trim() || "License has been revoked.",
+      });
       void syncPosOrgLicenseWindow(db, lic.tenantId, { endsAt: now }).catch((err) => {
         console.error(
           "[license] POS license end sync failed (non-fatal)",
@@ -1677,6 +1684,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     });
     void triggerFinanceLicenseSync(db, lic.tenantId).catch(() => undefined);
     if (lic.tenantId) {
+      notifyLicenseForTenant(db, {
+        tenantId: lic.tenantId,
+        licenseId: lic.id,
+        type: "license.suspended",
+        body: body.reason?.trim() || "License has been suspended.",
+      });
       void suspendPosOrgForLicense(db, lic.tenantId, body.reason ?? "license_suspended").catch(
         () => undefined,
       );
@@ -1827,3 +1840,4 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     return c.json({ blacklisted: true, deactivatedCount: deactivated.length });
   });
 }
+                                                                             

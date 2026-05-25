@@ -59,6 +59,12 @@ import { z } from "zod";
 import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
+import { registerNotificationsApi } from "./routes/notifications.js";
+import {
+  notifyJobLifecycle,
+  notifyModuleAdded,
+  notifyProvisionOutcome,
+} from "./notification-helpers.js";
 import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
 import { DEFAULT_GRACE_PERIOD_DAYS } from "./license-constants.js";
 import { registerLicenseApi } from "./license-http.js";
@@ -1025,6 +1031,11 @@ app.post("/internal/jobs/claim", async (c) => {
   const staleLeaseMs = 5 * 60 * 1000;
   const staleBefore = new Date(Date.now() - staleLeaseMs);
   const staleBeforeIso = staleBefore.toISOString();
+  const staleProvisionAlerts: Array<{
+    tenantId: string;
+    exhausted: boolean;
+    correlationId: string | null;
+  }> = [];
   const claimed = await db.transaction(async (tx) => {
     const staleRunning = await tx
       .select({
@@ -1033,6 +1044,7 @@ app.post("/internal/jobs/claim", async (c) => {
         type: tenantLifecycleJobs.type,
         attempts: tenantLifecycleJobs.attempts,
         maxAttempts: tenantLifecycleJobs.maxAttempts,
+        correlationId: tenantLifecycleJobs.correlationId,
       })
       .from(tenantLifecycleJobs)
       .where(
@@ -1086,6 +1098,11 @@ app.post("/internal/jobs/claim", async (c) => {
             updatedAt: new Date(),
           })
           .where(eq(tenantDeployments.tenantId, staleJob.tenantId));
+        staleProvisionAlerts.push({
+          tenantId: staleJob.tenantId,
+          exhausted,
+          correlationId: staleJob.correlationId ?? null,
+        });
       }
     }
 
@@ -1115,6 +1132,33 @@ app.post("/internal/jobs/claim", async (c) => {
       .returning();
     return updated ?? null;
   });
+
+  for (const alert of staleProvisionAlerts) {
+    const [tenantRow] = await db
+      .select({ ownerId: tenants.ownerId, name: tenants.name })
+      .from(tenants)
+      .where(eq(tenants.id, alert.tenantId))
+      .limit(1);
+    if (!tenantRow) continue;
+    if (alert.exhausted) {
+      notifyProvisionOutcome(db, {
+        tenantId: alert.tenantId,
+        finalStatus: "failed",
+        correlationId: alert.correlationId,
+        lastError: "worker_stale_lease_reclaimed",
+      });
+    } else {
+      notifyJobLifecycle(db, {
+        ownerId: tenantRow.ownerId,
+        tenantId: alert.tenantId,
+        tenantName: tenantRow.name,
+        type: "job.stuck",
+        lastError: "worker_stale_lease_reclaimed",
+        correlationId: alert.correlationId,
+      });
+    }
+  }
+
   return c.json({ job: claimed });
 });
 
@@ -1415,6 +1459,13 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             : {}),
         })
         .where(eq(tenantDeployments.tenantId, targetTenantId));
+
+      notifyProvisionOutcome(db, {
+        tenantId: targetTenantId,
+        finalStatus: finalTenantStatus,
+        correlationId: currentJob.correlationId,
+        lastError: deploymentLastError,
+      });
 
       try {
         const payload = currentJob.payload && typeof currentJob.payload === "object"
@@ -1803,6 +1854,20 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         meta: { jobId: currentJob.id },
       });
     }
+    const moduleFromPayload =
+      currentJob.payload &&
+      typeof currentJob.payload === "object" &&
+      "module" in currentJob.payload &&
+      typeof (currentJob.payload as { module?: unknown }).module === "string"
+        ? String((currentJob.payload as { module: string }).module)
+        : null;
+    if (moduleFromPayload) {
+      notifyModuleAdded(db, {
+        tenantId: currentJob.tenantId,
+        module: moduleFromPayload,
+        correlationId: currentJob.correlationId,
+      });
+    }
   }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
     const correlations = await db
@@ -1915,6 +1980,15 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
           })
           .where(eq(organizations.id, organizationIdForFail));
       }
+    }
+
+    if (updated.status === "dead" && updated.type === "tenant.provision" && updated.tenantId) {
+      notifyProvisionOutcome(db, {
+        tenantId: updated.tenantId,
+        finalStatus: "failed",
+        correlationId: updated.correlationId,
+        lastError: errorMessage,
+      });
     }
   }
   return c.json({ ok: true, job: updated ?? null });
@@ -5277,6 +5351,7 @@ function startReadinessReconciler() {
 }
 
 registerLicenseApi(app, db);
+registerNotificationsApi(app, db);
 registerTenantFinanceUsersApi(app, db);
 registerPosCredentialsRoutes(app, db);
 registerTenantModulesRoutes(app, db);
