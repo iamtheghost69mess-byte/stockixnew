@@ -109,6 +109,29 @@ function readFullCredentialsFromJson(body: unknown): PosRoleCredential[] {
   return [];
 }
 
+function readDefaultCredentialsFromOrgJson(body: unknown): PosRoleCredential[] {
+  if (!isRecord(body)) return [];
+  const data = body.data;
+  if (isRecord(data) && Array.isArray(data.defaultCredentials)) {
+    return normalizeCredentials(data.defaultCredentials);
+  }
+  return [];
+}
+
+/** Legacy POS images store plaintext PINs on the org until one-time reveal is available. */
+async function fetchCredentialsFromOrg(
+  base: string,
+  orgId: string,
+  apiKey: string,
+): Promise<PosRoleCredential[]> {
+  const orgRes = await platformFetch(base, `/api/platform/v1/organizations/${orgId}`, {
+    method: "GET",
+    apiKey,
+  });
+  if (!orgRes.ok) return [];
+  return readDefaultCredentialsFromOrgJson(orgRes.json);
+}
+
 function toPosDefaultCredentials(creds: PosRoleCredential[]): PosDefaultCredentials {
   const admin = creds.find((c) => c.role === "admin");
   return {
@@ -279,12 +302,32 @@ export async function bootstrapPosOrganization(
         const fromStatus = readFullCredentialsFromJson(statusRes.json);
         if (fromStatus.length > 0) {
           credentials = fromStatus;
+          bootstrapReady = true;
+          log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
+          break;
         }
-        bootstrapReady = true;
-        log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
-        break;
+        const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
+        if (fromOrg.length > 0) {
+          credentials = fromOrg;
+          bootstrapReady = true;
+          log(
+            `[provision][pos] org bootstrap ready (legacy defaultCredentials) orgId=${orgId}`,
+          );
+          break;
+        }
+        // readyForPinLogin without one-time credentials yet — keep polling briefly.
       }
       await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
+    }
+    if (!bootstrapReady) {
+      const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
+      if (fromOrg.length > 0) {
+        credentials = fromOrg;
+        bootstrapReady = true;
+        log(
+          `[provision][pos] org bootstrap credentials recovered from org record orgId=${orgId}`,
+        );
+      }
     }
     if (!bootstrapReady) {
       throw new Error(
