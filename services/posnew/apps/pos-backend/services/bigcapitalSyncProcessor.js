@@ -68,6 +68,36 @@ function resolveLocationMapping(order, cfg) {
  * @param {object} order
  * @param {Record<string, { id: number }>} itemMap
  */
+/**
+ * Append service charge / order discount lines when Finance item IDs are configured.
+ * @param {object} order
+ * @param {object} cfg - integrationConfig.bigcapital
+ * @param {Array<{ itemId: number, description: string, quantity: number, rate: number, discount: number }>} entries
+ */
+function appendFinanceAdjustmentEntries(order, cfg, entries) {
+  const serviceChargeAmount = Number(order.bills?.serviceChargeAmount || 0);
+  if (serviceChargeAmount > 0 && cfg.serviceChargeItemId) {
+    entries.push({
+      itemId: cfg.serviceChargeItemId,
+      description: "Service Charge",
+      quantity: 1,
+      rate: serviceChargeAmount,
+      discount: 0,
+    });
+  }
+
+  const discountAmount = Number(order.manualDiscountAmount || 0);
+  if (discountAmount > 0 && cfg.discountItemId) {
+    entries.push({
+      itemId: cfg.discountItemId,
+      description: "Order Discount",
+      quantity: 1,
+      rate: discountAmount,
+      discount: discountAmount,
+    });
+  }
+}
+
 function buildMappedEntries(order, itemMap) {
   return order.items
     .filter((item) => item.menuItem && Number(item.quantity) > 0)
@@ -117,6 +147,7 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
   );
 
   const entries = buildMappedEntries(order, itemMap);
+  appendFinanceAdjustmentEntries(order, cfg, entries);
 
   if (!entries.length) return null;
 
@@ -132,6 +163,16 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
     ? new Date(order.paidAt).toISOString().split("T")[0]
     : new Date().toISOString().split("T")[0];
 
+  const serviceChargeAmount = Number(order.bills?.serviceChargeAmount || 0);
+  const discountAmount = Number(order.manualDiscountAmount || 0);
+  let statement = `POS Order #${order.orderNumber || order._id} | ${order.paymentMethod || "cash"}`;
+  if (serviceChargeAmount > 0 && !cfg.serviceChargeItemId) {
+    statement += ` | Service charge: ${serviceChargeAmount}`;
+  }
+  if (discountAmount > 0 && !cfg.discountItemId) {
+    statement += ` | Order discount: ${discountAmount}`;
+  }
+
   const payload = {
     customerId: cfg.defaultWalkInCustomerId,
     receiptDate,
@@ -139,7 +180,7 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
     depositAccountId,
     entries,
     closed: true,
-    statement: `POS Order #${order.orderNumber || order._id} | ${order.paymentMethod || "cash"}`,
+    statement,
   };
 
   const fx = Number(order.fxRateToCompany);
@@ -325,6 +366,7 @@ async function onBigcapitalSyncFailed(job, error) {
 
 module.exports = {
   buildSaleReceiptPayload,
+  appendFinanceAdjustmentEntries,
   buildMappedEntries,
   resolveDepositAccountId,
   resolveLocationMapping,

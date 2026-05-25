@@ -18,6 +18,10 @@ const integrationConfigSchema = new mongoose.Schema(
       defaultCardDepositAccountId: { type: Number },
       /** Fallback Bigcapital warehouse when order location has no mapping. */
       defaultWarehouseId: { type: Number },
+      /** Optional Finance item for service charge lines on receipts. */
+      serviceChargeItemId: { type: Number },
+      /** Optional Finance item for order-level discount lines on receipts. */
+      discountItemId: { type: Number },
       /** POS location → Bigcapital branch/warehouse. */
       locationMapping: [
         {

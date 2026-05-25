@@ -340,7 +340,9 @@ module.exports = {
       query.location = locationScopeId;
     }
     const rows = await Order.find(query)
-      .select("_id table waiter bills status createdAt")
+      .select(
+        "_id table waiter bills status createdAt accountingSaleStatus accountingSaleError orderStatus"
+      )
       .populate("table", "_id tableNo")
       .populate("waiter", "name")
       .sort({ createdAt: -1 })
@@ -361,7 +363,9 @@ module.exports = {
           ? String(row.waiter.name).trim()
           : "",
       totalAmount: Number(row.bills?.totalWithTax || 0),
-      status: String(row.status || ""),
+      status: String(row.status || row.orderStatus || ""),
+      accountingSaleStatus: row.accountingSaleStatus ?? null,
+      accountingSaleError: row.accountingSaleError ?? "",
       createdAt: row.createdAt,
     }));
   },

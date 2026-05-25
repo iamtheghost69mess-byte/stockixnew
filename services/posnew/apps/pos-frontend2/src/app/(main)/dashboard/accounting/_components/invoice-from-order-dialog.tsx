@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FinanceSyncStatusBadge } from "@/components/finance-sync-status-badge";
 import { posCreateInvoiceFromOrder } from "@/lib/pos-accounting-api";
 import { type PosOrderListItem, posListOrdersPage } from "@/lib/pos-order-api";
 import { invoiceFromOrderFormSchema } from "@/lib/schemas/accounting/invoice-from-order";
@@ -150,8 +151,22 @@ export function InvoiceFromOrderDialog({
                       <SelectContent>
                         {orders.map((o: PosOrderListItem) => (
                           <SelectItem key={o._id} value={o._id}>
-                            Order {formatOrderReference(o)} · {o.orderStatus ?? "unknown"} ·{" "}
-                            {o.bills?.totalWithTax != null ? `$${Number(o.bills.totalWithTax).toFixed(2)}` : "No total"}
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span>
+                                Order {formatOrderReference(o)} · {o.orderStatus ?? "unknown"} ·{" "}
+                                {o.bills?.totalWithTax != null
+                                  ? `$${Number(o.bills.totalWithTax).toFixed(2)}`
+                                  : "No total"}
+                              </span>
+                              {o.orderStatus === "paid" || o.orderStatus === "closed" ? (
+                                <FinanceSyncStatusBadge
+                                  orderId={o._id}
+                                  status={o.accountingSaleStatus}
+                                  error={o.accountingSaleError}
+                                  compact
+                                />
+                              ) : null}
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
