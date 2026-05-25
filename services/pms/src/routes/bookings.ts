@@ -1,11 +1,44 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
-import { pmsBookings, pmsRooms, pmsCleaningTasks } from "@repo/db/schema";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsGuests } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import { syncBookingToFinance } from "../lib/finance-sync.js";
 import type { PmsEnv } from "../types.js";
+
+function escCsv(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function stripBom(s: string): string {
+  return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+}
+
+function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let cur: string[] = [];
+  let field = "";
+  let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') { inQ = true; }
+    else if (c === ",") { cur.push(field); field = ""; }
+    else if (c === "\r" || c === "\n") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      cur.push(field); rows.push(cur); cur = []; field = "";
+    } else field += c;
+  }
+  if (field.length > 0 || cur.length > 0) { cur.push(field); rows.push(cur); }
+  if (rows.length > 0 && rows[rows.length - 1]!.length === 1 && rows[rows.length - 1]![0] === "") rows.pop();
+  return rows;
+}
 
 export const bookingsRouter = new Hono<PmsEnv>();
 
@@ -159,4 +192,111 @@ bookingsRouter.post("/:id/cancel", async (c) => {
   // Free up the room
   await db.update(pmsRooms).set({ status: "available", updatedAt: new Date() }).where(eq(pmsRooms.id, row.roomId));
   return c.json({ booking: row });
+});
+
+// GET /api/bookings/export — download bookings as CSV
+// Query: ?propertyId=&from=YYYY-MM-DD&to=YYYY-MM-DD
+bookingsRouter.get("/export", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const propertyId = c.req.query("propertyId");
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  const tid = tenantId(c);
+
+  const conds = [eq(pmsBookings.tenantId, tid)];
+  if (propertyId) conds.push(eq(pmsBookings.propertyId, propertyId));
+  if (from) conds.push(gte(pmsBookings.checkIn, from));
+  if (to) conds.push(lte(pmsBookings.checkOut, to));
+
+  const rows = await db.select().from(pmsBookings).where(and(...conds)).orderBy(desc(pmsBookings.checkIn));
+
+  const COLS = ["id", "propertyId", "roomId", "guestId", "checkIn", "checkOut",
+    "platform", "bookingStatus", "paymentStatus", "totalAmountCents", "adults", "children", "createdAt"] as const;
+
+  const lines = [COLS.join(",")];
+  for (const r of rows) {
+    lines.push(COLS.map((k) => escCsv((r as Record<string, unknown>)[k])).join(","));
+  }
+  const csv = lines.join("\r\n");
+  return c.text(csv, 200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="bookings-${tid.slice(0, 8)}.csv"`,
+  });
+});
+
+// POST /api/bookings/import — bulk CSV import with overlap detection
+// Query: ?dryRun=true to validate without writing
+bookingsRouter.post("/import", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const dryRun = c.req.query("dryRun") === "true";
+  const tid = tenantId(c);
+  const csvText = stripBom(await c.req.text());
+  if (!csvText.trim()) return errors.badRequest(c, "empty body");
+
+  const csvRows = parseCsvRows(csvText);
+  if (csvRows.length < 2) return errors.badRequest(c, "need header + at least one row");
+
+  const headers = (csvRows[0]!).map((h) => h.trim());
+  const idx: Record<string, number> = {};
+  headers.forEach((h, i) => (idx[h] = i));
+
+  const REQUIRED = ["propertyId", "roomId", "guestId", "checkIn", "checkOut"] as const;
+  for (const f of REQUIRED) {
+    if (idx[f] === undefined) return errors.badRequest(c, `Missing column: ${f}`);
+  }
+
+  type ImportRow = { rowNumber: number; status: "created" | "skipped" | "error"; reason?: string; bookingId?: string };
+  const results: ImportRow[] = [];
+
+  for (let r = 1; r < csvRows.length; r++) {
+    const row = csvRows[r]!;
+    const n = r + 1;
+    const get = (k: string) => (row[idx[k]!] ?? "").trim();
+    const propertyId = get("propertyId");
+    const roomId = get("roomId");
+    const guestId = get("guestId");
+    const checkIn = get("checkIn");
+    const checkOut = get("checkOut");
+    const platform = get("platform") || "direct";
+
+    if (!propertyId || !roomId || !guestId || !checkIn || !checkOut) {
+      results.push({ rowNumber: n, status: "error", reason: "Missing required field" });
+      continue;
+    }
+    if (checkOut <= checkIn) {
+      results.push({ rowNumber: n, status: "error", reason: "checkOut must be after checkIn" });
+      continue;
+    }
+
+    // Overlap detection
+    const overlap = await db.select({ id: pmsBookings.id }).from(pmsBookings).where(
+      and(
+        eq(pmsBookings.tenantId, tid),
+        eq(pmsBookings.roomId, roomId),
+        lte(pmsBookings.checkIn, checkOut),
+        gte(pmsBookings.checkOut, checkIn),
+      ),
+    ).limit(1);
+    if (overlap.length > 0) {
+      results.push({ rowNumber: n, status: "skipped", reason: `Overlaps booking ${overlap[0]!.id}` });
+      continue;
+    }
+
+    if (dryRun) { results.push({ rowNumber: n, status: "created", reason: "(dry-run)" }); continue; }
+
+    const [created] = await db.insert(pmsBookings).values({
+      tenantId: tid, propertyId, roomId, guestId, checkIn, checkOut, platform,
+    }).returning();
+    results.push({ rowNumber: n, status: "created", bookingId: created!.id });
+  }
+
+  return c.json({
+    summary: {
+      created: results.filter((r) => r.status === "created").length,
+      skipped: results.filter((r) => r.status === "skipped").length,
+      error: results.filter((r) => r.status === "error").length,
+      dryRun,
+    },
+    results,
+  });
 });
