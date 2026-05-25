@@ -47,6 +47,8 @@ export function OwnersPageContent() {
     handleDeleteOpenChange,
     cancelDeleteDialog,
     copyOwnerId,
+    resendingId,
+    resendInvitation,
   } = useOwnersPage();
 
   return (
@@ -122,6 +124,8 @@ export function OwnersPageContent() {
         onOpenDelete={openDeleteDialog}
         onCopyOwnerId={copyOwnerId}
         onOpenRoleDialog={openRoleDialog}
+        resendingId={resendingId}
+        onResendInvitation={resendInvitation}
       />
 
       <OwnerRoleDialog

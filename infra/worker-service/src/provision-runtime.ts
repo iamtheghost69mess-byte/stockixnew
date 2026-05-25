@@ -801,6 +801,16 @@ export async function executeProvisionRuntime(
       internalApiSecret: apiConfig.internalApiSecret,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
+    if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
+      log(
+        "[provision][mail] tenant .env missing MAIL_PASSWORD or MAIL_FROM_ADDRESS — Finance invite/reset emails will not send",
+      );
+      await trace.event(
+        "mail.env_incomplete",
+        "Tenant mail env incomplete (MAIL_PASSWORD or MAIL_FROM_ADDRESS missing)",
+        { level: "warn" },
+      );
+    }
     const composeEnv = {
       ...tenantEnvMap,
       COMPOSE_PROJECT_NAME: project,

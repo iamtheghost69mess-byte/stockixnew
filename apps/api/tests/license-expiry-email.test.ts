@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
-const sendMailMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const sendMailMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "sent", messageId: "test-id" }),
+);
 const getActiveLicenseForTenantMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/mail/mailer.js", () => ({

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const sendMailMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const sendMailMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "sent", messageId: "test-id" }),
+);
 
 vi.mock("../src/mail/mailer.js", () => ({
   sendMail: sendMailMock,
