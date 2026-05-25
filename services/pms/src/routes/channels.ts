@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, like } from "drizzle-orm";
 import { pmsIcalChannels, pmsSyncLogs } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
@@ -77,4 +77,34 @@ channelsRouter.get("/logs", async (c) => {
   const rows = await db.select().from(pmsSyncLogs)
     .where(eq(pmsSyncLogs.tenantId, tenantId(c))).orderBy(desc(pmsSyncLogs.createdAt)).limit(limit);
   return c.json({ logs: rows });
+});
+
+// GET /api/channels/alerts — 3-strike sync failure alerts (undismissed)
+// Client passes ?since=ISO8601 to filter to alerts after a dismiss timestamp.
+channelsRouter.get("/alerts", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const since = c.req.query("since");
+  const conds = [
+    eq(pmsSyncLogs.tenantId, tenantId(c)),
+    eq(pmsSyncLogs.level, "error"),
+    like(pmsSyncLogs.message, "[ALERT]%"),
+  ];
+  const rows = await db.select().from(pmsSyncLogs)
+    .where(and(...conds)).orderBy(desc(pmsSyncLogs.createdAt)).limit(20);
+  const alerts = since
+    ? rows.filter((r) => r.createdAt && r.createdAt > new Date(since))
+    : rows;
+  return c.json({ alerts });
+});
+
+// POST /api/channels/:id/rotate-token — regenerate the iCal export token
+channelsRouter.post("/:id/rotate-token", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  const [row] = await db
+    .update(pmsIcalChannels)
+    .set({ exportToken: generateExportToken(), updatedAt: new Date() })
+    .where(and(eq(pmsIcalChannels.id, c.req.param("id")), eq(pmsIcalChannels.tenantId, tenantId(c))))
+    .returning();
+  if (!row) return errors.notFound(c, "channel");
+  return c.json({ channel: row });
 });

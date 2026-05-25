@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { pmsBookings, pmsRooms } from "@repo/db/schema";
+import { pmsBookings, pmsRooms, pmsCleaningTasks } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import { syncBookingToFinance } from "../lib/finance-sync.js";
@@ -120,8 +120,16 @@ bookingsRouter.post("/:id/check-out", async (c) => {
     .returning();
   if (!row) return errors.notFound(c, "booking");
 
-  // Mark room as cleaning (triggers housekeeping workflow)
+  // Mark room as cleaning and auto-create a cleaning task for today
   await db.update(pmsRooms).set({ status: "cleaning", updatedAt: new Date() }).where(eq(pmsRooms.id, row.roomId));
+  const today = new Date().toISOString().slice(0, 10);
+  await db.insert(pmsCleaningTasks).values({
+    tenantId: row.tenantId,
+    propertyId: row.propertyId,
+    roomId: row.roomId,
+    scheduledDate: today,
+    notes: `Auto-created on checkout of booking ${row.id}`,
+  }).onConflictDoNothing();
 
   // Trigger Finance sync (async, non-blocking)
   const financeResult = await syncBookingToFinance(db, {
