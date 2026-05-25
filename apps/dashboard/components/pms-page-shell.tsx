@@ -22,6 +22,7 @@ const PMS_LINKS = [
   { href: "/pms/calendar", label: "Calendar" },
   { href: "/pms/date-overrides", label: "Date Overrides" },
   { href: "/pms/message-templates", label: "Templates" },
+  { href: "/pms/guest-forms", label: "Guest Forms" },
   { href: "/pms/staff", label: "Staff" },
 ] as const;
 
