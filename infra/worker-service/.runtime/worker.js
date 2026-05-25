@@ -2552,6 +2552,7 @@ __export(schema_exports, {
   licenseHistory: () => licenseHistory,
   licenses: () => licenses,
   organizations: () => organizations,
+  ownerNotifications: () => ownerNotifications,
   ownerOrganizationAccess: () => ownerOrganizationAccess,
   owners: () => owners,
   plans: () => plans,
@@ -2899,6 +2900,31 @@ var licenses = pgTable(
     index("licenses_status_idx").on(t.status),
     index("licenses_product_idx").on(t.product),
     index("licenses_expires_at_idx").on(t.expiresAt)
+  ]
+);
+var ownerNotifications = pgTable(
+  "owner_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull().references(() => owners.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    licenseId: uuid("license_id").references(() => licenses.id, { onDelete: "set null" }),
+    correlationId: text("correlation_id"),
+    actionUrl: text("action_url"),
+    actionLabel: text("action_label"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    meta: jsonb("meta").$type(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("owner_notifications_owner_id_idx").on(t.ownerId),
+    index("owner_notifications_owner_unread_idx").on(t.ownerId, t.readAt),
+    index("owner_notifications_created_at_idx").on(t.createdAt),
+    index("owner_notifications_owner_created_idx").on(t.ownerId, t.createdAt)
   ]
 );
 var licenseHistory = pgTable(
@@ -3430,10 +3456,10 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { and as and3, eq as eq12, sql as sql2, isNotNull as isNotNull2, lte as lte2 } from "drizzle-orm";
+import { and as and4, eq as eq15, sql as sql2, isNotNull as isNotNull2, lte as lte2 } from "drizzle-orm";
 
 // src/license-expire-followup.ts
-import { and as and2, eq as eq6, gte, isNotNull, lte } from "drizzle-orm";
+import { and as and3, eq as eq9, gte as gte2, isNotNull, lte } from "drizzle-orm";
 
 // src/license-utils.ts
 import { randomBytes } from "crypto";
@@ -4099,6 +4125,90 @@ async function suspendPosOrgForLicense(db, tenantId, reason, log) {
   else console.log(okLine);
 }
 
+// src/notification-service.ts
+import { and as and2, asc, count, desc as desc2, eq as eq6, gte, isNull as isNull2, lt } from "drizzle-orm";
+async function createNotification(db, input) {
+  const [notification] = await db.insert(ownerNotifications).values({
+    ownerId: input.ownerId,
+    type: input.type,
+    severity: input.severity,
+    title: input.title,
+    body: input.body,
+    tenantId: input.tenantId ?? null,
+    licenseId: input.licenseId ?? null,
+    correlationId: input.correlationId ?? null,
+    actionUrl: input.actionUrl ?? null,
+    actionLabel: input.actionLabel ?? null,
+    meta: input.meta ?? null
+  }).returning();
+  return notification ?? null;
+}
+function safeCreateNotification(db, input) {
+  void createNotification(db, input).catch((err) => {
+    console.error(
+      "[notification] create failed:",
+      err instanceof Error ? err.message : String(err)
+    );
+  });
+}
+async function hasRecentNotification(db, opts) {
+  const withinHours = opts.withinHours ?? 24;
+  const since = new Date(Date.now() - withinHours * 60 * 60 * 1e3);
+  const conditions = [
+    eq6(ownerNotifications.type, opts.type),
+    gte(ownerNotifications.createdAt, since)
+  ];
+  if (opts.licenseId) {
+    conditions.push(eq6(ownerNotifications.licenseId, opts.licenseId));
+  }
+  if (opts.tenantId) {
+    conditions.push(eq6(ownerNotifications.tenantId, opts.tenantId));
+  }
+  const [row] = await db.select({ c: count() }).from(ownerNotifications).where(and2(...conditions));
+  return Number(row?.c ?? 0) > 0;
+}
+
+// src/notification-helpers.ts
+import { eq as eq8 } from "drizzle-orm";
+
+// src/services/auth/stockix-product-token.ts
+import { eq as eq7 } from "drizzle-orm";
+
+// src/notification-helpers.ts
+function licenseDetailPath(licenseId) {
+  return `/licenses/${licenseId}`;
+}
+function notifyLicenseForTenant(db, opts) {
+  void (async () => {
+    const [tenant] = await db.select({ id: tenants.id, name: tenants.name, ownerId: tenants.ownerId }).from(tenants).where(eq8(tenants.id, opts.tenantId)).limit(1);
+    if (!tenant) return;
+    const severity = opts.type === "license.expiring" ? "warning" : opts.type === "license.suspended" ? "warning" : "error";
+    const titleByType = {
+      "license.expired": `License expired for ${tenant.name}`,
+      "license.expiring": `License expiring soon for ${tenant.name}`,
+      "license.revoked": `License revoked for ${tenant.name}`,
+      "license.suspended": `License suspended for ${tenant.name}`
+    };
+    safeCreateNotification(db, {
+      ownerId: tenant.ownerId,
+      type: opts.type,
+      severity,
+      title: titleByType[opts.type],
+      body: opts.body,
+      tenantId: tenant.id,
+      licenseId: opts.licenseId,
+      actionUrl: licenseDetailPath(opts.licenseId),
+      actionLabel: opts.type === "license.expiring" ? "Extend license" : "View license",
+      meta: opts.daysLeft != null ? { daysLeft: opts.daysLeft } : void 0
+    });
+  })().catch((err) => {
+    console.error(
+      "[notification] license notify failed:",
+      err instanceof Error ? err.message : String(err)
+    );
+  });
+}
+
 // src/license-expire-followup.ts
 async function processLicenseExpiryFollowUp(db, opts) {
   const log = opts.log ?? ((message) => console.log(message));
@@ -4145,6 +4255,12 @@ async function processLicenseExpiryFollowUp(db, opts) {
         err
       );
     }
+    notifyLicenseForTenant(db, {
+      tenantId: license.tenantId,
+      licenseId: license.id,
+      type: "license.expired",
+      body: "This tenant's license has expired. Finance access is restricted until you renew or assign a new license."
+    });
   }
   await processExpiringSoonWarnings(db, now);
   await processPostGracePosSuspensions(db, now, log);
@@ -4156,8 +4272,8 @@ async function processPostGracePosSuspensions(db, now, log) {
     expiresAt: licenses.expiresAt,
     gracePeriodDays: licenses.gracePeriodDays
   }).from(licenses).where(
-    and2(
-      eq6(licenses.status, "expired"),
+    and3(
+      eq9(licenses.status, "expired"),
       isNotNull(licenses.tenantId),
       isNotNull(licenses.expiresAt),
       lte(licenses.expiresAt, now)
@@ -4186,12 +4302,12 @@ async function processExpiringSoonWarnings(db, now) {
     expiresAt: licenses.expiresAt,
     gracePeriodDays: licenses.gracePeriodDays
   }).from(licenses).where(
-    and2(
-      eq6(licenses.status, "active"),
-      eq6(licenses.isPerpetual, false),
+    and3(
+      eq9(licenses.status, "active"),
+      eq9(licenses.isPerpetual, false),
       isNotNull(licenses.tenantId),
       isNotNull(licenses.expiresAt),
-      gte(licenses.expiresAt, now)
+      gte2(licenses.expiresAt, now)
     )
   );
   for (const license of candidates) {
@@ -4211,6 +4327,24 @@ async function processExpiringSoonWarnings(db, now) {
         license.tenantId,
         err
       );
+    }
+    const alreadyNotified = await hasRecentNotification(db, {
+      type: "license.expiring",
+      licenseId: license.id,
+      withinHours: 24
+    });
+    if (!alreadyNotified) {
+      const daysLeft = Math.max(
+        1,
+        Math.ceil((license.expiresAt.getTime() - now.getTime()) / (1e3 * 60 * 60 * 24))
+      );
+      notifyLicenseForTenant(db, {
+        tenantId: license.tenantId,
+        licenseId: license.id,
+        type: "license.expiring",
+        body: `License expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
+        daysLeft
+      });
     }
   }
 }
@@ -4277,7 +4411,7 @@ async function checkRequiredTenantImages() {
 // ../../infra/worker-service/domain/provisioner.ts
 import { rm, stat } from "fs/promises";
 import { join as join8 } from "path";
-import { eq as eq11 } from "drizzle-orm";
+import { eq as eq14 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/env-paths.ts
 import { homedir } from "os";
@@ -4333,7 +4467,7 @@ import { mkdir as mkdir3 } from "fs/promises";
 import { join as join7 } from "path";
 import { createCipheriv, randomBytes as randomBytes3 } from "crypto";
 import { execa as execa3 } from "execa";
-import { eq as eq10 } from "drizzle-orm";
+import { eq as eq13 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/provision-trace.ts
 var PROVISION_META_SCRUB_KEYS = /* @__PURE__ */ new Set([
@@ -4779,6 +4913,10 @@ function isSeparateStackSubOrg(params) {
 }
 
 // ../../infra/worker-service/domain/provisioning/adapters/seed-finance-pos-defaults.ts
+function readOptionalPositiveId(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : void 0;
+}
 async function seedFinancePosDefaults(params) {
   const base = params.internalBaseUrl.replace(/\/+$/, "");
   const url = `${base}/api/internal/tenants/${params.financeTenantId}/seed-pos-defaults`;
@@ -4803,10 +4941,19 @@ async function seedFinancePosDefaults(params) {
   if (!Number.isFinite(walkInCustomerId) || walkInCustomerId <= 0 || !Number.isFinite(cashAccountId) || cashAccountId <= 0 || !Number.isFinite(cardAccountId) || cardAccountId <= 0) {
     throw new Error("seed_pos_defaults_failed:missing_ids");
   }
+  const serviceChargeItemId = readOptionalPositiveId(body.serviceChargeItemId);
+  const discountItemId = readOptionalPositiveId(body.discountItemId);
+  const bridgeNote = serviceChargeItemId || discountItemId ? ` serviceCharge=${serviceChargeItemId ?? "n/a"} discount=${discountItemId ?? "n/a"}` : "";
   params.log?.(
-    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}`
+    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}${bridgeNote}`
   );
-  return { walkInCustomerId, cashAccountId, cardAccountId };
+  return {
+    walkInCustomerId,
+    cashAccountId,
+    cardAccountId,
+    serviceChargeItemId,
+    discountItemId
+  };
 }
 
 // ../../infra/worker-service/domain/provisioning/build-finance-internal-url.ts
@@ -4873,6 +5020,12 @@ async function wirePosBigcapitalIntegration(input) {
     defaultCashDepositAccountId: input.cashAccountId,
     defaultCardDepositAccountId: input.cardAccountId
   };
+  if (input.serviceChargeItemId && input.serviceChargeItemId > 0) {
+    body.serviceChargeItemId = input.serviceChargeItemId;
+  }
+  if (input.discountItemId && input.discountItemId > 0) {
+    body.discountItemId = input.discountItemId;
+  }
   if (input.defaultWarehouseId && input.defaultWarehouseId > 0) {
     body.defaultWarehouseId = input.defaultWarehouseId;
   }
@@ -4956,7 +5109,7 @@ async function composeDownBestEffort(runner, ctx) {
 
 // ../../infra/worker-service/src/chatwoot-provision.ts
 import { randomBytes as randomBytes2 } from "crypto";
-import { eq as eq7 } from "drizzle-orm";
+import { eq as eq10 } from "drizzle-orm";
 function generateSecurePassword() {
   return randomBytes2(18).toString("base64url");
 }
@@ -5009,7 +5162,7 @@ async function provisionChatwootAccount(opts) {
       accountId = signUpJson.data?.account_id ? String(signUpJson.data.account_id) : null;
     }
     if (accountId) {
-      await db.update(tenants).set({ chatwootAccountId: accountId }).where(eq7(tenants.id, tenantId));
+      await db.update(tenants).set({ chatwootAccountId: accountId }).where(eq10(tenants.id, tenantId));
       log(`[chatwoot] account ${accountId} linked to tenant ${tenantId}`);
     }
     return { accountId };
@@ -5043,7 +5196,7 @@ var publicConfig = {
 };
 
 // ../../infra/worker-service/src/module-stacks.ts
-import { eq as eq8 } from "drizzle-orm";
+import { eq as eq11 } from "drizzle-orm";
 
 // ../../infra/worker-service/domain/provisioning/adapters/bootstrap-pos-org.ts
 var BOOTSTRAP_POLL_TIMEOUT_MS = 6e4;
@@ -5555,7 +5708,7 @@ ${stderrTail}`);
       posOrganizationId: bootstrap.posOrganizationId,
       posUrl,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq8(tenantDeployments.tenantId, opts.tenantId));
+    }).where(eq11(tenantDeployments.tenantId, opts.tenantId));
     opts.log(
       `[provision][pos] saved pos_organization_id=${bootstrap.posOrganizationId} pos_url=${posUrl}`
     );
@@ -5639,7 +5792,7 @@ async function provisionPmsStack(opts) {
 }
 
 // ../../infra/worker-service/src/provision-journal.ts
-import { asc, eq as eq9 } from "drizzle-orm";
+import { asc as asc2, eq as eq12 } from "drizzle-orm";
 function readPositiveInt(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : void 0;
@@ -5651,7 +5804,7 @@ async function loadProvisionJournalState(db, correlationId) {
   const rows = await db.select({
     phase: tenantProvisionEvents.phase,
     meta: tenantProvisionEvents.meta
-  }).from(tenantProvisionEvents).where(eq9(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc(tenantProvisionEvents.createdAt)).limit(2e3);
+  }).from(tenantProvisionEvents).where(eq12(tenantProvisionEvents.correlationId, correlationId)).orderBy(asc2(tenantProvisionEvents.createdAt)).limit(2e3);
   const completedOps = /* @__PURE__ */ new Set();
   const state = { completedOps };
   for (const row of rows) {
@@ -5671,6 +5824,10 @@ async function loadProvisionJournalState(db, correlationId) {
     if (cash) state.cashAccountId = cash;
     const card = readPositiveInt(meta?.cardAccountId);
     if (card) state.cardAccountId = card;
+    const serviceCharge = readPositiveInt(meta?.serviceChargeItemId);
+    if (serviceCharge) state.serviceChargeItemId = serviceCharge;
+    const discount = readPositiveInt(meta?.discountItemId);
+    if (discount) state.discountItemId = discount;
   }
   return state;
 }
@@ -5774,6 +5931,8 @@ async function runWirePosIntegrationStep(params) {
       walkInCustomerId: params.walkInCustomerId,
       cashAccountId: params.cashAccountId,
       cardAccountId: params.cardAccountId,
+      serviceChargeItemId: params.serviceChargeItemId,
+      discountItemId: params.discountItemId,
       defaultWarehouseId: params.financeDefaultWarehouseId,
       log: params.log
     });
@@ -5811,7 +5970,7 @@ async function persistFinanceDeploymentIds(db, deploymentId, ids) {
     patch.financeCardAccountId = ids.cardAccountId;
   }
   if (Object.keys(patch).length === 0) return;
-  await db.update(tenantDeployments).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.id, deploymentId));
+  await db.update(tenantDeployments).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.id, deploymentId));
 }
 function encryptDeploymentSecret(plaintext) {
   const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
@@ -5880,6 +6039,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   let walkInCustomerId;
   let cashAccountId;
   let cardAccountId;
+  let serviceChargeItemId;
+  let discountItemId;
   let posOrganizationId;
   let posUrl;
   let posApiUrl;
@@ -5894,6 +6055,10 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   if (journalState.walkInCustomerId) walkInCustomerId = journalState.walkInCustomerId;
   if (journalState.cashAccountId) cashAccountId = journalState.cashAccountId;
   if (journalState.cardAccountId) cardAccountId = journalState.cardAccountId;
+  if (journalState.serviceChargeItemId) {
+    serviceChargeItemId = journalState.serviceChargeItemId;
+  }
+  if (journalState.discountItemId) discountItemId = journalState.discountItemId;
   const checkNotCancelled = async () => {
     if (!assertNotCancelled) return;
     await assertNotCancelled();
@@ -6014,7 +6179,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
         financeCashAccountId: tenantDeployments.financeCashAccountId,
         financeCardAccountId: tenantDeployments.financeCardAccountId
-      }).from(tenants).innerJoin(tenantDeployments, eq10(tenantDeployments.tenantId, tenants.id)).where(eq10(tenants.slug, input.slug)).limit(1);
+      }).from(tenants).innerJoin(tenantDeployments, eq13(tenantDeployments.tenantId, tenants.id)).where(eq13(tenants.slug, input.slug)).limit(1);
       if (!existing) {
         throw new Error(`tenant_not_found:${input.slug}`);
       }
@@ -6042,6 +6207,25 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         const shouldWire = hasAccountingAndPos(retryLicensedModules) && existing.financeTenantId != null && existing.financeTenantId > 0 && existing.financeWalkInCustomerId != null && existing.financeWalkInCustomerId > 0;
         if (shouldWire && posOutcome2.posOrganizationId && posOutcome2.posHostPort && port && existing.financeCashAccountId && existing.financeCashAccountId > 0 && existing.financeCardAccountId && existing.financeCardAccountId > 0) {
           const workerInternalUrl = port > 0 ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}` : void 0;
+          let retryServiceChargeItemId;
+          let retryDiscountItemId;
+          const internalApiSecret = apiConfig.internalApiSecret?.trim() ?? "";
+          if (workerInternalUrl && internalApiSecret) {
+            try {
+              const seeded = await seedFinancePosDefaults({
+                internalBaseUrl: workerInternalUrl,
+                internalApiSecret,
+                financeTenantId: existing.financeTenantId,
+                correlationId,
+                log
+              });
+              retryServiceChargeItemId = seeded.serviceChargeItemId;
+              retryDiscountItemId = seeded.discountItemId;
+            } catch (seedErr) {
+              const seedMsg = seedErr instanceof Error ? seedErr.message : String(seedErr);
+              log(`[provision][pos] bridge item seed skipped on retry: ${seedMsg}`);
+            }
+          }
           const wireResult = await runWirePosIntegrationStep({
             licensedModules: retryLicensedModules,
             slug: input.slug,
@@ -6053,6 +6237,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
             walkInCustomerId: existing.financeWalkInCustomerId,
             cashAccountId: existing.financeCashAccountId,
             cardAccountId: existing.financeCardAccountId,
+            serviceChargeItemId: retryServiceChargeItemId,
+            discountItemId: retryDiscountItemId,
             financeDefaultWarehouseId: existing.financeDefaultWarehouseId ?? void 0,
             log,
             trace,
@@ -6069,14 +6255,14 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
             });
           }
         }
-        await db.update(tenants).set({ status: tenantStatus }).where(eq10(tenants.id, tenantId));
+        await db.update(tenants).set({ status: tenantStatus }).where(eq13(tenants.id, tenantId));
         await db.update(tenantDeployments).set({
           status: "active",
           lastError: wireError ?? null,
           updatedAt: /* @__PURE__ */ new Date(),
           ...posOutcome2.posOrganizationId ? { posOrganizationId: posOutcome2.posOrganizationId } : {},
           ...posOutcome2.posUrl ? { posUrl: posOutcome2.posUrl } : {}
-        }).where(eq10(tenantDeployments.tenantId, tenantId));
+        }).where(eq13(tenantDeployments.tenantId, tenantId));
         log(`[provision] POS-only retry success slug=${input.slug}`);
         return {
           ok: true,
@@ -6096,8 +6282,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         };
       }
       const posError = posOutcome2.posError ?? "POS provisioning failed";
-      await db.update(tenants).set({ status: "partial" }).where(eq10(tenants.id, tenantId));
-      await db.update(tenantDeployments).set({ status: "active", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+      await db.update(tenants).set({ status: "partial" }).where(eq13(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
       return {
         ok: true,
         tenantId,
@@ -6114,7 +6300,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         posApiUrl: posOutcome2.posApiUrl
       };
     }
-    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq10(tenants.slug, input.slug)).limit(1);
+    const existingSlug = await db.select({ id: tenants.id }).from(tenants).where(eq13(tenants.slug, input.slug)).limit(1);
     if (existingSlug.length > 0) {
       throw new Error(`tenant_slug_exists:${input.slug}`);
     }
@@ -6170,8 +6356,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       if (posOutcome2.posStatus === "failed") {
         const posError = posOutcome2.posError ?? "POS provisioning failed";
         if (tenantId) {
-          await db.update(tenants).set({ status: "failed" }).where(eq10(tenants.id, tenantId));
-          await db.update(tenantDeployments).set({ status: "failed", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+          await db.update(tenants).set({ status: "failed" }).where(eq13(tenants.id, tenantId));
+          await db.update(tenantDeployments).set({ status: "failed", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
         }
         return { ok: false, message: posError, cause: posError };
       }
@@ -6195,8 +6381,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
           log
         });
       }
-      await db.update(tenants).set({ status: "active" }).where(eq10(tenants.id, tenantId));
-      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+      await db.update(tenants).set({ status: "active" }).where(eq13(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
       return {
         ok: true,
         tenantId,
@@ -6400,7 +6586,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail }
       });
       if (!financeTenantId && deploymentId) {
-        const [deployRow] = await db.select({ financeTenantId: tenantDeployments.financeTenantId }).from(tenantDeployments).where(eq10(tenantDeployments.id, deploymentId)).limit(1);
+        const [deployRow] = await db.select({ financeTenantId: tenantDeployments.financeTenantId }).from(tenantDeployments).where(eq13(tenantDeployments.id, deploymentId)).limit(1);
         const fromDb = deployRow?.financeTenantId;
         if (fromDb != null && fromDb > 0) {
           financeTenantId = fromDb;
@@ -6683,6 +6869,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
           walkInCustomerId = seeded.walkInCustomerId;
           cashAccountId = seeded.cashAccountId;
           cardAccountId = seeded.cardAccountId;
+          serviceChargeItemId = seeded.serviceChargeItemId;
+          discountItemId = seeded.discountItemId;
           await persistFinanceDeploymentIds(db, deploymentId, {
             financeTenantId,
             financeDefaultWarehouseId,
@@ -6695,13 +6883,17 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
             walkInCustomerId,
             cashAccountId,
             cardAccountId,
+            serviceChargeItemId,
+            discountItemId,
             elapsedMs: elapsedMs()
           });
           await trace.event("pos_defaults_seeded", "Walk-in customer and deposit accounts ready", {
             meta: {
               walkInCustomerId,
               cashAccountId,
-              cardAccountId
+              cardAccountId,
+              serviceChargeItemId,
+              discountItemId
             }
           });
           log("[provision] step done: tenant.seed_pos_defaults");
@@ -6799,6 +6991,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
           walkInCustomerId,
           cashAccountId,
           cardAccountId,
+          serviceChargeItemId,
+          discountItemId,
           financeDefaultWarehouseId,
           log,
           trace,
@@ -6808,8 +7002,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         if (!wireResult.ok) {
           const wireError = wireResult.error;
           if (hasAccountingAndPos(licensedModules) && tenantId) {
-            await db.update(tenants).set({ status: "partial" }).where(eq10(tenants.id, tenantId));
-            await db.update(tenantDeployments).set({ status: "active", lastError: wireError, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+            await db.update(tenants).set({ status: "partial" }).where(eq13(tenants.id, tenantId));
+            await db.update(tenantDeployments).set({ status: "active", lastError: wireError, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
             log(
               `[provision] Finance+POS active but integration wire failed \u2014 tenant partial slug=${input.slug}`
             );
@@ -6844,8 +7038,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
     if (posOutcome.posStatus === "failed" && tenantId) {
       const posError = posOutcome.posError ?? "POS provisioning failed";
       if (hasAccountingAndPos(licensedModules)) {
-        await db.update(tenants).set({ status: "partial" }).where(eq10(tenants.id, tenantId));
-        await db.update(tenantDeployments).set({ status: "active", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+        await db.update(tenants).set({ status: "partial" }).where(eq13(tenants.id, tenantId));
+        await db.update(tenantDeployments).set({ status: "active", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
         log(`[provision] Finance active, POS failed \u2014 tenant marked partial slug=${input.slug}`);
         return {
           ok: true,
@@ -6867,8 +7061,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         };
       }
       if (isPosOnlyModules(licensedModules)) {
-        await db.update(tenants).set({ status: "failed" }).where(eq10(tenants.id, tenantId));
-        await db.update(tenantDeployments).set({ status: "failed", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+        await db.update(tenants).set({ status: "failed" }).where(eq13(tenants.id, tenantId));
+        await db.update(tenantDeployments).set({ status: "failed", lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
         return { ok: false, message: posError, cause: posError };
       }
     }
@@ -6893,8 +7087,8 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       });
     }
     if (tenantId) {
-      await db.update(tenants).set({ status: "active" }).where(eq10(tenants.id, tenantId));
-      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, tenantId));
+      await db.update(tenants).set({ status: "active" }).where(eq13(tenants.id, tenantId));
+      await db.update(tenantDeployments).set({ status: "active", lastError: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, tenantId));
     }
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
     return {
@@ -6921,10 +7115,10 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (tenantId) {
-      await db.update(tenants).set({ status: "failed" }).where(eq10(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
+      await db.update(tenants).set({ status: "failed" }).where(eq13(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_status_failed_update", error));
     }
     if (deploymentId) {
-      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
+      await db.update(tenantDeployments).set({ status: "failed", lastError: message, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.id, deploymentId)).catch((error) => recordCleanupError("deployment_status_failed_update", error));
     }
     if (sideEffectsStarted && composeCtx) {
       await trace.event("cleanup", "Attempting best-effort compose rollback", {
@@ -6933,7 +7127,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       }).catch((error) => recordCleanupError("cleanup_event_before_rollback", error));
       const rolledBack = await composeDownBestEffort(deps.docker, composeCtx);
       if (rolledBack && tenantId) {
-        await db.delete(tenants).where(eq10(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
+        await db.delete(tenants).where(eq13(tenants.id, tenantId)).catch((error) => recordCleanupError("tenant_delete_after_rollback", error));
         await trace.event("cleanup", "Compose rollback completed and tenant records removed", {
           level: "info",
           meta: { composeProjectName: composeCtx.project, tenantId }
@@ -6970,7 +7164,7 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
     financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
     financeCashAccountId: tenantDeployments.financeCashAccountId,
     financeCardAccountId: tenantDeployments.financeCardAccountId
-  }).from(tenants).innerJoin(tenantDeployments, eq10(tenantDeployments.tenantId, tenants.id)).where(eq10(tenants.id, input.tenantId)).limit(1);
+  }).from(tenants).innerJoin(tenantDeployments, eq13(tenantDeployments.tenantId, tenants.id)).where(eq13(tenants.id, input.tenantId)).limit(1);
   if (!row) {
     throw new Error(`tenant_not_found:${input.tenantId}`);
   }
@@ -6990,6 +7184,8 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
     let walkInCustomerId = row.financeWalkInCustomerId ?? void 0;
     let cashAccountId = row.financeCashAccountId ?? void 0;
     let cardAccountId = row.financeCardAccountId ?? void 0;
+    let serviceChargeItemId;
+    let discountItemId;
     const hasAccounting = licensedModules.includes("accounting");
     if (hasAccounting && financeTenantId && internalUrl && internalApiSecret) {
       if (!financeDefaultWarehouseId || financeDefaultWarehouseId <= 0) {
@@ -7005,7 +7201,9 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
           financeDefaultWarehouseId
         });
       }
-      if (!walkInCustomerId || walkInCustomerId <= 0 || (!cashAccountId || cashAccountId <= 0) || (!cardAccountId || cardAccountId <= 0)) {
+      const needsDepositIds = !walkInCustomerId || walkInCustomerId <= 0 || (!cashAccountId || cashAccountId <= 0) || (!cardAccountId || cardAccountId <= 0);
+      const needsBridgeItems = !serviceChargeItemId || !discountItemId;
+      if (needsDepositIds || needsBridgeItems) {
         const seeded = await seedFinancePosDefaults({
           internalBaseUrl: internalUrl,
           internalApiSecret,
@@ -7013,14 +7211,22 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
           correlationId,
           log
         });
-        walkInCustomerId = seeded.walkInCustomerId;
-        cashAccountId = seeded.cashAccountId;
-        cardAccountId = seeded.cardAccountId;
-        await persistFinanceDeploymentIds(db, row.deploymentId, {
-          walkInCustomerId,
-          cashAccountId,
-          cardAccountId
-        });
+        if (needsDepositIds) {
+          walkInCustomerId = seeded.walkInCustomerId;
+          cashAccountId = seeded.cashAccountId;
+          cardAccountId = seeded.cardAccountId;
+          await persistFinanceDeploymentIds(db, row.deploymentId, {
+            walkInCustomerId,
+            cashAccountId,
+            cardAccountId
+          });
+        }
+        if (seeded.serviceChargeItemId) {
+          serviceChargeItemId = seeded.serviceChargeItemId;
+        }
+        if (seeded.discountItemId) {
+          discountItemId = seeded.discountItemId;
+        }
       }
     }
     const posOutcome = await runPosProvisionStep({
@@ -7036,7 +7242,7 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
     });
     if (posOutcome.posStatus !== "ok") {
       const posError = posOutcome.posError ?? "POS module provisioning failed";
-      await db.update(tenantDeployments).set({ lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, input.tenantId));
+      await db.update(tenantDeployments).set({ lastError: posError, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, input.tenantId));
       return {
         ok: true,
         module: "pos",
@@ -7051,7 +7257,7 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
         ...posOutcome.posUrl ? { posUrl: posOutcome.posUrl } : {},
         lastError: null,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq10(tenantDeployments.tenantId, input.tenantId));
+      }).where(eq13(tenantDeployments.tenantId, input.tenantId));
     }
     if (hasAccounting && posOutcome.posOrganizationId && posOutcome.posHostPort && financeTenantId && walkInCustomerId && cashAccountId && cardAccountId && financeInternalPort) {
       const wireResult = await runWirePosIntegrationStep({
@@ -7065,6 +7271,8 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
         walkInCustomerId,
         cashAccountId,
         cardAccountId,
+        serviceChargeItemId,
+        discountItemId,
         financeDefaultWarehouseId,
         log,
         trace,
@@ -7074,8 +7282,8 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
         hasOp: () => false
       });
       if (!wireResult.ok) {
-        await db.update(tenants).set({ status: "partial" }).where(eq10(tenants.id, input.tenantId));
-        await db.update(tenantDeployments).set({ lastError: wireResult.error, updatedAt: /* @__PURE__ */ new Date() }).where(eq10(tenantDeployments.tenantId, input.tenantId));
+        await db.update(tenants).set({ status: "partial" }).where(eq13(tenants.id, input.tenantId));
+        await db.update(tenantDeployments).set({ lastError: wireResult.error, updatedAt: /* @__PURE__ */ new Date() }).where(eq13(tenantDeployments.tenantId, input.tenantId));
         return {
           ok: true,
           module: "pos",
@@ -7555,7 +7763,7 @@ async function provisionTenant(db, input, log, correlationId, assertNotCancelled
 }
 async function deprovisionTenant(db, tenantId, options = {}) {
   const log = options.log ?? (() => void 0);
-  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq11(tenantDeployments.tenantId, tenants.id)).where(eq11(tenants.id, tenantId)).limit(1);
+  const found = await db.select({ id: tenants.id, slug: tenants.slug, composeProject: tenantDeployments.composeProjectName }).from(tenants).leftJoin(tenantDeployments, eq14(tenantDeployments.tenantId, tenants.id)).where(eq14(tenants.id, tenantId)).limit(1);
   const row = found[0];
   if (!row) return { ok: false, message: "Tenant not found" };
   const project = row.composeProject ?? composeProjectName(row.slug);
@@ -7585,10 +7793,10 @@ async function deprovisionTenant(db, tenantId, options = {}) {
     const message = error instanceof Error ? error.message : String(error);
     log(`pos edge unpublish failed for ${row.slug}: ${message}`);
   });
-  await db.delete(tenantProvisionEvents).where(eq11(tenantProvisionEvents.tenantId, tenantId));
-  await db.delete(adminAuditLog).where(eq11(adminAuditLog.targetTenantId, tenantId));
-  await db.delete(tenantDeployments).where(eq11(tenantDeployments.tenantId, tenantId));
-  await db.delete(tenants).where(eq11(tenants.id, tenantId));
+  await db.delete(tenantProvisionEvents).where(eq14(tenantProvisionEvents.tenantId, tenantId));
+  await db.delete(adminAuditLog).where(eq14(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq14(tenantDeployments.tenantId, tenantId));
+  await db.delete(tenants).where(eq14(tenants.id, tenantId));
   await rm(join8(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => void 0);
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
@@ -7887,9 +8095,9 @@ var lastLicenseExpireScanMs = 0;
 async function expireDueLicenses(db) {
   const now = /* @__PURE__ */ new Date();
   const justExpired = await db.update(licenses).set({ status: "expired", updatedAt: now }).where(
-    and3(
-      eq12(licenses.status, "active"),
-      eq12(licenses.isPerpetual, false),
+    and4(
+      eq15(licenses.status, "active"),
+      eq15(licenses.isPerpetual, false),
       isNotNull2(licenses.expiresAt),
       lte2(licenses.expiresAt, now)
     )
@@ -8342,7 +8550,7 @@ async function runTenantLifecycleCommand(db, job, command) {
     tenantId: tenants.id,
     slug: tenants.slug,
     composeProjectName: tenantDeployments.composeProjectName
-  }).from(tenants).leftJoin(tenantDeployments, eq12(tenantDeployments.tenantId, tenants.id)).where(eq12(tenants.id, job.tenantId)).limit(1);
+  }).from(tenants).leftJoin(tenantDeployments, eq15(tenantDeployments.tenantId, tenants.id)).where(eq15(tenants.id, job.tenantId)).limit(1);
   const row = rows[0];
   if (!row || !row.composeProjectName) {
     throw new Error("tenant_not_found");
@@ -8480,16 +8688,16 @@ async function loop() {
             updatedAt: /* @__PURE__ */ new Date(),
             completedAt: fallbackNoRetry ? /* @__PURE__ */ new Date() : null,
             attempts: sql2`${tenantLifecycleJobs.attempts} + 1`
-          }).where(eq12(tenantLifecycleJobs.id, job.id));
+          }).where(eq15(tenantLifecycleJobs.id, job.id));
           if (job.type === "tenant.provision" && job.tenantId) {
-            await tx.update(tenants).set({ status: "failed" }).where(eq12(tenants.id, job.tenantId));
+            await tx.update(tenants).set({ status: "failed" }).where(eq15(tenants.id, job.tenantId));
             await tx.update(tenantDeployments).set({
               status: "failed",
               lastError: `worker_fallback_failure_persist:${message}`,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq12(tenantDeployments.tenantId, job.tenantId));
+            }).where(eq15(tenantDeployments.tenantId, job.tenantId));
           } else if (job.type === "add_module" && job.tenantId) {
-            await tx.update(tenants).set({ status: "active" }).where(eq12(tenants.id, job.tenantId));
+            await tx.update(tenants).set({ status: "active" }).where(eq15(tenants.id, job.tenantId));
           }
         }).catch((fallbackError) => {
           console.error(

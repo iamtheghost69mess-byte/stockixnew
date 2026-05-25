@@ -26,7 +26,7 @@ if (port !== preferred) {
 
 const child = spawn(
   "pnpm",
-  ["exec", "next", "dev", "--port", String(port)],
+  ["exec", "next", "dev", "--hostname", "127.0.0.1", "--port", String(port)],
   {
     cwd: dashboardDir,
     env: { ...process.env, PORT: String(port) },

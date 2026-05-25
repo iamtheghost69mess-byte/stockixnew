@@ -13,6 +13,14 @@ import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
 import { findFreePort } from "./find-free-port.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const concurrentlyBin = path.join(
+  repoRoot,
+  "node_modules",
+  "concurrently",
+  "dist",
+  "bin",
+  "concurrently.js",
+);
 loadEnvFilesAtRoot(repoRoot);
 
 /** @param {string} cmd @param {string[]} args @param {import('node:child_process').SpawnOptions} [opts] */
@@ -81,12 +89,15 @@ const posCmd =
     ? "node -e \"console.log('[dev-pos] skipped (STOCKIX_DEV_SKIP_POS=1)')\""
     : "node scripts/dev-pos-stack.mjs";
 
+// Run each service as a plain node script (not turbo --filter) so Windows cmd does not
+// split commands when concurrently is launched with shell: true.
 const concurrentlyArgs = [
   "-n",
-  "apps,worker,pos,pms,pms-ui",
+  "api,dash,worker,pos,pms,pms-ui",
   "-c",
-  "blue,magenta,green,cyan,yellow",
-  "pnpm exec turbo run dev --filter=dashboard --filter=api",
+  "blue,cyan,magenta,green,yellow",
+  "node scripts/dev-api.mjs",
+  "node scripts/dev-next.mjs",
   "node infra/worker-service/.runtime/worker.js",
   posCmd,
   "node scripts/dev-pms.mjs",
@@ -95,11 +106,11 @@ const concurrentlyArgs = [
 
 console.log("[dev] Starting apps, worker, POS, PMS…\n");
 
-const child = spawn("pnpm", ["exec", "concurrently", ...concurrentlyArgs], {
+const child = spawn(process.execPath, [concurrentlyBin, ...concurrentlyArgs], {
   cwd: repoRoot,
   env: sharedEnv,
   stdio: "inherit",
-  shell: process.platform === "win32",
+  shell: false,
 });
 
 child.on("exit", (code) => process.exit(code ?? 0));
