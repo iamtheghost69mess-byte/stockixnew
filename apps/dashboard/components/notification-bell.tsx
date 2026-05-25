@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { toast } from "@/components/reusabletoast";
+import { clientGet, clientPost } from "@/lib/client-fetch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,19 +71,6 @@ function timeAgo(date: string): string {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
   return new Date(date).toLocaleDateString();
-}
-
-async function apiFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as T;
 }
 
 function SeverityIcon({ severity }: { severity: NotificationSeverity }) {
@@ -211,8 +199,8 @@ export function NotificationBell() {
   const fetchNotifications = useCallback(async () => {
     try {
       const [notifRes, countRes] = await Promise.all([
-        apiFetchJson<NotificationsListResponse>(`/notifications?limit=${LIST_LIMIT}`),
-        apiFetchJson<CountResponse>("/notifications/count"),
+        clientGet<NotificationsListResponse>(`/notifications?limit=${LIST_LIMIT}`),
+        clientGet<CountResponse>("/notifications/count"),
       ]);
       const items = notifRes.data ?? [];
       setNotifications(items);
@@ -305,7 +293,7 @@ export function NotificationBell() {
     setUnreadCount((prev) => Math.max(0, prev - 1));
 
     try {
-      await apiFetchJson(`/notifications/${id}/read`, { method: "POST" });
+      await clientPost(`/notifications/${id}/read`);
     } catch {
       setNotifications(snapshot);
       setUnreadCount(countSnapshot);
@@ -322,7 +310,7 @@ export function NotificationBell() {
     setUnreadCount(0);
 
     try {
-      await apiFetchJson("/notifications/read-all", { method: "POST" });
+      await clientPost("/notifications/read-all");
     } catch {
       setNotifications(snapshot);
       setUnreadCount(countSnapshot);

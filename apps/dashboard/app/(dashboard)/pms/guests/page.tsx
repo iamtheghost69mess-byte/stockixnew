@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { PlusIcon, SearchIcon, Users } from "lucide-react";
 
+import { EmptyState } from "@/components/empty-state";
 import { PmsPageShell } from "@/components/pms-page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,8 +116,13 @@ export default function PmsGuestsPage() {
           <TableBody>
             {guests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
-                  No guests found.
+                <TableCell colSpan={7} className="p-0">
+                  <EmptyState
+                    icon={Users}
+                    title="No guests found"
+                    description="Guests appear when bookings are created for this tenant."
+                    className="border-0 bg-transparent"
+                  />
                 </TableCell>
               </TableRow>
             ) : (

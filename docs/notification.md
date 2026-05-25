@@ -288,6 +288,50 @@ Add a **durable notification row** per owner (or platform-wide for single-owner 
 
 ---
 
+## Implementation — multi-API safe stream (current)
+
+**Status:** Implemented. Global owner notifications use **DB polling** (not in-memory bus, not Redis).
+
+### Two SSE streams
+
+| Stream | Endpoint | Transport | Multi-instance |
+|--------|----------|-----------|----------------|
+| Provision step log | `GET /tenants/provision-stream/:correlationId` | Poll `tenant_provision_events` every 1.5s | Safe (shared DB) |
+| Owner inbox / toasts | `GET /notifications/stream` | Poll `owner_notifications` every 2.5s | Safe (shared DB) |
+
+### `GET /notifications/stream` behavior
+
+1. **Prime** — Load last 50 rows for owner into a `sent` Set (no SSE `notification` events → avoids reconnect toast storm).
+2. **`connected`** — `{ unread }` from DB count.
+3. **Loop** — `listNotificationsForStream(ownerId, since)` where `since = now - 1s`; emit `notification` for new IDs; `ping` every 15s.
+4. **`createNotification`** — Insert only; no `notificationBus`.
+
+### Constants
+
+- `NOTIFICATION_STREAM_POLL_MS = 2500`
+- `NOTIFICATION_STREAM_PING_MS = 15000`
+- Index: `owner_notifications_owner_created_idx` on `(owner_id, created_at)`
+
+### Latency and future upgrade
+
+- Worst-case live toast delay: **~2.5s** (poll interval).
+- **v2 (optional):** Redis pub/sub inside `createNotification` for sub-second push; dashboard SSE contract (`connected` / `notification` / `ping`) unchanged.
+
+### Key files (implementation)
+
+| Area | Path |
+|------|------|
+| Stream route | `apps/api/src/routes/notifications.ts` |
+| Service | `apps/api/src/notification-service.ts` |
+| Helpers (create on job/license) | `apps/api/src/notification-helpers.ts` |
+| Bell UI | `apps/dashboard/components/notification-bell.tsx` |
+| BFF SSE proxy | `apps/dashboard/app/api/notifications/stream/route.ts` |
+| Tests | `apps/api/tests/notification-stream.test.ts` |
+
+**Removed:** `apps/api/src/notification-bus.ts` (in-memory fan-out; not safe across API replicas).
+
+---
+
 ## CRITICAL RULES (audit compliance)
 
 - [x] Read existing SSE before recommending tech  

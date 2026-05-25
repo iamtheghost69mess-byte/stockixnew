@@ -1,5 +1,8 @@
 "use client";
 
+import { History } from "lucide-react";
+
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,12 +44,11 @@ export function TenantProvisionEvents({
         {eventsLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : events.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-10 text-center">
-            <p className="text-sm font-medium text-foreground">No provisioning events yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              When this tenant is provisioned or retried, lifecycle steps will appear here.
-            </p>
-          </div>
+          <EmptyState
+            icon={History}
+            title="No provisioning events yet"
+            description="When this tenant is provisioned or retried, lifecycle steps will appear here."
+          />
         ) : (
           <ScrollArea className="h-[400px]">
             <div className="space-y-2 text-sm">
