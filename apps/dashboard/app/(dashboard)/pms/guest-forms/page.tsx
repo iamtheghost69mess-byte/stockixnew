@@ -153,11 +153,14 @@ export default function PmsGuestFormsPage() {
     setShareLoading(false);
   }
 
-  const PMS_TENANT_URL = process.env.NEXT_PUBLIC_PMS_TENANT_APP_URL ?? "http://localhost:3004";
+  function guestFormUrl(token: string): string {
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    return `${base}/g/${token}`;
+  }
 
   function copyLink() {
     if (!shareToken) return;
-    void navigator.clipboard.writeText(`${PMS_TENANT_URL}/g/${shareToken}`);
+    void navigator.clipboard.writeText(guestFormUrl(shareToken));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
