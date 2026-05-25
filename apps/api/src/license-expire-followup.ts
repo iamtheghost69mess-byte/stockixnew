@@ -86,7 +86,7 @@ export async function processLicenseExpiryFollowUp(
       tenantId: license.tenantId,
       licenseId: license.id,
       type: "license.expired",
-      body: "Finance access is now restricted. Renew the license to restore full access.",
+      body: "This tenant's license has expired. Finance access is restricted until you renew or assign a new license.",
     });
   }
 

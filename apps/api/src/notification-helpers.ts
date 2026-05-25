@@ -20,6 +20,12 @@ function licenseDetailPath(licenseId: string): string {
   return `/licenses/${licenseId}`;
 }
 
+function formatModulesList(modulesJson: string | null | undefined): string {
+  const modules = parseTenantModules(modulesJson);
+  if (modules.length === 0) return "accounting";
+  return modules.join(", ");
+}
+
 async function loadTenantContext(db: Db, tenantId: string) {
   const [row] = await db
     .select({
@@ -27,6 +33,7 @@ async function loadTenantContext(db: Db, tenantId: string) {
       name: tenants.name,
       slug: tenants.slug,
       ownerId: tenants.ownerId,
+      adminEmail: tenants.adminEmail,
       modules: tenants.modules,
       internalPort: tenantDeployments.internalPort,
       posUrl: tenantDeployments.posUrl,
@@ -74,43 +81,50 @@ export function notifyProvisionOutcome(
       actionUrl: tenantDetailPath(tenant.id),
     };
 
+    const modulesLabel = formatModulesList(tenant.modules);
+
     if (opts.finalStatus === "active") {
       safeCreateNotification(db, {
         ...base,
         type: "provision.complete",
         severity: "success",
         title: `${tenant.name} is ready`,
-        body: "Your tenant has been provisioned successfully.",
+        body: `Tenant provisioned successfully with ${modulesLabel}. Bootstrap credentials are available in the tenant detail page${tenant.adminEmail ? ` (admin: ${tenant.adminEmail})` : ""}.`,
         actionLabel: "View tenant",
         meta: {
           financeUrl,
           posUrl,
           modules: parseTenantModules(tenant.modules),
+          adminEmail: tenant.adminEmail,
         },
       });
       return;
     }
 
     if (opts.finalStatus === "partial") {
+      const errDetail = tenant.lastError ?? opts.lastError ?? "unknown error";
       safeCreateNotification(db, {
         ...base,
         type: "provision.partial",
         severity: "warning",
-        title: `${tenant.name} partially provisioned`,
-        body: `Finance is active but POS provisioning failed. ${tenant.lastError ?? opts.lastError ?? ""}`.trim(),
-        actionLabel: "Retry POS",
-        meta: { financeUrl, posUrl },
+        title: `${tenant.name} — POS setup incomplete`,
+        body: `Finance is active and ready. POS provisioning failed: ${errDetail}. Retry from the tenant detail page.`,
+        actionLabel: "Retry POS setup",
+        meta: { financeUrl, posUrl, lastError: errDetail },
       });
       return;
     }
 
+    const failDetail =
+      opts.lastError ?? tenant.lastError ?? "Check the provision log for details.";
     safeCreateNotification(db, {
       ...base,
       type: "provision.failed",
       severity: "error",
       title: `${tenant.name} provisioning failed`,
-      body: opts.lastError ?? tenant.lastError ?? "An unexpected error occurred during provisioning.",
-      actionLabel: "View details",
+      body: `Provisioning could not complete. ${failDetail}`,
+      actionLabel: "View details & retry",
+      meta: { lastError: failDetail },
     });
   })().catch((err) => {
     console.error(

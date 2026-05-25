@@ -16,6 +16,28 @@ const ROUTE_TITLES: Record<string, string> = {
   "/audit-log": "Audit log",
   "/api-keys": "API keys",
   "/settings": "Security & settings",
+  "/pos": "POS",
+  "/pos/organizations": "Organizations",
+  "/pos/devices": "Devices",
+  "/pos/metrics": "Metrics",
+  "/pos/webhooks": "Webhooks",
+  "/pos/flags": "Feature flags",
+  "/pos/jobs": "Jobs",
+  "/pos/notifications": "Notifications",
+  "/pms": "PMS",
+  "/pms/properties": "Properties",
+  "/pms/rooms": "Rooms",
+  "/pms/bookings": "Bookings",
+  "/pms/guests": "Guests",
+  "/pms/payments": "Payments",
+  "/pms/channels": "iCal channels",
+  "/pms/cleaning": "Cleaning",
+  "/pms/reports": "Reports",
+  "/pms/calendar": "Calendar",
+  "/pms/date-overrides": "Date overrides",
+  "/pms/message-templates": "Message templates",
+  "/pms/guest-forms": "Guest forms",
+  "/pms/staff": "Staff",
 };
 
 function getPageTitle(pathname: string): string {
@@ -30,6 +52,9 @@ function getPageTitle(pathname: string): string {
   }
   if (/^\/licenses\/[^/]+/.test(path)) {
     return "License detail";
+  }
+  if (/^\/pos\/organizations\/[^/]+/.test(path)) {
+    return "Organization detail";
   }
 
   return "Dashboard";
