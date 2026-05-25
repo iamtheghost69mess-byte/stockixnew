@@ -2,12 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalLinkIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-
-const PMS_TENANT_APP_URL =
-  process.env.NEXT_PUBLIC_PMS_TENANT_APP_URL ?? "http://localhost:3004";
 
 const PMS_LINKS = [
   { href: "/pms", label: "Overview", exact: true },
@@ -48,29 +44,25 @@ export function PmsPageShell({
         </div>
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">You are here:</span> Platform admin PMS
-            (manage any licensed tenant). Same login as the dashboard —{" "}
+            <span className="font-medium text-foreground">You are here:</span> Platform admin PMS —
+            manage any licensed tenant. Same login as the dashboard (
             <Link href="/login" className="text-primary underline-offset-4 hover:underline">
               /login
             </Link>
-            .
+            ).
           </p>
           <p className="mt-2">
-            <span className="font-medium text-foreground">Full tenant PMS app:</span>{" "}
-            <a
-              href={PMS_TENANT_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-            >
-              {PMS_TENANT_APP_URL}
-              <ExternalLinkIcon className="size-3.5" />
-            </a>{" "}
-            (properties, bookings UI for property managers; requires tenant user session).
+            <span className="font-medium text-foreground">Guest pre-arrival forms</span> are served
+            at{" "}
+            <Link href="/g" className="text-primary underline-offset-4 hover:underline">
+              /g/:token
+            </Link>{" "}
+            on this host. Share links are generated in the Guest Forms tab.
           </p>
           <p className="mt-2 text-xs">
-            Metrics need the PMS API running (<code className="rounded bg-muted px-1">pnpm dev</code>{" "}
-            → look for <code className="rounded bg-muted px-1">[pms] PMS service listening</code>).
+            Metrics require the PMS API running (
+            <code className="rounded bg-muted px-1">pnpm dev</code> → look for{" "}
+            <code className="rounded bg-muted px-1">[pms] PMS service listening</code>).
           </p>
         </div>
       </div>
