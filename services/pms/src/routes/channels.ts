@@ -6,6 +6,7 @@ import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import { generateExportToken } from "../ical/sync.js";
 import { syncCalendars } from "../lib/calendar-sync.js";
+import { PLATFORM_PRESETS } from "../lib/platforms.js";
 import type { PmsEnv } from "../types.js";
 
 export const channelsRouter = new Hono<PmsEnv>();
@@ -95,6 +96,58 @@ channelsRouter.get("/alerts", async (c) => {
     ? rows.filter((r) => r.createdAt && r.createdAt > new Date(since))
     : rows;
   return c.json({ alerts });
+});
+
+// GET /api/channels/platform-presets — OTA platform registry for the UI
+channelsRouter.get("/platform-presets", (c) => c.json({ presets: PLATFORM_PRESETS }));
+
+// POST /api/channels/validate-url — sanity-check a pasted iCal import URL
+channelsRouter.post("/validate-url", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const raw = ((body as Record<string, unknown> | null)?.url as string | undefined ?? "").trim();
+  if (!raw) return c.json({ ok: false, reason: "missing_url" });
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return c.json({ ok: false, reason: "bad_url" });
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return c.json({ ok: false, reason: "bad_url" });
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: { "User-Agent": "Stockix-PMS/1.0", Accept: "text/calendar, text/plain, */*" },
+      redirect: "follow",
+    });
+  } catch {
+    clearTimeout(timeout);
+    return c.json({ ok: false, reason: "unreachable" });
+  }
+  clearTimeout(timeout);
+  if (!res.ok) return c.json({ ok: false, reason: "unreachable", status: res.status });
+  const reader = res.body?.getReader();
+  if (!reader) return c.json({ ok: false, reason: "not_ical" });
+  let head = "";
+  let total = 0;
+  try {
+    while (total < 512) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      head += new TextDecoder().decode(value);
+      total += value.byteLength;
+    }
+  } finally {
+    try { await reader.cancel(); } catch { /* ignore */ }
+  }
+  if (!head.trim().startsWith("BEGIN:VCALENDAR")) {
+    return c.json({ ok: false, reason: "not_ical" });
+  }
+  return c.json({ ok: true });
 });
 
 // POST /api/channels/:id/rotate-token — regenerate the iCal export token
