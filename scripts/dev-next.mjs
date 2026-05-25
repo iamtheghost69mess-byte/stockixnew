@@ -24,15 +24,28 @@ if (port !== preferred) {
   console.log(`[dashboard] http://localhost:${port}`);
 }
 
-const child = spawn(
-  "pnpm",
-  ["exec", "next", "dev", "--hostname", "127.0.0.1", "--port", String(port)],
-  {
-    cwd: dashboardDir,
-    env: { ...process.env, PORT: String(port) },
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  },
-);
+// Turbopack on Windows + pnpm often hits "module factory is not available" for react-hook-form etc.
+// Default to webpack; set STOCKIX_NEXT_TURBOPACK=1 to opt into Turbopack.
+const useWebpack = process.env.STOCKIX_NEXT_TURBOPACK !== "1";
+console.log(`[dashboard] dev bundler: ${useWebpack ? "webpack" : "turbopack"}`);
+
+const nextArgs = [
+  "exec",
+  "next",
+  "dev",
+  "--hostname",
+  "127.0.0.1",
+  "--port",
+  String(port),
+  ...(useWebpack ? ["--webpack"] : ["--turbopack"]),
+];
+
+const child = spawn("pnpm", nextArgs, {
+  cwd: dashboardDir,
+  env: { ...process.env, PORT: String(port) },
+  stdio: "inherit",
+  // shell:true on Windows can drop forwarded args to pnpm; keep false for reliable --webpack.
+  shell: false,
+});
 
 child.on("exit", (code) => process.exit(code ?? 0));
