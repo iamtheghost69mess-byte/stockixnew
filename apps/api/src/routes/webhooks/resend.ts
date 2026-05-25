@@ -7,6 +7,15 @@ import { updateEmailLogDelivery } from "../../mail/email-log.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+type ApiEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    requestId: string;
+    requestStartMs: number;
+  };
+};
+
 function verifySvixSignature(
   rawBody: string,
   headers: { id: string; timestamp: string; signature: string },
@@ -35,7 +44,7 @@ function verifySvixSignature(
   return false;
 }
 
-export function registerResendWebhook(app: Hono, db: Db | null): void {
+export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
   app.post("/webhooks/resend", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
