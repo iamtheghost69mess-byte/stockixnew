@@ -118,7 +118,13 @@ function startPos(label, cwd, cmd, args, env) {
 }
 
 startPos("api", repoRoot, "pnpm", ["--filter", "pos-backend", "dev"], backendEnv);
-startPos("ui", repoRoot, "pnpm", ["--filter", "studio-admin", "dev", "--", "-p", uiPort], frontendEnv);
+startPos(
+  "ui",
+  path.join(repoRoot, "services", "posnew", "apps", "pos-frontend2"),
+  "pnpm",
+  ["exec", "next", "dev", "--port", String(uiPort)],
+  frontendEnv,
+);
 
 function shutdown(signal) {
   for (const child of children) {
