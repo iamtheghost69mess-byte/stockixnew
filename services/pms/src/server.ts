@@ -4,6 +4,7 @@ import type { Hono } from "hono";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
 import { startIcalSyncJob } from "./jobs/ical-sync.js";
+import type { PmsEnv } from "./types.js";
 
 type PmsDb = PostgresJsDatabase<typeof schema> | null;
 
@@ -23,7 +24,7 @@ function log(level: "info" | "warn" | "error", message: string, extra?: Record<s
  * Bind the PMS Hono app and start background jobs.
  * Port comes from `PMS_PORT` (see `@repo/config` / root `.env`).
  */
-export function startPmsServer(app: Hono, db: PmsDb): void {
+export function startPmsServer(app: Hono<PmsEnv>, db: PmsDb): void {
   const port = pmsConfig.port;
 
   if (!dbConfig.databaseUrl) {
