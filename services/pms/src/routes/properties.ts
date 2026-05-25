@@ -6,6 +6,7 @@ import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 import { randomBytes } from "node:crypto";
+import { auditProperty } from "../lib/property-audit.js";
 
 export const propertiesRouter = new Hono<PmsEnv>();
 
@@ -106,4 +107,17 @@ propertiesRouter.delete("/:id", async (c) => {
     and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))),
   );
   return c.json({ ok: true });
+});
+
+// GET /api/properties/:id/audit — end-to-end health check
+propertiesRouter.get("/:id/audit", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  try {
+    const report = await auditProperty(db, tenantId(c), c.req.param("id"));
+    return c.json({ report });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("not found")) return errors.notFound(c, "property");
+    return c.json({ error: msg }, 500);
+  }
 });

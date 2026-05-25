@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { pmsPayments } from "@repo/db/schema";
+import { pmsPayments, pmsBookings } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
@@ -29,8 +29,15 @@ paymentsRouter.get("/", async (c) => {
 paymentsRouter.post("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const body = createSchema.parse(await c.req.json());
+  const tid = tenantId(c);
+  const [booking] = await db
+    .select({ id: pmsBookings.id })
+    .from(pmsBookings)
+    .where(and(eq(pmsBookings.id, body.bookingId), eq(pmsBookings.tenantId, tid)))
+    .limit(1);
+  if (!booking) return errors.notFound(c, "booking");
   const [row] = await db.insert(pmsPayments).values({
-    tenantId: tenantId(c), bookingId: body.bookingId, amountCents: body.amountCents,
+    tenantId: tid, bookingId: body.bookingId, amountCents: body.amountCents,
     method: body.method ?? "cash", status: body.status ?? "completed",
     transactionId: body.transactionId, notes: body.notes,
   }).returning();
