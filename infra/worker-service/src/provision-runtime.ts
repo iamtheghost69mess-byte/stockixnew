@@ -158,6 +158,8 @@ async function runWirePosIntegrationStep(params: {
   walkInCustomerId: number;
   cashAccountId: number;
   cardAccountId: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
   financeDefaultWarehouseId?: number;
   log: (m: string) => void;
   trace: ReturnType<typeof createProvisionTracer>;
@@ -197,6 +199,8 @@ async function runWirePosIntegrationStep(params: {
       walkInCustomerId: params.walkInCustomerId,
       cashAccountId: params.cashAccountId,
       cardAccountId: params.cardAccountId,
+      serviceChargeItemId: params.serviceChargeItemId,
+      discountItemId: params.discountItemId,
       defaultWarehouseId: params.financeDefaultWarehouseId,
       log: params.log,
     });
@@ -337,6 +341,8 @@ export async function executeProvisionRuntime(
   let walkInCustomerId: number | undefined;
   let cashAccountId: number | undefined;
   let cardAccountId: number | undefined;
+  let serviceChargeItemId: number | undefined;
+  let discountItemId: number | undefined;
   let posOrganizationId: string | undefined;
   let posUrl: string | undefined;
   let posApiUrl: string | undefined;
@@ -355,6 +361,10 @@ export async function executeProvisionRuntime(
   if (journalState.walkInCustomerId) walkInCustomerId = journalState.walkInCustomerId;
   if (journalState.cashAccountId) cashAccountId = journalState.cashAccountId;
   if (journalState.cardAccountId) cardAccountId = journalState.cardAccountId;
+  if (journalState.serviceChargeItemId) {
+    serviceChargeItemId = journalState.serviceChargeItemId;
+  }
+  if (journalState.discountItemId) discountItemId = journalState.discountItemId;
   const checkNotCancelled = async () => {
     if (!assertNotCancelled) return;
     await assertNotCancelled();
@@ -548,6 +558,26 @@ export async function executeProvisionRuntime(
             port > 0
               ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
               : undefined;
+          let retryServiceChargeItemId: number | undefined;
+          let retryDiscountItemId: number | undefined;
+          const internalApiSecret = apiConfig.internalApiSecret?.trim() ?? "";
+          if (workerInternalUrl && internalApiSecret) {
+            try {
+              const seeded = await seedFinancePosDefaults({
+                internalBaseUrl: workerInternalUrl,
+                internalApiSecret,
+                financeTenantId: existing.financeTenantId!,
+                correlationId,
+                log,
+              });
+              retryServiceChargeItemId = seeded.serviceChargeItemId;
+              retryDiscountItemId = seeded.discountItemId;
+            } catch (seedErr) {
+              const seedMsg =
+                seedErr instanceof Error ? seedErr.message : String(seedErr);
+              log(`[provision][pos] bridge item seed skipped on retry: ${seedMsg}`);
+            }
+          }
           const wireResult = await runWirePosIntegrationStep({
             licensedModules: retryLicensedModules,
             slug: input.slug,
@@ -559,6 +589,8 @@ export async function executeProvisionRuntime(
             walkInCustomerId: existing.financeWalkInCustomerId!,
             cashAccountId: existing.financeCashAccountId!,
             cardAccountId: existing.financeCardAccountId!,
+            serviceChargeItemId: retryServiceChargeItemId,
+            discountItemId: retryDiscountItemId,
             financeDefaultWarehouseId: existing.financeDefaultWarehouseId ?? undefined,
             log,
             trace,
@@ -1255,6 +1287,8 @@ export async function executeProvisionRuntime(
           walkInCustomerId = seeded.walkInCustomerId;
           cashAccountId = seeded.cashAccountId;
           cardAccountId = seeded.cardAccountId;
+          serviceChargeItemId = seeded.serviceChargeItemId;
+          discountItemId = seeded.discountItemId;
           await persistFinanceDeploymentIds(db, deploymentId, {
             financeTenantId,
             financeDefaultWarehouseId,
@@ -1267,6 +1301,8 @@ export async function executeProvisionRuntime(
             walkInCustomerId,
             cashAccountId,
             cardAccountId,
+            serviceChargeItemId,
+            discountItemId,
             elapsedMs: elapsedMs(),
           });
           await trace.event("pos_defaults_seeded", "Walk-in customer and deposit accounts ready", {
@@ -1274,6 +1310,8 @@ export async function executeProvisionRuntime(
               walkInCustomerId,
               cashAccountId,
               cardAccountId,
+              serviceChargeItemId,
+              discountItemId,
             },
           });
           log("[provision] step done: tenant.seed_pos_defaults");
@@ -1382,6 +1420,8 @@ export async function executeProvisionRuntime(
           walkInCustomerId,
           cashAccountId,
           cardAccountId,
+          serviceChargeItemId,
+          discountItemId,
           financeDefaultWarehouseId,
           log,
           trace,
@@ -1647,6 +1687,8 @@ export async function executeAddModuleRuntime(
     let walkInCustomerId = row.financeWalkInCustomerId ?? undefined;
     let cashAccountId = row.financeCashAccountId ?? undefined;
     let cardAccountId = row.financeCardAccountId ?? undefined;
+    let serviceChargeItemId: number | undefined;
+    let discountItemId: number | undefined;
 
     const hasAccounting = licensedModules.includes("accounting");
     if (
@@ -1668,11 +1710,13 @@ export async function executeAddModuleRuntime(
           financeDefaultWarehouseId,
         });
       }
-      if (
+      const needsDepositIds =
         (!walkInCustomerId || walkInCustomerId <= 0)
         || (!cashAccountId || cashAccountId <= 0)
-        || (!cardAccountId || cardAccountId <= 0)
-      ) {
+        || (!cardAccountId || cardAccountId <= 0);
+      const needsBridgeItems =
+        !serviceChargeItemId || !discountItemId;
+      if (needsDepositIds || needsBridgeItems) {
         const seeded = await seedFinancePosDefaults({
           internalBaseUrl: internalUrl,
           internalApiSecret,
@@ -1680,14 +1724,22 @@ export async function executeAddModuleRuntime(
           correlationId,
           log,
         });
-        walkInCustomerId = seeded.walkInCustomerId;
-        cashAccountId = seeded.cashAccountId;
-        cardAccountId = seeded.cardAccountId;
-        await persistFinanceDeploymentIds(db, row.deploymentId, {
-          walkInCustomerId,
-          cashAccountId,
-          cardAccountId,
-        });
+        if (needsDepositIds) {
+          walkInCustomerId = seeded.walkInCustomerId;
+          cashAccountId = seeded.cashAccountId;
+          cardAccountId = seeded.cardAccountId;
+          await persistFinanceDeploymentIds(db, row.deploymentId, {
+            walkInCustomerId,
+            cashAccountId,
+            cardAccountId,
+          });
+        }
+        if (seeded.serviceChargeItemId) {
+          serviceChargeItemId = seeded.serviceChargeItemId;
+        }
+        if (seeded.discountItemId) {
+          discountItemId = seeded.discountItemId;
+        }
       }
     }
 
@@ -1751,6 +1803,8 @@ export async function executeAddModuleRuntime(
         walkInCustomerId,
         cashAccountId,
         cardAccountId,
+        serviceChargeItemId,
+        discountItemId,
         financeDefaultWarehouseId,
         log,
         trace,

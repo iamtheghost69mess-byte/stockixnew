@@ -103,6 +103,8 @@ test("wireBigcapitalIntegration enables config and native GL guard", async (t) =
       defaultCashDepositAccountId: 20,
       defaultCardDepositAccountId: 21,
       defaultWarehouseId: 30,
+      serviceChargeItemId: 88,
+      discountItemId: 99,
     },
   };
   const res = createResponse();
@@ -121,4 +123,6 @@ test("wireBigcapitalIntegration enables config and native GL guard", async (t) =
   assert.ok(Array.isArray(savedBigcapital.locationMapping));
   assert.equal(String(savedBigcapital.locationMapping[0].posLocationId), String(locId));
   assert.equal(savedBigcapital.locationMapping[0].bigcapitalWarehouseId, 30);
+  assert.equal(savedBigcapital.serviceChargeItemId, 88);
+  assert.equal(savedBigcapital.discountItemId, 99);
 });

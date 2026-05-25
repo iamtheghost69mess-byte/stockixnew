@@ -241,7 +241,7 @@ Copies from provision result / deployment row:
 | H3 Auto internalBaseUrl | High | **FIXED** | `buildFinanceInternalUrlForPos` |
 | H4 Partial status in dashboard | High | **FIXED** | Partial banner |
 | H5 Unmapped items silent | High | **FIXED** | Notification + failed status |
-| H6 Service charge / discounts | High | **PARTIAL** | Line discounts synced; service charge in receipt `statement` only |
+| H6 Service charge / discounts | High | **FIXED** | Bridge items seeded (`POS-SERVICE-CHARGE`, `POS-ORDER-DISCOUNT`); wired to POS; receipt lines via `appendFinanceAdjustmentEntries` |
 | H7 Offline pay frontend | High | **FIXED** | `pay_order` offline queue (needs existing orderId) |
 | H8 Auto GL reversal on void | High | **FIXED** | Native bypass when Finance on |
 | M1 Multi-payment → single deposit | Medium | **OPEN** | Largest split wins |

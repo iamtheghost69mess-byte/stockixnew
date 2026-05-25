@@ -4,7 +4,14 @@ export type SeedFinancePosDefaultsResult = {
   walkInCustomerId: number;
   cashAccountId: number;
   cardAccountId: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
 };
+
+function readOptionalPositiveId(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined;
+}
 
 /**
  * POST /api/internal/tenants/:tenantId/seed-pos-defaults
@@ -51,9 +58,20 @@ export async function seedFinancePosDefaults(params: {
   ) {
     throw new Error("seed_pos_defaults_failed:missing_ids");
   }
+  const serviceChargeItemId = readOptionalPositiveId(body.serviceChargeItemId);
+  const discountItemId = readOptionalPositiveId(body.discountItemId);
+  const bridgeNote =
+    serviceChargeItemId || discountItemId
+      ? ` serviceCharge=${serviceChargeItemId ?? "n/a"} discount=${discountItemId ?? "n/a"}`
+      : "";
   params.log?.(
-    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}`,
+    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}${bridgeNote}`,
   );
-  return { walkInCustomerId, cashAccountId, cardAccountId };
+  return {
+    walkInCustomerId,
+    cashAccountId,
+    cardAccountId,
+    serviceChargeItemId,
+    discountItemId,
+  };
 }
-
