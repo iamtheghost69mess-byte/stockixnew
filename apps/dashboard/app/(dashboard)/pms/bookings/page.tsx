@@ -90,9 +90,14 @@ export default function PmsBookingsPage() {
   async function handleCreate() {
     if (!tenantId) return;
     setSaving(true);
+    const amountCents = parseInt(form.totalAmountCents, 10);
+    if (Number.isNaN(amountCents) || amountCents < 0) {
+      setSaving(false);
+      return;
+    }
     await pmsFetch("bookings", tenantId, {
       method: "POST",
-      body: JSON.stringify({ ...form, totalAmountCents: parseInt(form.totalAmountCents, 10) }),
+      body: JSON.stringify({ ...form, totalAmountCents: amountCents }),
     });
     setSaving(false);
     setOpen(false);

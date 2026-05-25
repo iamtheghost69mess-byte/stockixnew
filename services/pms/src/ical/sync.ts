@@ -59,6 +59,7 @@ export async function buildIcalFeed(
     channel.platform,
   );
 
-  // Combine direct booking events + buffer blocks
-  return generateICal([...events, ...buffered], `Stockix PMS — ${channel.name}`);
+  // Emit only the buffered events — they already span the full booking + buffer range.
+  // Emitting both events + buffered would produce duplicate overlapping VEVENTs.
+  return generateICal(buffered, `Stockix PMS — ${channel.name}`);
 }

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ZodError, z } from "zod";
+import { z } from "zod";
 import { and, desc, eq, gt, lt, gte, lte } from "drizzle-orm";
 import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsProperties, pmsGuests } from "@repo/db/schema";
 import { db } from "../db.js";
@@ -59,7 +59,6 @@ const updateSchema = z.object({
   checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   totalAmountCents: z.number().int().min(0).optional(),
-  bookingStatus: z.enum(["confirmed", "checked_in", "checked_out", "cancelled", "no_show"]).optional(),
   paymentStatus: z.enum(["pending", "partial", "paid", "refunded"]).optional(),
   adults: z.number().int().min(1).optional(),
   children: z.number().int().min(0).optional(),
@@ -204,7 +203,9 @@ bookingsRouter.post("/import", async (c) => {
 bookingsRouter.get("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const propertyId = c.req.query("propertyId");
-  const status = c.req.query("status");
+  const statusRaw = c.req.query("status");
+  const VALID_STATUSES = ["confirmed", "checked_in", "checked_out", "cancelled", "no_show"] as const;
+  const status = statusRaw && (VALID_STATUSES as readonly string[]).includes(statusRaw) ? statusRaw : undefined;
   const conditions = [eq(pmsBookings.tenantId, tenantId(c))];
   if (propertyId) conditions.push(eq(pmsBookings.propertyId, propertyId));
   if (status) conditions.push(eq(pmsBookings.bookingStatus, status));

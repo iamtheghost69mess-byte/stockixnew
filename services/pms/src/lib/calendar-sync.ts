@@ -4,7 +4,7 @@ import {
   pmsProperties,
   pmsSyncLogs,
 } from "@repo/db/schema";
-import { and, desc, eq, gt, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
 import { parseICal, type ICalEvent } from "./ical.js";
@@ -104,6 +104,7 @@ export async function syncCalendars(
   );
 
   for (const [propertyId, propertyLinks] of byProperty) {
+    let propertyHadSuccess = false;
     for (const link of propertyLinks) {
       if (!link.importUrl) continue;
 
@@ -223,6 +224,7 @@ export async function syncCalendars(
 
         summary.newEvents += newEvents.length;
         summary.removedEvents += removedRows.length;
+        propertyHadSuccess = true;
 
         if (newEvents.length > 0) {
           await log(
@@ -243,7 +245,7 @@ export async function syncCalendars(
       }
     }
 
-    summary.propertiesSynced++;
+    if (propertyHadSuccess) summary.propertiesSynced++;
   }
 
   // Prune oldest sync logs — keep last 1000 per tenant (bulk delete)

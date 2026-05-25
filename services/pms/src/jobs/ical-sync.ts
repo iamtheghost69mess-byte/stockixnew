@@ -17,15 +17,21 @@ export function startIcalSyncJob(
   log: (message: string) => void = console.log,
 ): void {
   const intervalMs = pmsConfig.icalSyncIntervalMs;
+  let isRunning = false;
 
   const tick = async () => {
+    if (isRunning) return;
+    isRunning = true;
     try {
       await syncAllTenants(db);
     } catch (err) {
       log(`[pms][ical-sync] ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      isRunning = false;
     }
   };
 
+  void tick();  // fire immediately on startup
   setInterval(tick, intervalMs);
   log(`[pms] iCal sync scheduled every ${intervalMs / 60000} minutes`);
 }

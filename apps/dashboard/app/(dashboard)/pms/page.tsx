@@ -47,12 +47,14 @@ export default function PmsOverviewPage() {
       setOccupancy(null);
       setRevenue(null);
       const today = new Date().toISOString().slice(0, 10);
+      const yearStart = new Date().toISOString().slice(0, 4) + "-01-01";
+      const yearEnd = new Date().toISOString().slice(0, 4) + "-12-31";
       const [occ, rev] = await Promise.all([
         pmsJson<OccupancyData>(
           `reports/occupancy?from=${today}&to=${today}`,
           tenantId,
         ),
-        pmsJson<RevenueData>("reports/revenue", tenantId),
+        pmsJson<RevenueData>(`reports/revenue?from=${yearStart}&to=${yearEnd}`, tenantId),
       ]);
       if (!occ.ok || !rev.ok) {
         setApiError(
