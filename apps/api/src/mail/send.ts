@@ -3,11 +3,16 @@ import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { getActiveLicenseForTenant, insertLicenseHistory } from "../license-utils.js";
-import { sendMail } from "./mailer.js";
+import {
+  mailSendSucceeded,
+  sendMail,
+  type MailSendResult,
+} from "./mailer.js";
 import { renderTenantWelcome } from "./templates/tenant-welcome.js";
 import { renderOwnerInvite } from "./templates/owner-invite.js";
 import { renderLicenseExpiring } from "./templates/license-expiring.js";
 import { renderLicenseExpired } from "./templates/license-expired.js";
+import { renderPasswordReset } from "./templates/password-reset.js";
 
 type MailDb = PostgresJsDatabase<typeof schema>;
 
@@ -16,7 +21,8 @@ export async function sendOwnerInviteEmail(opts: {
   name: string;
   role: string;
   inviteUrl: string;
-}) {
+  ownerId?: string;
+}): Promise<MailSendResult> {
   return sendMail({
     to: opts.to,
     subject: "You're invited to Stockix",
@@ -26,6 +32,50 @@ export async function sendOwnerInviteEmail(opts: {
       inviteUrl: opts.inviteUrl,
     }),
     idempotencyKey: `owner-invite/${opts.to}/${opts.inviteUrl.slice(-12)}`,
+    templateKey: "owner-invite",
+    ownerId: opts.ownerId,
+  });
+}
+
+export async function sendOwnerPasswordResetEmail(opts: {
+  to: string;
+  name?: string;
+  resetUrl: string;
+  ownerId?: string;
+}): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: "Reset your Stockix password",
+    html: renderPasswordReset({
+      name: opts.name,
+      resetUrl: opts.resetUrl,
+    }),
+    idempotencyKey: `password-reset/${opts.to}/${opts.resetUrl.slice(-16)}`,
+    templateKey: "password-reset",
+    ownerId: opts.ownerId,
+  });
+}
+
+export async function sendPasswordChangedEmail(opts: {
+  to: string;
+  name?: string;
+  ownerId?: string;
+}): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: "Your Stockix password was changed",
+    html: `<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
+  <h1>Password updated</h1>
+  <p>${opts.name ? `Hi ${escapeHtml(opts.name)},` : "Hi,"}</p>
+  <p>The password for your Stockix owner account was changed successfully.</p>
+  <p style="color: #666; font-size: 14px;">If you did not make this change, contact your platform administrator immediately.</p>
+</body>
+</html>`,
+    idempotencyKey: `password-changed/${opts.to}/${Date.now().toString(36).slice(0, 8)}`,
+    templateKey: "password-changed",
+    ownerId: opts.ownerId,
   });
 }
 
@@ -34,12 +84,15 @@ export async function sendTenantWelcomeEmail(opts: {
   tenantName: string;
   organizationNumber: string;
   loginUrl: string;
-}) {
+  tenantId?: string;
+}): Promise<MailSendResult> {
   return sendMail({
     to: opts.to,
     subject: `Welcome to Stockix — ${opts.tenantName}`,
     html: renderTenantWelcome(opts),
     idempotencyKey: `tenant-welcome/${opts.organizationNumber}`,
+    templateKey: "tenant-welcome",
+    tenantId: opts.tenantId,
   });
 }
 
@@ -66,7 +119,8 @@ export async function sendFinanceWelcomeEmail(opts: {
   adminEmail: string;
   oneTimePassword: string;
   modules: string[];
-}) {
+  tenantId?: string;
+}): Promise<MailSendResult> {
   const brandName = process.env.BRAND_NAME ?? "Stockix";
   const loginUrl = opts.financeUrl.replace(/\/+$/, "");
   const moduleNames = opts.modules.map(formatModuleLabel).join(", ");
@@ -105,6 +159,8 @@ export async function sendFinanceWelcomeEmail(opts: {
 </body>
 </html>`,
     idempotencyKey: `finance-welcome/${opts.adminEmail}/${loginUrl}`,
+    templateKey: "finance-welcome",
+    tenantId: opts.tenantId,
   });
 }
 
@@ -122,7 +178,8 @@ export async function sendPosWelcomeEmail(opts: {
   tenantName: string;
   posUrl: string;
   credentials: PosCredentialEmailRow[];
-}) {
+  tenantId?: string;
+}): Promise<MailSendResult> {
   const brandName = process.env.BRAND_NAME ?? "Stockix";
   const safeTenant = escapeHtml(opts.tenantName);
   const safePosUrl = escapeHtml(opts.posUrl);
@@ -164,6 +221,8 @@ export async function sendPosWelcomeEmail(opts: {
 </body>
 </html>`,
     idempotencyKey: `pos-welcome/${opts.to}/${opts.posUrl}`,
+    templateKey: "pos-welcome",
+    tenantId: opts.tenantId,
   });
 }
 
@@ -175,7 +234,7 @@ export async function sendLicenseExpiringEmail(opts: {
   tenantName: string;
   tenantId: string;
   expiresAt: Date;
-}): Promise<void> {
+}): Promise<MailSendResult> {
   const daysRemaining = Math.max(
     0,
     Math.ceil(
@@ -184,24 +243,27 @@ export async function sendLicenseExpiringEmail(opts: {
   );
   const expiryDay = opts.expiresAt.toISOString().split("T")[0];
 
-  try {
-    await sendMail({
-      to: opts.to,
-      subject: "Your Stockix license expires soon",
-      html: renderLicenseExpiring({
-        tenantName: opts.tenantName,
-        expiresAt: opts.expiresAt,
-        daysRemaining,
-      }),
-      idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`,
-    });
-  } catch (err) {
+  const result = await sendMail({
+    to: opts.to,
+    subject: "Your Stockix license expires soon",
+    html: renderLicenseExpiring({
+      tenantName: opts.tenantName,
+      expiresAt: opts.expiresAt,
+      daysRemaining,
+    }),
+    idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`,
+    templateKey: "license-expiring",
+    tenantId: opts.tenantId,
+  });
+
+  if (!mailSendSucceeded(result)) {
     console.error(
       "[sendLicenseExpiringEmail] Send failed",
       opts.tenantId,
-      err instanceof Error ? err.message : err,
+      result.status === "failed" ? result.error : result.status,
     );
   }
+  return result;
 }
 
 export async function sendLicenseExpiredEmail(opts: {
@@ -211,28 +273,31 @@ export async function sendLicenseExpiredEmail(opts: {
   expiredAt: Date;
   gracePeriodDays: number;
   graceEndsAt: Date;
-}): Promise<void> {
+}): Promise<MailSendResult> {
   const today = new Date().toISOString().split("T")[0];
 
-  try {
-    await sendMail({
-      to: opts.to,
-      subject: "Your Stockix license has expired",
-      html: renderLicenseExpired({
-        tenantName: opts.tenantName,
-        expiredAt: opts.expiredAt,
-        gracePeriodDays: opts.gracePeriodDays,
-        graceEndsAt: opts.graceEndsAt,
-      }),
-      idempotencyKey: `license-expired/${opts.tenantId}/${today}`,
-    });
-  } catch (err) {
+  const result = await sendMail({
+    to: opts.to,
+    subject: "Your Stockix license has expired",
+    html: renderLicenseExpired({
+      tenantName: opts.tenantName,
+      expiredAt: opts.expiredAt,
+      gracePeriodDays: opts.gracePeriodDays,
+      graceEndsAt: opts.graceEndsAt,
+    }),
+    idempotencyKey: `license-expired/${opts.tenantId}/${today}`,
+    templateKey: "license-expired",
+    tenantId: opts.tenantId,
+  });
+
+  if (!mailSendSucceeded(result)) {
     console.error(
       "[sendLicenseExpiredEmail] Send failed",
       opts.tenantId,
-      err instanceof Error ? err.message : err,
+      result.status === "failed" ? result.error : result.status,
     );
   }
+  return result;
 }
 
 export async function sendLicenseExpiredEmailForTenant(
@@ -276,7 +341,7 @@ export async function sendLicenseExpiredEmailForTenant(
     const graceEndsAt = new Date(expiredAt);
     graceEndsAt.setDate(graceEndsAt.getDate() + gracePeriodDays);
 
-    await sendLicenseExpiredEmail({
+    const result = await sendLicenseExpiredEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
       tenantId,
@@ -286,7 +351,7 @@ export async function sendLicenseExpiredEmailForTenant(
     });
 
     const historyLicenseId = opts?.licenseId ?? license?.id;
-    if (historyLicenseId) {
+    if (historyLicenseId && mailSendSucceeded(result)) {
       await insertLicenseHistory(db, {
         licenseId: historyLicenseId,
         action: "expired_email_sent",
@@ -324,7 +389,7 @@ export async function sendLicenseExpiringEmailForTenant(
       return;
     }
 
-    await sendLicenseExpiringEmail({
+    const result = await sendLicenseExpiringEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
       tenantId,
@@ -338,7 +403,7 @@ export async function sendLicenseExpiringEmailForTenant(
           )[0]
         : await getActiveLicenseForTenant(db, tenantId);
 
-    if (license?.id) {
+    if (license?.id && mailSendSucceeded(result)) {
       await insertLicenseHistory(db, {
         licenseId: license.id,
         action: "expiry_warning_sent",

@@ -429,6 +429,35 @@ export const ownerNotifications = pgTable(
 export type OwnerNotification = typeof ownerNotifications.$inferSelect;
 export type NewOwnerNotification = typeof ownerNotifications.$inferInsert;
 
+/** Outbound transactional email attempts (control plane SMTP). */
+export const emailLogs = pgTable(
+  "email_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateKey: text("template_key").notNull(),
+    recipientHash: text("recipient_hash").notNull(),
+    status: text("status").notNull(),
+    providerMessageId: text("provider_message_id"),
+    deliveryStatus: text("delivery_status"),
+    error: text("error"),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    ownerId: uuid("owner_id").references(() => owners.id, { onDelete: "set null" }),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("email_logs_created_at_idx").on(t.createdAt),
+    index("email_logs_template_key_idx").on(t.templateKey),
+    index("email_logs_provider_message_id_idx").on(t.providerMessageId),
+    index("email_logs_tenant_id_idx").on(t.tenantId),
+  ],
+);
+
+export type EmailLog = typeof emailLogs.$inferSelect;
+export type NewEmailLog = typeof emailLogs.$inferInsert;
+
 export const licenseHistory = pgTable(
   "license_history",
   {
