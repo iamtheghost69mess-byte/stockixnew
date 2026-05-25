@@ -99,13 +99,18 @@ export function generateICal(
     const dtstart = event.startDate.replace(/-/g, "");
     const dtend = event.endDate.replace(/-/g, "");
     const uid = event.uid.replace(/[^a-zA-Z0-9@._-]/g, "_");
-    const summary = event.summary.replace(/[^\x20-\x7E]/g, "");
+    const escapedSummary = event.summary
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\n/g, "\\n")
+      .replace(/[^\x20-\x7E]/g, "");
     lines.push(
       "BEGIN:VEVENT",
       `UID:${uid}`,
       `DTSTART;VALUE=DATE:${dtstart}`,
       `DTEND;VALUE=DATE:${dtend}`,
-      `SUMMARY:${summary}`,
+      `SUMMARY:${escapedSummary}`,
       `DTSTAMP:${formatNowUTC()}`,
       "END:VEVENT",
     );

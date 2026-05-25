@@ -5,6 +5,10 @@ import type * as schema from "@repo/db/schema";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+if (!process.env.FINANCE_INTERNAL_BASE_URL) {
+  console.warn("[pms][finance-sync] FINANCE_INTERNAL_BASE_URL is not set — finance sync will fail at runtime");
+}
+
 interface BookingRow {
   id: string;
   tenantId: string;

@@ -34,7 +34,8 @@ const updateSchema = createSchema.partial();
 // GET /api/guests?search=...
 guestsRouter.get("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
-  const search = c.req.query("search");
+  const searchRaw = c.req.query("search");
+  const search = searchRaw ? searchRaw.slice(0, 200) : undefined;
   const conditions = [eq(pmsGuests.tenantId, tenantId(c))];
   if (search) conditions.push(like(pmsGuests.name, `%${search}%`));
   const rows = await db.select().from(pmsGuests).where(and(...conditions)).orderBy(desc(pmsGuests.createdAt));

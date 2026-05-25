@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, sql, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { pmsBookings, pmsRooms, pmsPayments, pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors } from "./_utils.js";

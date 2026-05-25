@@ -78,6 +78,11 @@ export default function PmsRoomsPage() {
     setRooms(data.rooms ?? []);
   }
 
+  useEffect(() => {
+    setPropertyId("");
+    setRooms([]);
+  }, [tenantId]);
+
   useEffect(() => { void loadProperties(); }, [tenantId]);
   useEffect(() => { void loadRooms(); }, [tenantId, propertyId]);
 

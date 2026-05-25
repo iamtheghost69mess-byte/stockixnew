@@ -54,9 +54,7 @@ export function PmsPageShell({
           <p className="mt-2">
             <span className="font-medium text-foreground">Guest pre-arrival forms</span> are served
             at{" "}
-            <Link href="/g" className="text-primary underline-offset-4 hover:underline">
-              /g/:token
-            </Link>{" "}
+            <code className="rounded bg-muted px-1">/g/:token</code>{" "}
             on this host. Share links are generated in the Guest Forms tab.
           </p>
           <p className="mt-2 text-xs">

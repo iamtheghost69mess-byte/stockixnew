@@ -52,18 +52,28 @@ export default function PmsReportsPage() {
   const [occupancy, setOccupancy] = useState<OccupancyReport | null>(null);
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
   const [guests, setGuests] = useState<GuestsReport | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tenantId) return;
+    setApiError(null);
     void (async () => {
-      const [occRes, revRes, gRes] = await Promise.all([
-        pmsFetch(`reports/occupancy?from=${from}&to=${to}`, tenantId),
-        pmsFetch(`reports/revenue?from=${from}&to=${to}`, tenantId),
-        pmsFetch("reports/guests", tenantId),
-      ]);
-      setOccupancy((await occRes.json()) as OccupancyReport);
-      setRevenue((await revRes.json()) as RevenueReport);
-      setGuests((await gRes.json()) as GuestsReport);
+      try {
+        const [occRes, revRes, gRes] = await Promise.all([
+          pmsFetch(`reports/occupancy?from=${from}&to=${to}`, tenantId),
+          pmsFetch(`reports/revenue?from=${from}&to=${to}`, tenantId),
+          pmsFetch("reports/guests", tenantId),
+        ]);
+        if (!occRes.ok || !revRes.ok || !gRes.ok) {
+          setApiError("Failed to load reports. Is the PMS API running?");
+          return;
+        }
+        setOccupancy((await occRes.json()) as OccupancyReport);
+        setRevenue((await revRes.json()) as RevenueReport);
+        setGuests((await gRes.json()) as GuestsReport);
+      } catch {
+        setApiError("Network error loading reports.");
+      }
     })();
   }, [tenantId, from, to]);
 
@@ -90,6 +100,10 @@ export default function PmsReportsPage() {
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
         </div>
       </div>
+
+      {apiError ? (
+        <p className="text-sm text-destructive">{apiError}</p>
+      ) : null}
 
       <Tabs defaultValue="occupancy">
         <TabsList>

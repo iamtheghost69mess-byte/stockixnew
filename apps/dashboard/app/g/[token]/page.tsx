@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle2Icon, LoaderIcon } from "lucide-react";
 
@@ -87,10 +87,10 @@ export default function GuestFormPage() {
   const [formData, setFormData] = useState<FormData | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState("");
-  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     void (async () => {
+      if (!token) { setStatus("not_found"); return; }
       try {
         const res = await fetch(`/api/pms-public/${token}`);
         if (res.status === 404) { setStatus("not_found"); return; }
@@ -207,7 +207,7 @@ export default function GuestFormPage() {
               )}
             </div>
 
-            <form ref={formRef} onSubmit={(e) => void handleSubmit(e)} className="divide-y">
+            <form onSubmit={(e) => void handleSubmit(e)} className="divide-y">
               {formData.fields.map((field) => (
                 <div key={field.id} className="px-6 py-4 space-y-1.5">
                   <label htmlFor={field.id} className="block text-sm font-medium text-gray-700">

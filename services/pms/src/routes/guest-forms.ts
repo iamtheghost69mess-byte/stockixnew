@@ -140,6 +140,7 @@ guestFormsRouter.post("/booking/:bookingId/share", async (c) => {
       and(
         eq(pmsGuestFormSubmissions.bookingId, bookingId),
         eq(pmsGuestFormSubmissions.templateId, template.id),
+        eq(pmsGuestFormSubmissions.tenantId, tid),
       ),
     )
     .limit(1);

@@ -127,30 +127,40 @@ export default function PmsGuestFormsPage() {
     setLookupLoading(true);
     setSubmission(undefined);
     setShareToken(null);
-    const res = await pmsFetch(`guest-forms/booking/${bookingId.trim()}`, tenantId);
-    if (!res.ok) {
+    try {
+      const res = await pmsFetch(`guest-forms/booking/${bookingId.trim()}`, tenantId);
+      if (!res.ok) {
+        setSubmission(null);
+      } else {
+        const data = (await res.json()) as { submission: Submission | null };
+        setSubmission(data.submission);
+        setShareToken(data.submission?.shareToken ?? null);
+      }
+    } catch {
       setSubmission(null);
-    } else {
-      const data = (await res.json()) as { submission: Submission | null };
-      setSubmission(data.submission);
-      setShareToken(data.submission?.shareToken ?? null);
+    } finally {
+      setLookupLoading(false);
     }
-    setLookupLoading(false);
   }
 
   async function handleGenerateLink() {
     if (!tenantId || !bookingId.trim()) return;
     setShareLoading(true);
-    const res = await pmsFetch(`guest-forms/booking/${bookingId.trim()}/share`, tenantId, {
-      method: "POST",
-      body: "{}",
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { shareToken?: string };
-      if (data.shareToken) setShareToken(data.shareToken);
-      void handleLookup();
+    try {
+      const res = await pmsFetch(`guest-forms/booking/${bookingId.trim()}/share`, tenantId, {
+        method: "POST",
+        body: "{}",
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { shareToken?: string };
+        if (data.shareToken) setShareToken(data.shareToken);
+        await handleLookup();
+      }
+    } catch {
+      // network error — leave UI state unchanged
+    } finally {
+      setShareLoading(false);
     }
-    setShareLoading(false);
   }
 
   function guestFormUrl(token: string): string {
