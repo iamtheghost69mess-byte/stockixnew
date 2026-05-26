@@ -336,6 +336,9 @@ async function postStockTakeJournalEntry(params) {
     session,
   } = params;
   const orgId = organizationId;
+  if (await isBigcapitalNativeGlBypass(orgId)) {
+    return { entry: null, skipped: "bigcapital_integration" };
+  }
   const net = round2(
     (lines || []).reduce((s, l) => s + (Number(l.varianceValue) || 0), 0)
   );
@@ -3802,8 +3805,11 @@ async function issueCreditNote(invoiceId, data, userId) {
 async function postGrniAccrual(poId, receives, userId) {
   const po = await PurchaseOrder.findById(poId).populate("lines.ingredient");
   if (!po) throw new Error("Purchase order not found for GRNI accrual.");
-  
+
   const orgId = po.organization;
+  if (await isBigcapitalNativeGlBypass(orgId)) {
+    return true;
+  }
   const cfg = await getConfig(orgId);
   const grniAcc = cfg.defaultGrniAccount?._id || cfg.defaultGrniAccount;
   const invAcc =

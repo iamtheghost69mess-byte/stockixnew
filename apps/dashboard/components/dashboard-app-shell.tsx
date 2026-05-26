@@ -6,6 +6,10 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { DashboardRouteGuard } from "@/components/dashboard-route-guard";
+import { MailHealthBanner } from "@/components/mail-health-banner";
+import { MeProvider } from "@/components/me-provider";
+import type { Me } from "@/hooks/use-me";
 
 const ROUTE_TITLES: Record<string, string> = {
   "/": "Overview",
@@ -14,8 +18,32 @@ const ROUTE_TITLES: Record<string, string> = {
   "/plans": "Plans",
   "/owners": "Team & access",
   "/audit-log": "Audit log",
+  "/email-logs": "Email log",
   "/api-keys": "API keys",
   "/settings": "Security & settings",
+  "/settings/roles": "Platform roles",
+  "/pos": "POS",
+  "/pos/organizations": "Organizations",
+  "/pos/devices": "Devices",
+  "/pos/metrics": "Metrics",
+  "/pos/webhooks": "Webhooks",
+  "/pos/flags": "Feature flags",
+  "/pos/jobs": "Jobs",
+  "/pos/notifications": "Notifications",
+  "/pms": "PMS",
+  "/pms/properties": "Properties",
+  "/pms/rooms": "Rooms",
+  "/pms/bookings": "Bookings",
+  "/pms/guests": "Guests",
+  "/pms/payments": "Payments",
+  "/pms/channels": "iCal channels",
+  "/pms/cleaning": "Cleaning",
+  "/pms/reports": "Reports",
+  "/pms/calendar": "Calendar",
+  "/pms/date-overrides": "Date overrides",
+  "/pms/message-templates": "Message templates",
+  "/pms/guest-forms": "Guest forms",
+  "/pms/staff": "Staff",
 };
 
 function getPageTitle(pathname: string): string {
@@ -31,15 +59,25 @@ function getPageTitle(pathname: string): string {
   if (/^\/licenses\/[^/]+/.test(path)) {
     return "License detail";
   }
+  if (/^\/pos\/organizations\/[^/]+/.test(path)) {
+    return "Organization detail";
+  }
 
   return "Dashboard";
 }
 
-export function DashboardAppShell({ children }: { children: React.ReactNode }) {
+export function DashboardAppShell({
+  children,
+  initialMe = null,
+}: {
+  children: React.ReactNode;
+  initialMe?: Me | null;
+}) {
   const pathname = usePathname();
   const title = getPageTitle(pathname);
 
   return (
+    <MeProvider initialMe={initialMe ?? null}>
     <SidebarProvider
       style={
         {
@@ -55,11 +93,13 @@ export function DashboardAppShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-h-0 flex-1 flex-col overflow-auto">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 px-4 py-4 md:gap-6 md:py-6 lg:px-6">
-              {children}
+              <MailHealthBanner />
+              <DashboardRouteGuard>{children}</DashboardRouteGuard>
             </div>
           </div>
         </div>
       </SidebarInset>
     </SidebarProvider>
+    </MeProvider>
   );
 }

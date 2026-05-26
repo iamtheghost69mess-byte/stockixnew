@@ -20,6 +20,12 @@ export type TenantRow = {
   composeProject: string | null;
   lastError: string | null;
   registrationCompletedAt: string | null;
+  createdAt?: string | null;
+  /** Assigned license status (active, expired, suspended, revoked), or null if none. */
+  licenseStatus?: string | null;
+  licenseExpiresAt?: string | null;
+  licenseValidFrom?: string | null;
+  licenseIsPerpetual?: boolean | null;
 };
 
 /** Full-directory counts (child-org filter only), for headers and dashboard stats. */
@@ -29,6 +35,7 @@ export type TenantDirectoryTotals = {
   suspended: number;
   provisioning: number;
   failed: number;
+  partial?: number;
 };
 
 export type TenantDetail = {
@@ -66,6 +73,7 @@ export type TenantDetail = {
     publicUrl: string | null;
     financeAdminPassword: string | null;
     lastError: string | null;
+    partialFailureKind: "pos_failed" | "wire_failed" | null;
     registrationCompletedAt: string | null;
     createdAt: string;
     updatedAt: string;

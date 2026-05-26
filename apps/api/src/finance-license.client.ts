@@ -1,4 +1,14 @@
 import { apiConfig } from "@repo/config";
+import { requireEnv } from "./lib/require-env.js";
+
+/** When true, missing secret or HTTP failure is logged but does not throw (development only). */
+function isFinanceLicenseSyncOptional(): boolean {
+  const flag = process.env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
+  if (flag === "1" || flag === "true") {
+    return apiConfig.nodeEnv === "development";
+  }
+  return false;
+}
 import { tenantDeployments } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -9,6 +19,10 @@ import {
   insertLicenseHistory,
   isLicenseLimitsConsistentWithPlan,
 } from "./license-utils.js";
+import {
+  DEFAULT_GRACE_PERIOD_DAYS,
+  DEFAULT_MAX_USERS,
+} from "./license-constants.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -26,8 +40,8 @@ export type FinanceLicenseSyncPayload = {
   featureFlags: Record<string, boolean> | null;
 };
 
-/** Staff user cap in finance when Stockix licenses do not track maxUsers separately. */
-export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
+/** Staff user cap in finance when plan/license does not specify maxUsers. */
+export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = DEFAULT_MAX_USERS;
 
 /**
  * Field mapping — Stockix control plane → Finance tenant_licenses
@@ -46,6 +60,7 @@ export const FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = 999;
 type FinanceLicenseLimitSource = {
   maxActivations?: number;
   maxOrganizations?: number;
+  maxUsers?: number | null;
 };
 
 /**
@@ -67,7 +82,7 @@ export function resolveFinanceLicenseLimitFields(
   }
 
   return {
-    maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
+    maxUsers: license?.maxUsers ?? planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxOrganizations,
     maxActivations,
   };
@@ -84,6 +99,9 @@ export function buildFinanceLicenseLimitFields(
       maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     });
   }
+  console.warn(
+    "[finance-license] buildFinanceLicenseLimitFields called without planLimits; using license row or defaults",
+  );
   return {
     maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxActivations: license?.maxActivations ?? 1,
@@ -110,6 +128,9 @@ export function mapStockixLicenseStatus(
   }
   if (license.status === "revoked") {
     return "revoked";
+  }
+  if (license.status === "suspended") {
+    return "suspended";
   }
   if (license.isPerpetual) {
     return "active";
@@ -147,7 +168,7 @@ export async function resolveTenantInternalBaseUrl(
     return null;
   }
 
-  const host = process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? "127.0.0.1";
+  const host = requireEnv("STOCKIX_FINANCE_INTERNAL_HOST", "127.0.0.1");
   return `http://${host}:${deployment.internalPort}`;
 }
 
@@ -211,7 +232,7 @@ export async function syncFinanceLicenseForStockixTenant(
     ),
     validFrom: (license?.validFrom ?? new Date()).toISOString(),
     expiresAt: license?.expiresAt?.toISOString() ?? null,
-    gracePeriodDays: license?.gracePeriodDays ?? 30,
+    gracePeriodDays: license?.gracePeriodDays ?? DEFAULT_GRACE_PERIOD_DAYS,
     ...resolveFinanceLicenseLimitFields(license, planLimits),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,
@@ -232,10 +253,13 @@ export async function syncFinanceLicenseForStockixTenant(
 
     if (!res.ok) {
       const text = await res.text();
-      log(
-        `[finance-license] Sync failed HTTP ${res.status}: ${text.slice(0, 300)}`,
-      );
-      return;
+      const detail = `HTTP ${res.status} ${text.slice(0, 300)}`;
+      log(`[finance-license] Sync failed ${detail}`);
+      if (isFinanceLicenseSyncOptional()) {
+        log("[finance-license] FINANCE_LICENSE_SYNC_OPTIONAL=1 — continuing");
+        return;
+      }
+      throw new Error(`Finance license sync failed for tenant ${params.financeTenantId}: ${detail}`);
     }
 
     log(`[finance-license] Synced license for finance tenant ${params.financeTenantId}`);
@@ -254,10 +278,10 @@ export async function syncFinanceLicenseForStockixTenant(
       });
     }
   } catch (error) {
-    log(
-      `[finance-license] Sync error: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    const detail = error instanceof Error ? error.message : String(error);
+    log(`[finance-license] Sync error: ${detail}`);
+    if (!isFinanceLicenseSyncOptional()) {
+      throw error instanceof Error ? error : new Error(detail);
+    }
   }
 }

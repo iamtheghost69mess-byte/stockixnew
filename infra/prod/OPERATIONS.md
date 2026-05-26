@@ -1,0 +1,108 @@
+# Production operations — control plane
+
+Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored). After editing, sync and redeploy:
+
+```bash
+pnpm env:sync-prod          # copies infra/prod/.env → repo root .env (worker fallback)
+cd infra/prod
+docker compose --env-file .env up -d --build api infra-worker control-plane-redis
+```
+
+## Section 1 database migrations (0044–0046)
+
+These SQL files are **not** in the Drizzle journal yet. Apply once per environment after backup.
+
+| Order | File | Purpose |
+|-------|------|---------|
+| 1 | `packages/db/drizzle/0044_platform_roles.sql` | `platform_roles`, `owners.role_id`, seed system roles |
+| 2 | `packages/db/drizzle/0045_tenants_org_scope_permission.sql` | `tenants.org_scope` on support_agent |
+| 3 | `packages/db/drizzle/0046_stxi_license.sql` | `licenses.key_format`, `scoped_location_id` |
+
+**On the server** (compose project name `stockix`):
+
+```bash
+cd /opt/stockix/stockixnew
+pnpm --filter @repo/db db:migrate:section1
+```
+
+Or via Postgres container:
+
+```bash
+docker exec -i stockix-postgres-1 psql -U postgres -d stockix_platform \
+  < packages/db/drizzle/0044_platform_roles.sql
+# repeat for 0045 and 0046
+```
+
+**Verify:**
+
+```bash
+docker exec -i stockix-postgres-1 psql -U postgres -d stockix_platform \
+  -c "SELECT slug FROM platform_roles ORDER BY 1;"
+```
+
+## Environment variables (Section 1)
+
+| Variable | Where | Notes |
+|----------|--------|--------|
+| `LICENSE_SIGNING_SECRET` | `infra/prod/.env` → api + worker via compose | Min 32 chars; generate with `node scripts/generate-env-secrets.js` |
+| `CONTROL_PLANE_REDIS_URL` | `infra/prod/.env` | `redis://control-plane-redis:6379/0` when using prod compose Redis |
+| `LICENSE_SIGNING_SECRET` | Each tenant **POS** `.env` | **Must match** control-plane value for STXI validation |
+
+### POS tenant stacks
+
+Each provisioned POS backend reads `LICENSE_SIGNING_SECRET` from its tenant env file. When provisioning or updating tenants, set the same value as production `LICENSE_SIGNING_SECRET` in:
+
+- Tenant stack env under `TENANT_ENV_ROOT`, or
+- `services/posnew/apps/pos-backend/.env` used by that tenant’s compose project
+
+Mismatch causes STXI keys generated on the API to fail validation on POS login.
+
+## Tenant branding (Finance webapp)
+
+- Edit via dashboard tenant detail **Branding** tab → `PUT /tenants/:id/config` (control-plane `tenant_config`).
+- Worker writes `REACT_APP_STOCKIX_APP_NAME`, `REACT_APP_STOCKIX_LOGO_URL`, `REACT_APP_STOCKIX_PRIMARY_COLOR` into `infra/tenant-env/{slug}/.env`.
+- Rebuild the tenant Finance webapp image so Vite bakes env vars: `node scripts/rebuild-tenant-webapp.mjs {slug}` (or your deployment equivalent).
+- API pushes metadata to Finance: `POST /api/internal/organization/branding/sync` on the tenant stack (requires `INTERNAL_API_SECRET`).
+
+## Finance license sync on provision
+
+- Worker and API sync plan `maxOrganizations` to Finance `tenant_licenses` after provision (`syncFinanceLicense` / `syncFinanceLicenseForStockixTenant`).
+- `organization.provision` syncs license for each new Finance sub-tenant using the parent Stockix tenant’s active license.
+- Provision readiness includes `finance_license_sync_missing` when accounting modules are enabled but no sync event was journaled.
+- `FINANCE_LICENSE_SYNC_OPTIONAL=1` (development only) allows provision to continue if sync fails.
+
+## License ↔ POS sync strict mode
+
+- `LICENSE_SYNC_STRICT=1` on the control-plane API: license suspend and tenant suspend **fail with HTTP 502** when Finance or POS sync fails (instead of returning success with `posSync: "failed"`).
+- Recommended for production **after** staging verification of suspend/reactivate and STXI flows ([docs/section-2.3-license-e2e-checklist.md](../../docs/section-2.3-license-e2e-checklist.md)).
+- Default (unset): license row updates succeed; POS sync failures are logged and surfaced in API JSON (`posSync`, `errors`).
+
+## Control plane queues (BullMQ)
+
+- Redis service: `control-plane-redis` (internal Docker network only).
+- API logs on start when `CONTROL_PLANE_REDIS_URL` is set:
+  - `License expiry BullMQ worker started`
+  - `Owner invite mail BullMQ worker started`
+- License milestone log line: `license_expiry_milestone_fired`.
+- Owner invite mail log line: `owner_invite_mail_sent`; exhausted retries audit `invite.email_failed`.
+- If Redis is down or URL unset, license milestones and owner invite mail run **inline** in the API request (degraded but functional).
+
+## POS bootstrap credentials repair
+
+When `defaultCredentials` on a POS org drifts from bootstrap users (masked rows missing or wrong counts):
+
+```bash
+curl -X POST "https://api.${ROOT_DOMAIN}/api/platform/v1/organizations/{posOrgId}/repair-credentials" \
+  -H "X-Api-Key: $POS_PLATFORM_API_KEY"
+```
+
+Or run `node services/posnew/apps/pos-backend/scripts/repairCredentials.js` (uses the same sync logic). Plaintext PINs cannot be recovered — use dashboard **Reset PIN** per role.
+
+## Rollout checklist
+
+1. Backup Postgres (`stockix_platform`).
+2. Apply migrations 0044 → 0045 → 0046.
+3. Set `CONTROL_PLANE_REDIS_URL` in `infra/prod/.env`.
+4. Deploy `control-plane-redis`, `api`, `infra-worker`.
+5. Confirm API health and one test milestone (staging license) if possible.
+6. Propagate `LICENSE_SIGNING_SECRET` to POS tenant envs before issuing new STXI keys.

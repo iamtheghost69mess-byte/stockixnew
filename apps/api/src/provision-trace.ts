@@ -18,6 +18,26 @@ export type ProvisionEventPayload = {
   createdAt: string;
 };
 
+export const PROVISION_NOTIFY_CHANNEL = "stockix_provision_event";
+
+export function rowToProvisionPayload(
+  row: typeof tenantProvisionEvents.$inferSelect,
+): ProvisionEventPayload {
+  return {
+    id: row.id,
+    correlationId: row.correlationId,
+    slug: row.slug ?? null,
+    tenantId: row.tenantId ?? null,
+    parentTenantId: row.parentTenantId ?? null,
+    deploymentId: row.deploymentId ?? null,
+    phase: row.phase,
+    level: row.level,
+    message: row.message,
+    meta: row.meta ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export type ProvisionTracer = {
   event: (
     phase: string,

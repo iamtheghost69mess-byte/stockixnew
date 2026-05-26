@@ -1,25 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { PosPageShell } from "@/components/pos-page-shell";
-import { posApiFetch } from "@/lib/pos-fetch";
+import { PosResourceTable } from "@/components/pos-resource-table";
+import { Badge } from "@/components/ui/badge";
+import { formatDateTime } from "@/lib/date-format";
 
 export default function PosNotificationsPage() {
-  const [data, setData] = useState<unknown>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await posApiFetch("notifications");
-      setData(await res.json());
-    })();
-  }, []);
-
   return (
     <PosPageShell title="POS notifications" description="Operator notifications from POS platform.">
-      <pre className="max-h-[32rem] overflow-auto rounded-lg border bg-muted/30 p-4 text-xs">
-        {data ? JSON.stringify(data, null, 2) : "Loading…"}
-      </pre>
+      <PosResourceTable
+        title="Notifications"
+        fetchPath="notifications"
+        listKeys={["notifications", "data", "items"]}
+        emptyMessage="No notifications."
+        columns={[
+          { key: "title", label: "Title" },
+          { key: "type", label: "Type" },
+          {
+            key: "read",
+            label: "Read",
+            render: (value) => (
+              <Badge variant={value === true ? "secondary" : "default"}>
+                {value === true ? "Read" : "Unread"}
+              </Badge>
+            ),
+          },
+          {
+            key: "createdAt",
+            label: "Created",
+            render: (value) =>
+              typeof value === "string" ? formatDateTime(value) : "—",
+          },
+        ]}
+      />
     </PosPageShell>
   );
 }

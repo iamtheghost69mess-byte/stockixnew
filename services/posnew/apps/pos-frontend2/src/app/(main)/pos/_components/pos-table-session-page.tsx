@@ -9,6 +9,7 @@ import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from "lu
 import { toast } from "sonner";
 
 import { OfflineStatusBanner } from "@/components/pos/offline-status-banner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -59,6 +60,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
     sendToKitchen,
     sendingToKitchen,
     availabilityMap,
+    stockSnapshotUnavailable,
     barcode,
     setBarcode,
     barcodeBusy,
@@ -355,8 +357,20 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <OfflineStatusBanner />
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex min-w-[200px] flex-col gap-2">
+            <OfflineStatusBanner />
+            {stockSnapshotUnavailable ? (
+              <Alert variant="destructive" className="py-2">
+                <AlertTriangle className="size-4" />
+                <AlertTitle className="text-xs">Stock mirror unavailable</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Strict oversell is on but no cached availability exists. Reconnect once to refresh stock before
+                  adding items.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
           <div className="h-8 w-px bg-zinc-800 mx-2" />
           <div className="text-right">
             <div className="text-xs font-black text-white uppercase">{posUser?.name}</div>

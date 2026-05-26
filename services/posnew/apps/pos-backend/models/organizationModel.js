@@ -90,6 +90,12 @@ const organizationSchema = new mongoose.Schema(
     /** Commercial license window (owner console); optional enforcement elsewhere. */
     licenseStartsAt: { type: Date, default: null },
     licenseEndsAt: { type: Date, default: null },
+    /** Stockix control-plane license key (STXI or legacy STKX). */
+    licenseKey: { type: String, trim: true, default: null },
+    licenseKeyFormat: { type: String, trim: true, default: null },
+    /** STXI location scope synced from Stockix license row. */
+    scopedLocationId: { type: String, trim: true, default: null },
+    acceptStkxUntil: { type: Date, default: null },
     invoiceCurrency: { type: String, trim: true, uppercase: true, default: "USD" },
 
     dataRegion: { type: String, trim: true, default: "" },

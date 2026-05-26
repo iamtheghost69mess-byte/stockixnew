@@ -57,13 +57,19 @@ type Props = {
   onSuccess: () => void;
 };
 
+function defaultExpiresAt(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 365);
+  return d.toISOString();
+}
+
 function emptyFormValues(): GenerateLicenseValues {
   return {
     product: "platform",
     planSlug: "starter",
     modules: ["accounting"],
-    term: "perpetual",
-    expiresAt: undefined,
+    term: "fixed",
+    expiresAt: defaultExpiresAt(),
     maxActivations: 1,
     gracePeriodDays: 7,
     notes: "",
@@ -226,6 +232,21 @@ export default function LicenseGenerateDialog({
             onSubmit={(e) => void onSubmit(e)}
             noValidate
           >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  form.setValue("product", "platform");
+                  form.setValue("modules", sortModules(["accounting", "pos"]));
+                  form.setValue("term", "fixed");
+                  form.setValue("expiresAt", defaultExpiresAt());
+                }}
+              >
+                Preset: Platform + Accounting
+              </Button>
+            </div>
             <FormField
               control={form.control}
               name="product"
@@ -514,7 +535,7 @@ export default function LicenseGenerateDialog({
               name="gracePeriodDays"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Offline grace period (days)</FormLabel>
+                  <FormLabel>Post-expiry grace (read-only period, days)</FormLabel>
                   <FormControl>
                     <Input
                       className="mt-1"

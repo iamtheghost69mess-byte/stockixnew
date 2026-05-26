@@ -56,6 +56,8 @@ services:
       dockerfile: packages/server/Dockerfile
       target: app
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -124,6 +126,7 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET}
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
       - SYSTEM_DB_CLIENT=${SYSTEM_DB_CLIENT:-mysql}
       - SYSTEM_DB_HOST=${SYSTEM_DB_HOST:-mysql}
       - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
@@ -144,8 +147,15 @@ services:
         export SYSTEM_DB_HOST="$${SYSTEM_DB_HOST:-mysql}"
         export SYSTEM_DB_USER="$${SYSTEM_DB_USER:-$${DB_USER}}"
         export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
+        export DB_ROOT_PASSWORD="$${DB_ROOT_PASSWORD:-}"
         echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
-        /wait-for-it/wait-for-it.sh mysql:3306 -- node ./dist/cli.js system:migrate:latest
+        /wait-for-it/wait-for-it.sh mysql:3306 -- \
+          sh -ec '
+            if [ -n "$${DB_ROOT_PASSWORD}" ] && [ -n "$${SYSTEM_DB_USER}" ] && [ -n "$${SYSTEM_DB_PASSWORD}" ]; then
+              mariadb --ssl=0 -h mysql -uroot -p"$${DB_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON *.* TO '\''$${SYSTEM_DB_USER}'\''@'\''%'\'' IDENTIFIED BY '\''$${SYSTEM_DB_PASSWORD}'\'' WITH GRANT OPTION; FLUSH PRIVILEGES;" || true
+            fi
+            exec node ./dist/cli.js system:migrate:latest
+          '
     security_opt:
       - no-new-privileges:true
 
@@ -153,6 +163,8 @@ services:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/mariadb
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
     environment:
       - MYSQL_DATABASE=${SYSTEM_DB_NAME}
       - MYSQL_USER=${DB_USER}

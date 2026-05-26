@@ -19,7 +19,18 @@ const initialState = {
   errors: [],
 };
 
-const STORAGE_KEY = 'bigcapital:authentication';
+const STORAGE_KEY = 'stockix:authentication';
+const LEGACY_STORAGE_KEY = 'bigcapital:authentication';
+
+try {
+  const legacy = localStorage.getItem(`persist:${LEGACY_STORAGE_KEY}`);
+  if (legacy && !localStorage.getItem(`persist:${STORAGE_KEY}`)) {
+    localStorage.setItem(`persist:${STORAGE_KEY}`, legacy);
+    localStorage.removeItem(`persist:${LEGACY_STORAGE_KEY}`);
+  }
+} catch {
+  // ignore migration errors (SSR / private mode)
+}
 const CONFIG = {
   key: STORAGE_KEY,
   whitelist: [],

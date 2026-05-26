@@ -107,7 +107,7 @@ export class AuthenticationApplication {
     return this.switchTenantService.switchTenant(organizationId);
   }
 
-  public changePassword(userId: number, password: string) {
-    return this.authChangePasswordService.changePassword(userId, password);
+  public changePassword(password: string) {
+    return this.authChangePasswordService.changePassword(password);
   }
 }

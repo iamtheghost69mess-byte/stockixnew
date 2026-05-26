@@ -1,6 +1,6 @@
 # SaaS Audit — Session, Auth, License, Email
 
-Date: 2026-05-24 (updated after repair pass)
+Date: 2026-05-24 (updated 2026-05-25 — full email repair pass)
 
 Scope: Accounting provision — login session, one-time password, org access, user management, license, email (Resend), finance tenant ID.
 
@@ -84,15 +84,21 @@ Finance users are managed in **Finance users** panel with **Invite user** (prima
 
 | Flow | Status |
 |------|--------|
-| Provision welcome | Yes (if mail env set) |
-| Owner invite | **Fixed** |
-| Finance user invite (dashboard) | **Fixed** (per-tenant SMTP required) |
+| Provision welcome | Yes (if mail env set); **warns** via notification if mail fails |
+| Owner invite | Yes + `emailSent` in API response |
+| Owner password reset email | **Fixed** (2026-05-25) |
+| Owner invite resend | **Fixed** `POST /owners/:id/resend-invite` |
+| Finance user invite (dashboard) | Yes (per-tenant SMTP required) |
 | License expiry emails | Yes |
+| `email_logs` + Resend webhook | **Fixed** migration `0043`, `POST /webhooks/resend` |
+| Mail health | **Fixed** `GET /health` → `mail.configured`; dashboard banner |
 
 **Ops (not code):**
 
+- [ ] Run `pnpm db:migrate` (includes `0043_email_logs.sql`)
 - [ ] Verify `MAIL_FROM_ADDRESS` domain in Resend
 - [ ] Spot-check tenant `.env` after provision has `MAIL_HOST`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`
+- [ ] Optional: `RESEND_WEBHOOK_SECRET` for delivery events
 
 ---
 

@@ -52,6 +52,8 @@ function tablesSignature(rows: readonly PosTableRow[]): string {
         String(row.status ?? ""),
         String(row.currentOrder ?? ""),
         String(row.visibleInPos ?? ""),
+        String(row.reservatorIsVip ?? ""),
+        String(row.reservatorName ?? ""),
       ].join("|"),
     )
     .join("||");
@@ -438,7 +440,7 @@ export function PosFloorPage() {
                         </div>
 
                         <div className="space-y-4 mt-auto">
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
                             <div
                               className={cn(
                                 "size-2 rounded-full",
@@ -449,7 +451,25 @@ export function PosFloorPage() {
                             <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
                               {statusMeta.label}
                             </span>
+                            {t.reservatorIsVip && t.reservatorName?.trim() ? (
+                              <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400 ring-1 ring-amber-500/30">
+                                ★ VIP
+                              </span>
+                            ) : null}
                           </div>
+                          {t.reservatorName?.trim() &&
+                          (effectiveStatus === "reserved" || effectiveStatus === "occupied") ? (
+                            <p
+                              className={cn(
+                                "truncate text-[10px] font-bold",
+                                t.reservatorIsVip ? "text-amber-400/90" : "text-zinc-500",
+                              )}
+                              title={t.reservatorName}
+                            >
+                              {t.reservatorIsVip ? "★ " : null}
+                              {t.reservatorName}
+                            </p>
+                          ) : null}
 
                           <div className="flex items-center gap-6 border-zinc-800/50 border-t pt-4">
                             <div className="flex flex-col">

@@ -8,15 +8,14 @@ Next.js **App Router** app: **Studio** back office (`/dashboard/*`) and **staff 
 
 ## Run locally
 
-From monorepo root (recommended):
+From the Stockix repository root (recommended):
 
 ```bash
-npm install
-cd apps/pos-frontend2
-npm run dev
+pnpm install
+pnpm dev:pos:frontend
 ```
 
-Or use the root script that starts backend + Studio + platform dash: `npm run dev:all` from the repo root.
+Or start API + UI together: `pnpm dev:pos` or `pnpm run dev:all` from `services/posnew`.
 
 ## Configuration
 

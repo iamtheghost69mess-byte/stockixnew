@@ -145,7 +145,7 @@ async function main() {
     name: "Loc A",
     code: `LA${ts}`,
   });
-  await Location.create({
+  const locB = await Location.create({
     organization: orgB._id,
     name: "Loc B",
     code: `LB${ts}`,
@@ -164,10 +164,12 @@ async function main() {
 
   const ingA = await Ingredient.create({
     organization: orgA._id,
+    location: locA._id,
     name: `Ingredient A ${ts}`,
   });
   const ingB = await Ingredient.create({
     organization: orgB._id,
+    location: locB._id,
     name: `Ingredient B ${ts}`,
   });
 
@@ -188,7 +190,7 @@ async function main() {
   const poB = await PurchaseOrder.create({
     organization: orgB._id,
     supplier: (await Supplier.findOne({ organization: orgB._id }))._id,
-    location: (await Location.findOne({ organization: orgB._id }))._id,
+    location: locB._id,
     status: "draft",
     lines: [
       {

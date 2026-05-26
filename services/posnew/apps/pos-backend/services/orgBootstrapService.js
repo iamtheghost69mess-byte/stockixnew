@@ -38,12 +38,21 @@ const STEPS = [
   { id: "finalization", label: "Platform Finalization" },
 ];
  
-async function allocateUniqueSixDigitPin(organizationId) {
+/** Random numeric PIN length 4–6 (matches login / userModel validation). */
+function randomProvisionPinDigits() {
+  const length = 4 + Math.floor(Math.random() * 3);
+  const min = 10 ** (length - 1);
+  const max = 10 ** length - 1;
+  return String(min + Math.floor(Math.random() * (max - min + 1)));
+}
+
+async function allocateUniqueProvisionPin(organizationId) {
   if (!organizationId) {
     throw new Error("organizationId is required to allocate a PIN");
   }
   for (let attempts = 0; attempts < 100; attempts++) {
-    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    const pin = randomProvisionPinDigits();
+    if (!/^\d{4,6}$/.test(pin)) continue;
     const pinLookup = createPinLookup(pin, organizationId);
     const exists = await User.findOne({
       organization: organizationId,
@@ -109,7 +118,7 @@ async function bootstrapOrganization({ organizationId }) {
         await session.withTransaction(async () => {
           const createdUsers = [];
           for (const role of DEFAULT_BOOTSTRAP_ROLES) {
-            const plainPin = await allocateUniqueSixDigitPin(orgId);
+            const plainPin = await allocateUniqueProvisionPin(orgId);
             await User.create(
               [{ name: role, username: role, role, organization: orgId, pin: plainPin }],
               { session }
@@ -196,4 +205,9 @@ async function bootstrapOrganization({ organizationId }) {
   }
 }
  
-module.exports = { bootstrapOrganization, STEPS };
+module.exports = {
+  bootstrapOrganization,
+  STEPS,
+  randomProvisionPinDigits,
+  allocateUniqueProvisionPin,
+};

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { and, desc, eq, like } from "drizzle-orm";
 import { pmsIcalChannels, pmsSyncLogs } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import { generateExportToken } from "../ical/sync.js";
 import { syncCalendars } from "../lib/calendar-sync.js";
 import { PLATFORM_PRESETS } from "../lib/platforms.js";
@@ -40,8 +40,15 @@ channelsRouter.get("/", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conds = [eq(pmsIcalChannels.tenantId, tenantId(c))];
   if (propertyId) conds.push(eq(pmsIcalChannels.propertyId, propertyId));
-  const rows = await db.select().from(pmsIcalChannels).where(and(...conds)).orderBy(desc(pmsIcalChannels.createdAt));
-  return c.json({ channels: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsIcalChannels)
+    .where(and(...conds))
+    .orderBy(desc(pmsIcalChannels.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ channels: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 channelsRouter.post("/", async (c) => {

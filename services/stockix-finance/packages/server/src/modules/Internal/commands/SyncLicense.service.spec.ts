@@ -1,8 +1,13 @@
 import { SyncLicenseService } from './SyncLicense.service';
 import { LicenseService } from '@/modules/License/License.service';
 import { HttpStatus } from '@nestjs/common';
+import { licenseCache } from '@/modules/License/LicenseGuard.cache';
 
 describe('SyncLicenseService', () => {
+  beforeEach(() => {
+    licenseCache.clear();
+  });
+
   it('persists maxOrganizations from provision sync payload', async () => {
     const rows = new Map<number, Record<string, unknown>>();
     const tenantLicenseModel = {
@@ -36,6 +41,31 @@ describe('SyncLicenseService', () => {
     });
 
     expect(rows.get(1)?.maxOrganizations).toBe(3);
+  });
+
+  it('clears license cache after sync', async () => {
+    licenseCache.set(7, { effectiveStatus: 'expired', cachedAt: Date.now() });
+    const tenantLicenseModel = {
+      query: () => ({
+        findOne: async () => undefined,
+        insert: async () => undefined,
+      }),
+    };
+    const service = new SyncLicenseService(tenantLicenseModel as never);
+    await service.sync({
+      tenantId: 7,
+      planSlug: 'starter',
+      status: 'active',
+      validFrom: '2026-01-01T00:00:00.000Z',
+      expiresAt: null,
+      gracePeriodDays: 7,
+      maxUsers: 999,
+      maxActivations: 1,
+      maxOrganizations: 1,
+      isPerpetual: true,
+      featureFlags: null,
+    });
+    expect(licenseCache.has(7)).toBe(false);
   });
 });
 

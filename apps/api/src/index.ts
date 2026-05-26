@@ -1,14 +1,12 @@
+import * as Sentry from "@sentry/node";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  createHmac,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
+  decryptDeploymentSecret,
+  encryptDeploymentSecret,
+} from "@repo/shared/deployment-secrets";
 import { rm } from "node:fs/promises";
 import { serve } from "@hono/node-server";
-import { apiConfig } from "@repo/config";
+import { apiConfig, getMailHealthStatus, isMailConfigured } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
 import {
   createDb,
@@ -59,8 +57,30 @@ import { z } from "zod";
 import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
+import { handleEmailLogsList } from "./routes/email-logs.js";
+import {
+  handlePlatformRoleCreate,
+  handlePlatformRoleDelete,
+  handlePlatformRolePatch,
+  handlePlatformRolesList,
+} from "./routes/platform-roles.js";
+import { platformRoles } from "@repo/db/schema";
+import { registerNotificationsApi } from "./routes/notifications.js";
+import {
+  notifyJobLifecycle,
+  notifyModuleAdded,
+  notifyProvisionOutcome,
+} from "./notification-helpers.js";
 import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
+import {
+  DEFAULT_GRACE_PERIOD_DAYS,
+  DEFAULT_LICENSE_TERM_DAYS,
+} from "./license-constants.js";
 import { registerLicenseApi } from "./license-http.js";
+import {
+  ensureDefaultTenantConfig,
+  registerTenantConfigApi,
+} from "./routes/tenant-config.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import {
   readFinanceTenantIdFromProvisionEvents,
@@ -68,21 +88,39 @@ import {
 } from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
 import { registerPosCredentialsRoutes } from "./pos-credentials-http.js";
+import { registerIntegrationBridgeRoutes } from "./integration-bridge-http.js";
 import { effectivePosUrl } from "./pos-public-url.js";
 import { registerTenantModulesRoutes } from "./tenant-modules-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
+import {
+  mailSendSucceeded,
+} from "./mail/mailer.js";
+import { initEmailLogging } from "./mail/email-log.js";
 import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
+import { resendOwnerInvite } from "./services/invites/invites.js";
+import { deliverOwnerInviteEmail } from "./services/invites/owner-invite-delivery.js";
+import { isOwnerInviteMailQueueEnabled } from "./jobs/owner-invite-mail-queue.js";
+import {
+  applyTenantLicenseReactivate,
+  applyTenantLicenseSuspend,
+} from "./tenant-license-lifecycle.js";
+import { registerResendWebhook } from "./routes/webhooks/resend.js";
+import { safeCreateNotification } from "./notification-service.js";
 
+import { emitProvisionEvent, subscribeProvision } from "./provision-bus.js";
 import {
   createProvisionTracer,
+  rowToProvisionPayload,
   type ProvisionEventPayload,
 } from "./provision-trace.js";
 import { buildAuthRoutes } from "./routes/auth/index.js";
 import { enqueueOrgProvisioning } from "./org-provision.js";
 import {
   assertOrgInSupportScope,
+  assertTenantInOwnerScope,
   filterOrganizationsForSupportAgent,
+  getScopedTenantIdsForOwner,
   getSupportScopedOrgIdsForTenant,
 } from "./org-access-scope.js";
 import { canCreateOrganization, getTenantLicenseEligibility } from "./plan-limits.js";
@@ -105,7 +143,19 @@ import {
   getTenantReadiness,
   invalidateTenantReadinessCache,
 } from "./provisioning/readiness-engine.js";
+import { startStuckProvisioningReconciler } from "./provisioning/stuck-reconciler.js";
 import { securityHeadersMiddleware } from "./middleware/security-headers.js";
+import { globalRateLimitMiddleware } from "./middleware/global-rate-limit.js";
+import { isKnownControlPlanePath } from "./middleware/known-api-paths.js";
+import { logger } from "./lib/logger.js";
+
+if (process.env.SENTRY_DSN?.trim()) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    tracesSampleRate: 0.1,
+  });
+}
 
 const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
@@ -257,28 +307,11 @@ function serializeOrganizationRow(
     status: row.status,
     isPrimary: row.isPrimary,
     financeOrganizationId: row.financeOrganizationId ?? null,
+    posOrganizationId: row.posOrganizationId ?? null,
     provisioningError: row.provisioningError,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     publicUrl,
-  };
-}
-
-function rowToProvisionPayload(
-  row: typeof tenantProvisionEvents.$inferSelect,
-): ProvisionEventPayload {
-  return {
-    id: row.id,
-    correlationId: row.correlationId,
-    slug: row.slug ?? null,
-    tenantId: row.tenantId ?? null,
-    parentTenantId: row.parentTenantId ?? null,
-    deploymentId: row.deploymentId ?? null,
-    phase: row.phase,
-    level: row.level,
-    message: row.message,
-    meta: row.meta ?? null,
-    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -316,6 +349,7 @@ type ApiEnv = {
     actorRole: string;
     /** When set, RBAC uses this rank instead of the owner's DB role (API key auth → read_only). */
     actorEffectiveRole?: string;
+    actorPermissions?: string[];
     apiKeyId?: string;
     requestId: string;
     requestStartMs: number;
@@ -344,29 +378,11 @@ const PROVISION_STUCK_AFTER_MS = 10 * 60 * 1000;
 const RECONCILE_INTERVAL_MS = 30 * 1000;
 
 function encryptProvisionSecret(plaintext: string): string {
-  const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+  return encryptDeploymentSecret(plaintext, apiConfig.deploymentSecretKey);
 }
 
 function decryptProvisionSecret(ciphertext: string): string | null {
-  try {
-    const parts = ciphertext.split(":");
-    if (parts.length !== 5 || parts[0] !== "enc" || parts[1] !== "v1") return null;
-    const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-    const iv = Buffer.from(parts[2]!, "base64url");
-    const tag = Buffer.from(parts[3]!, "base64url");
-    const data = Buffer.from(parts[4]!, "base64url");
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(tag);
-    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
-    return decrypted.toString("utf8");
-  } catch {
-    return null;
-  }
+  return decryptDeploymentSecret(ciphertext, apiConfig.deploymentSecretKey);
 }
 
 function maskPinForDisplay(pin: string): string {
@@ -530,18 +546,28 @@ async function appendProvisionEventSafe(args: {
   message: string;
   slug?: string | null;
   tenantId?: string | null;
+  parentTenantId?: string | null;
+  deploymentId?: string | null;
   meta?: Record<string, unknown>;
 }) {
   if (!db) return;
-  await db.insert(tenantProvisionEvents).values({
-    correlationId: args.correlationId,
-    phase: args.phase,
-    level: args.level ?? "info",
-    message: args.message,
-    slug: args.slug ?? null,
-    tenantId: args.tenantId ?? null,
-    meta: args.meta ?? null,
-  });
+  const [row] = await db
+    .insert(tenantProvisionEvents)
+    .values({
+      correlationId: args.correlationId,
+      phase: args.phase,
+      level: args.level ?? "info",
+      message: args.message,
+      slug: args.slug ?? null,
+      tenantId: args.tenantId ?? null,
+      parentTenantId: args.parentTenantId ?? null,
+      deploymentId: args.deploymentId ?? null,
+      meta: args.meta ?? null,
+    })
+    .returning();
+  if (row) {
+    emitProvisionEvent(rowToProvisionPayload(row));
+  }
   invalidateTenantReadinessCache(args.correlationId);
 }
 
@@ -562,22 +588,18 @@ async function emitMetric(name: string, value: number, tags: Record<string, stri
       ts: new Date().toISOString(),
     }),
   }).catch((error) => {
-    console.error("[metrics] failed to emit API metric", error instanceof Error ? error.message : String(error));
+    logger.error("metrics emit failed", error);
   });
 }
 
 function emitInternalJobAudit(c: { get: (key: "requestId") => string }, action: string, details: Record<string, unknown>) {
   const requestId = c.get("requestId");
-  console.log(
-    JSON.stringify({
-      level: "info",
-      type: "internal_job_audit",
-      action,
-      requestId,
-      ...details,
-      ts: new Date().toISOString(),
-    }),
-  );
+  logger.info("internal_job_audit", {
+    type: "internal_job_audit",
+    action,
+    requestId,
+    ...details,
+  });
 }
 
 function readCookie(req: Request, name: string): string {
@@ -589,7 +611,9 @@ function readCookie(req: Request, name: string): string {
 }
 
 if (db) {
+  initEmailLogging(db);
   app.route("/auth", buildAuthRoutes(db));
+  registerResendWebhook(app, db);
 }
 
 function isTransientDbError(err: unknown): boolean {
@@ -605,10 +629,22 @@ function isTransientDbError(err: unknown): boolean {
 }
 
 app.onError((err, c) => {
-  console.error("[api]", err);
+  if (process.env.SENTRY_DSN?.trim()) {
+    Sentry.captureException(err);
+  }
+  logger.error("Unhandled API error", err, { path: c.req.path, method: c.req.method });
   if (isTransientDbError(err)) {
     return c.json(
       { error: "service_unavailable", message: "Database temporarily unavailable. Retry shortly." },
+      503,
+    );
+  }
+  if (message.includes('relation "email_logs" does not exist')) {
+    return c.json(
+      {
+        error: "schema_outdated",
+        message: "Database is missing email_logs. From the repo root run: pnpm db:migrate",
+      },
       503,
     );
   }
@@ -622,14 +658,24 @@ app.use(
   cors({
     origin: (origin) => {
       if (!origin) return origin;
-      const allowed = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        ...(rootDomain
-          ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
-          : []),
-        ...(apiConfig.corsOrigins ?? []),
-      ];
+      const baseOrigins = rootDomain
+        ? [
+            `https://${rootDomain}`,
+            `http://${rootDomain}`,
+            `https://www.${rootDomain}`,
+            `https://dashboard.${rootDomain}`,
+          ]
+        : [];
+      const devOrigins =
+        apiConfig.nodeEnv !== "production"
+          ? [
+              "http://localhost:3000",
+              "http://localhost:3001",
+              "http://127.0.0.1:3000",
+              "http://127.0.0.1:3001",
+            ]
+          : [];
+      const allowed = [...baseOrigins, ...devOrigins, ...(apiConfig.corsOrigins ?? [])];
       if (allowed.includes(origin)) return origin;
       if (!rootDomain) return null;
       const isSubdomain =
@@ -645,6 +691,8 @@ app.use(
 
 app.use("/*", securityHeadersMiddleware);
 
+app.use("/*", globalRateLimitMiddleware());
+
 app.use("/*", async (c, next) => {
   const requestId = c.req.header("x-request-id")
     ?? c.req.header("x-correlation-id")
@@ -657,17 +705,14 @@ app.use("/*", async (c, next) => {
   const latencyMs = Date.now() - startedAt;
   const isClaimPoll = c.req.method === "POST" && c.req.path === "/internal/jobs/claim";
   if (!isClaimPoll) {
-    console.log(
-      JSON.stringify({
-        level: "info",
-        type: "http_request",
-        requestId,
-        method: c.req.method,
-        path: c.req.path,
-        status: c.res.status,
-        latencyMs,
-      }),
-    );
+    logger.info("http_request", {
+      type: "http_request",
+      requestId,
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      latencyMs,
+    });
   }
   await emitMetric("api.request.latency_ms", latencyMs, {
     method: c.req.method,
@@ -707,6 +752,17 @@ app.use("/*", async (c, next) => {
     await next();
     return;
   }
+  if (!isKnownControlPlanePath(pubPath)) {
+    return c.json(
+      {
+        success: false,
+        error: "Not found",
+        path: pubPath,
+        method: pubMethod,
+      },
+      404,
+    );
+  }
   if (!platformApiSecret) {
     return c.json({ error: "unauthorized" }, 401);
   }
@@ -738,6 +794,7 @@ app.use("/*", async (c, next) => {
   if (
     path === "/health"
     || path.startsWith("/auth")
+    || path.startsWith("/webhooks/")
     || path.startsWith("/internal/jobs")
     || path.startsWith("/internal/organizations")
   ) {
@@ -870,7 +927,7 @@ app.use("/*", async (c, next) => {
     .delete(apiIdempotencyKeys)
     .where(sql`${apiIdempotencyKeys.expiresAt} < now()`)
     .catch((error) => {
-      console.error("[idempotency] prune failed", error instanceof Error ? error.message : String(error));
+      logger.error("idempotency prune failed", error);
     });
 
   const existingRows = await db
@@ -933,7 +990,7 @@ app.use("/*", async (c, next) => {
       expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
     })
     .catch((error) => {
-      console.error("[idempotency] persist response failed", error instanceof Error ? error.message : String(error));
+      logger.error("idempotency persist failed", error);
     });
 });
 
@@ -975,7 +1032,12 @@ app.use("/*", async (c, next) => {
   await next();
 });
 
-app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/health", (c) =>
+  c.json({
+    status: "ok",
+    mail: getMailHealthStatus(),
+  }),
+);
 
 app.get("/public/tenant-orgs/:tenantId", async (c) => {
   const tenantIdParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
@@ -1024,6 +1086,11 @@ app.post("/internal/jobs/claim", async (c) => {
   const staleLeaseMs = 5 * 60 * 1000;
   const staleBefore = new Date(Date.now() - staleLeaseMs);
   const staleBeforeIso = staleBefore.toISOString();
+  const staleProvisionAlerts: Array<{
+    tenantId: string;
+    exhausted: boolean;
+    correlationId: string | null;
+  }> = [];
   const claimed = await db.transaction(async (tx) => {
     const staleRunning = await tx
       .select({
@@ -1032,6 +1099,7 @@ app.post("/internal/jobs/claim", async (c) => {
         type: tenantLifecycleJobs.type,
         attempts: tenantLifecycleJobs.attempts,
         maxAttempts: tenantLifecycleJobs.maxAttempts,
+        correlationId: tenantLifecycleJobs.correlationId,
       })
       .from(tenantLifecycleJobs)
       .where(
@@ -1085,6 +1153,11 @@ app.post("/internal/jobs/claim", async (c) => {
             updatedAt: new Date(),
           })
           .where(eq(tenantDeployments.tenantId, staleJob.tenantId));
+        staleProvisionAlerts.push({
+          tenantId: staleJob.tenantId,
+          exhausted,
+          correlationId: staleJob.correlationId ?? null,
+        });
       }
     }
 
@@ -1114,6 +1187,33 @@ app.post("/internal/jobs/claim", async (c) => {
       .returning();
     return updated ?? null;
   });
+
+  for (const alert of staleProvisionAlerts) {
+    const [tenantRow] = await db
+      .select({ ownerId: tenants.ownerId, name: tenants.name })
+      .from(tenants)
+      .where(eq(tenants.id, alert.tenantId))
+      .limit(1);
+    if (!tenantRow) continue;
+    if (alert.exhausted) {
+      notifyProvisionOutcome(db, {
+        tenantId: alert.tenantId,
+        finalStatus: "failed",
+        correlationId: alert.correlationId,
+        lastError: "worker_stale_lease_reclaimed",
+      });
+    } else {
+      notifyJobLifecycle(db, {
+        ownerId: tenantRow.ownerId,
+        tenantId: alert.tenantId,
+        tenantName: tenantRow.name,
+        type: "job.stuck",
+        lastError: "worker_stale_lease_reclaimed",
+        correlationId: alert.correlationId,
+      });
+    }
+  }
+
   return c.json({ job: claimed });
 });
 
@@ -1190,7 +1290,9 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
   const body = await c.req.json().catch(() => null);
   const bodyParsed = z
     .object({
-      financeOrganizationId: z.string().min(1).max(255),
+      financeOrganizationId: z.string().min(1).max(255).optional(),
+      posOrganizationId: z.string().min(1).max(64).optional(),
+      provisioningError: z.string().max(2000).nullable().optional(),
     })
     .safeParse(body);
 
@@ -1201,10 +1303,26 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
     );
   }
 
+  if (
+    !bodyParsed.data.financeOrganizationId
+    && !bodyParsed.data.posOrganizationId
+    && bodyParsed.data.provisioningError === undefined
+  ) {
+    return c.json({ error: "VALIDATION_ERROR", message: "No fields to update" }, 400);
+  }
+
   const [updated] = await db
     .update(organizations)
     .set({
-      financeOrganizationId: bodyParsed.data.financeOrganizationId,
+      ...(bodyParsed.data.financeOrganizationId
+        ? { financeOrganizationId: bodyParsed.data.financeOrganizationId }
+        : {}),
+      ...(bodyParsed.data.posOrganizationId
+        ? { posOrganizationId: bodyParsed.data.posOrganizationId }
+        : {}),
+      ...(bodyParsed.data.provisioningError !== undefined
+        ? { provisioningError: bodyParsed.data.provisioningError }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(organizations.id, parsed.data))
@@ -1285,6 +1403,14 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       currentJob.correlationId,
     );
     if (fromJournal) financeTenantIdFromResult = fromJournal;
+  }
+  if (
+    currentJob.type === "tenant.provision"
+    && currentJob.tenantId
+    && (!Number.isFinite(financeTenantIdFromResult) || financeTenantIdFromResult <= 0)
+  ) {
+    const resolved = await resolveAndPersistFinanceTenantId(db, currentJob.tenantId);
+    if (resolved.ok) financeTenantIdFromResult = resolved.financeTenantId;
   }
   if (workerId && currentJob.claimedBy && currentJob.claimedBy !== workerId) {
     return c.json({ error: "job_claim_mismatch" }, 409);
@@ -1398,6 +1524,17 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           ? (posErrorFromResult ?? "POS provisioning failed")
           : null;
 
+      const [tenantNameRow] = await db
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, targetTenantId))
+        .limit(1);
+      if (tenantNameRow?.name) {
+        await ensureDefaultTenantConfig(db, targetTenantId, {
+          appName: tenantNameRow.name,
+        });
+      }
+
       await db
         .update(tenants)
         .set({ status: finalTenantStatus })
@@ -1407,6 +1544,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         .set({
           status: deploymentStatus,
           lastError: deploymentLastError,
+          ...(finalTenantStatus === "active" ? { partialFailureKind: null } : {}),
           registrationCompletedAt: new Date(),
           updatedAt: new Date(),
           ...(oneTimeAdminPassword
@@ -1414,6 +1552,13 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             : {}),
         })
         .where(eq(tenantDeployments.tenantId, targetTenantId));
+
+      notifyProvisionOutcome(db, {
+        tenantId: targetTenantId,
+        finalStatus: finalTenantStatus,
+        correlationId: currentJob.correlationId,
+        lastError: deploymentLastError,
+      });
 
       try {
         const payload = currentJob.payload && typeof currentJob.payload === "object"
@@ -1480,6 +1625,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               if (clash.length === 0) break;
               licenseKey = generateLicenseKey();
             }
+            const validFrom = new Date();
+            const expiresAt = new Date(validFrom);
+            expiresAt.setDate(expiresAt.getDate() + DEFAULT_LICENSE_TERM_DAYS);
             await db.insert(licenses).values({
               licenseKey,
               product: "platform",
@@ -1487,13 +1635,15 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               planSlug,
               tenantId: targetTenantId,
               status: "active",
-              activatedAt: new Date(),
-              validFrom: new Date(),
-              isPerpetual: true,
+              activatedAt: validFrom,
+              validFrom,
+              expiresAt,
+              isPerpetual: false,
               maxOrganizations: planLimits.maxOrganizations,
               maxActivations: planLimits.maxActivations,
+              maxUsers: planLimits.maxUsers,
               activationCount: 0,
-              gracePeriodDays: 7,
+              gracePeriodDays: DEFAULT_GRACE_PERIOD_DAYS,
               createdById: provisionRequestedById ?? null,
             });
           }
@@ -1510,10 +1660,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           });
         }
       } catch (licenseErr) {
-        console.error(
-          "[provision] license assignment failed (non-fatal)",
-          licenseErr instanceof Error ? licenseErr.message : String(licenseErr),
-        );
+        logger.error("provision license assignment failed (non-fatal)", licenseErr);
       }
 
       if (targetTenantId && (posOrganizationIdFromResult || posUrlFromResult)) {
@@ -1555,15 +1702,22 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           })
           .where(eq(tenantDeployments.tenantId, targetTenantId));
 
-        void syncFinanceLicenseForStockixTenant(db, {
-          stockixTenantId: targetTenantId,
-          financeTenantId: financeTenantIdFromResult,
-        }).catch((err) => {
-          console.error(
-            "[provision] finance license sync failed (non-fatal)",
-            err instanceof Error ? err.message : String(err),
-          );
-        });
+        try {
+          await syncFinanceLicenseForStockixTenant(db, {
+            stockixTenantId: targetTenantId,
+            financeTenantId: financeTenantIdFromResult,
+          });
+          if (currentJob.correlationId) {
+            await appendProvisionEventSafe({
+              correlationId: currentJob.correlationId,
+              phase: "finance_license",
+              message: `[finance-license] Synced license for finance tenant ${financeTenantIdFromResult}`,
+              tenantId: targetTenantId,
+            });
+          }
+        } catch (err) {
+          logger.error("provision finance license sync failed", err);
+        }
       }
 
       if (updated.type === "tenant.provision" && financeOrganizationIdFromResult) {
@@ -1655,18 +1809,20 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               : apiConfig.dashboardUrl);
           const provisionModules = parseTenantModules(tenant.modules);
 
+          let mailResult;
           if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
             const { sendFinanceWelcomeEmail } = await import("./mail/send.js");
-            await sendFinanceWelcomeEmail({
+            mailResult = await sendFinanceWelcomeEmail({
               to: tenant.adminEmail,
               tenantName: tenant.name,
               financeUrl,
               adminEmail: tenant.adminEmail,
               oneTimePassword: oneTimeAdminPassword,
               modules: provisionModules,
+              tenantId: targetTenantId,
             });
           } else {
-            await sendTenantWelcomeEmail({
+            mailResult = await sendTenantWelcomeEmail({
               to: tenant.adminEmail,
               tenantName: tenant.name,
               organizationNumber:
@@ -1674,13 +1830,39 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
                 financeOrganizationIdFromResult ??
                 "—",
               loginUrl: financeUrl,
+              tenantId: targetTenantId,
             });
           }
+
+          if (!mailSendSucceeded(mailResult)) {
+            const mailDetail =
+              mailResult.status === "failed"
+                ? mailResult.error
+                : mailResult.status;
+            logger.error("provision welcome email not sent", undefined, {
+              tenantId: targetTenantId,
+              mailDetail,
+            });
+            const [tenantRow] = await db
+              .select({ ownerId: tenants.ownerId })
+              .from(tenants)
+              .where(eq(tenants.id, targetTenantId))
+              .limit(1);
+            if (tenantRow?.ownerId) {
+              safeCreateNotification(db, {
+                ownerId: tenantRow.ownerId,
+                type: "provision.partial",
+                severity: "warning",
+                title: "Welcome email not sent",
+                body: `Tenant ${tenant.name} is ready but the welcome email could not be delivered (${mailDetail}). Check MAIL_* configuration.`,
+                tenantId: targetTenantId,
+                actionUrl: `/tenants/${targetTenantId}`,
+                actionLabel: "View tenant",
+              });
+            }
+          }
         } catch (welcomeErr) {
-          console.error(
-            "[provision] welcome email failed (non-fatal)",
-            welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
-          );
+          logger.error("provision welcome email failed (non-fatal)", welcomeErr);
         }
       })();
     }
@@ -1801,6 +1983,28 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         meta: { jobId: currentJob.id },
       });
     }
+    const moduleFromPayload =
+      currentJob.payload &&
+      typeof currentJob.payload === "object" &&
+      "module" in currentJob.payload &&
+      typeof (currentJob.payload as { module?: unknown }).module === "string"
+        ? String((currentJob.payload as { module: string }).module)
+        : null;
+    if (moduleFromPayload) {
+      if (finalTenantStatus === "partial") {
+        notifyProvisionOutcome(db, {
+          tenantId: currentJob.tenantId,
+          finalStatus: "partial",
+          correlationId: currentJob.correlationId,
+        });
+      } else {
+        notifyModuleAdded(db, {
+          tenantId: currentJob.tenantId,
+          module: moduleFromPayload,
+          correlationId: currentJob.correlationId,
+        });
+      }
+    }
   }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {
     const correlations = await db
@@ -1914,6 +2118,15 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
           .where(eq(organizations.id, organizationIdForFail));
       }
     }
+
+    if (updated.status === "dead" && updated.type === "tenant.provision" && updated.tenantId) {
+      notifyProvisionOutcome(db, {
+        tenantId: updated.tenantId,
+        finalStatus: "failed",
+        correlationId: updated.correlationId,
+        lastError: errorMessage,
+      });
+    }
   }
   return c.json({ ok: true, job: updated ?? null });
 });
@@ -1970,13 +2183,23 @@ app.get("/owners", async (c) => {
       email: owners.email,
       name: owners.name,
       role: owners.role,
+      roleName: platformRoles.name,
       status: owners.status,
       hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
       mfaEnabled: owners.mfaEnabled,
       createdAt: owners.createdAt,
+      inviteTokenExpiresAt: owners.inviteTokenExpiresAt,
     })
-    .from(owners);
-  return c.json({ owners: rows });
+    .from(owners)
+    .leftJoin(platformRoles, eq(owners.roleId, platformRoles.id));
+  return c.json({
+    owners: rows.map((r) => ({
+      ...r,
+      roleName: r.roleName ?? r.role.replace(/_/g, " "),
+      createdAt: r.createdAt.toISOString(),
+      inviteTokenExpiresAt: r.inviteTokenExpiresAt?.toISOString() ?? null,
+    })),
+  });
 });
 
 const ownerBody = z.object({
@@ -2028,7 +2251,7 @@ app.post("/owners", async (c) => {
   if (!row) return c.json({ error: "email_already_exists" }, 409);
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
-    action: "owner.invite",
+    action: "owner.create",
     targetOwnerId: row.id,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
     userAgent: c.req.header("user-agent") ?? null,
@@ -2039,7 +2262,8 @@ app.post("/owners", async (c) => {
 const inviteBody = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
-  role: ownerRoleSchema,
+  role: ownerRoleSchema.optional(),
+  roleId: z.string().uuid().optional(),
 });
 
 app.post("/owners/invite", async (c) => {
@@ -2056,12 +2280,37 @@ app.post("/owners/invite", async (c) => {
       400,
     );
   }
+  if (!body.roleId && !body.role) {
+    return c.json({ error: "role_or_roleId_required" }, 400);
+  }
   const existing = await db
     .select({ id: owners.id })
     .from(owners)
     .where(eq(owners.email, body.email))
     .limit(1);
   if (existing.length > 0) return c.json({ error: "email_already_exists" }, 409);
+
+  let roleSlug = body.role ?? "read_only";
+  let roleId: string | null = body.roleId ?? null;
+  if (roleId) {
+    const [pr] = await db
+      .select({ id: platformRoles.id, slug: platformRoles.slug })
+      .from(platformRoles)
+      .where(eq(platformRoles.id, roleId))
+      .limit(1);
+    if (!pr) return c.json({ error: "invalid_role_id" }, 400);
+    const parsedSlug = ownerRoleSchema.safeParse(pr.slug);
+    if (!parsedSlug.success) return c.json({ error: "invalid_role_slug" }, 400);
+    roleSlug = parsedSlug.data;
+    roleId = pr.id;
+  } else {
+    const [pr] = await db
+      .select({ id: platformRoles.id })
+      .from(platformRoles)
+      .where(eq(platformRoles.slug, roleSlug))
+      .limit(1);
+    roleId = pr?.id ?? null;
+  }
 
   const inviteToken = randomUUID();
   const inviteTokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -2070,7 +2319,8 @@ app.post("/owners/invite", async (c) => {
     .values({
       email: body.email,
       name: body.name,
-      role: body.role,
+      role: roleSlug,
+      roleId,
       inviteToken,
       inviteTokenExpiresAt,
       invitedById: (c.get("actorId") as string | undefined) ?? null,
@@ -2092,18 +2342,95 @@ app.post("/owners/invite", async (c) => {
     userAgent: c.req.header("user-agent") ?? null,
     metadata: { role: owner.role, email: owner.email },
   });
-  void sendOwnerInviteEmail({
+  const actorId = (c.get("actorId") as string | undefined) ?? null;
+  const delivery = await deliverOwnerInviteEmail(db, {
+    ownerId: owner.id,
     to: owner.email,
     name: owner.name,
     role: owner.role,
     inviteUrl,
-  }).catch((err) => {
-    console.error(
-      "[owners] invite email failed (non-fatal)",
-      err instanceof Error ? err.message : String(err),
-    );
+    actorId,
+    source: "invite",
   });
-  return c.json({ inviteToken, inviteUrl, owner }, 201);
+
+  if (delivery.mode === "queued") {
+    return c.json(
+      {
+        owner,
+        emailSent: false,
+        emailQueued: true,
+        mailConfigured: delivery.mailConfigured,
+      },
+      201,
+    );
+  }
+
+  const emailSent = delivery.emailSent;
+  if (!emailSent && !isOwnerInviteMailQueueEnabled()) {
+    logger.error("owners invite email not sent", undefined, { email: owner.email });
+    await logAudit(db, {
+      actorId: actorId ?? "",
+      action: "invite.email_failed",
+      targetOwnerId: owner.id,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { email: owner.email, reason: "inline_send_failed" },
+    });
+  }
+  return c.json(
+    {
+      owner,
+      emailSent,
+      mailConfigured: delivery.mailConfigured,
+      inviteUrl: delivery.inviteUrl,
+    },
+    201,
+  );
+});
+
+app.post("/owners/:ownerId/resend-invite", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
+  if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
+
+  const actorId = (c.get("actorId") as string | undefined) ?? null;
+  const result = await resendOwnerInvite(db, parsed.data, actorId);
+  if (!result.success) {
+    return c.json(
+      { error: result.error },
+      (result.status ?? 400) as 400 | 404,
+    );
+  }
+
+  await logAudit(db, {
+    actorId: actorId ?? "",
+    action: "owner.invite_resend",
+    targetOwnerId: parsed.data,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: {
+      email: result.data.owner.email,
+      emailSent: result.data.emailSent,
+      emailQueued: result.data.emailQueued ?? false,
+    },
+  });
+
+  if (
+    !result.data.emailSent &&
+    !result.data.emailQueued &&
+    !isOwnerInviteMailQueueEnabled()
+  ) {
+    await logAudit(db, {
+      actorId: actorId ?? "",
+      action: "invite.email_failed",
+      targetOwnerId: parsed.data,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { email: result.data.owner.email, reason: "resend_failed" },
+    });
+  }
+
+  return c.json(result.data, 200);
 });
 
 app.delete("/owners/:ownerId", async (c) => {
@@ -2363,6 +2690,37 @@ app.get("/audit-log", async (c) => {
   return handleAuditLogList(c, db);
 });
 
+app.get("/admin/email-logs", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+  return handleEmailLogsList(c, db);
+});
+
+app.get("/admin/roles", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  return handlePlatformRolesList(c, db);
+});
+
+app.post("/admin/roles", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  return handlePlatformRoleCreate(c, db);
+});
+
+app.patch("/admin/roles/:roleId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("roleId"));
+  if (!parsed.success) return c.json({ error: "roleId must be a UUID" }, 400);
+  return handlePlatformRolePatch(c, db, parsed.data);
+});
+
+app.delete("/admin/roles/:roleId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("roleId"));
+  if (!parsed.success) return c.json({ error: "roleId must be a UUID" }, 400);
+  return handlePlatformRoleDelete(c, db, parsed.data);
+});
+
 const apiKeyCreateBody = z.object({
   name: z.string().min(1).max(255),
 });
@@ -2498,6 +2856,10 @@ app.get("/tenants", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
 
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+
   const rawPage = c.req.query("page");
   const rawPageSize = c.req.query("pageSize");
   const search = c.req.query("search")?.trim() ?? "";
@@ -2517,6 +2879,33 @@ app.get("/tenants", async (c) => {
 
   const conditions: SQL[] = [childOrgFilter];
 
+  const scopedTenantIds = await getScopedTenantIdsForOwner(
+    db,
+    actorId,
+    actorPermissions,
+    actorRole,
+  );
+  if (scopedTenantIds !== null) {
+    if (scopedTenantIds.length === 0) {
+      return c.json({
+        tenants: [],
+        page,
+        pageSize,
+        total: 0,
+        totalPages: 1,
+        directoryTotals: {
+          all: 0,
+          active: 0,
+          suspended: 0,
+          provisioning: 0,
+          failed: 0,
+          partial: 0,
+        },
+      });
+    }
+    conditions.push(inArray(tenants.id, scopedTenantIds));
+  }
+
   if (search) {
     const pat = `%${search}%`;
     conditions.push(
@@ -2533,6 +2922,8 @@ app.get("/tenants", async (c) => {
       conditions.push(
         or(eq(tenantDeployments.status, "provisioning"), eq(tenantDeployments.status, "pending"))!,
       );
+    } else if (statusFilter === "partial") {
+      conditions.push(eq(tenants.status, "partial"));
     } else {
       conditions.push(eq(tenantDeployments.status, statusFilter));
     }
@@ -2571,6 +2962,7 @@ app.get("/tenants", async (c) => {
       composeProject: tenantDeployments.composeProjectName,
       lastError: tenantDeployments.lastError,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
+      createdAt: tenants.createdAt,
     })
     .from(tenants)
     .leftJoin(tenantDeployments, joinDeployments)
@@ -2581,8 +2973,16 @@ app.get("/tenants", async (c) => {
 
   const dirJoin = joinDeployments;
 
-  const [countResult, rows, totalAllRow, activeRow, suspendedRow, provisioningRow, failedRow] =
-    await Promise.all([
+  const [
+    countResult,
+    rows,
+    totalAllRow,
+    activeRow,
+    suspendedRow,
+    provisioningRow,
+    failedRow,
+    partialRow,
+  ] = await Promise.all([
       countQuery,
       dataQuery,
       db
@@ -2615,10 +3015,47 @@ app.get("/tenants", async (c) => {
         .from(tenants)
         .leftJoin(tenantDeployments, dirJoin)
         .where(and(childOrgFilter, eq(tenantDeployments.status, "failed"))),
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(and(childOrgFilter, eq(tenants.status, "partial"))),
     ]);
 
   const total = Number(countResult[0]?.c ?? 0);
   const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+
+  const tenantIds = rows.map((r) => r.tenantId);
+  type LicenseSummary = {
+    status: string;
+    expiresAt: string | null;
+    validFrom: string | null;
+    isPerpetual: boolean;
+  };
+  const licenseByTenant = new Map<string, LicenseSummary>();
+  if (tenantIds.length > 0) {
+    const licRows = await db
+      .select({
+        tenantId: licenses.tenantId,
+        status: licenses.status,
+        expiresAt: licenses.expiresAt,
+        validFrom: licenses.validFrom,
+        isPerpetual: licenses.isPerpetual,
+      })
+      .from(licenses)
+      .where(and(inArray(licenses.tenantId, tenantIds), ne(licenses.status, "unassigned")))
+      .orderBy(desc(licenses.updatedAt));
+    for (const lr of licRows) {
+      if (lr.tenantId && !licenseByTenant.has(lr.tenantId)) {
+        licenseByTenant.set(lr.tenantId, {
+          status: lr.status,
+          expiresAt: lr.expiresAt?.toISOString() ?? null,
+          validFrom: lr.validFrom?.toISOString() ?? null,
+          isPerpetual: lr.isPerpetual,
+        });
+      }
+    }
+  }
 
   const directoryTotals = {
     total: Number(totalAllRow[0]?.c ?? 0),
@@ -2626,10 +3063,22 @@ app.get("/tenants", async (c) => {
     suspended: Number(suspendedRow[0]?.c ?? 0),
     provisioning: Number(provisioningRow[0]?.c ?? 0),
     failed: Number(failedRow[0]?.c ?? 0),
+    partial: Number(partialRow[0]?.c ?? 0),
   };
 
   return c.json({
-    tenants: rows,
+    tenants: rows.map((r) => {
+      const lic = licenseByTenant.get(r.tenantId);
+      return {
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        registrationCompletedAt: r.registrationCompletedAt?.toISOString() ?? null,
+        licenseStatus: lic?.status ?? null,
+        licenseExpiresAt: lic?.expiresAt ?? null,
+        licenseValidFrom: lic?.validFrom ?? null,
+        licenseIsPerpetual: lic?.isPerpetual ?? null,
+      };
+    }),
     total,
     page,
     pageSize,
@@ -3059,7 +3508,7 @@ app.post("/tenants", async (c) => {
 
   const correlationId = randomUUID();
   const log = (m: string) => {
-    console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+    logger.info(m, { correlationId });
   };
 
   const acceptTrace = createProvisionTracer(
@@ -3132,7 +3581,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     db,
     correlationId,
     () => ({ slug: "unknown" }),
-    (m) => console.log(JSON.stringify({ level: "info", correlationId, message: m })),
+    (m) => logger.info(m, { correlationId }),
   );
 
   if (job.status === "completed") {
@@ -3144,7 +3593,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       level: "warn",
       meta: { status: "dead" },
     }).catch((error) => {
-      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+      logger.error("provision-stop trace write failed", error);
     });
     return c.json({ ok: true, status: "already_stopped", correlationId });
   }
@@ -3165,7 +3614,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       level: "warn",
       meta: { status: "pending" },
     }).catch((error) => {
-      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+      logger.error("provision-stop trace write failed", error);
     });
     return c.json({ ok: true, status: "cancelled", correlationId });
   }
@@ -3186,7 +3635,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       level: "warn",
       meta: { status: "running" },
     }).catch((error) => {
-      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+      logger.error("provision-stop trace write failed", error);
     });
     if (job.tenantId) {
       await db
@@ -3267,7 +3716,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
     db,
     correlationId,
     () => ({ slug: "unknown" }),
-    (m) => console.log(JSON.stringify({ level: "info", correlationId, message: m })),
+    (m) => logger.info(m, { correlationId }),
   );
 
   if (job.status === "completed") {
@@ -3289,10 +3738,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
         meta: { status: "dead", tenantId: parsed.data },
       })
       .catch((error) => {
-        console.error(
-          "[tenant-provision-stop] trace write failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("tenant-provision-stop trace write failed", error);
       });
     return c.json({ ok: true, status: "already_stopped", correlationId });
   }
@@ -3315,10 +3761,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
         meta: { status: "pending", tenantId: parsed.data },
       })
       .catch((error) => {
-        console.error(
-          "[tenant-provision-stop] trace write failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("tenant-provision-stop trace write failed", error);
       });
     await db
       .update(tenantDeployments)
@@ -3349,10 +3792,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
         meta: { status: "running", tenantId: parsed.data },
       })
       .catch((error) => {
-        console.error(
-          "[tenant-provision-stop] trace write failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("tenant-provision-stop trace write failed", error);
       });
     await db
       .update(tenantDeployments)
@@ -3635,7 +4075,7 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
   }
 
   const TERMINAL_JOB_STATUSES = new Set(["completed", "dead", "failed"]);
-  const STREAM_POLL_MS = 1500;
+  const STREAM_JOB_POLL_MS = 1500;
   const STREAM_PING_MS = 12_000;
 
   return streamSSE(c, async (stream) => {
@@ -3652,36 +4092,54 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     stream.onAbort(() => {
       closed = true;
     });
+
+    const replayRows = await db
+      .select()
+      .from(tenantProvisionEvents)
+      .where(eq(tenantProvisionEvents.correlationId, correlationId))
+      .orderBy(asc(tenantProvisionEvents.createdAt), asc(tenantProvisionEvents.id));
+    for (const row of replayRows) {
+      await forward(rowToProvisionPayload(row));
+    }
+
+    let lastEventPhase = replayRows[replayRows.length - 1]?.phase;
+    const unsubscribe = subscribeProvision(correlationId, (payload) => {
+      lastEventPhase = payload.phase;
+      void forward(payload);
+    });
+
     let lastPingAt = 0;
 
-    while (!closed) {
-      const rows = await db
-        .select()
-        .from(tenantProvisionEvents)
-        .where(eq(tenantProvisionEvents.correlationId, correlationId))
-        .orderBy(asc(tenantProvisionEvents.createdAt), asc(tenantProvisionEvents.id));
-
-      for (const row of rows) {
-        await forward(rowToProvisionPayload(row));
-      }
-
+    const writeDoneIfTerminal = async (): Promise<boolean> => {
       const streamJobs = await listTenantJobs(db, correlationId);
       const lastJob = streamJobs[streamJobs.length - 1] ?? null;
-      const lastEvent = rows[rows.length - 1];
       const terminalFromJob =
         lastJob !== null && TERMINAL_JOB_STATUSES.has(lastJob.status);
       const terminalFromEvent =
-        lastEvent?.phase === "complete" || lastEvent?.phase === "failed";
+        lastEventPhase === "complete" || lastEventPhase === "failed";
 
-      if (terminalFromJob || (terminalFromEvent && streamJobs.length === 0)) {
-        const status =
-          lastJob?.status === "completed" || lastEvent?.phase === "complete"
-            ? "complete"
-            : "failed";
-        await stream.writeSSE({
-          event: "done",
-          data: JSON.stringify({ status, correlationId }),
-        });
+      if (!terminalFromJob && !(terminalFromEvent && streamJobs.length === 0)) {
+        return false;
+      }
+
+      const status =
+        lastJob?.status === "completed" || lastEventPhase === "complete"
+          ? "complete"
+          : "failed";
+      await stream.writeSSE({
+        event: "done",
+        data: JSON.stringify({ status, correlationId }),
+      });
+      return true;
+    };
+
+    if (await writeDoneIfTerminal()) {
+      unsubscribe();
+      return;
+    }
+
+    while (!closed) {
+      if (await writeDoneIfTerminal()) {
         break;
       }
 
@@ -3691,8 +4149,10 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
         lastPingAt = now;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_MS));
+      await new Promise((resolve) => setTimeout(resolve, STREAM_JOB_POLL_MS));
     }
+
+    unsubscribe();
   });
 });
 
@@ -3716,8 +4176,14 @@ app.get("/tenants/:tenantId/organizations", async (c) => {
 
   const actorId = String(c.get("actorId") ?? "");
   const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
   const scoped = await getSupportScopedOrgIdsForTenant(db, actorId, parsed.data);
-  const visibleRows = filterOrganizationsForSupportAgent(actorRole, rows, scoped);
+  const visibleRows = filterOrganizationsForSupportAgent(
+    actorRole,
+    rows,
+    scoped,
+    actorPermissions,
+  );
 
   const composeNames = visibleRows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
   const portMap = await internalPortsByComposeProject(db, composeNames);
@@ -3826,10 +4292,7 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
   }
 
   void enqueueOrgProvisioning(db, inserted.id, parsed.data).catch((err) => {
-    console.error(
-      "[organizations] enqueueOrgProvisioning failed",
-      err instanceof Error ? err.message : String(err),
-    );
+    logger.error("organizations enqueueOrgProvisioning failed", err);
   });
 
   await logAudit(db, {
@@ -4319,7 +4782,20 @@ app.get("/tenants/:tenantId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
-  const actorRole = c.get("actorRole");
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+
+  const inScope = await assertTenantInOwnerScope(
+    db,
+    actorId,
+    parsed.data,
+    actorPermissions,
+    actorRole,
+  );
+  if (!inScope) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const rows = await db
     .select({
@@ -4347,6 +4823,7 @@ app.get("/tenants/:tenantId", async (c) => {
       financeAdminPasswordStored: tenantDeployments.financeAdminPassword,
       financeOrganizationId: organizations.financeOrganizationId,
       deploymentLastError: tenantDeployments.lastError,
+      partialFailureKind: tenantDeployments.partialFailureKind,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
       deploymentCreatedAt: tenantDeployments.createdAt,
       deploymentUpdatedAt: tenantDeployments.updatedAt,
@@ -4462,6 +4939,7 @@ app.get("/tenants/:tenantId", async (c) => {
               financeCardAccountId: row.financeCardAccountId,
               financeAdminPassword,
               lastError: row.deploymentLastError,
+              partialFailureKind: row.partialFailureKind,
               registrationCompletedAt: row.registrationCompletedAt
                 ? row.registrationCompletedAt.toISOString()
                 : null,
@@ -4502,6 +4980,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       planSlug: tenants.planSlug,
       modules: tenants.modules,
       deploymentStatus: tenantDeployments.status,
+      partialFailureKind: tenantDeployments.partialFailureKind,
     })
     .from(tenants)
     .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -4510,21 +4989,68 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
 
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
   const body = await c.req.json().catch(() => ({}));
+  const retryModulesRaw = (body as { retryModules?: unknown }).retryModules;
+  const retryModulesArr = Array.isArray(retryModulesRaw)
+    ? retryModulesRaw.filter((m): m is string => typeof m === "string")
+    : [];
   const retryPosOnly =
     (body as { retryPosOnly?: unknown }).retryPosOnly === true
-    || (Array.isArray((body as { retryModules?: unknown }).retryModules)
-      && (body as { retryModules: string[] }).retryModules.includes("pos")
-      && (body as { retryModules: string[] }).retryModules.length === 1);
+    || (retryModulesArr.includes("pos") && retryModulesArr.length === 1);
+  const retryWireOnly =
+    (body as { retryWireOnly?: unknown }).retryWireOnly === true
+    || (retryModulesArr.includes("wire") && retryModulesArr.length === 1);
 
   const failed =
     row.status === "failed" || row.deploymentStatus === "failed" || row.deploymentStatus === null;
   const partial = row.status === "partial";
+  const stuckProvisioning = row.status === "provisioning";
+
   if (retryPosOnly) {
     if (!partial) {
       return c.json(
         {
           error: "tenant_not_partial",
           message: "POS-only retry is available when tenant status is partial (Finance active, POS failed).",
+        },
+        409,
+      );
+    }
+  } else if (retryWireOnly) {
+    if (!partial) {
+      return c.json(
+        {
+          error: "tenant_not_partial",
+          message: "Wire-only retry is available when tenant status is partial.",
+        },
+        409,
+      );
+    }
+    if (row.partialFailureKind === "pos_failed") {
+      return c.json(
+        {
+          error: "tenant_pos_failed",
+          message: "Use POS-only retry when POS provisioning failed.",
+        },
+        409,
+      );
+    }
+  } else if (stuckProvisioning) {
+    const [runningJob] = await db
+      .select({ id: tenantLifecycleJobs.id })
+      .from(tenantLifecycleJobs)
+      .where(
+        and(
+          eq(tenantLifecycleJobs.tenantId, row.id),
+          eq(tenantLifecycleJobs.type, "tenant.provision"),
+          eq(tenantLifecycleJobs.status, "running"),
+        ),
+      )
+      .limit(1);
+    if (runningJob) {
+      return c.json(
+        {
+          error: "provision_job_running",
+          message: "Provisioning is still running for this tenant.",
         },
         409,
       );
@@ -4539,9 +5065,29 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
     );
   }
 
-  const correlationId = randomUUID();
+  const [latestProvisionJob] = await db
+    .select({
+      correlationId: tenantLifecycleJobs.correlationId,
+      status: tenantLifecycleJobs.status,
+    })
+    .from(tenantLifecycleJobs)
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, row.id),
+        eq(tenantLifecycleJobs.type, "tenant.provision"),
+      ),
+    )
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+
+  const correlationId =
+    stuckProvisioning
+    && latestProvisionJob?.correlationId
+    && latestProvisionJob.status !== "completed"
+      ? latestProvisionJob.correlationId
+      : randomUUID();
   const log = (m: string) => {
-    console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+    logger.info(m, { correlationId });
   };
   const acceptTrace = createProvisionTracer(db, correlationId, () => ({ slug: row.slug }), log);
   await acceptTrace.event("api", "HTTP 202 — retry provisioning accepted");
@@ -4552,7 +5098,12 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
     .where(eq(tenants.id, row.id));
   await db
     .update(tenantDeployments)
-    .set({ status: "provisioning", lastError: null, updatedAt: new Date() })
+    .set({
+      status: "provisioning",
+      lastError: null,
+      partialFailureKind: null,
+      updatedAt: new Date(),
+    })
     .where(eq(tenantDeployments.tenantId, row.id));
 
   const job = await insertTenantJob(db, {
@@ -4571,6 +5122,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       stockixTenantId: row.id,
       provisionRequestedById: c.get("actorId") as string,
       ...(retryPosOnly ? { retryModules: ["pos"] as const } : {}),
+      ...(retryWireOnly ? { retryModules: ["wire"] as const } : {}),
     },
   });
 
@@ -4782,6 +5334,13 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
       .set({ status: "suspended", updatedAt: new Date() })
       .where(eq(organizations.id, org.orgId));
   }
+
+  await applyTenantLicenseSuspend(
+    db,
+    parsed.data,
+    "tenant_suspended",
+    (message) => logger.info(message, { type: "tenant.suspend" }),
+  );
 
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
@@ -5008,6 +5567,12 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
       .set({ status: "active", updatedAt: new Date() })
       .where(eq(organizations.id, org.orgId));
   }
+
+  await applyTenantLicenseReactivate(
+    db,
+    parsed.data,
+    (message) => logger.info(message, { type: "tenant.reactivate" }),
+  );
 
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
@@ -5239,10 +5804,7 @@ function startReadinessReconciler() {
         }
       }
     } catch (error) {
-      console.error(
-        "[reconciler] readiness tick failed:",
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.error("reconciler readiness tick failed", error);
     } finally {
       running = false;
     }
@@ -5254,38 +5816,76 @@ function startReadinessReconciler() {
 }
 
 registerLicenseApi(app, db);
+registerTenantConfigApi(app, db);
+registerNotificationsApi(app, db);
 registerTenantFinanceUsersApi(app, db);
 registerPosCredentialsRoutes(app, db);
+registerIntegrationBridgeRoutes(app, db);
 registerTenantModulesRoutes(app, db);
 registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error(
-    JSON.stringify({
-      level: "error",
-      type: "unhandled_rejection",
-      reason: reason instanceof Error ? reason.message : String(reason),
-      promise: String(promise),
-    }),
-  );
+  if (process.env.SENTRY_DSN?.trim()) {
+    Sentry.captureException(reason);
+  }
+  logger.error("unhandled_rejection", reason, {
+    type: "unhandled_rejection",
+    promise: String(promise),
+  });
 });
 
 process.on("uncaughtException", (error) => {
-  console.error(
-    JSON.stringify({
-      level: "error",
-      type: "uncaught_exception",
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    }),
-  );
+  if (process.env.SENTRY_DSN?.trim()) {
+    Sentry.captureException(error);
+  }
+  logger.error("uncaught_exception", error, { type: "uncaught_exception" });
   process.exit(1);
 });
 
 const port = apiConfig.port;
 startReadinessReconciler();
+if (db) startStuckProvisioningReconciler(db);
+if (databaseUrl) {
+  void import("./provisioning/provision-notify-listener.js").then(
+    ({ startProvisionNotifyListener }) => {
+      startProvisionNotifyListener(databaseUrl, (message) => logger.info(message));
+      logger.info("Provision NOTIFY listener started");
+    },
+  );
+}
+
+void import("./jobs/license-expiry-queue.js").then(
+  ({ startLicenseExpiryWorker, isLicenseExpiryQueueEnabled }) => {
+    if (db && isLicenseExpiryQueueEnabled()) {
+      startLicenseExpiryWorker(db, (msg) => logger.info(msg));
+      logger.info("License expiry BullMQ worker started");
+    }
+  },
+);
+
+void import("./jobs/owner-invite-mail-queue.js").then(
+  ({ startOwnerInviteMailWorker, isOwnerInviteMailQueueEnabled }) => {
+    if (db && isOwnerInviteMailQueueEnabled()) {
+      startOwnerInviteMailWorker(db, (msg) => logger.info(msg));
+      logger.info("Owner invite mail BullMQ worker started");
+    }
+  },
+);
+
+// Global 404 handler — must be last route registered
+app.notFound((c) => {
+  return c.json(
+    {
+      success: false,
+      error: "Not found",
+      path: c.req.path,
+      method: c.req.method,
+    },
+    404,
+  );
+});
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`api listening on http://localhost:${info.port}`);
+  logger.info("api listening", { url: `http://localhost:${info.port}` });
 });

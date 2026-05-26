@@ -11,7 +11,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +26,19 @@ const FINANCE_ROOT =
   process.env.STOCKIX_TENANT_APP_ROOT?.trim() ||
   path.join(ROOT, "services", "stockix-finance");
 const TENANT_COMPOSE = path.join(ROOT, "infra", "tenant-stack", "docker-compose.yml");
+const REPO_SHARED_PKG = path.join(ROOT, "packages", "shared");
+/** Copied into Finance tree for Docker context (@repo/shared workspace dep). */
+const FINANCE_SHARED_PKG = path.join(FINANCE_ROOT, "packages", "shared");
+
+function syncRepoSharedIntoFinanceTree() {
+  if (!existsSync(REPO_SHARED_PKG)) {
+    console.error(`[prebuild] ERROR: @repo/shared not found: ${REPO_SHARED_PKG}`);
+    process.exit(1);
+  }
+  rmSync(FINANCE_SHARED_PKG, { recursive: true, force: true });
+  cpSync(REPO_SHARED_PKG, FINANCE_SHARED_PKG, { recursive: true });
+  console.log("[prebuild] Synced packages/shared → services/stockix-finance/packages/shared");
+}
 
 const REQUIRED_FINANCE_IMAGES = [
   "stockix-webapp:local",
@@ -107,6 +120,13 @@ run("Pull redis:alpine", "docker pull redis:alpine");
 
 // ── 2. Build Finance images ───────────────────────────────────────────────────
 console.log("\n[prebuild] Phase 2: Build Finance images");
+
+syncRepoSharedIntoFinanceTree();
+run(
+  "pnpm install (stockix-finance lockfile)",
+  "pnpm install --ignore-scripts",
+  FINANCE_ROOT,
+);
 
 if (!FORCE && imageExists("stockix-webapp:local")) {
   console.log("[prebuild] stockix-webapp:local already exists — skipping");

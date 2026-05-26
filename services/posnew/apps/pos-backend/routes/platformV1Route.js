@@ -24,6 +24,8 @@ const {
   getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
+  consumeProvisioningCredentials,
+  repairOrgCredentials,
   patchOrgLifecycle,
   suspendOrg,
   patchOrgLicense,
@@ -35,7 +37,11 @@ const {
   resetOrgPin,
   retryProvisioning,
 } = require("../controllers/platformOrgController");
-const { wireBigcapitalIntegration } = require("../controllers/platformIntegrationController");
+const {
+  wireBigcapitalIntegration,
+  getBigcapitalIntegrationHealth,
+  getIntegrationBridgeSummary,
+} = require("../controllers/platformIntegrationController");
 const {
   summary,
   kpis,
@@ -153,6 +159,16 @@ router.get(
   getOrgProvisioningStatus
 );
 router.post(
+  "/organizations/:id/provisioning-credentials/consume",
+  requirePlatformPermission(P.ORG_WRITE),
+  consumeProvisioningCredentials
+);
+router.post(
+  "/organizations/:id/repair-credentials",
+  requirePlatformPermission(P.ORG_WRITE),
+  repairOrgCredentials
+);
+router.post(
   "/organizations/:id/provisioning/retry",
   requirePlatformPermission(P.ORG_WRITE),
   retryProvisioning
@@ -182,6 +198,16 @@ router.put(
   "/organizations/:id/integration/bigcapital",
   requirePlatformPermission(P.ORG_WRITE),
   wireBigcapitalIntegration
+);
+router.get(
+  "/organizations/:id/integration/bigcapital/health",
+  requirePlatformPermission(P.ORG_READ),
+  getBigcapitalIntegrationHealth
+);
+router.get(
+  "/organizations/:id/integration/bridge-summary",
+  requirePlatformPermission(P.ORG_READ),
+  getIntegrationBridgeSummary
 );
 router.patch(
   "/organizations/:id/lifecycle",

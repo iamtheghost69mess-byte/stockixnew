@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsCleaningTasks, pmsCleaners, pmsCleanerAssignments, pmsRooms } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const cleaningRouter = new Hono<PmsEnv>();
@@ -16,8 +16,15 @@ cleaningRouter.get("/tasks", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conds = [eq(pmsCleaningTasks.tenantId, tenantId(c)), eq(pmsCleaningTasks.scheduledDate, date)];
   if (propertyId) conds.push(eq(pmsCleaningTasks.propertyId, propertyId));
-  const rows = await db.select().from(pmsCleaningTasks).where(and(...conds));
-  return c.json({ tasks: rows, date });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsCleaningTasks)
+    .where(and(...conds))
+    .orderBy(desc(pmsCleaningTasks.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ tasks: rows, date, meta: listMeta(page, limit, rows.length) });
 });
 
 cleaningRouter.post("/tasks", async (c) => {
@@ -61,9 +68,15 @@ cleaningRouter.patch("/tasks/:id", async (c) => {
 
 cleaningRouter.get("/cleaners", async (c) => {
   if (!db) return errors.dbUnavailable(c);
-  const rows = await db.select().from(pmsCleaners)
-    .where(eq(pmsCleaners.tenantId, tenantId(c))).orderBy(desc(pmsCleaners.createdAt));
-  return c.json({ cleaners: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsCleaners)
+    .where(eq(pmsCleaners.tenantId, tenantId(c)))
+    .orderBy(desc(pmsCleaners.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ cleaners: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 cleaningRouter.post("/cleaners", async (c) => {
@@ -95,8 +108,15 @@ cleaningRouter.get("/assignments", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conds = [eq(pmsCleanerAssignments.tenantId, tenantId(c))];
   if (propertyId) conds.push(eq(pmsCleanerAssignments.propertyId, propertyId));
-  const rows = await db.select().from(pmsCleanerAssignments).where(and(...conds));
-  return c.json({ assignments: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsCleanerAssignments)
+    .where(and(...conds))
+    .orderBy(desc(pmsCleanerAssignments.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ assignments: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 cleaningRouter.post("/assignments", async (c) => {

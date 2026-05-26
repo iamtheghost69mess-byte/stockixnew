@@ -20,6 +20,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { resetMeCache } from "@/hooks/use-me";
 import { cn } from "@/lib/utils";
 
 export function LoginForm({
@@ -69,6 +70,7 @@ export function LoginForm({
         setError(data.error ?? "Invalid credentials");
         return;
       }
+      resetMeCache();
       router.push(params.get("from") ?? "/");
       router.refresh();
     } catch {

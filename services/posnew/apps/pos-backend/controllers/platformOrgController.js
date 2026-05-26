@@ -11,8 +11,10 @@ const { recordEvent } = require("../services/productEventService");
 const { bootstrapOrganization } = require("../services/orgBootstrapService");
 const {
   storeFullCredentials,
+  peekFullCredentials,
   consumeFullCredentials,
 } = require("../services/bootstrapCredentialReveal");
+const { syncDefaultCredentialsFromUsers } = require("../services/defaultCredentialsSync");
 const { isDisposableEmail, trackSignupIp, maybeOpenFraudCase } = require(
   "../services/abuseSignals"
 );
@@ -28,6 +30,7 @@ const {
   logAccessStateTransitionIfChanged,
 } = require("../services/accessStateAuditService");
 const config = require("../config/config");
+const { assertCanCreatePlatformOrg } = require("../services/combinedOrgProvisionGuard");
 
 const DEFAULT_ORG_ENTITLEMENTS = {
   maxLocations: 5,
@@ -290,6 +293,11 @@ const createOrg = async (req, res, next) => {
           ? String(config.stockixTenantId).trim()
           : "";
 
+    await assertCanCreatePlatformOrg({
+      stockixTenantId: stockixTenantIdResolved,
+      idempotencyKey: idemKey ? String(idemKey) : "",
+    });
+
     const createPayload = {
       name: String(name).trim(),
       slug: slugNorm,
@@ -495,7 +503,9 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       return next(createHttpError(400, "Invalid organization id."));
     }
     const org = await Organization.findById(orgId)
-      .select("isBootstrapped lifecycle slug name provisioningSteps timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt")
+      .select(
+        "isBootstrapped lifecycle slug name provisioningSteps timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt licenseKey licenseKeyFormat stockixTenantId scopedLocationId acceptStkxUntil",
+      )
       .lean();
     if (!org) return next(createHttpError(404, "Organization not found."));
     const adminCount = await User.countDocuments({
@@ -503,10 +513,40 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       role: "admin",
     });
     const accessState = getOrganizationAccessState(org);
+    const lifecycleActive = String(org.lifecycle || "active").toLowerCase() === "active";
+
+    let licenseKeyValidForDefaultLocation = true;
+    const signingSecret =
+      config.licenseSigningSecret || process.env.LICENSE_SIGNING_SECRET || "";
+    if (org.licenseKey && signingSecret) {
+      const { assertLicenseKeyForLocation } = require("../services/stxiLicenseValidate");
+      let defaultLocationId = org.scopedLocationId
+        ? String(org.scopedLocationId)
+        : null;
+      if (!defaultLocationId) {
+        const firstLoc = await Location.findOne({ organization: orgId })
+          .select("_id")
+          .sort({ createdAt: 1 })
+          .lean();
+        defaultLocationId = firstLoc?._id ? String(firstLoc._id) : null;
+      }
+      const keyCheck = assertLicenseKeyForLocation({
+        licenseKey: org.licenseKey,
+        stockixTenantId: org.stockixTenantId || config.stockixTenantId,
+        locationId: defaultLocationId,
+        signingSecret,
+        acceptStkxUntil: org.acceptStkxUntil,
+      });
+      licenseKeyValidForDefaultLocation = keyCheck.ok;
+    }
+
     const readyForPinLogin =
+      lifecycleActive &&
       accessState.status === "active" &&
+      !accessState.blocked &&
       org.isBootstrapped === true &&
-      adminCount > 0;
+      adminCount > 0 &&
+      licenseKeyValidForDefaultLocation;
     const payload = {
       organizationId: String(orgId),
       slug: org.slug,
@@ -516,10 +556,11 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       adminUserCount: adminCount,
       hasAdminUser: adminCount > 0,
       readyForPinLogin,
+      licenseKeyValidForDefaultLocation,
       provisioningSteps: org.provisioningSteps || [],
     };
     if (readyForPinLogin) {
-      const fullCredentials = await consumeFullCredentials(orgId);
+      const fullCredentials = await peekFullCredentials(orgId);
       if (fullCredentials?.length) {
         payload.fullCredentials = fullCredentials;
       }
@@ -532,7 +573,52 @@ const getOrgProvisioningStatus = async (req, res, next) => {
     next(e);
   }
 };
- 
+
+/** Rebuild masked defaultCredentials from bootstrap users (no plaintext PIN recovery). */
+const repairOrgCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const result = await syncDefaultCredentialsFromUsers(orgId);
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.credentials_repaired",
+      organization: orgId,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { syncedCount: result.syncedCount },
+    });
+    res.json({ success: true, data: result });
+  } catch (e) {
+    if (e?.status === 404) return next(createHttpError(404, e.message));
+    next(e);
+  }
+};
+
+/** Delete one-time bootstrap PINs from the reveal store after Stockix persisted them. */
+const consumeProvisioningCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId).select("_id slug").lean();
+    if (!org) return next(createHttpError(404, "Organization not found."));
+    const consumed = await consumeFullCredentials(orgId);
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.provisioning_credentials_consumed",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { hadCredentials: Array.isArray(consumed) && consumed.length > 0 },
+    });
+    res.status(204).send();
+  } catch (e) {
+    next(e);
+  }
+};
+
 /** Manually trigger or resume a failed provisioning orchestrator for an organization. */
 const retryProvisioning = async (req, res, next) => {
   try {
@@ -901,6 +987,34 @@ const patchOrgLicense = async (req, res, next) => {
       org.licenseEndsAt = r.date;
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "licenseKey")) {
+      const rawKey = body.licenseKey;
+      org.licenseKey =
+        rawKey == null || String(rawKey).trim() === "" ? null : String(rawKey).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "licenseKeyFormat")) {
+      const rawFmt = body.licenseKeyFormat;
+      org.licenseKeyFormat =
+        rawFmt == null || String(rawFmt).trim() === "" ? null : String(rawFmt).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "stockixTenantId")) {
+      const rawTenant = body.stockixTenantId;
+      org.stockixTenantId =
+        rawTenant == null || String(rawTenant).trim() === ""
+          ? ""
+          : String(rawTenant).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "scopedLocationId")) {
+      const rawLoc = body.scopedLocationId;
+      org.scopedLocationId =
+        rawLoc == null || String(rawLoc).trim() === "" ? null : String(rawLoc).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "acceptStkxUntil")) {
+      const r = parseLicenseDateValue(body.acceptStkxUntil, "acceptStkxUntil");
+      if (r.error) return next(createHttpError(400, r.error));
+      org.acceptStkxUntil = r.date;
+    }
+
     await org.save();
     await OrgAccessCache.invalidateOrgAccessCache(org._id);
     const nextAccessState = getOrganizationAccessState(org);
@@ -929,6 +1043,9 @@ const patchOrgLicense = async (req, res, next) => {
       metadata: {
         licenseStartsAt: org.licenseStartsAt,
         licenseEndsAt: org.licenseEndsAt,
+        licenseKeyFormat: org.licenseKeyFormat ?? null,
+        scopedLocationId: org.scopedLocationId ?? null,
+        hasLicenseKey: Boolean(org.licenseKey),
       },
     });
     res.json({ success: true, data: withOrganizationAccessState(org) });
@@ -1263,6 +1380,8 @@ module.exports = {
   getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
+  consumeProvisioningCredentials,
+  repairOrgCredentials,
   patchOrgLifecycle,
   suspendOrg,
   patchOrgLicense,

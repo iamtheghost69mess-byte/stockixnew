@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { pmsCalendarEvents } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const calendarRouter = new Hono<PmsEnv>();
@@ -27,6 +27,13 @@ calendarRouter.get("/events", async (c) => {
   if (propertyId) conds.push(eq(pmsCalendarEvents.propertyId, propertyId));
   if (from) conds.push(gte(pmsCalendarEvents.endDate, from));
   conds.push(lte(pmsCalendarEvents.startDate, effectiveTo));
-  const rows = await db.select().from(pmsCalendarEvents).where(and(...conds)).orderBy(desc(pmsCalendarEvents.startDate));
-  return c.json({ events: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsCalendarEvents)
+    .where(and(...conds))
+    .orderBy(desc(pmsCalendarEvents.startDate))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ events: rows, meta: listMeta(page, limit, rows.length) });
 });

@@ -1,11 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { createCipheriv, randomBytes } from "node:crypto";
 import { execa } from "execa";
 
 import { apiConfig, posConfig } from "@repo/config";
+import { encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
 import { allocateOrganizationNumber, allocateTenantPort } from "@repo/db";
-import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
+import { tenantConfig, tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { asc, eq } from "drizzle-orm";
 import * as dbSchema from "@repo/db/schema";
@@ -32,6 +33,12 @@ import {
 } from "../domain/provisioning/adapters/copy-coa-across-stacks.js";
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
+import { verifyPosBigcapitalIntegration } from "../domain/provisioning/adapters/verify-pos-bigcapital-integration.js";
+import { completeFinanceSetupWizard } from "../domain/provisioning/adapters/complete-finance-setup-wizard.js";
+import {
+  clearTenantPartialState,
+  markTenantPartial,
+} from "../domain/provisioning/partial-provision.js";
 import { getLicenseExpiry, getPlanLimits } from "../../../apps/api/src/license-utils.js";
 import { sendPosWelcomeEmail } from "../../../apps/api/src/mail/send.js";
 import {
@@ -84,6 +91,7 @@ async function runPosProvisionStep(params: {
   tenantId: string | undefined;
   tenantName: string;
   adminEmail: string;
+  planSlug?: string;
   financeInternalPort?: number;
   db: PostgresJsDatabase<typeof dbSchema>;
   log: (m: string) => void;
@@ -101,6 +109,8 @@ async function runPosProvisionStep(params: {
         licenseErr instanceof Error ? licenseErr.message : String(licenseErr);
       params.log(`[provision][pos] license expiry lookup failed (using default): ${msg}`);
     }
+    const planSlug = params.planSlug?.trim() || "starter";
+    const planLimits = await getPlanLimits(params.db, planSlug);
     const posResult = await provisionPosStackTracked(
       {
         slug: params.slug,
@@ -111,6 +121,9 @@ async function runPosProvisionStep(params: {
         log: params.log,
         financeInternalPort: params.financeInternalPort,
         licenseExpiresAt,
+        tenantModules: params.licensedModules,
+        planSlug,
+        maxUsers: planLimits.maxUsers,
       },
       params.trace,
     );
@@ -158,7 +171,12 @@ async function runWirePosIntegrationStep(params: {
   walkInCustomerId: number;
   cashAccountId: number;
   cardAccountId: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
   financeDefaultWarehouseId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
   log: (m: string) => void;
   trace: ReturnType<typeof createProvisionTracer>;
   markOp: (
@@ -174,10 +192,27 @@ async function runWirePosIntegrationStep(params: {
     return { ok: true };
   }
   if (!params.forceRerun && params.hasOp("tenant.wire_pos_integration")) {
-    await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
-      meta: { operationKey: "tenant.wire_pos_integration" },
+    const health = await verifyPosBigcapitalIntegration({
+      posOrganizationId: params.posOrganizationId,
+      posHostPort: params.posHostPort,
+      log: params.log,
     });
-    return { ok: true };
+    if (health.healthy) {
+      await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
+        meta: { operationKey: "tenant.wire_pos_integration" },
+      });
+      return { ok: true };
+    }
+    await params.trace.event(
+      "resume",
+      "Re-wiring POS integration (journaled but health check failed)",
+      {
+        meta: {
+          operationKey: "tenant.wire_pos_integration",
+          healthReason: health.reason ?? "unknown",
+        },
+      },
+    );
   }
   try {
     params.log("[provision] step start: tenant.wire_pos_integration");
@@ -197,7 +232,12 @@ async function runWirePosIntegrationStep(params: {
       walkInCustomerId: params.walkInCustomerId,
       cashAccountId: params.cashAccountId,
       cardAccountId: params.cardAccountId,
+      serviceChargeItemId: params.serviceChargeItemId,
+      discountItemId: params.discountItemId,
       defaultWarehouseId: params.financeDefaultWarehouseId,
+      defaultVendorId: params.defaultVendorId,
+      inventoryAccountId: params.inventoryAccountId,
+      inventoryVarianceAccountId: params.inventoryVarianceAccountId,
       log: params.log,
     });
     await params.markOp("tenant.wire_pos_integration", "POS Bigcapital integration wired", {
@@ -251,13 +291,27 @@ async function persistFinanceDeploymentIds(
     .where(eq(tenantDeployments.id, deploymentId));
 }
 
-function encryptDeploymentSecret(plaintext: string): string {
-  const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+function encryptDeploymentSecretLocal(plaintext: string): string {
+  return encryptDeploymentSecret(plaintext, apiConfig.deploymentSecretKey);
+}
+
+async function resolvePosBackendHostPort(slug: string): Promise<number | null> {
+  const project = `stockix-pos-${slug}`;
+  try {
+    const { stdout } = await execa("docker", [
+      "compose",
+      "-p",
+      project,
+      "port",
+      "pos-backend",
+      "8010",
+    ]);
+    const match = stdout.trim().match(/:(\d+)\s*$/);
+    if (!match?.[1]) return null;
+    return Number(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 import { loadProvisionJournalState } from "./provision-journal.js";
@@ -337,6 +391,11 @@ export async function executeProvisionRuntime(
   let walkInCustomerId: number | undefined;
   let cashAccountId: number | undefined;
   let cardAccountId: number | undefined;
+  let serviceChargeItemId: number | undefined;
+  let discountItemId: number | undefined;
+  let defaultVendorId: number | undefined;
+  let inventoryAccountId: number | undefined;
+  let inventoryVarianceAccountId: number | undefined;
   let posOrganizationId: string | undefined;
   let posUrl: string | undefined;
   let posApiUrl: string | undefined;
@@ -355,6 +414,10 @@ export async function executeProvisionRuntime(
   if (journalState.walkInCustomerId) walkInCustomerId = journalState.walkInCustomerId;
   if (journalState.cashAccountId) cashAccountId = journalState.cashAccountId;
   if (journalState.cardAccountId) cardAccountId = journalState.cardAccountId;
+  if (journalState.serviceChargeItemId) {
+    serviceChargeItemId = journalState.serviceChargeItemId;
+  }
+  if (journalState.discountItemId) discountItemId = journalState.discountItemId;
   const checkNotCancelled = async () => {
     if (!assertNotCancelled) return;
     await assertNotCancelled();
@@ -484,6 +547,136 @@ export async function executeProvisionRuntime(
     assertProvisionModuleEnv(licensedModulesEarly);
     const posOnlyRetry =
       input.retryModules?.length === 1 && input.retryModules[0] === "pos";
+    const wireOnlyRetry =
+      input.retryModules?.length === 1 && input.retryModules[0] === "wire";
+
+    if (wireOnlyRetry) {
+      const [existing] = await db
+        .select({
+          tenantId: tenants.id,
+          tenantModules: tenants.modules,
+          deploymentId: tenantDeployments.id,
+          internalPort: tenantDeployments.internalPort,
+          composeProjectName: tenantDeployments.composeProjectName,
+          financeTenantId: tenantDeployments.financeTenantId,
+          financeDefaultWarehouseId: tenantDeployments.financeDefaultWarehouseId,
+          financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
+          financeCashAccountId: tenantDeployments.financeCashAccountId,
+          financeCardAccountId: tenantDeployments.financeCardAccountId,
+          posOrganizationId: tenantDeployments.posOrganizationId,
+          posUrl: tenantDeployments.posUrl,
+        })
+        .from(tenants)
+        .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+        .where(eq(tenants.slug, input.slug))
+        .limit(1);
+      if (!existing) {
+        throw new Error(`tenant_not_found:${input.slug}`);
+      }
+      tenantId = existing.tenantId;
+      deploymentId = existing.deploymentId;
+      port = existing.internalPort;
+      const retryLicensedModules = resolveTenantModules(
+        parseTenantModulesJson(existing.tenantModules),
+      );
+      if (!hasAccountingAndPos(retryLicensedModules)) {
+        throw new Error("wire_only_retry_requires_accounting_and_pos_modules");
+      }
+      const posOrgId = existing.posOrganizationId?.trim();
+      const posHostPort = await resolvePosBackendHostPort(input.slug);
+      if (
+        !posOrgId
+        || !posHostPort
+        || !existing.financeTenantId
+        || existing.financeTenantId <= 0
+        || !existing.financeWalkInCustomerId
+        || !port
+        || !existing.financeCashAccountId
+        || !existing.financeCardAccountId
+      ) {
+        throw new Error("wire_only_retry_missing_prerequisites");
+      }
+      await checkNotCancelled();
+      const workerInternalUrl =
+        port > 0
+          ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
+          : undefined;
+      let retryServiceChargeItemId: number | undefined;
+      let retryDiscountItemId: number | undefined;
+      const internalApiSecret = apiConfig.internalApiSecret?.trim() ?? "";
+      if (workerInternalUrl && internalApiSecret) {
+        try {
+          const seeded = await seedFinancePosDefaults({
+            internalBaseUrl: workerInternalUrl,
+            internalApiSecret,
+            financeTenantId: existing.financeTenantId,
+            correlationId,
+            log,
+          });
+          retryServiceChargeItemId = seeded.serviceChargeItemId;
+          retryDiscountItemId = seeded.discountItemId;
+        } catch (seedErr) {
+          const seedMsg = seedErr instanceof Error ? seedErr.message : String(seedErr);
+          log(`[provision][pos] bridge item seed skipped on wire retry: ${seedMsg}`);
+        }
+      }
+      const wireResult = await runWirePosIntegrationStep({
+        licensedModules: retryLicensedModules,
+        slug: input.slug,
+        posOrganizationId: posOrgId,
+        posHostPort,
+        financeInternalPort: port,
+        workerInternalUrl,
+        financeTenantId: existing.financeTenantId,
+        walkInCustomerId: existing.financeWalkInCustomerId,
+        cashAccountId: existing.financeCashAccountId,
+        cardAccountId: existing.financeCardAccountId,
+        serviceChargeItemId: retryServiceChargeItemId,
+        discountItemId: retryDiscountItemId,
+        financeDefaultWarehouseId: existing.financeDefaultWarehouseId ?? undefined,
+        log,
+        trace,
+        markOp,
+        hasOp,
+        forceRerun: true,
+      });
+      if (!wireResult.ok) {
+        await markTenantPartial(db, {
+          tenantId,
+          kind: "wire_failed",
+          lastError: wireResult.error,
+        });
+        return {
+          ok: true,
+          tenantId,
+          deploymentId,
+          composeProjectName: existing.composeProjectName,
+          internalPort: port,
+          baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+          oneTimeAdminPassword: oneTimeAdminPassword!,
+          posStatus: "ok",
+          posError: wireResult.error,
+          tenantStatus: "partial",
+          posOrganizationId: posOrgId,
+          posUrl: existing.posUrl ?? undefined,
+        };
+      }
+      await clearTenantPartialState(db, tenantId, "active");
+      log(`[provision] Wire-only retry success slug=${input.slug}`);
+      return {
+        ok: true,
+        tenantId,
+        deploymentId,
+        composeProjectName: existing.composeProjectName,
+        internalPort: port,
+        baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+        oneTimeAdminPassword: oneTimeAdminPassword!,
+        posStatus: "ok",
+        tenantStatus: "active",
+        posOrganizationId: posOrgId,
+        posUrl: existing.posUrl ?? undefined,
+      };
+    }
 
     if (posOnlyRetry) {
       const [existing] = await db
@@ -519,6 +712,7 @@ export async function executeProvisionRuntime(
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        planSlug: input.planSlug,
         financeInternalPort: port,
         db,
         log,
@@ -548,6 +742,26 @@ export async function executeProvisionRuntime(
             port > 0
               ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
               : undefined;
+          let retryServiceChargeItemId: number | undefined;
+          let retryDiscountItemId: number | undefined;
+          const internalApiSecret = apiConfig.internalApiSecret?.trim() ?? "";
+          if (workerInternalUrl && internalApiSecret) {
+            try {
+              const seeded = await seedFinancePosDefaults({
+                internalBaseUrl: workerInternalUrl,
+                internalApiSecret,
+                financeTenantId: existing.financeTenantId!,
+                correlationId,
+                log,
+              });
+              retryServiceChargeItemId = seeded.serviceChargeItemId;
+              retryDiscountItemId = seeded.discountItemId;
+            } catch (seedErr) {
+              const seedMsg =
+                seedErr instanceof Error ? seedErr.message : String(seedErr);
+              log(`[provision][pos] bridge item seed skipped on retry: ${seedMsg}`);
+            }
+          }
           const wireResult = await runWirePosIntegrationStep({
             licensedModules: retryLicensedModules,
             slug: input.slug,
@@ -559,6 +773,8 @@ export async function executeProvisionRuntime(
             walkInCustomerId: existing.financeWalkInCustomerId!,
             cashAccountId: existing.financeCashAccountId!,
             cardAccountId: existing.financeCardAccountId!,
+            serviceChargeItemId: retryServiceChargeItemId,
+            discountItemId: retryDiscountItemId,
             financeDefaultWarehouseId: existing.financeDefaultWarehouseId ?? undefined,
             log,
             trace,
@@ -569,22 +785,26 @@ export async function executeProvisionRuntime(
           if (!wireResult.ok) {
             tenantStatus = "partial";
             wireError = wireResult.error;
+            await markTenantPartial(db, {
+              tenantId,
+              kind: "wire_failed",
+              lastError: wireError,
+            });
           } else {
+            await clearTenantPartialState(db, tenantId, "active");
             await trace.event("progress", "Integration re-wired on retry", {
               meta: { operationKey: "tenant.wire_pos_integration" },
             });
           }
+        } else if (tenantStatus === "active") {
+          await clearTenantPartialState(db, tenantId, "active");
         }
 
-        await db
-          .update(tenants)
-          .set({ status: tenantStatus })
-          .where(eq(tenants.id, tenantId));
         await db
           .update(tenantDeployments)
           .set({
             status: "active",
-            lastError: wireError ?? null,
+            ...(wireError ? {} : { lastError: null, partialFailureKind: null }),
             updatedAt: new Date(),
             ...(posOutcome.posOrganizationId
               ? { posOrganizationId: posOutcome.posOrganizationId }
@@ -592,6 +812,9 @@ export async function executeProvisionRuntime(
             ...(posOutcome.posUrl ? { posUrl: posOutcome.posUrl } : {}),
           })
           .where(eq(tenantDeployments.tenantId, tenantId));
+        if (tenantStatus === "partial" && !wireError) {
+          await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
+        }
         log(`[provision] POS-only retry success slug=${input.slug}`);
         return {
           ok: true,
@@ -611,11 +834,11 @@ export async function executeProvisionRuntime(
         };
       }
       const posError = posOutcome.posError ?? "POS provisioning failed";
-      await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
-      await db
-        .update(tenantDeployments)
-        .set({ status: "active", lastError: posError, updatedAt: new Date() })
-        .where(eq(tenantDeployments.tenantId, tenantId));
+      await markTenantPartial(db, {
+        tenantId,
+        kind: "pos_failed",
+        lastError: posError,
+      });
       return {
         ok: true,
         tenantId,
@@ -665,9 +888,9 @@ export async function executeProvisionRuntime(
         status: "provisioning",
         composeProjectName: project,
         internalPort: allocated,
-        mysqlPassword: encryptDeploymentSecret(dbPassword),
-        mysqlRootPassword: encryptDeploymentSecret(dbRootPassword),
-        jwtSecret: encryptDeploymentSecret(jwtSecret),
+        mysqlPassword: encryptDeploymentSecretLocal(dbPassword),
+        mysqlRootPassword: encryptDeploymentSecretLocal(dbRootPassword),
+        jwtSecret: encryptDeploymentSecretLocal(jwtSecret),
         mongoUrl: mongoUrlPersisted,
       }).returning({ id: tenantDeployments.id });
       deploymentId = dRow!.id;
@@ -687,6 +910,7 @@ export async function executeProvisionRuntime(
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        planSlug: input.planSlug,
         financeInternalPort: port,
         db,
         log,
@@ -747,10 +971,31 @@ export async function executeProvisionRuntime(
       };
     }
 
+    let stockixAppName = input.name;
+    let stockixLogoUrl = "";
+    let stockixPrimaryColor = "#ca8a04";
+    if (tenantId) {
+      const [cfg] = await db
+        .select({
+          appName: tenantConfig.appName,
+          logoUrl: tenantConfig.logoUrl,
+          primaryColor: tenantConfig.primaryColor,
+        })
+        .from(tenantConfig)
+        .where(eq(tenantConfig.tenantId, tenantId))
+        .limit(1);
+      if (cfg) {
+        stockixAppName = cfg.appName ?? stockixAppName;
+        stockixLogoUrl = cfg.logoUrl ?? "";
+        stockixPrimaryColor = cfg.primaryColor ?? stockixPrimaryColor;
+      }
+    }
+
     const tenantEnvMap = buildTenantEnvMap({
       mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,
+      socketAllowedOrigins: baseUrl,
       jwtSecret,
       dbPassword,
       dbRootPassword,
@@ -767,8 +1012,21 @@ export async function executeProvisionRuntime(
       stockixTenantId: input.stockixTenantId,
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret,
+      stockixAppName,
+      stockixLogoUrl,
+      stockixPrimaryColor,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
+    if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
+      log(
+        "[provision][mail] tenant .env missing MAIL_PASSWORD or MAIL_FROM_ADDRESS — Finance invite/reset emails will not send",
+      );
+      await trace.event(
+        "mail.env_incomplete",
+        "Tenant mail env incomplete (MAIL_PASSWORD or MAIL_FROM_ADDRESS missing)",
+        { level: "warn" },
+      );
+    }
     const composeEnv = {
       ...tenantEnvMap,
       COMPOSE_PROJECT_NAME: project,
@@ -1119,6 +1377,24 @@ export async function executeProvisionRuntime(
           },
         );
         log("[provision] step done: tenant.build_organization");
+        if (
+          financeTenantId
+          && internalUrl
+          && !hasOp("tenant.complete_setup_wizard")
+        ) {
+          const setupResult = await completeFinanceSetupWizard({
+            internalBaseUrl: internalUrl,
+            financeTenantId,
+            log,
+          });
+          if (setupResult.ok) {
+            await markOp("tenant.complete_setup_wizard", "Setup wizard marked complete", {
+              financeTenantId,
+            });
+          } else {
+            log(`[provision] setup wizard complete skipped: ${setupResult.error}`);
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await trace.event(
@@ -1161,11 +1437,12 @@ export async function executeProvisionRuntime(
           log,
         });
       } catch (err) {
-        log(
-          `[provision] Cross-stack COA copy failed (non-fatal): ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        log(`[provision] Cross-stack COA copy failed (non-fatal): ${msg}`);
+        await trace.event("tenant.copy_coa", "Cross-stack chart of accounts copy failed", {
+          level: "warn",
+          meta: { error: msg },
+        });
       }
     }
 
@@ -1255,6 +1532,11 @@ export async function executeProvisionRuntime(
           walkInCustomerId = seeded.walkInCustomerId;
           cashAccountId = seeded.cashAccountId;
           cardAccountId = seeded.cardAccountId;
+          serviceChargeItemId = seeded.serviceChargeItemId;
+          discountItemId = seeded.discountItemId;
+          defaultVendorId = seeded.defaultVendorId;
+          inventoryAccountId = seeded.inventoryAccountId;
+          inventoryVarianceAccountId = seeded.inventoryVarianceAccountId;
           await persistFinanceDeploymentIds(db, deploymentId, {
             financeTenantId,
             financeDefaultWarehouseId,
@@ -1267,6 +1549,8 @@ export async function executeProvisionRuntime(
             walkInCustomerId,
             cashAccountId,
             cardAccountId,
+            serviceChargeItemId,
+            discountItemId,
             elapsedMs: elapsedMs(),
           });
           await trace.event("pos_defaults_seeded", "Walk-in customer and deposit accounts ready", {
@@ -1274,6 +1558,8 @@ export async function executeProvisionRuntime(
               walkInCustomerId,
               cashAccountId,
               cardAccountId,
+              serviceChargeItemId,
+              discountItemId,
             },
           });
           log("[provision] step done: tenant.seed_pos_defaults");
@@ -1344,12 +1630,32 @@ export async function executeProvisionRuntime(
       );
     }
 
+    let forceWireRerun: boolean = wireOnlyRetry;
+    if (tenantId) {
+      const [partialRow] = await db
+        .select({
+          tenantStatus: tenants.status,
+          partialFailureKind: tenantDeployments.partialFailureKind,
+        })
+        .from(tenants)
+        .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (
+        partialRow?.tenantStatus === "partial"
+        && partialRow.partialFailureKind === "wire_failed"
+      ) {
+        forceWireRerun = true;
+      }
+    }
+
     const posOutcome = await runPosProvisionStep({
       licensedModules,
       slug: input.slug,
       tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      planSlug: input.planSlug,
       financeInternalPort: port,
       db,
       log,
@@ -1382,20 +1688,26 @@ export async function executeProvisionRuntime(
           walkInCustomerId,
           cashAccountId,
           cardAccountId,
+          serviceChargeItemId,
+          discountItemId,
           financeDefaultWarehouseId,
+          defaultVendorId,
+          inventoryAccountId,
+          inventoryVarianceAccountId,
           log,
           trace,
           markOp,
           hasOp,
+          forceRerun: forceWireRerun,
         });
         if (!wireResult.ok) {
           const wireError = wireResult.error;
           if (hasAccountingAndPos(licensedModules) && tenantId) {
-            await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
-            await db
-              .update(tenantDeployments)
-              .set({ status: "active", lastError: wireError, updatedAt: new Date() })
-              .where(eq(tenantDeployments.tenantId, tenantId));
+            await markTenantPartial(db, {
+              tenantId,
+              kind: "wire_failed",
+              lastError: wireError,
+            });
             log(
               `[provision] Finance+POS active but integration wire failed — tenant partial slug=${input.slug}`,
             );
@@ -1430,11 +1742,11 @@ export async function executeProvisionRuntime(
     if (posOutcome.posStatus === "failed" && tenantId) {
       const posError = posOutcome.posError ?? "POS provisioning failed";
       if (hasAccountingAndPos(licensedModules)) {
-        await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
-        await db
-          .update(tenantDeployments)
-          .set({ status: "active", lastError: posError, updatedAt: new Date() })
-          .where(eq(tenantDeployments.tenantId, tenantId));
+        await markTenantPartial(db, {
+          tenantId,
+          kind: "pos_failed",
+          lastError: posError,
+        });
         log(`[provision] Finance active, POS failed — tenant marked partial slug=${input.slug}`);
         return {
           ok: true,
@@ -1572,7 +1884,7 @@ export type AddModuleInput = {
   slug: string;
   name: string;
   adminEmail: string;
-  module: "pos" | "pms" | "chat";
+  module: "pos" | "pms" | "chat" | "accounting";
   planSlug?: string;
 };
 
@@ -1647,6 +1959,11 @@ export async function executeAddModuleRuntime(
     let walkInCustomerId = row.financeWalkInCustomerId ?? undefined;
     let cashAccountId = row.financeCashAccountId ?? undefined;
     let cardAccountId = row.financeCardAccountId ?? undefined;
+    let serviceChargeItemId: number | undefined;
+    let discountItemId: number | undefined;
+    let defaultVendorId: number | undefined;
+    let inventoryAccountId: number | undefined;
+    let inventoryVarianceAccountId: number | undefined;
 
     const hasAccounting = licensedModules.includes("accounting");
     if (
@@ -1668,11 +1985,13 @@ export async function executeAddModuleRuntime(
           financeDefaultWarehouseId,
         });
       }
-      if (
+      const needsDepositIds =
         (!walkInCustomerId || walkInCustomerId <= 0)
         || (!cashAccountId || cashAccountId <= 0)
-        || (!cardAccountId || cardAccountId <= 0)
-      ) {
+        || (!cardAccountId || cardAccountId <= 0);
+      const needsBridgeItems =
+        !serviceChargeItemId || !discountItemId;
+      if (needsDepositIds || needsBridgeItems) {
         const seeded = await seedFinancePosDefaults({
           internalBaseUrl: internalUrl,
           internalApiSecret,
@@ -1680,14 +1999,31 @@ export async function executeAddModuleRuntime(
           correlationId,
           log,
         });
-        walkInCustomerId = seeded.walkInCustomerId;
-        cashAccountId = seeded.cashAccountId;
-        cardAccountId = seeded.cardAccountId;
-        await persistFinanceDeploymentIds(db, row.deploymentId, {
-          walkInCustomerId,
-          cashAccountId,
-          cardAccountId,
-        });
+        if (needsDepositIds) {
+          walkInCustomerId = seeded.walkInCustomerId;
+          cashAccountId = seeded.cashAccountId;
+          cardAccountId = seeded.cardAccountId;
+          await persistFinanceDeploymentIds(db, row.deploymentId, {
+            walkInCustomerId,
+            cashAccountId,
+            cardAccountId,
+          });
+        }
+        if (seeded.serviceChargeItemId) {
+          serviceChargeItemId = seeded.serviceChargeItemId;
+        }
+        if (seeded.discountItemId) {
+          discountItemId = seeded.discountItemId;
+        }
+        if (seeded.defaultVendorId) {
+          defaultVendorId = seeded.defaultVendorId;
+        }
+        if (seeded.inventoryAccountId) {
+          inventoryAccountId = seeded.inventoryAccountId;
+        }
+        if (seeded.inventoryVarianceAccountId) {
+          inventoryVarianceAccountId = seeded.inventoryVarianceAccountId;
+        }
       }
     }
 
@@ -1697,6 +2033,7 @@ export async function executeAddModuleRuntime(
       tenantId: input.tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      planSlug: input.planSlug,
       financeInternalPort: financeInternalPort ?? undefined,
       db,
       log,
@@ -1751,7 +2088,12 @@ export async function executeAddModuleRuntime(
         walkInCustomerId,
         cashAccountId,
         cardAccountId,
+        serviceChargeItemId,
+        discountItemId,
         financeDefaultWarehouseId,
+        defaultVendorId,
+        inventoryAccountId,
+        inventoryVarianceAccountId,
         log,
         trace,
         markOp: async (operationKey, message, meta) => {
@@ -1760,11 +2102,11 @@ export async function executeAddModuleRuntime(
         hasOp: () => false,
       });
       if (!wireResult.ok) {
-        await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, input.tenantId));
-        await db
-          .update(tenantDeployments)
-          .set({ lastError: wireResult.error, updatedAt: new Date() })
-          .where(eq(tenantDeployments.tenantId, input.tenantId));
+        await markTenantPartial(db, {
+          tenantId: input.tenantId,
+          kind: "wire_failed",
+          lastError: wireResult.error,
+        });
         return {
           ok: true,
           module: "pos",
@@ -1807,6 +2149,13 @@ export async function executeAddModuleRuntime(
       posApiUrl: posOutcome.posApiUrl,
       posDefaultCredentials: posOutcome.posDefaultCredentials,
     };
+  }
+
+  if (input.module === "accounting") {
+    const { executeAddAccountingModuleRuntime } = await import(
+      "./add-accounting-module-runtime.js"
+    );
+    return executeAddAccountingModuleRuntime(db, input, log, correlationId);
   }
 
   if (input.module === "pms") {

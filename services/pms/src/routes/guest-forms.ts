@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   pmsGuestFormTemplates,
   pmsGuestFormSubmissions,
   pmsBookings,
 } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const guestFormsRouter = new Hono<PmsEnv>();
@@ -30,8 +30,15 @@ guestFormsRouter.get("/", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conds = [eq(pmsGuestFormTemplates.tenantId, tenantId(c))];
   if (propertyId) conds.push(eq(pmsGuestFormTemplates.propertyId, propertyId));
-  const rows = await db.select().from(pmsGuestFormTemplates).where(and(...conds));
-  return c.json({ templates: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsGuestFormTemplates)
+    .where(and(...conds))
+    .orderBy(desc(pmsGuestFormTemplates.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ templates: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 guestFormsRouter.post("/", async (c) => {

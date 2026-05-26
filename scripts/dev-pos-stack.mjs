@@ -27,8 +27,8 @@ if (process.env.STOCKIX_DEV_SKIP_POS === "1") {
   skip("STOCKIX_DEV_SKIP_POS=1 — not starting POS stack.");
 }
 
-if (!existsSync(path.join(posRoot, "node_modules"))) {
-  skip("POS deps missing. Run: pnpm dev:pos:install");
+if (!existsSync(path.join(repoRoot, "node_modules"))) {
+  skip("Root deps missing. Run: pnpm install");
 }
 
 if (!existsSync(path.join(backendDir, "package.json"))) {
@@ -117,8 +117,14 @@ function startPos(label, cwd, cmd, args, env) {
   return child;
 }
 
-startPos("api", backendDir, "npm", ["run", "dev"], backendEnv);
-startPos("ui", frontendDir, "npm", ["run", "dev", "--", "-p", uiPort], frontendEnv);
+startPos("api", repoRoot, "pnpm", ["--filter", "pos-backend", "dev"], backendEnv);
+startPos(
+  "ui",
+  path.join(repoRoot, "services", "posnew", "apps", "pos-frontend2"),
+  "pnpm",
+  ["exec", "next", "dev", "--port", String(uiPort)],
+  frontendEnv,
+);
 
 function shutdown(signal) {
   for (const child of children) {

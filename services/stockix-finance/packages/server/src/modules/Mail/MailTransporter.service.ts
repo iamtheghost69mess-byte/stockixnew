@@ -10,7 +10,16 @@ export class MailTransporter {
     private readonly transporter: Transporter,
   ) {}
 
-  send(mail: Mail) {
-    return this.transporter.sendMail(mail.mailOptions);
+  async send(mail: Mail) {
+    try {
+      return await this.transporter.sendMail(mail.mailOptions);
+    } catch (error) {
+      console.error('[MailTransporter] send failed:', {
+        subject: mail.subject,
+        to: mail.to,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 }

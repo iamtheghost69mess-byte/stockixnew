@@ -39,6 +39,10 @@ export function createAuthGate(
     }
     // Internal job routes are protected by WORKER_SECRET, not PLATFORM_API_SECRET.
     // A dashboard operator must not be able to reach these endpoints (CRIT-01).
+    if (c.req.path.startsWith("/webhooks/")) {
+      await next();
+      return;
+    }
     if (c.req.path.startsWith("/internal/jobs")) {
       const auth = c.req.header("Authorization") ?? "";
       if (!workerSecret || auth !== `Bearer ${workerSecret}`) {
@@ -76,7 +80,12 @@ export function createAuthGate(
 export function createActorResolver(db: Db | null): MiddlewareHandler<AuthEnv> {
   return async (c, next) => {
     const path = c.req.path;
-    if (path === "/health" || path.startsWith("/auth") || path.startsWith("/internal/jobs")) {
+    if (
+      path === "/health"
+      || path.startsWith("/auth")
+      || path.startsWith("/webhooks/")
+      || path.startsWith("/internal/jobs")
+    ) {
       await next();
       return;
     }

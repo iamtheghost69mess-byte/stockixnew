@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 import { CopyIcon, PlusIcon, TrashIcon } from "lucide-react";
 
@@ -14,8 +16,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -34,6 +43,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
 import { pmsFetch } from "@/lib/pms-fetch";
+import {
+  pmsStaffCreateSchema,
+  pmsStaffInviteSchema,
+  type PmsStaffCreateValues,
+  type PmsStaffInviteValues,
+} from "@/lib/schemas";
 
 type Staff = { id: string; name: string; role: string; email: string | null };
 type Manager = { id: string; propertyId: string; staffId: string };
@@ -46,6 +61,8 @@ type Invite = {
   revokedAt: string | null;
 };
 
+const STAFF_ROLES = ["receptionist", "manager", "housekeeping", "maintenance"] as const;
+
 export default function PmsStaffPage() {
   const { tenantId } = usePmsTenant();
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -55,9 +72,17 @@ export default function PmsStaffPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [staffSaving, setStaffSaving] = useState(false);
   const [inviteSaving, setInviteSaving] = useState(false);
-  const [staffForm, setStaffForm] = useState({ name: "", role: "receptionist", email: "" });
-  const [inviteForm, setInviteForm] = useState({ propertyId: "", expiresInDays: "7" });
   const [copied, setCopied] = useState<string | null>(null);
+
+  const staffForm = useForm<PmsStaffCreateValues>({
+    resolver: zodResolver(pmsStaffCreateSchema),
+    defaultValues: { name: "", role: "receptionist", email: "" },
+  });
+
+  const inviteForm = useForm<PmsStaffInviteValues>({
+    resolver: zodResolver(pmsStaffInviteSchema),
+    defaultValues: { propertyId: "", expiresInDays: 7 },
+  });
 
   async function load() {
     if (!tenantId) return;
@@ -71,16 +96,19 @@ export default function PmsStaffPage() {
     setInvites(((await iRes.json()) as { invites?: Invite[] }).invites ?? []);
   }
 
-  useEffect(() => { void load(); }, [tenantId]);
+  useEffect(() => {
+    void load();
+  }, [tenantId]);
 
-  async function handleCreateStaff() {
-    if (!tenantId || !staffForm.name) return;
+  const onCreateStaff = staffForm.handleSubmit(async (data) => {
+    if (!tenantId) return;
     setStaffSaving(true);
-    await pmsFetch("staff", tenantId, { method: "POST", body: JSON.stringify(staffForm) });
+    await pmsFetch("staff", tenantId, { method: "POST", body: JSON.stringify(data) });
     setStaffSaving(false);
     setStaffOpen(false);
+    staffForm.reset();
     void load();
-  }
+  });
 
   async function handleDeleteStaff(id: string) {
     if (!tenantId) return;
@@ -88,17 +116,18 @@ export default function PmsStaffPage() {
     void load();
   }
 
-  async function handleCreateInvite() {
-    if (!tenantId || !inviteForm.propertyId) return;
+  const onCreateInvite = inviteForm.handleSubmit(async (data) => {
+    if (!tenantId) return;
     setInviteSaving(true);
     await pmsFetch("staff/invites", tenantId, {
       method: "POST",
-      body: JSON.stringify({ propertyId: inviteForm.propertyId, expiresInDays: parseInt(inviteForm.expiresInDays, 10) }),
+      body: JSON.stringify(data),
     });
     setInviteSaving(false);
     setInviteOpen(false);
+    inviteForm.reset();
     void load();
-  }
+  });
 
   async function handleRevokeInvite(id: string) {
     if (!tenantId) return;
@@ -148,20 +177,24 @@ export default function PmsStaffPage() {
               <TableBody>
                 {staff.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">No staff members.</TableCell>
-                  </TableRow>
-                ) : staff.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell className="capitalize">{s.role}</TableCell>
-                    <TableCell>{s.email ?? "—"}</TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => void handleDeleteStaff(s.id)}>
-                        <TrashIcon className="h-4 w-4 text-destructive" />
-                      </Button>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      No staff members.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  staff.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="capitalize">{s.role}</TableCell>
+                      <TableCell>{s.email ?? "—"}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" onClick={() => void handleDeleteStaff(s.id)}>
+                          <TrashIcon className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -183,12 +216,14 @@ export default function PmsStaffPage() {
                       No property managers. Use invites to delegate access.
                     </TableCell>
                   </TableRow>
-                ) : managers.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-mono text-xs">{m.propertyId.slice(0, 8)}…</TableCell>
-                    <TableCell className="font-mono text-xs">{m.staffId.slice(0, 8)}…</TableCell>
-                  </TableRow>
-                ))}
+                ) : (
+                  managers.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-mono text-xs">{m.propertyId.slice(0, 8)}…</TableCell>
+                      <TableCell className="font-mono text-xs">{m.staffId.slice(0, 8)}…</TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -214,101 +249,198 @@ export default function PmsStaffPage() {
               <TableBody>
                 {invites.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">No invites.</TableCell>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      No invites.
+                    </TableCell>
                   </TableRow>
-                ) : invites.map((inv) => {
-                  const expired = new Date(inv.expiresAt) < new Date();
-                  const status = inv.revokedAt ? "revoked" : inv.acceptedAt ? "accepted" : expired ? "expired" : "pending";
-                  return (
-                    <TableRow key={inv.id}>
-                      <TableCell className="font-mono text-xs">{inv.propertyId.slice(0, 8)}…</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono text-xs">{inv.token.slice(0, 12)}…</span>
-                          <Button size="sm" variant="ghost" onClick={() => copyToken(inv.token)}>
-                            <CopyIcon className={`h-3 w-3 ${copied === inv.token ? "text-green-600" : ""}`} />
-                          </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell className="tabular-nums text-sm">
-                        {new Date(inv.expiresAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={status === "accepted" ? "default" : status === "revoked" || status === "expired" ? "destructive" : "secondary"}
-                          className="capitalize"
-                        >
-                          {status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {status === "pending" && (
-                          <Button size="sm" variant="outline" onClick={() => void handleRevokeInvite(inv.id)}>
-                            Revoke
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                ) : (
+                  invites.map((inv) => {
+                    const expired = new Date(inv.expiresAt) < new Date();
+                    const status = inv.revokedAt
+                      ? "revoked"
+                      : inv.acceptedAt
+                        ? "accepted"
+                        : expired
+                          ? "expired"
+                          : "pending";
+                    return (
+                      <TableRow key={inv.id}>
+                        <TableCell className="font-mono text-xs">{inv.propertyId.slice(0, 8)}…</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-xs">{inv.token.slice(0, 12)}…</span>
+                            <Button size="sm" variant="ghost" onClick={() => copyToken(inv.token)}>
+                              <CopyIcon
+                                className={`h-3 w-3 ${copied === inv.token ? "text-green-600" : ""}`}
+                              />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell className="tabular-nums text-sm">
+                          {new Date(inv.expiresAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              status === "accepted"
+                                ? "default"
+                                : status === "revoked" || status === "expired"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                            className="capitalize"
+                          >
+                            {status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {status === "pending" && (
+                            <Button size="sm" variant="outline" onClick={() => void handleRevokeInvite(inv.id)}>
+                              Revoke
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
         </TabsContent>
       </Tabs>
 
-      <Dialog open={staffOpen} onOpenChange={setStaffOpen}>
+      <Dialog
+        open={staffOpen}
+        onOpenChange={(open) => {
+          setStaffOpen(open);
+          if (!open) staffForm.reset();
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Add staff member</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>Full name</Label>
-              <Input value={staffForm.name} onChange={(e) => setStaffForm((f) => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label>Role</Label>
-              <Select value={staffForm.role} onValueChange={(v) => setStaffForm((f) => ({ ...f, role: v ?? "receptionist" }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["receptionist", "manager", "housekeeping", "maintenance"].map((r) => (
-                    <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Email (optional)</Label>
-              <Input type="email" value={staffForm.email} onChange={(e) => setStaffForm((f) => ({ ...f, email: e.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setStaffOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateStaff()} disabled={staffSaving || !staffForm.name}>
-              {staffSaving ? "Saving…" : "Add"}
-            </Button>
-          </DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Add staff member</DialogTitle>
+          </DialogHeader>
+          <Form {...staffForm}>
+            <form onSubmit={onCreateStaff} className="space-y-3">
+              <FormField
+                control={staffForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full name</FormLabel>
+                    <FormControl>
+                      <Input {...field} autoComplete="off" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={staffForm.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {STAFF_ROLES.map((r) => (
+                          <SelectItem key={r} value={r} className="capitalize">
+                            {r}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={staffForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (optional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} autoComplete="off" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setStaffOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={staffSaving}>
+                  {staffSaving ? "Saving…" : "Add"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={(open) => {
+          setInviteOpen(open);
+          if (!open) inviteForm.reset();
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Create property manager invite</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>Property UUID</Label>
-              <Input value={inviteForm.propertyId} onChange={(e) => setInviteForm((f) => ({ ...f, propertyId: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label>Expires in (days)</Label>
-              <Input type="number" min={1} max={90} value={inviteForm.expiresInDays} onChange={(e) => setInviteForm((f) => ({ ...f, expiresInDays: e.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateInvite()} disabled={inviteSaving || !inviteForm.propertyId}>
-              {inviteSaving ? "Creating…" : "Create invite"}
-            </Button>
-          </DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Create property manager invite</DialogTitle>
+          </DialogHeader>
+          <Form {...inviteForm}>
+            <form onSubmit={onCreateInvite} className="space-y-3">
+              <FormField
+                control={inviteForm.control}
+                name="propertyId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Property UUID</FormLabel>
+                    <FormControl>
+                      <Input {...field} autoComplete="off" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={inviteForm.control}
+                name="expiresInDays"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Expires in (days)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={90}
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={inviteSaving}>
+                  {inviteSaving ? "Creating…" : "Create invite"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </PmsPageShell>

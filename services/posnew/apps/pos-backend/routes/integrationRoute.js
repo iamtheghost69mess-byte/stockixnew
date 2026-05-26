@@ -4,9 +4,18 @@ const { requireBackofficeStaff } = require("../middlewares/requireRoleOrPermissi
 const { assertTenantOrganization } = require("../utils/tenantOrg");
 const IntegrationConfig = require("../models/integrationConfigModel");
 const IntegrationItemMapping = require("../models/integrationItemMappingModel");
+const IntegrationIngredientMapping = require("../models/integrationIngredientMappingModel");
+const IntegrationVendorMapping = require("../models/integrationVendorMappingModel");
 const AccountingConfig = require("../models/accountingConfigModel");
 const { ensureDefaultAccountsAndConfig } = require("../services/accountingService");
 const { getQueue, addJob, QUEUE_NAMES } = require("../services/jobQueue");
+const AccountingIntegrationOutbox = require("../models/accountingIntegrationOutboxModel");
+const { listEventCatalog } = require("../services/accountingIntegrationEvents");
+const {
+  JOB_NAME_BY_EVENT,
+  recordAndDispatchAccountingSync,
+} = require("../services/accountingIntegrationOutbox");
+const { getIntegrationMappingCoverage } = require("../services/integrationMappingCoverage");
 
 const router = express.Router();
 const scoped = [...authedTenant, requireBackofficeStaff];
@@ -233,6 +242,186 @@ router.delete("/item-mappings/:posMenuItemId", ...scoped, async (req, res, next)
       posMenuItemId: req.params.posMenuItemId,
     });
     res.status(200).json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/ingredient-mappings", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const mappings = await IntegrationIngredientMapping.find({
+      organization: orgId,
+    }).populate("posIngredientId", "name unit sku");
+    res.status(200).json({ success: true, data: mappings });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/ingredient-mappings", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const { posIngredientId, bigcapitalItemId, bigcapitalItemName } = req.body;
+    const mapping = await IntegrationIngredientMapping.findOneAndUpdate(
+      { organization: orgId, posIngredientId },
+      {
+        $set: {
+          organization: orgId,
+          posIngredientId,
+          bigcapitalItemId,
+          bigcapitalItemName,
+          syncedAt: new Date(),
+        },
+      },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ success: true, data: mapping });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete(
+  "/ingredient-mappings/:posIngredientId",
+  ...scoped,
+  async (req, res, next) => {
+    try {
+      const orgId = assertTenantOrganization(req);
+      await IntegrationIngredientMapping.findOneAndDelete({
+        organization: orgId,
+        posIngredientId: req.params.posIngredientId,
+      });
+      res.status(200).json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get("/vendor-mappings", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const mappings = await IntegrationVendorMapping.find({
+      organization: orgId,
+    }).populate("posSupplierId", "name code");
+    res.status(200).json({ success: true, data: mappings });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/vendor-mappings", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const { posSupplierId, bigcapitalVendorId, bigcapitalVendorName } = req.body;
+    const mapping = await IntegrationVendorMapping.findOneAndUpdate(
+      { organization: orgId, posSupplierId },
+      {
+        $set: {
+          organization: orgId,
+          posSupplierId,
+          bigcapitalVendorId,
+          bigcapitalVendorName,
+          syncedAt: new Date(),
+        },
+      },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ success: true, data: mapping });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete(
+  "/vendor-mappings/:posSupplierId",
+  ...scoped,
+  async (req, res, next) => {
+    try {
+      const orgId = assertTenantOrganization(req);
+      await IntegrationVendorMapping.findOneAndDelete({
+        organization: orgId,
+        posSupplierId: req.params.posSupplierId,
+      });
+      res.status(200).json({ success: true });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get("/events", ...scoped, async (req, res, next) => {
+  try {
+    res.status(200).json({ success: true, data: listEventCatalog() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/mapping-coverage", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const data = await getIntegrationMappingCoverage(orgId);
+    res.status(200).json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/outbox", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const filter = { organization: orgId };
+    if (status) filter.status = status;
+
+    const rows = await AccountingIntegrationOutbox.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.status(200).json({ success: true, data: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/outbox/:outboxId/retry", ...scoped, async (req, res, next) => {
+  try {
+    const orgId = assertTenantOrganization(req);
+    const row = await AccountingIntegrationOutbox.findOne({
+      _id: req.params.outboxId,
+      organization: orgId,
+    }).lean();
+    if (!row) {
+      return res.status(404).json({ success: false, error: "Outbox row not found" });
+    }
+    if (row.status === "completed") {
+      return res.status(200).json({ success: true, skipped: true, reason: "already_completed" });
+    }
+
+    if (!JOB_NAME_BY_EVENT[row.eventType]) {
+      return res.status(400).json({ success: false, error: "Unknown event type" });
+    }
+
+    await AccountingIntegrationOutbox.updateOne(
+      { _id: row._id },
+      { status: "pending", lastError: "", nextAttemptAt: null }
+    );
+
+    const result = await recordAndDispatchAccountingSync({
+      organizationId: String(orgId),
+      resourceId: String(row.orderId),
+      orderId: String(row.orderId),
+      eventType: row.eventType,
+      idempotencyKey: row.idempotencyKey,
+      originatedBy: req.body?.originatedBy || "integration.outbox.retry",
+      payload: row.payload || {},
+    });
+
+    res.status(200).json({ success: true, data: result });
   } catch (e) {
     next(e);
   }

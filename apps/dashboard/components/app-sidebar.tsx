@@ -8,18 +8,22 @@ import {
   KeyRoundIcon,
   LayoutDashboardIcon,
   LayoutListIcon,
+  MailIcon,
   ScrollTextIcon,
   Settings2Icon,
   ShoppingCartIcon,
   UsersIcon,
 } from "lucide-react";
+import { hasPermission } from "@repo/shared/permissions";
 
 import { Logo } from "@/components/logo";
+import { MeContext } from "@/components/me-provider";
 import { NavDocuments, type NavDocumentItem } from "@/components/nav-documents";
 import { NavMain, type NavMainItem } from "@/components/nav-main";
 import { NavSecondary, type NavSecondaryItem } from "@/components/nav-secondary";
 import { NavUser, type NavUserAccount } from "@/components/nav-user";
 import { useMe } from "@/hooks/use-me";
+import { useMounted } from "@/hooks/use-mounted";
 import { usePosNavVisible } from "@/hooks/use-pos-nav";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
@@ -33,8 +37,25 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const me = useMe();
+  const mounted = useMounted();
+  const initialFromServer = React.useContext(MeContext);
+  const { me } = useMe();
   const posNavVisible = usePosNavVisible();
+
+  const effectiveMe = me ?? initialFromServer ?? null;
+  const perms = effectiveMe?.permissions ?? [];
+  const can = (permission: string) => hasPermission(perms, permission);
+
+  const canReadTenants = can("tenants.read");
+  const canReadLicenses = can("licenses.read");
+  const canReadPlans =
+    can("plans.read") || can("plans.manage") || Boolean(effectiveMe?.capabilities.canReadPlans);
+  const canManageOwners = can("owners.manage");
+  const canAudit = can("audit.read");
+  const canEmailLogs = can("email_logs.read");
+  const canApiKeys = can("api_keys.manage");
+  const canSettings = can("settings.access");
+  const canRoles = can("roles.manage");
 
   const navMain = React.useMemo((): NavMainItem[] => {
     const items: NavMainItem[] = [
@@ -43,16 +64,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/",
         icon: <LayoutDashboardIcon />,
       },
-      {
-        title: "Tenants",
-        url: "/tenants",
-        icon: <Building2Icon />,
-      },
-      {
-        title: "Licenses",
-        url: "/licenses",
-        icon: <KeyRoundIcon />,
-      },
+      ...(canReadTenants
+        ? [
+            {
+              title: "Tenants",
+              url: "/tenants",
+              icon: <Building2Icon />,
+            },
+          ]
+        : []),
+      ...(canReadLicenses
+        ? [
+            {
+              title: "Licenses",
+              url: "/licenses",
+              icon: <KeyRoundIcon />,
+            },
+          ]
+        : []),
       ...(posNavVisible
         ? [
             {
@@ -67,7 +96,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/pms",
         icon: <Building2Icon />,
       },
-      ...(me?.capabilities.canAccessSettings
+      ...(canReadPlans
         ? [
             {
               title: "Plans",
@@ -76,23 +105,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             },
           ]
         : []),
-      {
-        title: "Team & access",
-        url: "/owners",
-        icon: <UsersIcon />,
-      },
+      ...(canManageOwners
+        ? [
+            {
+              title: "Team & access",
+              url: "/owners",
+              icon: <UsersIcon />,
+            },
+          ]
+        : []),
     ];
-    if (me?.capabilities.canAccessSettings) {
+    if (canAudit) {
       items.push({
         title: "Audit log",
         url: "/audit-log",
         icon: <ScrollTextIcon />,
       });
+    }
+    if (canEmailLogs) {
+      items.push({
+        title: "Email log",
+        url: "/email-logs",
+        icon: <MailIcon />,
+      });
+    }
+    if (canApiKeys) {
       items.push({
         title: "API keys",
         url: "/api-keys",
         icon: <KeyRoundIcon />,
       });
+    }
+    if (canRoles) {
+      items.push({
+        title: "Roles",
+        url: "/settings/roles",
+        icon: <UsersIcon />,
+      });
+    }
+    if (canSettings) {
       items.push({
         title: "Security & settings",
         url: "/settings",
@@ -100,7 +151,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       });
     }
     return items;
-  }, [me?.capabilities.canAccessSettings, posNavVisible]);
+  }, [
+    canReadTenants,
+    canReadLicenses,
+    canReadPlans,
+    canManageOwners,
+    canAudit,
+    canEmailLogs,
+    canApiKeys,
+    canRoles,
+    canSettings,
+    posNavVisible,
+  ]);
 
   const documents = React.useMemo((): NavDocumentItem[] => {
     return [
@@ -115,14 +177,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const secondary = React.useMemo((): NavSecondaryItem[] => [], []);
 
-  const userAccount: NavUserAccount | null = me
+  const userAccount: NavUserAccount | null = effectiveMe
     ? {
-        name: me.name,
-        email: me.email,
-        roleLabel: ROLE_LABELS[me.role as Role] ?? me.role,
-        canAccessSettings: me.capabilities.canAccessSettings,
+        name: effectiveMe.name,
+        email: effectiveMe.email,
+        roleLabel: ROLE_LABELS[effectiveMe.role as Role] ?? effectiveMe.role,
+        canAccessSettings: effectiveMe.capabilities.canAccessSettings,
       }
     : null;
+
+  if (!mounted) {
+    return <aside className="hidden" aria-hidden="true" />;
+  }
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>

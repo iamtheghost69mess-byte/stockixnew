@@ -1,6 +1,10 @@
-const POS_PLATFORM_BASE =
-  process.env.POS_PLATFORM_BASE_URL ?? "http://localhost:8010";
+import { requireEnv } from "./lib/require-env.js";
+
 const POS_PLATFORM_KEY = process.env.POS_PLATFORM_API_KEY ?? "";
+
+function getPosPlatformBase(): string {
+  return requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
+}
 
 export async function posProxy(
   path: string,
@@ -8,7 +12,7 @@ export async function posProxy(
   body?: unknown,
   query?: Record<string, string | undefined>,
 ): Promise<Response> {
-  const url = new URL(`${POS_PLATFORM_BASE}/api/platform/v1${path}`);
+  const url = new URL(`${getPosPlatformBase()}/api/platform/v1${path}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== "") {
@@ -38,11 +42,13 @@ export async function posProxyJson(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "POS platform unreachable";
+    const posBase = process.env.POS_PLATFORM_BASE_URL?.trim() ?? "(not set)";
+    const posUi = process.env.POS_FRONTEND_URL?.trim() ?? "(not set)";
     return {
       data: {
         error: "pos_unavailable",
         message,
-        hint: `Run pnpm dev from repo root (POS API ${POS_PLATFORM_BASE}, UI ${process.env.POS_FRONTEND_URL ?? "http://localhost:3001"}). First time: pnpm dev:pos:install.`,
+        hint: `Set POS_PLATFORM_BASE_URL and POS_FRONTEND_URL in .env, then run pnpm dev (POS API ${posBase}, UI ${posUi}). First time: pnpm dev:pos:install.`,
       },
       status: 503,
     };
@@ -61,11 +67,11 @@ export async function posProxyJson(
 
 /** Whether POS platform proxy is configured (for dashboard nav visibility). */
 export function isPosProxyConfigured(): boolean {
-  return POS_PLATFORM_BASE.length > 0;
+  return Boolean(process.env.POS_PLATFORM_BASE_URL?.trim());
 }
 
 export function getPosPlatformBaseUrl(): string {
-  return POS_PLATFORM_BASE;
+  return getPosPlatformBase();
 }
 
 /** Resolve POS organization for a Stockix control-plane tenant UUID. */

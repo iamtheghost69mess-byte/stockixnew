@@ -12,6 +12,11 @@ import App from '@/components/App';
 import * as serviceWorker from '@/serviceWorker';
 import { store, persistor } from '@/store/createStore';
 
+const stockixPrimary = process.env.REACT_APP_STOCKIX_PRIMARY_COLOR?.trim();
+if (stockixPrimary) {
+  document.documentElement.style.setProperty('--stockix-primary-color', stockixPrimary);
+}
+
 ReactDOM.render(
   <Provider store={store}>
     <PersistGate loading={null} persistor={persistor}>

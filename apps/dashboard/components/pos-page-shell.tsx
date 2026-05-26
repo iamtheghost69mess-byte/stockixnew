@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 import { PosHealthAlert } from "@/components/pos-health-alert";
+import { useNavIsActive } from "@/hooks/use-nav-active";
 import { cn } from "@/lib/utils";
 
 const POS_LINKS = [
@@ -26,7 +26,7 @@ export function PosPageShell({
   description?: string;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
+  const isNavActive = useNavIsActive();
 
   return (
     <div className="w-full space-y-6">
@@ -44,7 +44,7 @@ export function PosPageShell({
             href={link.href}
             className={cn(
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              pathname === link.href
+              isNavActive(link.href, { exact: link.href === "/pos" })
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}

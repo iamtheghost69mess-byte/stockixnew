@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { logger } from "./lib/logger.js";
 import * as schema from "@repo/db/schema";
 import type { StockixModule } from "@repo/auth";
 import { logAudit } from "./audit.js";
@@ -29,8 +30,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const stockixTenantIdParam = z.string().uuid();
 
-const addableModuleSchema = z.enum(["pos", "pms", "chat"]);
-const removableModuleSchema = z.enum(["pos", "pms", "chat"]);
+const addableModuleSchema = z.enum(["pos", "pms", "chat", "accounting"]);
+const removableModuleSchema = z.enum(["pos", "pms", "chat", "accounting"]);
 
 const moduleBodySchema = z.object({
   module: addableModuleSchema,
@@ -111,7 +112,7 @@ export function registerTenantModulesRoutes(app: Hono<ApiEnv>, db: Db | null): v
 
     const correlationId = randomUUID();
     const log = (m: string) => {
-      console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+      logger.info(m, { correlationId });
     };
     const acceptTrace = createProvisionTracer(db, correlationId, () => ({ slug: row.slug }), log);
     await acceptTrace.event("api", `HTTP 202 — add module ${moduleToAdd} accepted`);
@@ -210,6 +211,19 @@ export function registerTenantModulesRoutes(app: Hono<ApiEnv>, db: Db | null): v
         .set({ posUrl: null, posOrganizationId: null, updatedAt: new Date() })
         .where(eq(tenantDeployments.tenantId, row.id));
     }
+    if (moduleToRemove === "accounting") {
+      await db
+        .update(tenantDeployments)
+        .set({
+          financeTenantId: null,
+          financeDefaultWarehouseId: null,
+          financeWalkInCustomerId: null,
+          financeCashAccountId: null,
+          financeCardAccountId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantDeployments.tenantId, row.id));
+    }
 
     const correlationId = randomUUID();
     const job = await insertTenantJob(db, {
@@ -222,7 +236,7 @@ export function registerTenantModulesRoutes(app: Hono<ApiEnv>, db: Db | null): v
       },
     });
 
-    if (row.financeTenantId && row.financeTenantId > 0) {
+    if (row.financeTenantId && row.financeTenantId > 0 && moduleToRemove !== "accounting") {
       void syncFinanceLicenseForStockixTenant(db, {
         stockixTenantId: row.id,
         financeTenantId: row.financeTenantId,

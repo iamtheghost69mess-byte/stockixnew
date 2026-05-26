@@ -28,6 +28,7 @@ services/**/.env
 
 # Testing
 coverage
+license-report.txt
 
 # Turbo
 .turbo
@@ -52,6 +53,7 @@ yarn-error.log*
 *.pem
 
 # Services — build artifacts (nested repos removed; tracked by root)
+services/posnew/.nx/
 services/posnew/node_modules/
 services/posnew/apps/pos-backend/dist/
 # Legacy PMS trees removed from repo (local copies may linger until deleted)
@@ -64,3 +66,16 @@ services/stockix-finance/node_modules/
 services/stockix-finance/packages/server/dist/
 services/stockix-finance/packages/webapp/dist/
 services/pms/node_modules/
+
+# AI assistants (Claude Code, Codex, claude-flow) — local / machine-specific
+.claude/
+.claude/settings.local.json
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+.claude-flow/neural/
+.claude-flow/daemon.pid
+.claude-flow/metrics/
+.claude-flow/security/
+.codex/
+CLAUDE.local.md
