@@ -42,6 +42,9 @@ type LicenseDetailHeaderProps = {
   notesSaving: boolean;
   revokeOpen: boolean;
   revokeReason: string;
+  suspendOpen: boolean;
+  suspendReason: string;
+  reactivateOpen: boolean;
   onNotesEditChange: (value: boolean) => void;
   onNotesDraftChange: (value: string) => void;
   onSaveNotes: () => void;
@@ -50,6 +53,11 @@ type LicenseDetailHeaderProps = {
   onRevokeOpenChange: (open: boolean) => void;
   onRevokeReasonChange: (value: string) => void;
   onRevoke: () => Promise<void>;
+  onSuspendOpenChange: (open: boolean) => void;
+  onSuspendReasonChange: (value: string) => void;
+  onSuspend: () => Promise<void>;
+  onReactivateOpenChange: (open: boolean) => void;
+  onReactivate: () => Promise<void>;
 };
 
 export function LicenseDetailHero({ license: L, keyTail }: Pick<LicenseDetailHeaderProps, "license" | "keyTail">) {
@@ -119,6 +127,9 @@ export function LicenseDetailHeader({
   notesSaving,
   revokeOpen,
   revokeReason,
+  suspendOpen,
+  suspendReason,
+  reactivateOpen,
   onNotesEditChange,
   onNotesDraftChange,
   onSaveNotes,
@@ -127,6 +138,11 @@ export function LicenseDetailHeader({
   onRevokeOpenChange,
   onRevokeReasonChange,
   onRevoke,
+  onSuspendOpenChange,
+  onSuspendReasonChange,
+  onSuspend,
+  onReactivateOpenChange,
+  onReactivate,
 }: Omit<LicenseDetailHeaderProps, "keyTail">) {
   return (
     <>
@@ -273,9 +289,26 @@ export function LicenseDetailHeader({
                 </Button>
               ) : null}
               {L.status === "active" && isSuper ? (
+                <Button variant="outline" className="w-full" onClick={() => onSuspendOpenChange(true)}>
+                  Suspend license
+                </Button>
+              ) : null}
+              {canExtendOrEditNotes &&
+              (L.status === "suspended" || L.status === "expired") &&
+              L.status !== "revoked" ? (
+                <Button className="w-full" onClick={() => onReactivateOpenChange(true)}>
+                  Reactivate license
+                </Button>
+              ) : null}
+              {L.status === "active" && isSuper ? (
                 <Button variant="destructive" className="w-full" onClick={() => onRevokeOpenChange(true)}>
                   Revoke license
                 </Button>
+              ) : null}
+              {L.status === "suspended" ? (
+                <p className="text-sm text-muted-foreground">
+                  Suspended — POS and Accounting access are blocked until reactivated.
+                </p>
               ) : null}
               {L.status === "revoked" ? (
                 <p className="text-sm text-muted-foreground">
@@ -307,6 +340,50 @@ export function LicenseDetailHeader({
             <Button variant="destructive" onClick={() => void onRevoke()}>
               Revoke
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={suspendOpen} onOpenChange={onSuspendOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend license</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Suspends tenant access in POS and Accounting. The deployment stack is not stopped.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="suspend-reason">Reason (optional)</Label>
+            <Input
+              id="suspend-reason"
+              value={suspendReason}
+              onChange={(e) => onSuspendReasonChange(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => onSuspendOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void onSuspend()}>
+              Suspend
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reactivateOpen} onOpenChange={onReactivateOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reactivate license</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Restores license status to active and re-enables POS and Accounting access.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => onReactivateOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void onReactivate()}>Reactivate</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

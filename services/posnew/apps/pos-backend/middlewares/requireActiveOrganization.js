@@ -11,7 +11,7 @@ async function enforceActiveOrganizationById(orgId, context = {}) {
     throw createHttpError(403, "Organization is required.");
   }
   const org = await Organization.findById(orgId)
-    .select("licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt timezone")
+    .select("licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt timezone lifecycle")
     .lean();
   if (!org) {
     throw createHttpError(403, "Organization not found.");

@@ -199,6 +199,7 @@ export function notifyLicenseForTenant(
     >;
     body: string;
     daysLeft?: number;
+    milestoneDays?: number;
   },
 ): void {
   void (async () => {
@@ -234,7 +235,15 @@ export function notifyLicenseForTenant(
       actionUrl: licenseDetailPath(opts.licenseId),
       actionLabel:
         opts.type === "license.expiring" ? "Extend license" : "View license",
-      meta: opts.daysLeft != null ? { daysLeft: opts.daysLeft } : undefined,
+      meta:
+        opts.daysLeft != null || opts.milestoneDays != null
+          ? {
+              ...(opts.daysLeft != null ? { daysLeft: opts.daysLeft } : {}),
+              ...(opts.milestoneDays != null
+                ? { milestoneDays: opts.milestoneDays }
+                : {}),
+            }
+          : undefined,
     });
   })().catch((err) => {
     console.error(

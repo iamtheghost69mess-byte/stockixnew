@@ -503,8 +503,11 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       role: "admin",
     });
     const accessState = getOrganizationAccessState(org);
+    const lifecycleActive = String(org.lifecycle || "active").toLowerCase() === "active";
     const readyForPinLogin =
+      lifecycleActive &&
       accessState.status === "active" &&
+      !accessState.blocked &&
       org.isBootstrapped === true &&
       adminCount > 0;
     const payload = {

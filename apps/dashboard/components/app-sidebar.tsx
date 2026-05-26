@@ -8,6 +8,7 @@ import {
   KeyRoundIcon,
   LayoutDashboardIcon,
   LayoutListIcon,
+  MailIcon,
   ScrollTextIcon,
   Settings2Icon,
   ShoppingCartIcon,
@@ -87,6 +88,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         title: "Audit log",
         url: "/audit-log",
         icon: <ScrollTextIcon />,
+      });
+      items.push({
+        title: "Email log",
+        url: "/email-logs",
+        icon: <MailIcon />,
       });
       items.push({
         title: "API keys",

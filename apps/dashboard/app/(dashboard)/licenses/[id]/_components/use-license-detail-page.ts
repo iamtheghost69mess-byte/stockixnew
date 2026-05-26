@@ -27,6 +27,9 @@ export function useLicenseDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [revokeReason, setRevokeReason] = useState("");
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [reactivateOpen, setReactivateOpen] = useState(false);
   const [deactivateAct, setDeactivateAct] = useState<LicenseActivation | null>(null);
   const [blacklistAct, setBlacklistAct] = useState<LicenseActivation | null>(null);
   const [blacklistReason, setBlacklistReason] = useState("");
@@ -175,6 +178,12 @@ export function useLicenseDetailPage() {
     setRevokeOpen,
     revokeReason,
     setRevokeReason,
+    suspendOpen,
+    setSuspendOpen,
+    suspendReason,
+    setSuspendReason,
+    reactivateOpen,
+    setReactivateOpen,
     deactivateAct,
     setDeactivateAct,
     blacklistAct,

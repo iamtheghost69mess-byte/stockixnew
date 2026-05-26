@@ -17,6 +17,24 @@ export type SyncFinanceLicensePayload = {
   featureFlags?: Record<string, boolean> | null;
 };
 
+export class FinanceLicenseSyncError extends Error {
+  readonly code = "FINANCE_LICENSE_SYNC_FAILED" as const;
+
+  constructor(message: string, readonly detail?: string) {
+    super(message);
+    this.name = "FinanceLicenseSyncError";
+  }
+}
+
+/** When true, missing secret or HTTP failure is logged but does not throw (development only). */
+export function isFinanceLicenseSyncOptional(): boolean {
+  const flag = process.env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
+  if (flag === "1" || flag === "true") {
+    return apiConfig.nodeEnv === "development";
+  }
+  return false;
+}
+
 export async function syncFinanceLicense(
   internalBaseUrl: string,
   payload: SyncFinanceLicensePayload,
@@ -24,8 +42,12 @@ export async function syncFinanceLicense(
 ): Promise<void> {
   const secret = apiConfig.internalApiSecret;
   if (!secret) {
-    log("[provision] INTERNAL_API_SECRET not set; skipping finance license sync");
-    return;
+    const msg = "INTERNAL_API_SECRET is not set; finance license sync is required for accounting tenants";
+    if (isFinanceLicenseSyncOptional()) {
+      log(`[provision] ${msg} (FINANCE_LICENSE_SYNC_OPTIONAL=1 — skipping)`);
+      return;
+    }
+    throw new FinanceLicenseSyncError(msg);
   }
 
   const url = `${internalBaseUrl.replace(/\/+$/, "")}/api/internal/license/sync`;
@@ -55,15 +77,31 @@ export async function syncFinanceLicense(
     });
     if (!res.ok) {
       const text = await res.text();
-      log(`[provision] finance license sync failed: HTTP ${res.status} ${text.slice(0, 200)}`);
-      return;
+      const detail = `HTTP ${res.status} ${text.slice(0, 200)}`;
+      log(`[provision] finance license sync failed: ${detail}`);
+      if (isFinanceLicenseSyncOptional()) {
+        log("[provision] FINANCE_LICENSE_SYNC_OPTIONAL=1 — continuing despite sync failure");
+        return;
+      }
+      throw new FinanceLicenseSyncError(
+        `Finance license sync failed for tenant ${payload.tenantId}`,
+        detail,
+      );
     }
     log(`[provision] finance license synced for tenant ${payload.tenantId}`);
   } catch (error) {
-    log(
-      `[provision] finance license sync error: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+    if (error instanceof FinanceLicenseSyncError) {
+      throw error;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    log(`[provision] finance license sync error: ${detail}`);
+    if (isFinanceLicenseSyncOptional()) {
+      log("[provision] FINANCE_LICENSE_SYNC_OPTIONAL=1 — continuing despite sync error");
+      return;
+    }
+    throw new FinanceLicenseSyncError(
+      `Finance license sync error for tenant ${payload.tenantId}`,
+      detail,
     );
   }
 }

@@ -39,6 +39,12 @@ export function LicenseDetailContent({ license: L, page }: LicenseDetailContentP
     setRevokeOpen,
     revokeReason,
     setRevokeReason,
+    suspendOpen,
+    setSuspendOpen,
+    suspendReason,
+    setSuspendReason,
+    reactivateOpen,
+    setReactivateOpen,
     deactivateAct,
     setDeactivateAct,
     blacklistAct,
@@ -77,6 +83,35 @@ export function LicenseDetailContent({ license: L, page }: LicenseDetailContentP
     void load();
   };
 
+  const handleSuspend = async () => {
+    const res = await fetch(`/api/licenses/${L.id}/suspend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: suspendReason || undefined }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as unknown;
+      toast.error(formatApiError(body, "Suspend failed"));
+      return;
+    }
+    toast.success("License suspended");
+    setSuspendOpen(false);
+    setSuspendReason("");
+    void load();
+  };
+
+  const handleReactivate = async () => {
+    const res = await fetch(`/api/licenses/${L.id}/reactivate`, { method: "POST" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as unknown;
+      toast.error(formatApiError(body, "Reactivate failed"));
+      return;
+    }
+    toast.success("License reactivated");
+    setReactivateOpen(false);
+    void load();
+  };
+
   return (
     <div className="space-y-6">
       <LicenseDetailHero license={L} keyTail={keyTail} />
@@ -111,6 +146,14 @@ export function LicenseDetailContent({ license: L, page }: LicenseDetailContentP
           onRevokeOpenChange={setRevokeOpen}
           onRevokeReasonChange={setRevokeReason}
           onRevoke={handleRevoke}
+          suspendOpen={suspendOpen}
+          suspendReason={suspendReason}
+          reactivateOpen={reactivateOpen}
+          onSuspendOpenChange={setSuspendOpen}
+          onSuspendReasonChange={setSuspendReason}
+          onSuspend={handleSuspend}
+          onReactivateOpenChange={setReactivateOpen}
+          onReactivate={handleReactivate}
         />
 
         <LicenseActivationsTable

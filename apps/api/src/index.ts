@@ -8,7 +8,7 @@ import {
 } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { serve } from "@hono/node-server";
-import { apiConfig, getMailHealthStatus } from "@repo/config";
+import { apiConfig, getMailHealthStatus, isMailConfigured } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
 import {
   createDb,
@@ -59,6 +59,7 @@ import { z } from "zod";
 import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
+import { handleEmailLogsList } from "./routes/email-logs.js";
 import { registerNotificationsApi } from "./routes/notifications.js";
 import {
   notifyJobLifecycle,
@@ -66,7 +67,10 @@ import {
   notifyProvisionOutcome,
 } from "./notification-helpers.js";
 import { generateLicenseKey, getActiveLicenseForTenant, getPlanLimits } from "./license-utils.js";
-import { DEFAULT_GRACE_PERIOD_DAYS } from "./license-constants.js";
+import {
+  DEFAULT_GRACE_PERIOD_DAYS,
+  DEFAULT_LICENSE_TERM_DAYS,
+} from "./license-constants.js";
 import { registerLicenseApi } from "./license-http.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import {
@@ -85,6 +89,10 @@ import {
 import { initEmailLogging } from "./mail/email-log.js";
 import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
 import { resendOwnerInvite } from "./services/invites/invites.js";
+import {
+  applyTenantLicenseReactivate,
+  applyTenantLicenseSuspend,
+} from "./tenant-license-lifecycle.js";
 import { registerResendWebhook } from "./routes/webhooks/resend.js";
 import { safeCreateNotification } from "./notification-service.js";
 
@@ -1547,6 +1555,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               if (clash.length === 0) break;
               licenseKey = generateLicenseKey();
             }
+            const validFrom = new Date();
+            const expiresAt = new Date(validFrom);
+            expiresAt.setDate(expiresAt.getDate() + DEFAULT_LICENSE_TERM_DAYS);
             await db.insert(licenses).values({
               licenseKey,
               product: "platform",
@@ -1554,9 +1565,10 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               planSlug,
               tenantId: targetTenantId,
               status: "active",
-              activatedAt: new Date(),
-              validFrom: new Date(),
-              isPerpetual: true,
+              activatedAt: validFrom,
+              validFrom,
+              expiresAt,
+              isPerpetual: false,
               maxOrganizations: planLimits.maxOrganizations,
               maxActivations: planLimits.maxActivations,
               maxUsers: planLimits.maxUsers,
@@ -2240,6 +2252,7 @@ app.post("/owners/invite", async (c) => {
     {
       owner,
       emailSent,
+      mailConfigured: isMailConfigured(),
       inviteUrl: emailSent ? undefined : inviteUrl,
     },
     201,
@@ -2529,6 +2542,13 @@ app.get("/audit-log", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
   return handleAuditLogList(c, db);
+});
+
+app.get("/admin/email-logs", async (c) => {
+  if (!db) {
+    return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+  return handleEmailLogsList(c, db);
 });
 
 const apiKeyCreateBody = z.object({
@@ -4972,6 +4992,13 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
       .where(eq(organizations.id, org.orgId));
   }
 
+  await applyTenantLicenseSuspend(
+    db,
+    parsed.data,
+    "tenant_suspended",
+    (message) => console.log(`[tenant.suspend] ${message}`),
+  );
+
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.suspend",
@@ -5197,6 +5224,12 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
       .set({ status: "active", updatedAt: new Date() })
       .where(eq(organizations.id, org.orgId));
   }
+
+  await applyTenantLicenseReactivate(
+    db,
+    parsed.data,
+    (message) => console.log(`[tenant.reactivate] ${message}`),
+  );
 
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",

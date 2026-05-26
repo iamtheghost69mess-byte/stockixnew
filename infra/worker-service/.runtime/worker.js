@@ -212,6 +212,7 @@ var env = {
   DEPLOYMENT_SECRET_KEY: readOptionalString("DEPLOYMENT_SECRET_KEY"),
   MAIL_FROM_NAME: readOptionalString("MAIL_FROM_NAME"),
   MAIL_FROM_ADDRESS: readOptionalString("MAIL_FROM_ADDRESS"),
+  RESEND_WEBHOOK_SECRET: readOptionalString("RESEND_WEBHOOK_SECRET"),
   MONGODB_DATABASE_URL: readOptionalString("MONGODB_DATABASE_URL"),
   AGENDA_DB_COLLECTION: readOptionalString("AGENDA_DB_COLLECTION"),
   AGENDA_POOL_TIME: readOptionalString("AGENDA_POOL_TIME"),
@@ -237,6 +238,9 @@ var mailConfig = {
   fromName: env.MAIL_FROM_NAME ?? "Stockix",
   fromAddress: env.MAIL_FROM_ADDRESS ?? ""
 };
+function isMailConfigured() {
+  return Boolean(mailConfig.password?.trim() && mailConfig.fromAddress?.trim());
+}
 var apiConfig = {
   get databaseUrl() {
     return env.DATABASE_URL ?? readRequiredString("DATABASE_URL");
@@ -2548,6 +2552,7 @@ __export(schema_exports, {
   apiIdempotencyKeys: () => apiIdempotencyKeys,
   apiKeys: () => apiKeys,
   blacklistedFingerprints: () => blacklistedFingerprints,
+  emailLogs: () => emailLogs,
   licenseActivations: () => licenseActivations,
   licenseHistory: () => licenseHistory,
   licenses: () => licenses,
@@ -2925,6 +2930,28 @@ var ownerNotifications = pgTable(
     index("owner_notifications_owner_unread_idx").on(t.ownerId, t.readAt),
     index("owner_notifications_created_at_idx").on(t.createdAt),
     index("owner_notifications_owner_created_idx").on(t.ownerId, t.createdAt)
+  ]
+);
+var emailLogs = pgTable(
+  "email_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateKey: text("template_key").notNull(),
+    recipientHash: text("recipient_hash").notNull(),
+    status: text("status").notNull(),
+    providerMessageId: text("provider_message_id"),
+    deliveryStatus: text("delivery_status"),
+    error: text("error"),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    ownerId: uuid("owner_id").references(() => owners.id, { onDelete: "set null" }),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [
+    index("email_logs_created_at_idx").on(t.createdAt),
+    index("email_logs_template_key_idx").on(t.templateKey),
+    index("email_logs_provider_message_id_idx").on(t.providerMessageId),
+    index("email_logs_tenant_id_idx").on(t.tenantId)
   ]
 );
 var licenseHistory = pgTable(
@@ -3719,18 +3746,72 @@ var mailer = createTransport({
 function formatFromHeader() {
   return `${mailConfig.fromName} <${mailConfig.fromAddress}>`;
 }
+var logEmailAttemptFn = null;
 async function sendMail(options) {
-  if (!mailConfig.password || !mailConfig.fromAddress) {
-    console.warn("[mail] MAIL_PASSWORD or MAIL_FROM_ADDRESS not set; skipping send");
-    return null;
+  const templateKey = options.templateKey ?? "unknown";
+  if (!isMailConfigured()) {
+    console.warn(
+      `[mail] ${templateKey}: MAIL_PASSWORD or MAIL_FROM_ADDRESS not set; skipping send`
+    );
+    const result = { status: "skipped", reason: "not_configured" };
+    if (logEmailAttemptFn) {
+      await logEmailAttemptFn({
+        templateKey,
+        to: options.to,
+        result,
+        idempotencyKey: options.idempotencyKey,
+        tenantId: options.tenantId,
+        ownerId: options.ownerId
+      }).catch((err) => {
+        console.error("[mail] email log failed:", err instanceof Error ? err.message : err);
+      });
+    }
+    return result;
   }
-  return mailer.sendMail({
-    from: formatFromHeader(),
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    headers: options.idempotencyKey ? { "Resend-Idempotency-Key": options.idempotencyKey } : void 0
-  });
+  try {
+    const info = await mailer.sendMail({
+      from: formatFromHeader(),
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      headers: options.idempotencyKey ? { "Resend-Idempotency-Key": options.idempotencyKey } : void 0
+    });
+    const messageId = typeof info.messageId === "string" ? info.messageId : void 0;
+    const result = { status: "sent", messageId };
+    if (logEmailAttemptFn) {
+      await logEmailAttemptFn({
+        templateKey,
+        to: options.to,
+        result,
+        idempotencyKey: options.idempotencyKey,
+        tenantId: options.tenantId,
+        ownerId: options.ownerId
+      }).catch((err) => {
+        console.error("[mail] email log failed:", err instanceof Error ? err.message : err);
+      });
+    }
+    return result;
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error(`[mail] ${templateKey}: send failed:`, error);
+    const result = { status: "failed", error };
+    if (logEmailAttemptFn) {
+      await logEmailAttemptFn({
+        templateKey,
+        to: options.to,
+        result,
+        idempotencyKey: options.idempotencyKey,
+        tenantId: options.tenantId,
+        ownerId: options.ownerId
+      }).catch((logErr) => {
+        console.error("[mail] email log failed:", logErr instanceof Error ? logErr.message : logErr);
+      });
+    }
+    return result;
+  }
+}
+function mailSendSucceeded(result) {
+  return result.status === "sent";
 }
 
 // src/mail/templates/license-expiring.ts
@@ -3858,7 +3939,9 @@ async function sendPosWelcomeEmail(opts) {
   <p style="color: #666; font-size: 14px;">To reset a PIN, log in as admin and go to Settings \u2192 Staff Management.</p>
 </body>
 </html>`,
-    idempotencyKey: `pos-welcome/${opts.to}/${opts.posUrl}`
+    idempotencyKey: `pos-welcome/${opts.to}/${opts.posUrl}`,
+    templateKey: "pos-welcome",
+    tenantId: opts.tenantId
   });
 }
 async function sendLicenseExpiringEmail(opts) {
@@ -3869,46 +3952,50 @@ async function sendLicenseExpiringEmail(opts) {
     )
   );
   const expiryDay = opts.expiresAt.toISOString().split("T")[0];
-  try {
-    await sendMail({
-      to: opts.to,
-      subject: "Your Stockix license expires soon",
-      html: renderLicenseExpiring({
-        tenantName: opts.tenantName,
-        expiresAt: opts.expiresAt,
-        daysRemaining
-      }),
-      idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`
-    });
-  } catch (err) {
+  const result = await sendMail({
+    to: opts.to,
+    subject: "Your Stockix license expires soon",
+    html: renderLicenseExpiring({
+      tenantName: opts.tenantName,
+      expiresAt: opts.expiresAt,
+      daysRemaining
+    }),
+    idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`,
+    templateKey: "license-expiring",
+    tenantId: opts.tenantId
+  });
+  if (!mailSendSucceeded(result)) {
     console.error(
       "[sendLicenseExpiringEmail] Send failed",
       opts.tenantId,
-      err instanceof Error ? err.message : err
+      result.status === "failed" ? result.error : result.status
     );
   }
+  return result;
 }
 async function sendLicenseExpiredEmail(opts) {
   const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-  try {
-    await sendMail({
-      to: opts.to,
-      subject: "Your Stockix license has expired",
-      html: renderLicenseExpired({
-        tenantName: opts.tenantName,
-        expiredAt: opts.expiredAt,
-        gracePeriodDays: opts.gracePeriodDays,
-        graceEndsAt: opts.graceEndsAt
-      }),
-      idempotencyKey: `license-expired/${opts.tenantId}/${today}`
-    });
-  } catch (err) {
+  const result = await sendMail({
+    to: opts.to,
+    subject: "Your Stockix license has expired",
+    html: renderLicenseExpired({
+      tenantName: opts.tenantName,
+      expiredAt: opts.expiredAt,
+      gracePeriodDays: opts.gracePeriodDays,
+      graceEndsAt: opts.graceEndsAt
+    }),
+    idempotencyKey: `license-expired/${opts.tenantId}/${today}`,
+    templateKey: "license-expired",
+    tenantId: opts.tenantId
+  });
+  if (!mailSendSucceeded(result)) {
     console.error(
       "[sendLicenseExpiredEmail] Send failed",
       opts.tenantId,
-      err instanceof Error ? err.message : err
+      result.status === "failed" ? result.error : result.status
     );
   }
+  return result;
 }
 async function sendLicenseExpiredEmailForTenant(db, tenantId, opts) {
   try {
@@ -3930,7 +4017,7 @@ async function sendLicenseExpiredEmailForTenant(db, tenantId, opts) {
     const gracePeriodDays = license?.gracePeriodDays ?? 7;
     const graceEndsAt = new Date(expiredAt);
     graceEndsAt.setDate(graceEndsAt.getDate() + gracePeriodDays);
-    await sendLicenseExpiredEmail({
+    const result = await sendLicenseExpiredEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
       tenantId,
@@ -3939,7 +4026,7 @@ async function sendLicenseExpiredEmailForTenant(db, tenantId, opts) {
       graceEndsAt
     });
     const historyLicenseId = opts?.licenseId ?? license?.id;
-    if (historyLicenseId) {
+    if (historyLicenseId && mailSendSucceeded(result)) {
       await insertLicenseHistory(db, {
         licenseId: historyLicenseId,
         action: "expired_email_sent",
@@ -3965,14 +4052,14 @@ async function sendLicenseExpiringEmailForTenant(db, tenantId, opts) {
       console.warn("[sendLicenseExpiringEmail] No admin email for tenant", tenantId);
       return;
     }
-    await sendLicenseExpiringEmail({
+    const result = await sendLicenseExpiringEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
       tenantId,
       expiresAt: opts.expiresAt
     });
     const license = opts.licenseId != null ? (await db.select({ id: licenses.id }).from(licenses).where(eq3(licenses.id, opts.licenseId)).limit(1))[0] : await getActiveLicenseForTenant(db, tenantId);
-    if (license?.id) {
+    if (license?.id && mailSendSucceeded(result)) {
       await insertLicenseHistory(db, {
         licenseId: license.id,
         action: "expiry_warning_sent",
@@ -5051,11 +5138,31 @@ async function wirePosBigcapitalIntegration(input) {
 
 // ../../infra/worker-service/domain/provisioning/adapters/sync-finance-license.ts
 var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS2 = 999;
+var FinanceLicenseSyncError = class extends Error {
+  constructor(message, detail) {
+    super(message);
+    this.detail = detail;
+    this.name = "FinanceLicenseSyncError";
+  }
+  detail;
+  code = "FINANCE_LICENSE_SYNC_FAILED";
+};
+function isFinanceLicenseSyncOptional() {
+  const flag = process.env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
+  if (flag === "1" || flag === "true") {
+    return apiConfig.nodeEnv === "development";
+  }
+  return false;
+}
 async function syncFinanceLicense(internalBaseUrl, payload, log) {
   const secret = apiConfig.internalApiSecret;
   if (!secret) {
-    log("[provision] INTERNAL_API_SECRET not set; skipping finance license sync");
-    return;
+    const msg = "INTERNAL_API_SECRET is not set; finance license sync is required for accounting tenants";
+    if (isFinanceLicenseSyncOptional()) {
+      log(`[provision] ${msg} (FINANCE_LICENSE_SYNC_OPTIONAL=1 \u2014 skipping)`);
+      return;
+    }
+    throw new FinanceLicenseSyncError(msg);
   }
   const url = `${internalBaseUrl.replace(/\/+$/, "")}/api/internal/license/sync`;
   const body = {
@@ -5083,13 +5190,31 @@ async function syncFinanceLicense(internalBaseUrl, payload, log) {
     });
     if (!res.ok) {
       const text2 = await res.text();
-      log(`[provision] finance license sync failed: HTTP ${res.status} ${text2.slice(0, 200)}`);
-      return;
+      const detail = `HTTP ${res.status} ${text2.slice(0, 200)}`;
+      log(`[provision] finance license sync failed: ${detail}`);
+      if (isFinanceLicenseSyncOptional()) {
+        log("[provision] FINANCE_LICENSE_SYNC_OPTIONAL=1 \u2014 continuing despite sync failure");
+        return;
+      }
+      throw new FinanceLicenseSyncError(
+        `Finance license sync failed for tenant ${payload.tenantId}`,
+        detail
+      );
     }
     log(`[provision] finance license synced for tenant ${payload.tenantId}`);
   } catch (error) {
-    log(
-      `[provision] finance license sync error: ${error instanceof Error ? error.message : String(error)}`
+    if (error instanceof FinanceLicenseSyncError) {
+      throw error;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    log(`[provision] finance license sync error: ${detail}`);
+    if (isFinanceLicenseSyncOptional()) {
+      log("[provision] FINANCE_LICENSE_SYNC_OPTIONAL=1 \u2014 continuing despite sync error");
+      return;
+    }
+    throw new FinanceLicenseSyncError(
+      `Finance license sync error for tenant ${payload.tenantId}`,
+      detail
     );
   }
 }
@@ -6423,6 +6548,16 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       internalApiSecret: apiConfig.internalApiSecret
     });
     const envPath = await writeTenantEnvFileAtomic(join7(tenantEnvRoot, input.slug), tenantEnvMap);
+    if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
+      log(
+        "[provision][mail] tenant .env missing MAIL_PASSWORD or MAIL_FROM_ADDRESS \u2014 Finance invite/reset emails will not send"
+      );
+      await trace.event(
+        "mail.env_incomplete",
+        "Tenant mail env incomplete (MAIL_PASSWORD or MAIL_FROM_ADDRESS missing)",
+        { level: "warn" }
+      );
+    }
     const composeEnv = {
       ...tenantEnvMap,
       COMPOSE_PROJECT_NAME: project

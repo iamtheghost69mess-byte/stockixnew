@@ -111,13 +111,19 @@ export function useOwnersPage() {
         owner?: Owner;
         inviteUrl?: string;
         emailSent?: boolean;
+        mailConfigured?: boolean;
         error?: string;
       };
       if (!res.ok) {
         setAddErr(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         return;
       }
-      if (data.emailSent === false) {
+      if (data.mailConfigured === false) {
+        setInviteUrl(data.inviteUrl ?? "");
+        toast.warning(
+          "Email is not configured on this server. Copy the invite link below to share manually.",
+        );
+      } else if (data.emailSent === false) {
         setInviteUrl(data.inviteUrl ?? "");
         toast.warning(
           "Invitation created but email was not sent. Copy the invite link below.",
@@ -279,6 +285,7 @@ export function useOwnersPage() {
       });
       const data = (await res.json()) as {
         emailSent?: boolean;
+        mailConfigured?: boolean;
         inviteUrl?: string;
         error?: string;
       };
@@ -286,7 +293,12 @@ export function useOwnersPage() {
         toast.error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         return;
       }
-      if (data.emailSent === false && data.inviteUrl) {
+      if (data.mailConfigured === false && data.inviteUrl) {
+        setInviteUrl(data.inviteUrl);
+        toast.warning(
+          "Email is not configured. Copy the invite link from the banner above.",
+        );
+      } else if (data.emailSent === false && data.inviteUrl) {
         setInviteUrl(data.inviteUrl);
         toast.warning("Email not sent. Copy the invite link from the banner above.");
       } else {

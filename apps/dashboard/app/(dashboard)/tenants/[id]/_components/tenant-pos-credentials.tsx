@@ -43,7 +43,7 @@ export function TenantPosCredentials({
   const [posCredentialsOpen, setPosCredentialsOpen] = useState(false);
   const [posCredentialsLoading, setPosCredentialsLoading] = useState(false);
   const [posCredentials, setPosCredentials] = useState<
-    { role: string; username: string; pin: string }[]
+    { role: string; username: string; pin: string; masked?: boolean }[]
   >([]);
   const [posPinResettingRole, setPosPinResettingRole] = useState<string | null>(null);
 
@@ -52,7 +52,7 @@ export function TenantPosCredentials({
     try {
       const res = await fetch(`/api/tenants/${tenantId}/pos-credentials`);
       const body = (await readJson(res)) as {
-        roles?: { role: string; username: string; pin: string }[];
+        roles?: { role: string; username: string; pin: string; masked?: boolean }[];
         error?: string;
         message?: string;
       };
@@ -77,7 +77,7 @@ export function TenantPosCredentials({
         body: JSON.stringify({ role }),
       });
       const body = (await readJson(res)) as {
-        roles?: { role: string; username: string; pin: string }[];
+        roles?: { role: string; username: string; pin: string; masked?: boolean }[];
         error?: string;
         message?: string;
       };
@@ -158,13 +158,13 @@ export function TenantPosCredentials({
                     {posCredentialsLoading ? (
                       <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                     ) : null}
-                    Reveal Staff PINs
+                    View staff PINs
                   </Button>
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                PINs are masked here. Use Reveal Staff PINs to fetch live credentials from the
-                POS platform (requires manage-tenant access).
+                Bootstrap PINs are shown once during provisioning. After that, only masked values
+                are stored — use <strong>Reset PIN</strong> per role to issue a new PIN.
               </p>
               <p>
                 Admin PIN:{" "}
@@ -194,12 +194,12 @@ export function TenantPosCredentials({
                   {posCredentialsLoading ? (
                     <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                   ) : null}
-                  Reveal Staff PINs
+                  View staff PINs
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Provision-time PIN cache is unavailable. Reveal loads current PINs from the POS
-                organization.
+                Plaintext PINs are not kept after bootstrap. Open the dialog to see masked roles
+                and reset PINs as needed.
               </p>
             </div>
           ) : (
@@ -224,11 +224,14 @@ export function TenantPosCredentials({
           </DialogHeader>
           <Alert>
             <AlertDescription>
-              Store these securely. Share only with the tenant admin.
+              Plaintext PINs are only returned immediately after provisioning or after you reset a
+              role. Masked values cannot be recovered — use Reset PIN to issue a new one.
             </AlertDescription>
           </Alert>
           {posCredentials.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No bootstrap credentials found on the POS organization.</p>
+            <p className="text-sm text-muted-foreground">
+              No staff roles found on the POS organization. Complete POS bootstrap first.
+            </p>
           ) : (
             <ScrollArea className="max-h-[360px] rounded-md border">
               <Table>
@@ -245,13 +248,22 @@ export function TenantPosCredentials({
                     <TableRow key={`${row.role}-${row.username}`}>
                       <TableCell className="font-medium capitalize">{row.role}</TableCell>
                       <TableCell className="font-mono text-xs">{row.username}</TableCell>
-                      <TableCell className="font-mono text-sm">{row.pin}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {row.masked ? (
+                          <span className="text-muted-foreground" title="Masked — reset to reveal">
+                            {row.pin || "••••••"}
+                          </span>
+                        ) : (
+                          row.pin
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
+                            disabled={row.masked}
                             onClick={() => void copyText(`${row.role} PIN`, row.pin)}
                           >
                             <Copy className="h-4 w-4" />

@@ -1,5 +1,5 @@
 import { ownerNotifications, type OwnerNotification } from "@repo/db/schema";
-import { and, asc, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
@@ -153,6 +153,24 @@ export async function markAllAsRead(db: Db, ownerId: string): Promise<void> {
     .where(
       and(eq(ownerNotifications.ownerId, ownerId), isNull(ownerNotifications.readAt)),
     );
+}
+
+/** True if an expiry milestone in-app notification was already created for this license. */
+export async function hasLicenseExpiryMilestoneNotification(
+  db: Db,
+  opts: { licenseId: string; milestoneDays: number },
+): Promise<boolean> {
+  const [row] = await db
+    .select({ c: count() })
+    .from(ownerNotifications)
+    .where(
+      and(
+        eq(ownerNotifications.type, "license.expiring"),
+        eq(ownerNotifications.licenseId, opts.licenseId),
+        sql`${ownerNotifications.meta}->>'milestoneDays' = ${String(opts.milestoneDays)}`,
+      ),
+    );
+  return Number(row?.c ?? 0) > 0;
 }
 
 export async function hasRecentNotification(

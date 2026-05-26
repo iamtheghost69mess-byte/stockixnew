@@ -1,11 +1,13 @@
 import "@repo/config";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 const dashboardDir = path.dirname(fileURLToPath(import.meta.url));
-const reactRoot = path.join(dashboardDir, "node_modules", "react");
-const reactDomRoot = path.join(dashboardDir, "node_modules", "react-dom");
+const repoRoot = path.join(dashboardDir, "..", "..");
+const reactRoot = realpathSync(path.join(repoRoot, "node_modules", "react"));
+const reactDomRoot = realpathSync(path.join(repoRoot, "node_modules", "react-dom"));
 
 const nextConfig: NextConfig = {
   output: "standalone",

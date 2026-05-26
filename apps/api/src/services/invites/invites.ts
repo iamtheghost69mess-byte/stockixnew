@@ -4,7 +4,7 @@ import { and, eq, gt } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { owners } from "@repo/db/schema";
-import { apiConfig } from "@repo/config";
+import { apiConfig, isMailConfigured } from "@repo/config";
 import { sendOwnerInviteEmail } from "../../mail/send.js";
 import { mailSendSucceeded } from "../../mail/mailer.js";
 import type { ApiServiceResult } from "../auth/types.js";
@@ -49,6 +49,7 @@ export async function resendOwnerInvite(
 ): Promise<
   ApiServiceResult<{
     emailSent: boolean;
+    mailConfigured: boolean;
     inviteUrl?: string;
     owner: { id: string; email: string; name: string; role: string };
   }>
@@ -105,6 +106,7 @@ export async function resendOwnerInvite(
     success: true,
     data: {
       emailSent,
+      mailConfigured: isMailConfigured(),
       inviteUrl: emailSent ? undefined : inviteUrl,
       owner: {
         id: owner.id,

@@ -29,6 +29,7 @@ export type PosCredentialRole = {
   role: string;
   username: string;
   pin: string;
+  masked: boolean;
 };
 
 function canRevealPosCredentials(actorRole: string): boolean {
@@ -47,12 +48,23 @@ function parsePosCredentialRoles(data: unknown): PosCredentialRole[] {
   if (!Array.isArray(rolesRaw)) return [];
   return rolesRaw
     .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
-    .map((row) => ({
-      role: String(row.role ?? "").toLowerCase().trim(),
-      username: String(row.username ?? row.name ?? row.role ?? "").toLowerCase().trim(),
-      pin: String(row.pin ?? ""),
-    }))
-    .filter((row) => row.role.length > 0 && row.pin.length > 0);
+    .map((row) => {
+      const role = String(row.role ?? "").toLowerCase().trim();
+      const username = String(row.username ?? row.name ?? row.role ?? "")
+        .toLowerCase()
+        .trim();
+      const plainPin = String(row.pin ?? "").trim();
+      const pinMasked = String(row.pinMasked ?? "").trim();
+      const hasPlainPin =
+        plainPin.length > 0 && !plainPin.includes("*") && plainPin !== "******";
+      return {
+        role,
+        username,
+        pin: hasPlainPin ? plainPin : pinMasked || "••••••",
+        masked: !hasPlainPin,
+      };
+    })
+    .filter((row) => row.role.length > 0);
 }
 
 async function loadTenantPosOrgId(
