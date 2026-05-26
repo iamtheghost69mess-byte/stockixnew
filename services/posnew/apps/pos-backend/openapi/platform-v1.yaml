@@ -228,6 +228,35 @@ paths:
         Returns whether `org_bootstrap` has finished (`isBootstrapped`), whether an admin user exists,
         and `readyForPinLogin` (lifecycle active + bootstrapped + admin present). After `POST /organizations`
         with `bootstrapMode: queue`, poll this until `readyForPinLogin` is true before tenant PIN login.
+        When ready, may include `fullCredentials` (peek only — safe to poll repeatedly).
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid organization id }
+        "404": { description: Not found }
+  /organizations/{id}/provisioning-credentials/consume:
+    post:
+      tags: [Organizations]
+      summary: Consume one-time bootstrap PIN reveal store
+      description: >
+        Deletes plaintext bootstrap PINs from the reveal store after the Stockix worker persisted them.
+        Idempotent when already consumed.
+      security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      responses:
+        "204": { description: Consumed or already empty }
+        "400": { description: Invalid organization id }
+        "404": { description: Not found }
+  /organizations/{id}/repair-credentials:
+    post:
+      tags: [Organizations]
+      summary: Rebuild masked defaultCredentials from bootstrap users
+      description: >
+        Syncs `organization.defaultCredentials` from staff users where username/name matches role.
+        Does not invent or recover plaintext PINs.
       security: [{ PlatformBearer: [] }, { PlatformApiKey: [] }]
       parameters:
         - $ref: "#/components/parameters/OrgId"

@@ -15,6 +15,10 @@ import { tenantPublicBaseUrl } from "@/lib/tenant-url";
 import type { ProvisionEventRow, TenantDirectoryTotals, TenantRow } from "@/types/tenant";
 
 import { TenantAccessBanner } from "./tenant-access-banner";
+import {
+  TenantPosBootstrapBanner,
+  type PosBootstrapCredentialsPayload,
+} from "./tenant-pos-bootstrap-banner";
 import { TenantDeleteDialogs } from "./tenant-delete-dialogs";
 import { TenantProvisionBanner } from "./tenant-provision-banner";
 import {
@@ -40,6 +44,8 @@ export function TenantsPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oneTimePassword, setOneTimePassword] = useState<string | null>(null);
+  const [posDefaultCredentials, setPosDefaultCredentials] =
+    useState<PosBootstrapCredentialsPayload | null>(null);
   const [tenantAccess, setTenantAccess] = useState<{
     publicUrl: string | null;
     adminEmail: string;
@@ -420,6 +426,9 @@ export function TenantsPageContent() {
       if ("status" in sj && sj.status === "complete") {
         const ok = sj as ProvisionPollComplete;
         setOneTimePassword((prev) => ok.oneTimeAdminPassword ?? prev ?? null);
+        if (ok.posDefaultCredentials?.allRoles?.length) {
+          setPosDefaultCredentials(ok.posDefaultCredentials);
+        }
         if (ok.ready === true) {
           await load();
           return ok;
@@ -623,12 +632,15 @@ export function TenantsPageContent() {
         tenantAccess={tenantAccess}
       />
 
+      <TenantPosBootstrapBanner posDefaultCredentials={posDefaultCredentials} />
+
       <TenantCreateWizard
         dialog={{ open: addTenantOpen, onOpenChange: setAddTenantOpen }}
         loading={loading}
         provisionLog={provisionLog}
         elapsedSec={elapsedSec}
         oneTimePassword={oneTimePassword}
+        posDefaultCredentials={posDefaultCredentials}
         tenantAccess={tenantAccess}
         onProvision={async (data) => {
           if (!me?.id) {
@@ -644,6 +656,7 @@ export function TenantsPageContent() {
         }}
         onReset={() => {
           setOneTimePassword(null);
+          setPosDefaultCredentials(null);
           setTenantAccess(null);
           setProvisionLog([]);
         }}

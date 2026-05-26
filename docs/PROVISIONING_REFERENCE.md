@@ -342,7 +342,26 @@ pnpm cli:tenants:migrate:latest
 ### POS PIN login
 
 - 4–6 digits, org-scoped via subdomain optional.
-- Bootstrap creates role users with random PINs stored in `organization.defaultCredentials`.
+- Bootstrap creates role users with random PINs stored in `organization.defaultCredentials` (masked after bootstrap).
+
+### Bootstrap PIN one-time reveal (peek / consume)
+
+| Step | Endpoint | Behavior |
+|------|----------|----------|
+| Poll readiness | `GET /api/platform/v1/organizations/:id/provisioning-status` | `readyForPinLogin`; includes `fullCredentials` via **peek** (repeatable polls) |
+| Worker persists | Stockix job complete | Encrypted `pos_bootstrap_pins` on provision trace + 15 min cache |
+| Consume store | `POST /api/platform/v1/organizations/:id/provisioning-credentials/consume` | Deletes Redis/memory reveal blob after worker captured PINs |
+| Operator UI | Dashboard provision status / tenant create | `posDefaultCredentials` + `TenantPosBootstrapBanner` |
+
+Manual sign-off: [section-2.1-e2e-checklist.md](./section-2.1-e2e-checklist.md).
+
+### POS-only entitlements
+
+Stockix worker passes `entitlements` on org create using `@repo/shared/pos-entitlements-from-modules`: `modules: ["pos"]` → `{ inventory: true, accounting: false }`.
+
+### Credentials repair
+
+`POST /api/platform/v1/organizations/:id/repair-credentials` rebuilds masked `defaultCredentials` from bootstrap users (`name`/`username` === `role`). Does not recover plaintext PINs. CLI: `repairCredentials.js` delegates to the same sync helper.
 
 ---
 

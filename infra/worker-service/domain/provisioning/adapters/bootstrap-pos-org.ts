@@ -1,4 +1,5 @@
 import { posConfig } from "@repo/config";
+import { buildPosEntitlementsForProvision } from "@repo/shared/pos-entitlements-from-modules";
 
 export type PosRoleCredential = {
   role: string;
@@ -19,6 +20,11 @@ export type BootstrapPosOrgInput = {
   log: (message: string) => void;
   /** Stockix license expiry (defaults to +1 year when omitted). */
   licenseExpiresAt?: Date | string | number | null;
+  /** Stockix tenant modules (drives POS entitlements.modules). */
+  tenantModules?: string[] | null;
+  maxUsers?: number | null;
+  maxLocations?: number | null;
+  maxOrdersPerMonth?: number | null;
   /** Override base URL (default: posConfig.platformBaseUrl). */
   posBaseUrl?: string;
   posHostPort?: number;
@@ -30,8 +36,12 @@ export type BootstrapPosOrgResult = {
   bootstrapMode?: string;
 };
 
-const BOOTSTRAP_POLL_TIMEOUT_MS = 60_000;
-const BOOTSTRAP_POLL_INTERVAL_MS = 1_500;
+const BOOTSTRAP_POLL_TIMEOUT_MS = Number(process.env.BOOTSTRAP_POLL_TIMEOUT_MS ?? 60_000);
+/** Extra time when readyForPinLogin is true but one-time credentials are not in the reveal store yet. */
+const BOOTSTRAP_CREDENTIALS_WAIT_MS = Number(
+  process.env.BOOTSTRAP_CREDENTIALS_WAIT_MS ?? 120_000,
+);
+const BOOTSTRAP_POLL_INTERVAL_MS = Number(process.env.BOOTSTRAP_POLL_INTERVAL_MS ?? 1_500);
 const POS_HEALTH_TIMEOUT_MS = 90_000;
 const POS_HEALTH_INTERVAL_MS = 2_000;
 const PLATFORM_AUTH_TIMEOUT_MS = 30_000;
@@ -77,6 +87,14 @@ function readOrgId(body: unknown): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
+function isPlaintextCredentialPin(pin: string): boolean {
+  const p = pin.trim();
+  if (p.length < 4) return false;
+  if (p.includes("•") || p.includes("*")) return false;
+  if (/^[*•]+$/.test(p)) return false;
+  return /^\d{4,6}$/.test(p);
+}
+
 function normalizeCredentials(raw: unknown): PosRoleCredential[] {
   if (!Array.isArray(raw)) return [];
   const out: PosRoleCredential[] = [];
@@ -90,7 +108,7 @@ function normalizeCredentials(raw: unknown): PosRoleCredential[] {
           ? row.name
           : role;
     const pin = typeof row.pin === "string" ? row.pin : "";
-    if (!role || !pin) continue;
+    if (!role || !pin || !isPlaintextCredentialPin(pin)) continue;
     out.push({ role, username, pin });
   }
   return out;
@@ -236,6 +254,12 @@ export async function bootstrapPosOrganization(
   ).toISOString();
 
   const idempotencyKey = `stockix-provision-${input.tenantId}`;
+  const entitlements = buildPosEntitlementsForProvision({
+    modules: input.tenantModules,
+    maxUsers: input.maxUsers,
+    maxLocations: input.maxLocations,
+    maxOrdersPerMonth: input.maxOrdersPerMonth,
+  });
   log(`[provision][pos] creating organization slug=${input.slug}`);
   const createRes = await platformFetch(base, "/api/platform/v1/organizations", {
     method: "POST",
@@ -249,6 +273,7 @@ export async function bootstrapPosOrganization(
       timezone: "UTC",
       licenseStartsAt,
       licenseEndsAt,
+      entitlements,
     }),
   });
 
@@ -280,6 +305,7 @@ export async function bootstrapPosOrganization(
   if (bootstrapMode !== "sync_fallback") {
     const pollStarted = Date.now();
     let bootstrapReady = false;
+    let readySince: number | null = null;
     log(`[provision][pos] waiting for org bootstrap orgId=${orgId}`);
     while (Date.now() - pollStarted < BOOTSTRAP_POLL_TIMEOUT_MS) {
       const statusRes = await platformFetch(
@@ -299,6 +325,7 @@ export async function bootstrapPosOrganization(
       const readyForPinLogin = data?.readyForPinLogin === true;
       // lifecycle is "active" on create before org_bootstrap finishes — wait for PIN readiness only.
       if (readyForPinLogin) {
+        if (readySince == null) readySince = Date.now();
         const fromStatus = readFullCredentialsFromJson(statusRes.json);
         if (fromStatus.length > 0) {
           credentials = fromStatus;
@@ -306,16 +333,12 @@ export async function bootstrapPosOrganization(
           log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
           break;
         }
-        const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
-        if (fromOrg.length > 0) {
-          credentials = fromOrg;
-          bootstrapReady = true;
-          log(
-            `[provision][pos] org bootstrap ready (legacy defaultCredentials) orgId=${orgId}`,
-          );
+        if (readySince != null && Date.now() - readySince >= BOOTSTRAP_CREDENTIALS_WAIT_MS) {
           break;
         }
-        // readyForPinLogin without one-time credentials yet — keep polling briefly.
+        // readyForPinLogin without one-time credentials yet — keep polling (peek does not consume).
+      } else {
+        readySince = null;
       }
       await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
     }
@@ -325,7 +348,7 @@ export async function bootstrapPosOrganization(
         credentials = fromOrg;
         bootstrapReady = true;
         log(
-          `[provision][pos] org bootstrap credentials recovered from org record orgId=${orgId}`,
+          `[provision][pos] org bootstrap credentials recovered from legacy org record orgId=${orgId}`,
         );
       }
     }
@@ -339,6 +362,17 @@ export async function bootstrapPosOrganization(
   if (credentials.length === 0) {
     throw new Error(
       `POS org bootstrap finished but fullCredentials missing for orgId=${orgId}`,
+    );
+  }
+
+  const consumeRes = await platformFetch(
+    base,
+    `/api/platform/v1/organizations/${orgId}/provisioning-credentials/consume`,
+    { method: "POST", apiKey },
+  );
+  if (consumeRes.status !== 204 && consumeRes.status !== 200) {
+    log(
+      `[provision][pos] warning: provisioning-credentials/consume returned ${consumeRes.status} orgId=${orgId}`,
     );
   }
 

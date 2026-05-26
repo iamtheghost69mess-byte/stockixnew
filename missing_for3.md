@@ -207,30 +207,25 @@ EFFORT: Medium — **done**
 
 ### 2.1 Provisioning
 
-✅ **`readyForPinLogin` and org lifecycle** — **Fixed (plan #4).** Requires `lifecycle === "active"` plus license window (`platformOrgController.js`). **Tested:** lifecycle access unit test only; no dedicated `readyForPinLogin` test. **Manual E2E:** not signed off.
+**Section 2.1 repair (May 2026):** Peek/consume bootstrap PINs, POS-only entitlements from Stockix modules, credentials repair API. Manual checklist: [docs/section-2.1-e2e-checklist.md](docs/section-2.1-e2e-checklist.md).
 
-PRIORITY: High  
-EFFORT: Low — **done**
+| Item | Status | Tests |
+|------|--------|--------|
+| `readyForPinLogin` + lifecycle | ✅ | `organization-provisioning-status.test.js`, `organization-lifecycle-access.test.js` |
+| One-time bootstrap PIN reveal | ✅ | `bootstrap-credential-reveal.test.js`, `bootstrap-pos-org.test.ts`; peek on status poll, `POST .../provisioning-credentials/consume` |
+| Owner “Reveal Staff PINs” | ✅ | `pos-credentials-http.test.ts` (`masked`); `tenant-pos-credentials.tsx` masked-table UX |
+| POS-only tenant defaults | ✅ | `@repo/shared/pos-entitlements-from-modules`; worker passes `entitlements` on org create |
+| `defaultCredentials` drift | ✅ | `defaultCredentialsSync.js`, `POST .../repair-credentials`; script wraps shared sync |
 
-⚠️ **POS-only tenant defaults** — New orgs default `modules: { inventory: true, accounting: true }` unless overridden; no POS-only entitlement profile from Stockix worker.
+✅ **`readyForPinLogin` and org lifecycle** — Requires `lifecycle === "active"`, license window, `isBootstrapped`, admin user (`platformOrgController.js`). **Manual E2E:** [section-2.1-e2e-checklist.md](docs/section-2.1-e2e-checklist.md) Phase 0.
 
-PRIORITY: Medium  
-EFFORT: Medium
+✅ **One-time bootstrap PIN reveal** — `peekFullCredentials` on `GET .../provisioning-status`; worker `POST .../provisioning-credentials/consume` after Stockix persists `pos_bootstrap_pins`. Dashboard: `TenantPosBootstrapBanner` during provision. **Manual E2E:** checklist Phase 1.
 
-⚠️ **One-time bootstrap PIN reveal** — Full PINs live in Redis ~1h then consumed; org stores **masked** PINs only. Missed worker poll during provision → failure. Owner `GET .../credentials` returns masked PINs → dashboard table empty unless **Reset PIN**.
+✅ **Owner “Reveal Staff PINs” after provision** — Reset-only by design; masked rows + alert in credentials dialog. **Manual E2E:** checklist Phase 2.
 
-PRIORITY: High  
-EFFORT: Medium
+✅ **POS-only tenant defaults** — `buildPosEntitlementsForProvision(["pos"])` → `accounting: false`. **Manual E2E:** checklist Phase 3.
 
-✅ **Owner “Reveal Staff PINs” after provision** — **Fixed as reset-only UX (plan #7).** Copy explains bootstrap PINs shown once; dialog shows masked roles + reset. API returns `masked` per role. No post-bootstrap plaintext reveal (by design). **Tested:** `pos-credentials-http.test.ts` (PIN paths, not `masked` field). **Manual E2E:** not signed off.
-
-PRIORITY: High  
-EFFORT: Medium — **UX aligned to security model**
-
-⚠️ **`defaultCredentials` drift** — Repair scripts exist (`repairCredentials.js`, `migrate-bootstrap-credentials.js`); indicates production drift between org doc and staff users.
-
-PRIORITY: Medium  
-EFFORT: Medium
+✅ **`defaultCredentials` drift** — `syncDefaultCredentialsFromUsers` + platform repair endpoint (masked only). **Manual E2E:** checklist Phase 4. **Deferred §2.2:** staff PIN change → `defaultCredentials` sync on tenant path.
 
 ---
 

@@ -10,11 +10,17 @@ export type ProvisionPollRunning = {
   message?: string;
 };
 
+export type PosDefaultCredentialsPayload = {
+  adminPin: string;
+  allRoles: { role: string; username: string; pin: string }[];
+};
+
 export type ProvisionPollComplete = {
   status: "complete";
   ready?: boolean;
   correlationId: string;
   oneTimeAdminPassword?: string | null;
+  posDefaultCredentials?: PosDefaultCredentialsPayload | null;
   internalPort?: number;
   baseUrl?: string;
   events?: ProvisionEventRow[];

@@ -55,6 +55,10 @@ type Props = {
   provisionLog: ProvisionEventRow[];
   elapsedSec: number;
   oneTimePassword: string | null;
+  posDefaultCredentials?: {
+    adminPin: string;
+    allRoles: { role: string; username: string; pin: string }[];
+  } | null;
   tenantAccess: { publicUrl: string | null; adminEmail: string } | null;
   onProvision: (data: {
     slug: string;
@@ -109,6 +113,7 @@ export default function TenantCreateWizard(props: Props) {
     provisionLog,
     elapsedSec,
     oneTimePassword,
+    posDefaultCredentials = null,
     tenantAccess,
     onProvision,
     onReset,
