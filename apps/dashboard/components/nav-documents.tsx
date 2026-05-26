@@ -29,7 +29,6 @@ export function NavDocuments({ items }: { items: NavDocumentItem[] }) {
           <SidebarMenuItem key={item.name}>
             <SidebarMenuButton
               tooltip={item.name}
-              suppressHydrationWarning
               render={
                 item.external ? (
                   <a href={item.url} target="_blank" rel="noopener noreferrer" />

@@ -14,6 +14,7 @@ import {
   ShoppingCartIcon,
   UsersIcon,
 } from "lucide-react";
+import { hasPermission } from "@repo/shared/permissions";
 
 import { Logo } from "@/components/logo";
 import { MeContext } from "@/components/me-provider";
@@ -24,7 +25,6 @@ import { NavUser, type NavUserAccount } from "@/components/nav-user";
 import { useMe } from "@/hooks/use-me";
 import { useMounted } from "@/hooks/use-mounted";
 import { usePosNavVisible } from "@/hooks/use-pos-nav";
-import { hasPermission } from "@repo/shared/permissions";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
   Sidebar,
@@ -37,16 +37,14 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const mounted = useMounted();
   const initialFromServer = React.useContext(MeContext);
   const { me } = useMe();
-  const mounted = useMounted();
   const posNavVisible = usePosNavVisible();
 
-  // SSR + first paint: use server session so nav items match layout auth.
-  const effectiveMe = mounted ? me : (initialFromServer ?? me);
+  const effectiveMe = me ?? initialFromServer ?? null;
   const perms = effectiveMe?.permissions ?? [];
   const can = (permission: string) => hasPermission(perms, permission);
-  const showPosNav = mounted && posNavVisible;
 
   const canReadTenants = can("tenants.read");
   const canReadLicenses = can("licenses.read");
@@ -84,7 +82,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             },
           ]
         : []),
-      ...(showPosNav
+      ...(posNavVisible
         ? [
             {
               title: "POS",
@@ -163,7 +161,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     canApiKeys,
     canRoles,
     canSettings,
-    showPosNav,
+    posNavVisible,
   ]);
 
   const documents = React.useMemo((): NavDocumentItem[] => {
@@ -188,15 +186,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
     : null;
 
+  if (!mounted) {
+    return <aside className="hidden" aria-hidden="true" />;
+  }
+
   return (
-    <Sidebar collapsible="offcanvas" suppressHydrationWarning {...props}>
+    <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               className="data-[slot=sidebar-menu-button]:p-1.5!"
               tooltip="Stockix — home"
-              suppressHydrationWarning
               render={<Link href="/" />}
             >
               <Logo className="h-5 w-auto shrink-0 text-sidebar-foreground" />

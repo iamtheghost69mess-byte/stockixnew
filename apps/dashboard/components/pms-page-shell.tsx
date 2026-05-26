@@ -73,7 +73,6 @@ export function PmsPageShell({
             <Link
               key={link.href}
               href={link.href}
-              suppressHydrationWarning
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 isActive
