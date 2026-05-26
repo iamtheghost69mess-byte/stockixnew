@@ -1,4 +1,4 @@
-import { apiConfig } from "@repo/config";
+import { apiConfig, licenseConfig } from "@repo/config";
 import {
   blacklistedFingerprints,
   licenseActivations,
@@ -1753,7 +1753,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         });
       });
     }
-    const strict = process.env.LICENSE_SYNC_STRICT === "1";
+    const strict = licenseConfig.syncStrict;
     if (strict && syncErrors.length > 0) {
       return c.json(
         { error: "license_sync_failed", financeSync, posSync, errors: syncErrors },

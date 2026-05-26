@@ -1,3 +1,4 @@
+import { licenseConfig } from "@repo/config";
 import { licenses, tenants } from "@repo/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -64,7 +65,7 @@ export async function applyTenantLicenseSuspend(
   const posResult = await suspendPosOrgForLicense(db, tenantId, reason, log);
   if (!posResult.ok) {
     log(`[tenant-license] POS suspend failed: ${posResult.error}`);
-    if (process.env.LICENSE_SYNC_STRICT === "1") {
+    if (licenseConfig.syncStrict) {
       throw new Error(`pos: ${posResult.error}`);
     }
   }
@@ -114,14 +115,14 @@ export async function applyTenantLicenseReactivate(
     const windowResult = await syncPosOrgLicenseFromLicense(db, tenantId, updated, log);
     if (!windowResult.ok) {
       log(`[tenant-license] POS license window sync failed: ${windowResult.error}`);
-      if (process.env.LICENSE_SYNC_STRICT === "1") {
+      if (licenseConfig.syncStrict) {
         throw new Error(`pos: ${windowResult.error}`);
       }
     }
     const reactivateResult = await reactivatePosOrgForLicense(db, tenantId, log);
     if (!reactivateResult.ok) {
       log(`[tenant-license] POS reactivate failed: ${reactivateResult.error}`);
-      if (process.env.LICENSE_SYNC_STRICT === "1") {
+      if (licenseConfig.syncStrict) {
         throw new Error(`pos: ${reactivateResult.error}`);
       }
     }

@@ -16,6 +16,7 @@
  * Currently configured: SMTP via Resend (see mailer.ts).
  * RESEND_API_KEY is NOT required if using SMTP mode.
  */
+import { apiConfig } from "@repo/config";
 import { licenses, owners, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -139,7 +140,7 @@ export async function sendFinanceWelcomeEmail(opts: {
   modules: string[];
   tenantId?: string;
 }): Promise<MailSendResult> {
-  const brandName = process.env.BRAND_NAME ?? "Stockix";
+  const brandName = apiConfig.brandName;
   const loginUrl = opts.financeUrl.replace(/\/+$/, "");
   const moduleNames = opts.modules.map(formatModuleLabel).join(", ");
   const safeTenant = escapeHtml(opts.tenantName);
@@ -198,7 +199,7 @@ export async function sendPosWelcomeEmail(opts: {
   credentials: PosCredentialEmailRow[];
   tenantId?: string;
 }): Promise<MailSendResult> {
-  const brandName = process.env.BRAND_NAME ?? "Stockix";
+  const brandName = apiConfig.brandName;
   const safeTenant = escapeHtml(opts.tenantName);
   const safePosUrl = escapeHtml(opts.posUrl);
   const credentialRows = opts.credentials
