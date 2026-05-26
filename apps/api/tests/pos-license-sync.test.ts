@@ -8,6 +8,14 @@ vi.mock("../src/pos-proxy.js", () => ({
   posProxyJson: (...args: unknown[]) => posProxyJson(...args),
 }));
 
+const {
+  suspendPosOrgForLicense,
+  syncPosOrgLicenseWindow,
+  reactivatePosOrgForLicense,
+  syncPosOrgLicenseMetadata,
+  resolveLicenseWindowDates,
+} = await import("../src/pos-license-sync.js");
+
 describe("suspendPosOrgForLicense", () => {
   const tenantId = "11111111-1111-1111-1111-111111111111";
   const posOrgId = "507f1f77bcf86cd799439011";
@@ -37,8 +45,6 @@ describe("suspendPosOrgForLicense", () => {
 
   it("calls POS suspend when tenant has pos module and org id", async () => {
     posProxyJson.mockResolvedValueOnce({ status: 200, data: { success: true } });
-    vi.resetModules();
-    const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
     const result = await suspendPosOrgForLicense(
       buildDb(["accounting", "pos"], posOrgId),
       tenantId,
@@ -53,15 +59,11 @@ describe("suspendPosOrgForLicense", () => {
   });
 
   it("skips when pos module is not licensed", async () => {
-    vi.resetModules();
-    const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
     await suspendPosOrgForLicense(buildDb(["accounting"], posOrgId), tenantId, "license_expired");
     expect(posProxyJson).not.toHaveBeenCalled();
   });
 
   it("skips when pos organization is not linked", async () => {
-    vi.resetModules();
-    const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
     const result = await suspendPosOrgForLicense(
       buildDb(["pos"], null),
       tenantId,
@@ -73,8 +75,6 @@ describe("suspendPosOrgForLicense", () => {
 
   it("returns error when POS suspend proxy fails", async () => {
     posProxyJson.mockResolvedValueOnce({ status: 502, data: { message: "bad gateway" } });
-    vi.resetModules();
-    const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
     const result = await suspendPosOrgForLicense(
       buildDb(["pos"], posOrgId),
       tenantId,
@@ -113,8 +113,6 @@ describe("syncPosOrgLicenseWindow", () => {
 
   it("patches POS org license window when pos is licensed", async () => {
     posProxyJson.mockResolvedValueOnce({ status: 200, data: { success: true } });
-    vi.resetModules();
-    const { syncPosOrgLicenseWindow } = await import("../src/pos-license-sync.js");
     const startsAt = new Date("2026-01-01T00:00:00.000Z");
     const endsAt = new Date("2027-01-01T00:00:00.000Z");
     await syncPosOrgLicenseWindow(
@@ -162,8 +160,6 @@ describe("reactivatePosOrgForLicense", () => {
 
   it("patches POS org lifecycle to active", async () => {
     posProxyJson.mockResolvedValueOnce({ status: 200, data: { success: true } });
-    vi.resetModules();
-    const { reactivatePosOrgForLicense } = await import("../src/pos-license-sync.js");
     await reactivatePosOrgForLicense(buildDb(["pos"], posOrgId), tenantId);
     expect(posProxyJson).toHaveBeenCalledWith(
       `/organizations/${encodeURIComponent(posOrgId)}/lifecycle`,
@@ -202,8 +198,6 @@ describe("syncPosOrgLicenseMetadata", () => {
 
   it("patches license key metadata to POS org", async () => {
     posProxyJson.mockResolvedValueOnce({ status: 200, data: { success: true } });
-    vi.resetModules();
-    const { syncPosOrgLicenseMetadata } = await import("../src/pos-license-sync.js");
     const result = await syncPosOrgLicenseMetadata(
       buildDb(["pos"], posOrgId),
       tenantId,
@@ -230,8 +224,6 @@ describe("syncPosOrgLicenseMetadata", () => {
 
 describe("resolveLicenseWindowDates", () => {
   it("uses far-future end for perpetual licenses", async () => {
-    vi.resetModules();
-    const { resolveLicenseWindowDates } = await import("../src/pos-license-sync.js");
     const startsAt = new Date("2026-01-01T00:00:00.000Z");
     const { startsAt: outStart, endsAt } = resolveLicenseWindowDates({
       isPerpetual: true,
@@ -244,8 +236,6 @@ describe("resolveLicenseWindowDates", () => {
   });
 
   it("uses expiresAt for dated licenses", async () => {
-    vi.resetModules();
-    const { resolveLicenseWindowDates } = await import("../src/pos-license-sync.js");
     const expiresAt = new Date("2027-06-01T00:00:00.000Z");
     const { endsAt } = resolveLicenseWindowDates({
       isPerpetual: false,

@@ -2,8 +2,6 @@ import { Injectable, Scope } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import stripe from 'stripe';
 
-const origin = 'https://cfdf-102-164-97-88.ngrok-free.app';
-
 @Injectable({ scope: Scope.DEFAULT })
 export class StripePaymentService {
   public stripe: stripe;
@@ -45,12 +43,26 @@ export class StripePaymentService {
    * @param {number} accountId - Account id.
    * @returns {Promise<stripe.Response<stripe.AccountLink>}
    */
+  private stripeRedirectBase(): string {
+    const configured =
+      this.config.get<string>('stripePayment.redirectUrl')?.trim() ||
+      this.config.get<string>('app.baseUrl')?.trim() ||
+      '';
+    return configured.replace(/\/$/, '');
+  }
+
   public async createAccountLink(accountId: string) {
+    const base = this.stripeRedirectBase();
+    if (!base) {
+      throw new Error(
+        'STRIPE_PAYMENT_REDIRECT_URL or BASE_URL must be set for Stripe account links',
+      );
+    }
     try {
       const accountLink = await this.stripe.accountLinks.create({
         account: accountId,
-        return_url: `${origin}/return/${accountId}`,
-        refresh_url: `${origin}/refresh/${accountId}`,
+        return_url: `${base}/return/${accountId}`,
+        refresh_url: `${base}/refresh/${accountId}`,
         type: 'account_onboarding',
       });
       return accountLink;

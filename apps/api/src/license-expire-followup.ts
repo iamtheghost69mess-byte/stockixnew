@@ -2,6 +2,7 @@ import { licenses, tenantDeployments, tenants } from "@repo/db/schema";
 import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { logLine } from "./lib/logger.js";
 import { LICENSE_EXPIRY_MILESTONE_DAYS } from "./license-constants.js";
 import { insertLicenseHistory } from "./license-utils.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
@@ -75,7 +76,7 @@ export async function processLicenseExpiryFollowUp(
     log?: (message: string) => void;
   },
 ): Promise<void> {
-  const log = opts.log ?? ((message: string) => console.log(message));
+  const log = opts.log ?? logLine;
   const now = opts.now ?? new Date();
 
   for (const license of opts.justExpired) {

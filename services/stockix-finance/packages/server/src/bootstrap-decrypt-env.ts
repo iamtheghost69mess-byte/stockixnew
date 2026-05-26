@@ -1,4 +1,4 @@
-import { decryptEncryptedEnvVars } from '@repo/shared/deployment-secrets';
+import { decryptEncryptedEnvVars } from './lib/deployment-secrets';
 
 const SENSITIVE_ENV_KEYS = [
   'DB_PASSWORD',

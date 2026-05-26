@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
   decryptDeploymentSecret,
@@ -144,6 +145,16 @@ import {
 } from "./provisioning/readiness-engine.js";
 import { startStuckProvisioningReconciler } from "./provisioning/stuck-reconciler.js";
 import { securityHeadersMiddleware } from "./middleware/security-headers.js";
+import { globalRateLimitMiddleware } from "./middleware/global-rate-limit.js";
+import { logger } from "./lib/logger.js";
+
+if (process.env.SENTRY_DSN?.trim()) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    tracesSampleRate: 0.1,
+  });
+}
 
 const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
@@ -576,22 +587,18 @@ async function emitMetric(name: string, value: number, tags: Record<string, stri
       ts: new Date().toISOString(),
     }),
   }).catch((error) => {
-    console.error("[metrics] failed to emit API metric", error instanceof Error ? error.message : String(error));
+    logger.error("metrics emit failed", error);
   });
 }
 
 function emitInternalJobAudit(c: { get: (key: "requestId") => string }, action: string, details: Record<string, unknown>) {
   const requestId = c.get("requestId");
-  console.log(
-    JSON.stringify({
-      level: "info",
-      type: "internal_job_audit",
-      action,
-      requestId,
-      ...details,
-      ts: new Date().toISOString(),
-    }),
-  );
+  logger.info("internal_job_audit", {
+    type: "internal_job_audit",
+    action,
+    requestId,
+    ...details,
+  });
 }
 
 function readCookie(req: Request, name: string): string {
@@ -621,7 +628,10 @@ function isTransientDbError(err: unknown): boolean {
 }
 
 app.onError((err, c) => {
-  console.error("[api]", err);
+  if (process.env.SENTRY_DSN?.trim()) {
+    Sentry.captureException(err);
+  }
+  logger.error("Unhandled API error", err, { path: c.req.path, method: c.req.method });
   if (isTransientDbError(err)) {
     return c.json(
       { error: "service_unavailable", message: "Database temporarily unavailable. Retry shortly." },
@@ -638,14 +648,24 @@ app.use(
   cors({
     origin: (origin) => {
       if (!origin) return origin;
-      const allowed = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        ...(rootDomain
-          ? [`https://${rootDomain}`, `http://${rootDomain}`, `https://www.${rootDomain}`]
-          : []),
-        ...(apiConfig.corsOrigins ?? []),
-      ];
+      const baseOrigins = rootDomain
+        ? [
+            `https://${rootDomain}`,
+            `http://${rootDomain}`,
+            `https://www.${rootDomain}`,
+            `https://dashboard.${rootDomain}`,
+          ]
+        : [];
+      const devOrigins =
+        apiConfig.nodeEnv !== "production"
+          ? [
+              "http://localhost:3000",
+              "http://localhost:3001",
+              "http://127.0.0.1:3000",
+              "http://127.0.0.1:3001",
+            ]
+          : [];
+      const allowed = [...baseOrigins, ...devOrigins, ...(apiConfig.corsOrigins ?? [])];
       if (allowed.includes(origin)) return origin;
       if (!rootDomain) return null;
       const isSubdomain =
@@ -661,6 +681,8 @@ app.use(
 
 app.use("/*", securityHeadersMiddleware);
 
+app.use("/*", globalRateLimitMiddleware());
+
 app.use("/*", async (c, next) => {
   const requestId = c.req.header("x-request-id")
     ?? c.req.header("x-correlation-id")
@@ -673,17 +695,14 @@ app.use("/*", async (c, next) => {
   const latencyMs = Date.now() - startedAt;
   const isClaimPoll = c.req.method === "POST" && c.req.path === "/internal/jobs/claim";
   if (!isClaimPoll) {
-    console.log(
-      JSON.stringify({
-        level: "info",
-        type: "http_request",
-        requestId,
-        method: c.req.method,
-        path: c.req.path,
-        status: c.res.status,
-        latencyMs,
-      }),
-    );
+    logger.info("http_request", {
+      type: "http_request",
+      requestId,
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      latencyMs,
+    });
   }
   await emitMetric("api.request.latency_ms", latencyMs, {
     method: c.req.method,
@@ -887,7 +906,7 @@ app.use("/*", async (c, next) => {
     .delete(apiIdempotencyKeys)
     .where(sql`${apiIdempotencyKeys.expiresAt} < now()`)
     .catch((error) => {
-      console.error("[idempotency] prune failed", error instanceof Error ? error.message : String(error));
+      logger.error("idempotency prune failed", error);
     });
 
   const existingRows = await db
@@ -950,7 +969,7 @@ app.use("/*", async (c, next) => {
       expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
     })
     .catch((error) => {
-      console.error("[idempotency] persist response failed", error instanceof Error ? error.message : String(error));
+      logger.error("idempotency persist failed", error);
     });
 });
 
@@ -1620,10 +1639,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           });
         }
       } catch (licenseErr) {
-        console.error(
-          "[provision] license assignment failed (non-fatal)",
-          licenseErr instanceof Error ? licenseErr.message : String(licenseErr),
-        );
+        logger.error("provision license assignment failed (non-fatal)", licenseErr);
       }
 
       if (targetTenantId && (posOrganizationIdFromResult || posUrlFromResult)) {
@@ -1679,10 +1695,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             });
           }
         } catch (err) {
-          console.error(
-            "[provision] finance license sync failed",
-            err instanceof Error ? err.message : String(err),
-          );
+          logger.error("provision finance license sync failed", err);
         }
       }
 
@@ -1805,9 +1818,10 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               mailResult.status === "failed"
                 ? mailResult.error
                 : mailResult.status;
-            console.error(
-              `[provision] welcome email not sent for tenant ${targetTenantId}: ${mailDetail}`,
-            );
+            logger.error("provision welcome email not sent", undefined, {
+              tenantId: targetTenantId,
+              mailDetail,
+            });
             const [tenantRow] = await db
               .select({ ownerId: tenants.ownerId })
               .from(tenants)
@@ -1827,10 +1841,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
             }
           }
         } catch (welcomeErr) {
-          console.error(
-            "[provision] welcome email failed (non-fatal)",
-            welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
-          );
+          logger.error("provision welcome email failed (non-fatal)", welcomeErr);
         }
       })();
     }
@@ -2335,7 +2346,7 @@ app.post("/owners/invite", async (c) => {
 
   const emailSent = delivery.emailSent;
   if (!emailSent && !isOwnerInviteMailQueueEnabled()) {
-    console.error("[owners] invite email not sent", owner.email);
+    logger.error("owners invite email not sent", undefined, { email: owner.email });
     await logAudit(db, {
       actorId: actorId ?? "",
       action: "invite.email_failed",
@@ -3476,7 +3487,7 @@ app.post("/tenants", async (c) => {
 
   const correlationId = randomUUID();
   const log = (m: string) => {
-    console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+    logger.info(m, { correlationId });
   };
 
   const acceptTrace = createProvisionTracer(
@@ -3549,7 +3560,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     db,
     correlationId,
     () => ({ slug: "unknown" }),
-    (m) => console.log(JSON.stringify({ level: "info", correlationId, message: m })),
+    (m) => logger.info(m, { correlationId }),
   );
 
   if (job.status === "completed") {
@@ -3561,7 +3572,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       level: "warn",
       meta: { status: "dead" },
     }).catch((error) => {
-      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+      logger.error("provision-stop trace write failed", error);
     });
     return c.json({ ok: true, status: "already_stopped", correlationId });
   }
@@ -3582,7 +3593,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       level: "warn",
       meta: { status: "pending" },
     }).catch((error) => {
-      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+      logger.error("provision-stop trace write failed", error);
     });
     return c.json({ ok: true, status: "cancelled", correlationId });
   }
@@ -3603,7 +3614,7 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
       level: "warn",
       meta: { status: "running" },
     }).catch((error) => {
-      console.error("[provision-stop] trace write failed", error instanceof Error ? error.message : String(error));
+      logger.error("provision-stop trace write failed", error);
     });
     if (job.tenantId) {
       await db
@@ -3684,7 +3695,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
     db,
     correlationId,
     () => ({ slug: "unknown" }),
-    (m) => console.log(JSON.stringify({ level: "info", correlationId, message: m })),
+    (m) => logger.info(m, { correlationId }),
   );
 
   if (job.status === "completed") {
@@ -3706,10 +3717,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
         meta: { status: "dead", tenantId: parsed.data },
       })
       .catch((error) => {
-        console.error(
-          "[tenant-provision-stop] trace write failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("tenant-provision-stop trace write failed", error);
       });
     return c.json({ ok: true, status: "already_stopped", correlationId });
   }
@@ -3732,10 +3740,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
         meta: { status: "pending", tenantId: parsed.data },
       })
       .catch((error) => {
-        console.error(
-          "[tenant-provision-stop] trace write failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("tenant-provision-stop trace write failed", error);
       });
     await db
       .update(tenantDeployments)
@@ -3766,10 +3771,7 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
         meta: { status: "running", tenantId: parsed.data },
       })
       .catch((error) => {
-        console.error(
-          "[tenant-provision-stop] trace write failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("tenant-provision-stop trace write failed", error);
       });
     await db
       .update(tenantDeployments)
@@ -4269,10 +4271,7 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
   }
 
   void enqueueOrgProvisioning(db, inserted.id, parsed.data).catch((err) => {
-    console.error(
-      "[organizations] enqueueOrgProvisioning failed",
-      err instanceof Error ? err.message : String(err),
-    );
+    logger.error("organizations enqueueOrgProvisioning failed", err);
   });
 
   await logAudit(db, {
@@ -5067,7 +5066,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       ? latestProvisionJob.correlationId
       : randomUUID();
   const log = (m: string) => {
-    console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+    logger.info(m, { correlationId });
   };
   const acceptTrace = createProvisionTracer(db, correlationId, () => ({ slug: row.slug }), log);
   await acceptTrace.event("api", "HTTP 202 — retry provisioning accepted");
@@ -5319,7 +5318,7 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
     db,
     parsed.data,
     "tenant_suspended",
-    (message) => console.log(`[tenant.suspend] ${message}`),
+    (message) => logger.info(message, { type: "tenant.suspend" }),
   );
 
   await logAudit(db, {
@@ -5551,7 +5550,7 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
   await applyTenantLicenseReactivate(
     db,
     parsed.data,
-    (message) => console.log(`[tenant.reactivate] ${message}`),
+    (message) => logger.info(message, { type: "tenant.reactivate" }),
   );
 
   await logAudit(db, {
@@ -5784,10 +5783,7 @@ function startReadinessReconciler() {
         }
       }
     } catch (error) {
-      console.error(
-        "[reconciler] readiness tick failed:",
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.error("reconciler readiness tick failed", error);
     } finally {
       running = false;
     }
@@ -5809,25 +5805,20 @@ registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error(
-    JSON.stringify({
-      level: "error",
-      type: "unhandled_rejection",
-      reason: reason instanceof Error ? reason.message : String(reason),
-      promise: String(promise),
-    }),
-  );
+  if (process.env.SENTRY_DSN?.trim()) {
+    Sentry.captureException(reason);
+  }
+  logger.error("unhandled_rejection", reason, {
+    type: "unhandled_rejection",
+    promise: String(promise),
+  });
 });
 
 process.on("uncaughtException", (error) => {
-  console.error(
-    JSON.stringify({
-      level: "error",
-      type: "uncaught_exception",
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    }),
-  );
+  if (process.env.SENTRY_DSN?.trim()) {
+    Sentry.captureException(error);
+  }
+  logger.error("uncaught_exception", error, { type: "uncaught_exception" });
   process.exit(1);
 });
 
@@ -5837,8 +5828,8 @@ if (db) startStuckProvisioningReconciler(db);
 if (databaseUrl) {
   void import("./provisioning/provision-notify-listener.js").then(
     ({ startProvisionNotifyListener }) => {
-      startProvisionNotifyListener(databaseUrl, (message) => console.log(message));
-      console.log("[api] Provision NOTIFY listener started");
+      startProvisionNotifyListener(databaseUrl, (message) => logger.info(message));
+      logger.info("Provision NOTIFY listener started");
     },
   );
 }
@@ -5846,8 +5837,8 @@ if (databaseUrl) {
 void import("./jobs/license-expiry-queue.js").then(
   ({ startLicenseExpiryWorker, isLicenseExpiryQueueEnabled }) => {
     if (db && isLicenseExpiryQueueEnabled()) {
-      startLicenseExpiryWorker(db, (msg) => console.log(msg));
-      console.log("[api] License expiry BullMQ worker started");
+      startLicenseExpiryWorker(db, (msg) => logger.info(msg));
+      logger.info("License expiry BullMQ worker started");
     }
   },
 );
@@ -5855,12 +5846,25 @@ void import("./jobs/license-expiry-queue.js").then(
 void import("./jobs/owner-invite-mail-queue.js").then(
   ({ startOwnerInviteMailWorker, isOwnerInviteMailQueueEnabled }) => {
     if (db && isOwnerInviteMailQueueEnabled()) {
-      startOwnerInviteMailWorker(db, (msg) => console.log(msg));
-      console.log("[api] Owner invite mail BullMQ worker started");
+      startOwnerInviteMailWorker(db, (msg) => logger.info(msg));
+      logger.info("Owner invite mail BullMQ worker started");
     }
   },
 );
 
+// Global 404 handler — must be last route registered
+app.notFound((c) => {
+  return c.json(
+    {
+      success: false,
+      error: "Not found",
+      path: c.req.path,
+      method: c.req.method,
+    },
+    404,
+  );
+});
+
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`api listening on http://localhost:${info.port}`);
+  logger.info("api listening", { url: `http://localhost:${info.port}` });
 });

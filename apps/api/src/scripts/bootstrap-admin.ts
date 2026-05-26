@@ -20,7 +20,7 @@ async function run() {
     .where(isNotNull(owners.passwordHash))
     .limit(1);
   if (activated.length > 0) {
-    console.log("Bootstrap skipped: activated admin already exists");
+    process.stdout.write("Bootstrap skipped: activated admin already exists\n");
     return;
   }
 
@@ -52,7 +52,7 @@ async function run() {
       mfaEnabled: false,
     });
   }
-  console.log(`Bootstrap admin created: ${email}`);
+  process.stdout.write(`Bootstrap admin created: ${email}\n`);
 }
 
 void run();

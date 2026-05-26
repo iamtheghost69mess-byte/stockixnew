@@ -2,6 +2,7 @@ import { Queue, Worker } from "bullmq";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
+import { logLine } from "../lib/logger.js";
 import {
   runLicenseExpiryMilestoneJob,
   type LicenseMilestoneJob,
@@ -52,7 +53,7 @@ export async function enqueueLicenseExpiryMilestone(
 
 export function startLicenseExpiryWorker(
   db: PostgresJsDatabase<typeof schema>,
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = logLine,
 ): Worker<MilestoneJobData> | null {
   const conn = redisConnection();
   if (!conn) return null;

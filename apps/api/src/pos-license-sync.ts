@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
 import { parseLicenseModulesJson } from "./license-utils.js";
+import { logLine } from "./lib/logger.js";
 import { posProxyJson } from "./pos-proxy.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -89,7 +90,7 @@ function logPosSyncLine(
 ): void {
   if (log) log(line);
   else if (line.includes("failed")) console.error(line);
-  else console.log(line);
+  else logLine(line);
 }
 
 /**

@@ -1,3 +1,21 @@
+/**
+ * Mail configuration supports two modes:
+ *
+ * Mode 1 — SMTP (recommended for production):
+ *   MAIL_HOST=smtp.resend.com
+ *   MAIL_PORT=587
+ *   MAIL_USERNAME=resend
+ *   MAIL_PASSWORD=[your-resend-api-key]
+ *   MAIL_FROM_ADDRESS=noreply@yourdomain.com
+ *   MAIL_FROM_NAME=Stockix
+ *
+ * Mode 2 — Resend SDK (alternative):
+ *   RESEND_API_KEY=re_[your-key]
+ *   MAIL_FROM_ADDRESS=noreply@yourdomain.com
+ *
+ * Currently configured: SMTP via Resend (see mailer.ts).
+ * RESEND_API_KEY is NOT required if using SMTP mode.
+ */
 import { licenses, owners, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";

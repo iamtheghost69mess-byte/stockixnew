@@ -3,8 +3,18 @@ import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { createDb } from "@repo/db";
-import { requiredApiRole } from "../middleware/rbac.js";
 import { syncTenantBrandingToFinance } from "../finance-branding-sync.js";
+type ApiEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    actorEffectiveRole?: string;
+    actorPermissions?: string[];
+    requestId: string;
+    requestStartMs: number;
+    apiKeyId?: string;
+  };
+};
 
 const tenantConfigBody = z.object({
   appName: z.string().min(1).max(120).optional(),
@@ -46,13 +56,11 @@ export async function ensureDefaultTenantConfig(
 }
 
 export function registerTenantConfigApi(
-  app: Hono,
+  app: Hono<ApiEnv>,
   db: ReturnType<typeof createDb> | null,
 ): void {
   app.get("/tenants/:tenantId/config", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
-    const rbac = requiredApiRole(c, ["tenants.read", "super_admin"]);
-    if (rbac) return rbac;
 
     const tenantId = c.req.param("tenantId");
     const parsed = z.string().uuid().safeParse(tenantId);
@@ -92,8 +100,6 @@ export function registerTenantConfigApi(
 
   app.put("/tenants/:tenantId/config", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
-    const rbac = requiredApiRole(c, ["tenants.write", "super_admin"]);
-    if (rbac) return rbac;
 
     const tenantId = c.req.param("tenantId");
     const parsedId = z.string().uuid().safeParse(tenantId);
@@ -135,6 +141,10 @@ export function registerTenantConfigApi(
         .where(eq(tenantConfig.tenantId, parsedId.data))
         .returning();
 
+      if (!updated) {
+        return c.json({ error: "tenant_config_update_failed" }, 500);
+      }
+
       const response = {
         tenantId: updated.tenantId,
         appName: updated.appName,
@@ -161,6 +171,10 @@ export function registerTenantConfigApi(
         branding: patch.branding ?? null,
       })
       .returning();
+
+    if (!inserted) {
+      return c.json({ error: "tenant_config_insert_failed" }, 500);
+    }
 
     const response = {
       tenantId: inserted.tenantId,

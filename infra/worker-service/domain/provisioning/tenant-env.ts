@@ -29,6 +29,8 @@ export type TenantEnvFileParams = {
   stockixAppName?: string;
   stockixLogoUrl?: string;
   stockixPrimaryColor?: string;
+  /** Browser origins allowed for Finance Socket.IO (comma-separated). */
+  socketAllowedOrigins?: string;
 };
 
 /** Signup policy copied from repo root `.env` into each tenant Finance stack. */
@@ -117,6 +119,8 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     REACT_APP_STOCKIX_APP_NAME: params.stockixAppName ?? "",
     REACT_APP_STOCKIX_LOGO_URL: params.stockixLogoUrl ?? "",
     REACT_APP_STOCKIX_PRIMARY_COLOR: params.stockixPrimaryColor ?? "",
+    PUBLIC_BASE_URL: params.baseUrl,
+    SOCKET_ALLOWED_ORIGINS: params.socketAllowedOrigins ?? params.baseUrl,
     THROTTLE_GLOBAL_TTL: String(env.THROTTLE_GLOBAL_TTL),
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),

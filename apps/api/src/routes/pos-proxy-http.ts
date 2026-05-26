@@ -1,3 +1,4 @@
+import { requireEnv } from "../lib/require-env.js";
 import { getPosOrgByStockixTenantId, posProxyJson } from "../pos-proxy.js";
 import type { registerLicenseApi } from "../license-http.js";
 
@@ -128,8 +129,15 @@ export function registerPosProxyRoutes(
   });
 
   app.get("/pos/status", async (c) => {
-    const base = process.env.POS_PLATFORM_BASE_URL ?? "http://localhost:8010";
-    const frontendUrl = process.env.POS_FRONTEND_URL ?? "http://localhost:3001";
+    let base: string;
+    let frontendUrl: string;
+    try {
+      base = requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
+      frontendUrl = requireEnv("POS_FRONTEND_URL", "http://localhost:3001");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ configured: false, error: message }, 503);
+    }
     let reachable = false;
     let pingError: string | undefined;
     try {

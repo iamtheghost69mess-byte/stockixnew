@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { logger } from "./lib/logger.js";
 import * as schema from "@repo/db/schema";
 import type { StockixModule } from "@repo/auth";
 import { logAudit } from "./audit.js";
@@ -111,7 +112,7 @@ export function registerTenantModulesRoutes(app: Hono<ApiEnv>, db: Db | null): v
 
     const correlationId = randomUUID();
     const log = (m: string) => {
-      console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+      logger.info(m, { correlationId });
     };
     const acceptTrace = createProvisionTracer(db, correlationId, () => ({ slug: row.slug }), log);
     await acceptTrace.event("api", `HTTP 202 — add module ${moduleToAdd} accepted`);

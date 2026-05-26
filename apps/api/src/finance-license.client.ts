@@ -1,5 +1,14 @@
 import { apiConfig } from "@repo/config";
-import { isFinanceLicenseSyncOptional } from "../../../infra/worker-service/domain/provisioning/adapters/sync-finance-license.js";
+import { requireEnv } from "./lib/require-env.js";
+
+/** When true, missing secret or HTTP failure is logged but does not throw (development only). */
+function isFinanceLicenseSyncOptional(): boolean {
+  const flag = process.env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
+  if (flag === "1" || flag === "true") {
+    return apiConfig.nodeEnv === "development";
+  }
+  return false;
+}
 import { tenantDeployments } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -159,7 +168,7 @@ export async function resolveTenantInternalBaseUrl(
     return null;
   }
 
-  const host = process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? "127.0.0.1";
+  const host = requireEnv("STOCKIX_FINANCE_INTERNAL_HOST", "127.0.0.1");
   return `http://${host}:${deployment.internalPort}`;
 }
 

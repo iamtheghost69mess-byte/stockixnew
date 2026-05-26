@@ -547,3 +547,7 @@ export const moduleGatingConfig = {
   },
 } as const;
 
+export const licenseConfig = {
+  defaultTermDays: parseInt(process.env.DEFAULT_LICENSE_TERM_DAYS ?? "365", 10),
+} as const;
+

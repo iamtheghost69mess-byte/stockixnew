@@ -47,6 +47,11 @@ export class InternalPosDepositPaymentDto {
   amount: number;
 }
 
+export class InternalPosTenantBodyDto {
+  @IsInt()
+  tenantId: number;
+}
+
 export class InternalPosReceiptPayloadDto {
   @IsInt()
   customerId: number;
@@ -114,11 +119,6 @@ export class CreateInternalPosReceiptDto {
   @ValidateNested()
   @Type(() => InternalPosReceiptPayloadDto)
   payload: InternalPosReceiptPayloadDto;
-}
-
-export class InternalPosTenantBodyDto {
-  @IsInt()
-  tenantId: number;
 }
 
 export class InternalPosCheckDuplicateDto extends InternalPosTenantBodyDto {

@@ -3,6 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
+import { logLine } from "./lib/logger.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 import { insertLicenseHistory } from "./license-utils.js";
 import {
@@ -21,7 +22,7 @@ export async function applyTenantLicenseSuspend(
   db: Db,
   tenantId: string,
   reason: string,
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = logLine,
 ): Promise<void> {
   await db
     .update(tenants)
@@ -75,7 +76,7 @@ export async function applyTenantLicenseSuspend(
 export async function applyTenantLicenseReactivate(
   db: Db,
   tenantId: string,
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = logLine,
 ): Promise<void> {
   await db
     .update(tenants)

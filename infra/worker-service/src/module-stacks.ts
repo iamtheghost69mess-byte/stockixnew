@@ -15,9 +15,10 @@ import * as dbSchema from "@repo/db/schema";
 
 import { tenantDeployments } from "@repo/db/schema";
 
-
+import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
 
 import type { ProvisionTracer } from "../domain/provision-trace.js";
+import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
 
 import {
 
@@ -328,6 +329,7 @@ export async function provisionPosStack(
     POS_PLATFORM_API_KEY: platformApiKey,
     POS_BACKEND_URL: posApiUrl,
     POS_FRONTEND_URL: posUrl,
+    CORS_ORIGINS: buildPosCorsOrigins(opts.slug),
     ROOT_DOMAIN: rootDomain,
     ...(financeInternalBaseUrl
       ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
