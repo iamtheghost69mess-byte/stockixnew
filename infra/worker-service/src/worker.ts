@@ -56,7 +56,18 @@ const healthServer = http.createServer((req, res) => {
   res.writeHead(404);
   res.end();
 });
-healthServer.listen(9090, "0.0.0.0");
+const workerHealthPort = parseInt(process.env.WORKER_HEALTH_PORT ?? "9090", 10);
+healthServer.on("error", (err) => {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "EADDRINUSE") {
+    logger.error(
+      `Worker health port ${workerHealthPort} already in use — run pnpm dev:kill or set WORKER_HEALTH_PORT`,
+      err,
+    );
+  }
+  throw err;
+});
+healthServer.listen(workerHealthPort, "0.0.0.0");
 /** Periodically flip time-expired licenses to status `expired`. */
 const LICENSE_EXPIRE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 let lastLicenseExpireScanMs = 0;

@@ -44,12 +44,31 @@ const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
 /** @param {number} preferred */
 const pick = (preferred) => (strict ? Promise.resolve(preferred) : findFreePort(preferred));
 
-const [apiPort, dashPort, pmsPort, pmsUiPort] = await Promise.all([
-  pick(parseInt(process.env.PORT || "4000", 10)),
+/** @param {number} port */
+async function isApiHealthy(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+const preferredApiPort = parseInt(process.env.PORT || "4000", 10);
+const existingApiPort =
+  !strict && (await isApiHealthy(preferredApiPort)) ? preferredApiPort : null;
+
+const [apiPort, dashPort, pmsPort, pmsUiPort, workerHealthPort] = await Promise.all([
+  existingApiPort != null ? Promise.resolve(existingApiPort) : pick(preferredApiPort),
   pick(parseInt(process.env.DASHBOARD_PORT || "3000", 10)),
   pick(parseInt(process.env.PMS_PORT || "3003", 10)),
   pick(parseInt(process.env.PMS_FRONTEND_PORT || "3004", 10)),
+  pick(parseInt(process.env.WORKER_HEALTH_PORT || "9090", 10)),
 ]);
+
+const reuseExistingApi = existingApiPort != null && apiPort === existingApiPort;
 
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const pmsOrigin = `http://127.0.0.1:${pmsPort}`;
@@ -66,7 +85,18 @@ const sharedEnv = {
   NEXT_PUBLIC_PMS_TENANT_APP_URL: `http://localhost:${pmsUiPort}`,
   STOCKIX_API_URL: apiOrigin,
   NEXT_PUBLIC_STOCKIX_API_URL: apiOrigin,
+  WORKER_HEALTH_PORT: String(workerHealthPort),
+  STOCKIX_DEV_LOCKED_PORT: "1",
 };
+
+if (reuseExistingApi) {
+  console.log(`[dev] Reusing existing API on ${apiOrigin} (skip starting a second instance)\n`);
+} else if (apiPort !== preferredApiPort) {
+  console.warn(
+    `[dev] ⚠ Port ${preferredApiPort} is in use — API will use ${apiOrigin}. Dashboard BFF is aligned.`,
+  );
+  console.warn("[dev] Tip: run `pnpm dev:kill` to free stale processes on port 4000.\n");
+}
 
 console.log("\n[dev] Stockix local stack");
 console.log(`  Dashboard   http://localhost:${dashPort}`);
@@ -89,6 +119,10 @@ const posCmd =
     ? "node -e \"console.log('[dev-pos] skipped (STOCKIX_DEV_SKIP_POS=1)')\""
     : "node scripts/dev-pos-stack.mjs";
 
+const apiCmd = reuseExistingApi
+  ? "node -e \"console.log('[api] reusing existing instance on " + apiOrigin + "')\""
+  : "node scripts/dev-api.mjs";
+
 // Run each service as a plain node script (not turbo --filter) so Windows cmd does not
 // split commands when concurrently is launched with shell: true.
 const concurrentlyArgs = [
@@ -96,7 +130,7 @@ const concurrentlyArgs = [
   "api,dash,worker,pos,pms,pms-ui",
   "-c",
   "blue,cyan,magenta,green,yellow",
-  "node scripts/dev-api.mjs",
+  apiCmd,
   "node scripts/dev-next.mjs",
   "node infra/worker-service/.runtime/worker.js",
   posCmd,

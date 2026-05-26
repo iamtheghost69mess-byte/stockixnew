@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findFreePort } from "./find-free-port.mjs";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
+import { waitForHttp } from "./wait-for-http.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
@@ -16,6 +17,26 @@ const dashboardDir = path.join(repoRoot, "apps", "dashboard");
 const preferred = parseInt(process.env.DASHBOARD_PORT || "3000", 10);
 const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
 const port = strict ? preferred : await findFreePort(preferred);
+
+const apiHealthUrl =
+  process.env.STOCKIX_API_URL?.replace(/\/$/, "") ??
+  process.env.NEXT_PUBLIC_STOCKIX_API_URL?.replace(/\/$/, "") ??
+  "http://127.0.0.1:4000";
+
+try {
+  await waitForHttp(`${apiHealthUrl}/health`, {
+    timeoutMs: parseInt(process.env.STOCKIX_DEV_API_WAIT_MS || "120000", 10),
+    label: `API (${apiHealthUrl})`,
+  });
+} catch (error) {
+  console.error(
+    `[dashboard] ${error instanceof Error ? error.message : String(error)}`,
+  );
+  console.error(
+    "[dashboard] Start the API first, or free port 4000 if a stale process holds it (`pnpm dev:kill`).",
+  );
+  process.exit(1);
+}
 
 if (port !== preferred) {
   console.warn(
@@ -50,7 +71,7 @@ const nextDevArgs = [
 // Invoke Next directly — avoids Windows ENOENT when pnpm is only available as pnpm.ps1.
 const child = spawn(process.execPath, [nextBin, ...nextDevArgs], {
   cwd: dashboardDir,
-  env: { ...process.env, PORT: String(port) },
+  env: { ...process.env, DASHBOARD_PORT: String(port) },
   stdio: "inherit",
   shell: false,
 });

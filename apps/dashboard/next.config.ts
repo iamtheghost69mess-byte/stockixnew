@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveAlias: reactAliases,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { dev, isServer }) => {
     // Client bundle only — aliasing react on the server breaks react-server exports
     // and causes "Invalid hook call" / null dispatcher in layout-router.
     if (!isServer) {
@@ -39,6 +39,20 @@ const nextConfig: NextConfig = {
       config.resolve.alias = {
         ...config.resolve.alias,
         ...reactAliases,
+      };
+    }
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/.next/**",
+          "**/infra/**",
+          "**/services/**",
+        ],
+        aggregateTimeout: 300,
+        poll: false,
       };
     }
     return config;

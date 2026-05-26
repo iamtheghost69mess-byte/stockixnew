@@ -1,6 +1,7 @@
 /**
  * Find the first available TCP port starting at `preferred`.
- * Used by local dev scripts when the default port is already in use.
+ * Probes the same bind addresses dev servers use (0.0.0.0 / ::), not only 127.0.0.1,
+ * so Windows does not report a false "free" when Next/worker hold :::port.
  */
 import net from "node:net";
 import path from "node:path";
@@ -8,18 +9,35 @@ import { fileURLToPath } from "node:url";
 
 /**
  * @param {number} port
+ * @param {string} host
  * @returns {Promise<boolean>}
  */
-export function isPortFree(port) {
+function isPortFreeOnHost(port, host) {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.unref();
-    server.once("error", () => resolve(false));
+    server.once("error", (err) => {
+      const code = /** @type {NodeJS.ErrnoException} */ (err).code;
+      if (code === "EADDRNOTAVAIL" || code === "EAFNOSUPPORT") {
+        resolve(true);
+        return;
+      }
+      resolve(false);
+    });
     server.once("listening", () => {
       server.close(() => resolve(true));
     });
-    server.listen(port, "127.0.0.1");
+    server.listen(port, host);
   });
+}
+
+/**
+ * @param {number} port
+ * @returns {Promise<boolean>}
+ */
+export async function isPortFree(port) {
+  if (!(await isPortFreeOnHost(port, "0.0.0.0"))) return false;
+  return isPortFreeOnHost(port, "::");
 }
 
 /**

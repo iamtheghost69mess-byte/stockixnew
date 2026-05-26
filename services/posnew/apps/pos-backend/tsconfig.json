@@ -6,10 +6,13 @@
     "outDir": "./dist",
     "rootDir": "./",
     "strict": false,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["**/*.ts", "middlewares/**/*.js", "utils/**/*.js"],
+  "include": ["**/*.js", "middlewares/**/*.js", "utils/**/*.js"],
   "exclude": ["node_modules", "dist", "tests"]
 }

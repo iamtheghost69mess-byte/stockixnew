@@ -4,6 +4,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "node scripts/dev-stockix.mjs",
+    "dev:kill": "node scripts/dev-kill-stale.mjs",
     "dev:all": "pnpm dev",
     "dev:apps": "turbo run dev --filter=dashboard --filter=api",
     "dev:pms": "node scripts/dev-pms.mjs",
