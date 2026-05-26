@@ -114,7 +114,7 @@ RUN pnpm --filter @stockix/utils run build \
 
 FROM build-migration AS migration
 USER root
-RUN apk add --no-cache bash git \
+RUN apk add --no-cache bash git mariadb-client \
   && git clone --depth 1 https://github.com/vishnubob/wait-for-it.git /wait-for-it
 WORKDIR /app/packages/server
 CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./dist/cli.js", "system:migrate:latest"]
