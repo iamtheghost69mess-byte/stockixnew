@@ -165,4 +165,25 @@ describe("License expiry email", () => {
       }),
     );
   });
+
+  it("uses milestone idempotency key when milestoneDays provided", async () => {
+    const licenseId = "lic-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const expiresAt = new Date("2026-06-01T00:00:00.000Z");
+    const db = createTenantSelectMock([
+      { name: "Milestone Corp", adminEmail: "m@corp.test" },
+    ]);
+
+    await sendLicenseExpiringEmailForTenant(db, tenantId, {
+      expiresAt,
+      gracePeriodDays: 7,
+      licenseId,
+      milestoneDays: 7,
+    });
+
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: `license-expiring/${licenseId}/7`,
+      }),
+    );
+  });
 });

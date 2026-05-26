@@ -2,6 +2,7 @@ import { licenses } from "@repo/db/schema";
 import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { LICENSE_EXPIRY_MILESTONE_DAYS } from "./license-constants.js";
 import { insertLicenseHistory } from "./license-utils.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 import { suspendPosOrgForLicense } from "./pos-license-sync.js";
@@ -9,7 +10,9 @@ import {
   sendLicenseExpiredEmailForTenant,
   sendLicenseExpiringEmailForTenant,
 } from "./mail/send.js";
-import { hasRecentNotification } from "./notification-service.js";
+import {
+  hasLicenseExpiryMilestoneNotification,
+} from "./notification-service.js";
 import { notifyLicenseForTenant } from "./notification-helpers.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -20,6 +23,24 @@ export type ExpiredLicenseRow = {
   expiresAt: Date | null;
   gracePeriodDays: number;
 };
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/** Whole days from `now` until `expiresAt` (minimum 0). */
+export function daysUntilExpiry(expiresAt: Date, now: Date): number {
+  return Math.max(
+    0,
+    Math.ceil((expiresAt.getTime() - now.getTime()) / MS_PER_DAY),
+  );
+}
+
+/** Milestone day count when `daysLeft` matches a configured milestone, else null. */
+export function pickExpiryMilestone(daysLeft: number): number | null {
+  for (const milestone of LICENSE_EXPIRY_MILESTONE_DAYS) {
+    if (daysLeft === milestone) return milestone;
+  }
+  return null;
+}
 
 /**
  * After licenses are marked expired: sync finance, send expiry email, warn soon-to-expire.
@@ -136,6 +157,10 @@ async function processPostGracePosSuspensions(
 }
 
 async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
+  const maxMilestone = Math.max(...LICENSE_EXPIRY_MILESTONE_DAYS);
+  const horizon = new Date(now);
+  horizon.setDate(horizon.getDate() + maxMilestone);
+
   const candidates = await db
     .select({
       id: licenses.id,
@@ -151,47 +176,46 @@ async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
         isNotNull(licenses.tenantId),
         isNotNull(licenses.expiresAt),
         gte(licenses.expiresAt, now),
+        lte(licenses.expiresAt, horizon),
       ),
     );
 
   for (const license of candidates) {
     if (!license.tenantId || !license.expiresAt) continue;
 
-    const warningWindowEnd = new Date(now);
-    warningWindowEnd.setDate(warningWindowEnd.getDate() + 30);
-    if (license.expiresAt > warningWindowEnd) continue;
+    const daysLeft = daysUntilExpiry(license.expiresAt, now);
+    const milestoneDays = pickExpiryMilestone(daysLeft);
+    if (milestoneDays == null) continue;
+
+    const alreadyNotified = await hasLicenseExpiryMilestoneNotification(db, {
+      licenseId: license.id,
+      milestoneDays,
+    });
+    if (alreadyNotified) continue;
 
     try {
       await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
         expiresAt: license.expiresAt,
         gracePeriodDays: license.gracePeriodDays ?? 7,
         licenseId: license.id,
+        milestoneDays,
       });
     } catch (err) {
       console.error(
-        "[expireDueLicenses] Warning email failed",
+        "[expireDueLicenses] Milestone email failed",
         license.tenantId,
+        milestoneDays,
         err,
       );
     }
 
-    const alreadyNotified = await hasRecentNotification(db, {
-      type: "license.expiring",
+    notifyLicenseForTenant(db, {
+      tenantId: license.tenantId,
       licenseId: license.id,
-      withinHours: 24,
+      type: "license.expiring",
+      body: `License expires in ${milestoneDays} day${milestoneDays === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
+      daysLeft: milestoneDays,
+      milestoneDays,
     });
-    if (!alreadyNotified) {
-      const daysLeft = Math.max(
-        1,
-        Math.ceil((license.expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
-      );
-      notifyLicenseForTenant(db, {
-        tenantId: license.tenantId,
-        licenseId: license.id,
-        type: "license.expiring",
-        body: `License expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
-        daysLeft,
-      });
-    }
   }
 }

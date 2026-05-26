@@ -2,6 +2,7 @@
  * Next.js dev with automatic port fallback when the preferred port is busy.
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findFreePort } from "./find-free-port.mjs";
@@ -29,9 +30,15 @@ if (port !== preferred) {
 const useWebpack = process.env.STOCKIX_NEXT_TURBOPACK !== "1";
 console.log(`[dashboard] dev bundler: ${useWebpack ? "webpack" : "turbopack"}`);
 
-const nextArgs = [
-  "exec",
-  "next",
+const nextBin = path.join(dashboardDir, "node_modules", "next", "dist", "bin", "next");
+if (!existsSync(nextBin)) {
+  console.error(
+    "[dashboard] next not found. Run `pnpm install` from the repo root, then retry.",
+  );
+  process.exit(1);
+}
+
+const nextDevArgs = [
   "dev",
   "--hostname",
   "127.0.0.1",
@@ -40,11 +47,11 @@ const nextArgs = [
   ...(useWebpack ? ["--webpack"] : ["--turbopack"]),
 ];
 
-const child = spawn("pnpm", nextArgs, {
+// Invoke Next directly — avoids Windows ENOENT when pnpm is only available as pnpm.ps1.
+const child = spawn(process.execPath, [nextBin, ...nextDevArgs], {
   cwd: dashboardDir,
   env: { ...process.env, PORT: String(port) },
   stdio: "inherit",
-  // shell:true on Windows can drop forwarded args to pnpm; keep false for reliable --webpack.
   shell: false,
 });
 

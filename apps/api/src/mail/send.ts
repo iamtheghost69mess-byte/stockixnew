@@ -234,6 +234,8 @@ export async function sendLicenseExpiringEmail(opts: {
   tenantName: string;
   tenantId: string;
   expiresAt: Date;
+  licenseId?: string;
+  milestoneDays?: number;
 }): Promise<MailSendResult> {
   const daysRemaining = Math.max(
     0,
@@ -242,6 +244,10 @@ export async function sendLicenseExpiringEmail(opts: {
     ),
   );
   const expiryDay = opts.expiresAt.toISOString().split("T")[0];
+  const idempotencyKey =
+    opts.licenseId != null && opts.milestoneDays != null
+      ? `license-expiring/${opts.licenseId}/${opts.milestoneDays}`
+      : `license-expiring/${opts.tenantId}/${expiryDay}`;
 
   const result = await sendMail({
     to: opts.to,
@@ -251,7 +257,7 @@ export async function sendLicenseExpiringEmail(opts: {
       expiresAt: opts.expiresAt,
       daysRemaining,
     }),
-    idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`,
+    idempotencyKey,
     templateKey: "license-expiring",
     tenantId: opts.tenantId,
   });
@@ -370,7 +376,12 @@ export async function sendLicenseExpiredEmailForTenant(
 export async function sendLicenseExpiringEmailForTenant(
   db: MailDb,
   tenantId: string,
-  opts: { expiresAt: Date; gracePeriodDays: number; licenseId?: string },
+  opts: {
+    expiresAt: Date;
+    gracePeriodDays: number;
+    licenseId?: string;
+    milestoneDays?: number;
+  },
 ): Promise<void> {
   try {
     const [tenant] = await db
@@ -389,11 +400,14 @@ export async function sendLicenseExpiringEmailForTenant(
       return;
     }
 
+    const licenseIdForMail = opts.licenseId;
     const result = await sendLicenseExpiringEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
       tenantId,
       expiresAt: opts.expiresAt,
+      licenseId: licenseIdForMail,
+      milestoneDays: opts.milestoneDays,
     });
 
     const license =
@@ -410,6 +424,9 @@ export async function sendLicenseExpiringEmailForTenant(
         newValues: {
           to: tenant.adminEmail,
           expiresAt: opts.expiresAt.toISOString(),
+          ...(opts.milestoneDays != null
+            ? { milestoneDays: opts.milestoneDays }
+            : {}),
         },
       });
     }

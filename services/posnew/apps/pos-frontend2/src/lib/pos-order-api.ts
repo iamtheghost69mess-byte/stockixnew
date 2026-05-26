@@ -155,6 +155,7 @@ export async function posCreateOrder(body: {
   items: Partial<PosOrderLine>[];
   orderStatus?: string;
   bills?: { total: number; tax: number; serviceChargeRate?: number; serviceChargeAmount?: number; totalWithTax: number };
+  offlineSyncKey?: string;
 }) {
   return posApiJson<PosOrder>("/api/order/", {
     method: "POST",
@@ -168,6 +169,7 @@ export async function posCreateOrder(body: {
       orderStatus: body.orderStatus ?? "pending",
       table: body.table,
       items: body.items,
+      ...(body.offlineSyncKey ? { offlineSyncKey: body.offlineSyncKey } : {}),
     }),
   });
 }

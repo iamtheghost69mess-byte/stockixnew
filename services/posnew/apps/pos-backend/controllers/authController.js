@@ -70,7 +70,7 @@ async function assertOrganizationActiveForUser(user, requestId) {
   if (!user || !user.organization) return;
   const oid = user.organization._id || user.organization;
   const org = await Organization.findById(oid)
-    .select("timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt")
+    .select("timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt lifecycle")
     .lean();
   if (!org) {
     const err = new Error("Organization not found.");
@@ -475,7 +475,7 @@ const acceptInvitation = async (req, res, next) => {
     if (!inv) return next(createHttpError(404, "Invitation not found."));
 
     const invOrg = await Organization.findById(inv.organization)
-      .select("timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt")
+      .select("timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt lifecycle")
       .lean();
     if (!invOrg) {
       return next(createHttpError(403, "Organization not found."));

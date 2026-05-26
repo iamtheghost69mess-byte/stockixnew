@@ -1,6 +1,7 @@
 import {
   enqueueOfflineMutation,
   listOfflineMutations,
+  makeOfflineSyncKey,
   markOfflineMutationAttempt,
   type OfflineMutation,
   removeOfflineMutation,
@@ -23,8 +24,10 @@ export async function persistPosCheckToServer(): Promise<void> {
 
   if (!activeOrderId) {
     if (!cart.length) return;
+    const offlineSyncKey = makeOfflineSyncKey();
     const bodyArgs = {
       table: tableId,
+      offlineSyncKey,
       items: cart.map((c) => ({
         menuItem: c.menuItem,
         quantity: c.quantity,
@@ -40,7 +43,11 @@ export async function persistPosCheckToServer(): Promise<void> {
     lastSentPayloadStr = signature;
 
     if (typeof window !== "undefined" && !navigator.onLine) {
-      await enqueueOfflineMutation("create_order", bodyArgs as Record<string, unknown>, `create:${tableId}`);
+      await enqueueOfflineMutation(
+        "create_order",
+        bodyArgs as Record<string, unknown>,
+        `create:${tableId}:${offlineSyncKey}`,
+      );
       return;
     }
 
@@ -51,7 +58,11 @@ export async function persistPosCheckToServer(): Promise<void> {
       }
       return;
     } catch {
-      await enqueueOfflineMutation("create_order", bodyArgs as Record<string, unknown>, `create:${tableId}`);
+      await enqueueOfflineMutation(
+        "create_order",
+        bodyArgs as Record<string, unknown>,
+        `create:${tableId}:${offlineSyncKey}`,
+      );
       return;
     }
   }
@@ -85,7 +96,10 @@ export async function persistPosCheckToServer(): Promise<void> {
 
 async function processMutation(mutation: OfflineMutation): Promise<void> {
   if (mutation.kind === "create_order") {
-    await posCreateOrder(mutation.payload as Parameters<typeof posCreateOrder>[0]);
+    const res = await posCreateOrder(mutation.payload as Parameters<typeof posCreateOrder>[0]);
+    if (res.data && typeof res.data === "object") {
+      usePosOrderStore.getState().replaceCartFromPopulatedOrder(res.data);
+    }
     return;
   }
 

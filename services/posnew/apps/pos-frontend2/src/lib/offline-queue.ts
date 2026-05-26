@@ -27,6 +27,11 @@ function makeId() {
   return `m_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
+/** Stable idempotency key for offline order creates (stored on Order.offlineSyncKey). */
+export function makeOfflineSyncKey(): string {
+  return makeId();
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (!isBrowser()) return reject(new Error("IndexedDB unavailable"));

@@ -505,6 +505,21 @@ const addOrder = async (req, res, next) => {
       }
     }
 
+    if (body.offlineSyncKey) {
+      const syncKey = String(body.offlineSyncKey).trim();
+      const dup = await Order.findOne({
+        organization: req.tenantOrganizationId,
+        offlineSyncKey: syncKey,
+      }).lean();
+      if (dup) {
+        const populated = await Order.findById(dup._id)
+          .populate("table", "tableNo name")
+          .populate("items.menuItem", "name priceUsd priceLbp");
+        return res.status(200).json(populated);
+      }
+      body.offlineSyncKey = syncKey;
+    }
+
     const order = new Order(body);
     await recalcOrderTotals(order);
     const initialSt = normalizeOrderStatus(order.orderStatus);

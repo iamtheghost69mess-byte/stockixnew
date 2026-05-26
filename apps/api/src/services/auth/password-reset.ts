@@ -29,7 +29,10 @@ export async function requestOwnerPasswordReset(
     ipAddress?: string | null;
     userAgent?: string | null;
   },
-): Promise<ApiServiceResult<{ ok: true }>> {
+): Promise<
+  ApiServiceResult<{ ok: true; emailSent?: boolean; mailConfigured: boolean; mailStatus?: string }>
+> {
+  const mailConfigured = isMailConfigured();
   const email = input.email.trim().toLowerCase();
   const [owner] = await db
     .select({
@@ -44,7 +47,7 @@ export async function requestOwnerPasswordReset(
     .limit(1);
 
   if (!owner?.passwordHash || owner.status !== "active") {
-    return { success: true, data: { ok: true } };
+    return { success: true, data: { ok: true, mailConfigured } };
   }
 
   const { raw, hash } = generatePasswordResetToken();
@@ -108,7 +111,10 @@ export async function requestOwnerPasswordReset(
     },
   });
 
-  return { success: true, data: { ok: true } };
+  return {
+    success: true,
+    data: { ok: true, emailSent, mailConfigured, mailStatus },
+  };
 }
 
 export async function completeOwnerPasswordReset(
