@@ -88,6 +88,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=1
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json ./
 COPY packages/server/package.json ./packages/server/
+COPY packages/shared/package.json ./packages/shared/
 COPY shared/bigcapital-utils/package.json ./shared/bigcapital-utils/
 COPY shared/email-components/package.json ./shared/email-components/
 COPY shared/pdf-templates/package.json ./shared/pdf-templates/
@@ -104,6 +105,7 @@ RUN corepack enable \
 # -----------------------------------------------------------------------------
 FROM deps AS build-migration
 COPY --chown=node:node ./packages/server ./packages/server
+COPY --chown=node:node ./packages/shared ./packages/shared
 COPY --chown=node:node ./shared ./shared
 RUN pnpm --filter @stockix/utils run build \
   && pnpm --filter @stockix/pdf-templates run build \
@@ -122,6 +124,7 @@ CMD ["/bin/bash", "/wait-for-it/wait-for-it.sh", "mysql:3306", "--", "node", "./
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
+COPY --chown=node:node ./packages/shared ./packages/shared
 COPY --chown=node:node ./shared ./shared
 RUN pnpm --filter @stockix/utils run build \
   && pnpm --filter @stockix/pdf-templates run build \
