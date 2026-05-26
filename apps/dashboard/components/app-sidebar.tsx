@@ -16,13 +16,15 @@ import {
 } from "lucide-react";
 
 import { Logo } from "@/components/logo";
+import { MeContext } from "@/components/me-provider";
 import { NavDocuments, type NavDocumentItem } from "@/components/nav-documents";
 import { NavMain, type NavMainItem } from "@/components/nav-main";
 import { NavSecondary, type NavSecondaryItem } from "@/components/nav-secondary";
 import { NavUser, type NavUserAccount } from "@/components/nav-user";
 import { useMe } from "@/hooks/use-me";
-import { useHasPermission } from "@/hooks/use-permissions";
+import { useMounted } from "@/hooks/use-mounted";
 import { usePosNavVisible } from "@/hooks/use-pos-nav";
+import { hasPermission } from "@repo/shared/permissions";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
   Sidebar,
@@ -35,18 +37,27 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const initialFromServer = React.useContext(MeContext);
   const { me } = useMe();
+  const mounted = useMounted();
   const posNavVisible = usePosNavVisible();
-  const canReadTenants = useHasPermission("tenants.read");
-  const canReadLicenses = useHasPermission("licenses.read");
+
+  // SSR + first paint: use server session so nav items match layout auth.
+  const effectiveMe = mounted ? me : (initialFromServer ?? me);
+  const perms = effectiveMe?.permissions ?? [];
+  const can = (permission: string) => hasPermission(perms, permission);
+  const showPosNav = mounted && posNavVisible;
+
+  const canReadTenants = can("tenants.read");
+  const canReadLicenses = can("licenses.read");
   const canReadPlans =
-    useHasPermission("plans.read") || Boolean(me?.capabilities.canReadPlans);
-  const canManageOwners = useHasPermission("owners.manage");
-  const canAudit = useHasPermission("audit.read");
-  const canEmailLogs = useHasPermission("email_logs.read");
-  const canApiKeys = useHasPermission("api_keys.manage");
-  const canSettings = useHasPermission("settings.access");
-  const canRoles = useHasPermission("roles.manage");
+    can("plans.read") || can("plans.manage") || Boolean(effectiveMe?.capabilities.canReadPlans);
+  const canManageOwners = can("owners.manage");
+  const canAudit = can("audit.read");
+  const canEmailLogs = can("email_logs.read");
+  const canApiKeys = can("api_keys.manage");
+  const canSettings = can("settings.access");
+  const canRoles = can("roles.manage");
 
   const navMain = React.useMemo((): NavMainItem[] => {
     const items: NavMainItem[] = [
@@ -73,7 +84,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             },
           ]
         : []),
-      ...(posNavVisible
+      ...(showPosNav
         ? [
             {
               title: "POS",
@@ -152,7 +163,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     canApiKeys,
     canRoles,
     canSettings,
-    posNavVisible,
+    showPosNav,
   ]);
 
   const documents = React.useMemo((): NavDocumentItem[] => {
@@ -168,23 +179,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const secondary = React.useMemo((): NavSecondaryItem[] => [], []);
 
-  const userAccount: NavUserAccount | null = me
+  const userAccount: NavUserAccount | null = effectiveMe
     ? {
-        name: me.name,
-        email: me.email,
-        roleLabel: ROLE_LABELS[me.role as Role] ?? me.role,
-        canAccessSettings: me.capabilities.canAccessSettings,
+        name: effectiveMe.name,
+        email: effectiveMe.email,
+        roleLabel: ROLE_LABELS[effectiveMe.role as Role] ?? effectiveMe.role,
+        canAccessSettings: effectiveMe.capabilities.canAccessSettings,
       }
     : null;
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="offcanvas" suppressHydrationWarning {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               className="data-[slot=sidebar-menu-button]:p-1.5!"
               tooltip="Stockix — home"
+              suppressHydrationWarning
               render={<Link href="/" />}
             >
               <Logo className="h-5 w-auto shrink-0 text-sidebar-foreground" />

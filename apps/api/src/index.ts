@@ -639,6 +639,15 @@ app.onError((err, c) => {
       503,
     );
   }
+  if (message.includes('relation "email_logs" does not exist')) {
+    return c.json(
+      {
+        error: "schema_outdated",
+        message: "Database is missing email_logs. From the repo root run: pnpm db:migrate",
+      },
+      503,
+    );
+  }
   return c.json({ error: "internal_error", message: "An unexpected error occurred." }, 500);
 });
 

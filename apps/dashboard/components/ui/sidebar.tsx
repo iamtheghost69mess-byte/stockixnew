@@ -539,7 +539,9 @@ function SidebarMenuButton({
 
   return (
     <Tooltip>
-      {comp}
+      <span suppressHydrationWarning className="contents">
+        {comp}
+      </span>
       <TooltipContent
         side="right"
         align="center"

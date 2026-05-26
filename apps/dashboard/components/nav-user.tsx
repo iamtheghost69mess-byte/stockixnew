@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { resetMeCache } from "@/hooks/use-me";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,7 @@ export function NavUser({ user }: { user: NavUserAccount }) {
 
   async function performLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    resetMeCache();
     setLogoutConfirmOpen(false);
     router.push("/login");
     router.refresh();

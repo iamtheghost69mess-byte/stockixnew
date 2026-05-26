@@ -4,8 +4,10 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useMe } from "@/hooks/use-me";
 import { useHasAnyPermission } from "@/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type RouteRule = {
   prefix: string;
@@ -38,10 +40,21 @@ function requiredPermissionsForPath(pathname: string): string[] | null {
 export function DashboardRouteGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const required = requiredPermissionsForPath(pathname);
+  const { loading } = useMe();
   const allowed = useHasAnyPermission(required ?? ["*"]);
 
   if (!required || allowed) {
     return <>{children}</>;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-3 py-8">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-full max-w-lg" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   return (

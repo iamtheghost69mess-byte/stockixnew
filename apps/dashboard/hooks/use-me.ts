@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { permissionsForRoleSlug } from "@repo/shared/permissions";
+
+import { MeContext } from "@/components/me-provider";
 
 export type Me = {
   id: string;
@@ -23,21 +26,38 @@ export type Me = {
 let cachedMe: Me | null = null;
 let inFlight: Promise<Me | null> | null = null;
 
+export function resetMeCache(): void {
+  cachedMe = null;
+  inFlight = null;
+}
+
+function normalizeMe(raw: Me): Me {
+  const permissions =
+    raw.permissions && raw.permissions.length > 0
+      ? raw.permissions
+      : [...permissionsForRoleSlug(raw.role)];
+  return { ...raw, permissions };
+}
+
+function isValidMe(raw: Me | undefined): raw is Me {
+  return Boolean(raw?.id && raw.role && raw.email && raw.name);
+}
+
 async function fetchMe(): Promise<Me | null> {
   if (inFlight) return inFlight;
-  inFlight = fetch("/api/me")
+  inFlight = fetch("/api/me", { credentials: "same-origin" })
     .then(async (r) => {
       if (!r.ok) {
         cachedMe = null;
         return null;
       }
       const payload = (await r.json()) as { me?: Me };
-      if (payload.me?.id && payload.me.role && payload.me.email && payload.me.name) {
-        cachedMe = payload.me;
-        return cachedMe;
+      if (!isValidMe(payload.me)) {
+        cachedMe = null;
+        return null;
       }
-      cachedMe = null;
-      return null;
+      cachedMe = normalizeMe(payload.me);
+      return cachedMe;
     })
     .catch(() => {
       cachedMe = null;
@@ -50,22 +70,30 @@ async function fetchMe(): Promise<Me | null> {
 }
 
 export function useMe(): { me: Me | null; loading: boolean } {
-  // Avoid stale module cache snapshots across logout/login transitions.
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialFromServer = useContext(MeContext);
+  const seeded = initialFromServer !== undefined ? initialFromServer : cachedMe;
+  const [me, setMe] = useState<Me | null>(
+    seeded ? normalizeMe(seeded) : null,
+  );
+  const [loading, setLoading] = useState(seeded == null);
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
     void fetchMe().then((data) => {
-      if (mounted) {
+      if (!mounted) return;
+      if (data) {
         setMe(data);
-        setLoading(false);
+      } else if (seeded) {
+        setMe(normalizeMe(seeded));
+      } else {
+        setMe(null);
       }
+      setLoading(false);
     });
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount; seed is initial snapshot only
   }, []);
 
   return { me, loading };

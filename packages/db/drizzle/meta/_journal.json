@@ -278,22 +278,78 @@
     {
       "idx": 39,
       "version": "7",
+      "when": 1780850000000,
+      "tag": "0038_one_active_license_per_tenant",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780860000000,
+      "tag": "0039_licenses_max_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780870000000,
+      "tag": "0040_licenses_status_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
       "when": 1780900000000,
       "tag": "0041_owner_notifications",
       "breakpoints": true
     },
     {
-      "idx": 40,
+      "idx": 43,
       "version": "7",
       "when": 1781000000000,
       "tag": "0042_owner_notifications_owner_created_idx",
       "breakpoints": true
     },
     {
-      "idx": 41,
+      "idx": 44,
+      "version": "7",
+      "when": 1781050000000,
+      "tag": "0043_email_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1781060000000,
+      "tag": "0044_platform_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1781070000000,
+      "tag": "0045_tenants_org_scope_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781080000000,
+      "tag": "0046_stxi_license",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
       "version": "7",
       "when": 1781100000000,
       "tag": "0047_partial_failure_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1781120000000,
+      "tag": "0048_organizations_pos_organization_id",
       "breakpoints": true
     }
   ]
