@@ -15,6 +15,7 @@ import {
 
 import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import { useMe } from "@/hooks/use-me";
+import { useHasPermission } from "@/hooks/use-permissions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,26 +32,42 @@ function KpiCard(props: {
   subtitle: string;
   value: number;
   valueClassName?: string;
-  href: string;
+  href?: string;
   loading: boolean;
 }) {
   const { title, subtitle, value, valueClassName, href, loading } = props;
-  return (
-    <Link href={href} className="block min-h-0 rounded-xl outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
-      <Card className="h-full transition-colors hover:bg-muted/30">
-        <CardHeader className="pb-2">
-          <p className="text-sm text-muted-foreground">{title}</p>
-        </CardHeader>
-        <CardContent className="space-y-1 pt-0">
-          {loading ? (
-            <Skeleton className="h-9 w-16" />
-          ) : (
-            <p className={cn("text-3xl font-bold tabular-nums", valueClassName)}>{value}</p>
-          )}
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
+  const card = (
+    <Card
+      className={cn(
+        "h-full",
+        href ? "transition-colors hover:bg-muted/30" : undefined,
+      )}
+    >
+      <CardHeader className="pb-2">
+        <p className="text-sm text-muted-foreground">{title}</p>
+      </CardHeader>
+      <CardContent className="space-y-1 pt-0">
+        {loading ? (
+          <Skeleton className="h-9 w-16" />
+        ) : (
+          <p className={cn("text-3xl font-bold tabular-nums", valueClassName)}>{value}</p>
+        )}
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+        {href ? (
           <p className="pt-1 text-xs text-muted-foreground/80">View details →</p>
-        </CardContent>
-      </Card>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+  if (!href) {
+    return <div className="block min-h-0 rounded-xl">{card}</div>;
+  }
+  return (
+    <Link
+      href={href}
+      className="block min-h-0 rounded-xl outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {card}
     </Link>
   );
 }
@@ -75,6 +92,8 @@ function KpiSkeletonGrid() {
 
 export function DashboardHome() {
   const { me } = useMe();
+  const canReadTenants = useHasPermission("tenants.read");
+  const canReadLicenses = useHasPermission("licenses.read");
   const { tenants, licenses, isLoading, error, refetch } = useDashboardStats();
 
   const hour = new Date().getHours();
@@ -123,7 +142,7 @@ export function DashboardHome() {
               title="Total tenants"
               subtitle="All customer organizations"
               value={tenants.total}
-              href="/tenants"
+              href={canReadTenants ? "/tenants" : undefined}
               loading={false}
             />
             <KpiCard
@@ -131,7 +150,7 @@ export function DashboardHome() {
               subtitle="Stacks running and reachable"
               value={tenants.active}
               valueClassName="text-emerald-600 dark:text-emerald-400"
-              href="/tenants?status=active"
+              href={canReadTenants ? "/tenants?status=active" : undefined}
               loading={false}
             />
             <KpiCard
@@ -139,7 +158,7 @@ export function DashboardHome() {
               subtitle="Stacks stopped"
               value={tenants.suspended}
               valueClassName="text-yellow-600 dark:text-yellow-400"
-              href="/tenants?status=suspended"
+              href={canReadTenants ? "/tenants?status=suspended" : undefined}
               loading={false}
             />
             <KpiCard
@@ -147,7 +166,7 @@ export function DashboardHome() {
               subtitle="Provisioning or runtime failures"
               value={tenants.failed}
               valueClassName={tenants.failed > 0 ? "text-destructive" : undefined}
-              href="/tenants?status=failed"
+              href={canReadTenants ? "/tenants?status=failed" : undefined}
               loading={false}
             />
           </div>
@@ -156,7 +175,7 @@ export function DashboardHome() {
               title="Total licenses"
               subtitle="All license rows"
               value={licenses.total}
-              href="/licenses"
+              href={canReadLicenses ? "/licenses" : undefined}
               loading={false}
             />
             <KpiCard
@@ -164,14 +183,14 @@ export function DashboardHome() {
               subtitle="Assigned and in good standing"
               value={licenses.active}
               valueClassName="text-emerald-600 dark:text-emerald-400"
-              href="/licenses?status=active"
+              href={canReadLicenses ? "/licenses?status=active" : undefined}
               loading={false}
             />
             <KpiCard
               title="Unassigned licenses"
               subtitle="Ready to assign to a tenant"
               value={licenses.unassigned}
-              href="/licenses?status=unassigned"
+              href={canReadLicenses ? "/licenses?status=unassigned" : undefined}
               loading={false}
             />
             <KpiCard
@@ -181,7 +200,7 @@ export function DashboardHome() {
               valueClassName={
                 licenses.expiringIn30Days > 0 ? "text-amber-600 dark:text-amber-400" : undefined
               }
-              href="/licenses?expiring=true"
+              href={canReadLicenses ? "/licenses?expiring=true" : undefined}
               loading={false}
             />
           </div>

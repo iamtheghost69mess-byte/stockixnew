@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
+import { useNavIsActive } from "@/hooks/use-nav-active";
 import { cn } from "@/lib/utils";
 
 const PMS_LINKS = [
@@ -31,7 +31,7 @@ export function PmsPageShell({
   description?: string;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
+  const isNavActive = useNavIsActive();
 
   return (
     <div className="w-full space-y-6">
@@ -66,11 +66,14 @@ export function PmsPageShell({
       </div>
       <nav className="flex flex-wrap gap-2 border-b pb-3">
         {PMS_LINKS.map((link) => {
-          const isActive = "exact" in link && link.exact ? pathname === link.href : pathname.startsWith(link.href);
+          const isActive = isNavActive(link.href, {
+            exact: "exact" in link && link.exact,
+          });
           return (
             <Link
               key={link.href}
               href={link.href}
+              suppressHydrationWarning
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 isActive

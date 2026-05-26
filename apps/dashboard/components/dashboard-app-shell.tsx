@@ -8,6 +8,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { DashboardRouteGuard } from "@/components/dashboard-route-guard";
 import { MailHealthBanner } from "@/components/mail-health-banner";
+import { MeProvider } from "@/components/me-provider";
+import type { Me } from "@/hooks/use-me";
 
 const ROUTE_TITLES: Record<string, string> = {
   "/": "Overview",
@@ -64,11 +66,18 @@ function getPageTitle(pathname: string): string {
   return "Dashboard";
 }
 
-export function DashboardAppShell({ children }: { children: React.ReactNode }) {
+export function DashboardAppShell({
+  children,
+  initialMe = null,
+}: {
+  children: React.ReactNode;
+  initialMe?: Me | null;
+}) {
   const pathname = usePathname();
   const title = getPageTitle(pathname);
 
   return (
+    <MeProvider initialMe={initialMe ?? null}>
     <SidebarProvider
       style={
         {
@@ -91,5 +100,6 @@ export function DashboardAppShell({ children }: { children: React.ReactNode }) {
         </div>
       </SidebarInset>
     </SidebarProvider>
+    </MeProvider>
   );
 }

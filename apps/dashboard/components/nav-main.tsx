@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
+import { useNavIsActive } from "@/hooks/use-nav-active";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -19,7 +19,7 @@ export type NavMainItem = {
 };
 
 export function NavMain({ items }: { items: NavMainItem[] }) {
-  const pathname = usePathname();
+  const isNavActive = useNavIsActive();
 
   return (
     <SidebarGroup>
@@ -27,15 +27,13 @@ export function NavMain({ items }: { items: NavMainItem[] }) {
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
-            const isActive =
-              item.url === "/"
-                ? pathname === "/"
-                : pathname === item.url || pathname.startsWith(`${item.url}/`);
+            const isActive = isNavActive(item.url, { exact: item.url === "/" });
             return (
               <SidebarMenuItem key={item.url}>
                 <SidebarMenuButton
                   tooltip={item.title}
                   isActive={isActive}
+                  suppressHydrationWarning
                   render={<Link href={item.url} />}
                 >
                   {item.icon}
