@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const triggerFinanceMock = vi.fn().mockResolvedValue(undefined);
-const suspendPosMock = vi.fn().mockResolvedValue(undefined);
-const reactivatePosMock = vi.fn().mockResolvedValue(undefined);
-const syncPosFromLicenseMock = vi.fn().mockResolvedValue(undefined);
+const suspendPosMock = vi.fn().mockResolvedValue({ ok: true });
+const reactivatePosMock = vi.fn().mockResolvedValue({ ok: true });
+const syncPosFromLicenseMock = vi.fn().mockResolvedValue({ ok: true });
 
 vi.mock("../src/license-finance-sync.js", () => ({
   triggerFinanceLicenseSync: (...args: unknown[]) => triggerFinanceMock(...args),

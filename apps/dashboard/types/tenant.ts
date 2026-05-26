@@ -73,6 +73,7 @@ export type TenantDetail = {
     publicUrl: string | null;
     financeAdminPassword: string | null;
     lastError: string | null;
+    partialFailureKind: "pos_failed" | "wire_failed" | null;
     registrationCompletedAt: string | null;
     createdAt: string;
     updatedAt: string;

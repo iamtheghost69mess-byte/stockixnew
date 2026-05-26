@@ -497,7 +497,9 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       return next(createHttpError(400, "Invalid organization id."));
     }
     const org = await Organization.findById(orgId)
-      .select("isBootstrapped lifecycle slug name provisioningSteps timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt")
+      .select(
+        "isBootstrapped lifecycle slug name provisioningSteps timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt licenseKey licenseKeyFormat stockixTenantId scopedLocationId acceptStkxUntil",
+      )
       .lean();
     if (!org) return next(createHttpError(404, "Organization not found."));
     const adminCount = await User.countDocuments({
@@ -506,12 +508,39 @@ const getOrgProvisioningStatus = async (req, res, next) => {
     });
     const accessState = getOrganizationAccessState(org);
     const lifecycleActive = String(org.lifecycle || "active").toLowerCase() === "active";
+
+    let licenseKeyValidForDefaultLocation = true;
+    const signingSecret =
+      config.licenseSigningSecret || process.env.LICENSE_SIGNING_SECRET || "";
+    if (org.licenseKey && signingSecret) {
+      const { assertLicenseKeyForLocation } = require("../services/stxiLicenseValidate");
+      let defaultLocationId = org.scopedLocationId
+        ? String(org.scopedLocationId)
+        : null;
+      if (!defaultLocationId) {
+        const firstLoc = await Location.findOne({ organization: orgId })
+          .select("_id")
+          .sort({ createdAt: 1 })
+          .lean();
+        defaultLocationId = firstLoc?._id ? String(firstLoc._id) : null;
+      }
+      const keyCheck = assertLicenseKeyForLocation({
+        licenseKey: org.licenseKey,
+        stockixTenantId: org.stockixTenantId || config.stockixTenantId,
+        locationId: defaultLocationId,
+        signingSecret,
+        acceptStkxUntil: org.acceptStkxUntil,
+      });
+      licenseKeyValidForDefaultLocation = keyCheck.ok;
+    }
+
     const readyForPinLogin =
       lifecycleActive &&
       accessState.status === "active" &&
       !accessState.blocked &&
       org.isBootstrapped === true &&
-      adminCount > 0;
+      adminCount > 0 &&
+      licenseKeyValidForDefaultLocation;
     const payload = {
       organizationId: String(orgId),
       slug: org.slug,
@@ -521,6 +550,7 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       adminUserCount: adminCount,
       hasAdminUser: adminCount > 0,
       readyForPinLogin,
+      licenseKeyValidForDefaultLocation,
       provisioningSteps: org.provisioningSteps || [],
     };
     if (readyForPinLogin) {
@@ -951,6 +981,34 @@ const patchOrgLicense = async (req, res, next) => {
       org.licenseEndsAt = r.date;
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "licenseKey")) {
+      const rawKey = body.licenseKey;
+      org.licenseKey =
+        rawKey == null || String(rawKey).trim() === "" ? null : String(rawKey).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "licenseKeyFormat")) {
+      const rawFmt = body.licenseKeyFormat;
+      org.licenseKeyFormat =
+        rawFmt == null || String(rawFmt).trim() === "" ? null : String(rawFmt).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "stockixTenantId")) {
+      const rawTenant = body.stockixTenantId;
+      org.stockixTenantId =
+        rawTenant == null || String(rawTenant).trim() === ""
+          ? ""
+          : String(rawTenant).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "scopedLocationId")) {
+      const rawLoc = body.scopedLocationId;
+      org.scopedLocationId =
+        rawLoc == null || String(rawLoc).trim() === "" ? null : String(rawLoc).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "acceptStkxUntil")) {
+      const r = parseLicenseDateValue(body.acceptStkxUntil, "acceptStkxUntil");
+      if (r.error) return next(createHttpError(400, r.error));
+      org.acceptStkxUntil = r.date;
+    }
+
     await org.save();
     await OrgAccessCache.invalidateOrgAccessCache(org._id);
     const nextAccessState = getOrganizationAccessState(org);
@@ -979,6 +1037,9 @@ const patchOrgLicense = async (req, res, next) => {
       metadata: {
         licenseStartsAt: org.licenseStartsAt,
         licenseEndsAt: org.licenseEndsAt,
+        licenseKeyFormat: org.licenseKeyFormat ?? null,
+        scopedLocationId: org.scopedLocationId ?? null,
+        hasLicenseKey: Boolean(org.licenseKey),
       },
     });
     res.json({ success: true, data: withOrganizationAccessState(org) });

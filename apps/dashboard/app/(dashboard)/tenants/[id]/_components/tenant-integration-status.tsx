@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, Loader2, RotateCw } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
@@ -25,6 +25,7 @@ export function TenantIntegrationStatus({
   onTenantReload,
 }: TenantIntegrationStatusProps) {
   const [repairingFinanceLink, setRepairingFinanceLink] = useState(false);
+  const autoRepairAttempted = useRef(false);
 
   const tenantModules = tenant.modules ?? [];
   const hasAccountingAndPos =
@@ -57,6 +58,21 @@ export function TenantIntegrationStatus({
       setRepairingFinanceLink(false);
     }
   };
+
+  useEffect(() => {
+    if (autoRepairAttempted.current) return;
+    if (!hasAccountingAndPos) return;
+    const dep = tenant.deployment;
+    if (!dep || dep.status !== "active") return;
+    if (dep.financeTenantId != null && dep.financeTenantId > 0) return;
+    autoRepairAttempted.current = true;
+    void repairFinanceLink();
+  }, [
+    hasAccountingAndPos,
+    tenant.deployment?.financeTenantId,
+    tenant.deployment?.status,
+    tenant.id,
+  ]);
 
   if (!hasAccountingAndPos) {
     return null;

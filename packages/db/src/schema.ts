@@ -187,6 +187,8 @@ export const tenantDeployments = pgTable(
     /** MongoDB URL scoped to the tenant stack (e.g. mongodb://mongo/stockix). */
     mongoUrl: text("mongo_url").notNull(),
     lastError: text("last_error"),
+    /** When tenant.status is partial: pos_failed | wire_failed */
+    partialFailureKind: text("partial_failure_kind"),
     registrationCompletedAt: timestamp("registration_completed_at", {
       withTimezone: true,
     }),

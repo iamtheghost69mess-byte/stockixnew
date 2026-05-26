@@ -1,9 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { createCipheriv, randomBytes } from "node:crypto";
 import { execa } from "execa";
 
 import { apiConfig, posConfig } from "@repo/config";
+import { encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
 import { allocateOrganizationNumber, allocateTenantPort } from "@repo/db";
 import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -32,6 +32,11 @@ import {
 } from "../domain/provisioning/adapters/copy-coa-across-stacks.js";
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
+import { completeFinanceSetupWizard } from "../domain/provisioning/adapters/complete-finance-setup-wizard.js";
+import {
+  clearTenantPartialState,
+  markTenantPartial,
+} from "../domain/provisioning/partial-provision.js";
 import { getLicenseExpiry, getPlanLimits } from "../../../apps/api/src/license-utils.js";
 import { sendPosWelcomeEmail } from "../../../apps/api/src/mail/send.js";
 import {
@@ -261,13 +266,27 @@ async function persistFinanceDeploymentIds(
     .where(eq(tenantDeployments.id, deploymentId));
 }
 
-function encryptDeploymentSecret(plaintext: string): string {
-  const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+function encryptDeploymentSecretLocal(plaintext: string): string {
+  return encryptDeploymentSecret(plaintext, apiConfig.deploymentSecretKey);
+}
+
+async function resolvePosBackendHostPort(slug: string): Promise<number | null> {
+  const project = `stockix-pos-${slug}`;
+  try {
+    const { stdout } = await execa("docker", [
+      "compose",
+      "-p",
+      project,
+      "port",
+      "pos-backend",
+      "8010",
+    ]);
+    const match = stdout.trim().match(/:(\d+)\s*$/);
+    if (!match?.[1]) return null;
+    return Number(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 import { loadProvisionJournalState } from "./provision-journal.js";
@@ -500,6 +519,136 @@ export async function executeProvisionRuntime(
     assertProvisionModuleEnv(licensedModulesEarly);
     const posOnlyRetry =
       input.retryModules?.length === 1 && input.retryModules[0] === "pos";
+    const wireOnlyRetry =
+      input.retryModules?.length === 1 && input.retryModules[0] === "wire";
+
+    if (wireOnlyRetry) {
+      const [existing] = await db
+        .select({
+          tenantId: tenants.id,
+          tenantModules: tenants.modules,
+          deploymentId: tenantDeployments.id,
+          internalPort: tenantDeployments.internalPort,
+          composeProjectName: tenantDeployments.composeProjectName,
+          financeTenantId: tenantDeployments.financeTenantId,
+          financeDefaultWarehouseId: tenantDeployments.financeDefaultWarehouseId,
+          financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
+          financeCashAccountId: tenantDeployments.financeCashAccountId,
+          financeCardAccountId: tenantDeployments.financeCardAccountId,
+          posOrganizationId: tenantDeployments.posOrganizationId,
+          posUrl: tenantDeployments.posUrl,
+        })
+        .from(tenants)
+        .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+        .where(eq(tenants.slug, input.slug))
+        .limit(1);
+      if (!existing) {
+        throw new Error(`tenant_not_found:${input.slug}`);
+      }
+      tenantId = existing.tenantId;
+      deploymentId = existing.deploymentId;
+      port = existing.internalPort;
+      const retryLicensedModules = resolveTenantModules(
+        parseTenantModulesJson(existing.tenantModules),
+      );
+      if (!hasAccountingAndPos(retryLicensedModules)) {
+        throw new Error("wire_only_retry_requires_accounting_and_pos_modules");
+      }
+      const posOrgId = existing.posOrganizationId?.trim();
+      const posHostPort = await resolvePosBackendHostPort(input.slug);
+      if (
+        !posOrgId
+        || !posHostPort
+        || !existing.financeTenantId
+        || existing.financeTenantId <= 0
+        || !existing.financeWalkInCustomerId
+        || !port
+        || !existing.financeCashAccountId
+        || !existing.financeCardAccountId
+      ) {
+        throw new Error("wire_only_retry_missing_prerequisites");
+      }
+      await checkNotCancelled();
+      const workerInternalUrl =
+        port > 0
+          ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
+          : undefined;
+      let retryServiceChargeItemId: number | undefined;
+      let retryDiscountItemId: number | undefined;
+      const internalApiSecret = apiConfig.internalApiSecret?.trim() ?? "";
+      if (workerInternalUrl && internalApiSecret) {
+        try {
+          const seeded = await seedFinancePosDefaults({
+            internalBaseUrl: workerInternalUrl,
+            internalApiSecret,
+            financeTenantId: existing.financeTenantId,
+            correlationId,
+            log,
+          });
+          retryServiceChargeItemId = seeded.serviceChargeItemId;
+          retryDiscountItemId = seeded.discountItemId;
+        } catch (seedErr) {
+          const seedMsg = seedErr instanceof Error ? seedErr.message : String(seedErr);
+          log(`[provision][pos] bridge item seed skipped on wire retry: ${seedMsg}`);
+        }
+      }
+      const wireResult = await runWirePosIntegrationStep({
+        licensedModules: retryLicensedModules,
+        slug: input.slug,
+        posOrganizationId: posOrgId,
+        posHostPort,
+        financeInternalPort: port,
+        workerInternalUrl,
+        financeTenantId: existing.financeTenantId,
+        walkInCustomerId: existing.financeWalkInCustomerId,
+        cashAccountId: existing.financeCashAccountId,
+        cardAccountId: existing.financeCardAccountId,
+        serviceChargeItemId: retryServiceChargeItemId,
+        discountItemId: retryDiscountItemId,
+        financeDefaultWarehouseId: existing.financeDefaultWarehouseId ?? undefined,
+        log,
+        trace,
+        markOp,
+        hasOp,
+        forceRerun: true,
+      });
+      if (!wireResult.ok) {
+        await markTenantPartial(db, {
+          tenantId,
+          kind: "wire_failed",
+          lastError: wireResult.error,
+        });
+        return {
+          ok: true,
+          tenantId,
+          deploymentId,
+          composeProjectName: existing.composeProjectName,
+          internalPort: port,
+          baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+          oneTimeAdminPassword: oneTimeAdminPassword!,
+          posStatus: "ok",
+          posError: wireResult.error,
+          tenantStatus: "partial",
+          posOrganizationId: posOrgId,
+          posUrl: existing.posUrl ?? undefined,
+        };
+      }
+      await clearTenantPartialState(db, tenantId, "active");
+      log(`[provision] Wire-only retry success slug=${input.slug}`);
+      return {
+        ok: true,
+        tenantId,
+        deploymentId,
+        composeProjectName: existing.composeProjectName,
+        internalPort: port,
+        baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
+        oneTimeAdminPassword: oneTimeAdminPassword!,
+        posStatus: "ok",
+        tenantStatus: "active",
+        posOrganizationId: posOrgId,
+        posUrl: existing.posUrl ?? undefined,
+      };
+    }
 
     if (posOnlyRetry) {
       const [existing] = await db
@@ -608,22 +757,26 @@ export async function executeProvisionRuntime(
           if (!wireResult.ok) {
             tenantStatus = "partial";
             wireError = wireResult.error;
+            await markTenantPartial(db, {
+              tenantId,
+              kind: "wire_failed",
+              lastError: wireError,
+            });
           } else {
+            await clearTenantPartialState(db, tenantId, "active");
             await trace.event("progress", "Integration re-wired on retry", {
               meta: { operationKey: "tenant.wire_pos_integration" },
             });
           }
+        } else if (tenantStatus === "active") {
+          await clearTenantPartialState(db, tenantId, "active");
         }
 
-        await db
-          .update(tenants)
-          .set({ status: tenantStatus })
-          .where(eq(tenants.id, tenantId));
         await db
           .update(tenantDeployments)
           .set({
             status: "active",
-            lastError: wireError ?? null,
+            ...(wireError ? {} : { lastError: null, partialFailureKind: null }),
             updatedAt: new Date(),
             ...(posOutcome.posOrganizationId
               ? { posOrganizationId: posOutcome.posOrganizationId }
@@ -631,6 +784,9 @@ export async function executeProvisionRuntime(
             ...(posOutcome.posUrl ? { posUrl: posOutcome.posUrl } : {}),
           })
           .where(eq(tenantDeployments.tenantId, tenantId));
+        if (tenantStatus === "partial" && !wireError) {
+          await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
+        }
         log(`[provision] POS-only retry success slug=${input.slug}`);
         return {
           ok: true,
@@ -650,11 +806,11 @@ export async function executeProvisionRuntime(
         };
       }
       const posError = posOutcome.posError ?? "POS provisioning failed";
-      await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
-      await db
-        .update(tenantDeployments)
-        .set({ status: "active", lastError: posError, updatedAt: new Date() })
-        .where(eq(tenantDeployments.tenantId, tenantId));
+      await markTenantPartial(db, {
+        tenantId,
+        kind: "pos_failed",
+        lastError: posError,
+      });
       return {
         ok: true,
         tenantId,
@@ -704,9 +860,9 @@ export async function executeProvisionRuntime(
         status: "provisioning",
         composeProjectName: project,
         internalPort: allocated,
-        mysqlPassword: encryptDeploymentSecret(dbPassword),
-        mysqlRootPassword: encryptDeploymentSecret(dbRootPassword),
-        jwtSecret: encryptDeploymentSecret(jwtSecret),
+        mysqlPassword: encryptDeploymentSecretLocal(dbPassword),
+        mysqlRootPassword: encryptDeploymentSecretLocal(dbRootPassword),
+        jwtSecret: encryptDeploymentSecretLocal(jwtSecret),
         mongoUrl: mongoUrlPersisted,
       }).returning({ id: tenantDeployments.id });
       deploymentId = dRow!.id;
@@ -1169,6 +1325,24 @@ export async function executeProvisionRuntime(
           },
         );
         log("[provision] step done: tenant.build_organization");
+        if (
+          financeTenantId
+          && internalUrl
+          && !hasOp("tenant.complete_setup_wizard")
+        ) {
+          const setupResult = await completeFinanceSetupWizard({
+            internalBaseUrl: internalUrl,
+            financeTenantId,
+            log,
+          });
+          if (setupResult.ok) {
+            await markOp("tenant.complete_setup_wizard", "Setup wizard marked complete", {
+              financeTenantId,
+            });
+          } else {
+            log(`[provision] setup wizard complete skipped: ${setupResult.error}`);
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await trace.event(
@@ -1400,6 +1574,25 @@ export async function executeProvisionRuntime(
       );
     }
 
+    let forceWireRerun = wireOnlyRetry;
+    if (tenantId) {
+      const [partialRow] = await db
+        .select({
+          tenantStatus: tenants.status,
+          partialFailureKind: tenantDeployments.partialFailureKind,
+        })
+        .from(tenants)
+        .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (
+        partialRow?.tenantStatus === "partial"
+        && partialRow.partialFailureKind === "wire_failed"
+      ) {
+        forceWireRerun = true;
+      }
+    }
+
     const posOutcome = await runPosProvisionStep({
       licensedModules,
       slug: input.slug,
@@ -1446,15 +1639,16 @@ export async function executeProvisionRuntime(
           trace,
           markOp,
           hasOp,
+          forceRerun: forceWireRerun,
         });
         if (!wireResult.ok) {
           const wireError = wireResult.error;
           if (hasAccountingAndPos(licensedModules) && tenantId) {
-            await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
-            await db
-              .update(tenantDeployments)
-              .set({ status: "active", lastError: wireError, updatedAt: new Date() })
-              .where(eq(tenantDeployments.tenantId, tenantId));
+            await markTenantPartial(db, {
+              tenantId,
+              kind: "wire_failed",
+              lastError: wireError,
+            });
             log(
               `[provision] Finance+POS active but integration wire failed — tenant partial slug=${input.slug}`,
             );
@@ -1489,11 +1683,11 @@ export async function executeProvisionRuntime(
     if (posOutcome.posStatus === "failed" && tenantId) {
       const posError = posOutcome.posError ?? "POS provisioning failed";
       if (hasAccountingAndPos(licensedModules)) {
-        await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, tenantId));
-        await db
-          .update(tenantDeployments)
-          .set({ status: "active", lastError: posError, updatedAt: new Date() })
-          .where(eq(tenantDeployments.tenantId, tenantId));
+        await markTenantPartial(db, {
+          tenantId,
+          kind: "pos_failed",
+          lastError: posError,
+        });
         log(`[provision] Finance active, POS failed — tenant marked partial slug=${input.slug}`);
         return {
           ok: true,
@@ -1834,11 +2028,11 @@ export async function executeAddModuleRuntime(
         hasOp: () => false,
       });
       if (!wireResult.ok) {
-        await db.update(tenants).set({ status: "partial" }).where(eq(tenants.id, input.tenantId));
-        await db
-          .update(tenantDeployments)
-          .set({ lastError: wireResult.error, updatedAt: new Date() })
-          .where(eq(tenantDeployments.tenantId, input.tenantId));
+        await markTenantPartial(db, {
+          tenantId: input.tenantId,
+          kind: "wire_failed",
+          lastError: wireResult.error,
+        });
         return {
           ok: true,
           module: "pos",

@@ -11,15 +11,19 @@ vi.mock("../src/license-finance-sync.js", () => ({
   triggerFinanceLicenseSync: vi.fn().mockResolvedValue(undefined),
 }));
 
-const suspendPosMock = vi.fn().mockResolvedValue(undefined);
-const reactivatePosMock = vi.fn().mockResolvedValue(undefined);
-const syncPosFromLicenseMock = vi.fn().mockResolvedValue(undefined);
+const suspendPosMock = vi.fn().mockResolvedValue({ ok: true });
+const reactivatePosMock = vi.fn().mockResolvedValue({ ok: true });
+const syncPosFromLicenseMock = vi.fn().mockResolvedValue({ ok: true });
 
 vi.mock("../src/pos-license-sync.js", () => ({
   suspendPosOrgForLicense: (...args: unknown[]) => suspendPosMock(...args),
   reactivatePosOrgForLicense: (...args: unknown[]) => reactivatePosMock(...args),
   syncPosOrgLicenseFromLicense: (...args: unknown[]) => syncPosFromLicenseMock(...args),
   syncPosOrgLicenseWindow: vi.fn(),
+  posSyncResultToStatus: (result: { ok: boolean }, hasTenant: boolean) => {
+    if (!hasTenant) return "skipped";
+    return result.ok ? "ok" : "failed";
+  },
 }));
 
 vi.mock("../src/license-utils.js", async (importOriginal) => {
@@ -114,12 +118,61 @@ describe("license suspend/reactivate", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { suspended?: boolean };
+    const body = (await res.json()) as { suspended?: boolean; posSync?: string };
     expect(body.suspended).toBe(true);
+    expect(body.posSync).toBe("ok");
     expect(suspendPosMock).toHaveBeenCalledWith(db, tenantId, "billing_hold");
     },
     15_000,
   );
+
+  it("POST /licenses/:id/suspend reports posSync failed when POS proxy fails", async () => {
+    suspendPosMock.mockResolvedValueOnce({ ok: false, error: "HTTP 502" });
+    const { db } = createSuspendDb("active");
+    const { registerLicenseApi } = await import("../src/license-http.js");
+    const app = new Hono();
+    registerLicenseApi(app, db);
+
+    const res = await app.request(`http://local/licenses/${licenseId}/suspend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      posSync?: string;
+      errors?: string[];
+    };
+    expect(body.posSync).toBe("failed");
+    expect(body.errors?.some((e) => e.startsWith("pos:"))).toBe(true);
+  });
+
+  it("POST /licenses/:id/suspend returns 502 when LICENSE_SYNC_STRICT and POS fails", async () => {
+    const prev = process.env.LICENSE_SYNC_STRICT;
+    process.env.LICENSE_SYNC_STRICT = "1";
+    suspendPosMock.mockResolvedValueOnce({ ok: false, error: "HTTP 502" });
+    try {
+      const { db } = createSuspendDb("active");
+      const { registerLicenseApi } = await import("../src/license-http.js");
+      const app = new Hono();
+      registerLicenseApi(app, db);
+
+      const res = await app.request(`http://local/licenses/${licenseId}/suspend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(502);
+      const body = (await res.json()) as { error?: string; posSync?: string };
+      expect(body.error).toBe("license_sync_failed");
+      expect(body.posSync).toBe("failed");
+    } finally {
+      if (prev === undefined) delete process.env.LICENSE_SYNC_STRICT;
+      else process.env.LICENSE_SYNC_STRICT = prev;
+    }
+  });
 
   it("POST /licenses/:id/reactivate sets status active and reactivates POS", async () => {
     const { db } = createSuspendDb("suspended");

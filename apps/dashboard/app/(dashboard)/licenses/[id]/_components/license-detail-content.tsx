@@ -89,12 +89,21 @@ export function LicenseDetailContent({ license: L, page }: LicenseDetailContentP
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason: suspendReason || undefined }),
     });
+    const body = (await res.json().catch(() => ({}))) as {
+      posSync?: string;
+      errors?: string[];
+    };
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as unknown;
       toast.error(formatApiError(body, "Suspend failed"));
       return;
     }
-    toast.success("License suspended");
+    if (body.posSync === "failed" || (body.errors?.length ?? 0) > 0) {
+      toast.warning(
+        "License suspended in Stockix, but POS sync failed. Check POS connectivity or errors in the response.",
+      );
+    } else {
+      toast.success("License suspended");
+    }
     setSuspendOpen(false);
     setSuspendReason("");
     void load();

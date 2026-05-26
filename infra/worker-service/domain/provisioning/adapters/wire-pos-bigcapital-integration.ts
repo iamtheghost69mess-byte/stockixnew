@@ -103,6 +103,21 @@ export async function wirePosBigcapitalIntegration(
     );
   }
 
+  try {
+    const body = JSON.parse(text) as {
+      success?: boolean;
+      data?: { bigcapitalIntegrationEnabled?: boolean };
+    };
+    if (body?.data?.bigcapitalIntegrationEnabled !== true) {
+      throw new Error("wire_pos_integration_verify:integration_not_enabled");
+    }
+  } catch (parseErr) {
+    if (parseErr instanceof Error && parseErr.message.startsWith("wire_pos")) {
+      throw parseErr;
+    }
+    throw new Error(`wire_pos_integration_verify:invalid_response:${text.slice(0, 120)}`);
+  }
+
   input.log("[provision][pos] Bigcapital integration wired successfully");
   return { wired: true, internalBaseUrl };
 }

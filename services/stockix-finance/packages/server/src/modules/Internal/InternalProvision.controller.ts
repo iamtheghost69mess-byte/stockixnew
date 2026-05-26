@@ -11,6 +11,7 @@ import { PublicRoute } from '@/modules/Auth/guards/jwt.guard';
 import { TenantAgnosticRoute } from '@/modules/Tenancy/TenancyGlobal.guard';
 import { InternalSecretGuard } from './guards/InternalSecret.guard';
 import { ProvisionUserService } from './commands/ProvisionUser.service';
+import { InternalCompleteOrganizationSetupService } from './commands/InternalCompleteOrganizationSetup.service';
 import {
   ProvisionUserDto,
   ProvisionUserRole,
@@ -21,7 +22,10 @@ import {
 @PublicRoute()
 @TenantAgnosticRoute()
 export class InternalProvisionController {
-  constructor(private readonly provisionUserService: ProvisionUserService) {}
+  constructor(
+    private readonly provisionUserService: ProvisionUserService,
+    private readonly internalCompleteOrganizationSetupService: InternalCompleteOrganizationSetupService,
+  ) {}
 
   /**
    * Internal user provisioning (replaces public /api/auth/register for workers).
@@ -57,6 +61,18 @@ export class InternalProvisionController {
     }
 
     return this.provisionUserService.provisionUser(dto);
+  }
+
+  @Post('/organization/setup/complete')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(InternalSecretGuard)
+  async completeOrganizationSetup(@Body() body: Record<string, unknown>) {
+    const tenantIdRaw = body.tenantId ?? body.tenant_id;
+    const tenantId = Number(tenantIdRaw);
+    if (!Number.isFinite(tenantId) || tenantId <= 0) {
+      throw new Error('tenant_id_required');
+    }
+    return this.internalCompleteOrganizationSetupService.executeForTenantId(tenantId);
   }
 
   private parseRole(value: unknown): ProvisionUserRole {

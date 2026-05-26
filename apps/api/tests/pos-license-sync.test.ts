@@ -39,7 +39,12 @@ describe("suspendPosOrgForLicense", () => {
     posProxyJson.mockResolvedValueOnce({ status: 200, data: { success: true } });
     vi.resetModules();
     const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
-    await suspendPosOrgForLicense(buildDb(["accounting", "pos"], posOrgId), tenantId, "license_revoked");
+    const result = await suspendPosOrgForLicense(
+      buildDb(["accounting", "pos"], posOrgId),
+      tenantId,
+      "license_revoked",
+    );
+    expect(result).toEqual({ ok: true });
     expect(posProxyJson).toHaveBeenCalledWith(
       `/organizations/${encodeURIComponent(posOrgId)}/suspend`,
       "POST",
@@ -57,8 +62,25 @@ describe("suspendPosOrgForLicense", () => {
   it("skips when pos organization is not linked", async () => {
     vi.resetModules();
     const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
-    await suspendPosOrgForLicense(buildDb(["pos"], null), tenantId, "license_expired");
+    const result = await suspendPosOrgForLicense(
+      buildDb(["pos"], null),
+      tenantId,
+      "license_expired",
+    );
+    expect(result).toEqual({ ok: true });
     expect(posProxyJson).not.toHaveBeenCalled();
+  });
+
+  it("returns error when POS suspend proxy fails", async () => {
+    posProxyJson.mockResolvedValueOnce({ status: 502, data: { message: "bad gateway" } });
+    vi.resetModules();
+    const { suspendPosOrgForLicense } = await import("../src/pos-license-sync.js");
+    const result = await suspendPosOrgForLicense(
+      buildDb(["pos"], posOrgId),
+      tenantId,
+      "license_suspended",
+    );
+    expect(result).toEqual({ ok: false, error: "bad gateway" });
   });
 });
 
@@ -147,6 +169,61 @@ describe("reactivatePosOrgForLicense", () => {
       `/organizations/${encodeURIComponent(posOrgId)}/lifecycle`,
       "PATCH",
       { lifecycle: "active", lifecycleReasonCode: "license_reactivated" },
+    );
+  });
+});
+
+describe("syncPosOrgLicenseMetadata", () => {
+  const tenantId = "11111111-1111-1111-1111-111111111111";
+  const posOrgId = "507f1f77bcf86cd799439011";
+
+  beforeEach(() => {
+    posProxyJson.mockReset();
+  });
+
+  function buildDb(modules: string[], posOrganizationId: string | null) {
+    return {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          leftJoin: vi.fn(() => ({
+            where: vi.fn(() => ({
+              limit: vi.fn(async () => [
+                {
+                  modules: JSON.stringify(modules),
+                  posOrganizationId,
+                },
+              ]),
+            })),
+          })),
+        })),
+      })),
+    } as unknown as PostgresJsDatabase<typeof schema>;
+  }
+
+  it("patches license key metadata to POS org", async () => {
+    posProxyJson.mockResolvedValueOnce({ status: 200, data: { success: true } });
+    vi.resetModules();
+    const { syncPosOrgLicenseMetadata } = await import("../src/pos-license-sync.js");
+    const result = await syncPosOrgLicenseMetadata(
+      buildDb(["pos"], posOrgId),
+      tenantId,
+      {
+        licenseKey: "STXI-A1B2C3D4-439011-ABCDEF",
+        stockixTenantId: tenantId,
+        licenseKeyFormat: "stxi",
+        scopedLocationId: "507f1f77bcf86cd799439012",
+      },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(posProxyJson).toHaveBeenCalledWith(
+      `/organizations/${encodeURIComponent(posOrgId)}/license`,
+      "PATCH",
+      expect.objectContaining({
+        licenseKey: "STXI-A1B2C3D4-439011-ABCDEF",
+        stockixTenantId: tenantId,
+        licenseKeyFormat: "stxi",
+        scopedLocationId: "507f1f77bcf86cd799439012",
+      }),
     );
   });
 });

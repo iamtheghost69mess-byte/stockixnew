@@ -60,13 +60,13 @@ export async function applyTenantLicenseSuspend(
     );
   }
 
-  await suspendPosOrgForLicense(db, tenantId, reason, log).catch((err) => {
-    log(
-      `[tenant-license] POS suspend failed (non-fatal): ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-  });
+  const posResult = await suspendPosOrgForLicense(db, tenantId, reason, log);
+  if (!posResult.ok) {
+    log(`[tenant-license] POS suspend failed: ${posResult.error}`);
+    if (process.env.LICENSE_SYNC_STRICT === "1") {
+      throw new Error(`pos: ${posResult.error}`);
+    }
+  }
 }
 
 /**
@@ -110,20 +110,20 @@ export async function applyTenantLicenseReactivate(
     });
 
     const updated = { ...lic, status: "active" as const };
-    await syncPosOrgLicenseFromLicense(db, tenantId, updated, log).catch((err) => {
-      log(
-        `[tenant-license] POS license window sync failed (non-fatal): ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    });
-    await reactivatePosOrgForLicense(db, tenantId, log).catch((err) => {
-      log(
-        `[tenant-license] POS reactivate failed (non-fatal): ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    });
+    const windowResult = await syncPosOrgLicenseFromLicense(db, tenantId, updated, log);
+    if (!windowResult.ok) {
+      log(`[tenant-license] POS license window sync failed: ${windowResult.error}`);
+      if (process.env.LICENSE_SYNC_STRICT === "1") {
+        throw new Error(`pos: ${windowResult.error}`);
+      }
+    }
+    const reactivateResult = await reactivatePosOrgForLicense(db, tenantId, log);
+    if (!reactivateResult.ok) {
+      log(`[tenant-license] POS reactivate failed: ${reactivateResult.error}`);
+      if (process.env.LICENSE_SYNC_STRICT === "1") {
+        throw new Error(`pos: ${reactivateResult.error}`);
+      }
+    }
   }
 
   try {

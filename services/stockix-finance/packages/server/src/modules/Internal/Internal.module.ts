@@ -18,6 +18,7 @@ import { AttachUserToTenantService } from './commands/AttachUserToTenant.service
 import { InternalActivateWarehousesService } from './commands/InternalActivateWarehouses.service';
 import { InternalSeedPosDefaultsService } from './commands/InternalSeedPosDefaults.service';
 import { ProvisionUserService } from './commands/ProvisionUser.service';
+import { InternalCompleteOrganizationSetupService } from './commands/InternalCompleteOrganizationSetup.service';
 import { SyncLicenseService } from './commands/SyncLicense.service';
 import { InternalUsersService } from './commands/InternalUsers.service';
 import { InternalSecretGuard } from './guards/InternalSecret.guard';
@@ -50,6 +51,7 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     InternalResolveTenantService,
     AttachUserToTenantService,
     ProvisionUserService,
+    InternalCompleteOrganizationSetupService,
     SyncLicenseService,
     InternalUsersService,
     InternalPosReceiptsService,
