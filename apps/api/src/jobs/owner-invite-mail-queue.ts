@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { owners } from "@repo/db/schema";
 import { z } from "zod";
+import { infraConfig } from "@repo/config";
 
 import { logLine } from "../lib/logger.js";
 import { logAudit } from "../audit.js";
@@ -33,7 +34,7 @@ export const OWNER_INVITE_MAIL_JOB_OPTIONS = {
 let queue: Queue<OwnerInviteMailJob> | null = null;
 
 function redisConnection() {
-  const url = process.env.CONTROL_PLANE_REDIS_URL?.trim();
+  const url = infraConfig.controlPlaneRedisUrl?.trim();
   if (!url) return null;
   return { url };
 }

@@ -6,6 +6,7 @@ import {
 import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
+import { infraConfig } from "@repo/config";
 
 import { logger } from "../lib/logger.js";
 import { resolveAndPersistFinanceTenantId } from "../finance-tenant-resolve.js";
@@ -112,7 +113,7 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
 }
 
 export function startStuckProvisioningReconciler(db: Db): void {
-  const intervalMs = Number(process.env.PROVISION_RECONCILE_INTERVAL_MS ?? 60_000);
+  const intervalMs = infraConfig.provisionReconcileIntervalMs;
   const tick = async () => {
     try {
       await reconcileStuckProvisioning(db);
