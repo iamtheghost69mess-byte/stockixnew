@@ -14,6 +14,7 @@ import { OrgSwitcher } from "@/components/org-switcher";
 import TenantOrgAccessPanel from "@/components/tenant-org-access-panel";
 import TenantUsersPanel from "@/components/tenant-users-panel";
 
+import { TenantBrandingPanel } from "./_components/tenant-branding-panel";
 import { TenantDangerZone } from "./_components/tenant-danger-zone";
 import { TenantFinanceCredentials } from "./_components/tenant-finance-credentials";
 import { TenantInfrastructureCard } from "./_components/tenant-infrastructure-card";
@@ -162,6 +163,8 @@ export default function TenantDetailPage() {
           posOrgHref={posOrgHref}
           onTenantReload={loadTenant}
         />
+
+        <TenantBrandingPanel tenantId={id} />
       </div>
 
       <div className="mt-6">

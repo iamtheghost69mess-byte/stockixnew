@@ -14,6 +14,24 @@ export function StockixLogo({
   height = 37,
   ...props
 }: StockixLogoProps) {
+  const logoUrl = process.env.REACT_APP_STOCKIX_LOGO_URL?.trim();
+  const appName = process.env.REACT_APP_STOCKIX_APP_NAME?.trim() || 'Stockix';
+
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={appName}
+        className={className}
+        style={{
+          width: typeof width === 'number' ? width : width,
+          height: typeof height === 'number' ? height : height,
+          objectFit: 'contain',
+        }}
+      />
+    );
+  }
+
   return (
     <svg
       data-icon="stockix"

@@ -26,9 +26,10 @@ export type TenantEnvFileParams = {
   stockixTenantId?: string;
   stockixApiUrl?: string;
   internalApiSecret?: string;
+  stockixAppName?: string;
+  stockixLogoUrl?: string;
+  stockixPrimaryColor?: string;
 };
-
-import { apiConfig } from "@repo/config";
 
 /** Signup policy copied from repo root `.env` into each tenant Finance stack. */
 export function buildTenantSignupEnv(): {
@@ -113,6 +114,9 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
+    REACT_APP_STOCKIX_APP_NAME: params.stockixAppName ?? "",
+    REACT_APP_STOCKIX_LOGO_URL: params.stockixLogoUrl ?? "",
+    REACT_APP_STOCKIX_PRIMARY_COLOR: params.stockixPrimaryColor ?? "",
     THROTTLE_GLOBAL_TTL: String(env.THROTTLE_GLOBAL_TTL),
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),

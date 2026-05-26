@@ -29,6 +29,20 @@ export class SeedTenantLicenseOnBuiltSubscriber {
       .findOne({ tenantId });
 
     if (!existingLicense) {
+      let maxOrganizations = 1;
+      let maxUsers = 10;
+      const tenantRow = await this.tenantModel.query().findById(tenantId);
+      const parentTenantId = tenantRow?.parentTenantId;
+      if (parentTenantId) {
+        const parentLicense = await this.tenantLicenseModel
+          .query()
+          .findOne({ tenantId: parentTenantId });
+        if (parentLicense) {
+          maxOrganizations = parentLicense.maxOrganizations;
+          maxUsers = parentLicense.maxUsers;
+        }
+      }
+
       await this.tenantLicenseModel.query().insert({
         tenantId,
         planSlug: 'owner-managed',
@@ -36,8 +50,8 @@ export class SeedTenantLicenseOnBuiltSubscriber {
         validFrom: moment().toMySqlDateTime(),
         expiresAt: null,
         gracePeriodDays: 30,
-        maxUsers: 10,
-        maxOrganizations: 1,
+        maxUsers,
+        maxOrganizations,
         isPerpetual: true,
         featureFlags: null,
       });

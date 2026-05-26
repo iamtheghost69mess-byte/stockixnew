@@ -57,6 +57,20 @@ Each provisioned POS backend reads `LICENSE_SIGNING_SECRET` from its tenant env 
 
 Mismatch causes STXI keys generated on the API to fail validation on POS login.
 
+## Tenant branding (Finance webapp)
+
+- Edit via dashboard tenant detail **Branding** tab → `PUT /tenants/:id/config` (control-plane `tenant_config`).
+- Worker writes `REACT_APP_STOCKIX_APP_NAME`, `REACT_APP_STOCKIX_LOGO_URL`, `REACT_APP_STOCKIX_PRIMARY_COLOR` into `infra/tenant-env/{slug}/.env`.
+- Rebuild the tenant Finance webapp image so Vite bakes env vars: `node scripts/rebuild-tenant-webapp.mjs {slug}` (or your deployment equivalent).
+- API pushes metadata to Finance: `POST /api/internal/organization/branding/sync` on the tenant stack (requires `INTERNAL_API_SECRET`).
+
+## Finance license sync on provision
+
+- Worker and API sync plan `maxOrganizations` to Finance `tenant_licenses` after provision (`syncFinanceLicense` / `syncFinanceLicenseForStockixTenant`).
+- `organization.provision` syncs license for each new Finance sub-tenant using the parent Stockix tenant’s active license.
+- Provision readiness includes `finance_license_sync_missing` when accounting modules are enabled but no sync event was journaled.
+- `FINANCE_LICENSE_SYNC_OPTIONAL=1` (development only) allows provision to continue if sync fails.
+
 ## License ↔ POS sync strict mode
 
 - `LICENSE_SYNC_STRICT=1` on the control-plane API: license suspend and tenant suspend **fail with HTTP 502** when Finance or POS sync fails (instead of returning success with `posSync: "failed"`).

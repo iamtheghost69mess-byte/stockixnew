@@ -24,6 +24,7 @@ export type TenantReadiness = {
     authReady: boolean;
     routeActive: boolean;
     financeTenantLinked: boolean;
+    financeLicenseSynced: boolean;
   };
   reasons: string[];
 };
@@ -171,6 +172,14 @@ export async function getTenantReadiness(
       !needsFinanceLink
       || (tenant?.financeTenantId != null && Number(tenant.financeTenantId) > 0);
 
+    const financeLicenseSynced =
+      !needsFinanceLink
+      || events.some(
+        (e) =>
+          e.message.includes("[finance-license] Synced")
+          || e.message.includes("finance license synced"),
+      );
+
     const checks = {
       jobCompleted,
       tenantExists,
@@ -179,6 +188,7 @@ export async function getTenantReadiness(
       authReady,
       routeActive,
       financeTenantLinked,
+      financeLicenseSynced,
     };
 
     const reasons: string[] = [];
@@ -189,6 +199,7 @@ export async function getTenantReadiness(
     if (!checks.authReady) reasons.push("bootstrap_admin_not_confirmed");
     if (!checks.tenantResponding) reasons.push("tenant_ping_unreachable");
     if (!checks.financeTenantLinked) reasons.push("finance_tenant_id_missing");
+    if (!checks.financeLicenseSynced) reasons.push("finance_license_sync_missing");
     if (tenant?.deploymentLastError) reasons.push(`deployment_error:${tenant.deploymentLastError}`);
     if (tenant?.tenantStatus === "failed") reasons.push("tenant_status_failed");
     if (tenant?.tenantStatus === "partial") reasons.push("tenant_status_partial");
@@ -217,6 +228,7 @@ export async function getTenantReadiness(
         authReady: false,
         tenantResponding: false,
         financeTenantLinked: false,
+        financeLicenseSynced: false,
       },
       reasons: [
         "readiness_evaluation_error",

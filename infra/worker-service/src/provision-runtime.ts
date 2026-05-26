@@ -5,7 +5,7 @@ import { execa } from "execa";
 import { apiConfig, posConfig } from "@repo/config";
 import { encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
 import { allocateOrganizationNumber, allocateTenantPort } from "@repo/db";
-import { tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
+import { tenantConfig, tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { asc, eq } from "drizzle-orm";
 import * as dbSchema from "@repo/db/schema";
@@ -943,6 +943,26 @@ export async function executeProvisionRuntime(
       };
     }
 
+    let stockixAppName = input.name;
+    let stockixLogoUrl = "";
+    let stockixPrimaryColor = "#ca8a04";
+    if (tenantId) {
+      const [cfg] = await db
+        .select({
+          appName: tenantConfig.appName,
+          logoUrl: tenantConfig.logoUrl,
+          primaryColor: tenantConfig.primaryColor,
+        })
+        .from(tenantConfig)
+        .where(eq(tenantConfig.tenantId, tenantId))
+        .limit(1);
+      if (cfg) {
+        stockixAppName = cfg.appName ?? stockixAppName;
+        stockixLogoUrl = cfg.logoUrl ?? "";
+        stockixPrimaryColor = cfg.primaryColor ?? stockixPrimaryColor;
+      }
+    }
+
     const tenantEnvMap = buildTenantEnvMap({
       mysqlVolumeName,
       stockixFinanceRoot,
@@ -963,6 +983,9 @@ export async function executeProvisionRuntime(
       stockixTenantId: input.stockixTenantId,
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret,
+      stockixAppName,
+      stockixLogoUrl,
+      stockixPrimaryColor,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
     if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
@@ -1385,11 +1408,12 @@ export async function executeProvisionRuntime(
           log,
         });
       } catch (err) {
-        log(
-          `[provision] Cross-stack COA copy failed (non-fatal): ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        log(`[provision] Cross-stack COA copy failed (non-fatal): ${msg}`);
+        await trace.event("tenant.copy_coa", "Cross-stack chart of accounts copy failed", {
+          level: "warn",
+          meta: { error: msg },
+        });
       }
     }
 

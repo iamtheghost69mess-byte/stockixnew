@@ -9,7 +9,7 @@ export const DefaultPdfTemplateItemName = 'Web development';
 export const DefaultPdfTemplateItemDescription =
   'Website development with content and SEO optimization';
 
-export const DefaultPdfTemplateAddressBilledTo = `Bigcapital Technology, Inc.<br />
+export const DefaultPdfTemplateAddressBilledTo = `Your organization<br />
 131 Continental Dr, <br />
 Suite 305, <br />
 Newark, Delaware 19713, <br />

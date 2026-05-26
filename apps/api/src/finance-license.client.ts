@@ -1,4 +1,5 @@
 import { apiConfig } from "@repo/config";
+import { isFinanceLicenseSyncOptional } from "../../../infra/worker-service/domain/provisioning/adapters/sync-finance-license.js";
 import { tenantDeployments } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -89,6 +90,9 @@ export function buildFinanceLicenseLimitFields(
       maxUsers: planLimits.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     });
   }
+  console.warn(
+    "[finance-license] buildFinanceLicenseLimitFields called without planLimits; using license row or defaults",
+  );
   return {
     maxUsers: FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxActivations: license?.maxActivations ?? 1,
@@ -240,10 +244,13 @@ export async function syncFinanceLicenseForStockixTenant(
 
     if (!res.ok) {
       const text = await res.text();
-      log(
-        `[finance-license] Sync failed HTTP ${res.status}: ${text.slice(0, 300)}`,
-      );
-      return;
+      const detail = `HTTP ${res.status} ${text.slice(0, 300)}`;
+      log(`[finance-license] Sync failed ${detail}`);
+      if (isFinanceLicenseSyncOptional()) {
+        log("[finance-license] FINANCE_LICENSE_SYNC_OPTIONAL=1 — continuing");
+        return;
+      }
+      throw new Error(`Finance license sync failed for tenant ${params.financeTenantId}: ${detail}`);
     }
 
     log(`[finance-license] Synced license for finance tenant ${params.financeTenantId}`);
@@ -262,10 +269,10 @@ export async function syncFinanceLicenseForStockixTenant(
       });
     }
   } catch (error) {
-    log(
-      `[finance-license] Sync error: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    const detail = error instanceof Error ? error.message : String(error);
+    log(`[finance-license] Sync error: ${detail}`);
+    if (!isFinanceLicenseSyncOptional()) {
+      throw error instanceof Error ? error : new Error(detail);
+    }
   }
 }

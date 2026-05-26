@@ -62,8 +62,12 @@ Same as A without steps 8–10 (no POS stack).
 
 ### D. Sub-organization (`organization.provision`)
 
-- `org-provision-runtime.ts`: register user on **parent** Finance stack, build org under parent session.
-- Shared bootstrap password key = `parentTenantSlug`.
+- **One Finance Docker stack per Stockix tenant.** Additional organizations are new Finance `tenants` rows on that same stack, not separate compose projects.
+- Dashboard: `POST /tenants/:tenantId/organizations` → worker job `organization.provision` ([org-provision-runtime.ts](../infra/worker-service/src/org-provision-runtime.ts)).
+- Steps: `provision-user` on parent stack → sign-in → `build_organization` → COA `copy-from` parent Finance tenant → `set-parent` → `syncFinanceLicense` for child Finance `tenantId` using parent Stockix plan limits.
+- COA copy failures set `organizations.provisioning_error` (non-fatal); org still becomes `active`.
+- Separate-stack child tenants (`tenant.provision` with `parentTenantSlug`) use export/import COA ([copy-coa-across-stacks.ts](../infra/worker-service/domain/provisioning/adapters/copy-coa-across-stacks.ts)); failures are journaled as `tenant.copy_coa` warn events.
+- Self-service org creation inside the Finance webapp alone is **not** supported for SaaS tenants (internal `TenantsManager` only).
 - See [PLATFORM_REFERENCE.md §6](./PLATFORM_REFERENCE.md#6-multi-organization-architecture).
 
 ### Partial failure (accounting + pos)
@@ -91,6 +95,17 @@ Sensitive keys in `infra/tenant-env/{slug}/.env` use **`enc:v1:`** (AES-256-GCM,
 ### Setup wizard (SaaS-provisioned)
 
 Worker calls `POST /api/internal/organization/setup/complete` after `tenant.build_organization` (journaled as `tenant.complete_setup_wizard`). First Finance login should skip `/setup/complete`.
+
+### Provision progress stream (SSE)
+
+`GET /tenants/provision-stream/:correlationId` replays `tenant_provision_events` once on connect, then pushes live rows via `subscribeProvision` (`apps/api/src/provision-bus.ts`). Worker and API inserts call `pg_notify('stockix_provision_event', …)`; the API runs `LISTEN` on startup (`provision-notify-listener.ts`) so events reach the bus without polling the events table. The stream loop only polls job terminal state and sends keepalive pings.
+
+### Tenant branding (`tenant_config`)
+
+- Control plane: `GET/PUT /tenants/:tenantId/config` (dashboard Branding tab).
+- Provision seeds a default `tenant_config` row from tenant name.
+- Worker maps config into tenant `.env` as `REACT_APP_STOCKIX_*` for Finance webapp builds.
+- `PUT` config triggers `POST /api/internal/organization/branding/sync` on the Finance stack (org metadata name/color/logo URI).
 
 ### Finance internal API responses (snake_case)
 

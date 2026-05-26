@@ -98,23 +98,21 @@ export class LicenseGuardMiddleware implements NestMiddleware {
       return;
     }
 
-    if (effectiveStatus === 'expired') {
-      res.status(HttpStatus.PAYMENT_REQUIRED).json({
-        error: 'LICENSE_EXPIRED',
-        message: 'License expired. Contact your provider.',
-        statusCode: HttpStatus.PAYMENT_REQUIRED,
-      });
-      return;
-    }
-
-    if (effectiveStatus === 'grace') {
+    if (effectiveStatus === 'expired' || effectiveStatus === 'grace') {
       if (!isWrite) {
         return next();
       }
 
+      const errorCode =
+        effectiveStatus === 'expired' ? 'LICENSE_EXPIRED' : 'LICENSE_GRACE';
+      const message =
+        effectiveStatus === 'expired'
+          ? 'License expired. You can view data but cannot make changes.'
+          : 'License in grace period. Upgrade to continue editing.';
+
       res.status(HttpStatus.PAYMENT_REQUIRED).json({
-        error: 'LICENSE_GRACE',
-        message: 'License in grace period. Upgrade to continue editing.',
+        error: errorCode,
+        message,
         statusCode: HttpStatus.PAYMENT_REQUIRED,
       });
       return;

@@ -258,6 +258,12 @@ export default function OrgDetailPage() {
           <p>
             <span className="text-muted-foreground">Subdomain:</span> {org.subdomain}
           </p>
+          {org.financeOrganizationId ? (
+            <p>
+              <span className="text-muted-foreground">Finance organization ID:</span>{" "}
+              <span className="font-mono">{org.financeOrganizationId}</span>
+            </p>
+          ) : null}
           <p>
             <span className="text-muted-foreground">Created:</span> {formatDateTime(org.createdAt)}
           </p>
