@@ -107,6 +107,10 @@ function validateRequiredEnvForProfile(profile: string) {
     ],
     production: [
       "DATABASE_URL",
+      "DB_POOL_MAX",
+      "DB_IDLE_TIMEOUT_SECONDS",
+      "DB_CONNECT_TIMEOUT_SECONDS",
+      "DB_MAX_LIFETIME_SECONDS",
       "PLATFORM_API_SECRET",
       "WORKER_SECRET",
       "SESSION_SECRET",
@@ -114,6 +118,7 @@ function validateRequiredEnvForProfile(profile: string) {
       "AUTH_TOKEN_SECRET",
       "DEPLOYMENT_SECRET_KEY",
       "LICENSE_SIGNING_SECRET",
+      "CONTROL_PLANE_REDIS_URL",
     ],
   };
   const required = requiredByProfile[profile] ?? requiredByProfile.production ?? [];
@@ -188,6 +193,7 @@ export const env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  RUN_BULLMQ_CONSUMERS: readOptionalString("RUN_BULLMQ_CONSUMERS"),
   /** Shared with stockix-finance for POST /api/internal/* (provisioning attach-user). */
   INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
   /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
@@ -273,6 +279,11 @@ export function getResendWebhookSecret(): string | undefined {
 }
 
 export const apiConfig = {
+  get runBullMqConsumers() {
+    const raw = env.RUN_BULLMQ_CONSUMERS;
+    if (raw === undefined || raw === "") return true;
+    return raw === "1" || raw.toLowerCase() === "true";
+  },
   get databaseUrl() {
     return env.DATABASE_URL ?? readRequiredString("DATABASE_URL");
   },

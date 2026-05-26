@@ -1,6 +1,7 @@
 /** Control-plane API path prefixes (unknown paths return 404 before platform auth). */
 const KNOWN_PATH_PREFIXES = [
   "/health",
+  "/ready",
   "/public/",
   "/auth",
   "/webhooks/",
@@ -21,7 +22,7 @@ const KNOWN_PATH_PREFIXES = [
 ] as const;
 
 export function isKnownControlPlanePath(path: string): boolean {
-  if (path === "/health") return true;
+  if (path === "/health" || path === "/ready") return true;
   return KNOWN_PATH_PREFIXES.some(
     (prefix) => prefix !== "/health" && path.startsWith(prefix),
   );

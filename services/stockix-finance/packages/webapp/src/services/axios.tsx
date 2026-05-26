@@ -47,19 +47,29 @@ function redirectToLogin() {
   window.location.href = `/auth/login?redirect=${returnUrl}`;
 }
 
+function setRequestHeader(request, key, value) {
+  const headers = request.headers ?? {};
+  if (typeof headers.set === 'function') {
+    headers.set(key, value);
+  } else {
+    headers[key] = value;
+  }
+  request.headers = headers;
+}
+
 http.interceptors.request.use((request) => {
   const state = store.getState();
   const { token, organizationId, locale } = state.authentication;
 
   if (token) {
-    request.headers.common['x-access-token'] = token;
-    request.headers.common['Authorization'] = `Bearer ${token}`;
+    setRequestHeader(request, 'x-access-token', token);
+    setRequestHeader(request, 'Authorization', `Bearer ${token}`);
   }
   if (organizationId) {
-    request.headers.common['organization-id'] = organizationId;
+    setRequestHeader(request, 'organization-id', organizationId);
   }
   if (locale) {
-    request.headers.common['Accept-Language'] = locale;
+    setRequestHeader(request, 'Accept-Language', locale);
   }
 
   return request;

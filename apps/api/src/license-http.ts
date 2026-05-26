@@ -26,6 +26,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { z } from "zod";
 import { logAudit } from "./audit.js";
+import { consumeLicenseActivateKeyLimit } from "./middleware/license-rate-limit.js";
 import {
   generateLicenseKey,
   generateLicenseKeyForTenant,
@@ -869,6 +870,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     const keyNorm = body.licenseKey.trim().toUpperCase();
     const fp = body.hardwareFingerprint.trim();
 
+    const keyLimit = await consumeLicenseActivateKeyLimit(keyNorm);
+    if (!keyLimit.ok) {
+      c.header("Retry-After", String(keyLimit.retryAfterSec));
+      return c.json({ success: false, error: "invalid_license" }, 429);
+    }
+
     const [bl] = await db
       .select({ id: blacklistedFingerprints.id })
       .from(blacklistedFingerprints)
@@ -877,7 +884,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (bl) return c.json({ error: "device_blacklisted" }, 403);
 
     const [lic] = await db.select().from(licenses).where(eq(licenses.licenseKey, keyNorm)).limit(1);
-    if (!lic) return c.json({ error: "not_found" }, 404);
+    if (!lic) return c.json({ success: false, error: "invalid_license" }, 400);
     if (lic.status === "revoked") return c.json({ error: "license_revoked" }, 403);
     if (lic.status === "expired") return c.json({ error: "license_expired" }, 403);
     if (lic.status !== "active") {
@@ -1100,6 +1107,11 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       body = bodySchema.parse(await c.req.json());
     } catch (e) {
       return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
+    }
+    const keyLimit = await consumeLicenseActivateKeyLimit(body.offlineToken);
+    if (!keyLimit.ok) {
+      c.header("Retry-After", String(keyLimit.retryAfterSec));
+      return c.json({ success: false, error: "invalid_license" }, 429);
     }
     const payload = await verifyOfflineToken(body.offlineToken);
     if (!payload) return c.json({ error: "invalid_token" }, 401);

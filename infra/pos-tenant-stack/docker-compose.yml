@@ -7,6 +7,12 @@ services:
       context: ${STOCKIX_REPO_ROOT}
       dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8010/api/ping || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -23,12 +29,16 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
     depends_on:
-      - pos-mongo
-      - pos-redis
+      pos-mongo:
+        condition: service_healthy
+      pos-redis:
+        condition: service_started
     ports:
       - "127.0.0.1:${POS_HOST_PORT:-8010}:8010"
     mem_limit: 512m
     cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pos-platform-worker:
     image: stockix-pos-backend:local
@@ -53,6 +63,8 @@ services:
       - pos-backend
     mem_limit: 256m
     cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pos-bigcapital-worker:
     image: stockix-pos-backend:local
@@ -77,6 +89,8 @@ services:
       - pos-backend
     mem_limit: 256m
     cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pos-frontend:
     image: stockix-pos-frontend:local
@@ -84,12 +98,20 @@ services:
       context: ${STOCKIX_REPO_ROOT}
       dockerfile: services/posnew/apps/pos-frontend2/Dockerfile
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
     environment:
       - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}
     ports:
       - "127.0.0.1:${POS_FRONTEND_HOST_PORT:-3001}:3000"
     mem_limit: 256m
     cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pos-mongo:
     image: mongo:7.0
@@ -105,6 +127,8 @@ services:
       start_period: 5s
     mem_limit: 512m
     cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pos-mongo-init:
     image: mongo:7.0
@@ -121,6 +145,10 @@ services:
           rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'pos-mongo:27017' }] });
         }
         "
+    mem_limit: 128m
+    cpus: "0.1"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pos-redis:
     image: redis:7-alpine
@@ -129,6 +157,8 @@ services:
       - pos_redis:/data
     mem_limit: 128m
     cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
 volumes:
   pos_mongo:

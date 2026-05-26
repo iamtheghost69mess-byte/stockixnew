@@ -19,6 +19,7 @@ import { composeProjectName } from "../domain/provisioning/compose-project-name.
 
 import type { ProvisionTracer } from "../domain/provision-trace.js";
 import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
+import { isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
 
 import {
 
@@ -351,6 +352,12 @@ export async function provisionPosStack(
     "pos-bigcapital-worker",
   ];
   if (await dockerImageExists("stockix-pos-frontend:local")) {
+    if (await isPosFrontendStubImage()) {
+      throw new Error(
+        "stockix-pos-frontend:local is the nginx stub (shows 'POS frontend placeholder'). " +
+          "Run: pnpm pos:images:build -- --force",
+      );
+    }
     upServices.push("pos-frontend");
   } else {
     opts.log(

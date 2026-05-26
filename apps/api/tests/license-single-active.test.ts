@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { registerLicenseApi } from "../src/license-http.js";
 
 vi.mock("../src/audit.js", () => ({
   logAudit: vi.fn().mockResolvedValue(undefined),
@@ -38,6 +39,17 @@ vi.mock("../src/license-utils.js", async (importOriginal) => {
 const tenantId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const licenseId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
+function createLicenseApp(db: PostgresJsDatabase<typeof schema>) {
+  const app = new Hono<{ Variables: { actorId: string; actorRole: string } }>();
+  app.use("*", async (c, next) => {
+    c.set("actorId", "owner-11111111-1111-1111-1111-111111111111");
+    c.set("actorRole", "super_admin");
+    await next();
+  });
+  registerLicenseApi(app, db);
+  return app;
+}
+
 function createAssignMockDb() {
   const unassignedLicense = {
     id: licenseId,
@@ -68,8 +80,7 @@ function createAssignMockDb() {
   const selectLimit = vi.fn(async () => {
     selectCall += 1;
     if (selectCall === 1) return [unassignedLicense];
-    if (selectCall === 2) return [{ id: tenantId }];
-    if (selectCall === 3) return [];
+    if (selectCall === 2) return [{ id: tenantId, modules: '["accounting"]' }];
     return [];
   });
 
@@ -98,7 +109,7 @@ function createAssignMockDb() {
   return { db: { select, update } as unknown as PostgresJsDatabase<typeof schema> };
 }
 
-describe("single active license enforcement", () => {
+describe.sequential("single active license enforcement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tenantHasActiveLicenseMock.mockReset();
@@ -107,14 +118,7 @@ describe("single active license enforcement", () => {
   it("POST /licenses/:id/assign returns 409 when tenant already licensed", async () => {
     tenantHasActiveLicenseMock.mockResolvedValue(true);
     const { db } = createAssignMockDb();
-    const app = new Hono<{ Variables: { actorId: string; actorRole: string } }>();
-    app.use("*", async (c, next) => {
-      c.set("actorId", "owner-11111111-1111-1111-1111-111111111111");
-      c.set("actorRole", "super_admin");
-      await next();
-    });
-    const { registerLicenseApi } = await import("../src/license-http.js");
-    registerLicenseApi(app, db);
+    const app = createLicenseApp(db);
 
     const res = await app.request(`http://local/licenses/${licenseId}/assign`, {
       method: "POST",
@@ -125,6 +129,7 @@ describe("single active license enforcement", () => {
 
     expect(res.status).toBe(409);
     expect(body).toMatchObject({ error: "tenant_already_licensed" });
+    expect(tenantHasActiveLicenseMock).toHaveBeenCalledWith(db, tenantId);
   });
 
   it("POST /licenses/generate returns 409 when tenantId already licensed", async () => {
@@ -143,14 +148,7 @@ describe("single active license enforcement", () => {
       transaction: vi.fn(),
     } as unknown as PostgresJsDatabase<typeof schema>;
 
-    const app = new Hono<{ Variables: { actorId: string; actorRole: string } }>();
-    app.use("*", async (c, next) => {
-      c.set("actorId", "owner-11111111-1111-1111-1111-111111111111");
-      c.set("actorRole", "super_admin");
-      await next();
-    });
-    const { registerLicenseApi } = await import("../src/license-http.js");
-    registerLicenseApi(app, db);
+    const app = createLicenseApp(db);
 
     const res = await app.request("http://local/licenses/generate", {
       method: "POST",

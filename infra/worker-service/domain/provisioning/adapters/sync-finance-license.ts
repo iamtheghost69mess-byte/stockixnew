@@ -26,6 +26,16 @@ export class FinanceLicenseSyncError extends Error {
   }
 }
 
+function toMySqlDateTime(value: string | Date): string {
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (!Number.isFinite(d.getTime())) {
+    return typeof value === "string" ? value : d.toISOString();
+  }
+  // MySQL `datetime` (and strict modes) don't accept ISO strings with `T`/`Z`.
+  // Use `YYYY-MM-DD HH:mm:ss` in UTC.
+  return d.toISOString().slice(0, 19).replace("T", " ");
+}
+
 /** When true, missing secret or HTTP failure is logged but does not throw (development only). */
 export function isFinanceLicenseSyncOptional(): boolean {
   const flag = process.env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
@@ -64,8 +74,10 @@ export async function syncFinanceLicense(
     tenantId: payload.tenantId,
     planSlug: payload.planSlug ?? "owner-managed",
     status: payload.status ?? "active",
-    validFrom: payload.validFrom ?? new Date().toISOString(),
-    expiresAt: payload.expiresAt ?? null,
+    validFrom: payload.validFrom
+      ? toMySqlDateTime(payload.validFrom)
+      : toMySqlDateTime(new Date()),
+    expiresAt: payload.expiresAt ? toMySqlDateTime(payload.expiresAt) : null,
     gracePeriodDays: payload.gracePeriodDays ?? 30,
     maxUsers: payload.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxActivations: payload.maxActivations,
@@ -86,7 +98,7 @@ export async function syncFinanceLicense(
     });
     if (!res.ok) {
       const text = await res.text();
-      const detail = `HTTP ${res.status} ${text.slice(0, 200)}`;
+      const detail = `HTTP ${res.status} ${text.slice(0, 1200)}`;
       log(`[provision] finance license sync failed: ${detail}`);
       if (isFinanceLicenseSyncOptional()) {
         log("[provision] FINANCE_LICENSE_SYNC_OPTIONAL=1 — continuing despite sync failure");

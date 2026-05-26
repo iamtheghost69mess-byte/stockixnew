@@ -24,6 +24,8 @@ export type TenantEnvFileParams = {
   s3Bucket: string;
   s3ForcePathStyle: string;
   stockixTenantId?: string;
+  /** Public discovery slug (not tenant UUID) for Finance webapp branding fetch. */
+  stockixDiscoverySlug?: string;
   stockixApiUrl?: string;
   internalApiSecret?: string;
   stockixAppName?: string;
@@ -116,6 +118,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
+    REACT_APP_STOCKIX_DISCOVERY_SLUG: params.stockixDiscoverySlug ?? "",
     REACT_APP_STOCKIX_APP_NAME: params.stockixAppName ?? "",
     REACT_APP_STOCKIX_LOGO_URL: params.stockixLogoUrl ?? "",
     REACT_APP_STOCKIX_PRIMARY_COLOR: params.stockixPrimaryColor ?? "",

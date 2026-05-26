@@ -14,8 +14,8 @@ import {
   PercentFieldCell,
   NumericInputCell,
   CheckBoxFieldCell,
-  ProjectBillableEntriesCell,
 } from '@/components/DataTableCells';
+import { ProjectBillableEntriesCell } from '@/components/DataTableCells/ProjectBillableEntriesCell';
 import { useFeatureCan } from '@/hooks/state';
 import { TaxRatesSuggestInputCell } from '@/components/TaxRates/TaxRatesSuggestInputCell';
 import { useItemEntriesTableContext } from './ItemEntriesTableProvider';

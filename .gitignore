@@ -16,6 +16,7 @@ package-lock.json
 apps/api/.env
 apps/dashboard/.env
 infra/prod/.env
+infra/staging/.env
 services/**/.env
 **/.env
 !**/.env.example
@@ -41,6 +42,14 @@ license-report.txt
 out/
 build
 dist
+
+# Worker runtime bundles — built by CI/deploy, never committed
+infra/worker-service/.runtime/
+infra/worker-service/.runtime/**
+apps/api/.tmp-worker/
+apps/api/.tmp-worker/**
+**/.runtime/
+**/.tmp-worker/
 
 
 # Debug

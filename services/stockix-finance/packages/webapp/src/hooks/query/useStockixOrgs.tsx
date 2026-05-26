@@ -25,39 +25,31 @@ const STOCKIX_API_URL = (process.env.REACT_APP_STOCKIX_API_URL ?? '').replace(
   /\/$/,
   '',
 );
-const STOCKIX_TENANT_ID = process.env.REACT_APP_STOCKIX_TENANT_ID ?? '';
+const STOCKIX_DISCOVERY_SLUG =
+  process.env.REACT_APP_STOCKIX_DISCOVERY_SLUG ?? '';
 
-async function fetchExternalStockixOrgs(): Promise<StockixOrg[]> {
-  if (!STOCKIX_API_URL || !STOCKIX_TENANT_ID) return [];
+/** Fetches public tenant branding (no org list — use auth/my-tenants for orgs). */
+async function fetchPublicTenantBranding(): Promise<{
+  displayName?: string;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+} | null> {
+  if (!STOCKIX_API_URL || !STOCKIX_DISCOVERY_SLUG) return null;
   const res = await fetch(
-    `${STOCKIX_API_URL}/public/tenant-orgs/${STOCKIX_TENANT_ID}`,
+    `${STOCKIX_API_URL}/public/tenant/${STOCKIX_DISCOVERY_SLUG}`,
     { headers: { Accept: 'application/json' } },
   );
-  if (!res.ok) return [];
+  if (!res.ok) return null;
   const data: unknown = await res.json();
-  if (
-    typeof data === 'object' &&
-    data !== null &&
-    'organizations' in data &&
-    Array.isArray((data as { organizations: unknown }).organizations)
-  ) {
-    const list = (data as { organizations: Record<string, unknown>[] })
-      .organizations;
-    return list.map((o) => {
-      const id = String(o.id ?? '');
-      return {
-        id,
-        organizationId: id,
-        name: String(o.name ?? ''),
-        slug: String(o.slug ?? ''),
-        subdomain: String(o.subdomain ?? ''),
-        status: String(o.status ?? ''),
-        createdAt: String(o.createdAt ?? ''),
-        publicUrl: typeof o.publicUrl === 'string' ? o.publicUrl : null,
-      };
-    });
-  }
-  return [];
+  if (typeof data !== 'object' || data === null) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    displayName:
+      typeof row.displayName === 'string' ? row.displayName : undefined,
+    logoUrl: typeof row.logoUrl === 'string' ? row.logoUrl : null,
+    primaryColor:
+      typeof row.primaryColor === 'string' ? row.primaryColor : null,
+  };
 }
 
 function mapFinanceTenants(rows: FinanceTenant[]): StockixOrg[] {
@@ -70,23 +62,11 @@ function mapFinanceTenants(rows: FinanceTenant[]): StockixOrg[] {
   }));
 }
 
-function mergeOrgLists(
-  finance: StockixOrg[],
-  external: StockixOrg[],
-): StockixOrg[] {
-  if (finance.length === 0) return external;
-  if (external.length === 0) return finance;
-
-  const seen = new Set(finance.map((o) => o.organizationId));
-  const externalOnly = external.filter((o) => !seen.has(o.organizationId));
-  return [...finance, ...externalOnly];
-}
-
 export function useStockixOrgs() {
   const apiRequest = useApiRequest();
 
   return useQuery<StockixOrg[]>(
-    ['auth', 'my-tenants', STOCKIX_TENANT_ID],
+    ['auth', 'my-tenants', STOCKIX_DISCOVERY_SLUG],
     async () => {
       let finance: StockixOrg[] = [];
       try {
@@ -96,9 +76,8 @@ export function useStockixOrgs() {
         finance = [];
       }
 
-      if (STOCKIX_API_URL && STOCKIX_TENANT_ID) {
-        const external = await fetchExternalStockixOrgs();
-        return mergeOrgLists(finance, external);
+      if (STOCKIX_DISCOVERY_SLUG) {
+        await fetchPublicTenantBranding();
       }
 
       return finance;
