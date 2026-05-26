@@ -21,6 +21,9 @@ function getClient() {
     client = new IORedis(config.redisUrl, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
+      connectTimeout: 2_000,
+      commandTimeout: 2_000,
+      enableOfflineQueue: false,
     });
     client.on("error", () => {});
     return client;

@@ -6,8 +6,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findFreePort } from "./find-free-port.mjs";
+import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+loadEnvFilesAtRoot(repoRoot);
 const dashboardDir = path.join(repoRoot, "apps", "dashboard");
 
 const preferred = parseInt(

@@ -96,6 +96,8 @@ import {
 import { initEmailLogging } from "./mail/email-log.js";
 import { sendOwnerInviteEmail, sendTenantWelcomeEmail } from "./mail/send.js";
 import { resendOwnerInvite } from "./services/invites/invites.js";
+import { deliverOwnerInviteEmail } from "./services/invites/owner-invite-delivery.js";
+import { isOwnerInviteMailQueueEnabled } from "./jobs/owner-invite-mail-queue.js";
 import {
   applyTenantLicenseReactivate,
   applyTenantLicenseSuspend,
@@ -2277,43 +2279,47 @@ app.post("/owners/invite", async (c) => {
     userAgent: c.req.header("user-agent") ?? null,
     metadata: { role: owner.role, email: owner.email },
   });
-  let mailResult = await sendOwnerInviteEmail({
+  const actorId = (c.get("actorId") as string | undefined) ?? null;
+  const delivery = await deliverOwnerInviteEmail(db, {
+    ownerId: owner.id,
     to: owner.email,
     name: owner.name,
     role: owner.role,
     inviteUrl,
-    ownerId: owner.id,
+    actorId,
+    source: "invite",
   });
-  if (!mailSendSucceeded(mailResult)) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    mailResult = await sendOwnerInviteEmail({
-      to: owner.email,
-      name: owner.name,
-      role: owner.role,
-      inviteUrl,
-      ownerId: owner.id,
-    });
+
+  if (delivery.mode === "queued") {
+    return c.json(
+      {
+        owner,
+        emailSent: false,
+        emailQueued: true,
+        mailConfigured: delivery.mailConfigured,
+      },
+      201,
+    );
   }
-  const emailSent = mailSendSucceeded(mailResult);
-  if (!emailSent) {
-    const reason =
-      mailResult.status === "failed" ? mailResult.error : String(mailResult.status);
-    console.error("[owners] invite email not sent", owner.email, reason);
+
+  const emailSent = delivery.emailSent;
+  if (!emailSent && !isOwnerInviteMailQueueEnabled()) {
+    console.error("[owners] invite email not sent", owner.email);
     await logAudit(db, {
-      actorId: (c.get("actorId") as string | undefined) ?? "",
+      actorId: actorId ?? "",
       action: "invite.email_failed",
       targetOwnerId: owner.id,
       ipAddress: c.req.header("x-forwarded-for") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
-      metadata: { email: owner.email, reason },
+      metadata: { email: owner.email, reason: "inline_send_failed" },
     });
   }
   return c.json(
     {
       owner,
       emailSent,
-      mailConfigured: isMailConfigured(),
-      inviteUrl: emailSent ? undefined : inviteUrl,
+      mailConfigured: delivery.mailConfigured,
+      inviteUrl: delivery.inviteUrl,
     },
     201,
   );
@@ -2324,7 +2330,8 @@ app.post("/owners/:ownerId/resend-invite", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("ownerId"));
   if (!parsed.success) return c.json({ error: "ownerId must be a UUID" }, 400);
 
-  const result = await resendOwnerInvite(db, parsed.data);
+  const actorId = (c.get("actorId") as string | undefined) ?? null;
+  const result = await resendOwnerInvite(db, parsed.data, actorId);
   if (!result.success) {
     return c.json(
       { error: result.error },
@@ -2333,7 +2340,7 @@ app.post("/owners/:ownerId/resend-invite", async (c) => {
   }
 
   await logAudit(db, {
-    actorId: (c.get("actorId") as string | undefined) ?? "",
+    actorId: actorId ?? "",
     action: "owner.invite_resend",
     targetOwnerId: parsed.data,
     ipAddress: c.req.header("x-forwarded-for") ?? null,
@@ -2341,12 +2348,17 @@ app.post("/owners/:ownerId/resend-invite", async (c) => {
     metadata: {
       email: result.data.owner.email,
       emailSent: result.data.emailSent,
+      emailQueued: result.data.emailQueued ?? false,
     },
   });
 
-  if (!result.data.emailSent) {
+  if (
+    !result.data.emailSent &&
+    !result.data.emailQueued &&
+    !isOwnerInviteMailQueueEnabled()
+  ) {
     await logAudit(db, {
-      actorId: (c.get("actorId") as string | undefined) ?? "",
+      actorId: actorId ?? "",
       action: "invite.email_failed",
       targetOwnerId: parsed.data,
       ipAddress: c.req.header("x-forwarded-for") ?? null,
@@ -5698,6 +5710,15 @@ void import("./jobs/license-expiry-queue.js").then(
     if (db && isLicenseExpiryQueueEnabled()) {
       startLicenseExpiryWorker(db, (msg) => console.log(msg));
       console.log("[api] License expiry BullMQ worker started");
+    }
+  },
+);
+
+void import("./jobs/owner-invite-mail-queue.js").then(
+  ({ startOwnerInviteMailWorker, isOwnerInviteMailQueueEnabled }) => {
+    if (db && isOwnerInviteMailQueueEnabled()) {
+      startOwnerInviteMailWorker(db, (msg) => console.log(msg));
+      console.log("[api] Owner invite mail BullMQ worker started");
     }
   },
 );

@@ -9,6 +9,14 @@ const repoRoot = path.join(dashboardDir, "..", "..");
 const reactRoot = realpathSync(path.join(repoRoot, "node_modules", "react"));
 const reactDomRoot = realpathSync(path.join(repoRoot, "node_modules", "react-dom"));
 
+const reactAliases = {
+  react: reactRoot,
+  "react-dom": reactDomRoot,
+  "react/jsx-runtime": path.join(reactRoot, "jsx-runtime.js"),
+  "react/jsx-dev-runtime": path.join(reactRoot, "jsx-dev-runtime.js"),
+  "react-dom/client": path.join(reactDomRoot, "client.js"),
+} as const;
+
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
@@ -22,17 +30,13 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["@base-ui/react", "lucide-react", "react-hook-form"],
   },
   turbopack: {
-    resolveAlias: {
-      react: reactRoot,
-      "react-dom": reactDomRoot,
-    },
+    resolveAlias: reactAliases,
   },
   webpack: (config) => {
     config.resolve ??= {};
     config.resolve.alias = {
       ...config.resolve.alias,
-      react: reactRoot,
-      "react-dom": reactDomRoot,
+      ...reactAliases,
     };
     return config;
   },

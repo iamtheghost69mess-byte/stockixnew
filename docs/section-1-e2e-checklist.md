@@ -17,6 +17,7 @@ Run after each phase’s automated tests pass. Do not start the next phase until
 - [ ] Support agent with org scope: tenant list shows only assigned tenants
 - [ ] Direct URL to out-of-scope tenant → 404 or forbidden
 - [ ] Invite with mail off: audit `invite.email_failed` + copy-link + **Resend invite**
+- [ ] Invite with Redis + mail on: API returns `emailQueued`; `owner-invite` row in Email logs after worker runs
 - [ ] Custom role with only `licenses.read` cannot suspend a license
 
 **Signed off:** __________ **Date:** __________
