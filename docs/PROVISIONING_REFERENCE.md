@@ -80,6 +80,10 @@ If POS fails after Finance succeeds → tenant status **`partial`**, Finance dep
 | Wire only | `POST /tenants/:id/retry-provision` `{ "retryWireOnly": true }` | `partial_failure_kind=wire_failed` |
 | Stuck provisioning | Same endpoint when `tenants.status=provisioning` and no running job | Resumes journal via prior `correlationId` when available |
 
+**Wire resume (May 2026):** If journal has `tenant.wire_pos_integration` but `GET /api/platform/v1/organizations/:id/integration/bigcapital/health` reports unhealthy, the worker re-runs wire instead of skipping.
+
+**Combined org guard:** On stacks with `FINANCE_INTERNAL_BASE_URL`, platform `POST /organizations` allows only the first org (or `Idempotency-Key: stockix-provision-*`). Additional orgs use control-plane `POST /tenants/:tenantId/organizations`.
+
 Dashboard tenant detail shows targeted CTAs and integration checklist fields.
 
 ### Finance tenant link & stuck provisioning

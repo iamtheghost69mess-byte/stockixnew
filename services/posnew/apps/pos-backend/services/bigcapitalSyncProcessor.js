@@ -6,6 +6,42 @@ const {
   createBackofficeNotificationFromEvent,
 } = require("./backofficeNotificationEvents");
 
+/**
+ * Notify backoffice when a paid order cannot sync due to missing Finance item mappings.
+ * @param {import('mongoose').Document} order
+ * @param {string} organizationId
+ */
+async function notifyUnmappedBigcapitalSync(order, organizationId) {
+  const sellable = (order.items || []).filter(
+    (item) => item.menuItem && Number(item.quantity) > 0
+  );
+  const menuItemIds = sellable.map((item) => String(item.menuItem));
+  let unmappedCount = sellable.length;
+  if (menuItemIds.length) {
+    const mappings = await IntegrationItemMapping.find({
+      organization: organizationId,
+      posMenuItemId: { $in: menuItemIds },
+    })
+      .select("posMenuItemId")
+      .lean();
+    const mappedIds = new Set(mappings.map((m) => String(m.posMenuItemId)));
+    unmappedCount = sellable.filter(
+      (item) => !mappedIds.has(String(item.menuItem))
+    ).length;
+  }
+
+  const orderLabel = order.orderNumber || order._id;
+  await createBackofficeNotificationFromEvent(
+    NOTIFICATION_EVENTS.INTEGRATION_SYNC_UNMAPPED,
+    {
+      organizationId,
+      orderId: String(order._id),
+      unmappedCount,
+      body: `Order #${orderLabel} could not sync to Finance: ${unmappedCount} line(s) have no item mapping.`,
+    }
+  ).catch(() => {});
+}
+
 function modifierSuffix(line) {
   const groups = line.selectedModifiers;
   if (!Array.isArray(groups) || !groups.length) return "";
@@ -26,22 +62,50 @@ function isCardMethodKey(methodKey) {
  * @param {object} order
  * @param {object} cfg - integrationConfig.bigcapital
  */
+function resolveDepositAccountIdForSplit(split, cfg) {
+  if (split && isCardMethodKey(split.methodKey)) {
+    return cfg.defaultCardDepositAccountId || cfg.defaultCashDepositAccountId;
+  }
+  return cfg.defaultCashDepositAccountId || cfg.defaultCardDepositAccountId;
+}
+
 function resolveDepositAccountId(order, cfg) {
   const splits = order.paymentSplits;
   if (Array.isArray(splits) && splits.length) {
     const sorted = [...splits].sort(
       (a, b) => Number(b.amount) - Number(a.amount)
     );
-    const primary = sorted[0];
-    if (primary && isCardMethodKey(primary.methodKey)) {
-      return cfg.defaultCardDepositAccountId || cfg.defaultCashDepositAccountId;
-    }
-    return cfg.defaultCashDepositAccountId || cfg.defaultCardDepositAccountId;
+    return resolveDepositAccountIdForSplit(sorted[0], cfg);
   }
   if (isCardMethodKey(order.paymentMethod)) {
     return cfg.defaultCardDepositAccountId || cfg.defaultCashDepositAccountId;
   }
   return cfg.defaultCashDepositAccountId || cfg.defaultCardDepositAccountId;
+}
+
+/**
+ * Map POS payment splits to Finance deposit accounts.
+ * @param {object} order
+ * @param {object} cfg
+ * @returns {Array<{ depositAccountId: number, amount: number }>}
+ */
+function buildDepositPayments(order, cfg) {
+  const splits = order.paymentSplits;
+  if (Array.isArray(splits) && splits.length) {
+    return splits
+      .map((split) => ({
+        depositAccountId: resolveDepositAccountIdForSplit(split, cfg),
+        amount: Number(split.amount) || 0,
+      }))
+      .filter((row) => row.depositAccountId && row.amount > 0);
+  }
+  let accountId = cfg.defaultCashDepositAccountId || cfg.defaultCardDepositAccountId;
+  if (isCardMethodKey(order.paymentMethod)) {
+    accountId = cfg.defaultCardDepositAccountId || cfg.defaultCashDepositAccountId;
+  }
+  const amount = Number(order.total || 0);
+  if (!accountId || amount <= 0) return [];
+  return [{ depositAccountId: accountId, amount }];
 }
 
 /**
@@ -151,7 +215,12 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
 
   if (!entries.length) return null;
 
-  const depositAccountId = resolveDepositAccountId(order, cfg);
+  const depositPayments = buildDepositPayments(order, cfg);
+  const depositAccountId =
+    depositPayments.length > 0
+      ? [...depositPayments].sort((a, b) => b.amount - a.amount)[0]
+          .depositAccountId
+      : resolveDepositAccountId(order, cfg);
 
   if (!depositAccountId || !cfg.defaultWalkInCustomerId) {
     throw new Error(
@@ -166,6 +235,14 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
   const serviceChargeAmount = Number(order.bills?.serviceChargeAmount || 0);
   const discountAmount = Number(order.manualDiscountAmount || 0);
   let statement = `POS Order #${order.orderNumber || order._id} | ${order.paymentMethod || "cash"}`;
+  const uniqueDepositAccounts = new Set(
+    depositPayments.map((p) => p.depositAccountId)
+  );
+  if (uniqueDepositAccounts.size > 1) {
+    statement += ` | tenders: ${depositPayments
+      .map((p) => `${p.depositAccountId}:${p.amount.toFixed(2)}`)
+      .join(", ")}`;
+  }
   if (serviceChargeAmount > 0 && !cfg.serviceChargeItemId) {
     statement += ` | Service charge: ${serviceChargeAmount}`;
   }
@@ -191,6 +268,9 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
   const { warehouseId, branchId } = resolveLocationMapping(order, cfg);
   if (warehouseId) payload.warehouseId = warehouseId;
   if (branchId) payload.branchId = branchId;
+  if (uniqueDepositAccounts.size > 1) {
+    payload.depositPayments = depositPayments;
+  }
 
   return payload;
 }
@@ -343,6 +423,60 @@ async function processBigcapitalVoidJob(job) {
   return voidFinanceReceipt(orderId, organizationId);
 }
 
+/**
+ * POST Finance partial refund (credit note) for a paid order.
+ * @param {{ data: { orderId: string, organizationId: string, amount: number, idempotencyKey?: string } }} job
+ */
+async function processBigcapitalPartialRefundJob(job) {
+  const { orderId, organizationId, amount, idempotencyKey } = job.data;
+  const refundAmount = Number(amount);
+  if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+    throw new Error("partial_refund amount must be positive");
+  }
+
+  const integrationConfig = await IntegrationConfig.findOne({
+    organization: organizationId,
+  });
+  if (!integrationConfig?.bigcapital?.enabled) {
+    return { skipped: true, reason: "Bigcapital not enabled for org" };
+  }
+
+  const cfg = integrationConfig.bigcapital;
+  const refundItemId =
+    cfg.refundAdjustmentItemId || cfg.discountItemId || cfg.serviceChargeItemId;
+  if (!refundItemId) {
+    throw new Error(
+      "Configure refundAdjustmentItemId or discountItemId on integration for partial refunds"
+    );
+  }
+
+  const base = String(cfg.internalBaseUrl || "").replace(/\/$/, "");
+  const response = await fetch(
+    `${base}/api/internal/pos/receipts/by-reference/${encodeURIComponent(orderId)}/partial-refund`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": cfg.internalSecret || "",
+      },
+      body: JSON.stringify({
+        tenantId: cfg.financeTenantId,
+        amount: refundAmount,
+        refundItemId,
+        idempotencyKey: idempotencyKey || `partial-${orderId}-${refundAmount}`,
+        creditNoteDate: new Date().toISOString().split("T")[0],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Finance partial refund ${response.status}: ${errorText}`);
+  }
+
+  return response.json();
+}
+
 async function onBigcapitalSyncFailed(job, error) {
   console.error("[BigcapitalSync] Job failed:", job?.id, error?.message);
 
@@ -368,12 +502,14 @@ module.exports = {
   buildSaleReceiptPayload,
   appendFinanceAdjustmentEntries,
   buildMappedEntries,
+  buildDepositPayments,
   resolveDepositAccountId,
   resolveLocationMapping,
   isCardMethodKey,
   postToBigcapital,
   processBigcapitalSyncJob,
   processBigcapitalVoidJob,
+  processBigcapitalPartialRefundJob,
   voidFinanceReceipt,
   onBigcapitalSyncFailed,
 };

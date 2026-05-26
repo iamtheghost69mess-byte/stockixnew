@@ -251,51 +251,51 @@ EFFORT: Medium
 PRIORITY: High  
 EFFORT: —
 
-🔲 **Second POS org does not auto-create Finance org** — `platformOrgController` create org has no Finance counterpart job.
+⚠️ **Second POS org does not auto-create Finance org** — **Phase 0:** combined stacks block ad-hoc `POST /organizations` when `FINANCE_INTERNAL_BASE_URL` is set (`combinedOrgProvisionGuard.js`). Full orchestration (control-plane + Finance + wire) → Phase 2.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: High (orchestration remaining)
 
 ⚠️ **Sync one-way (POS → Finance)** — No Finance org/COA changes propagated back to POS.
 
 PRIORITY: Medium  
 EFFORT: —
 
-⚠️ **Wire failure → `partial` tenant; retry `hasOp` skip** — Retry may skip `wire_pos_integration` if journal marks op complete while integration still error.
+✅ **Wire failure → `partial` tenant; retry `hasOp` skip** — **Phase 0 (May 2026):** Worker calls `GET .../integration/bigcapital/health` before skipping journaled wire; re-wires when unhealthy (`verify-pos-bigcapital-integration.ts`, `provision-runtime.ts`).
 
 PRIORITY: High  
-EFFORT: Medium
+EFFORT: Low — verify on staging
 
 ---
 
 ### 4.2 Sales → Accounting Flow
 
-🔲 **Cross-product event bus / `originatedBy`** — No shared event bus; zero `originatedBy` matches in monorepo. Bridge is BullMQ `bigcapital_sync` → HTTP `POST /api/internal/pos/receipts` only.
+⚠️ **Cross-product event bus / `originatedBy`** — **Phase 1 (May 2026):** Durable `AccountingIntegrationOutbox` + `originatedBy` on enqueue paths; worker drains pending rows when Redis down. Full cross-product bus still deferred.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Medium (bus remaining)
 
 ⚠️ **Paid orders only** — Enqueue from paid paths + `syncOfflineOrders`; other sale types not unified.
 
 PRIORITY: Medium  
 EFFORT: Medium
 
-❌ **Partial refund does not adjust Finance** — Full void only; partial refund leaves Finance receipt unchanged (`docs/INTEGRATION_REFERENCE.md`).
+✅ **Partial refund does not adjust Finance** — **Phase 1 (May 2026):** `PATCH .../receipts/by-reference/:id/partial-refund` (Finance credit note) + `partial_refund` outbox job from `postRefund` when amount &lt; order total.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Low — staging verify
 
-⚠️ **Multi-tender → single deposit account** — Largest split wins in `bigcapitalSyncProcessor.js`.
+✅ **Multi-tender → single deposit account** — **Phase 1 (May 2026):** `depositPayments[]` on receipt payload; Finance posts manual journal splits from primary deposit to other tender accounts.
 
 PRIORITY: Medium  
-EFFORT: Medium
+EFFORT: Low — staging verify
 
 ⚠️ **Manual item mapping required** — Unmapped lines dropped; partial cart totals can diverge.
 
 PRIORITY: High  
 EFFORT: High (product)
 
-⚠️ **Offline accounting replay** — Offline paid orders enqueue sync when replayed online; no durable accounting outbox beyond BullMQ job idempotency.
+⚠️ **Offline accounting replay** — **Phase 1:** Mongo outbox + worker drain; offline pay still depends on server accept. Batch `offlineSyncKey` on patch/pay remains §2.7.
 
 PRIORITY: Medium  
 EFFORT: Medium

@@ -30,6 +30,7 @@ const {
   logAccessStateTransitionIfChanged,
 } = require("../services/accessStateAuditService");
 const config = require("../config/config");
+const { assertCanCreatePlatformOrg } = require("../services/combinedOrgProvisionGuard");
 
 const DEFAULT_ORG_ENTITLEMENTS = {
   maxLocations: 5,
@@ -291,6 +292,11 @@ const createOrg = async (req, res, next) => {
         : config.stockixTenantId
           ? String(config.stockixTenantId).trim()
           : "";
+
+    await assertCanCreatePlatformOrg({
+      stockixTenantId: stockixTenantIdResolved,
+      idempotencyKey: idemKey ? String(idemKey) : "",
+    });
 
     const createPayload = {
       name: String(name).trim(),

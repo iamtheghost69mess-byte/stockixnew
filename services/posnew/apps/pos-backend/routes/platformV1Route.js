@@ -37,7 +37,10 @@ const {
   resetOrgPin,
   retryProvisioning,
 } = require("../controllers/platformOrgController");
-const { wireBigcapitalIntegration } = require("../controllers/platformIntegrationController");
+const {
+  wireBigcapitalIntegration,
+  getBigcapitalIntegrationHealth,
+} = require("../controllers/platformIntegrationController");
 const {
   summary,
   kpis,
@@ -194,6 +197,11 @@ router.put(
   "/organizations/:id/integration/bigcapital",
   requirePlatformPermission(P.ORG_WRITE),
   wireBigcapitalIntegration
+);
+router.get(
+  "/organizations/:id/integration/bigcapital/health",
+  requirePlatformPermission(P.ORG_READ),
+  getBigcapitalIntegrationHealth
 );
 router.patch(
   "/organizations/:id/lifecycle",

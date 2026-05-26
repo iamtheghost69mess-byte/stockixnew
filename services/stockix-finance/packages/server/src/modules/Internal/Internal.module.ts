@@ -12,6 +12,8 @@ import { InternalResolveTenantService } from './commands/InternalResolveTenant.s
 import { InternalPosController } from './InternalPos.controller';
 import { InternalPosReceiptsService } from './commands/InternalPosReceipts.service';
 import { SaleReceiptsModule } from '@/modules/SaleReceipts/SaleReceipts.module';
+import { CreditNotesModule } from '@/modules/CreditNotes/CreditNotes.module';
+import { ManualJournalsModule } from '@/modules/ManualJournals/ManualJournals.module';
 import { WarehousesModule } from '@/modules/Warehouses/Warehouses.module';
 import { CustomersModule } from '@/modules/Customers/Customers.module';
 import { AccountsModule } from '@/modules/Accounts/Accounts.module';
@@ -37,6 +39,8 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     TenantDBManagerModule,
     UsersModule,
     SaleReceiptsModule,
+    CreditNotesModule,
+    ManualJournalsModule,
     WarehousesModule,
     CustomersModule,
     AccountsModule,

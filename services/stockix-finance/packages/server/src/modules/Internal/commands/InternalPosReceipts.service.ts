@@ -12,7 +12,13 @@ import { CreateSaleReceiptDto } from '@/modules/SaleReceipts/dtos/SaleReceipt.dt
 import { SaleReceipt } from '@/modules/SaleReceipts/models/SaleReceipt';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { DeleteSaleReceipt } from '@/modules/SaleReceipts/commands/DeleteSaleReceipt.service';
+import { CreditNoteApplication } from '@/modules/CreditNotes/CreditNoteApplication.service';
+import { CreateCreditNoteDto } from '@/modules/CreditNotes/dtos/CreditNote.dto';
+import { CreditNote } from '@/modules/CreditNotes/models/CreditNote';
+import { ManualJournalsApplication } from '@/modules/ManualJournals/ManualJournalsApplication.service';
+import { CreateManualJournalDto } from '@/modules/ManualJournals/dtos/ManualJournal.dto';
 import {
+  InternalPosPartialRefundDto,
   InternalPosReceiptPayloadDto,
 } from '../dtos/InternalPosReceipt.dto';
 
@@ -22,6 +28,8 @@ export class InternalPosReceiptsService {
     private readonly cls: ClsService,
     private readonly saleReceiptApplication: SaleReceiptApplication,
     private readonly deleteSaleReceiptService: DeleteSaleReceipt,
+    private readonly creditNoteApplication: CreditNoteApplication,
+    private readonly manualJournalsApplication: ManualJournalsApplication,
 
     @Inject(TenantModel.name)
     private readonly tenantModel: typeof TenantModel,
@@ -31,6 +39,9 @@ export class InternalPosReceiptsService {
 
     @Inject(SaleReceipt.name)
     private readonly saleReceiptModel: TenantModelProxy<typeof SaleReceipt>,
+
+    @Inject(CreditNote.name)
+    private readonly creditNoteModel: TenantModelProxy<typeof CreditNote>,
   ) {}
 
   private async resolveTenantContext(tenantId: number) {
@@ -109,7 +120,58 @@ export class InternalPosReceiptsService {
 
     const dto = this.mapPayloadToDto(payload);
     const receipt = await this.saleReceiptApplication.createSaleReceipt(dto);
+
+    if (payload.depositPayments?.length) {
+      await this.applyDepositPaymentSplits(
+        payload,
+        receipt.receiptDate as unknown as string,
+        referenceNo,
+      );
+    }
+
     return { success: true, data: receipt, idempotent: false };
+  }
+
+  private async applyDepositPaymentSplits(
+    payload: InternalPosReceiptPayloadDto,
+    receiptDate: string,
+    referenceNo: string,
+  ) {
+    const payments = (payload.depositPayments || []).filter(
+      (p) => p.depositAccountId && Number(p.amount) > 0,
+    );
+    if (payments.length < 2) return;
+
+    const primaryId = payload.depositAccountId;
+    const others = payments.filter((p) => p.depositAccountId !== primaryId);
+    if (!others.length) return;
+
+    let index = 0;
+    for (const payment of others) {
+      const amount = Number(payment.amount);
+      if (amount <= 0) continue;
+      index += 1;
+      const journalDto = new CreateManualJournalDto();
+      journalDto.date = receiptDate as unknown as Date;
+      journalDto.publish = true;
+      journalDto.reference = `pos-deposit-split-${referenceNo}-${index}`;
+      journalDto.description = `POS multi-tender reallocation for ${referenceNo}`;
+      journalDto.entries = [
+        {
+          index: 1,
+          credit: amount,
+          accountId: primaryId,
+          note: 'POS tender split',
+        },
+        {
+          index: 2,
+          debit: amount,
+          accountId: payment.depositAccountId,
+          note: 'POS tender split',
+        },
+      ];
+      await this.manualJournalsApplication.createManualJournal(journalDto);
+    }
   }
 
   async voidByReference(tenantId: number, referenceNo: string) {
@@ -128,5 +190,72 @@ export class InternalPosReceiptsService {
 
     await this.deleteSaleReceiptService.deleteSaleReceipt(receipt.id);
     return { success: true, deletedId: receipt.id };
+  }
+
+  async partialRefundByReference(
+    tenantId: number,
+    referenceNo: string,
+    body: InternalPosPartialRefundDto,
+  ) {
+    await this.resolveTenantContext(tenantId);
+
+    const receipt = await this.saleReceiptModel()
+      .query()
+      .where('referenceNo', referenceNo)
+      .first();
+
+    if (!receipt) {
+      throw new NotFoundException(
+        `No sale receipt with referenceNo ${referenceNo}`,
+      );
+    }
+
+    const idemKey = String(
+      body.idempotencyKey || `pos-partial-refund-${referenceNo}-${body.amount}`,
+    ).trim();
+    const creditRef = `pos-partial-refund-${referenceNo}-${idemKey}`;
+
+    const existingNote = await this.creditNoteModel()
+      .query()
+      .where('referenceNo', creditRef)
+      .first();
+
+    if (existingNote) {
+      return {
+        success: true,
+        data: existingNote,
+        idempotent: true,
+        saleReceiptId: receipt.id,
+      };
+    }
+
+    const creditNoteDto = new CreateCreditNoteDto();
+    creditNoteDto.customerId = receipt.customerId;
+    creditNoteDto.creditNoteDate = (body.creditNoteDate ||
+      new Date().toISOString().split('T')[0]) as unknown as Date;
+    creditNoteDto.referenceNo = creditRef;
+    creditNoteDto.note = `POS partial refund for order ${referenceNo}`;
+    creditNoteDto.open = false;
+    if (receipt.branchId) creditNoteDto.branchId = receipt.branchId;
+    if (receipt.warehouseId) creditNoteDto.warehouseId = receipt.warehouseId;
+    creditNoteDto.entries = [
+      {
+        index: 1,
+        itemId: body.refundItemId,
+        quantity: 1,
+        rate: Number(body.amount),
+        description: `Partial refund — POS ${referenceNo}`,
+      },
+    ];
+
+    const creditNote =
+      await this.creditNoteApplication.createCreditNote(creditNoteDto);
+
+    return {
+      success: true,
+      data: creditNote,
+      idempotent: false,
+      saleReceiptId: receipt.id,
+    };
   }
 }
