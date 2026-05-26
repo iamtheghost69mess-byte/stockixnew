@@ -4,6 +4,9 @@ const EVENT_TYPES = [
   "sync_paid_order",
   "void_receipt",
   "partial_refund",
+  "grn_bill",
+  "inventory_adjustment",
+  "stock_take_variance",
 ];
 
 const STATUSES = ["pending", "queued", "processing", "completed", "failed"];

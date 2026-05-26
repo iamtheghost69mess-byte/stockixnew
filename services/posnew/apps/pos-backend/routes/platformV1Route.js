@@ -40,6 +40,7 @@ const {
 const {
   wireBigcapitalIntegration,
   getBigcapitalIntegrationHealth,
+  getIntegrationBridgeSummary,
 } = require("../controllers/platformIntegrationController");
 const {
   summary,
@@ -202,6 +203,11 @@ router.get(
   "/organizations/:id/integration/bigcapital/health",
   requirePlatformPermission(P.ORG_READ),
   getBigcapitalIntegrationHealth
+);
+router.get(
+  "/organizations/:id/integration/bridge-summary",
+  requirePlatformPermission(P.ORG_READ),
+  getIntegrationBridgeSummary
 );
 router.patch(
   "/organizations/:id/lifecycle",

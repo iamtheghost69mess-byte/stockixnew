@@ -64,6 +64,7 @@ Same as A without steps 8–10 (no POS stack).
 
 - **One Finance Docker stack per Stockix tenant.** Additional organizations are new Finance `tenants` rows on that same stack, not separate compose projects.
 - Dashboard: `POST /tenants/:tenantId/organizations` → worker job `organization.provision` ([org-provision-runtime.ts](../infra/worker-service/src/org-provision-runtime.ts)).
+- **Combined accounting+pos (May 2026):** For non-primary orgs, worker also creates a dedicated POS organization and wires `financeTenantId` for that sub-org (`combined-org-pos-provision.ts`). `organizations.pos_organization_id` stores the Mongo org id.
 - Steps: `provision-user` on parent stack → sign-in → `build_organization` → COA `copy-from` parent Finance tenant → `set-parent` → `syncFinanceLicense` for child Finance `tenantId` using parent Stockix plan limits.
 - COA copy failures set `organizations.provisioning_error` (non-fatal); org still becomes `active`.
 - Separate-stack child tenants (`tenant.provision` with `parentTenantSlug`) use export/import COA ([copy-coa-across-stacks.ts](../infra/worker-service/domain/provisioning/adapters/copy-coa-across-stacks.ts)); failures are journaled as `tenant.copy_coa` warn events.
@@ -82,7 +83,9 @@ If POS fails after Finance succeeds → tenant status **`partial`**, Finance dep
 
 **Wire resume (May 2026):** If journal has `tenant.wire_pos_integration` but `GET /api/platform/v1/organizations/:id/integration/bigcapital/health` reports unhealthy, the worker re-runs wire instead of skipping.
 
-**Combined org guard:** On stacks with `FINANCE_INTERNAL_BASE_URL`, platform `POST /organizations` allows only the first org (or `Idempotency-Key: stockix-provision-*`). Additional orgs use control-plane `POST /tenants/:tenantId/organizations`.
+**Combined org guard:** On stacks with `FINANCE_INTERNAL_BASE_URL`, platform `POST /organizations` allows only the first org (or `Idempotency-Key: stockix-provision-*`). Additional orgs use control-plane `POST /tenants/:tenantId/organizations` (Finance + POS + wire).
+
+**Module lifecycle (May 2026):** `POST /tenants/:id/add-module` and `remove-module` accept `accounting` (see [tenant-modules-http.ts](../apps/api/src/tenant-modules-http.ts)).
 
 Dashboard tenant detail shows targeted CTAs and integration checklist fields.
 
@@ -394,7 +397,7 @@ pnpm cli:tenants:migrate:latest
 | Consume store | `POST /api/platform/v1/organizations/:id/provisioning-credentials/consume` | Deletes Redis/memory reveal blob after worker captured PINs |
 | Operator UI | Dashboard provision status / tenant create | `posDefaultCredentials` + `TenantPosBootstrapBanner` |
 
-Manual sign-off: [section-2.1-e2e-checklist.md](./section-2.1-e2e-checklist.md).
+Manual sign-off: [section-2.1-e2e-checklist.md](./section-2.1-e2e-checklist.md). Combined POS+Finance: [section-4-integration-e2e-checklist.md](./section-4-integration-e2e-checklist.md).
 
 ### POS-only entitlements
 

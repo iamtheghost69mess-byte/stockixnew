@@ -173,6 +173,9 @@ async function runWirePosIntegrationStep(params: {
   serviceChargeItemId?: number;
   discountItemId?: number;
   financeDefaultWarehouseId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
   log: (m: string) => void;
   trace: ReturnType<typeof createProvisionTracer>;
   markOp: (
@@ -231,6 +234,9 @@ async function runWirePosIntegrationStep(params: {
       serviceChargeItemId: params.serviceChargeItemId,
       discountItemId: params.discountItemId,
       defaultWarehouseId: params.financeDefaultWarehouseId,
+      defaultVendorId: params.defaultVendorId,
+      inventoryAccountId: params.inventoryAccountId,
+      inventoryVarianceAccountId: params.inventoryVarianceAccountId,
       log: params.log,
     });
     await params.markOp("tenant.wire_pos_integration", "POS Bigcapital integration wired", {
@@ -386,6 +392,9 @@ export async function executeProvisionRuntime(
   let cardAccountId: number | undefined;
   let serviceChargeItemId: number | undefined;
   let discountItemId: number | undefined;
+  let defaultVendorId: number | undefined;
+  let inventoryAccountId: number | undefined;
+  let inventoryVarianceAccountId: number | undefined;
   let posOrganizationId: string | undefined;
   let posUrl: string | undefined;
   let posApiUrl: string | undefined;
@@ -1523,6 +1532,9 @@ export async function executeProvisionRuntime(
           cardAccountId = seeded.cardAccountId;
           serviceChargeItemId = seeded.serviceChargeItemId;
           discountItemId = seeded.discountItemId;
+          defaultVendorId = seeded.defaultVendorId;
+          inventoryAccountId = seeded.inventoryAccountId;
+          inventoryVarianceAccountId = seeded.inventoryVarianceAccountId;
           await persistFinanceDeploymentIds(db, deploymentId, {
             financeTenantId,
             financeDefaultWarehouseId,
@@ -1677,6 +1689,9 @@ export async function executeProvisionRuntime(
           serviceChargeItemId,
           discountItemId,
           financeDefaultWarehouseId,
+          defaultVendorId,
+          inventoryAccountId,
+          inventoryVarianceAccountId,
           log,
           trace,
           markOp,
@@ -1995,6 +2010,15 @@ export async function executeAddModuleRuntime(
         if (seeded.discountItemId) {
           discountItemId = seeded.discountItemId;
         }
+        if (seeded.defaultVendorId) {
+          defaultVendorId = seeded.defaultVendorId;
+        }
+        if (seeded.inventoryAccountId) {
+          inventoryAccountId = seeded.inventoryAccountId;
+        }
+        if (seeded.inventoryVarianceAccountId) {
+          inventoryVarianceAccountId = seeded.inventoryVarianceAccountId;
+        }
       }
     }
 
@@ -2062,6 +2086,9 @@ export async function executeAddModuleRuntime(
         serviceChargeItemId,
         discountItemId,
         financeDefaultWarehouseId,
+        defaultVendorId,
+        inventoryAccountId,
+        inventoryVarianceAccountId,
         log,
         trace,
         markOp: async (operationKey, message, meta) => {
@@ -2117,6 +2144,13 @@ export async function executeAddModuleRuntime(
       posApiUrl: posOutcome.posApiUrl,
       posDefaultCredentials: posOutcome.posDefaultCredentials,
     };
+  }
+
+  if (input.module === "accounting") {
+    const { executeAddAccountingModuleRuntime } = await import(
+      "./add-accounting-module-runtime.js"
+    );
+    return executeAddAccountingModuleRuntime(db, input, log, correlationId);
   }
 
   if (input.module === "pms") {

@@ -17,6 +17,8 @@ import { CreateCreditNoteDto } from '@/modules/CreditNotes/dtos/CreditNote.dto';
 import { CreditNote } from '@/modules/CreditNotes/models/CreditNote';
 import { ManualJournalsApplication } from '@/modules/ManualJournals/ManualJournalsApplication.service';
 import { CreateManualJournalDto } from '@/modules/ManualJournals/dtos/ManualJournal.dto';
+import { ItemsApplicationService } from '@/modules/Items/ItemsApplication.service';
+import { EditItemDto } from '@/modules/Items/dtos/Item.dto';
 import {
   InternalPosPartialRefundDto,
   InternalPosReceiptPayloadDto,
@@ -30,6 +32,7 @@ export class InternalPosReceiptsService {
     private readonly deleteSaleReceiptService: DeleteSaleReceipt,
     private readonly creditNoteApplication: CreditNoteApplication,
     private readonly manualJournalsApplication: ManualJournalsApplication,
+    private readonly itemsApplication: ItemsApplicationService,
 
     @Inject(TenantModel.name)
     private readonly tenantModel: typeof TenantModel,
@@ -92,6 +95,19 @@ export class InternalPosReceiptsService {
     return dto;
   }
 
+  private async applyRecipeUnitCosts(
+    entries: InternalPosReceiptPayloadDto['entries'],
+  ) {
+    for (const entry of entries || []) {
+      const unitCost = entry.unitCost;
+      if (unitCost == null || !Number.isFinite(Number(unitCost))) continue;
+      const cost = Math.max(0, Number(unitCost));
+      const editDto = new EditItemDto();
+      editDto.costPrice = cost;
+      await this.itemsApplication.editItem(entry.itemId, editDto);
+    }
+  }
+
   async checkDuplicate(tenantId: number, referenceNo: string) {
     await this.resolveTenantContext(tenantId);
     const existing = await this.saleReceiptModel()
@@ -117,6 +133,8 @@ export class InternalPosReceiptsService {
     if (existing) {
       return { success: true, data: existing, idempotent: true };
     }
+
+    await this.applyRecipeUnitCosts(payload.entries);
 
     const dto = this.mapPayloadToDto(payload);
     const receipt = await this.saleReceiptApplication.createSaleReceipt(dto);

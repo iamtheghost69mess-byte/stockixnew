@@ -87,6 +87,7 @@ import {
 } from "./finance-tenant-resolve.js";
 import { registerPosProxyRoutes } from "./routes/pos-proxy-http.js";
 import { registerPosCredentialsRoutes } from "./pos-credentials-http.js";
+import { registerIntegrationBridgeRoutes } from "./integration-bridge-http.js";
 import { effectivePosUrl } from "./pos-public-url.js";
 import { registerTenantModulesRoutes } from "./tenant-modules-http.js";
 import { registerPmsProxyRoutes } from "./routes/pms-proxy-http.js";
@@ -294,6 +295,7 @@ function serializeOrganizationRow(
     status: row.status,
     isPrimary: row.isPrimary,
     financeOrganizationId: row.financeOrganizationId ?? null,
+    posOrganizationId: row.posOrganizationId ?? null,
     provisioningError: row.provisioningError,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -1249,6 +1251,7 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
   const bodyParsed = z
     .object({
       financeOrganizationId: z.string().min(1).max(255).optional(),
+      posOrganizationId: z.string().min(1).max(64).optional(),
       provisioningError: z.string().max(2000).nullable().optional(),
     })
     .safeParse(body);
@@ -1262,6 +1265,7 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
 
   if (
     !bodyParsed.data.financeOrganizationId
+    && !bodyParsed.data.posOrganizationId
     && bodyParsed.data.provisioningError === undefined
   ) {
     return c.json({ error: "VALIDATION_ERROR", message: "No fields to update" }, 400);
@@ -1272,6 +1276,9 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
     .set({
       ...(bodyParsed.data.financeOrganizationId
         ? { financeOrganizationId: bodyParsed.data.financeOrganizationId }
+        : {}),
+      ...(bodyParsed.data.posOrganizationId
+        ? { posOrganizationId: bodyParsed.data.posOrganizationId }
         : {}),
       ...(bodyParsed.data.provisioningError !== undefined
         ? { provisioningError: bodyParsed.data.provisioningError }
@@ -5796,6 +5803,7 @@ registerTenantConfigApi(app, db);
 registerNotificationsApi(app, db);
 registerTenantFinanceUsersApi(app, db);
 registerPosCredentialsRoutes(app, db);
+registerIntegrationBridgeRoutes(app, db);
 registerTenantModulesRoutes(app, db);
 registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);

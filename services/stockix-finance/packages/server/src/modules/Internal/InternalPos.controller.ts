@@ -14,12 +14,17 @@ import { PublicRoute } from '@/modules/Auth/guards/jwt.guard';
 import { TenantAgnosticRoute } from '@/modules/Tenancy/TenancyGlobal.guard';
 import { InternalSecretGuard } from './guards/InternalSecret.guard';
 import { InternalPosReceiptsService } from './commands/InternalPosReceipts.service';
+import { InternalPosInventoryService } from './commands/InternalPosInventory.service';
 import {
   CreateInternalPosReceiptDto,
   InternalPosCheckDuplicateDto,
   InternalPosPartialRefundDto,
   InternalPosTenantBodyDto,
 } from './dtos/InternalPosReceipt.dto';
+import {
+  CreateInternalPosGrnBillDto,
+  CreateInternalPosInventoryVarianceDto,
+} from './dtos/InternalPosInventory.dto';
 
 @ApiTags('Internal POS')
 @Controller('internal/pos')
@@ -29,6 +34,7 @@ import {
 export class InternalPosController {
   constructor(
     private readonly internalPosReceipts: InternalPosReceiptsService,
+    private readonly internalPosInventory: InternalPosInventoryService,
   ) {}
 
   @Post('receipts')
@@ -65,6 +71,26 @@ export class InternalPosController {
       body.tenantId,
       referenceNo,
       body,
+    );
+  }
+
+  @Post('inventory/grn-bill')
+  @HttpCode(HttpStatus.CREATED)
+  async createGrnBill(@Body() body: CreateInternalPosGrnBillDto) {
+    return this.internalPosInventory.createGrnBill(
+      body.tenantId,
+      body.payload,
+    );
+  }
+
+  @Post('inventory/variance-journal')
+  @HttpCode(HttpStatus.CREATED)
+  async postInventoryVariance(
+    @Body() body: CreateInternalPosInventoryVarianceDto,
+  ) {
+    return this.internalPosInventory.postInventoryVariance(
+      body.tenantId,
+      body.payload,
     );
   }
 }

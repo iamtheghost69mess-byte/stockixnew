@@ -19,6 +19,7 @@ export async function enqueueOrgProvisioning(
       slug: organizations.slug,
       name: organizations.name,
       tenantId: organizations.tenantId,
+      isPrimary: organizations.isPrimary,
     })
     .from(organizations)
     .where(and(eq(organizations.id, organizationId), eq(organizations.tenantId, tenantId)))
@@ -31,6 +32,7 @@ export async function enqueueOrgProvisioning(
     .select({
       id: tenants.id,
       slug: tenants.slug,
+      modules: tenants.modules,
       ownerId: tenants.ownerId,
       adminEmail: tenants.adminEmail,
       adminFirstName: tenants.adminFirstName,
@@ -83,6 +85,8 @@ export async function enqueueOrgProvisioning(
     correlationId,
     payload: {
       organizationId,
+      organizationSlug: org.slug,
+      isPrimary: org.isPrimary,
       adminEmail: tenant.adminEmail,
       adminFirstName: tenant.adminFirstName,
       adminLastName: tenant.adminLastName,
@@ -90,6 +94,7 @@ export async function enqueueOrgProvisioning(
       parentTenantSlug: tenant.slug,
       mainTenantInternalBaseUrl,
       stockixTenantId: tenantId,
+      tenantModules: tenant.modules,
       stockixApiUrl:
         process.env.STOCKIX_API_URL?.trim()
         ?? process.env.NEXT_PUBLIC_STOCKIX_API_URL?.trim()

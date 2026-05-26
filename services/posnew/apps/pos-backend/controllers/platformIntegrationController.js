@@ -71,6 +71,13 @@ const wireBigcapitalIntegration = async (req, res, next) => {
         parsePositiveInt(body.serviceChargeItemId) ?? prior.serviceChargeItemId,
       discountItemId:
         parsePositiveInt(body.discountItemId) ?? prior.discountItemId,
+      defaultVendorId:
+        parsePositiveInt(body.defaultVendorId) ?? prior.defaultVendorId,
+      inventoryAccountId:
+        parsePositiveInt(body.inventoryAccountId) ?? prior.inventoryAccountId,
+      inventoryVarianceAccountId:
+        parsePositiveInt(body.inventoryVarianceAccountId) ??
+        prior.inventoryVarianceAccountId,
       syncStatus: "idle",
       lastSyncError: null,
     };
@@ -199,8 +206,57 @@ const getBigcapitalIntegrationHealth = async (req, res, next) => {
   }
 };
 
+/**
+ * Platform read: health + mapping coverage (owner dashboard / ops).
+ */
+const getIntegrationBridgeSummary = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(orgId)) {
+      return next(createHttpError(400, "Invalid organization id"));
+    }
+
+    const org = await Organization.findById(orgId);
+    if (!org) {
+      return next(createHttpError(404, "Organization not found"));
+    }
+
+    const { getIntegrationMappingCoverage } = require("../services/integrationMappingCoverage");
+
+    const [integrationConfig, accountingConfig, coverage] = await Promise.all([
+      IntegrationConfig.findOne({ organization: orgId }),
+      AccountingConfig.findOne({ organization: orgId }).select(
+        "bigcapitalIntegrationEnabled"
+      ),
+      getIntegrationMappingCoverage(orgId),
+    ]);
+
+    const evaluation = evaluateBigcapitalIntegrationHealth(integrationConfig, {
+      requireAccountingFlag: true,
+      accountingIntegrationEnabled: Boolean(
+        accountingConfig?.bigcapitalIntegrationEnabled
+      ),
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        organizationId: orgId,
+        healthy: evaluation.healthy,
+        healthReason: evaluation.healthy ? null : evaluation.reason,
+        financeTenantId: integrationConfig?.bigcapital?.financeTenantId ?? null,
+        integrationEnabled: Boolean(integrationConfig?.bigcapital?.enabled),
+        mappingCoverage: coverage,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
 module.exports = {
   wireBigcapitalIntegration,
   getBigcapitalIntegrationHealth,
+  getIntegrationBridgeSummary,
   evaluateBigcapitalIntegrationHealth,
 };

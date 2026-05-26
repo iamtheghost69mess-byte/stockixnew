@@ -1,6 +1,7 @@
 const IntegrationConfig = require("../models/integrationConfigModel");
 const IntegrationItemMapping = require("../models/integrationItemMappingModel");
 const Order = require("../models/orderModel");
+const { computeMenuLineUnitCost } = require("./financeRecipeCost");
 const {
   NOTIFICATION_EVENTS,
   createBackofficeNotificationFromEvent,
@@ -162,9 +163,34 @@ function appendFinanceAdjustmentEntries(order, cfg, entries) {
   }
 }
 
-function buildMappedEntries(order, itemMap) {
-  return order.items
-    .filter((item) => item.menuItem && Number(item.quantity) > 0)
+async function buildMappedEntries(order, itemMap, opts = {}) {
+  const syncRecipeCost = opts.syncRecipeCost !== false;
+  const orgId = order.organization ? String(order.organization) : null;
+
+  const sellable = order.items.filter(
+    (item) => item.menuItem && Number(item.quantity) > 0
+  );
+
+  const recipeCosts = new Map();
+  if (syncRecipeCost && orgId) {
+    await Promise.all(
+      sellable.map(async (item) => {
+        const menuId = String(item.menuItem);
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        const unitCost = await computeMenuLineUnitCost(
+          menuId,
+          qty,
+          item.menuItemVariant || null,
+          orgId
+        );
+        if (unitCost != null && unitCost >= 0) {
+          recipeCosts.set(menuId, unitCost);
+        }
+      })
+    );
+  }
+
+  return sellable
     .map((item) => {
       const mapped = itemMap[String(item.menuItem)];
       const qty = Math.max(1, Number(item.quantity) || 1);
@@ -172,13 +198,16 @@ function buildMappedEntries(order, itemMap) {
         Number(item.pricePerQuantity) ||
         (Number(item.price) > 0 ? Number(item.price) / qty : 0);
       const lineDiscount = Number(item.discount?.amount);
-      return {
+      const entry = {
         itemId: mapped?.id ?? null,
         description: `${item.name || "Item"}${modifierSuffix(item)}`,
         quantity: qty,
         rate,
         discount: lineDiscount > 0 ? lineDiscount : 0,
       };
+      const unitCost = recipeCosts.get(String(item.menuItem));
+      if (unitCost != null) entry.unitCost = unitCost;
+      return entry;
     })
     .filter((e) => e.itemId != null);
 }
@@ -210,7 +239,22 @@ async function buildSaleReceiptPayload(order, integrationConfig) {
     ])
   );
 
-  const entries = buildMappedEntries(order, itemMap);
+  if (cfg.allowPartialUnmappedReceipt !== true) {
+    const mappedIds = new Set(mappings.map((m) => String(m.posMenuItemId)));
+    const unmappedSellable = (order.items || []).filter(
+      (item) =>
+        item.menuItem
+        && Number(item.quantity) > 0
+        && !mappedIds.has(String(item.menuItem))
+    );
+    if (unmappedSellable.length > 0) {
+      await notifyUnmappedBigcapitalSync(order, orgId);
+      return null;
+    }
+  }
+
+  const syncRecipeCost = cfg.syncRecipeCostOnSale !== false;
+  const entries = await buildMappedEntries(order, itemMap, { syncRecipeCost });
   appendFinanceAdjustmentEntries(order, cfg, entries);
 
   if (!entries.length) return null;

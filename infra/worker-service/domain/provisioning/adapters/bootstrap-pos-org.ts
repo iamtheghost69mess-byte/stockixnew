@@ -12,6 +12,13 @@ export type PosDefaultCredentials = {
   allRoles: PosRoleCredential[];
 };
 
+export type BootstrapPosOrgForControlPlaneInput = BootstrapPosOrgInput & {
+  /** Control-plane organization UUID (idempotency + slug source). */
+  controlPlaneOrganizationId: string;
+  /** POS org slug (unique per control-plane org). */
+  organizationSlug: string;
+};
+
 export type BootstrapPosOrgInput = {
   slug: string;
   tenantName: string;
@@ -373,6 +380,109 @@ export async function bootstrapPosOrganization(
     log(
       `[provision][pos] warning: provisioning-credentials/consume returned ${consumeRes.status} orgId=${orgId}`,
     );
+  }
+
+  return {
+    posOrganizationId: orgId,
+    posDefaultCredentials: toPosDefaultCredentials(credentials),
+    bootstrapMode,
+  };
+}
+
+/**
+ * Creates a dedicated POS organization for a control-plane org (combined multi-org).
+ */
+export async function bootstrapPosOrganizationForControlPlane(
+  input: BootstrapPosOrgForControlPlaneInput,
+): Promise<BootstrapPosOrgResult> {
+  const apiKey = apiKeyOrThrow();
+  const base = posApiBase(input);
+  const log = input.log;
+
+  await waitForPosBackend(base, log);
+  await waitForPlatformApiAuth(base, apiKey, log);
+
+  const licenseStartsAt = new Date().toISOString();
+  const licenseEndsAt = new Date(
+    input.licenseExpiresAt != null
+      ? new Date(input.licenseExpiresAt).getTime()
+      : Date.now() + 365 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const idempotencyKey = `stockix-org-provision-${input.controlPlaneOrganizationId}`;
+  const entitlements = buildPosEntitlementsForProvision({
+    modules: input.tenantModules,
+    maxUsers: input.maxUsers,
+    maxLocations: input.maxLocations,
+    maxOrdersPerMonth: input.maxOrdersPerMonth,
+  });
+
+  log(
+    `[provision][pos] creating control-plane org slug=${input.organizationSlug} cpOrg=${input.controlPlaneOrganizationId}`,
+  );
+  const createRes = await platformFetch(base, "/api/platform/v1/organizations", {
+    method: "POST",
+    apiKey,
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({
+      name: input.tenantName,
+      slug: input.organizationSlug,
+      stockixTenantId: input.tenantId,
+      ownerEmail: input.adminEmail,
+      timezone: "UTC",
+      licenseStartsAt,
+      licenseEndsAt,
+      entitlements,
+    }),
+  });
+
+  if (!createRes.ok) {
+    throw new Error(
+      `POS org create failed (${createRes.status}): ${createRes.text.slice(0, 500)}`,
+    );
+  }
+
+  const orgId = readOrgId(createRes.json);
+  if (!orgId) {
+    throw new Error("POS org create response missing organization id");
+  }
+
+  const bootstrapMode =
+    isRecord(createRes.json) && typeof createRes.json.bootstrapMode === "string"
+      ? createRes.json.bootstrapMode
+      : undefined;
+
+  let credentials = normalizeCredentials(
+    isRecord(createRes.json) && isRecord(createRes.json.data)
+      ? createRes.json.data.defaultCredentials
+      : null,
+  );
+  if (credentials.length === 0) {
+    credentials = readFullCredentialsFromJson(createRes.json);
+  }
+
+  if (bootstrapMode !== "sync_fallback") {
+    const pollStarted = Date.now();
+    log(`[provision][pos] waiting for org bootstrap orgId=${orgId}`);
+    while (Date.now() - pollStarted < BOOTSTRAP_POLL_TIMEOUT_MS) {
+      const statusRes = await platformFetch(
+        base,
+        `/api/platform/v1/organizations/${orgId}/provisioning-status`,
+        { method: "GET", apiKey },
+      );
+      if (!statusRes.ok) {
+        throw new Error(
+          `POS provisioning-status failed (${statusRes.status}): ${statusRes.text.slice(0, 300)}`,
+        );
+      }
+      const ready = isRecord(statusRes.json) && statusRes.json.readyForPinLogin === true;
+      if (ready) break;
+      await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
+    }
+  }
+
+  if (credentials.length === 0) {
+    credentials = await fetchCredentialsFromOrg(base, orgId, apiKey);
   }
 
   return {

@@ -30,6 +30,12 @@ export class InternalPosReceiptEntryDto {
   @IsOptional()
   @IsNumber()
   discount?: number;
+
+  /** Optional recipe-based unit cost for COGS (updates Finance item cost before receipt). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
 }
 
 export class InternalPosDepositPaymentDto {

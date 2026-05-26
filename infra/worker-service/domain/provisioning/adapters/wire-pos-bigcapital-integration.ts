@@ -15,6 +15,9 @@ export type WirePosBigcapitalIntegrationInput = {
   serviceChargeItemId?: number;
   discountItemId?: number;
   defaultWarehouseId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
   log: (message: string) => void;
   posBaseUrl?: string;
 };
@@ -83,6 +86,15 @@ export async function wirePosBigcapitalIntegration(
   }
   if (input.defaultWarehouseId && input.defaultWarehouseId > 0) {
     body.defaultWarehouseId = input.defaultWarehouseId;
+  }
+  if (input.defaultVendorId && input.defaultVendorId > 0) {
+    body.defaultVendorId = input.defaultVendorId;
+  }
+  if (input.inventoryAccountId && input.inventoryAccountId > 0) {
+    body.inventoryAccountId = input.inventoryAccountId;
+  }
+  if (input.inventoryVarianceAccountId && input.inventoryVarianceAccountId > 0) {
+    body.inventoryVarianceAccountId = input.inventoryVarianceAccountId;
   }
 
   const res = await fetch(url, {

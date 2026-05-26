@@ -6,6 +6,9 @@ export type SeedFinancePosDefaultsResult = {
   cardAccountId: number;
   serviceChargeItemId?: number;
   discountItemId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
 };
 
 function readOptionalPositiveId(value: unknown): number | undefined {
@@ -60,12 +63,17 @@ export async function seedFinancePosDefaults(params: {
   }
   const serviceChargeItemId = readOptionalPositiveId(body.serviceChargeItemId);
   const discountItemId = readOptionalPositiveId(body.discountItemId);
+  const defaultVendorId = readOptionalPositiveId(body.defaultVendorId);
+  const inventoryAccountId = readOptionalPositiveId(body.inventoryAccountId);
+  const inventoryVarianceAccountId = readOptionalPositiveId(
+    body.inventoryVarianceAccountId,
+  );
   const bridgeNote =
     serviceChargeItemId || discountItemId
       ? ` serviceCharge=${serviceChargeItemId ?? "n/a"} discount=${discountItemId ?? "n/a"}`
       : "";
   params.log?.(
-    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}${bridgeNote}`,
+    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}${bridgeNote} vendor=${defaultVendorId ?? "n/a"}`,
   );
   return {
     walkInCustomerId,
@@ -73,5 +81,8 @@ export async function seedFinancePosDefaults(params: {
     cardAccountId,
     serviceChargeItemId,
     discountItemId,
+    defaultVendorId,
+    inventoryAccountId,
+    inventoryVarianceAccountId,
   };
 }

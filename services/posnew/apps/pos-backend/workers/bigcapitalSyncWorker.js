@@ -11,6 +11,11 @@ const {
   onBigcapitalSyncFailed,
 } = require("../services/bigcapitalSyncProcessor");
 const {
+  processGrnBillJob,
+  processInventoryAdjustJob,
+  processStockTakeVarianceJob,
+} = require("../services/bigcapitalInventorySync");
+const {
   markOutboxProcessing,
   markOutboxCompleted,
   markOutboxFailed,
@@ -40,6 +45,26 @@ async function main() {
     sync_paid_order: (job) => runWithOutbox(job, processBigcapitalSyncJob),
     void_receipt: (job) => runWithOutbox(job, processBigcapitalVoidJob),
     partial_refund: (job) => runWithOutbox(job, processBigcapitalPartialRefundJob),
+    grn_bill: (job) =>
+      runWithOutbox(job, (j) =>
+        processGrnBillJob({
+          data: {
+            grnId: j.data.grnId || j.data.orderId,
+            organizationId: j.data.organizationId,
+          },
+        })
+      ),
+    inventory_adjustment: (job) => runWithOutbox(job, processInventoryAdjustJob),
+    stock_take_variance: (job) =>
+      runWithOutbox(job, (j) =>
+        processStockTakeVarianceJob({
+          data: {
+            stockTakeSessionId:
+              j.data.stockTakeSessionId || j.data.orderId,
+            organizationId: j.data.organizationId,
+          },
+        })
+      ),
   };
 
   const worker = createWorker(QUEUE_NAME, async (job) => {

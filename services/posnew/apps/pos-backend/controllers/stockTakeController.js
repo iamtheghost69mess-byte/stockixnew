@@ -8,6 +8,7 @@ const stockBalanceService = require("../services/stockBalanceService");
 const accountingService = require("../services/accountingService");
 const { recordInventoryAudit } = require("../services/inventoryAuditService");
 const { emitPos } = require("../utils/socketEmit");
+const { enqueueBigcapitalStockTakeIfEnabled } = require("../services/bigcapitalSyncEnqueue");
 const Location = require("../models/locationModel");
 const { assertTenantOrganization } = require("../utils/tenantOrg");
 
@@ -449,6 +450,12 @@ const postSession = async (req, res, next) => {
         at: Date.now(),
       });
     }
+
+    enqueueBigcapitalStockTakeIfEnabled(locked, {
+      originatedBy: "stockTakeController.postSession",
+    }).catch((err) => {
+      console.error("[stockTake] Finance variance enqueue failed:", err.message);
+    });
 
     const populated = await StockTakeSession.findById(locked._id)
       .populate("lines.ingredient", "name unit sku isSerialTracked")

@@ -24,6 +24,18 @@ const integrationConfigSchema = new mongoose.Schema(
       discountItemId: { type: Number },
       /** Finance item for partial refund credit notes (falls back to discountItemId). */
       refundAdjustmentItemId: { type: Number },
+      /** Default Finance vendor for GRN bills when supplier is not mapped. */
+      defaultVendorId: { type: Number },
+      /** Finance GL accounts for inventory variance journals from POS. */
+      inventoryAccountId: { type: Number },
+      inventoryVarianceAccountId: { type: Number },
+      /** When true, push recipe-based unit cost on sale receipt lines (default true). */
+      syncRecipeCostOnSale: { type: Boolean, default: true },
+      /**
+       * When false (default), any unmapped sellable menu line blocks the Finance receipt
+       * (avoids partial cart totals). Set true only for deliberate partial sync.
+       */
+      allowPartialUnmappedReceipt: { type: Boolean, default: false },
       /** POS location → Bigcapital branch/warehouse. */
       locationMapping: [
         {

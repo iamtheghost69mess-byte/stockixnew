@@ -7,6 +7,9 @@ const JOB_NAME_BY_EVENT = {
   sync_paid_order: "sync_paid_order",
   void_receipt: "void_receipt",
   partial_refund: "partial_refund",
+  grn_bill: "grn_bill",
+  inventory_adjustment: "inventory_adjustment",
+  stock_take_variance: "stock_take_variance",
 };
 
 /**
@@ -14,17 +17,18 @@ const JOB_NAME_BY_EVENT = {
  * @param {object} params
  * @param {string} params.organizationId
  * @param {string} params.eventType
- * @param {string} params.orderId
+ * @param {string} [params.orderId]
+ * @param {string} [params.resourceId] - primary resource id when not an order
  * @param {string} params.idempotencyKey
  * @param {string} [params.originatedBy]
  * @param {object} [params.payload]
  */
 async function recordAndDispatchAccountingSync(params) {
   const orgId = params.organizationId;
-  const orderId = params.orderId;
+  const resourceId = params.resourceId || params.orderId;
   const eventType = params.eventType;
   const idempotencyKey = String(params.idempotencyKey || "").trim();
-  if (!orgId || !orderId || !eventType || !idempotencyKey) {
+  if (!orgId || !resourceId || !eventType || !idempotencyKey) {
     throw new Error("recordAndDispatchAccountingSync: missing required fields");
   }
 
@@ -38,7 +42,7 @@ async function recordAndDispatchAccountingSync(params) {
     row = await AccountingIntegrationOutbox.create({
       organization: orgId,
       eventType,
-      orderId,
+      orderId: resourceId,
       originatedBy: params.originatedBy || "",
       payload: params.payload || {},
       status: "pending",
@@ -49,7 +53,7 @@ async function recordAndDispatchAccountingSync(params) {
   }
 
   const jobData = {
-    orderId: String(orderId),
+    orderId: String(resourceId),
     organizationId: String(orgId),
     outboxId: String(row._id),
     originatedBy: params.originatedBy || row.originatedBy || "",
@@ -181,6 +185,7 @@ async function drainPendingAccountingOutbox(handlers, limit = 25) {
 
 module.exports = {
   QUEUE_NAME,
+  JOB_NAME_BY_EVENT,
   recordAndDispatchAccountingSync,
   markOutboxProcessing,
   markOutboxCompleted,
