@@ -14,9 +14,12 @@ export type OfflineMutation = {
   updatedAt: number;
 };
 
-const DB_NAME = "pos-offline-db";
-const DB_VERSION = 2;
+export const OFFLINE_DB_NAME = "pos-offline-db";
+export const OFFLINE_DB_VERSION = 3;
+const DB_NAME = OFFLINE_DB_NAME;
+const DB_VERSION = OFFLINE_DB_VERSION;
 const STORE = "mutations";
+export const STOCK_SNAPSHOT_STORE = "stock_snapshot";
 
 function isBrowser() {
   return typeof window !== "undefined" && !!window.indexedDB;
@@ -42,6 +45,9 @@ function openDb(): Promise<IDBDatabase> {
         const store = db.createObjectStore(STORE, { keyPath: "id" });
         store.createIndex("dedupeKey", "dedupeKey", { unique: false });
         store.createIndex("createdAt", "createdAt", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(STOCK_SNAPSHOT_STORE)) {
+        db.createObjectStore(STOCK_SNAPSHOT_STORE, { keyPath: "locationId" });
       }
     };
     req.onsuccess = () => resolve(req.result);

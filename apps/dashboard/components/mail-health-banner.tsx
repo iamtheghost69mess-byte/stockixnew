@@ -7,7 +7,7 @@ import { useMe } from "@/hooks/use-me";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function MailHealthBanner() {
-  const me = useMe();
+  const { me } = useMe();
   const [configured, setConfigured] = useState<boolean | null>(null);
 
   const showBanner =

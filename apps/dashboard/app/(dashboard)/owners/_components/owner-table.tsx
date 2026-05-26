@@ -11,7 +11,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { useMe } from "@/hooks/use-me";
+import type { Me } from "@/hooks/use-me";
 import { formatDate } from "@/lib/date-format";
 import {
   ROLE,
@@ -91,7 +91,7 @@ function roleBadgeClass(role: Role) {
 }
 
 export type OwnerTableProps = {
-  me: ReturnType<typeof useMe>;
+  me: Me | null;
   canManageOwners: boolean;
   owners: Owner[];
   loading: boolean;

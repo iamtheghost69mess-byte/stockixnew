@@ -21,7 +21,7 @@ import { LicenseTable } from "./license-table";
 export function LicensesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const me = useMe();
+  const { me } = useMe();
   const canGenerateLicenses = me?.role === "super_admin";
   const [analytics, setAnalytics] = useState<LicenseAnalytics | null>(null);
   const [licenses, setLicenses] = useState<LicenseRow[]>([]);

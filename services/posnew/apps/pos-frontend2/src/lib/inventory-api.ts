@@ -467,6 +467,32 @@ export async function fetchWastageReport(params?: { from?: string; to?: string }
   >(`/api/inventory/wastage/report${suffix}`);
 }
 
+export function buildInventoryAdjustDedupeKey(data: InventoryAdjustParams): string {
+  const loc = data.locationId ?? "";
+  return `adjust:${data.ingredientId}:${loc}:${data.reason}:${data.quantityDelta}`;
+}
+
+export type InventoryAdjustDeliveryResult =
+  | { mode: "sent"; result: InventoryAdjustResult }
+  | { mode: "queued" };
+
+export async function adjustInventoryWithOfflineSupport(
+  data: InventoryAdjustParams,
+): Promise<InventoryAdjustDeliveryResult> {
+  const online = typeof navigator === "undefined" ? true : navigator.onLine;
+  if (online) {
+    const res = await adjustInventory(data);
+    return { mode: "sent", result: res.data as InventoryAdjustResult };
+  }
+  const { enqueueOfflineMutation } = await import("@/lib/offline-queue");
+  await enqueueOfflineMutation(
+    "inventory_adjust",
+    data as Record<string, unknown>,
+    buildInventoryAdjustDedupeKey(data),
+  );
+  return { mode: "queued" };
+}
+
 export async function adjustInventory(data: InventoryAdjustParams) {
   return posApiJson<InventoryAdjustResult>("/api/inventory/adjust", {
     method: "POST",

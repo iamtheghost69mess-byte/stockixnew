@@ -9,12 +9,10 @@ const repoRoot = path.join(dashboardDir, "..", "..");
 const reactRoot = realpathSync(path.join(repoRoot, "node_modules", "react"));
 const reactDomRoot = realpathSync(path.join(repoRoot, "node_modules", "react-dom"));
 
+/** Dedupe React only — do not alias jsx-runtime paths (breaks react-server exports in RSC). */
 const reactAliases = {
   react: reactRoot,
   "react-dom": reactDomRoot,
-  "react/jsx-runtime": path.join(reactRoot, "jsx-runtime.js"),
-  "react/jsx-dev-runtime": path.join(reactRoot, "jsx-dev-runtime.js"),
-  "react-dom/client": path.join(reactDomRoot, "client.js"),
 } as const;
 
 const nextConfig: NextConfig = {
@@ -38,6 +36,7 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       ...reactAliases,
     };
+    config.resolve.dedupe = [...(config.resolve.dedupe ?? []), "react", "react-dom"];
     return config;
   },
 };

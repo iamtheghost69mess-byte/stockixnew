@@ -3,7 +3,7 @@
 import { useMe } from "@/hooks/use-me";
 
 export function usePermissions(): string[] {
-  const me = useMe();
+  const { me } = useMe();
   return me?.permissions ?? [];
 }
 

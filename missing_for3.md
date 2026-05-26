@@ -16,6 +16,7 @@
 | STXI license keys (control plane + POS validate) | `@repo/shared/stxi-license-key`, `stxiLicenseValidate.js`, migrations `0046` |
 | Custom roles + dashboard RBAC | `platform_roles`, `/settings/roles`, `rbac.test.ts` |
 | Owner invite email durable queue (BullMQ) | `owner-invite-mail-queue.ts`, `owner-invite-delivery.ts`, `CONTROL_PLANE_REDIS_URL` |
+| POS §2.5 inventory & stock | `offline-stock-mirror.ts`, `adjustInventoryWithOfflineSupport`, stock-take serial guard, `mdfiles/offline-inventory.md` |
 
 ### Legend (plan fixes 1–10)
 
@@ -144,25 +145,6 @@ EFFORT: Low
 
 PRIORITY: Medium  
 EFFORT: Medium
-
----
-
-### 2.5 Inventory & Stock
-
-⚠️ **Live stock check offline** — Server-side MongoDB stock check works when online; offline queue has no stock mirror.
-
-PRIORITY: High  
-EFFORT: High
-
-⚠️ **Stock take — serial-tracked lines** — Backend rejects post without serials; stock-take detail UI lacks serial-tracked banner/guard.
-
-PRIORITY: Medium  
-EFFORT: Medium
-
-⚠️ **Offline `inventory_adjust` queue kind** — Processor exists; frontend never enqueues it.
-
-PRIORITY: Low  
-EFFORT: Low
 
 ---
 

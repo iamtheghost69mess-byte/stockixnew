@@ -293,9 +293,7 @@ export function LicenseDetailHeader({
                   Suspend license
                 </Button>
               ) : null}
-              {canExtendOrEditNotes &&
-              (L.status === "suspended" || L.status === "expired") &&
-              L.status !== "revoked" ? (
+              {canExtendOrEditNotes && (L.status === "suspended" || L.status === "expired") ? (
                 <Button className="w-full" onClick={() => onReactivateOpenChange(true)}>
                   Reactivate license
                 </Button>

@@ -23,7 +23,7 @@ export type Owner = {
 };
 
 export function useOwnersPage() {
-  const me = useMe();
+  const { me } = useMe();
   const canManageOwners = Boolean(me?.capabilities.canManageOwners);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [loadErr, setLoadErr] = useState("");

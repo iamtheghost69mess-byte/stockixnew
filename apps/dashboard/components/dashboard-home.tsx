@@ -74,7 +74,7 @@ function KpiSkeletonGrid() {
 }
 
 export function DashboardHome() {
-  const me = useMe();
+  const { me } = useMe();
   const { tenants, licenses, isLoading, error, refetch } = useDashboardStats();
 
   const hour = new Date().getHours();

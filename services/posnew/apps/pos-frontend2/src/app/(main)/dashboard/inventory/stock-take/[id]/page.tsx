@@ -44,6 +44,10 @@ import {
   posPatchStockTakeCounts,
   posPostStockTakeSession,
 } from "@/lib/pos-stock-take-api";
+import {
+  isStockTakeSerialVarianceError,
+  serialLinesWithVariance,
+} from "@/lib/stock-take-serial-guard";
 
 function loadErrorHint(err: unknown): string | null {
   const msg = err instanceof Error ? err.message : String(err);
@@ -105,6 +109,12 @@ export default function StockTakeDetailPage() {
       router.push("/dashboard/inventory/stock-take");
     },
     onError: (err: unknown) => {
+      if (isStockTakeSerialVarianceError(err)) {
+        toast.error(
+          "Serial-tracked items with a count variance must be adjusted from Inventory using serial numbers, not stock take post.",
+        );
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Failed to finalize session.";
       const hint = loadErrorHint(err);
       toast.error(hint ? `${msg} ${hint}` : msg);
@@ -126,8 +136,15 @@ export default function StockTakeDetailPage() {
 
   const showBinColumn = useMemo(
     () => Boolean(session?.lines?.some((l) => l.bin != null && l.bin !== "")),
-    [session?.lines]
+    [session?.lines],
   );
+
+  const serialVarianceLines = useMemo(
+    () => serialLinesWithVariance(session?.lines ?? [], counts),
+    [session?.lines, counts],
+  );
+
+  const serialPostBlocked = serialVarianceLines.length > 0;
 
   function binLabel(bin: StockTakeLine["bin"]): string {
     if (bin == null || bin === "") return "—";
@@ -167,6 +184,12 @@ export default function StockTakeDetailPage() {
   const handlePost = () => {
     if (!session || session.status === "posted") return;
     if (saveMutation.isPending || postMutation.isPending || isFinalizing) return;
+    if (serialPostBlocked) {
+      toast.error(
+        "Resolve serial-tracked variances via Inventory → Adjust before finalizing this session.",
+      );
+      return;
+    }
 
     const allLinesCounted = session.lines.every((line) => {
       const existing = line.countedQty !== null && line.countedQty !== undefined;
@@ -289,7 +312,17 @@ export default function StockTakeDetailPage() {
             </Button>
             <Button
               onClick={handlePost}
-              disabled={postMutation.isPending || saveMutation.isPending || isFinalizing}
+              disabled={
+                postMutation.isPending ||
+                saveMutation.isPending ||
+                isFinalizing ||
+                serialPostBlocked
+              }
+              title={
+                serialPostBlocked
+                  ? "Serial-tracked lines with variance must use Inventory → Adjust with serial numbers"
+                  : undefined
+              }
             >
               {postMutation.isPending || isFinalizing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -301,6 +334,31 @@ export default function StockTakeDetailPage() {
           </div>
         )}
       </div>
+
+      {serialPostBlocked && !isPosted ? (
+        <Alert variant="destructive">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Serial-tracked items need a different workflow</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>
+              These lines have a physical count that does not match system quantity. Stock take cannot post variance
+              for serial-tracked ingredients — use Inventory → Adjust and enter serial numbers.
+            </p>
+            <ul className="list-inside list-disc text-sm">
+              {serialVarianceLines.map((row) => (
+                <li key={row.lineId}>
+                  <Link
+                    href={`/dashboard/inventory?adjustIngredientId=${encodeURIComponent(row.ingredientId)}`}
+                    className="underline"
+                  >
+                    {row.ingredientName}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {isPosted && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

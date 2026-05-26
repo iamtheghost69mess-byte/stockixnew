@@ -45,7 +45,7 @@ export default function PlatformRolesPage() {
         allPermissions?: string[];
         error?: string;
       };
-      if (!res.ok) throw new Error(formatApiError(data, data.error));
+      if (!res.ok) throw new Error(formatApiError(data, "Failed to load roles"));
       setRoles(data.roles ?? []);
       setAllPermissions(data.allPermissions ?? []);
     } catch (e) {
@@ -67,7 +67,7 @@ export default function PlatformRolesPage() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error(formatApiError(data, (data as { error?: string }).error));
+      toast.error(formatApiError(data, "Failed to update role"));
       return;
     }
     toast.success(`Updated ${role.name}`);
@@ -82,7 +82,7 @@ export default function PlatformRolesPage() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error(formatApiError(data, (data as { error?: string }).error));
+      toast.error(formatApiError(data, "Failed to create role"));
       return;
     }
     toast.success("Role created");

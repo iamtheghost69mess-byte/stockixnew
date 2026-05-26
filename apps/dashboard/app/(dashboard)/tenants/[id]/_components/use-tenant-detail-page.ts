@@ -19,7 +19,7 @@ import {
 
 export function useTenantDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const me = useMe();
+  const { me } = useMe();
   const isSuper = me?.role === "super_admin";
 
   const [tenant, setTenant] = useState<TenantDetail | null>(null);

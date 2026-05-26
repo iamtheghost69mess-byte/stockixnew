@@ -16,7 +16,7 @@ import {
 } from "./plans-utils";
 
 export function usePlansPage() {
-  const me = useMe();
+  const { me } = useMe();
   const canManage = Boolean(me?.capabilities.canAccessSettings);
 
   const [plans, setPlans] = useState<PlanRow[]>([]);

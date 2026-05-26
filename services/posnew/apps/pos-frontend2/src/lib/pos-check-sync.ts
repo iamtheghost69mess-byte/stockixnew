@@ -13,7 +13,12 @@ import {
   posPatchOrderReplaceLines,
 } from "@/lib/pos-order-api";
 import { adjustInventory, type InventoryAdjustParams } from "@/lib/inventory-api";
+import {
+  isStockSyncConflictError,
+  refreshStockSnapshotFromApi,
+} from "@/lib/offline-stock-mirror";
 import { cartToReplaceLines, usePosOrderStore } from "@/stores/pos-order-store";
+import { toast } from "sonner";
 
 let lastSentPayloadStr = "";
 
@@ -142,15 +147,36 @@ async function processMutation(mutation: OfflineMutation): Promise<void> {
   }
 }
 
-export async function flushOfflineMutationQueue(): Promise<void> {
-  if (typeof window === "undefined" || !navigator.onLine) return;
+export async function flushOfflineMutationQueue(): Promise<{ stockConflicts: number }> {
+  if (typeof window === "undefined" || !navigator.onLine) {
+    return { stockConflicts: 0 };
+  }
   const pending = await listOfflineMutations(100);
+  let stockConflicts = 0;
   for (const mutation of pending) {
     try {
       await processMutation(mutation);
       await removeOfflineMutation(mutation.id);
-    } catch {
+    } catch (err) {
       await markOfflineMutationAttempt(mutation.id);
+      if (isStockSyncConflictError(err)) {
+        stockConflicts += 1;
+        const label =
+          mutation.kind === "create_order"
+            ? "order"
+            : mutation.kind === "pay_order"
+              ? "payment"
+              : mutation.kind;
+        toast.error(
+          `Could not sync ${label}: stock changed while offline. Review the check and try again.`,
+        );
+      }
     }
   }
+  try {
+    await refreshStockSnapshotFromApi();
+  } catch {
+    /* snapshot refresh is best-effort after flush */
+  }
+  return { stockConflicts };
 }

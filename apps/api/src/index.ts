@@ -349,6 +349,7 @@ type ApiEnv = {
     actorRole: string;
     /** When set, RBAC uses this rank instead of the owner's DB role (API key auth → read_only). */
     actorEffectiveRole?: string;
+    actorPermissions?: string[];
     apiKeyId?: string;
     requestId: string;
     requestStartMs: number;
@@ -2238,7 +2239,9 @@ app.post("/owners/invite", async (c) => {
       .where(eq(platformRoles.id, roleId))
       .limit(1);
     if (!pr) return c.json({ error: "invalid_role_id" }, 400);
-    roleSlug = pr.slug;
+    const parsedSlug = ownerRoleSchema.safeParse(pr.slug);
+    if (!parsedSlug.success) return c.json({ error: "invalid_role_slug" }, 400);
+    roleSlug = parsedSlug.data;
     roleId = pr.id;
   } else {
     const [pr] = await db

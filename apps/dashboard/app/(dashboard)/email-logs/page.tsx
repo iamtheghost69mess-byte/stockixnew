@@ -75,7 +75,7 @@ export default function EmailLogsPage() {
         error?: string;
       };
       if (!res.ok) {
-        setError(formatApiError(data.error ?? res.statusText));
+        setError(formatApiError(data, res.statusText));
         setLogs([]);
         return;
       }

@@ -47,7 +47,11 @@ export function OfflineStatusBanner() {
   }, [refreshPending]);
 
   const label = useMemo(() => {
-    if (!online) return "Offline mode";
+    if (!online) {
+      return pending > 0
+        ? `Offline · ${pending} queued (orders, payments, adjustments)`
+        : "Offline mode";
+    }
     if (pending > 0) return `Online · ${pending} queued`;
     return "Online";
   }, [online, pending]);
