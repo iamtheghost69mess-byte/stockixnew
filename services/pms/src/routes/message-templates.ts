@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsMessageTemplates } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const messageTemplatesRouter = new Hono<PmsEnv>();
@@ -23,8 +23,15 @@ messageTemplatesRouter.get("/", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conds = [eq(pmsMessageTemplates.tenantId, tenantId(c))];
   if (propertyId) conds.push(eq(pmsMessageTemplates.propertyId, propertyId));
-  const rows = await db.select().from(pmsMessageTemplates).where(and(...conds)).orderBy(desc(pmsMessageTemplates.createdAt));
-  return c.json({ templates: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsMessageTemplates)
+    .where(and(...conds))
+    .orderBy(desc(pmsMessageTemplates.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ templates: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 messageTemplatesRouter.post("/", async (c) => {

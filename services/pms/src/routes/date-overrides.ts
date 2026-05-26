@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsDateOverrides } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const dateOverridesRouter = new Hono<PmsEnv>();
@@ -13,8 +13,15 @@ dateOverridesRouter.get("/", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conds = [eq(pmsDateOverrides.tenantId, tenantId(c))];
   if (propertyId) conds.push(eq(pmsDateOverrides.propertyId, propertyId));
-  const rows = await db.select().from(pmsDateOverrides).where(and(...conds)).orderBy(desc(pmsDateOverrides.date));
-  return c.json({ overrides: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsDateOverrides)
+    .where(and(...conds))
+    .orderBy(desc(pmsDateOverrides.date))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ overrides: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 dateOverridesRouter.post("/", async (c) => {

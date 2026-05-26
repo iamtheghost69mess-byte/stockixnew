@@ -24,6 +24,10 @@ export function parsePagination(c: Context<PmsEnv>): {
   return { page, limit, offset };
 }
 
+export function listMeta(page: number, limit: number, itemCount: number) {
+  return { page, limit, hasMore: itemCount === limit };
+}
+
 /** Reject report date ranges wider than MAX_REPORT_DAYS. */
 export function validateReportDateRange(from: string, to: string): string | null {
   const start = new Date(`${from}T12:00:00Z`);
