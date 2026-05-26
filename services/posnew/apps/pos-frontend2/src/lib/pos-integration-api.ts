@@ -1,4 +1,11 @@
-import { posApiJson } from "@/lib/pos-api-fetch";
+import { posApiJson, type PosApiJson } from "@/lib/pos-api-fetch";
+
+function requireApiData<T>(res: PosApiJson<T>, label: string): T {
+  if (res.data === undefined) {
+    throw new Error(res.message ?? `${label} response missing data`);
+  }
+  return res.data;
+}
 
 export type IntegrationSyncStatus = {
   enabled: boolean;
@@ -73,18 +80,18 @@ export type VendorMappingRow = {
 };
 
 export async function posFetchIntegrationSyncStatus(): Promise<IntegrationSyncStatus> {
-  const res = await posApiJson<{ data: IntegrationSyncStatus }>("/api/integration/sync/status");
-  return res.data;
+  const res = await posApiJson<IntegrationSyncStatus>("/api/integration/sync/status");
+  return requireApiData(res, "Integration sync status");
 }
 
 export async function posFetchMappingCoverage(): Promise<MappingCoverage> {
-  const res = await posApiJson<{ data: MappingCoverage }>("/api/integration/mapping-coverage");
-  return res.data;
+  const res = await posApiJson<MappingCoverage>("/api/integration/mapping-coverage");
+  return requireApiData(res, "Mapping coverage");
 }
 
 export async function posFetchIntegrationEvents(): Promise<IntegrationEventMeta[]> {
-  const res = await posApiJson<{ data: IntegrationEventMeta[] }>("/api/integration/events");
-  return res.data;
+  const res = await posApiJson<IntegrationEventMeta[]>("/api/integration/events");
+  return requireApiData(res, "Integration events");
 }
 
 export async function posFetchIntegrationOutbox(params?: {
@@ -95,8 +102,8 @@ export async function posFetchIntegrationOutbox(params?: {
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.status) q.set("status", params.status);
   const suffix = q.toString() ? `?${q}` : "";
-  const res = await posApiJson<{ data: OutboxRow[] }>(`/api/integration/outbox${suffix}`);
-  return res.data;
+  const res = await posApiJson<OutboxRow[]>(`/api/integration/outbox${suffix}`);
+  return requireApiData(res, "Integration outbox");
 }
 
 export async function posRetryOutboxRow(outboxId: string): Promise<void> {
@@ -108,8 +115,8 @@ export async function posReplayFinanceSync(orderId: string): Promise<void> {
 }
 
 export async function posFetchItemMappings(): Promise<ItemMappingRow[]> {
-  const res = await posApiJson<{ data: ItemMappingRow[] }>("/api/integration/item-mappings");
-  return res.data;
+  const res = await posApiJson<ItemMappingRow[]>("/api/integration/item-mappings");
+  return requireApiData(res, "Item mappings");
 }
 
 export async function posUpsertItemMapping(body: {
@@ -117,11 +124,11 @@ export async function posUpsertItemMapping(body: {
   bigcapitalItemId: number;
   bigcapitalItemName?: string;
 }): Promise<ItemMappingRow> {
-  const res = await posApiJson<{ data: ItemMappingRow }>("/api/integration/item-mappings", {
+  const res = await posApiJson<ItemMappingRow>("/api/integration/item-mappings", {
     method: "POST",
     body: JSON.stringify(body),
   });
-  return res.data;
+  return requireApiData(res, "Item mapping");
 }
 
 export async function posDeleteItemMapping(posMenuItemId: string): Promise<void> {
@@ -129,10 +136,8 @@ export async function posDeleteItemMapping(posMenuItemId: string): Promise<void>
 }
 
 export async function posFetchIngredientMappings(): Promise<IngredientMappingRow[]> {
-  const res = await posApiJson<{ data: IngredientMappingRow[] }>(
-    "/api/integration/ingredient-mappings"
-  );
-  return res.data;
+  const res = await posApiJson<IngredientMappingRow[]>("/api/integration/ingredient-mappings");
+  return requireApiData(res, "Ingredient mappings");
 }
 
 export async function posUpsertIngredientMapping(body: {
@@ -140,11 +145,11 @@ export async function posUpsertIngredientMapping(body: {
   bigcapitalItemId: number;
   bigcapitalItemName?: string;
 }): Promise<IngredientMappingRow> {
-  const res = await posApiJson<{ data: IngredientMappingRow }>(
-    "/api/integration/ingredient-mappings",
-    { method: "POST", body: JSON.stringify(body) }
-  );
-  return res.data;
+  const res = await posApiJson<IngredientMappingRow>("/api/integration/ingredient-mappings", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return requireApiData(res, "Ingredient mapping");
 }
 
 export async function posDeleteIngredientMapping(posIngredientId: string): Promise<void> {
@@ -154,8 +159,8 @@ export async function posDeleteIngredientMapping(posIngredientId: string): Promi
 }
 
 export async function posFetchVendorMappings(): Promise<VendorMappingRow[]> {
-  const res = await posApiJson<{ data: VendorMappingRow[] }>("/api/integration/vendor-mappings");
-  return res.data;
+  const res = await posApiJson<VendorMappingRow[]>("/api/integration/vendor-mappings");
+  return requireApiData(res, "Vendor mappings");
 }
 
 export async function posUpsertVendorMapping(body: {
@@ -163,11 +168,11 @@ export async function posUpsertVendorMapping(body: {
   bigcapitalVendorId: number;
   bigcapitalVendorName?: string;
 }): Promise<VendorMappingRow> {
-  const res = await posApiJson<{ data: VendorMappingRow }>("/api/integration/vendor-mappings", {
+  const res = await posApiJson<VendorMappingRow>("/api/integration/vendor-mappings", {
     method: "POST",
     body: JSON.stringify(body),
   });
-  return res.data;
+  return requireApiData(res, "Vendor mapping");
 }
 
 export async function posDeleteVendorMapping(posSupplierId: string): Promise<void> {
@@ -175,5 +180,9 @@ export async function posDeleteVendorMapping(posSupplierId: string): Promise<voi
 }
 
 export async function posTestFinanceConnection(): Promise<{ success: boolean; message?: string }> {
-  return posApiJson("/api/integration/test-connection", { method: "POST" });
+  const res = await posApiJson<unknown>("/api/integration/test-connection", { method: "POST" });
+  return {
+    success: res.success ?? false,
+    message: res.message,
+  };
 }

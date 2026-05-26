@@ -1,5 +1,7 @@
 import { dashboardConfig } from "@repo/config";
 
+import { isApiConnectionError } from "@/lib/api-connection";
+
 const apiBase = dashboardConfig.nextPublicApiUrl;
 
 function createRequestId(): string {
@@ -10,6 +12,7 @@ export async function apiFetch(
   input: string,
   init: RequestInit = {},
   request?: Request,
+  retries = 2,
 ): Promise<Response> {
   const secret = dashboardConfig.platformApiSecret;
   if (!secret) throw new Error("PLATFORM_API_SECRET is not configured");
@@ -31,9 +34,27 @@ export async function apiFetch(
     headers.set("Cookie", cookie);
   }
 
-  return fetch(`${apiBase}${input}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
+  const url = `${apiBase}${input}`;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, {
+        ...init,
+        headers,
+        cache: "no-store",
+        signal: init.signal ?? AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      lastError = error;
+      if (isApiConnectionError(error) && attempt < retries) {
+        const delayMs = 500 * 2 ** attempt;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("apiFetch failed");
 }

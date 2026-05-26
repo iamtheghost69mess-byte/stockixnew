@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
+import { isApiConnectionError } from "@/lib/api-connection";
 
 export async function POST(req: Request) {
   const payload = (await req.json().catch(() => ({}))) as {
@@ -24,16 +25,11 @@ export async function POST(req: Request) {
       req,
     );
   } catch (err) {
-    const code =
-      err instanceof Error && "code" in err
-        ? String((err as NodeJS.ErrnoException).code)
-        : "";
-    const refused = code === "ECONNREFUSED" || code === "ENOTFOUND";
-    if (refused) {
+    if (isApiConnectionError(err)) {
       return NextResponse.json(
         {
           error:
-            "Control-plane API is not reachable. From the repo root run `pnpm dev` (or start the API on port 4000).",
+            "Control-plane API is not reachable. From the repo root run `pnpm dev` (or start the API on the configured port).",
         },
         { status: 503 },
       );

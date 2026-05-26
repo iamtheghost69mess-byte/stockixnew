@@ -2,6 +2,7 @@
  * Tenant-facing PMS Next.js app (services/pms/frontend).
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
@@ -35,11 +36,18 @@ const env = {
 console.log(`[pms-ui] Tenant PMS app → http://localhost:${port}`);
 console.log(`[pms-ui] API target     → ${pmsApi}`);
 
-const child = spawn("pnpm", ["exec", "next", "dev", "--port", String(port)], {
+const nextBin = path.join(frontendDir, "node_modules", "next", "dist", "bin", "next");
+if (!existsSync(nextBin)) {
+  console.error("[pms-ui] next not found. Run `pnpm install` from the repo root.");
+  process.exit(1);
+}
+const nextArgs = ["dev", "--hostname", "127.0.0.1", "--port", String(port)];
+
+const child = spawn(process.execPath, [nextBin, ...nextArgs], {
   cwd: frontendDir,
   env,
   stdio: "inherit",
-  shell: process.platform === "win32",
+  shell: false,
 });
 
 child.on("exit", (code) => process.exit(code ?? 0));

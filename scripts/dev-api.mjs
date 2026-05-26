@@ -11,9 +11,10 @@ const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
 const apiDir = path.join(repoRoot, "apps", "api");
 
+const locked = process.env.STOCKIX_DEV_LOCKED_PORT === "1";
 const preferred = parseInt(process.env.PORT || "4000", 10);
 const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
-const port = strict ? preferred : await findFreePort(preferred);
+const port = locked || strict ? preferred : await findFreePort(preferred);
 
 if (port !== preferred) {
   console.warn(
