@@ -210,7 +210,7 @@ export function usePosSession(tableId: string) {
       const canFulfill =
         ledgerPortions !== undefined
           ? estimatedPortions == null || estimatedPortions > 0
-            ? row.canFulfill || estimatedPortions > 0
+            ? row.canFulfill || (estimatedPortions ?? 0) > 0
             : false
           : !!row.canFulfill;
       return {

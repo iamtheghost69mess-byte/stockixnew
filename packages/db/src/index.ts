@@ -17,6 +17,8 @@ function readPoolInt(name: string, fallback: number): number {
 
 /** Create a Drizzle client using the `postgres` (postgres.js) driver. */
 export function createDb(connectionString: string) {
+  // Pool tuning: set DB_POOL_MAX to (postgres max_connections - reserved) / number_of_api_replicas
+  // Default 20 is safe for single-replica on shared EC2 with Postgres default max_connections=100
   const client = postgres(connectionString, {
     max: readPoolInt("DB_POOL_MAX", 10),
     idle_timeout: readPoolInt("DB_IDLE_TIMEOUT_SECONDS", 20),

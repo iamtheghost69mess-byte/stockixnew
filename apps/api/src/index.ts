@@ -145,7 +145,12 @@ import {
 } from "./provisioning/readiness-engine.js";
 import { startStuckProvisioningReconciler } from "./provisioning/stuck-reconciler.js";
 import { securityHeadersMiddleware } from "./middleware/security-headers.js";
-import { globalRateLimitMiddleware } from "./middleware/global-rate-limit.js";
+import {
+  globalRateLimitMiddleware,
+  publicTenantDiscoveryRateLimitMiddleware,
+} from "./middleware/global-rate-limit.js";
+import { licenseActivateRateLimitMiddleware } from "./middleware/license-rate-limit.js";
+import { isValidPublicDiscoverySlug } from "./lib/tenant-discovery-slug.js";
 import { isKnownControlPlanePath } from "./middleware/known-api-paths.js";
 import { logger } from "./lib/logger.js";
 
@@ -161,6 +166,18 @@ const databaseUrl = apiConfig.databaseUrl;
 const db = databaseUrl ? createDb(databaseUrl) : null;
 
 type DbClient = NonNullable<typeof db>;
+
+/** Scoped owners (support_agent / tenants.org_scope) may only access assigned tenants. */
+async function tenantWithinOwnerScope(
+  client: DbClient,
+  c: { get: (key: string) => unknown },
+  tenantId: string,
+): Promise<boolean> {
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+  return assertTenantInOwnerScope(client, actorId, tenantId, actorPermissions, actorRole);
+}
 
 const organizationCreateBody = z.object({
   name: z.string().min(1).max(100),
@@ -360,6 +377,15 @@ const app = new Hono<ApiEnv>();
 const platformApiSecret = apiConfig.platformApiSecret;
 const workerSecret = apiConfig.workerSecret;
 apiConfig.validateRequiredEnv();
+
+if (apiConfig.nodeEnv === "production" && !process.env.CONTROL_PLANE_REDIS_URL?.trim()) {
+  logger.error(
+    "CONTROL_PLANE_REDIS_URL is required in production for distributed rate limiting",
+    undefined,
+    { event: "startup_redis_required" },
+  );
+  process.exit(1);
+}
 
 // In-memory cache for one-time admin passwords (fast path during provisioning).
 // Passwords are also persisted encrypted on tenant_deployments.finance_admin_password.
@@ -639,7 +665,8 @@ app.onError((err, c) => {
       503,
     );
   }
-  if (message.includes('relation "email_logs" does not exist')) {
+  const errMessage = err instanceof Error ? err.message : String(err);
+  if (errMessage.includes('relation "email_logs" does not exist')) {
     return c.json(
       {
         error: "schema_outdated",
@@ -692,6 +719,8 @@ app.use(
 app.use("/*", securityHeadersMiddleware);
 
 app.use("/*", globalRateLimitMiddleware());
+app.use("/*", publicTenantDiscoveryRateLimitMiddleware());
+app.use("/*", licenseActivateRateLimitMiddleware());
 
 app.use("/*", async (c, next) => {
   const requestId = c.req.header("x-request-id")
@@ -724,11 +753,11 @@ app.use("/*", async (c, next) => {
 app.use("/*", async (c, next) => {
   const pubPath = c.req.path;
   const pubMethod = c.req.method.toUpperCase();
-  if (pubPath === "/health") {
+  if (pubPath === "/health" || pubPath === "/ready") {
     await next();
     return;
   }
-  if (pubMethod === "GET" && pubPath.startsWith("/public/tenant-orgs/")) {
+  if (pubMethod === "GET" && pubPath.startsWith("/public/tenant/")) {
     await next();
     return;
   }
@@ -793,6 +822,7 @@ app.use("/*", async (c, next) => {
   const path = c.req.path;
   if (
     path === "/health"
+    || path === "/ready"
     || path.startsWith("/auth")
     || path.startsWith("/webhooks/")
     || path.startsWith("/internal/jobs")
@@ -801,7 +831,7 @@ app.use("/*", async (c, next) => {
     await next();
     return;
   }
-  if (method === "GET" && path.startsWith("/public/tenant-orgs/")) {
+  if (method === "GET" && path.startsWith("/public/tenant/")) {
     await next();
     return;
   }
@@ -1032,6 +1062,44 @@ app.use("/*", async (c, next) => {
   await next();
 });
 
+app.get("/ready", async (c) => {
+  const checks: Record<string, "ok" | "fail"> = {};
+  let isReady = true;
+
+  if (!db) {
+    checks.database = "fail";
+    isReady = false;
+  } else {
+    try {
+      await db.execute(sql`SELECT 1`);
+      checks.database = "ok";
+    } catch (err) {
+      checks.database = "fail";
+      isReady = false;
+      logger.error("Readiness check: database failed", err);
+    }
+  }
+
+  const redisClient = (await import("./lib/redis.js")).getControlPlaneRedisClient();
+  if (redisClient) {
+    try {
+      const pong = await redisClient.ping();
+      checks.redis = pong === "PONG" ? "ok" : "fail";
+      if (checks.redis === "fail") isReady = false;
+    } catch (err) {
+      checks.redis = "fail";
+      isReady = false;
+      logger.error("Readiness check: redis failed", err);
+    }
+  }
+
+  const status = isReady ? 200 : 503;
+  return c.json(
+    { ready: isReady, checks, timestamp: new Date().toISOString() },
+    status,
+  );
+});
+
 app.get("/health", (c) =>
   c.json({
     status: "ok",
@@ -1039,40 +1107,39 @@ app.get("/health", (c) =>
   }),
 );
 
-app.get("/public/tenant-orgs/:tenantId", async (c) => {
-  const tenantIdParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
-  if (!tenantIdParsed.success) {
-    return c.json({ error: "INVALID_TENANT_ID" }, 400);
+/** Deprecated — UUID-based discovery removed (use slug route). */
+app.get("/public/tenant-orgs/:tenantId", (c) =>
+  c.json({ success: false, error: "Not found", path: c.req.path }, 404),
+);
+
+/** Public tenant branding by discovery slug (not tenant UUID). */
+app.get("/public/tenant/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  if (!isValidPublicDiscoverySlug(slug)) {
+    return c.json({ success: false, error: "Not found" }, 404);
   }
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
-  const tenantId = tenantIdParsed.data;
-  const rows = await db
-    .select()
-    .from(organizations)
-    .where(
-      and(eq(organizations.tenantId, tenantId), eq(organizations.status, "active")),
-    )
-    .orderBy(desc(organizations.isPrimary), asc(organizations.createdAt));
-  const composeNames = rows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
-  const portMap = await internalPortsByComposeProject(db, composeNames);
+
+  const [row] = await db
+    .select({
+      appName: tenantConfig.appName,
+      logoUrl: tenantConfig.logoUrl,
+      primaryColor: tenantConfig.primaryColor,
+      tenantName: tenants.name,
+    })
+    .from(tenantConfig)
+    .innerJoin(tenants, eq(tenants.id, tenantConfig.tenantId))
+    .where(eq(tenantConfig.publicDiscoverySlug, slug))
+    .limit(1);
+
+  if (!row) {
+    return c.json({ success: false, error: "Not found" }, 404);
+  }
+
   return c.json({
-    organizations: rows.map((row) => {
-      const full = serializeOrganizationRow(
-        row,
-        portMap.get(dockerComposeProjectForOrgSlug(row.slug)) ?? null,
-      );
-      return {
-        id: full.id,
-        name: full.name,
-        slug: full.slug,
-        subdomain: full.subdomain,
-        status: full.status,
-        isPrimary: full.isPrimary,
-        financeOrganizationId: full.financeOrganizationId,
-        createdAt: full.createdAt,
-        publicUrl: full.publicUrl,
-      };
-    }),
+    displayName: row.appName ?? row.tenantName,
+    logoUrl: row.logoUrl,
+    primaryColor: row.primaryColor,
   });
 });
 
@@ -1083,8 +1150,19 @@ app.post("/internal/jobs/claim", async (c) => {
   if (!workerId) {
     return c.json({ error: "worker_id_required" }, 400);
   }
-  const staleLeaseMs = 5 * 60 * 1000;
-  const staleBefore = new Date(Date.now() - staleLeaseMs);
+  const heartbeatStaleMs = Number.parseInt(
+    process.env.WORKER_HEARTBEAT_STALE_MS ?? "600000",
+    10,
+  );
+  const staleLeaseMs = Number.parseInt(
+    process.env.WORKER_STALE_LEASE_THRESHOLD_MS ?? "3000000",
+    10,
+  );
+  const effectiveStaleMs = Math.min(
+    Number.isFinite(heartbeatStaleMs) ? heartbeatStaleMs : 600_000,
+    Number.isFinite(staleLeaseMs) ? staleLeaseMs : 3_000_000,
+  );
+  const staleBefore = new Date(Date.now() - effectiveStaleMs);
   const staleBeforeIso = staleBefore.toISOString();
   const staleProvisionAlerts: Array<{
     tenantId: string;
@@ -1110,6 +1188,27 @@ app.post("/internal/jobs/claim", async (c) => {
         ),
       );
     for (const staleJob of staleRunning) {
+      if (staleJob.type === "tenant.provision" && staleJob.tenantId) {
+        const [otherRunning] = await tx
+          .select({ id: tenantLifecycleJobs.id })
+          .from(tenantLifecycleJobs)
+          .where(
+            and(
+              eq(tenantLifecycleJobs.tenantId, staleJob.tenantId),
+              eq(tenantLifecycleJobs.status, "running"),
+              ne(tenantLifecycleJobs.id, staleJob.id),
+            ),
+          )
+          .limit(1);
+        if (otherRunning) {
+          logger.warn("concurrent_provision_aborted", {
+            tenantId: staleJob.tenantId,
+            staleJobId: staleJob.id,
+            otherJobId: otherRunning.id,
+          });
+          continue;
+        }
+      }
       const nextAttempts = staleJob.attempts + 1;
       const exhausted = nextAttempts >= staleJob.maxAttempts;
       const nextStatus = exhausted ? "dead" : "pending";
@@ -1123,6 +1222,7 @@ app.post("/internal/jobs/claim", async (c) => {
                 lastError: sql`'worker_stale_lease_reclaimed'`,
                 claimedAt: null,
                 claimedBy: null,
+                claimToken: null,
                 completedAt: new Date(),
                 updatedAt: new Date(),
               }
@@ -1132,6 +1232,7 @@ app.post("/internal/jobs/claim", async (c) => {
                 lastError: sql`'worker_stale_lease_reclaimed'`,
                 claimedAt: null,
                 claimedBy: null,
+                claimToken: null,
                 runAt: new Date(),
                 completedAt: null,
                 updatedAt: new Date(),
@@ -1175,12 +1276,14 @@ app.post("/internal/jobs/claim", async (c) => {
       .limit(1);
     if (!pending?.id) return null;
 
+    const claimToken = randomUUID();
     const [updated] = await tx
       .update(tenantLifecycleJobs)
       .set({
         status: "running",
         claimedAt: new Date(),
         claimedBy: workerId,
+        claimToken,
         updatedAt: new Date(),
       })
       .where(and(eq(tenantLifecycleJobs.id, pending.id), eq(tenantLifecycleJobs.status, "pending")))
@@ -1222,6 +1325,7 @@ app.post("/internal/jobs/:jobId/heartbeat", async (c) => {
   const jobId = c.req.param("jobId");
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
+  const claimToken = String((body as { claimToken?: unknown }).claimToken ?? "").trim();
   if (!workerId) {
     return c.json({ error: "worker_id_required" }, 400);
   }
@@ -1236,6 +1340,7 @@ app.post("/internal/jobs/:jobId/heartbeat", async (c) => {
         eq(tenantLifecycleJobs.id, jobId),
         eq(tenantLifecycleJobs.status, "running"),
         eq(tenantLifecycleJobs.claimedBy, workerId),
+        ...(claimToken ? [eq(tenantLifecycleJobs.claimToken, claimToken)] : []),
       ),
     )
     .returning({ id: tenantLifecycleJobs.id });
@@ -1340,6 +1445,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   const jobId = c.req.param("jobId");
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
+  const claimToken = String((body as { claimToken?: unknown }).claimToken ?? "").trim();
   // oneTimeAdminPassword is passed by the worker for tenant.provision jobs.
   // Persisted encrypted on tenant_deployments; also cached in memory for 15 minutes.
   const oneTimeAdminPassword =
@@ -1387,6 +1493,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       correlationId: tenantLifecycleJobs.correlationId,
       payload: tenantLifecycleJobs.payload,
       claimedBy: tenantLifecycleJobs.claimedBy,
+      claimToken: tenantLifecycleJobs.claimToken,
     })
     .from(tenantLifecycleJobs)
     .where(eq(tenantLifecycleJobs.id, jobId))
@@ -1415,6 +1522,9 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
   if (workerId && currentJob.claimedBy && currentJob.claimedBy !== workerId) {
     return c.json({ error: "job_claim_mismatch" }, 409);
   }
+  if (claimToken && currentJob.claimToken && currentJob.claimToken !== claimToken) {
+    return c.json({ error: "job_claim_token_mismatch" }, 409);
+  }
   const [updated] = await db
     .update(tenantLifecycleJobs)
     .set({
@@ -1423,9 +1533,16 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       lastError: null,
       claimedAt: null,
       claimedBy: null,
+      claimToken: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "running")))
+    .where(
+      and(
+        eq(tenantLifecycleJobs.id, jobId),
+        eq(tenantLifecycleJobs.status, "running"),
+        ...(claimToken ? [eq(tenantLifecycleJobs.claimToken, claimToken)] : []),
+      ),
+    )
     .returning();
   if (!updated) return c.json({ error: "job_not_running" }, 409);
   // Store the one-time admin password in memory as a fast path.
@@ -2026,6 +2143,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
   const jobId = c.req.param("jobId");
   const body = await c.req.json().catch(() => ({}));
   const workerId = String((body as { workerId?: unknown }).workerId ?? "").trim();
+  const claimToken = String((body as { claimToken?: unknown }).claimToken ?? "").trim();
   const errorMessage = String((body as { error?: unknown }).error ?? "job_failed").slice(0, 4000);
   const noRetry = (body as { noRetry?: unknown }).noRetry === true;
   const requestId = c.get("requestId");
@@ -2037,12 +2155,16 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
         attempts: tenantLifecycleJobs.attempts,
         maxAttempts: tenantLifecycleJobs.maxAttempts,
         claimedBy: tenantLifecycleJobs.claimedBy,
+        claimToken: tenantLifecycleJobs.claimToken,
       })
       .from(tenantLifecycleJobs)
       .where(eq(tenantLifecycleJobs.id, jobId))
       .limit(1);
     if (!job) return [];
     if (workerId && job.claimedBy && job.claimedBy !== workerId) {
+      return [];
+    }
+    if (claimToken && job.claimToken && job.claimToken !== claimToken) {
       return [];
     }
     const nextAttempts = (job.attempts ?? 0) + 1;
@@ -2058,9 +2180,16 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
         runAt: exhausted ? new Date() : new Date(Date.now() + retryDelayMs),
         claimedAt: null,
         claimedBy: null,
+        claimToken: null,
         updatedAt: new Date(),
       })
-      .where(and(eq(tenantLifecycleJobs.id, jobId), eq(tenantLifecycleJobs.status, "running")))
+      .where(
+        and(
+          eq(tenantLifecycleJobs.id, jobId),
+          eq(tenantLifecycleJobs.status, "running"),
+          ...(claimToken ? [eq(tenantLifecycleJobs.claimToken, claimToken)] : []),
+        ),
+      )
       .returning();
     return next ? [next] : [];
   });
@@ -2333,7 +2462,11 @@ app.post("/owners/invite", async (c) => {
     });
   if (!owner) return c.json({ error: "failed_to_create_invite" }, 500);
   const dashboardUrl = apiConfig.dashboardUrl?.replace(/\/+$/, "");
-  const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+  const dashUrl = apiConfig.dashboardUrl;
+  if (!dashUrl && apiConfig.nodeEnv === "production") {
+    throw new Error("DASHBOARD_URL must be set in production — cannot generate invite URL");
+  }
+  const inviteUrl = `${dashUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "owner.invite",
@@ -3199,6 +3332,10 @@ app.get("/tenants/export.csv", async (c) => {
   });
 });
 
+// ─── TENANT ROUTES — ALL REQUIRE assertTenantInOwnerScope ───────────────
+// Scope check ensures operator can only access tenants in their org.
+// Do not add new tenant routes without calling assertTenantInOwnerScope first.
+// See: apps/api/src/org-access-scope.ts
 app.delete("/tenants/:tenantId", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -3207,6 +3344,9 @@ app.delete("/tenants/:tenantId", async (c) => {
   const parsed = z.string().uuid().safeParse(tenantId);
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
+  }
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
   }
   const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
   const existing = await db
@@ -3664,6 +3804,9 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [job] = await db
     .select({
@@ -4160,6 +4303,9 @@ app.get("/tenants/:tenantId/organizations", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4199,6 +4345,9 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4313,6 +4462,9 @@ app.get("/tenants/:tenantId/organizations/:orgId", async (c) => {
   if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
   const orgParsed = z.string().uuid().safeParse(c.req.param("orgId"));
   if (!orgParsed.success) return c.json({ error: "orgId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4356,6 +4508,9 @@ app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
   if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
   const orgParsed = z.string().uuid().safeParse(c.req.param("orgId"));
   if (!orgParsed.success) return c.json({ error: "orgId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4474,6 +4629,9 @@ app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
   if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
   const orgParsed = z.string().uuid().safeParse(c.req.param("orgId"));
   if (!orgParsed.success) return c.json({ error: "orgId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4571,6 +4729,9 @@ app.get("/tenants/:tenantId/organization-access", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4618,6 +4779,9 @@ app.post("/tenants/:tenantId/organization-access", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const tenantParsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [tenantRow] = await db
     .select({ id: tenants.id })
@@ -4718,6 +4882,9 @@ app.delete("/tenants/:tenantId/organization-access/:accessId", async (c) => {
   if (!tenantParsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
   const accessParsed = z.string().uuid().safeParse(c.req.param("accessId"));
   if (!accessParsed.success) return c.json({ error: "accessId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [row] = await db
     .select({ id: ownerOrganizationAccess.id })
@@ -4756,6 +4923,9 @@ app.delete("/tenants/:tenantId/finance-password", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const actorRole = c.get("actorRole");
   if (!canViewFinanceAdminPassword(actorRole)) {
@@ -4782,20 +4952,11 @@ app.get("/tenants/:tenantId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
-  const actorId = String(c.get("actorId") ?? "");
-  const actorRole = String(c.get("actorRole") ?? "");
-  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
-
-  const inScope = await assertTenantInOwnerScope(
-    db,
-    actorId,
-    parsed.data,
-    actorPermissions,
-    actorRole,
-  );
-  if (!inScope) {
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
     return c.json({ error: "tenant_not_found" }, 404);
   }
+
+  const actorRole = String(c.get("actorRole") ?? "");
 
   const rows = await db
     .select({
@@ -4966,6 +5127,9 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const [row] = await db
     .select({
@@ -5160,6 +5324,9 @@ app.patch("/tenants/:tenantId", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   let body: z.infer<typeof tenantPatchBody>;
   try {
@@ -5272,6 +5439,9 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const row = await loadTenantForLifecycle(parsed.data);
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
@@ -5365,6 +5535,9 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
+  }
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
   }
 
   const [row] = await db
@@ -5481,6 +5654,9 @@ app.post("/tenants/:tenantId/stop", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const row = await loadTenantForLifecycle(parsed.data);
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
@@ -5522,6 +5698,9 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const row = await loadTenantForLifecycle(parsed.data);
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
@@ -5595,6 +5774,9 @@ app.get("/tenants/:tenantId/events", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
   const correlationId = c.req.query("correlationId");
   const tenantMatch = or(
     eq(tenantProvisionEvents.tenantId, parsed.data),
@@ -5857,18 +6039,22 @@ if (databaseUrl) {
 
 void import("./jobs/license-expiry-queue.js").then(
   ({ startLicenseExpiryWorker, isLicenseExpiryQueueEnabled }) => {
-    if (db && isLicenseExpiryQueueEnabled()) {
+    if (db && apiConfig.runBullMqConsumers && isLicenseExpiryQueueEnabled()) {
       startLicenseExpiryWorker(db, (msg) => logger.info(msg));
       logger.info("License expiry BullMQ worker started");
+    } else if (db && !apiConfig.runBullMqConsumers) {
+      logger.info("License expiry BullMQ worker disabled (RUN_BULLMQ_CONSUMERS=false)");
     }
   },
 );
 
 void import("./jobs/owner-invite-mail-queue.js").then(
   ({ startOwnerInviteMailWorker, isOwnerInviteMailQueueEnabled }) => {
-    if (db && isOwnerInviteMailQueueEnabled()) {
+    if (db && apiConfig.runBullMqConsumers && isOwnerInviteMailQueueEnabled()) {
       startOwnerInviteMailWorker(db, (msg) => logger.info(msg));
       logger.info("Owner invite mail BullMQ worker started");
+    } else if (db && !apiConfig.runBullMqConsumers) {
+      logger.info("Owner invite mail BullMQ worker disabled (RUN_BULLMQ_CONSUMERS=false)");
     }
   },
 );

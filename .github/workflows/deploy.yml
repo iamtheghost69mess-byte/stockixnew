@@ -47,6 +47,25 @@ jobs:
       - name: Type check — PMS
         run: pnpm --filter @stockix/pms exec tsc --noEmit
 
+      - name: Tenant scope audit
+        run: pnpm --filter api check:tenant-scope
+
+      - name: License test stability check
+        run: |
+          for i in 1 2 3; do
+            pnpm --filter api exec vitest run tests/license-single-active.test.ts || exit 1
+          done
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+          SESSION_SECRET: test-session-secret-32-chars-minimum-length
+          AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum
+          PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum
+          INTERNAL_API_SECRET: test-internal-api-secret-32-chars-min
+          DEPLOYMENT_SECRET_KEY: test-deployment-secret-key-32-chars-min
+          LICENSE_SIGNING_SECRET: test-license-signing-secret-32-chars-min
+          WORKER_SECRET: test-worker-secret-32-chars-minimum-length
+
       - name: Run API tests
         run: pnpm --filter api test
         env:
@@ -65,9 +84,9 @@ jobs:
           STOCKIX_FINANCE_INTERNAL_HOST: 127.0.0.1
 
       - name: Run POS tests
-        run: |
-          cd services/posnew/apps/pos-backend
-          npm test
+        working-directory: services/posnew/apps/pos-backend
+        run: npm test
+        timeout-minutes: 5
         continue-on-error: false
 
       - name: Run Finance tests
@@ -136,10 +155,12 @@ jobs:
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
           pnpm install --frozen-lockfile
+          pnpm infra:worker:build
           pnpm --filter @repo/db db:migrate
           cd infra/prod
           docker compose --env-file .env up -d --build --wait
-          curl --fail --silent --show-error "http://127.0.0.1:4000/health" >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 \
+            "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
           if ! docker compose --env-file .env ps --status running | grep -q "api"; then
             echo "API service is not running after deploy"
             docker compose --env-file .env logs --tail=200

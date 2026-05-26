@@ -4,6 +4,7 @@ import { getResendWebhookSecret } from "@repo/config";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { updateEmailLogDelivery } from "../../mail/email-log.js";
+import { logger } from "../../lib/logger.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -49,9 +50,18 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
     const rawBody = await c.req.text();
-    const secret = getResendWebhookSecret();
+    const resendWebhookSecret = process.env.RESEND_WEBHOOK_SECRET?.trim() || getResendWebhookSecret();
 
-    if (secret) {
+    if (!resendWebhookSecret && process.env.NODE_ENV === "production") {
+      logger.error(
+        "RESEND_WEBHOOK_SECRET not set in production — rejecting request",
+        undefined,
+        { event: "resend_webhook_secret_missing" },
+      );
+      return c.json({ error: "Webhook not configured" }, 401);
+    }
+
+    if (resendWebhookSecret) {
       const svixId = c.req.header("svix-id") ?? "";
       const svixTimestamp = c.req.header("svix-timestamp") ?? "";
       const svixSignature = c.req.header("svix-signature") ?? "";
@@ -60,12 +70,15 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
           id: svixId,
           timestamp: svixTimestamp,
           signature: svixSignature,
-        }, secret)
+        }, resendWebhookSecret)
       ) {
         return c.json({ error: "invalid_signature" }, 401);
       }
-    } else if (process.env.NODE_ENV === "production") {
-      console.warn("[webhooks/resend] RESEND_WEBHOOK_SECRET not set in production");
+    } else {
+      logger.warn(
+        "RESEND_WEBHOOK_SECRET not set — accepting webhook without signature verification (dev only)",
+        { event: "resend_webhook_secret_missing_dev" },
+      );
     }
 
     let payload: { type?: string; data?: { email_id?: string; message_id?: string } };

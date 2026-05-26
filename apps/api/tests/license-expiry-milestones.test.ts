@@ -2,13 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
-const sendExpiringMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const sendExpiringMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "sent", messageId: "msg-tenant" }),
+);
+const sendExpiringOwnerMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "sent", messageId: "msg-owner" }),
+);
 const hasMilestoneMock = vi.hoisted(() => vi.fn().mockResolvedValue(false));
 const notifyMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/mail/send.js", () => ({
   sendLicenseExpiredEmailForTenant: vi.fn(),
   sendLicenseExpiringEmailForTenant: sendExpiringMock,
+  sendLicenseExpiringEmailToPlatformOwner: sendExpiringOwnerMock,
 }));
 
 vi.mock("../src/notification-service.js", async (importOriginal) => {

@@ -6,11 +6,15 @@ WORKDIR /pos
 COPY services/posnew/packages/ui ./packages/ui
 COPY services/posnew/apps/pos-frontend2 ./apps/pos-frontend2
 
+WORKDIR /pos/packages/ui
+RUN npm install --legacy-peer-deps --no-audit
+
 WORKDIR /pos/apps/pos-frontend2
 RUN npm pkg set dependencies.@restaurant-pos/ui=file:../../packages/ui \
     && npm install --legacy-peer-deps --no-audit
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TURBOPACK_ROOT=/pos
 ENV NEXT_PUBLIC_POS_API_ORIGIN=http://localhost:8010
 RUN npm run build
 

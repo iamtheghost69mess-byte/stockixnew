@@ -4,6 +4,7 @@ import {
   getOrganizationByIdFactory,
   isOrganizationReadyFactory,
   isOrganizationBuiltFactory,
+  isOrganizationSeededFactory,
   isOrganizationSubscribedFactory,
   isOrganizationCongratsFactory,
   isOrganizationBuildRunningFactory
@@ -13,6 +14,7 @@ export const withOrganization = (mapState) => {
   const getOrganizationById = getOrganizationByIdFactory();
   const isOrganizationReady = isOrganizationReadyFactory();
   const isOrganizationBuilt = isOrganizationBuiltFactory();
+  const isOrganizationSeeded = isOrganizationSeededFactory();
 
   const isOrganizationSubscribed = isOrganizationSubscribedFactory();
   const isOrganizationCongrats = isOrganizationCongratsFactory();
@@ -23,6 +25,7 @@ export const withOrganization = (mapState) => {
       organization: getOrganizationById(state, props),
       isOrganizationReady: isOrganizationReady(state, props),
       isOrganizationInitialized: isOrganizationBuilt(state, props),
+      isOrganizationSeeded: isOrganizationSeeded(state, props),
 
       isOrganizationSubscribed: isOrganizationSubscribed(state, props),
       isOrganizationSetupCompleted: isOrganizationCongrats(state, props),

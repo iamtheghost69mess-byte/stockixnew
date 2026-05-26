@@ -90,14 +90,14 @@ describe("owner invite mail queue", () => {
 
   it("runOwnerInviteMailJob returns sent on success", async () => {
     const result = await runOwnerInviteMailJob(sampleJob);
-    expect(result).toEqual({ sent: true });
+    expect(result).toEqual({ outcome: "sent" });
     expect(sendOwnerInviteEmailMock).toHaveBeenCalledOnce();
   });
 
   it("runOwnerInviteMailJob returns failure reason when send fails", async () => {
     sendOwnerInviteEmailMock.mockResolvedValue({ status: "failed", error: "smtp down" });
     const result = await runOwnerInviteMailJob(sampleJob);
-    expect(result).toEqual({ sent: false, reason: "smtp down" });
+    expect(result).toEqual({ outcome: "failed", reason: "smtp down" });
   });
 
   it("auditOwnerInviteMailFailed logs invite.email_failed with actorId", async () => {

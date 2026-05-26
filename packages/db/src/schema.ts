@@ -158,6 +158,8 @@ export const tenantConfig = pgTable("tenant_config", {
   appName: text("app_name"),
   logoUrl: text("logo_url"),
   primaryColor: text("primary_color"),
+  /** URL-safe public discovery token (not tenant UUID). */
+  publicDiscoverySlug: text("public_discovery_slug"),
   branding: jsonb("branding").$type<Record<string, unknown>>(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
@@ -333,6 +335,7 @@ export const tenantLifecycleJobs = pgTable(
     runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     claimedBy: text("claimed_by"),
+    claimToken: uuid("claim_token"),
     lastError: text("last_error"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -122,7 +122,7 @@ export default function FinanceIntegrationPage() {
 
   const ingredientsQ = useQuery({
     queryKey: ["ingredients", "active"],
-    queryFn: () => fetchIngredients({ status: "active" }),
+    queryFn: async () => (await fetchIngredients({ status: "active" })).data ?? [],
   });
 
   const suppliersQ = useQuery({

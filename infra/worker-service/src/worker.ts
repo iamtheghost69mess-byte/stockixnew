@@ -1,5 +1,17 @@
+import * as Sentry from "@sentry/node";
+import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { logger } from "./lib/logger.js";
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    release: process.env.RELEASE_VERSION,
+    tracesSampleRate: 0.1,
+    integrations: [Sentry.httpIntegration()],
+  });
+}
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +42,21 @@ import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
+const POLL_INTERVAL_MS = pollMs;
+let lastSuccessfulPollAt = Date.now();
+
+const healthServer = http.createServer((req, res) => {
+  if (req.url === "/health" && req.method === "GET") {
+    const lastPollAge = Date.now() - lastSuccessfulPollAt;
+    const healthy = lastPollAge < POLL_INTERVAL_MS * 2;
+    res.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: healthy ? "ok" : "degraded", lastPollAge }));
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
+healthServer.listen(9090, "0.0.0.0");
 /** Periodically flip time-expired licenses to status `expired`. */
 const LICENSE_EXPIRE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 let lastLicenseExpireScanMs = 0;
@@ -65,7 +92,7 @@ const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
 const apiBaseUrl = `http://${apiHost}:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
 const jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
-const heartbeatIntervalMs = 15_000;
+const heartbeatIntervalMs = 30_000;
 const apiReadyMaxWaitMs = 180_000;
 const apiUnreachableLogIntervalMs = 30_000;
 let shuttingDown = false;
@@ -179,8 +206,11 @@ type ClaimedJob = {
   type: string;
   tenantId: string | null;
   correlationId: string | null;
+  claimToken: string | null;
   payload: Record<string, unknown>;
 };
+
+let activeClaimToken: string | null = null;
 
 async function claimNextJob(): Promise<ClaimedJob | null> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
@@ -199,7 +229,9 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
   });
   if (!res.ok) throw new Error(`claim_failed:${res.status}`);
   const body = (await res.json()) as { job?: ClaimedJob | null };
-  return body.job ?? null;
+  const job = body.job ?? null;
+  activeClaimToken = job?.claimToken ?? null;
+  return job;
 }
 
 async function markJobComplete(
@@ -227,7 +259,10 @@ async function markJobComplete(
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
-  const completionBody: Record<string, unknown> = { workerId };
+  const completionBody: Record<string, unknown> = {
+    workerId,
+    ...(activeClaimToken ? { claimToken: activeClaimToken } : {}),
+  };
   // Pass the one-time admin password so the API holds it in memory only — never persisted to DB (CRIT-02).
   if (opts?.oneTimeAdminPassword !== undefined) {
     completionBody.oneTimeAdminPassword = opts.oneTimeAdminPassword;
@@ -300,7 +335,10 @@ async function markJobHeartbeat(jobId: string): Promise<void> {
       "x-correlation-id": requestId,
       ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
     },
-    body: JSON.stringify({ workerId }),
+    body: JSON.stringify({
+      workerId,
+      ...(activeClaimToken ? { claimToken: activeClaimToken } : {}),
+    }),
     signal: timeoutSignal(requestTimeoutMs),
   });
   if (!res.ok) throw new Error(`heartbeat_failed:${res.status}`);
@@ -318,7 +356,12 @@ async function markJobFailure(jobId: string, message: string, noRetry = false): 
       "x-correlation-id": requestId,
       ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
     },
-    body: JSON.stringify({ error: message, workerId, noRetry }),
+    body: JSON.stringify({
+      error: message,
+      workerId,
+      noRetry,
+      ...(activeClaimToken ? { claimToken: activeClaimToken } : {}),
+    }),
     signal: timeoutSignal(requestTimeoutMs),
   });
   if (!res.ok) throw new Error(`fail_failed:${res.status}`);
@@ -708,9 +751,11 @@ async function loop() {
         logApiUnreachable();
         return null;
       }
+      Sentry.captureException(error);
       logger.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     });
+    lastSuccessfulPollAt = Date.now();
     if (!job) {
       const nowMs = Date.now();
       if (nowMs - lastLicenseExpireScanMs >= LICENSE_EXPIRE_SCAN_INTERVAL_MS) {
@@ -773,6 +818,7 @@ async function loop() {
         }),
       );
     } catch (error) {
+      Sentry.captureException(error);
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[worker][${job.id}] failed: ${message}`);
       try {
@@ -816,6 +862,7 @@ async function loop() {
               lastError: `worker_fallback_failure_persist:${message}`,
               claimedAt: null,
               claimedBy: null,
+              claimToken: null,
               runAt: nextRunAt ?? sql`${tenantLifecycleJobs.runAt}`,
               updatedAt: new Date(),
               completedAt: fallbackNoRetry ? new Date() : null,
@@ -852,6 +899,7 @@ async function loop() {
       }
     } finally {
       stopHeartbeat();
+      activeClaimToken = null;
     }
   }
 }
@@ -863,6 +911,14 @@ process.on("SIGTERM", () => {
 process.on("SIGINT", () => {
   shuttingDown = true;
   logger.info(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGINT", workerId }));
+});
+process.on("uncaughtException", (error) => {
+  Sentry.captureException(error);
+  logger.error(`[worker] uncaughtException: ${error instanceof Error ? error.message : String(error)}`);
+});
+process.on("unhandledRejection", (reason) => {
+  Sentry.captureException(reason);
+  logger.error(`[worker] unhandledRejection: ${reason instanceof Error ? reason.message : String(reason)}`);
 });
 
 void loop();

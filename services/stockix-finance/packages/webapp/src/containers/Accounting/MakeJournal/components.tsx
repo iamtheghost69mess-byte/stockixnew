@@ -18,8 +18,8 @@ import {
   InputGroupCell,
   ContactsListFieldCell,
   BranchesListFieldCell,
-  ProjectsListFieldCell,
 } from '@/components/DataTableCells';
+import { ProjectsListFieldCell } from '@/components/DataTableCells/ProjectsListFieldCell';
 
 import { CellType, Features, Align } from '@/constants';
 

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import { Queue, Worker } from "bullmq";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -8,7 +9,7 @@ import { z } from "zod";
 import { logLine } from "../lib/logger.js";
 import { logAudit } from "../audit.js";
 import { sendOwnerInviteEmail } from "../mail/send.js";
-import { mailSendSucceeded } from "../mail/mailer.js";
+import type { MailSendResult } from "../mail/mailer.js";
 
 const QUEUE_NAME = "owner-invite-mail";
 
@@ -76,20 +77,31 @@ export async function enqueueOwnerInviteMail(
 
 export async function runOwnerInviteMailJob(
   data: OwnerInviteMailJob,
-): Promise<{ sent: boolean; reason?: string }> {
-  let mailResult = await sendOwnerInviteEmail({
+): Promise<{ outcome: "sent" } | { outcome: "skipped"; reason: string } | { outcome: "failed"; reason: string }> {
+  const result: MailSendResult = await sendOwnerInviteEmail({
     to: data.to,
     name: data.name,
     role: data.role,
     inviteUrl: data.inviteUrl,
     ownerId: data.ownerId,
   });
-  if (!mailSendSucceeded(mailResult)) {
-    const reason =
-      mailResult.status === "failed" ? mailResult.error : String(mailResult.status);
-    return { sent: false, reason };
+  if (result.status === "failed") {
+    return { outcome: "failed", reason: result.error };
   }
-  return { sent: true };
+  if (result.status === "skipped") {
+    logLine(
+      `[owner_invite_mail_skipped] ownerId=${data.ownerId} reason=${result.reason} — ` +
+        "Set SMTP credentials in production to enable delivery.",
+    );
+    if (process.env.NODE_ENV === "production" && process.env.SENTRY_DSN?.trim()) {
+      Sentry.captureMessage("Owner invite mail skipped in production — SMTP not configured", {
+        level: "warning",
+        extra: { ownerId: data.ownerId, reason: result.reason, source: data.source },
+      });
+    }
+    return { outcome: "skipped", reason: result.reason };
+  }
+  return { outcome: "sent" };
 }
 
 const actorIdSchema = z.string().uuid();
@@ -143,8 +155,11 @@ export function startOwnerInviteMailWorker(
     QUEUE_NAME,
     async (job) => {
       const result = await runOwnerInviteMailJob(job.data);
-      if (!result.sent) {
-        throw new Error(result.reason ?? "invite_mail_send_failed");
+      if (result.outcome === "failed") {
+        throw new Error(`Mail delivery failed: ${result.reason}`);
+      }
+      if (result.outcome === "skipped") {
+        return;
       }
       log(
         `[owner_invite_mail_sent] ownerId=${job.data.ownerId} source=${job.data.source}`,

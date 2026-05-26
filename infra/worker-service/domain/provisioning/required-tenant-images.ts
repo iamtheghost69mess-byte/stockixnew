@@ -1,3 +1,6 @@
+/** Docker label on infra/pos-tenant-stack/Dockerfile.pos-frontend-stub */
+export const POS_FRONTEND_STUB_LABEL = "io.stockix.image";
+
 /** Finance stack images referenced by infra/tenant-stack/docker-compose.yml */
 export const REQUIRED_STOCKIX_TENANT_IMAGES = [
   "stockix-webapp:local",

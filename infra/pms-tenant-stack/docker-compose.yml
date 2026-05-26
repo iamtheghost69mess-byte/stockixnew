@@ -4,19 +4,36 @@ services:
     build:
       context: ${PMS_APP_ROOT}/frontend
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_PMS_API_URL=http://pms-api:3003
     ports:
       - "127.0.0.1:${PMS_FRONTEND_HOST_PORT:-3004}:3000"
     depends_on:
-      - pms-api
+      pms-api:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   pms-api:
     image: stockix-pms:local
     build:
       context: ${PMS_APP_ROOT}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3003/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     environment:
       - NODE_ENV=production
       - PMS_PORT=3003
@@ -26,5 +43,9 @@ services:
       - TENANT_ID=${TENANT_ID}
     ports:
       - "127.0.0.1:${PMS_HOST_PORT:-3003}:3003"
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
 volumes: {}

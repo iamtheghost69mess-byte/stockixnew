@@ -91,7 +91,7 @@ export async function sendPasswordChangedEmail(opts: {
   <p style="color: #666; font-size: 14px;">If you did not make this change, contact your platform administrator immediately.</p>
 </body>
 </html>`,
-    idempotencyKey: `password-changed/${opts.to}/${Date.now().toString(36).slice(0, 8)}`,
+    idempotencyKey: `password-changed-${opts.ownerId ?? opts.to}-${Math.floor(Date.now() / 86400000)}`,
     templateKey: "password-changed",
     ownerId: opts.ownerId,
   });
@@ -402,7 +402,7 @@ export async function sendLicenseExpiringEmailForTenant(
     licenseId?: string;
     milestoneDays?: number;
   },
-): Promise<void> {
+): Promise<MailSendResult | "no_recipient"> {
   try {
     const [tenant] = await db
       .select({ name: tenants.name, adminEmail: tenants.adminEmail })
@@ -412,12 +412,12 @@ export async function sendLicenseExpiringEmailForTenant(
 
     if (!tenant) {
       console.warn("[sendLicenseExpiringEmail] Tenant not found:", tenantId);
-      return;
+      return "no_recipient";
     }
 
     if (!tenant.adminEmail) {
       console.warn("[sendLicenseExpiringEmail] No admin email for tenant", tenantId);
-      return;
+      return "no_recipient";
     }
 
     const licenseIdForMail = opts.licenseId;
@@ -450,12 +450,11 @@ export async function sendLicenseExpiringEmailForTenant(
         },
       });
     }
+    return result;
   } catch (err) {
-    console.error(
-      "[sendLicenseExpiringEmail] Failed for tenant",
-      tenantId,
-      err instanceof Error ? err.message : err,
-    );
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("[sendLicenseExpiringEmail] Failed for tenant", tenantId, error);
+    return { status: "failed", error };
   }
 }
 
@@ -468,23 +467,23 @@ export async function sendLicenseExpiringEmailToPlatformOwner(
     licenseId: string;
     milestoneDays: number;
   },
-): Promise<void> {
+): Promise<MailSendResult | "no_recipient"> {
   try {
     const [tenant] = await db
       .select({ name: tenants.name, ownerId: tenants.ownerId })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);
-    if (!tenant?.ownerId) return;
+    if (!tenant?.ownerId) return "no_recipient";
 
     const [owner] = await db
       .select({ email: owners.email })
       .from(owners)
       .where(eq(owners.id, tenant.ownerId))
       .limit(1);
-    if (!owner?.email) return;
+    if (!owner?.email) return "no_recipient";
 
-    await sendLicenseExpiringEmail({
+    return sendLicenseExpiringEmail({
       to: owner.email,
       tenantName: tenant.name,
       tenantId,
@@ -494,10 +493,8 @@ export async function sendLicenseExpiringEmailToPlatformOwner(
       idempotencyKey: `license-expiring-owner/${opts.licenseId}/${opts.milestoneDays}`,
     });
   } catch (err) {
-    console.error(
-      "[sendLicenseExpiringEmailToPlatformOwner] Failed",
-      tenantId,
-      err instanceof Error ? err.message : err,
-    );
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("[sendLicenseExpiringEmailToPlatformOwner] Failed", tenantId, error);
+    return { status: "failed", error };
   }
 }

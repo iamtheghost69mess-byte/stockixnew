@@ -45,6 +45,11 @@ import {
   FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
   syncFinanceLicense,
 } from "../domain/provisioning/adapters/sync-finance-license.js";
+import { assertRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
+import {
+  assertNoConcurrentProvisionJob,
+  withTenantProvisionAdvisoryLock,
+} from "../domain/provisioning/provision-lock.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 import { provisionChatwootAccount } from "./chatwoot-provision.js";
@@ -78,9 +83,11 @@ function assertProvisionModuleEnv(modules: string[]): void {
       );
     }
   }
-  if (modules.includes("accounting") && !apiConfig.internalApiSecret?.trim()) {
+  // Finance stack requests (including organization build + license guarded writes)
+  // require internal API secret for internal endpoints.
+  if (shouldProvisionFinanceStack(modules) && !apiConfig.internalApiSecret?.trim()) {
     throw new Error(
-      "INTERNAL_API_SECRET is required when provisioning the accounting module",
+      "INTERNAL_API_SECRET is required when provisioning the Finance stack",
     );
   }
 }
@@ -425,6 +432,7 @@ export async function executeProvisionRuntime(
   const runComposeWithCancellation = async (
     args: string[],
   ): Promise<void> => {
+    const executeCompose = async () => {
     log(`[compose] starting: docker compose ${args.join(" ")}`);
     const controller = new AbortController();
     const intervalId = setInterval(() => {
@@ -484,6 +492,12 @@ export async function executeProvisionRuntime(
       throw error;
     } finally {
       clearInterval(intervalId);
+    }
+    };
+    if (tenantId) {
+      await withTenantProvisionAdvisoryLock(db, tenantId, executeCompose);
+    } else {
+      await executeCompose();
     }
   };
   const hasOp = (key: string) => completedOps.has(key);
@@ -974,12 +988,14 @@ export async function executeProvisionRuntime(
     let stockixAppName = input.name;
     let stockixLogoUrl = "";
     let stockixPrimaryColor = "#ca8a04";
+    let stockixDiscoverySlug = "";
     if (tenantId) {
       const [cfg] = await db
         .select({
           appName: tenantConfig.appName,
           logoUrl: tenantConfig.logoUrl,
           primaryColor: tenantConfig.primaryColor,
+          publicDiscoverySlug: tenantConfig.publicDiscoverySlug,
         })
         .from(tenantConfig)
         .where(eq(tenantConfig.tenantId, tenantId))
@@ -988,6 +1004,7 @@ export async function executeProvisionRuntime(
         stockixAppName = cfg.appName ?? stockixAppName;
         stockixLogoUrl = cfg.logoUrl ?? "";
         stockixPrimaryColor = cfg.primaryColor ?? stockixPrimaryColor;
+        stockixDiscoverySlug = cfg.publicDiscoverySlug ?? "";
       }
     }
 
@@ -1010,6 +1027,7 @@ export async function executeProvisionRuntime(
       s3Bucket,
       s3ForcePathStyle,
       stockixTenantId: input.stockixTenantId,
+      stockixDiscoverySlug,
       stockixApiUrl: input.stockixApiUrl,
       internalApiSecret: apiConfig.internalApiSecret,
       stockixAppName,
@@ -1033,6 +1051,7 @@ export async function executeProvisionRuntime(
     };
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
+    await assertRequiredTenantImages();
     await checkNotCancelled();
     const staleContainersRaw = await execa(
       "docker",
@@ -1090,7 +1109,7 @@ export async function executeProvisionRuntime(
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
       log("database_migration");
-      await runComposeWithCancellation(["run", "--rm", "--build", "database_migration"]);
+      await runComposeWithCancellation(["run", "--rm", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs(),
@@ -1280,6 +1299,81 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() },
       });
       try {
+        // The Finance API enforces license for write endpoints (organization build).
+        // Sync the license before attempting to build the organization schema.
+        if (financeTenantId && internalUrl) {
+          const planSlug = input.planSlug ?? "starter";
+          const planLimits = await getPlanLimits(db, planSlug);
+          const internalSecret = apiConfig.internalApiSecret?.trim();
+          if (!internalSecret) {
+            throw new Error("INTERNAL_API_SECRET is required to resolve finance tenant for license sync");
+          }
+
+          // LicenseGuard checks license based on Finance's `tenant.id` (resolved via organization-id header).
+          // To avoid any control-plane vs finance-tenant mapping drift, resolve the finance tenant id
+          // from the admin email used for the build session, then sync against that tenant id.
+          const resolveUrl = `${internalUrl.replace(/\/+$/, "")}/api/internal/resolve-tenant?email=${encodeURIComponent(
+            input.adminEmail,
+          )}`;
+          const resolveRes = await fetch(resolveUrl, {
+            method: "GET",
+            headers: {
+              "x-internal-secret": internalSecret,
+              Accept: "application/json",
+            },
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!resolveRes.ok) {
+            const detail = await resolveRes.text();
+            throw new Error(
+              `finance_resolve_tenant_http_${resolveRes.status}: ${detail.slice(0, 200)}`,
+            );
+          }
+          const resolveJson: unknown = await resolveRes.json();
+          const resolvedTenantId =
+            resolveJson && typeof resolveJson === "object"
+              ? Number(
+                  (resolveJson as Record<string, unknown>).tenantId ??
+                    (resolveJson as Record<string, unknown>).tenant_id,
+                )
+              : NaN;
+          if (!resolvedTenantId || !Number.isFinite(resolvedTenantId) || resolvedTenantId <= 0) {
+            throw new Error(`finance_resolve_tenant_invalid_response: ${JSON.stringify(resolveJson)}`);
+          }
+
+          await trace.event("progress", "Syncing finance license before organization build", {
+            meta: {
+              operationKey: "tenant.sync_finance_license_before_build",
+              financeTenantId,
+              resolvedTenantId,
+              planSlug,
+              maxOrganizations: planLimits.maxOrganizations,
+              maxActivations: planLimits.maxActivations,
+              maxUsers: planLimits.maxUsers,
+            },
+          });
+          await syncFinanceLicense(
+            internalUrl,
+            {
+              tenantId: resolvedTenantId,
+              planSlug,
+              status: "active",
+              isPerpetual: true,
+              maxOrganizations: planLimits.maxOrganizations,
+              maxActivations: planLimits.maxActivations,
+              maxUsers: planLimits.maxUsers,
+            },
+            log,
+          );
+          await trace.event("progress", "Finance license synced before organization build", {
+            meta: {
+              operationKey: "tenant.sync_finance_license_before_build",
+              financeTenantId,
+              resolvedTenantId,
+            },
+          });
+        }
+
         const buildResult = await finance.buildOrganization(
           {
             internalBaseUrl: internalUrl,
@@ -1397,12 +1491,22 @@ export async function executeProvisionRuntime(
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const detail =
+          err && typeof err === "object" && "detail" in err
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (err as any).detail
+            : undefined;
+        const richError = detail ? `${msg} :: ${detail}` : msg;
         await trace.event(
           "progress",
-          `Organization build failed: ${msg}`,
+          `Organization build failed: ${richError}`,
           {
             level: "error",
-            meta: { operationKey: "tenant.build_organization", error: msg },
+            meta: {
+              operationKey: "tenant.build_organization",
+              error: richError,
+              ...(detail ? { detail } : {}),
+            },
           },
         );
         throw err;
@@ -1612,24 +1716,6 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
       });
     }
-    if (financeTenantId && internalUrl) {
-      const planSlug = input.planSlug ?? "starter";
-      const planLimits = await getPlanLimits(db, planSlug);
-      await syncFinanceLicense(
-        internalUrl,
-        {
-          tenantId: financeTenantId,
-          planSlug,
-          status: "active",
-          isPerpetual: true,
-          maxOrganizations: planLimits.maxOrganizations,
-          maxActivations: planLimits.maxActivations,
-          maxUsers: planLimits.maxUsers,
-        },
-        log,
-      );
-    }
-
     let forceWireRerun: boolean = wireOnlyRetry;
     if (tenantId) {
       const [partialRow] = await db

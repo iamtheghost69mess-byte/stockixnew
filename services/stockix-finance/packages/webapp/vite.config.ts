@@ -4,6 +4,9 @@ import path from 'node:path';
 import { defineConfig, loadEnv, type PluginOption } from 'vite';
 import fixReactVirtualized from 'esbuild-plugin-react-virtualized';
 
+/** @vitejs/plugin-legacy can crash Rollup 4.x during transformChunk (undefined code). */
+const enableLegacyPlugin = process.env.VITE_LEGACY_PLUGIN === '1';
+
 const allowedEnvPrefixes = ['VITE_', 'REACT_APP_', 'PUBLIC_URL'];
 
 const pickClientEnv = (env: Record<string, string>) =>
@@ -21,13 +24,15 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, rootDir, '');
   const clientEnv = pickClientEnv(env);
   const port = Number(env.PORT) || 4000;
-  const plugins: PluginOption[] = [
-    react(),
-    legacy({
-      targets: ['defaults', 'not IE 11'],
-      additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
-    }),
-  ];
+  const plugins: PluginOption[] = [react()];
+  if (enableLegacyPlugin) {
+    plugins.push(
+      legacy({
+        targets: ['defaults', 'not IE 11'],
+        additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
+      }),
+    );
+  }
 
   return {
     plugins,
@@ -63,6 +68,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
+      target: enableLegacyPlugin ? undefined : 'es2015',
     },
     optimizeDeps: {
       esbuildOptions: {

@@ -351,6 +351,20 @@
       "when": 1781120000000,
       "tag": "0048_organizations_pos_organization_id",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781130000000,
+      "tag": "0049_tenant_lifecycle_jobs_claim_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781140000000,
+      "tag": "0050_tenant_public_discovery_slug",
+      "breakpoints": true
     }
   ]
 }

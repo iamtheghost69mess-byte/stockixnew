@@ -16,7 +16,7 @@ export function requiredPermissionsForRoute(
   if (pathname.startsWith("/internal/organizations")) return null;
   if (m === "POST" && pathname === "/licenses/activate") return null;
   if (m === "POST" && pathname === "/licenses/verify-offline") return null;
-  if (m === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
+  if (m === "GET" && pathname.startsWith("/public/tenant/")) return null;
 
   if (pathname === "/admin/orphan-check" && m === "GET") return ["*"];
   if (pathname.startsWith("/admin/roles")) {

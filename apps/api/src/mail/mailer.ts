@@ -7,8 +7,8 @@ import { createTransport } from "nodemailer";
 import { isMailConfigured, mailConfig } from "@repo/config";
 
 export type MailSendResult =
-  | { status: "sent"; messageId?: string }
-  | { status: "skipped"; reason: "not_configured" }
+  | { status: "sent"; messageId: string }
+  | { status: "skipped"; reason: "not_configured" | "suppressed" }
   | { status: "failed"; error: string };
 
 export type SendMailOptions = {
@@ -91,7 +91,7 @@ export async function sendMail(options: SendMailOptions): Promise<MailSendResult
     });
     const messageId =
       typeof info.messageId === "string" ? info.messageId : undefined;
-    const result: MailSendResult = { status: "sent", messageId };
+    const result: MailSendResult = { status: "sent", messageId: messageId ?? "" };
     if (logEmailAttemptFn) {
       await logEmailAttemptFn({
         templateKey,

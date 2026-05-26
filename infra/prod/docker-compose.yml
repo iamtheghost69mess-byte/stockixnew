@@ -22,6 +22,7 @@ x-stockix-platform-env: &stockix-platform-env
   CORS_ORIGINS: ${CORS_ORIGINS:-}
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  RELEASE_VERSION: ${RELEASE_VERSION:-}
   DB_POOL_MAX: ${DB_POOL_MAX:-20}
   DB_IDLE_TIMEOUT_SECONDS: ${DB_IDLE_TIMEOUT_SECONDS:-30}
   STOCKIX_API_URL: ${STOCKIX_API_URL:-}
@@ -33,6 +34,7 @@ x-stockix-platform-env: &stockix-platform-env
   DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
   LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
   CONTROL_PLANE_REDIS_URL: ${CONTROL_PLANE_REDIS_URL:-}
+  RUN_BULLMQ_CONSUMERS: ${RUN_BULLMQ_CONSUMERS:-true}
   JWT_SECRET: ${JWT_SECRET:-}
   SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
   SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
@@ -79,14 +81,22 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
+      LOG_LEVEL: warning
       CONTAINERS: 1
       IMAGES: 1
       NETWORKS: 1
       VOLUMES: 1
-      SERVICES: 1
-      TASKS: 1
       POST: 1
-      BUILD: 1
+      BUILD: 0
+      AUTH: 0
+      SECRETS: 0
+      CONFIGS: 0
+      SWARM: 0
+      NODES: 0
+      PLUGINS: 0
+      SERVICES: 0
+      TASKS: 0
+      DISTRIBUTION: 0
     networks:
       - stockix_internal
     security_opt:
@@ -206,7 +216,7 @@ services:
     tmpfs:
       - /tmp
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -225,6 +235,14 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     cpus: "1.0"
+    expose:
+      - "9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
@@ -253,12 +271,12 @@ services:
     build:
       context: ../..
       dockerfile: apps/dashboard/Dockerfile
-    mem_limit: 256m
-    cpus: "0.25"
       args:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
         NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
+    mem_limit: 256m
+    cpus: "0.25"
     restart: unless-stopped
     depends_on:
       traefik:
@@ -332,9 +350,17 @@ services:
       - SMTP_PASSWORD=${MAIL_PASSWORD:-}
     ports:
       - "127.0.0.1:3200:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/auth/sign_in >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
-      - chatwoot-postgres
-      - chatwoot-redis
+      chatwoot-postgres:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
     networks:
       - stockix_internal
 
@@ -349,12 +375,54 @@ services:
       - chatwoot_postgres:/var/lib/postgresql/data
     networks:
       - stockix_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot -d chatwoot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   chatwoot-redis:
     image: redis:7-alpine
     restart: unless-stopped
     volumes:
       - chatwoot_redis:/data
+    networks:
+      - stockix_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  db-backup:
+    image: amazon/aws-cli:2.15.0
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: "0.1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./backup/backup.sh:/backup.sh:ro
+    environment:
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-stockix-platform-backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_POSTGRES_CONTAINER: ${BACKUP_POSTGRES_CONTAINER:-stockix-postgres-1}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
+      AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${BACKUP_AWS_REGION:-us-east-1}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo '0 2 * * * /backup.sh >> /var/log/backup.log 2>&1' | crontab -
+        crond -f
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - stockix_internal
 

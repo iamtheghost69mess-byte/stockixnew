@@ -4,6 +4,7 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import type { createDb } from "@repo/db";
 import { syncTenantBrandingToFinance } from "../finance-branding-sync.js";
+import { generatePublicDiscoverySlug } from "../lib/tenant-discovery-slug.js";
 type ApiEnv = {
   Variables: {
     actorId: string;
@@ -51,6 +52,7 @@ export async function ensureDefaultTenantConfig(
     appName: defaults.appName,
     logoUrl: null,
     primaryColor: "#ca8a04",
+    publicDiscoverySlug: generatePublicDiscoverySlug(),
     branding: null,
   });
 }

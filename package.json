@@ -39,6 +39,7 @@
     "cleanup:tenant-local": "node scripts/cleanup-tenant-docker-local.mjs",
     "docker:prebuild": "node scripts/prebuild-tenant-images.mjs",
     "pos:images:build": "node scripts/build-pos-tenant-images.mjs",
+    "pos:images:build:stub": "node scripts/build-pos-tenant-images.mjs -- --stub-frontend",
     "docker:prebuild:force": "node scripts/prebuild-tenant-images.mjs --force",
     "docker:check": "node scripts/prebuild-tenant-images.mjs --verify",
     "provision:diagnose": "pnpm --filter api exec node scripts/provision-diagnose.mjs --",
@@ -94,6 +95,7 @@
     }
   },
   "dependencies": {
+    "@sentry/node": "^8.40.0",
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",

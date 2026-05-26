@@ -1,5 +1,7 @@
 # Production operations — control plane
 
+# SECRETS ROTATED: _pending_ — replace date after git-history rotation (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
+
 Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored). After editing, sync and redeploy:
 
 ```bash
@@ -8,30 +10,25 @@ cd infra/prod
 docker compose --env-file .env up -d --build api infra-worker control-plane-redis
 ```
 
-## Section 1 database migrations (0044–0046)
+## Database migrations
 
-These SQL files are **not** in the Drizzle journal yet. Apply once per environment after backup.
-
-| Order | File | Purpose |
-|-------|------|---------|
-| 1 | `packages/db/drizzle/0044_platform_roles.sql` | `platform_roles`, `owners.role_id`, seed system roles |
-| 2 | `packages/db/drizzle/0045_tenants_org_scope_permission.sql` | `tenants.org_scope` on support_agent |
-| 3 | `packages/db/drizzle/0046_stxi_license.sql` | `licenses.key_format`, `scoped_location_id` |
-
-**On the server** (compose project name `stockix`):
+All migrations in `packages/db/drizzle/meta/_journal.json` (including 0044–0046 and `0050_tenant_public_discovery_slug`) apply via:
 
 ```bash
 cd /opt/stockix/stockixnew
-pnpm --filter @repo/db db:migrate:section1
+pnpm --filter @repo/db db:migrate
+pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
 ```
 
-Or via Postgres container:
+After migrate, backfill public discovery slugs and sync tenant Finance `.env` files:
 
 ```bash
-docker exec -i stockix-postgres-1 psql -U postgres -d stockix_platform \
-  < packages/db/drizzle/0044_platform_roles.sql
-# repeat for 0045 and 0046
+node apps/api/scripts/backfill-discovery-slugs.mjs
+node apps/api/scripts/sync-tenant-discovery-env.mjs
+# Rebuild tenant webapp images so Vite bakes REACT_APP_STOCKIX_DISCOVERY_SLUG
 ```
+
+Do **not** run `scripts/apply-orphan-migrations.ts` in CI — emergency recovery only.
 
 **Verify:**
 
@@ -77,6 +74,18 @@ Mismatch causes STXI keys generated on the API to fail validation on POS login.
 - Recommended for production **after** staging verification of suspend/reactivate and STXI flows ([docs/section-2.3-license-e2e-checklist.md](../../docs/section-2.3-license-e2e-checklist.md)).
 - Default (unset): license row updates succeed; POS sync failures are logged and surfaced in API JSON (`posSync`, `errors`).
 
+## Redis (mandatory in production)
+
+`CONTROL_PLANE_REDIS_URL` is **required**. The API exits on startup if unset in production.
+Rate limits and BullMQ are not safe across multiple API replicas without shared Redis.
+
+Set `RUN_BULLMQ_CONSUMERS=true` on exactly one API instance when scaling horizontally.
+
+## Docker socket-proxy
+
+Worker Docker access is restricted via `socket-proxy` (`BUILD=0` — images must be pre-built).
+Any new Docker API verb requires an explicit proxy env change and security review.
+
 ## Control plane queues (BullMQ)
 
 - Redis service: `control-plane-redis` (internal Docker network only).
@@ -98,9 +107,23 @@ curl -X POST "https://api.${ROOT_DOMAIN}/api/platform/v1/organizations/{posOrgId
 
 Or run `node services/posnew/apps/pos-backend/scripts/repairCredentials.js` (uses the same sync logic). Plaintext PINs cannot be recovered — use dashboard **Reset PIN** per role.
 
+## Database backup and restore
+
+Automated backups: `db-backup` service runs `infra/prod/backup/backup.sh` daily (02:00 cron) to S3.
+
+Required env: `BACKUP_S3_BUCKET`, `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY`.
+
+**Restore:**
+
+```bash
+aws s3 cp s3://$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX/<backup-file>.dump.gz /tmp/restore.dump.gz
+gunzip /tmp/restore.dump.gz
+docker exec -i stockix-postgres-1 pg_restore -U postgres -d stockix_platform --clean --if-exists < /tmp/restore.dump
+```
+
 ## Rollout checklist
 
-1. Backup Postgres (`stockix_platform`).
+1. Backup Postgres (`stockix_platform`) or confirm S3 backup job healthy.
 2. Apply migrations 0044 → 0045 → 0046.
 3. Set `CONTROL_PLANE_REDIS_URL` in `infra/prod/.env`.
 4. Deploy `control-plane-redis`, `api`, `infra-worker`.

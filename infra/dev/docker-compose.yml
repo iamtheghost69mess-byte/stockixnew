@@ -3,6 +3,10 @@
 services:
   redis:
     image: redis:7-alpine
+    mem_limit: 128m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
     ports:
       - "6379:6379"
     healthcheck:
@@ -13,6 +17,10 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

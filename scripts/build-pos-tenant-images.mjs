@@ -6,9 +6,9 @@
  *   pnpm pos:images:build
  *   pnpm pos:images:build -- --force
  *   pnpm pos:images:build -- --backend-only
- *   pnpm pos:images:build -- --full-frontend   # build real Next.js image (slow)
+ *   pnpm pos:images:build -- --stub-frontend    # nginx placeholder only (not a real POS UI)
  *
- * Run before first POS provision or after POS / @repo/auth changes.
+ * Default builds the real Next.js POS UI. Run before first POS provision or after POS changes.
  */
 
 import { execSync } from "node:child_process";
@@ -21,8 +21,8 @@ import { loadRootEnv } from "./load-root-env.mjs";
 const ROOT = loadRootEnv(import.meta.url);
 const FORCE = process.argv.includes("--force");
 const BACKEND_ONLY = process.argv.includes("--backend-only");
-const FULL_FRONTEND = process.argv.includes("--full-frontend");
-const STUB_FRONTEND = !FULL_FRONTEND;
+const STUB_FRONTEND = process.argv.includes("--stub-frontend");
+const FULL_FRONTEND = !STUB_FRONTEND;
 const posAppRaw = process.env.POS_APP_ROOT?.trim() || path.join("services", "posnew");
 const POS_ROOT = path.isAbsolute(posAppRaw) ? posAppRaw : path.join(ROOT, posAppRaw);
 const COMPOSE = path.join(ROOT, "infra", "pos-tenant-stack", "docker-compose.yml");
