@@ -1,3 +1,4 @@
+import process from "node:process";
 import { type Page, type Route } from "@playwright/test";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
