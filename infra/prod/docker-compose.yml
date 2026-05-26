@@ -28,6 +28,7 @@ x-stockix-platform-env: &stockix-platform-env
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
   DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
   LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
+  CONTROL_PLANE_REDIS_URL: ${CONTROL_PLANE_REDIS_URL:-}
   JWT_SECRET: ${JWT_SECRET:-}
   SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
   SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
@@ -155,6 +156,21 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Dedicated Redis for control-plane BullMQ (license expiry milestones). Not shared with Chatwoot.
+  control-plane-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stockix_internal
+    security_opt:
+      - no-new-privileges:true
+
   api:
     build:
       context: ../..
@@ -163,12 +179,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
     environment:
       <<: *stockix-platform-env
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
     networks:
       - stockix_public
+      - stockix_internal
     read_only: true
     cap_drop:
       - ALL
@@ -197,6 +216,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
       api:
         condition: service_healthy
       socket-proxy:
@@ -212,6 +233,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - stockix_public
+      - stockix_internal
     security_opt:
       - no-new-privileges:true
 
