@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FinanceSyncStatusBadge } from "@/components/finance-sync-status-badge";
 import type { DashboardRecentOrderRow } from "@/lib/pos-dashboard-api";
 import { formatCurrency } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ export function RecentOrdersWidget({ rows, isLoading }: RecentOrdersWidgetProps)
               <TableHead>Table</TableHead>
               <TableHead>Waiter</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Finance</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="text-right">When</TableHead>
             </TableRow>
@@ -41,13 +43,13 @@ export function RecentOrdersWidget({ rows, isLoading }: RecentOrdersWidgetProps)
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
+                <TableCell colSpan={7} className="text-muted-foreground">
                   Loading recent orders...
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
+                <TableCell colSpan={7} className="text-muted-foreground">
                   No recent paid/closed orders.
                 </TableCell>
               </TableRow>
@@ -69,6 +71,14 @@ export function RecentOrdersWidget({ rows, isLoading }: RecentOrdersWidgetProps)
                   <TableCell>{row.tableNumber || "—"}</TableCell>
                   <TableCell>{row.waiterName || "—"}</TableCell>
                   <TableCell className="capitalize">{row.status || "—"}</TableCell>
+                  <TableCell>
+                    <FinanceSyncStatusBadge
+                      orderId={row.orderId}
+                      status={row.accountingSaleStatus}
+                      error={row.accountingSaleError}
+                      compact
+                    />
+                  </TableCell>
                   <TableCell className="text-right">{formatCurrency(row.totalAmount || 0)}</TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {formatCreatedAt(row.createdAt)}

@@ -1,25 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { PosPageShell } from "@/components/pos-page-shell";
-import { posApiFetch } from "@/lib/pos-fetch";
+import { PosResourceTable } from "@/components/pos-resource-table";
+import { Badge } from "@/components/ui/badge";
+
+function formatPosJobState(value: unknown): string {
+  if (value == null) return "—";
+  return String(value);
+}
 
 export default function PosJobsPage() {
-  const [data, setData] = useState<unknown>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await posApiFetch("jobs");
-      setData(await res.json());
-    })();
-  }, []);
-
   return (
     <PosPageShell title="POS jobs" description="BullMQ job console (read-only proxy).">
-      <pre className="max-h-[32rem] overflow-auto rounded-lg border bg-muted/30 p-4 text-xs">
-        {data ? JSON.stringify(data, null, 2) : "Loading…"}
-      </pre>
+      <PosResourceTable
+        title="Background jobs"
+        fetchPath="jobs"
+        listKeys={["jobs", "data", "items", "queues"]}
+        emptyMessage="No jobs in queue."
+        columns={[
+          { key: "id", label: "ID", mono: true },
+          { key: "name", label: "Name" },
+          { key: "queue", label: "Queue" },
+          {
+            key: "state",
+            label: "State",
+            render: (value) => (
+              <Badge variant="outline">{formatPosJobState(value)}</Badge>
+            ),
+          },
+          { key: "progress", label: "Progress" },
+        ]}
+      />
     </PosPageShell>
   );
 }

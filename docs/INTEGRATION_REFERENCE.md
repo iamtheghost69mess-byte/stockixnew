@@ -66,16 +66,27 @@ sequenceDiagram
 | IntegrationConfig model | `models/integrationConfigModel.js` | ✅ |
 | Item mapping model | `models/integrationItemMappingModel.js` | ✅ |
 | Sync enqueue | `services/bigcapitalSyncEnqueue.js` | ✅ |
+| Accounting outbox | `models/accountingIntegrationOutboxModel.js`, `services/accountingIntegrationOutbox.js` | ✅ |
 | Sync processor | `services/bigcapitalSyncProcessor.js` | ✅ |
 | Sync worker | `workers/bigcapitalSyncWorker.js` | ✅ In compose as `pos-bigcapital-worker` |
-| Integration REST routes | `routes/integrationRoute.js` (8 routes) | ✅ |
+| Integration REST routes | `routes/integrationRoute.js` | ✅ |
+| Event catalog + dispatch | `services/accountingIntegrationEvents.js` | ✅ |
+| Mapping coverage API | `GET /api/integration/mapping-coverage` | ✅ |
+| Outbox ops API | `GET /api/integration/outbox`, retry | ✅ |
 | Finance receipt ingress | `InternalPos.controller.ts`, `InternalPosReceipts.service.ts` | ✅ |
 | Platform wire API | `PUT /api/platform/v1/organizations/:id/integration/bigcapital` | ✅ |
+| Integration health | `GET /api/platform/v1/organizations/:id/integration/bigcapital/health` | ✅ (provision resume) |
 | Worker wire step | `tenant.wire_pos_integration` after accounting+pos | ✅ |
 | Preflight | `POS_PLATFORM_API_KEY`, `INTERNAL_API_SECRET` | ✅ |
 | Finance seed defaults | `seed-pos-defaults`, walk-in + deposit accounts | ✅ |
 | persistFinanceDeploymentIds | `tenant_deployments.finance_tenant_id`, etc. | ✅ |
 | Void sync | `void_receipt` jobs on reverse-order + full refund | ✅ |
+| Partial refund sync | `partial_refund` → `PATCH .../partial-refund` (credit note) | ✅ |
+| GRN → Finance AP | `grn_bill` → `POST /internal/pos/inventory/grn-bill` | ✅ |
+| Stock adjust / stock take | `inventory_adjustment`, `stock_take_variance` → variance journal | ✅ |
+| Ingredient / vendor mapping | `integrationIngredientMappingModel`, `integrationVendorMappingModel` | ✅ |
+| Recipe COGS on sale | `unitCost` on receipt entries → Finance item `costPrice` | ✅ |
+| Multi-tender deposits | `depositPayments[]` + Finance manual journal split | ✅ |
 | Unmapped-item alerts | Backoffice notification + `accountingSaleStatus: failed` | ✅ |
 | Line discounts in receipt | Per mapped line; service charge in `statement` only | ⚠️ Partial |
 | Offline pay queue | `pay_order` in IndexedDB offline queue | ✅ |
@@ -90,8 +101,9 @@ sequenceDiagram
 1. Order transitions to `paid` (`patchOrderStatus`, `addOrder`, `syncOfflineOrders`, `updateOrder`).
 2. `processStockAfterPayment` deducts POS ingredient stock (unchanged).
 3. If `AccountingConfig.bigcapitalIntegrationEnabled` → skip native sale/COGS journals.
-4. `fireBigcapitalSync(order)` — non-blocking enqueue to `bigcapital_sync`.
+4. `fireBigcapitalSync(order, originatedBy)` — writes `AccountingIntegrationOutbox` then enqueues `bigcapital_sync` when Redis is up.
 5. HTTP response returns immediately (payment not blocked).
+6. Worker drains pending outbox rows on interval when queue unavailable (`ACCOUNTING_OUTBOX_DRAIN_MS`, default 45s).
 
 ### Worker processing
 
@@ -107,9 +119,12 @@ sequenceDiagram
 |---------|--------|
 | `POST /api/accounting/reverse-order/:orderId` | Enqueue `void_receipt` when Finance integration on |
 | Full refund (amount ≥ order total) | Same void enqueue |
+| Partial refund (amount &lt; order total) | `partial_refund` → Finance credit note by reference |
 | Native GL | Skipped when `bigcapitalIntegrationEnabled` |
 
-Finance: `DELETE /api/internal/pos/receipts/by-reference/:referenceNo`
+Finance: `DELETE /api/internal/pos/receipts/by-reference/:referenceNo`  
+Finance partial: `PATCH /api/internal/pos/receipts/by-reference/:referenceNo/partial-refund`  
+Requires `refundAdjustmentItemId` or `discountItemId` on `IntegrationConfig`.
 
 ### Queue configuration
 
@@ -241,10 +256,10 @@ Copies from provision result / deployment row:
 | H3 Auto internalBaseUrl | High | **FIXED** | `buildFinanceInternalUrlForPos` |
 | H4 Partial status in dashboard | High | **FIXED** | Partial banner |
 | H5 Unmapped items silent | High | **FIXED** | Notification + failed status |
-| H6 Service charge / discounts | High | **PARTIAL** | Line discounts synced; service charge in receipt `statement` only |
+| H6 Service charge / discounts | High | **FIXED** | Bridge items seeded (`POS-SERVICE-CHARGE`, `POS-ORDER-DISCOUNT`); wired to POS; receipt lines via `appendFinanceAdjustmentEntries` |
 | H7 Offline pay frontend | High | **FIXED** | `pay_order` offline queue (needs existing orderId) |
 | H8 Auto GL reversal on void | High | **FIXED** | Native bypass when Finance on |
-| M1 Multi-payment → single deposit | Medium | **OPEN** | Largest split wins |
+| M1 Multi-payment → single deposit | Medium | **FIXED** | `depositPayments[]` + journal split |
 | M2 Per-order sync status UI | Medium | **FIXED** | Payment success toasts |
 | M3 KDS frontend | Medium | **OPEN** | Separate product scope |
 | M4 Location mapping auto-seed | Medium | **FIXED** | Main → warehouse on wire |
@@ -255,8 +270,8 @@ Copies from provision result / deployment row:
 | Gap | Severity | Status |
 |-----|----------|--------|
 | Stockix JWT accepted but no `req.user` bridge | Critical | **OPEN** — SSO into POS tenant API non-functional |
-| Partial refund without full void | Medium | **OPEN** — no Finance adjust API |
-| Live E2E burger scenario | — | **NOT RUN** — required on staging |
+| Partial refund without full void | Medium | **FIXED** — credit note via internal partial-refund API |
+| Live E2E burger scenario | — | **NOT RUN** — use [section-4-integration-e2e-checklist.md](./section-4-integration-e2e-checklist.md) |
 
 ### Production readiness by bundle
 

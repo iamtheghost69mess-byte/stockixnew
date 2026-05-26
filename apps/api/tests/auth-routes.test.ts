@@ -7,6 +7,17 @@ vi.mock("@repo/config", () => ({
     publicBaseUrlScheme: "http",
     dashboardUrl: "http://local",
   },
+  mailConfig: {
+    host: "smtp.resend.com",
+    port: 587,
+    username: "resend",
+    password: "",
+    secure: false,
+    fromName: "Stockix",
+    fromAddress: "",
+  },
+  isMailConfigured: () => false,
+  getMailHealthStatus: () => ({ configured: false, fromAddressSet: false }),
 }));
 
 const loginOwnerMock = vi.fn();

@@ -4,7 +4,17 @@ export type SeedFinancePosDefaultsResult = {
   walkInCustomerId: number;
   cashAccountId: number;
   cardAccountId: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
 };
+
+function readOptionalPositiveId(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined;
+}
 
 /**
  * POST /api/internal/tenants/:tenantId/seed-pos-defaults
@@ -51,9 +61,28 @@ export async function seedFinancePosDefaults(params: {
   ) {
     throw new Error("seed_pos_defaults_failed:missing_ids");
   }
-  params.log?.(
-    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}`,
+  const serviceChargeItemId = readOptionalPositiveId(body.serviceChargeItemId);
+  const discountItemId = readOptionalPositiveId(body.discountItemId);
+  const defaultVendorId = readOptionalPositiveId(body.defaultVendorId);
+  const inventoryAccountId = readOptionalPositiveId(body.inventoryAccountId);
+  const inventoryVarianceAccountId = readOptionalPositiveId(
+    body.inventoryVarianceAccountId,
   );
-  return { walkInCustomerId, cashAccountId, cardAccountId };
+  const bridgeNote =
+    serviceChargeItemId || discountItemId
+      ? ` serviceCharge=${serviceChargeItemId ?? "n/a"} discount=${discountItemId ?? "n/a"}`
+      : "";
+  params.log?.(
+    `[provision] POS defaults seeded walkIn=${walkInCustomerId} cash=${cashAccountId} card=${cardAccountId}${bridgeNote} vendor=${defaultVendorId ?? "n/a"}`,
+  );
+  return {
+    walkInCustomerId,
+    cashAccountId,
+    cardAccountId,
+    serviceChargeItemId,
+    discountItemId,
+    defaultVendorId,
+    inventoryAccountId,
+    inventoryVarianceAccountId,
+  };
 }
-

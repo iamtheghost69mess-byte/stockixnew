@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 import { randomBytes } from "node:crypto";
 import { auditProperty } from "../lib/property-audit.js";
@@ -41,12 +41,15 @@ const updateSchema = z.object({
 // GET /api/properties
 propertiesRouter.get("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
+  const { page, limit, offset } = parsePagination(c);
   const rows = await db
     .select()
     .from(pmsProperties)
     .where(eq(pmsProperties.tenantId, tenantId(c)))
-    .orderBy(desc(pmsProperties.createdAt));
-  return c.json({ properties: rows });
+    .orderBy(desc(pmsProperties.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ properties: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 // POST /api/properties

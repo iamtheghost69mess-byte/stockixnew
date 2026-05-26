@@ -38,5 +38,10 @@ cd infra/worker-service && npx tsc --noEmit
 
 ## Mail (ops)
 
+- `GET /health` returns `mail.configured: true` when `MAIL_PASSWORD` and `MAIL_FROM_ADDRESS` are set.
+- Dashboard shows a warning banner for super admins when mail is not configured.
 - Confirm `MAIL_FROM_ADDRESS` domain verified in Resend (control plane and tenant `.env` after provision).
 - Tenant stack should include `MAIL_HOST`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` from worker `tenant-env.ts`.
+- Owner forgot-password sends email (not console-only).
+- `POST /owners/:id/resend-invite` for pending owners.
+- Optional: configure `RESEND_WEBHOOK_SECRET` and point Resend webhooks to `POST /webhooks/resend`.

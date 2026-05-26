@@ -4,6 +4,7 @@ import { apiConfig } from "@repo/config";
 import { organizations, tenantDeployments, tenants } from "@repo/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 
+import { logger } from "./lib/logger.js";
 import { createProvisionTracer } from "./provision-trace.js";
 import { insertTenantJob } from "./services/tenant-jobs.js";
 import type { PlanLimitsDb } from "./plan-limits.js";
@@ -19,6 +20,7 @@ export async function enqueueOrgProvisioning(
       slug: organizations.slug,
       name: organizations.name,
       tenantId: organizations.tenantId,
+      isPrimary: organizations.isPrimary,
     })
     .from(organizations)
     .where(and(eq(organizations.id, organizationId), eq(organizations.tenantId, tenantId)))
@@ -31,6 +33,7 @@ export async function enqueueOrgProvisioning(
     .select({
       id: tenants.id,
       slug: tenants.slug,
+      modules: tenants.modules,
       ownerId: tenants.ownerId,
       adminEmail: tenants.adminEmail,
       adminFirstName: tenants.adminFirstName,
@@ -59,7 +62,7 @@ export async function enqueueOrgProvisioning(
 
   const correlationId = randomUUID();
   const log = (m: string) => {
-    console.log(JSON.stringify({ level: "info", correlationId, message: m }));
+    logger.info(m, { correlationId });
   };
   const acceptTrace = createProvisionTracer(
     db,
@@ -83,6 +86,8 @@ export async function enqueueOrgProvisioning(
     correlationId,
     payload: {
       organizationId,
+      organizationSlug: org.slug,
+      isPrimary: org.isPrimary,
       adminEmail: tenant.adminEmail,
       adminFirstName: tenant.adminFirstName,
       adminLastName: tenant.adminLastName,
@@ -90,6 +95,7 @@ export async function enqueueOrgProvisioning(
       parentTenantSlug: tenant.slug,
       mainTenantInternalBaseUrl,
       stockixTenantId: tenantId,
+      tenantModules: tenant.modules,
       stockixApiUrl:
         process.env.STOCKIX_API_URL?.trim()
         ?? process.env.NEXT_PUBLIC_STOCKIX_API_URL?.trim()

@@ -21,6 +21,9 @@ function getClient() {
     client = new IORedis(config.redisUrl, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
+      connectTimeout: 2_000,
+      commandTimeout: 2_000,
+      enableOfflineQueue: false,
     });
     client.on("error", () => {});
     return client;
@@ -49,14 +52,14 @@ async function storeFullCredentials(orgId, fullCredentials) {
   });
 }
 
-async function consumeFullCredentials(orgId) {
+async function readFullCredentials(orgId, { deleteAfterRead = false } = {}) {
   const key = orgScopedKey(orgId, REVEAL_SUFFIX);
   const redis = getClient();
   if (redis) {
     try {
       const raw = await redis.get(key);
       if (raw) {
-        await redis.del(key);
+        if (deleteAfterRead) await redis.del(key);
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : null;
       }
@@ -65,9 +68,23 @@ async function consumeFullCredentials(orgId) {
     }
   }
   const row = memory.get(String(orgId));
-  memory.delete(String(orgId));
   if (!row || Date.now() > row.expiresAt) return null;
+  if (deleteAfterRead) memory.delete(String(orgId));
   return row.payload;
 }
 
-module.exports = { storeFullCredentials, consumeFullCredentials };
+/** Read bootstrap PINs without deleting (safe for repeated provisioning-status polls). */
+async function peekFullCredentials(orgId) {
+  return readFullCredentials(orgId, { deleteAfterRead: false });
+}
+
+/** Read and delete one-time bootstrap PINs (after Stockix worker persisted secrets). */
+async function consumeFullCredentials(orgId) {
+  return readFullCredentials(orgId, { deleteAfterRead: true });
+}
+
+module.exports = {
+  storeFullCredentials,
+  peekFullCredentials,
+  consumeFullCredentials,
+};

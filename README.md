@@ -45,10 +45,7 @@ pnpm bootstrap:env
 # 3. Start Postgres, wait for it, run migrations, and seed
 pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local
 
-# 4. (Once) POS backend deps — npm workspaces under services/posnew
-pnpm dev:pos:install
-
-# 5. Start API + Dashboard + worker + PMS + POS (ports auto-shift if busy)
+# 4. Start API + Dashboard + worker + PMS + POS (ports auto-shift if busy)
 pnpm dev
 ```
 
@@ -68,6 +65,11 @@ pnpm dev
 | Script | Purpose |
 |--------|---------|
 | `pnpm dev:pms` | PMS service only |
+| `pnpm dev:pos` | POS API + restaurant UI (see `scripts/dev-pos-stack.mjs`) |
+| `pnpm dev:pos:backend` | POS API only (`pos-backend`) |
+| `pnpm dev:pos:frontend` | POS UI only (`studio-admin`) |
+| `pnpm build:pos` | Production Next.js build for POS UI |
+| `pnpm test:pos` | POS backend unit tests |
 | `pnpm db:seed:pms-demo` | Demo tenant with PMS license for `/pms` dropdown |
 
 Control-plane + PMS, no POS: `STOCKIX_DEV_SKIP_POS=1 pnpm dev`
@@ -258,6 +260,37 @@ main  ←  pull request (reviewed + passing)  ←  feature/your-branch
    ```
 
 > Branch naming: `feature/`, `fix/`, `chore/` prefixes. Example: `feature/tenant-billing`, `fix/login-redirect`.
+
+## Branch Protection
+
+The following branch protection rules should be enabled on GitHub:
+
+### main branch
+
+- Require pull request reviews (minimum 1)
+- Require status checks to pass:
+  - Type check (API, Worker, Dashboard)
+  - API tests
+  - Architecture boundary check
+- Do not allow bypassing the above settings
+- Require branches to be up to date before merging
+
+### Setup
+
+Go to: GitHub → Settings → Branches → Add rule → `main`
+
+## CI/CD
+
+All merges to `main` run the **quality** job in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) before production deploy:
+
+- TypeScript compilation (`apps/api`, `infra/worker-service`, `apps/dashboard`, `packages/*`, `services/pms`)
+- API, POS, and Finance test suites (zero failures required)
+- Dashboard production build and static bundle size check (informational warning above 10MB)
+- Architecture boundary and phase validation
+
+Deploy to production only runs after the quality job passes.
+
+If `.env` or `infra/prod/.env` was ever committed to git history, rotate affected secrets on the server before the next deploy.
 
 ## Stockix (`services/stockix-finance`)
 

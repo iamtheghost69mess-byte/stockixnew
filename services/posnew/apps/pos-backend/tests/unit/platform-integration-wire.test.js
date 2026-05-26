@@ -21,9 +21,9 @@ function stubAccounting() {
   };
 }
 
-function reloadWireHandler() {
+function reloadController() {
   delete require.cache[controllerPath];
-  return require("../../controllers/platformIntegrationController").wireBigcapitalIntegration;
+  return require("../../controllers/platformIntegrationController");
 }
 
 function createResponse() {
@@ -90,7 +90,7 @@ test("wireBigcapitalIntegration enables config and native GL guard", async (t) =
   };
 
   stubAccounting();
-  const wireBigcapitalIntegration = reloadWireHandler();
+  const { wireBigcapitalIntegration } = reloadController();
 
   const req = {
     params: { id: String(orgId) },
@@ -103,6 +103,8 @@ test("wireBigcapitalIntegration enables config and native GL guard", async (t) =
       defaultCashDepositAccountId: 20,
       defaultCardDepositAccountId: 21,
       defaultWarehouseId: 30,
+      serviceChargeItemId: 88,
+      discountItemId: 99,
     },
   };
   const res = createResponse();
@@ -121,4 +123,54 @@ test("wireBigcapitalIntegration enables config and native GL guard", async (t) =
   assert.ok(Array.isArray(savedBigcapital.locationMapping));
   assert.equal(String(savedBigcapital.locationMapping[0].posLocationId), String(locId));
   assert.equal(savedBigcapital.locationMapping[0].bigcapitalWarehouseId, 30);
+  assert.equal(savedBigcapital.serviceChargeItemId, 88);
+  assert.equal(savedBigcapital.discountItemId, 99);
+});
+
+test("getBigcapitalIntegrationHealth reports healthy when configured", async (t) => {
+  const orgId = new mongoose.Types.ObjectId();
+  const origOrgFind = Organization.findById;
+  const origIntFind = IntegrationConfig.findOne;
+  const origAcctFind = AccountingConfig.findOne;
+  const prevAccounting = require.cache[accountingPath];
+
+  t.after(() => {
+    Organization.findById = origOrgFind;
+    IntegrationConfig.findOne = origIntFind;
+    AccountingConfig.findOne = origAcctFind;
+    if (prevAccounting) {
+      require.cache[accountingPath] = prevAccounting;
+    } else {
+      delete require.cache[accountingPath];
+    }
+    delete require.cache[controllerPath];
+  });
+
+  stubAccounting();
+  const { getBigcapitalIntegrationHealth } = reloadController();
+
+  Organization.findById = async () => ({ _id: orgId });
+  IntegrationConfig.findOne = async () => ({
+    bigcapital: {
+      enabled: true,
+      financeTenantId: 1,
+      internalBaseUrl: "http://finance",
+      internalSecret: "secret",
+      defaultWalkInCustomerId: 2,
+      defaultCashDepositAccountId: 3,
+      defaultCardDepositAccountId: 4,
+    },
+  });
+  AccountingConfig.findOne = () => ({
+    select: async () => ({ bigcapitalIntegrationEnabled: true }),
+  });
+
+  const req = { params: { id: String(orgId) } };
+  const res = createResponse();
+  await getBigcapitalIntegrationHealth(req, res, (err) => {
+    throw err;
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.healthy, true);
 });

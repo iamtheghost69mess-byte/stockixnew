@@ -9,6 +9,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyOrphanMigrations } from "./apply-orphan-migrations.js";
 import { postMigrateBootstrap } from "./post-migrate-bootstrap.js";
 
 const url =
@@ -96,6 +97,11 @@ async function main(): Promise<void> {
   }
 
   const newlyApplied = appliedAfter.size - appliedBefore.size;
+
+  const orphanMessages = await applyOrphanMigrations(sql);
+  for (const msg of orphanMessages) {
+    console.log(`[migrate] ${msg}`);
+  }
 
   const bootstrapMessages = await postMigrateBootstrap(sql);
   for (const msg of bootstrapMessages) {

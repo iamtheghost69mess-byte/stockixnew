@@ -4,6 +4,11 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { apiConfig } from "@repo/config";
 
+import {
+  capabilitiesFromPermissions,
+  permissionsForRoleSlug,
+} from "@repo/shared/permissions";
+import { loadOwnerAuthById } from "../../permissions/resolve-owner-permissions.js";
 import { validateOwnerSession } from "../../services/auth/session-validation.js";
 import { loginOwner, reconfirmOwnerPassword } from "../../services/auth/login.js";
 import {
@@ -291,23 +296,35 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       sessionVersion: session.sessionVersion,
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    let permissions: string[] = [...permissionsForRoleSlug(session.role)];
+    let roleSlug = session.role;
+    let roleId: string | null = null;
+    let roleName: string | null = null;
+    try {
+      const auth = await loadOwnerAuthById(db, session.sub);
+      if (auth) {
+        roleSlug = auth.roleSlug;
+        roleId = auth.roleId;
+        roleName = auth.roleName;
+        if (auth.permissions.length > 0) {
+          permissions = auth.permissions;
+        }
+      }
+    } catch {
+      // Tests may use a minimal db mock — fall back to built-in role permissions.
+    }
+    const capabilities = capabilitiesFromPermissions(permissions);
     return c.json({
       success: true,
       me: {
         id: session.sub,
-        role: session.role,
+        role: roleSlug,
+        roleId,
+        roleName,
         email: session.email,
         name: session.name,
-        capabilities: {
-          canAccessSettings: session.role === "super_admin",
-          canManageOwners: session.role === "super_admin",
-          canManageTenants:
-            session.role === "support_agent" || session.role === "super_admin",
-          canExtendLicenses:
-            session.role === "billing_manager" ||
-            session.role === "support_agent" ||
-            session.role === "super_admin",
-        },
+        permissions,
+        capabilities,
       },
     });
   });
@@ -374,7 +391,14 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       userAgent: c.req.header("user-agent"),
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
-    return c.json({ success: true, ok: true });
+    return c.json({
+      success: true,
+      ok: true,
+      emailSent: result.data.emailSent,
+      mailConfigured: result.data.mailConfigured,
+      mailStatus: result.data.mailStatus,
+      accountPending: result.data.accountPending,
+    });
   });
 
   auth.post("/password/reset", async (c) => {

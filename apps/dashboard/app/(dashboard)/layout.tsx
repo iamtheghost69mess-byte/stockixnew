@@ -2,6 +2,7 @@ import { DashboardAppShell } from "@/components/dashboard-app-shell";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { dashboardConfig } from "@repo/config";
+import type { Me } from "@/hooks/use-me";
 
 export default async function DashboardLayout({
   children,
@@ -20,5 +21,7 @@ export default async function DashboardLayout({
   if (!meRes?.ok) {
     redirect("/login");
   }
-  return <DashboardAppShell>{children}</DashboardAppShell>;
+  const body = (await meRes.json()) as { me?: Me };
+  const initialMe = body.me ?? null;
+  return <DashboardAppShell initialMe={initialMe}>{children}</DashboardAppShell>;
 }

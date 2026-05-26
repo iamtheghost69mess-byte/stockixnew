@@ -15,9 +15,10 @@ import * as dbSchema from "@repo/db/schema";
 
 import { tenantDeployments } from "@repo/db/schema";
 
-
+import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
 
 import type { ProvisionTracer } from "../domain/provision-trace.js";
+import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
 
 import {
 
@@ -174,6 +175,17 @@ export type ProvisionPosStackInput = {
 
   financeInternalPort?: number;
 
+  /** Stockix licensed modules for POS entitlements. */
+  tenantModules?: string[];
+
+  planSlug?: string;
+
+  maxUsers?: number | null;
+
+  maxLocations?: number | null;
+
+  maxOrdersPerMonth?: number | null;
+
 };
 
 
@@ -317,6 +329,7 @@ export async function provisionPosStack(
     POS_PLATFORM_API_KEY: platformApiKey,
     POS_BACKEND_URL: posApiUrl,
     POS_FRONTEND_URL: posUrl,
+    CORS_ORIGINS: buildPosCorsOrigins(opts.slug),
     ROOT_DOMAIN: rootDomain,
     ...(financeInternalBaseUrl
       ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
@@ -387,6 +400,14 @@ export async function provisionPosStack(
     log: opts.log,
 
     licenseExpiresAt: opts.licenseExpiresAt,
+
+    tenantModules: opts.tenantModules,
+
+    maxUsers: opts.maxUsers,
+
+    maxLocations: opts.maxLocations,
+
+    maxOrdersPerMonth: opts.maxOrdersPerMonth,
 
     posHostPort: backendPort,
 
@@ -511,6 +532,21 @@ export async function unpublishPosTraefik(slug: string): Promise<void> {
 
   await removePosTraefikConfig(slug);
 
+}
+
+/** Stop Finance tenant stack (remove accounting module). Data volumes are retained. */
+export async function stopFinanceStack(
+  slug: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const composeFile = join(repoRoot(), "infra", "tenant-stack", "docker-compose.yml");
+  const project = composeProjectName(slug);
+  log(`[module-stop][accounting] compose stop project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "stop"],
+    { stdio: "pipe", reject: false },
+  );
 }
 
 /** Stop a module stack without removing volumes (remove-module). */

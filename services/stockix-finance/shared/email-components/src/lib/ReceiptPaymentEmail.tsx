@@ -52,7 +52,7 @@ export const ReceiptEmailTemplate: React.FC<
   preview,
 
   // # Company
-  companyName = 'Bigcapital, Inc.',
+  companyName = 'Stockix',
   companyLogoUri,
 
   // # Colors

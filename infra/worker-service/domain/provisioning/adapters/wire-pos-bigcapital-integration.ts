@@ -12,7 +12,12 @@ export type WirePosBigcapitalIntegrationInput = {
   walkInCustomerId: number;
   cashAccountId: number;
   cardAccountId: number;
+  serviceChargeItemId?: number;
+  discountItemId?: number;
   defaultWarehouseId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
   log: (message: string) => void;
   posBaseUrl?: string;
 };
@@ -73,8 +78,23 @@ export async function wirePosBigcapitalIntegration(
     defaultCashDepositAccountId: input.cashAccountId,
     defaultCardDepositAccountId: input.cardAccountId,
   };
+  if (input.serviceChargeItemId && input.serviceChargeItemId > 0) {
+    body.serviceChargeItemId = input.serviceChargeItemId;
+  }
+  if (input.discountItemId && input.discountItemId > 0) {
+    body.discountItemId = input.discountItemId;
+  }
   if (input.defaultWarehouseId && input.defaultWarehouseId > 0) {
     body.defaultWarehouseId = input.defaultWarehouseId;
+  }
+  if (input.defaultVendorId && input.defaultVendorId > 0) {
+    body.defaultVendorId = input.defaultVendorId;
+  }
+  if (input.inventoryAccountId && input.inventoryAccountId > 0) {
+    body.inventoryAccountId = input.inventoryAccountId;
+  }
+  if (input.inventoryVarianceAccountId && input.inventoryVarianceAccountId > 0) {
+    body.inventoryVarianceAccountId = input.inventoryVarianceAccountId;
   }
 
   const res = await fetch(url, {
@@ -93,6 +113,21 @@ export async function wirePosBigcapitalIntegration(
     throw new Error(
       `wire_pos_integration_failed:${res.status}:${text.slice(0, 500)}`,
     );
+  }
+
+  try {
+    const body = JSON.parse(text) as {
+      success?: boolean;
+      data?: { bigcapitalIntegrationEnabled?: boolean };
+    };
+    if (body?.data?.bigcapitalIntegrationEnabled !== true) {
+      throw new Error("wire_pos_integration_verify:integration_not_enabled");
+    }
+  } catch (parseErr) {
+    if (parseErr instanceof Error && parseErr.message.startsWith("wire_pos")) {
+      throw parseErr;
+    }
+    throw new Error(`wire_pos_integration_verify:invalid_response:${text.slice(0, 120)}`);
   }
 
   input.log("[provision][pos] Bigcapital integration wired successfully");

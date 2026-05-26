@@ -20,6 +20,10 @@ x-stockix-platform-env: &stockix-platform-env
   PUBLIC_BASE_URL_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
   DASHBOARD_URL: ${DASHBOARD_URL}
   CORS_ORIGINS: ${CORS_ORIGINS:-}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  DB_POOL_MAX: ${DB_POOL_MAX:-20}
+  DB_IDLE_TIMEOUT_SECONDS: ${DB_IDLE_TIMEOUT_SECONDS:-30}
   STOCKIX_API_URL: ${STOCKIX_API_URL:-}
   PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
   WORKER_SECRET: ${WORKER_SECRET}
@@ -28,6 +32,7 @@ x-stockix-platform-env: &stockix-platform-env
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
   DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
   LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
+  CONTROL_PLANE_REDIS_URL: ${CONTROL_PLANE_REDIS_URL:-}
   JWT_SECRET: ${JWT_SECRET:-}
   SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
   SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
@@ -90,6 +95,8 @@ services:
   traefik:
     image: traefik:v3.1.2
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.25"
     depends_on:
       - socket-proxy
     ports:
@@ -137,6 +144,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: "0.5"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -155,13 +164,32 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Dedicated Redis for control-plane BullMQ (license expiry milestones). Not shared with Chatwoot.
+  control-plane-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stockix_internal
+    security_opt:
+      - no-new-privileges:true
+
   api:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
     depends_on:
       postgres:
+        condition: service_healthy
+      control-plane-redis:
         condition: service_healthy
     environment:
       <<: *stockix-platform-env
@@ -169,6 +197,7 @@ services:
       PORT: "4000"
     networks:
       - stockix_public
+      - stockix_internal
     read_only: true
     cap_drop:
       - ALL
@@ -194,8 +223,12 @@ services:
       context: ../..
       dockerfile: infra/worker-service/Dockerfile
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: "1.0"
     depends_on:
       postgres:
+        condition: service_healthy
+      control-plane-redis:
         condition: service_healthy
       api:
         condition: service_healthy
@@ -212,6 +245,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - stockix_public
+      - stockix_internal
     security_opt:
       - no-new-privileges:true
 
@@ -219,6 +253,8 @@ services:
     build:
       context: ../..
       dockerfile: apps/dashboard/Dockerfile
+    mem_limit: 256m
+    cpus: "0.25"
       args:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}

@@ -43,11 +43,11 @@ async function canProcessOrganization(organizationId) {
 
 async function sendResendEmail({ to, subject, html }) {
   if (!config.resendApiKey) {
-    console.warn("RESEND_API_KEY not set; skipping email job");
+    console.warn("[pos-mail] RESEND_API_KEY not set; skipping email job");
     return;
   }
   if (!to) {
-    console.warn("email job missing recipient");
+    console.warn("[pos-mail] email job missing recipient");
     return;
   }
   const { Resend } = require("resend");
@@ -67,7 +67,7 @@ async function handleEmail(job) {
   }
   if (job.name === "org_invitation") {
     if (!config.resendApiKey) {
-      console.warn("RESEND_API_KEY not set; skipping invitation email");
+      console.warn("[pos-mail] RESEND_API_KEY not set; skipping invitation email");
       return;
     }
     const invitationId = job.data?.invitationId;

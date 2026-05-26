@@ -225,6 +225,7 @@ export const env = {
   DEPLOYMENT_SECRET_KEY: readOptionalString("DEPLOYMENT_SECRET_KEY"),
   MAIL_FROM_NAME: readOptionalString("MAIL_FROM_NAME"),
   MAIL_FROM_ADDRESS: readOptionalString("MAIL_FROM_ADDRESS"),
+  RESEND_WEBHOOK_SECRET: readOptionalString("RESEND_WEBHOOK_SECRET"),
   MONGODB_DATABASE_URL: readOptionalString("MONGODB_DATABASE_URL"),
   AGENDA_DB_COLLECTION: readOptionalString("AGENDA_DB_COLLECTION"),
   AGENDA_POOL_TIME: readOptionalString("AGENDA_POOL_TIME"),
@@ -251,6 +252,25 @@ export const mailConfig = {
   fromName: env.MAIL_FROM_NAME ?? 'Stockix',
   fromAddress: env.MAIL_FROM_ADDRESS ?? '',
 } as const;
+
+/** True when Resend SMTP can send (API key + verified from address). */
+export function isMailConfigured(): boolean {
+  return Boolean(mailConfig.password?.trim() && mailConfig.fromAddress?.trim());
+}
+
+export function getMailHealthStatus(): {
+  configured: boolean;
+  fromAddressSet: boolean;
+} {
+  return {
+    configured: isMailConfigured(),
+    fromAddressSet: Boolean(mailConfig.fromAddress?.trim()),
+  };
+}
+
+export function getResendWebhookSecret(): string | undefined {
+  return env.RESEND_WEBHOOK_SECRET?.trim() || undefined;
+}
 
 export const apiConfig = {
   get databaseUrl() {
@@ -525,5 +545,9 @@ export const moduleGatingConfig = {
   get enabled() {
     return process.env.PROVISION_MODULE_GATING !== "0";
   },
+} as const;
+
+export const licenseConfig = {
+  defaultTermDays: parseInt(process.env.DEFAULT_LICENSE_TERM_DAYS ?? "365", 10),
 } as const;
 

@@ -1,6 +1,23 @@
 import { tenantProvisionEvents } from "@repo/db/schema";
+import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
+
+export const PROVISION_NOTIFY_CHANNEL = "stockix_provision_event";
+
+export type ProvisionEventPayload = {
+  id: string;
+  correlationId: string;
+  slug: string | null;
+  tenantId: string | null;
+  parentTenantId: string | null;
+  deploymentId: string | null;
+  phase: string;
+  level: string;
+  message: string;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+};
 
 export type ProvisionTracer = {
   event: (
@@ -53,7 +70,28 @@ export function createProvisionTracer(
       const meta = scrubProvisionMeta(rawMeta);
       const ctx = getContext();
       log(`[${phase}] ${message}`);
-      await db.insert(tenantProvisionEvents).values({
+      const [row] = await db
+        .insert(tenantProvisionEvents)
+        .values({
+          correlationId,
+          slug: ctx.slug,
+          tenantId: ctx.tenantId ?? null,
+          parentTenantId: ctx.parentTenantId ?? null,
+          deploymentId: ctx.deploymentId ?? null,
+          phase,
+          level,
+          message,
+          meta,
+        })
+        .returning({
+          id: tenantProvisionEvents.id,
+          createdAt: tenantProvisionEvents.createdAt,
+        });
+
+      if (!row) return;
+
+      const payload: ProvisionEventPayload = {
+        id: row.id,
         correlationId,
         slug: ctx.slug,
         tenantId: ctx.tenantId ?? null,
@@ -63,7 +101,12 @@ export function createProvisionTracer(
         level,
         message,
         meta,
-      });
+        createdAt: row.createdAt.toISOString(),
+      };
+
+      await db.execute(
+        sql`SELECT pg_notify(${PROVISION_NOTIFY_CHANNEL}, ${JSON.stringify(payload)})`,
+      );
     },
   };
 }

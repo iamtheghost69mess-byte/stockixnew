@@ -10,7 +10,91 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check — API
+        run: pnpm --filter api exec tsc --noEmit
+
+      - name: Type check — Worker
+        run: cd infra/worker-service && npx tsc --noEmit
+
+      - name: Type check — Dashboard
+        run: pnpm --filter dashboard exec tsc --noEmit
+
+      - name: Type check — Packages
+        run: |
+          pnpm --filter @repo/db exec tsc --noEmit
+          pnpm --filter @repo/auth exec tsc --noEmit
+          pnpm --filter @repo/config exec tsc --noEmit
+
+      - name: Type check — PMS
+        run: pnpm --filter @stockix/pms exec tsc --noEmit
+
+      - name: Run API tests
+        run: pnpm --filter api test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+          SESSION_SECRET: test-session-secret-32-chars-minimum-length
+          AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum
+          PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum
+          INTERNAL_API_SECRET: test-internal-api-secret-32-chars-min
+          DEPLOYMENT_SECRET_KEY: test-deployment-secret-key-32-chars-min
+          LICENSE_SIGNING_SECRET: test-license-signing-secret-32-chars-min
+          WORKER_SECRET: test-worker-secret-32-chars-minimum-length
+          POS_PLATFORM_BASE_URL: http://127.0.0.1:8010
+          POS_FRONTEND_URL: http://127.0.0.1:3001
+          PMS_BASE_URL: http://127.0.0.1:3003
+          STOCKIX_FINANCE_INTERNAL_HOST: 127.0.0.1
+
+      - name: Run POS tests
+        run: |
+          cd services/posnew/apps/pos-backend
+          npm test
+        continue-on-error: false
+
+      - name: Run Finance tests
+        run: |
+          cd services/stockix-finance/packages/server
+          pnpm test
+        continue-on-error: false
+
+      - name: Build dashboard
+        run: pnpm --filter dashboard build
+
+      - name: Check bundle size
+        run: |
+          size=$(du -sk apps/dashboard/.next/static | awk '{print $1}')
+          echo "Bundle size: ${size}KB"
+          if [ "$size" -gt 10240 ]; then
+            echo "WARNING: Bundle over 10MB"
+          fi
+
+      - name: Enforce architecture boundaries
+        run: pnpm lint:boundaries
+
+      - name: Enforce architecture phases
+        run: pnpm architecture:validate
+
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

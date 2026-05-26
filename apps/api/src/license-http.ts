@@ -28,6 +28,7 @@ import { z } from "zod";
 import { logAudit } from "./audit.js";
 import {
   generateLicenseKey,
+  generateLicenseKeyForTenant,
   getActiveLicenseForTenant,
   getPlanLimits,
   insertLicenseHistory,
@@ -36,11 +37,20 @@ import {
   parseLicenseHistoryJson,
   parseLicenseModulesJson,
   signOfflineToken,
+  tenantHasActiveLicense,
+  validateLicenseModulesForTenant,
   verifyOfflineToken,
 } from "./license-utils.js";
 import { buildFinanceLicenseLimitFields } from "./finance-license.client.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
-import { suspendPosOrgForLicense } from "./pos-license-sync.js";
+import {
+  posSyncResultToStatus,
+  reactivatePosOrgForLicense,
+  suspendPosOrgForLicense,
+  syncPosOrgLicenseFromLicense,
+  syncPosOrgLicenseWindow,
+} from "./pos-license-sync.js";
+import { DEFAULT_GRACE_PERIOD_DAYS } from "./license-constants.js";
 
 type ApiEnv = {
   Variables: {
@@ -360,13 +370,14 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         .default(["accounting"]),
       planSlug: z.string().min(1),
       count: z.number().int().min(1).max(100).default(1),
-      isPerpetual: z.boolean().default(true),
+      isPerpetual: z.boolean().default(false),
       expiresAt: z.string().datetime().optional(),
       validFrom: z.string().datetime().optional(),
       maxActivations: z.number().int().min(1).max(50).default(1),
-      gracePeriodDays: z.number().int().min(0).max(365).default(7),
+      gracePeriodDays: z.number().int().min(0).max(365).default(DEFAULT_GRACE_PERIOD_DAYS),
       notes: z.string().max(500).optional(),
       tenantId: z.string().uuid().optional(),
+      scopedLocationId: z.string().min(1).max(64).optional(),
     })
     .refine((data) => data.isPerpetual || data.expiresAt !== undefined, {
       message: "expiresAt is required when isPerpetual is false",
@@ -390,8 +401,25 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       return c.json({ error: "invalid_plan", message: `Plan not found: ${body.planSlug}` }, 400);
     }
     if (body.tenantId) {
-      const [t] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, body.tenantId)).limit(1);
+      const [t] = await db
+        .select({ id: tenants.id, modules: tenants.modules })
+        .from(tenants)
+        .where(eq(tenants.id, body.tenantId))
+        .limit(1);
       if (!t) return c.json({ error: "tenant_not_found" }, 404);
+      const moduleCheck = validateLicenseModulesForTenant(t.modules, body.modules);
+      if (!moduleCheck.ok) {
+        return c.json({ error: "modules_exceed_tenant", message: moduleCheck.message }, 400);
+      }
+      if (await tenantHasActiveLicense(db, body.tenantId)) {
+        return c.json(
+          {
+            error: "tenant_already_licensed",
+            message: "This tenant already has an active license. Revoke or expire it before assigning another.",
+          },
+          409,
+        );
+      }
     }
     const actorId = c.get("actorId") as string;
     const expiresAtDate = body.expiresAt ? new Date(body.expiresAt) : null;
@@ -407,7 +435,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     const created = await db.transaction(async (tx) => {
       const out: (typeof licenses.$inferSelect)[] = [];
       for (let i = 0; i < body.count; i++) {
-        let licenseKey = generateLicenseKey();
+        const keyMeta =
+          body.tenantId && body.scopedLocationId
+            ? generateLicenseKeyForTenant({
+                tenantId: body.tenantId,
+                locationId: body.scopedLocationId,
+                signingSecret: apiConfig.licenseSigningSecret,
+                modules: body.modules,
+              })
+            : {
+                licenseKey: generateLicenseKey(),
+                keyFormat: "stkx" as const,
+                scopedLocationId: null,
+              };
+        let licenseKey = keyMeta.licenseKey;
         for (let attempt = 0; attempt < 3; attempt++) {
           const clash = await tx
             .select({ id: licenses.id })
@@ -415,7 +456,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             .where(eq(licenses.licenseKey, licenseKey))
             .limit(1);
           if (clash.length === 0) break;
-          licenseKey = generateLicenseKey();
+          const regen =
+            body.tenantId && body.scopedLocationId
+              ? generateLicenseKeyForTenant({
+                  tenantId: body.tenantId,
+                  locationId: body.scopedLocationId,
+                  signingSecret: apiConfig.licenseSigningSecret,
+                  modules: body.modules,
+                })
+              : {
+                  licenseKey: generateLicenseKey(),
+                  keyFormat: "stkx" as const,
+                  scopedLocationId: null,
+                };
+          licenseKey = regen.licenseKey;
         }
         const status = body.tenantId ? "active" : "unassigned";
         const assignNow = Boolean(body.tenantId);
@@ -424,6 +478,8 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           .insert(licenses)
           .values({
             licenseKey,
+            keyFormat: keyMeta.keyFormat,
+            scopedLocationId: keyMeta.scopedLocationId,
             product: body.product,
             modules: JSON.stringify(body.modules),
             planSlug: body.planSlug,
@@ -435,6 +491,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             isPerpetual: body.isPerpetual,
             maxOrganizations: planLimits.maxOrganizations,
             maxActivations,
+            maxUsers: planLimits.maxUsers,
             activationCount: 0,
             gracePeriodDays: body.gracePeriodDays,
             notes: body.notes ?? null,
@@ -467,6 +524,15 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         newValues: licenseHistorySnapshot(license),
         ipAddress: clientIp(c),
         userAgent: c.req.header("user-agent") ?? null,
+      });
+    }
+
+    if (body.tenantId && created[0]) {
+      void syncPosOrgLicenseFromLicense(db, body.tenantId, created[0]).catch((err) => {
+        console.error(
+          "[license] POS license sync failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
       });
     }
 
@@ -1364,6 +1430,21 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       );
     });
 
+    if (lic.tenantId) {
+      void syncPosOrgLicenseFromLicense(db, lic.tenantId, updated).catch((err) => {
+        console.error(
+          "[license] POS license window sync failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+      void reactivatePosOrgForLicense(db, lic.tenantId).catch((err) => {
+        console.error(
+          "[license] POS reactivate failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+    }
+
     return c.json({
       license: {
         id: updated.id,
@@ -1393,8 +1474,26 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (lic.status !== "unassigned") {
       return c.json({ error: "license_already_assigned", message: "This license is already assigned." }, 409);
     }
-    const [t] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, body.tenantId)).limit(1);
+    const [t] = await db
+      .select({ id: tenants.id, modules: tenants.modules })
+      .from(tenants)
+      .where(eq(tenants.id, body.tenantId))
+      .limit(1);
     if (!t) return c.json({ error: "tenant_not_found" }, 404);
+    const licenseModules = parseLicenseModulesJson(lic.modules);
+    const moduleCheck = validateLicenseModulesForTenant(t.modules, licenseModules);
+    if (!moduleCheck.ok) {
+      return c.json({ error: "modules_exceed_tenant", message: moduleCheck.message }, 400);
+    }
+    if (await tenantHasActiveLicense(db, body.tenantId)) {
+      return c.json(
+        {
+          error: "tenant_already_licensed",
+          message: "This tenant already has an active license. Revoke or expire it before assigning another.",
+        },
+        409,
+      );
+    }
 
     const assignAt = new Date();
     const startAt = body.validFrom ? new Date(body.validFrom) : (lic.validFrom ?? assignAt);
@@ -1407,6 +1506,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       updatedAt: Date;
       maxOrganizations?: number;
       maxActivations?: number;
+      maxUsers?: number;
     } = {
       tenantId: body.tenantId,
       status: "active",
@@ -1420,6 +1520,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     if (lic.maxActivations === 1) {
       assignSet.maxActivations = planLimits.maxActivations;
     }
+    assignSet.maxUsers = lic.maxUsers ?? planLimits.maxUsers;
     const [upd] = await db
       .update(licenses)
       .set(assignSet)
@@ -1461,6 +1562,13 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     void triggerFinanceLicenseSync(db, body.tenantId).catch((err) => {
       console.error(
         "[license] finance sync failed (non-fatal)",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+
+    void syncPosOrgLicenseFromLicense(db, body.tenantId, upd).catch((err) => {
+      console.error(
+        "[license] POS license window sync failed (non-fatal)",
         err instanceof Error ? err.message : String(err),
       );
     });
@@ -1557,6 +1665,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     });
 
     if (lic.tenantId) {
+      void import("./notification-helpers.js").then(({ notifyLicenseForTenant }) => {
+        notifyLicenseForTenant(db, {
+          tenantId: lic.tenantId!,
+          licenseId: lic.id,
+          type: "license.revoked",
+          body: body.reason?.trim() || "License has been revoked.",
+        });
+      });
+      void syncPosOrgLicenseWindow(db, lic.tenantId, { endsAt: now }).catch((err) => {
+        console.error(
+          "[license] POS license end sync failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
       void suspendPosOrgForLicense(db, lic.tenantId, body.reason ?? "license_revoked").catch(
         (err) => {
           console.error(
@@ -1568,6 +1690,116 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     }
 
     return c.json({ revoked: true });
+  });
+
+  const suspendBody = z.object({ reason: z.string().max(500).optional() });
+
+  app.post("/licenses/:licenseId/suspend", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const idParsed = z.string().uuid().safeParse(c.req.param("licenseId"));
+    if (!idParsed.success) return c.json({ error: "invalid_license_id" }, 400);
+    let body: z.infer<typeof suspendBody>;
+    try {
+      body = suspendBody.parse(await c.req.json().catch(() => ({})));
+    } catch (e) {
+      return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
+    }
+    const [lic] = await db.select().from(licenses).where(eq(licenses.id, idParsed.data)).limit(1);
+    if (!lic) return c.json({ error: "not_found" }, 404);
+    if (lic.status === "revoked") return c.json({ error: "cannot_suspend_revoked" }, 409);
+    if (lic.status === "suspended") return c.json({ error: "already_suspended" }, 409);
+    const now = new Date();
+    await db
+      .update(licenses)
+      .set({ status: "suspended", updatedAt: now })
+      .where(eq(licenses.id, lic.id));
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: lic.id,
+      ...historyActor,
+      action: "suspended",
+      previousValues: { status: lic.status },
+      newValues: { status: "suspended", reason: body.reason ?? null },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
+    let financeSync: "ok" | "failed" | "skipped" = lic.tenantId ? "ok" : "skipped";
+    let posSync: "ok" | "failed" | "skipped" = lic.tenantId ? "ok" : "skipped";
+    const syncErrors: string[] = [];
+    if (lic.tenantId) {
+      try {
+        await triggerFinanceLicenseSync(db, lic.tenantId);
+      } catch (err) {
+        financeSync = "failed";
+        syncErrors.push(
+          `finance: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      const posResult = await suspendPosOrgForLicense(
+        db,
+        lic.tenantId,
+        body.reason ?? "license_suspended",
+      );
+      posSync = posSyncResultToStatus(posResult, true);
+      if (!posResult.ok) {
+        syncErrors.push(`pos: ${posResult.error}`);
+      }
+      void import("./notification-helpers.js").then(({ notifyLicenseForTenant }) => {
+        notifyLicenseForTenant(db, {
+          tenantId: lic.tenantId!,
+          licenseId: lic.id,
+          type: "license.suspended",
+          body: body.reason?.trim() || "License has been suspended.",
+        });
+      });
+    }
+    const strict = process.env.LICENSE_SYNC_STRICT === "1";
+    if (strict && syncErrors.length > 0) {
+      return c.json(
+        { error: "license_sync_failed", financeSync, posSync, errors: syncErrors },
+        502,
+      );
+    }
+    return c.json({
+      suspended: true,
+      financeSync,
+      posSync,
+      ...(syncErrors.length ? { errors: syncErrors } : {}),
+    });
+  });
+
+  app.post("/licenses/:licenseId/reactivate", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+    const idParsed = z.string().uuid().safeParse(c.req.param("licenseId"));
+    if (!idParsed.success) return c.json({ error: "invalid_license_id" }, 400);
+    const [lic] = await db.select().from(licenses).where(eq(licenses.id, idParsed.data)).limit(1);
+    if (!lic) return c.json({ error: "not_found" }, 404);
+    if (lic.status !== "suspended" && lic.status !== "expired") {
+      return c.json({ error: "cannot_reactivate", message: "License is not suspended or expired" }, 409);
+    }
+    const now = new Date();
+    const setVals: { status: string; updatedAt: Date } = {
+      status: "active",
+      updatedAt: now,
+    };
+    const [updated] = await db.update(licenses).set(setVals).where(eq(licenses.id, lic.id)).returning();
+    if (!updated) return c.json({ error: "not_found" }, 404);
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: lic.id,
+      ...historyActor,
+      action: "reactivated",
+      previousValues: { status: lic.status },
+      newValues: { status: "active" },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
+    void triggerFinanceLicenseSync(db, lic.tenantId).catch(() => undefined);
+    if (lic.tenantId) {
+      void syncPosOrgLicenseFromLicense(db, lic.tenantId, updated).catch(() => undefined);
+      void reactivatePosOrgForLicense(db, lic.tenantId).catch(() => undefined);
+    }
+    return c.json({ reactivated: true });
   });
 
   app.post("/licenses/:licenseId/activations/:activationId/deactivate", async (c) => {

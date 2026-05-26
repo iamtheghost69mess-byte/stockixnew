@@ -1,3 +1,5 @@
+const INACTIVE_LIFECYCLES = new Set(["suspended", "pending_closure", "deleted", "draft"]);
+
 function toEpochMs(value) {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(String(value));
@@ -39,6 +41,24 @@ function formatDateInTimezone(value, timezone) {
 }
 
 function getOrganizationAccessState(input) {
+  const lifecycle = String(input.lifecycle || "active").trim().toLowerCase();
+  if (INACTIVE_LIFECYCLES.has(lifecycle)) {
+    const label =
+      lifecycle === "suspended"
+        ? "suspended"
+        : lifecycle === "pending_closure"
+          ? "pending closure"
+          : lifecycle === "deleted"
+            ? "deleted"
+            : "not active";
+    return {
+      status: "suspended",
+      reason: `Organization is ${label}. Contact support to restore access.`,
+      blocked: true,
+      blockCode: "ORGANIZATION_NOT_ACTIVE",
+    };
+  }
+
   const timezoneRaw = String(input.timezone || "Asia/Beirut").trim();
   const timezone = isValidTimezone(timezoneRaw) ? timezoneRaw : "Asia/Beirut";
   const now = input.now instanceof Date ? input.now : new Date();

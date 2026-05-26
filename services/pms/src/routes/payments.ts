@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsPayments, pmsBookings } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const paymentsRouter = new Hono<PmsEnv>();
@@ -22,8 +22,15 @@ paymentsRouter.get("/", async (c) => {
   const bookingId = c.req.query("bookingId");
   const conditions = [eq(pmsPayments.tenantId, tenantId(c))];
   if (bookingId) conditions.push(eq(pmsPayments.bookingId, bookingId));
-  const rows = await db.select().from(pmsPayments).where(and(...conditions)).orderBy(desc(pmsPayments.createdAt));
-  return c.json({ payments: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsPayments)
+    .where(and(...conditions))
+    .orderBy(desc(pmsPayments.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ payments: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 paymentsRouter.post("/", async (c) => {

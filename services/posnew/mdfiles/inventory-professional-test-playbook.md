@@ -63,8 +63,15 @@ Use this after running:
 - Open `/dashboard/inventory/stock-take`
 - Verify one draft and one in-progress session are present
 - Continue counts and post to test correction movements
+- Serial-tracked line with variance: blocking banner, Finalize disabled, link to Inventory Adjust
 
-7) **Barcode lookup**
+7) **Offline inventory (POS)**
+- Online: open a table session so menu availability snapshot is cached (IndexedDB `stock_snapshot`)
+- Go offline: strict oversell blocks add when portions exhausted; banner if no snapshot
+- Inventory hub: manual adjust while offline queues `inventory_adjust`; sync when online
+- Reconnect: flush queue; stock conflict toast if server rejects oversold offline order
+
+9) **Barcode lookup**
 - Open `/dashboard/inventory/barcode-lookup`
 - Scan/enter: `DEMO-UI-BC-SCAN-999`
 - Verify mozzarella ingredient details appear

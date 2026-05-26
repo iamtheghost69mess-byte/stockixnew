@@ -8,19 +8,38 @@ export async function POST(req: Request) {
     mfaCode?: string;
   };
 
-  const res = await apiFetch(
-    "/auth/login",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: payload.email,
-        password: payload.password,
-        code: payload.mfaCode,
-      }),
-    },
-    req,
-  );
+  let res: Response;
+  try {
+    res = await apiFetch(
+      "/auth/login",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: payload.email,
+          password: payload.password,
+          code: payload.mfaCode,
+        }),
+      },
+      req,
+    );
+  } catch (err) {
+    const code =
+      err instanceof Error && "code" in err
+        ? String((err as NodeJS.ErrnoException).code)
+        : "";
+    const refused = code === "ECONNREFUSED" || code === "ENOTFOUND";
+    if (refused) {
+      return NextResponse.json(
+        {
+          error:
+            "Control-plane API is not reachable. From the repo root run `pnpm dev` (or start the API on port 4000).",
+        },
+        { status: 503 },
+      );
+    }
+    throw err;
+  }
   const responseBody = await res.text();
   const out = new NextResponse(responseBody, {
     status: res.status,

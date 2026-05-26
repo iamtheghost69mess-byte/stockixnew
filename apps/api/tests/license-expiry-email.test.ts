@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
-const sendMailMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const sendMailMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "sent", messageId: "test-id" }),
+);
 const getActiveLicenseForTenantMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/mail/mailer.js", () => ({
@@ -160,6 +162,27 @@ describe("License expiry email", () => {
     expect(sendMailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         idempotencyKey: `license-expiring/${tenantId}/2026-06-01`,
+      }),
+    );
+  });
+
+  it("uses milestone idempotency key when milestoneDays provided", async () => {
+    const licenseId = "lic-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const expiresAt = new Date("2026-06-01T00:00:00.000Z");
+    const db = createTenantSelectMock([
+      { name: "Milestone Corp", adminEmail: "m@corp.test" },
+    ]);
+
+    await sendLicenseExpiringEmailForTenant(db, tenantId, {
+      expiresAt,
+      gracePeriodDays: 7,
+      licenseId,
+      milestoneDays: 7,
+    });
+
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: `license-expiring/${licenseId}/7`,
       }),
     );
   });
