@@ -15,6 +15,14 @@ import {
   hasLicenseExpiryMilestoneNotification,
 } from "./notification-service.js";
 import { notifyLicenseForTenant } from "./notification-helpers.js";
+import { enqueueLicenseExpiryMilestone } from "./jobs/license-expiry-queue.js";
+import {
+  runLicenseExpiryMilestoneJob,
+  type LicenseMilestoneJob,
+} from "./jobs/license-expiry-milestone.js";
+
+export type { LicenseMilestoneJob };
+export { runLicenseExpiryMilestoneJob };
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -225,34 +233,17 @@ async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
     });
     if (alreadyNotified) continue;
 
-    try {
-      await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
-        expiresAt: license.expiresAt,
-        gracePeriodDays: license.gracePeriodDays ?? 7,
-        licenseId: license.id,
-        milestoneDays,
-      });
-      await sendLicenseExpiringEmailToPlatformOwner(db, license.tenantId, {
-        expiresAt: license.expiresAt,
-        licenseId: license.id,
-        milestoneDays,
-      });
-    } catch (err) {
-      console.error(
-        "[expireDueLicenses] Milestone email failed",
-        license.tenantId,
-        milestoneDays,
-        err,
-      );
-    }
-
-    notifyLicenseForTenant(db, {
-      tenantId: license.tenantId,
+    const job: LicenseMilestoneJob = {
       licenseId: license.id,
-      type: "license.expiring",
-      body: `License expires in ${milestoneDays} day${milestoneDays === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
-      daysLeft: milestoneDays,
+      tenantId: license.tenantId,
       milestoneDays,
-    });
+      expiresAt: license.expiresAt.toISOString(),
+      gracePeriodDays: license.gracePeriodDays ?? 7,
+    };
+
+    const mode = await enqueueLicenseExpiryMilestone(job);
+    if (mode === "inline") {
+      await runLicenseExpiryMilestoneJob(db, job);
+    }
   }
 }

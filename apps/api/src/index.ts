@@ -111,7 +111,9 @@ import { buildAuthRoutes } from "./routes/auth/index.js";
 import { enqueueOrgProvisioning } from "./org-provision.js";
 import {
   assertOrgInSupportScope,
+  assertTenantInOwnerScope,
   filterOrganizationsForSupportAgent,
+  getScopedTenantIdsForOwner,
   getSupportScopedOrgIdsForTenant,
 } from "./org-access-scope.js";
 import { canCreateOrganization, getTenantLicenseEligibility } from "./plan-limits.js";
@@ -2118,16 +2120,19 @@ app.get("/owners", async (c) => {
       email: owners.email,
       name: owners.name,
       role: owners.role,
+      roleName: platformRoles.name,
       status: owners.status,
       hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
       mfaEnabled: owners.mfaEnabled,
       createdAt: owners.createdAt,
       inviteTokenExpiresAt: owners.inviteTokenExpiresAt,
     })
-    .from(owners);
+    .from(owners)
+    .leftJoin(platformRoles, eq(owners.roleId, platformRoles.id));
   return c.json({
     owners: rows.map((r) => ({
       ...r,
+      roleName: r.roleName ?? r.role.replace(/_/g, " "),
       createdAt: r.createdAt.toISOString(),
       inviteTokenExpiresAt: r.inviteTokenExpiresAt?.toISOString() ?? null,
     })),
@@ -2272,20 +2277,36 @@ app.post("/owners/invite", async (c) => {
     userAgent: c.req.header("user-agent") ?? null,
     metadata: { role: owner.role, email: owner.email },
   });
-  const mailResult = await sendOwnerInviteEmail({
+  let mailResult = await sendOwnerInviteEmail({
     to: owner.email,
     name: owner.name,
     role: owner.role,
     inviteUrl,
     ownerId: owner.id,
   });
+  if (!mailSendSucceeded(mailResult)) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    mailResult = await sendOwnerInviteEmail({
+      to: owner.email,
+      name: owner.name,
+      role: owner.role,
+      inviteUrl,
+      ownerId: owner.id,
+    });
+  }
   const emailSent = mailSendSucceeded(mailResult);
   if (!emailSent) {
-    console.error(
-      "[owners] invite email not sent",
-      owner.email,
-      mailResult.status === "failed" ? mailResult.error : mailResult.status,
-    );
+    const reason =
+      mailResult.status === "failed" ? mailResult.error : String(mailResult.status);
+    console.error("[owners] invite email not sent", owner.email, reason);
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "invite.email_failed",
+      targetOwnerId: owner.id,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { email: owner.email, reason },
+    });
   }
   return c.json(
     {
@@ -2322,6 +2343,17 @@ app.post("/owners/:ownerId/resend-invite", async (c) => {
       emailSent: result.data.emailSent,
     },
   });
+
+  if (!result.data.emailSent) {
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "invite.email_failed",
+      targetOwnerId: parsed.data,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { email: result.data.owner.email, reason: "resend_failed" },
+    });
+  }
 
   return c.json(result.data, 200);
 });
@@ -2749,6 +2781,10 @@ app.get("/tenants", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
 
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+
   const rawPage = c.req.query("page");
   const rawPageSize = c.req.query("pageSize");
   const search = c.req.query("search")?.trim() ?? "";
@@ -2767,6 +2803,33 @@ app.get("/tenants", async (c) => {
   );
 
   const conditions: SQL[] = [childOrgFilter];
+
+  const scopedTenantIds = await getScopedTenantIdsForOwner(
+    db,
+    actorId,
+    actorPermissions,
+    actorRole,
+  );
+  if (scopedTenantIds !== null) {
+    if (scopedTenantIds.length === 0) {
+      return c.json({
+        tenants: [],
+        page,
+        pageSize,
+        total: 0,
+        totalPages: 1,
+        directoryTotals: {
+          all: 0,
+          active: 0,
+          suspended: 0,
+          provisioning: 0,
+          failed: 0,
+          partial: 0,
+        },
+      });
+    }
+    conditions.push(inArray(tenants.id, scopedTenantIds));
+  }
 
   if (search) {
     const pat = `%${search}%`;
@@ -4027,8 +4090,14 @@ app.get("/tenants/:tenantId/organizations", async (c) => {
 
   const actorId = String(c.get("actorId") ?? "");
   const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
   const scoped = await getSupportScopedOrgIdsForTenant(db, actorId, parsed.data);
-  const visibleRows = filterOrganizationsForSupportAgent(actorRole, rows, scoped);
+  const visibleRows = filterOrganizationsForSupportAgent(
+    actorRole,
+    rows,
+    scoped,
+    actorPermissions,
+  );
 
   const composeNames = visibleRows.map((r) => dockerComposeProjectForOrgSlug(r.slug));
   const portMap = await internalPortsByComposeProject(db, composeNames);
@@ -4630,7 +4699,20 @@ app.get("/tenants/:tenantId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
-  const actorRole = c.get("actorRole");
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+
+  const inScope = await assertTenantInOwnerScope(
+    db,
+    actorId,
+    parsed.data,
+    actorPermissions,
+    actorRole,
+  );
+  if (!inScope) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
 
   const rows = await db
     .select({
@@ -5610,6 +5692,15 @@ process.on("uncaughtException", (error) => {
 
 const port = apiConfig.port;
 startReadinessReconciler();
+
+void import("./jobs/license-expiry-queue.js").then(
+  ({ startLicenseExpiryWorker, isLicenseExpiryQueueEnabled }) => {
+    if (db && isLicenseExpiryQueueEnabled()) {
+      startLicenseExpiryWorker(db, (msg) => console.log(msg));
+      console.log("[api] License expiry BullMQ worker started");
+    }
+  },
+);
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`);

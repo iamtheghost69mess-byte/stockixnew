@@ -6,6 +6,7 @@
   "exports": {
     "./roles": "./src/roles.ts",
     "./permissions": "./src/permissions.ts",
+    "./stxi-license-key": "./src/stxi-license-key.ts",
     "./audit-log": "./src/audit-log.ts",
     "./finance-api": "./src/finance-api.ts"
   }

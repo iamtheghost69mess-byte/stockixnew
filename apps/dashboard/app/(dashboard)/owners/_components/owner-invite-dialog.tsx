@@ -1,9 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 
-import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 import type { InviteOwnerValues } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+export type PlatformRoleOption = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
 export type OwnerInviteDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +54,36 @@ export function OwnerInviteDialog({
   adding,
   onCancel,
 }: OwnerInviteDialogProps) {
+  const [roles, setRoles] = useState<PlatformRoleOption[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      setRolesLoading(true);
+      try {
+        const res = await fetch("/api/admin/roles");
+        const data = (await res.json()) as {
+          roles?: PlatformRoleOption[];
+          error?: string;
+        };
+        if (!cancelled && res.ok && data.roles?.length) {
+          setRoles(data.roles);
+          const current = inviteForm.getValues("roleId");
+          if (!current && data.roles[0]) {
+            inviteForm.setValue("roleId", data.roles[0].id);
+          }
+        }
+      } finally {
+        if (!cancelled) setRolesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, inviteForm]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -81,25 +117,28 @@ export function OwnerInviteDialog({
             />
             <FormField
               control={inviteForm.control}
-              name="role"
+              name="roleId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs font-medium text-muted-foreground">
                     Role
                   </FormLabel>
                   <Select
-                    value={field.value}
-                    onValueChange={(value) => field.onChange(value as Role)}
+                    value={field.value ?? ""}
+                    onValueChange={(value) => field.onChange(value)}
+                    disabled={rolesLoading || roles.length === 0}
                   >
                     <FormControl>
                       <SelectTrigger className="h-9 w-full">
-                        <SelectValue />
+                        <SelectValue
+                          placeholder={rolesLoading ? "Loading roles…" : "Select role"}
+                        />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {ROLES.map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {ROLE_LABELS[role]}
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

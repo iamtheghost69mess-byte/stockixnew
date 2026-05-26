@@ -11,7 +11,9 @@ async function enforceActiveOrganizationById(orgId, context = {}) {
     throw createHttpError(403, "Organization is required.");
   }
   const org = await Organization.findById(orgId)
-    .select("licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt timezone lifecycle")
+    .select(
+      "licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt timezone lifecycle licenseKey licenseKeyFormat acceptStkxUntil stockixTenantId",
+    )
     .lean();
   if (!org) {
     throw createHttpError(403, "Organization not found.");
@@ -22,7 +24,24 @@ async function enforceActiveOrganizationById(orgId, context = {}) {
     traceparent: context.traceparent,
     routeKey: context.routeKey || "tenant.requireActiveOrganization",
     useCache: true,
+    locationId: context.locationId,
   });
+
+  if (org?.licenseKey) {
+    const config = require("../config/config");
+    const { assertLicenseKeyForLocation } = require("../services/stxiLicenseValidate");
+    const keyCheck = assertLicenseKeyForLocation({
+      licenseKey: org.licenseKey,
+      stockixTenantId: org.stockixTenantId || config.stockixTenantId,
+      locationId: context.locationId,
+      signingSecret: config.licenseSigningSecret || process.env.LICENSE_SIGNING_SECRET || "",
+      acceptStkxUntil: org.acceptStkxUntil,
+    });
+    if (!keyCheck.ok) {
+      const createHttpError = require("http-errors");
+      throw createHttpError(403, "License key is not valid for this location.", keyCheck.code);
+    }
+  }
 }
 
 async function requireActiveOrganization(req, res, next) {

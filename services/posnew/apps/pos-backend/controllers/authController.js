@@ -70,7 +70,9 @@ async function assertOrganizationActiveForUser(user, requestId) {
   if (!user || !user.organization) return;
   const oid = user.organization._id || user.organization;
   const org = await Organization.findById(oid)
-    .select("timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt lifecycle")
+    .select(
+      "timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt lifecycle licenseKey stockixTenantId acceptStkxUntil",
+    )
     .lean();
   if (!org) {
     const err = new Error("Organization not found.");
@@ -78,9 +80,16 @@ async function assertOrganizationActiveForUser(user, requestId) {
     err.code = "ORGANIZATION_NOT_FOUND";
     throw err;
   }
+  const locationId =
+    user.location?._id?.toString?.() ||
+    user.location?.toString?.() ||
+    user.locations?.[0]?._id?.toString?.() ||
+    user.locations?.[0]?.toString?.() ||
+    null;
   await enforceActiveOrganizationById(oid, {
     requestId,
     routeKey: "tenant.auth.assertOrganizationActiveForUser",
+    locationId,
   });
 }
 

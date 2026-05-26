@@ -199,7 +199,7 @@ export function OwnerTable({
                         o.role,
                       )}`}
                     >
-                      {ROLE_LABELS[o.role]}
+                      {o.roleName ?? ROLE_LABELS[o.role]}
                     </span>
                     <p className="mb-2 text-[10px] text-muted-foreground">
                       Role changes take effect on next login

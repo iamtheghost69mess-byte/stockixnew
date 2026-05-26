@@ -366,11 +366,22 @@ export function TenantList(props: Props) {
             <TableRow className="hover:bg-transparent">
               <TableHead className="min-w-[200px] pl-4 whitespace-normal">Organization</TableHead>
               <TableHead className="whitespace-normal">Admin</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead title="Deployment status (Docker stack) and tenant record status (e.g. partial bundle)">
+                Status
+              </TableHead>
               <TableHead className="hidden sm:table-cell">License</TableHead>
-              <TableHead className="hidden md:table-cell">Expires</TableHead>
-              <TableHead className="hidden lg:table-cell">Created</TableHead>
-              <TableHead className="hidden xl:table-cell">Provisioned</TableHead>
+              <TableHead className="hidden md:table-cell" title="Active license expiry date">
+                Expires
+              </TableHead>
+              <TableHead className="hidden lg:table-cell" title="When the tenant row was created in Stockix">
+                Created
+              </TableHead>
+              <TableHead
+                className="hidden xl:table-cell"
+                title="When provisioning finished (registration completed)"
+              >
+                Provisioned
+              </TableHead>
               <TableHead className="hidden min-w-[140px] whitespace-normal lg:table-cell">
                 Public URL
               </TableHead>

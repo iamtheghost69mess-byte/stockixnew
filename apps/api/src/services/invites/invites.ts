@@ -111,13 +111,23 @@ export async function resendOwnerInvite(
   const dashboardUrl = apiConfig.dashboardUrl?.replace(/\/+$/, "");
   const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
 
-  const mailResult = await sendOwnerInviteEmail({
+  let mailResult = await sendOwnerInviteEmail({
     to: owner.email,
     name: owner.name,
     role: owner.role,
     inviteUrl,
     ownerId: owner.id,
   });
+  if (!mailSendSucceeded(mailResult)) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    mailResult = await sendOwnerInviteEmail({
+      to: owner.email,
+      name: owner.name,
+      role: owner.role,
+      inviteUrl,
+      ownerId: owner.id,
+    });
+  }
 
   const emailSent = mailSendSucceeded(mailResult);
 

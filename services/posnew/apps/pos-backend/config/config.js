@@ -140,6 +140,9 @@ const config = Object.freeze({
   stockixTenantId: process.env.TENANT_ID
     ? String(process.env.TENANT_ID).trim()
     : null,
+  licenseSigningSecret: process.env.LICENSE_SIGNING_SECRET
+    ? String(process.env.LICENSE_SIGNING_SECRET).trim()
+    : "",
   isWildcardPosOrigin,
 });
 
