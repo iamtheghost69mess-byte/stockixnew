@@ -69,22 +69,31 @@ export default function PmsBookingsPage() {
     checkIn: "", checkOut: "", totalAmountCents: "0", platform: "direct",
   });
 
-  async function load() {
+  async function load(signal?: AbortSignal) {
     if (!tenantId) return;
     const qs = statusFilter !== "all" ? `?status=${statusFilter}` : "";
-    const res = await pmsFetch(`bookings${qs}`, tenantId);
-    const data = (await res.json()) as { bookings?: Booking[] };
-    setBookings(data.bookings ?? []);
+    try {
+      const res = await pmsFetch(`bookings${qs}`, tenantId, { signal });
+      const data = (await res.json()) as { bookings?: Booking[] };
+      setBookings(data.bookings ?? []);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+    }
   }
 
-  useEffect(() => { void load(); }, [tenantId, statusFilter]);
+  useEffect(() => {
+    if (!tenantId) return;
+    const ctrl = new AbortController();
+    void load(ctrl.signal);
+    return () => ctrl.abort();
+  }, [tenantId, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAction(id: string, action: "check-in" | "check-out" | "cancel") {
     if (!tenantId) return;
     setActionId(id);
     await pmsFetch(`bookings/${id}/${action}`, tenantId, { method: "POST", body: "{}" });
     setActionId(null);
-    void load();
+    void load(new AbortController().signal);
   }
 
   async function handleCreate() {
@@ -101,7 +110,7 @@ export default function PmsBookingsPage() {
     });
     setSaving(false);
     setOpen(false);
-    void load();
+    void load(new AbortController().signal);
   }
 
   const fmt = (cents: number) =>

@@ -1,9 +1,9 @@
-import { requireEnv } from "./lib/require-env.js";
-
-const POS_PLATFORM_KEY = process.env.POS_PLATFORM_API_KEY ?? "";
+import { posConfig } from "@repo/config";
 
 function getPosPlatformBase(): string {
-  return requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
+  const url = posConfig.platformBaseUrl?.trim();
+  if (!url) throw new Error("POS_PLATFORM_BASE_URL is required. Set it in .env. Example: http://localhost:8010");
+  return url;
 }
 
 export async function posProxy(
@@ -20,11 +20,12 @@ export async function posProxy(
       }
     }
   }
+  const platformApiKey = posConfig.platformApiKey;
   return fetch(url.toString(), {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(POS_PLATFORM_KEY ? { "X-Api-Key": POS_PLATFORM_KEY } : {}),
+      ...(platformApiKey ? { "X-Api-Key": platformApiKey } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -42,8 +43,8 @@ export async function posProxyJson(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "POS platform unreachable";
-    const posBase = process.env.POS_PLATFORM_BASE_URL?.trim() ?? "(not set)";
-    const posUi = process.env.POS_FRONTEND_URL?.trim() ?? "(not set)";
+    const posBase = posConfig.platformBaseUrl?.trim() ?? "(not set)";
+    const posUi = posConfig.frontendUrl?.trim() ?? "(not set)";
     return {
       data: {
         error: "pos_unavailable",
@@ -67,7 +68,7 @@ export async function posProxyJson(
 
 /** Whether POS platform proxy is configured (for dashboard nav visibility). */
 export function isPosProxyConfigured(): boolean {
-  return Boolean(process.env.POS_PLATFORM_BASE_URL?.trim());
+  return Boolean(posConfig.platformBaseUrl?.trim());
 }
 
 export function getPosPlatformBaseUrl(): string {

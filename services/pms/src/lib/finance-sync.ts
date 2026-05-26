@@ -2,12 +2,9 @@ import { pmsBookings, tenantDeployments } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
+import { pmsConfig, apiConfig } from "@repo/config";
 
 type Db = PostgresJsDatabase<typeof schema>;
-
-if (!process.env.FINANCE_INTERNAL_BASE_URL) {
-  console.warn("[pms][finance-sync] FINANCE_INTERNAL_BASE_URL is not set — finance sync will fail at runtime");
-}
 
 interface BookingRow {
   id: string;
@@ -45,8 +42,7 @@ export async function syncBookingToFinance(
     return { receiptId: null, error: "finance_not_provisioned" };
   }
 
-  const financeBaseUrl =
-    process.env.FINANCE_INTERNAL_BASE_URL ?? "http://localhost:3000";
+  const financeBaseUrl = pmsConfig.financeInternalBaseUrl;
 
   const nights = Math.max(
     1,
@@ -82,7 +78,7 @@ export async function syncBookingToFinance(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-stockix-internal-secret": process.env.PLATFORM_API_SECRET ?? "",
+          "x-stockix-internal-secret": apiConfig.platformApiSecret ?? "",
           "x-stockix-tenant-id": booking.tenantId,
         },
         body: JSON.stringify(payload),

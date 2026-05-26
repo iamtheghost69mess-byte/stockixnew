@@ -117,7 +117,19 @@ export function generateICal(
   }
 
   lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  return lines.map(foldLine).join("\r\n");
+}
+
+/** RFC 5545 §3.1: fold lines longer than 75 octets with CRLF + single space. */
+function foldLine(line: string): string {
+  if (line.length <= 75) return line;
+  const chunks: string[] = [line.slice(0, 75)];
+  let i = 75;
+  while (i < line.length) {
+    chunks.push(line.slice(i, i + 74));
+    i += 74;
+  }
+  return chunks.join("\r\n ");
 }
 
 function formatNowUTC(): string {

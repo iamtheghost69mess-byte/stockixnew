@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Hono } from "hono";
-import { getResendWebhookSecret } from "@repo/config";
+import { apiConfig, getResendWebhookSecret } from "@repo/config";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { updateEmailLogDelivery } from "../../mail/email-log.js";
@@ -64,7 +64,7 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
       ) {
         return c.json({ error: "invalid_signature" }, 401);
       }
-    } else if (process.env.NODE_ENV === "production") {
+    } else if (apiConfig.nodeEnv === "production") {
       console.warn("[webhooks/resend] RESEND_WEBHOOK_SECRET not set in production");
     }
 
