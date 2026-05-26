@@ -64,7 +64,7 @@ function parseLicenseStatus(raw: string | null | undefined): LicenseStatus | nul
   return null;
 }
 
-type StatusFilter = "all" | "active" | "suspended" | "provisioning" | "failed";
+type StatusFilter = "all" | "active" | "partial" | "suspended" | "provisioning" | "failed";
 export type TenantSortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 type Props = {

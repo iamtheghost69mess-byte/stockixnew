@@ -139,7 +139,7 @@ export default function TenantUsersPanel({
   financeTenantId,
 }: Props) {
   const financeUsersEnabled = hasAccountingModule && deploymentReady;
-  const me = useMe();
+  const { me } = useMe();
   const canMutate = Boolean(me?.capabilities.canManageTenants);
 
   const [users, setUsers] = useState<FinanceUserRow[]>([]);

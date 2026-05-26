@@ -44,7 +44,7 @@ import { useInventoryPosPolicyQuery } from "@/hooks/use-inventory-pos-policy";
 import { exportReportExcel } from "@/lib/reports/export-excel";
 import { exportReportPdf } from "@/lib/reports/export-pdf";
 import {
-  adjustInventory,
+  adjustInventoryWithOfflineSupport,
   fetchAllInventoryMovements,
   fetchIngredients,
   fetchInventoryBalances,
@@ -383,11 +383,15 @@ export function InventoryAdminDashboard() {
     }
     setIsAdjusting(true);
     try {
-      await adjustInventory({
+      const delivery = await adjustInventoryWithOfflineSupport({
         ...adjustForm,
         quantityDelta: qty,
       });
-      toast.success("Inventory adjusted.");
+      if (delivery.mode === "queued") {
+        toast.success("Adjustment queued; it will sync when you are back online.");
+      } else {
+        toast.success("Inventory adjusted.");
+      }
       setIsAdjustOpen(false);
       setAdjustForm({
         ingredientId: "",

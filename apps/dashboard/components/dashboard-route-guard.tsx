@@ -51,8 +51,8 @@ export function DashboardRouteGuard({ children }: { children: ReactNode }) {
         Your role does not include permission to view this page. Contact a super admin if you need
         access.
       </p>
-      <Button asChild variant="outline">
-        <Link href="/">Back to overview</Link>
+      <Button render={<Link href="/" />} variant="outline" nativeButton={false}>
+        Back to overview
       </Button>
     </div>
   );

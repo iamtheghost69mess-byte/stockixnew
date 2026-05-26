@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const me = useMe();
+  const { me } = useMe();
   const posNavVisible = usePosNavVisible();
   const canReadTenants = useHasPermission("tenants.read");
   const canReadLicenses = useHasPermission("licenses.read");

@@ -32,12 +32,26 @@ import {
 } from "./tenants-utils";
 
 export function TenantsPageContent() {
-  const me = useMe();
+  const { me } = useMe();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialListStatus = useMemo((): "all" | "active" | "suspended" | "provisioning" | "failed" => {
+  const initialListStatus = useMemo(():
+    | "all"
+    | "active"
+    | "partial"
+    | "suspended"
+    | "provisioning"
+    | "failed" => {
     const s = searchParams.get("status");
-    if (s === "active" || s === "suspended" || s === "provisioning" || s === "failed") return s;
+    if (
+      s === "active" ||
+      s === "partial" ||
+      s === "suspended" ||
+      s === "provisioning" ||
+      s === "failed"
+    ) {
+      return s;
+    }
     return "all";
   }, [searchParams]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
@@ -67,7 +81,7 @@ export function TenantsPageContent() {
   const [deleteVolumesOpen, setDeleteVolumesOpen] = useState(false);
   const [deleteSlugInput, setDeleteSlugInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<
-    "all" | "active" | "suspended" | "provisioning" | "failed"
+    "all" | "active" | "partial" | "suspended" | "provisioning" | "failed"
   >(initialListStatus);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);

@@ -16,7 +16,7 @@ import type { LicenseHistoryEntry } from "./license-detail-utils";
 
 export function useLicenseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const me = useMe();
+  const { me } = useMe();
   const isSuper = me?.role === "super_admin";
   const canExtendOrEditNotes = Boolean(me?.capabilities.canExtendLicenses);
   const canSupportLicenseOps = me?.role === "support_agent" || me?.role === "super_admin";

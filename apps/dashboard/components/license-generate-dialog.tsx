@@ -57,10 +57,10 @@ type Props = {
   onSuccess: () => void;
 };
 
-function defaultExpiresAt(): Date {
+function defaultExpiresAt(): string {
   const d = new Date();
   d.setDate(d.getDate() + 365);
-  return d;
+  return d.toISOString();
 }
 
 function emptyFormValues(): GenerateLicenseValues {

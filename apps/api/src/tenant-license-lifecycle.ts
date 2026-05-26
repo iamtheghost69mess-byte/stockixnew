@@ -25,7 +25,7 @@ export async function applyTenantLicenseSuspend(
 ): Promise<void> {
   await db
     .update(tenants)
-    .set({ status: "suspended", updatedAt: new Date() })
+    .set({ status: "suspended" })
     .where(eq(tenants.id, tenantId));
 
   const [lic] = await db
@@ -79,7 +79,7 @@ export async function applyTenantLicenseReactivate(
 ): Promise<void> {
   await db
     .update(tenants)
-    .set({ status: "active", updatedAt: new Date() })
+    .set({ status: "active" })
     .where(eq(tenants.id, tenantId));
 
   const [lic] = await db

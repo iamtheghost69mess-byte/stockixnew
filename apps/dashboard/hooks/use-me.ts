@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Me = {
+export type Me = {
   id: string;
   role: string;
   roleId?: string | null;
@@ -49,19 +49,24 @@ async function fetchMe(): Promise<Me | null> {
   return inFlight;
 }
 
-export function useMe(): Me | null {
+export function useMe(): { me: Me | null; loading: boolean } {
   // Avoid stale module cache snapshots across logout/login transitions.
   const [me, setMe] = useState<Me | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
     void fetchMe().then((data) => {
-      if (mounted) setMe(data);
+      if (mounted) {
+        setMe(data);
+        setLoading(false);
+      }
     });
     return () => {
       mounted = false;
     };
   }, []);
 
-  return me;
+  return { me, loading };
 }
