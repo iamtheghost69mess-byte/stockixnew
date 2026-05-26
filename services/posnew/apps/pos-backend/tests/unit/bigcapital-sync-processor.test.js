@@ -5,6 +5,7 @@ const {
   buildMappedEntries,
   appendFinanceAdjustmentEntries,
   resolveDepositAccountId,
+  buildDepositPayments,
   resolveLocationMapping,
   isCardMethodKey,
   buildSaleReceiptPayload,
@@ -48,6 +49,23 @@ test("resolveDepositAccountId uses largest split method", () => {
     baseCfg
   );
   assert.equal(id, 10002);
+});
+
+test("buildDepositPayments maps each split to cash or card account", () => {
+  const payments = buildDepositPayments(
+    {
+      paymentSplits: [
+        { methodKey: "cash", amount: 5 },
+        { methodKey: "card", amount: 20 },
+      ],
+    },
+    baseCfg
+  );
+  assert.equal(payments.length, 2);
+  assert.equal(payments[0].amount, 5);
+  assert.equal(payments[0].depositAccountId, 10001);
+  assert.equal(payments[1].amount, 20);
+  assert.equal(payments[1].depositAccountId, 10002);
 });
 
 test("buildMappedEntries passes line discount amount", () => {

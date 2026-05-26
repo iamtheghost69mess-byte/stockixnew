@@ -32,6 +32,15 @@ export class InternalPosReceiptEntryDto {
   discount?: number;
 }
 
+export class InternalPosDepositPaymentDto {
+  @IsInt()
+  depositAccountId: number;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+}
+
 export class InternalPosReceiptPayloadDto {
   @IsInt()
   customerId: number;
@@ -66,6 +75,30 @@ export class InternalPosReceiptPayloadDto {
   @IsOptional()
   @IsInt()
   warehouseId?: number;
+
+  /** When multiple tender accounts were used on the POS order. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InternalPosDepositPaymentDto)
+  depositPayments?: InternalPosDepositPaymentDto[];
+}
+
+export class InternalPosPartialRefundDto extends InternalPosTenantBodyDto {
+  @IsNumber()
+  @Min(0.01)
+  amount: number;
+
+  @IsInt()
+  refundItemId: number;
+
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+
+  @IsOptional()
+  @IsString()
+  creditNoteDate?: string;
 }
 
 export class CreateInternalPosReceiptDto {

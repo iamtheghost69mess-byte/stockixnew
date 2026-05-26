@@ -32,6 +32,7 @@ import {
 } from "../domain/provisioning/adapters/copy-coa-across-stacks.js";
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
+import { verifyPosBigcapitalIntegration } from "../domain/provisioning/adapters/verify-pos-bigcapital-integration.js";
 import { completeFinanceSetupWizard } from "../domain/provisioning/adapters/complete-finance-setup-wizard.js";
 import {
   clearTenantPartialState,
@@ -187,10 +188,27 @@ async function runWirePosIntegrationStep(params: {
     return { ok: true };
   }
   if (!params.forceRerun && params.hasOp("tenant.wire_pos_integration")) {
-    await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
-      meta: { operationKey: "tenant.wire_pos_integration" },
+    const health = await verifyPosBigcapitalIntegration({
+      posOrganizationId: params.posOrganizationId,
+      posHostPort: params.posHostPort,
+      log: params.log,
     });
-    return { ok: true };
+    if (health.healthy) {
+      await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
+        meta: { operationKey: "tenant.wire_pos_integration" },
+      });
+      return { ok: true };
+    }
+    await params.trace.event(
+      "resume",
+      "Re-wiring POS integration (journaled but health check failed)",
+      {
+        meta: {
+          operationKey: "tenant.wire_pos_integration",
+          healthReason: health.reason ?? "unknown",
+        },
+      },
+    );
   }
   try {
     params.log("[provision] step start: tenant.wire_pos_integration");

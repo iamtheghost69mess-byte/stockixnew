@@ -22,6 +22,8 @@ const integrationConfigSchema = new mongoose.Schema(
       serviceChargeItemId: { type: Number },
       /** Optional Finance item for order-level discount lines on receipts. */
       discountItemId: { type: Number },
+      /** Finance item for partial refund credit notes (falls back to discountItemId). */
+      refundAdjustmentItemId: { type: Number },
       /** POS location → Bigcapital branch/warehouse. */
       locationMapping: [
         {

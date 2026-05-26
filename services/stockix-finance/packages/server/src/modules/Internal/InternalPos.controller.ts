@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { InternalPosReceiptsService } from './commands/InternalPosReceipts.servi
 import {
   CreateInternalPosReceiptDto,
   InternalPosCheckDuplicateDto,
+  InternalPosPartialRefundDto,
   InternalPosTenantBodyDto,
 } from './dtos/InternalPosReceipt.dto';
 
@@ -51,5 +53,18 @@ export class InternalPosController {
     @Body() body: InternalPosTenantBodyDto,
   ) {
     return this.internalPosReceipts.voidByReference(body.tenantId, referenceNo);
+  }
+
+  @Patch('receipts/by-reference/:referenceNo/partial-refund')
+  @HttpCode(HttpStatus.OK)
+  async partialRefundByReference(
+    @Param('referenceNo') referenceNo: string,
+    @Body() body: InternalPosPartialRefundDto,
+  ) {
+    return this.internalPosReceipts.partialRefundByReference(
+      body.tenantId,
+      referenceNo,
+      body,
+    );
   }
 }

@@ -5,6 +5,9 @@ const Location = require("../models/locationModel");
 const IntegrationConfig = require("../models/integrationConfigModel");
 const AccountingConfig = require("../models/accountingConfigModel");
 const { ensureDefaultAccountsAndConfig } = require("../services/accountingService");
+const {
+  evaluateBigcapitalIntegrationHealth,
+} = require("../services/bigcapitalIntegrationHealth");
 
 function maskIntegrationConfig(doc) {
   const safe = doc?.toObject ? doc.toObject() : { ...(doc || {}) };
@@ -151,6 +154,53 @@ const wireBigcapitalIntegration = async (req, res, next) => {
   }
 };
 
+/**
+ * Provision health check: confirms integration is enabled and fully configured.
+ */
+const getBigcapitalIntegrationHealth = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(orgId)) {
+      return next(createHttpError(400, "Invalid organization id"));
+    }
+
+    const org = await Organization.findById(orgId);
+    if (!org) {
+      return next(createHttpError(404, "Organization not found"));
+    }
+
+    const [integrationConfig, accountingConfig] = await Promise.all([
+      IntegrationConfig.findOne({ organization: orgId }),
+      AccountingConfig.findOne({ organization: orgId }).select(
+        "bigcapitalIntegrationEnabled"
+      ),
+    ]);
+
+    const evaluation = evaluateBigcapitalIntegrationHealth(integrationConfig, {
+      requireAccountingFlag: true,
+      accountingIntegrationEnabled: Boolean(
+        accountingConfig?.bigcapitalIntegrationEnabled
+      ),
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        organizationId: orgId,
+        healthy: evaluation.healthy,
+        reason: evaluation.healthy ? null : evaluation.reason,
+        bigcapitalIntegrationEnabled: Boolean(
+          integrationConfig?.bigcapital?.enabled
+        ),
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
 module.exports = {
   wireBigcapitalIntegration,
+  getBigcapitalIntegrationHealth,
+  evaluateBigcapitalIntegrationHealth,
 };

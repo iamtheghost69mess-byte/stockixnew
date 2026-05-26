@@ -21,6 +21,7 @@ const Organization = require("../models/organizationModel");
 const Order = require("../models/orderModel");
 const {
   enqueueBigcapitalVoidIfEnabled,
+  enqueueBigcapitalPartialRefundIfEnabled,
 } = require("../services/bigcapitalSyncEnqueue");
 const { assertTenantOrganization } = require("../utils/tenantOrg");
 const {
@@ -662,7 +663,9 @@ const reverseOrder = async (req, res, next) => {
     }
     const order = await Order.findById(orderId);
     if (order) {
-      enqueueBigcapitalVoidIfEnabled(order).catch((err) => {
+      enqueueBigcapitalVoidIfEnabled(order, {
+        originatedBy: "accounting.reverse_order",
+      }).catch((err) => {
         console.error("[BigcapitalVoid] reverse-order enqueue:", err.message);
       });
     }
@@ -713,14 +716,27 @@ const postRefund = async (req, res, next) => {
       : null;
     const refundAmount = Number(amount);
     const order = await Order.findById(orderId);
-    if (
-      order &&
-      Number.isFinite(refundAmount) &&
-      refundAmount >= Number(order.total || 0) - 0.01
-    ) {
-      enqueueBigcapitalVoidIfEnabled(order).catch((err) => {
-        console.error("[BigcapitalVoid] full-refund enqueue:", err.message);
-      });
+    if (order && Number.isFinite(refundAmount)) {
+      const orderTotal = Number(order.total || 0);
+      if (refundAmount >= orderTotal - 0.01) {
+        enqueueBigcapitalVoidIfEnabled(order, {
+          originatedBy: "accounting.full_refund",
+        }).catch((err) => {
+          console.error("[BigcapitalVoid] full-refund enqueue:", err.message);
+        });
+      } else if (refundAmount > 0) {
+        enqueueBigcapitalPartialRefundIfEnabled(order, refundAmount, {
+          idempotencyKey: idem
+            ? `partial_refund_${orderId}_${idem}`
+            : undefined,
+          originatedBy: "accounting.partial_refund",
+        }).catch((err) => {
+          console.error(
+            "[BigcapitalPartialRefund] enqueue:",
+            err.message
+          );
+        });
+      }
     }
     if (Number.isFinite(refundAmount) && refundAmount >= 200) {
       await createBackofficeNotificationFromEvent(
