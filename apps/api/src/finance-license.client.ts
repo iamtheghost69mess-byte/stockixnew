@@ -3,11 +3,7 @@ import { requireEnv } from "./lib/require-env.js";
 
 /** When true, missing secret or HTTP failure is logged but does not throw (development only). */
 function isFinanceLicenseSyncOptional(): boolean {
-  const flag = process.env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
-  if (flag === "1" || flag === "true") {
-    return apiConfig.nodeEnv === "development";
-  }
-  return false;
+  return apiConfig.financeLicenseSyncOptional;
 }
 import { tenantDeployments } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
