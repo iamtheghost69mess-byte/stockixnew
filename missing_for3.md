@@ -18,6 +18,8 @@
 | Owner invite email durable queue (BullMQ) | `apps/api/src/jobs/owner-invite-mail-queue.ts`, `owner-invite-delivery.ts`, `emailQueued` in owners UI; tests: `owner-invite-mail-queue.test.ts`. Requires `CONTROL_PLANE_REDIS_URL` for queue path; inline 2s retry when Redis unset. |
 | POS §2.5 inventory & stock | `offline-stock-mirror.ts` (IDB `stock_snapshot`), `adjustInventoryWithOfflineSupport`, `stock-take-serial-guard.ts`, `STOCK_TAKE_SERIAL_VARIANCE`; docs: `mdfiles/offline-inventory.md`, playbook §7. Tests: `inventory-adjust-offline-key.test.js`, `stock-take-serial-guard.test.js`, `offline-stock-mirror.test.js`. **Manual E2E:** not signed off. |
 | POS §2.3 license enforcement | `pos-license-sync.ts` (`PosSyncResult`, metadata sync), `patchOrgLicense` STXI fields, `authedTenantLocation` middleware order, `getOrgProvisioningStatus` STXI gate; docs: [docs/section-2.3-license-e2e-checklist.md](docs/section-2.3-license-e2e-checklist.md). Tests: `license-suspend.test.ts`, `pos-license-sync.test.ts`, `stxi-license-validate.test.js`. **Manual E2E / `test:saas-integration`:** not signed off. |
+| Low/Low audit repairs | Bootstrap PIN 4–6 (`orgBootstrapService.js`), POS floor VIP badge (`pos-floor-page.tsx`), provision SSE bus + `pg_notify` (`provision-bus.ts`, worker `provision-trace.ts`, API `provision-notify-listener.ts`). Tests: `provision-pin-allocation.test.js`, `provision-bus.test.ts`. |
+| Accounting §3.2–3.4 (May 2026) | `maxOrganizations` sync on `organization.provision`; Finance `LicenseGuard` expired read-only + `useLicenseWriteAllowed` null block; `tenant_config` CRUD + tenant `.env` branding vars + dashboard Branding tab; `POST /api/internal/organization/branding/sync`; partial BigCapital cleanup (PDF/email defaults, auth persist migration). **Remaining:** Finance self-service multi-org, full CSS/mail rebrand, per-tenant webapp rebuild automation. |
 
 ### Legend (plan fixes 1–10)
 
@@ -101,11 +103,6 @@ EFFORT: High
 PRIORITY: Medium  
 EFFORT: Medium
 
-⚠️ **Bootstrap 6-digit PIN vs login 4–6** — Bootstrap allocates 6 digits; login accepts `^\d{4,6}$` (inconsistent UX/docs).
-
-PRIORITY: Low  
-EFFORT: Low
-
 ---
 
 ### 2.3 License Enforcement in POS
@@ -122,11 +119,6 @@ EFFORT: Low
 
 PRIORITY: Medium  
 EFFORT: High
-
-⚠️ **VIP indicator on POS floor** — `reservatorIsVip` exists in API and backoffice table (★ in columns); **not** shown on `pos-floor-page.tsx` terminal cards.
-
-PRIORITY: Low  
-EFFORT: Low
 
 ⚠️ **Guest/table menu vs org lifecycle** — Table-path guest menu may not check org `lifecycle` before serving (documented in `mdfiles/guest menu.md`).
 
@@ -218,39 +210,19 @@ EFFORT: Low
 
 ### 3.2 Organization Model
 
-⚠️ **Multi-org on one Finance stack** — Control-plane `organization.provision` driven; not self-service in Finance UI alone.
+⚠️ **Multi-org self-service in Finance UI** — Sub-orgs are created via dashboard `organization.provision` on the parent stack; Finance webapp does not expose a tenant-admin “add branch” wizard.
 
 PRIORITY: Medium  
 EFFORT: Medium
 
-⚠️ **Separate-stack child org — no COA copy** — Parent-stack sub-org path copies COA; separate-stack children do not (non-fatal failure).
+⚠️ **Separate-stack COA retry** — Cross-stack export/import runs on `tenant.provision` with `parentTenantSlug`; failures are journaled but there is no dedicated “retry COA only” repair action on tenant detail.
 
 PRIORITY: Medium  
 EFFORT: Medium
-
-🔲 **Owner dashboard CRUD for Finance sub-orgs** — Second org requires worker/API path; no owner UI workflow.
-
-PRIORITY: Medium  
-EFFORT: High
-
-⚠️ **`maxOrganizations` vs provision defaults** — Finance enforces limit; provision/sync can default to `1` if plan payload not applied.
-
-PRIORITY: High  
-EFFORT: Low
 
 ---
 
 ### 3.3 License Enforcement in Accounting
-
-⚠️ **Expired license blocks all API including reads** — No read-only degraded mode (`LicenseGuard.middleware.ts`).
-
-PRIORITY: Medium  
-EFFORT: Low
-
-⚠️ **No license row → writes blocked, reads allowed** — Mis-synced provision looks usable until first POST.
-
-PRIORITY: High  
-EFFORT: Low
 
 **Tenant suspend + Finance + POS (plan #6):** Done — see [Completed work](#completed-work-may-2026). **Manual E2E:** not signed off.
 
@@ -258,20 +230,15 @@ EFFORT: Low
 
 ### 3.4 Whitelabeling
 
-⚠️ **`tenant_config` not injected into Finance stack** — Logo/colors in control-plane DB not passed to tenant `.env` / webapp boot (`tenant-env.ts` only sets Stockix API URL + tenant id).
-
-PRIORITY: High  
-EFFORT: Medium
-
-⚠️ **BigCapital branding remnants** — `bigcapital:*` localStorage keys, `bigcapital-loading` CSS, mail templates with Bigcapital assets (`UserInvite.html`, etc.).
+⚠️ **BigCapital branding remnants (partial cleanup)** — Remaining `bigcapital:*` persist keys (beyond auth), `.bigcapital-*` CSS classes, static mail assets (`UserInvite.html`, `bigcapital.png`).
 
 PRIORITY: Medium  
 EFFORT: Medium
 
-🔲 **Per-tenant product name/colors → Finance PDF/branding** — Finance `preferences/branding` is per-org inside tenant, not wired from Stockix `tenant_config`.
+⚠️ **Per-tenant webapp rebuild after branding change** — `REACT_APP_STOCKIX_*` vars are written to tenant `.env`; Finance webapp image must be rebuilt (`scripts/rebuild-tenant-webapp.mjs`) for logo/title to appear in the bundle.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Medium
 
 ---
 
@@ -445,11 +412,6 @@ EFFORT: Medium
 PRIORITY: Medium  
 EFFORT: High
 
-⚠️ **Provision SSE bus unused for fan-out** — `subscribeProvision` never called; SSE polls DB.
-
-PRIORITY: Low  
-EFFORT: Low
-
 ---
 
 ### Notification / email log
@@ -483,7 +445,7 @@ Open and partial gaps only (completed items: [Completed work](#completed-work-ma
 | 12 | Deferred accounting + print offline | 🔲 / ⚠️ Partial | High |
 | 14 | STXI enforcement E2E (all tenants/locations) | ⚠️ Partial | Medium |
 | 15 | `defaultCredentials` on tenant staff PIN change | ⚠️ Partial (§2.2) | Medium |
-| 16 | Visual floor plan + VIP on POS floor | ⚠️ Partial | Medium / Low |
+| 16 | Visual spatial floor plan (POS) | ⚠️ Partial | Medium / High |
 | 17 | Plan display (no Stripe invoices) | ⚠️ Partial | High |
 | 18 | Resend webhook / delivery status | ⚠️ Partial | Medium |
 | 19 | Combined bundle `partial` / wire retry | ⚠️ Partial | High |

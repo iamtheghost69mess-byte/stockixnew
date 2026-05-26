@@ -364,7 +364,8 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
               </div>
               <p className="text-sm font-medium">No sub-organizations yet</p>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Each organization runs its own Bigcapital stack. Add one to get started.
+                Additional organizations share your tenant&apos;s Finance instance. Add one
+                to get started.
               </p>
               <Button type="button" className="mt-4" variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
                 Add organization
@@ -396,6 +397,11 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
                     <span className="block text-xs text-muted-foreground">
                       Created {formatDate(org.createdAt)}
                     </span>
+                    {org.provisioningError ? (
+                      <span className="block text-xs text-amber-600 dark:text-amber-400">
+                        COA copy: {org.provisioningError}
+                      </span>
+                    ) : null}
                     {org.publicUrl ? (
                       <a
                         className="text-xs font-medium text-primary underline"

@@ -8,8 +8,14 @@ export const useLicenseWriteAllowed = (): boolean => {
     enabled: isAuthenticated && !!organizationId,
   });
   const status = data?.licenseStatus ?? data?.license_status ?? null;
-  if (status === 'suspended' || status === 'expired' || status === 'grace') {
+  if (
+    status === 'suspended' ||
+    status === 'revoked' ||
+    status === 'expired' ||
+    status === 'grace' ||
+    status === null
+  ) {
     return false;
   }
-  return status === 'active' || status === null;
+  return status === 'active';
 };

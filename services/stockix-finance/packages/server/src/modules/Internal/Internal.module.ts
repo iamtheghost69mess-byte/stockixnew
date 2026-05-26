@@ -5,6 +5,8 @@ import { InternalProvisionController } from './InternalProvision.controller';
 import { InternalLicenseController } from './InternalLicense.controller';
 import { InternalUsersController } from './InternalUsers.controller';
 import { InternalOrgController } from './InternalOrg.controller';
+import { InternalOrganizationController } from './InternalOrganization.controller';
+import { InternalSyncOrganizationBrandingService } from './commands/InternalSyncOrganizationBranding.service';
 import { InternalResolveController } from './InternalResolve.controller';
 import { InternalResolveTenantService } from './commands/InternalResolveTenant.service';
 import { InternalPosController } from './InternalPos.controller';
@@ -22,6 +24,7 @@ import { InternalCompleteOrganizationSetupService } from './commands/InternalCom
 import { SyncLicenseService } from './commands/SyncLicense.service';
 import { InternalUsersService } from './commands/InternalUsers.service';
 import { InternalSecretGuard } from './guards/InternalSecret.guard';
+import { SystemModelsModule } from '@/modules/System/SystemModels/SystemModels.module';
 import { TenantDBManagerModule } from '@/modules/TenantDBManager/TenantDBManager.module';
 import { TenantKnexFactory } from '@/modules/Tenancy/TenantKnexFactory';
 import { CopyParentTenantSettingsService } from '@/modules/Organization/CopyParentTenantSettings.service';
@@ -30,6 +33,7 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
 @Module({
   imports: [
     ConfigModule,
+    SystemModelsModule,
     TenantDBManagerModule,
     UsersModule,
     SaleReceiptsModule,
@@ -44,6 +48,7 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     InternalLicenseController,
     InternalUsersController,
     InternalOrgController,
+    InternalOrganizationController,
     InternalResolveController,
     InternalPosController,
   ],
@@ -57,6 +62,7 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     InternalPosReceiptsService,
     InternalActivateWarehousesService,
     InternalSeedPosDefaultsService,
+    InternalSyncOrganizationBrandingService,
     InternalSecretGuard,
     TenantKnexFactory,
     CopyParentTenantSettingsService,

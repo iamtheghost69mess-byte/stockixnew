@@ -50,6 +50,15 @@ export async function syncFinanceLicense(
     throw new FinanceLicenseSyncError(msg);
   }
 
+  if (
+    typeof payload.maxOrganizations !== "number" ||
+    typeof payload.maxActivations !== "number"
+  ) {
+    throw new FinanceLicenseSyncError(
+      "maxOrganizations and maxActivations are required on finance license sync payload",
+    );
+  }
+
   const url = `${internalBaseUrl.replace(/\/+$/, "")}/api/internal/license/sync`;
   const body = {
     tenantId: payload.tenantId,
@@ -59,8 +68,8 @@ export async function syncFinanceLicense(
     expiresAt: payload.expiresAt ?? null,
     gracePeriodDays: payload.gracePeriodDays ?? 30,
     maxUsers: payload.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
-    maxActivations: payload.maxActivations ?? 1,
-    maxOrganizations: payload.maxOrganizations ?? 1,
+    maxActivations: payload.maxActivations,
+    maxOrganizations: payload.maxOrganizations,
     isPerpetual: payload.isPerpetual ?? true,
     featureFlags: payload.featureFlags ?? null,
   };

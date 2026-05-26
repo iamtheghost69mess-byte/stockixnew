@@ -76,6 +76,10 @@ import {
   DEFAULT_LICENSE_TERM_DAYS,
 } from "./license-constants.js";
 import { registerLicenseApi } from "./license-http.js";
+import {
+  ensureDefaultTenantConfig,
+  registerTenantConfigApi,
+} from "./routes/tenant-config.js";
 import { registerTenantFinanceUsersApi } from "./finance-users-http.js";
 import {
   readFinanceTenantIdFromProvisionEvents,
@@ -102,8 +106,10 @@ import {
 import { registerResendWebhook } from "./routes/webhooks/resend.js";
 import { safeCreateNotification } from "./notification-service.js";
 
+import { emitProvisionEvent, subscribeProvision } from "./provision-bus.js";
 import {
   createProvisionTracer,
+  rowToProvisionPayload,
   type ProvisionEventPayload,
 } from "./provision-trace.js";
 import { buildAuthRoutes } from "./routes/auth/index.js";
@@ -292,24 +298,6 @@ function serializeOrganizationRow(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     publicUrl,
-  };
-}
-
-function rowToProvisionPayload(
-  row: typeof tenantProvisionEvents.$inferSelect,
-): ProvisionEventPayload {
-  return {
-    id: row.id,
-    correlationId: row.correlationId,
-    slug: row.slug ?? null,
-    tenantId: row.tenantId ?? null,
-    parentTenantId: row.parentTenantId ?? null,
-    deploymentId: row.deploymentId ?? null,
-    phase: row.phase,
-    level: row.level,
-    message: row.message,
-    meta: row.meta ?? null,
-    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -544,18 +532,28 @@ async function appendProvisionEventSafe(args: {
   message: string;
   slug?: string | null;
   tenantId?: string | null;
+  parentTenantId?: string | null;
+  deploymentId?: string | null;
   meta?: Record<string, unknown>;
 }) {
   if (!db) return;
-  await db.insert(tenantProvisionEvents).values({
-    correlationId: args.correlationId,
-    phase: args.phase,
-    level: args.level ?? "info",
-    message: args.message,
-    slug: args.slug ?? null,
-    tenantId: args.tenantId ?? null,
-    meta: args.meta ?? null,
-  });
+  const [row] = await db
+    .insert(tenantProvisionEvents)
+    .values({
+      correlationId: args.correlationId,
+      phase: args.phase,
+      level: args.level ?? "info",
+      message: args.message,
+      slug: args.slug ?? null,
+      tenantId: args.tenantId ?? null,
+      parentTenantId: args.parentTenantId ?? null,
+      deploymentId: args.deploymentId ?? null,
+      meta: args.meta ?? null,
+    })
+    .returning();
+  if (row) {
+    emitProvisionEvent(rowToProvisionPayload(row));
+  }
   invalidateTenantReadinessCache(args.correlationId);
 }
 
@@ -1250,7 +1248,8 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
   const body = await c.req.json().catch(() => null);
   const bodyParsed = z
     .object({
-      financeOrganizationId: z.string().min(1).max(255),
+      financeOrganizationId: z.string().min(1).max(255).optional(),
+      provisioningError: z.string().max(2000).nullable().optional(),
     })
     .safeParse(body);
 
@@ -1261,10 +1260,22 @@ app.patch("/internal/organizations/:controlPlaneOrgId", async (c) => {
     );
   }
 
+  if (
+    !bodyParsed.data.financeOrganizationId
+    && bodyParsed.data.provisioningError === undefined
+  ) {
+    return c.json({ error: "VALIDATION_ERROR", message: "No fields to update" }, 400);
+  }
+
   const [updated] = await db
     .update(organizations)
     .set({
-      financeOrganizationId: bodyParsed.data.financeOrganizationId,
+      ...(bodyParsed.data.financeOrganizationId
+        ? { financeOrganizationId: bodyParsed.data.financeOrganizationId }
+        : {}),
+      ...(bodyParsed.data.provisioningError !== undefined
+        ? { provisioningError: bodyParsed.data.provisioningError }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(organizations.id, parsed.data))
@@ -1466,6 +1477,17 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           ? (posErrorFromResult ?? "POS provisioning failed")
           : null;
 
+      const [tenantNameRow] = await db
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, targetTenantId))
+        .limit(1);
+      if (tenantNameRow?.name) {
+        await ensureDefaultTenantConfig(db, targetTenantId, {
+          appName: tenantNameRow.name,
+        });
+      }
+
       await db
         .update(tenants)
         .set({ status: finalTenantStatus })
@@ -1636,15 +1658,25 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           })
           .where(eq(tenantDeployments.tenantId, targetTenantId));
 
-        void syncFinanceLicenseForStockixTenant(db, {
-          stockixTenantId: targetTenantId,
-          financeTenantId: financeTenantIdFromResult,
-        }).catch((err) => {
+        try {
+          await syncFinanceLicenseForStockixTenant(db, {
+            stockixTenantId: targetTenantId,
+            financeTenantId: financeTenantIdFromResult,
+          });
+          if (currentJob.correlationId) {
+            await appendProvisionEventSafe({
+              correlationId: currentJob.correlationId,
+              phase: "finance_license",
+              message: `[finance-license] Synced license for finance tenant ${financeTenantIdFromResult}`,
+              tenantId: targetTenantId,
+            });
+          }
+        } catch (err) {
           console.error(
-            "[provision] finance license sync failed (non-fatal)",
+            "[provision] finance license sync failed",
             err instanceof Error ? err.message : String(err),
           );
-        });
+        }
       }
 
       if (updated.type === "tenant.provision" && financeOrganizationIdFromResult) {
@@ -4013,7 +4045,7 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
   }
 
   const TERMINAL_JOB_STATUSES = new Set(["completed", "dead", "failed"]);
-  const STREAM_POLL_MS = 1500;
+  const STREAM_JOB_POLL_MS = 1500;
   const STREAM_PING_MS = 12_000;
 
   return streamSSE(c, async (stream) => {
@@ -4030,36 +4062,54 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     stream.onAbort(() => {
       closed = true;
     });
+
+    const replayRows = await db
+      .select()
+      .from(tenantProvisionEvents)
+      .where(eq(tenantProvisionEvents.correlationId, correlationId))
+      .orderBy(asc(tenantProvisionEvents.createdAt), asc(tenantProvisionEvents.id));
+    for (const row of replayRows) {
+      await forward(rowToProvisionPayload(row));
+    }
+
+    let lastEventPhase = replayRows[replayRows.length - 1]?.phase;
+    const unsubscribe = subscribeProvision(correlationId, (payload) => {
+      lastEventPhase = payload.phase;
+      void forward(payload);
+    });
+
     let lastPingAt = 0;
 
-    while (!closed) {
-      const rows = await db
-        .select()
-        .from(tenantProvisionEvents)
-        .where(eq(tenantProvisionEvents.correlationId, correlationId))
-        .orderBy(asc(tenantProvisionEvents.createdAt), asc(tenantProvisionEvents.id));
-
-      for (const row of rows) {
-        await forward(rowToProvisionPayload(row));
-      }
-
+    const writeDoneIfTerminal = async (): Promise<boolean> => {
       const streamJobs = await listTenantJobs(db, correlationId);
       const lastJob = streamJobs[streamJobs.length - 1] ?? null;
-      const lastEvent = rows[rows.length - 1];
       const terminalFromJob =
         lastJob !== null && TERMINAL_JOB_STATUSES.has(lastJob.status);
       const terminalFromEvent =
-        lastEvent?.phase === "complete" || lastEvent?.phase === "failed";
+        lastEventPhase === "complete" || lastEventPhase === "failed";
 
-      if (terminalFromJob || (terminalFromEvent && streamJobs.length === 0)) {
-        const status =
-          lastJob?.status === "completed" || lastEvent?.phase === "complete"
-            ? "complete"
-            : "failed";
-        await stream.writeSSE({
-          event: "done",
-          data: JSON.stringify({ status, correlationId }),
-        });
+      if (!terminalFromJob && !(terminalFromEvent && streamJobs.length === 0)) {
+        return false;
+      }
+
+      const status =
+        lastJob?.status === "completed" || lastEventPhase === "complete"
+          ? "complete"
+          : "failed";
+      await stream.writeSSE({
+        event: "done",
+        data: JSON.stringify({ status, correlationId }),
+      });
+      return true;
+    };
+
+    if (await writeDoneIfTerminal()) {
+      unsubscribe();
+      return;
+    }
+
+    while (!closed) {
+      if (await writeDoneIfTerminal()) {
         break;
       }
 
@@ -4069,8 +4119,10 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
         lastPingAt = now;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_MS));
+      await new Promise((resolve) => setTimeout(resolve, STREAM_JOB_POLL_MS));
     }
+
+    unsubscribe();
   });
 });
 
@@ -5740,6 +5792,7 @@ function startReadinessReconciler() {
 }
 
 registerLicenseApi(app, db);
+registerTenantConfigApi(app, db);
 registerNotificationsApi(app, db);
 registerTenantFinanceUsersApi(app, db);
 registerPosCredentialsRoutes(app, db);
@@ -5773,6 +5826,14 @@ process.on("uncaughtException", (error) => {
 const port = apiConfig.port;
 startReadinessReconciler();
 if (db) startStuckProvisioningReconciler(db);
+if (databaseUrl) {
+  void import("./provisioning/provision-notify-listener.js").then(
+    ({ startProvisionNotifyListener }) => {
+      startProvisionNotifyListener(databaseUrl, (message) => console.log(message));
+      console.log("[api] Provision NOTIFY listener started");
+    },
+  );
+}
 
 void import("./jobs/license-expiry-queue.js").then(
   ({ startLicenseExpiryWorker, isLicenseExpiryQueueEnabled }) => {

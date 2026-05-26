@@ -6,6 +6,46 @@ export default function LicenseBanner() {
   const { data } = useDashboardMeta({ enabled: true });
   const status = data?.licenseStatus ?? data?.license_status;
 
+  if (status === null) {
+    return (
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+          background: '#fecaca',
+          color: '#1a1a1a',
+          padding: '0.75rem 1rem',
+          textAlign: 'center',
+          fontSize: '14px',
+        }}
+      >
+        No license is configured for this organization. Contact your provider to
+        enable editing.
+      </div>
+    );
+  }
+
+  if (status === 'expired') {
+    return (
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+          background: '#fdba74',
+          color: '#1a1a1a',
+          padding: '0.75rem 1rem',
+          textAlign: 'center',
+          fontSize: '14px',
+        }}
+      >
+        Your license has expired. You can view data but cannot make changes until
+        you renew.
+      </div>
+    );
+  }
+
   if (status !== 'grace') {
     return null;
   }

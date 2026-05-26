@@ -50,7 +50,11 @@ describe("syncFinanceLicense adapter", () => {
   it("skips when secret missing and FINANCE_LICENSE_SYNC_OPTIONAL in development", async () => {
     process.env.FINANCE_LICENSE_SYNC_OPTIONAL = "1";
     apiConfigMock.nodeEnv = "development";
-    await syncFinanceLicense("http://127.0.0.1:4100", { tenantId: 42 }, log);
+    await syncFinanceLicense(
+      "http://127.0.0.1:4100",
+      { tenantId: 42, maxOrganizations: 1, maxActivations: 1 },
+      log,
+    );
     expect(logs.some((l) => l.includes("skipping"))).toBe(true);
   });
 
@@ -59,7 +63,11 @@ describe("syncFinanceLicense adapter", () => {
     globalThis.fetch = vi.fn(async () => new Response("bad", { status: 500 })) as typeof fetch;
 
     await expect(
-      syncFinanceLicense("http://127.0.0.1:4100", { tenantId: 99 }, log),
+      syncFinanceLicense(
+        "http://127.0.0.1:4100",
+        { tenantId: 99, maxOrganizations: 1, maxActivations: 1 },
+        log,
+      ),
     ).rejects.toBeInstanceOf(FinanceLicenseSyncError);
   });
 
@@ -69,7 +77,11 @@ describe("syncFinanceLicense adapter", () => {
       new Response(JSON.stringify({ success: true }), { status: 200 }),
     ) as typeof fetch;
 
-    await syncFinanceLicense("http://127.0.0.1:4100", { tenantId: 7 }, log);
+    await syncFinanceLicense(
+      "http://127.0.0.1:4100",
+      { tenantId: 7, maxOrganizations: 3, maxActivations: 2 },
+      log,
+    );
     expect(logs.some((l) => l.includes("finance license synced"))).toBe(true);
   });
 });

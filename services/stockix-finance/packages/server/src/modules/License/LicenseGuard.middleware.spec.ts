@@ -65,4 +65,41 @@ describe('LicenseGuardMiddleware', () => {
 
     expect(next).toHaveBeenCalled();
   });
+
+  it('allows reads when license is expired', async () => {
+    const middleware = buildMiddleware('expired');
+    const req = {
+      originalUrl: '/api/items',
+      method: 'GET',
+      headers: { 'organization-id': 'org-1' },
+    } as never;
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+
+    await middleware.use(req, res as never, next);
+
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('blocks writes when license is expired', async () => {
+    const middleware = buildMiddleware('expired');
+    const req = {
+      originalUrl: '/api/items',
+      method: 'POST',
+      headers: { 'organization-id': 'org-1' },
+    } as never;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+    const next = jest.fn();
+
+    await middleware.use(req, res as never, next);
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.PAYMENT_REQUIRED);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'LICENSE_EXPIRED' }),
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
 });
