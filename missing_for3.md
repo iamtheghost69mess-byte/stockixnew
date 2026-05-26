@@ -28,7 +28,7 @@
 | 7 | POS credentials reset-only UX | ✅ | ⚠️ `pos-credentials-http.test.ts` (no `masked` assertion) | ⚠️ Not signed off | `tenant-pos-credentials.tsx` + API `masked` flag. No secure plaintext reveal after bootstrap (intentional). |
 | 8 | POS offline `offlineSyncKey` idempotency | ⚠️ Partial | 🔲 No duplicate-order test | 🔲 Not signed off | Create path: `makeOfflineSyncKey()` → `posCreateOrder` / `addOrder` dedupe. **Not** using batch `POST /api/orders/sync` for flush; patch/pay queue **without** key. |
 | 9 | Email log API + dashboard page | ✅ | ✅ `apps/api/tests/email-logs.test.ts` | ⚠️ Not signed off | `GET /admin/email-logs` + `/email-logs` page. Resend webhook still needs ops config. |
-| 10 | Expiry milestones + default dated license | ⚠️ Partial | ✅ `license-expiry-milestones.test.ts`, `license-expiry-email.test.ts` | ⚠️ Not signed off | Milestones **90/60/30/15/7/3/2/1** in `license-expire-followup.ts`; provision default `isPerpetual: false` + `DEFAULT_LICENSE_TERM_DAYS`. Still: no BullMQ per milestone; owner **email** still `adminEmail` only; `tenants.status` not auto-suspended on expiry; license **generate UI** can still pick perpetual. |
+| 10 | Expiry milestones + default dated license | ✅ | ✅ `license-expiry-milestones.test.ts`, `license-expiry-email.test.ts` | ⚠️ Not signed off | Milestones **90/60/30/15/7/3/2/1**; owner email to assigned `ownerId`; tenant auto-suspend after grace; BullMQ when Redis configured. Generate UI defaults fixed term; perpetual still selectable. |
 
 **Deferred (unchanged):** Stripe billing, event bus, GRN/stock bridge, NeDB/LAN offline, `STXI` keys, combined module add/remove, Finance whitelabel — not in plan scope.
 
@@ -36,7 +36,15 @@
 
 ## SECTION 1 — SAAS OWNER DASHBOARD CORE
 
-**Section 1 repair (May 2026):** Phases 0–4 implemented in repo. Run migration `packages/db/drizzle/0044_platform_roles.sql` before using custom roles. Automated: `pnpm vitest run` in `apps/api` (includes `rbac.test.ts`, `license-expiry-milestones.test.ts`). **Manual staging E2E not signed off.**
+**Section 1.1–1.4 full repair (May 2026):** Implemented in repo. Apply migrations: `0044_platform_roles.sql`, `0045_tenants_org_scope_permission.sql`, `0046_stxi_license.sql`. Optional: `CONTROL_PLANE_REDIS_URL` for BullMQ milestone queue (inline fallback when unset). Manual checklist: [docs/section-1-e2e-checklist.md](docs/section-1-e2e-checklist.md).
+
+| Phase | Automated tests | Manual E2E |
+|-------|-----------------|------------|
+| 0 Baseline | `rbac`, `password-reset-mail-status`, `license-suspend`, `license-expiry-*`, `org-access-scope` | Not signed off |
+| 1 Auth | + `org-access-scope` (org_scope), invite audit on resend | Not signed off |
+| 2 Tenants | UI + list fields in API | Not signed off |
+| 3 Licenses | `stxi-license-key.test.ts`, generate STXI when `scopedLocationId` | Not signed off |
+| 4 Expiry | `license-expiry-milestones`, BullMQ when Redis configured | Not signed off |
 
 ### 1.1 Authentication & Access
 
@@ -50,20 +58,20 @@ EFFORT: High — **done**
 PRIORITY: High  
 EFFORT: Medium — **done**
 
-⚠️ **Per-organization access scope** — `owner_organization_access` is stored for `support_agent` but schema comment still marks full enforcement as future; not a general team permission system.
+✅ **Per-organization access scope** — `tenants.org_scope` permission; `GET /tenants` + `GET /tenants/:id` filtered by `owner_organization_access`; org CRUD scoped. **Tested:** `org-access-scope.test.ts`. **Manual E2E:** not signed off.
 
 PRIORITY: Medium  
-EFFORT: High
+EFFORT: High — **done**
 
 ✅ **Invite link expiry UX** — `inviteTokenExpiresAt` on `GET /owners`, `GET /auth/invite/:token`; shown on owner table + accept-invite page. **Manual E2E:** not signed off.
 
 PRIORITY: Medium  
 EFFORT: Low — **done**
 
-⚠️ **Invite email delivery failure** — API returns `emailSent`, `mailConfigured`, and manual `inviteUrl`; owners UI surfaces mail warnings (plan #2). **No** retry queue, scheduled resend, or admin alert beyond copy-link.
+⚠️ **Invite email delivery failure** — `invite.email_failed` audit; 2s retry on invite/resend; **Resend invitation** in owners table. **No** durable mail queue (deferred). **Tested:** API paths; dedicated audit test optional.
 
 PRIORITY: Medium  
-EFFORT: Medium — **UX improved; retry queue still open**
+EFFORT: Medium — **partial (no queue)**
 
 ✅ **Forgot password for pending-invite owners** — API returns `accountPending: true`; forgot-password UI explains accept-invite-first. Still no email sent (by design). **Tested:** `password-reset-mail-status.test.ts` (extend if needed).
 
@@ -94,15 +102,15 @@ EFFORT: Low — **done**
 PRIORITY: High  
 EFFORT: Medium — **provision default done**
 
-⚠️ **Tenant detail page license actions** — Suspend/reactivate on **license detail** page (plan #5). Tenant profile license panel still has extend/revoke only, not suspend/reactivate shortcuts.
+✅ **Tenant detail page license actions** — Suspend/Reactivate on tenant license panel + license detail. **Tested:** `license-suspend.test.ts`. **Manual E2E:** not signed off.
 
 PRIORITY: Medium  
-EFFORT: Medium — **partial**
+EFFORT: Medium — **done**
 
-⚠️ **Tenant vs deployment status confusion** — **Partial filter** chip + `directoryTotals.partial` on `GET /tenants`. Deployment vs tenant status tooltips still minimal.
+✅ **Tenant vs deployment status confusion** — Partial filter + column `title` tooltips on tenant list.
 
 PRIORITY: Medium  
-EFFORT: Medium — **partial**
+EFFORT: Medium — **done (docs in UI)**
 
 ---
 
@@ -113,39 +121,39 @@ EFFORT: Medium — **partial**
 PRIORITY: High  
 EFFORT: Medium — **done**
 
-⚠️ **POS / Accounting / combined product models** — Generate UI now defaults to **fixed term** (1y) + `isPerpetual: false` on API generate. No combined SKU UX (unchanged).
+✅ **POS / Accounting / combined product models** — **Preset: Platform + Accounting** in generate dialog; fixed-term default.
 
 PRIORITY: Medium  
-EFFORT: Medium — **partial**
+EFFORT: Medium — **done (preset; no new product enum)**
 
-⚠️ **License key format (`STXI` spec vs implementation)** — Keys are `STKX-XXXX-XXXX-XXXX` (`apps/api/src/license-utils.ts`), not `STXI-[TENANT_ID]-[LOCATION_ID]-[CHECKSUM]`. No tenant/location/checksum segments; POS has no per-location key validation.
+✅ **License key format (`STXI` spec vs implementation)** — `STXI-{tenantShort}-{locationShort}-{checksum}` in `@repo/shared/stxi-license-key`; DB `key_format` + `scoped_location_id`; POS `stxiLicenseValidate.js` on auth + middleware. Legacy STKX until `LICENSE_ACCEPT_STKX_UNTIL` / org `acceptStkxUntil`. **Tested:** `stxi-license-key.test.ts`.
 
 PRIORITY: Medium  
-EFFORT: Low (prefix) / High (full spec)
+EFFORT: High — **done**
 
 ✅ **`suspended` / `expired` badge styling** — Distinct styles in `license-status-badge.tsx`.
 
 PRIORITY: Low  
 EFFORT: Low — **done**
 
-⚠️ **License suspend → POS/Accounting block (dashboard path)** — **Improved (plans #5–#6).** Dashboard can suspend/reactivate licenses; tenant suspend also calls `applyTenantLicenseSuspend` / reactivate (`tenant-license-lifecycle.ts`). Finance + POS sync still best-effort on failure. **Manual E2E:** not signed off.
+✅ **License suspend → POS/Accounting block (dashboard path)** — Suspend API returns `financeSync` / `posSync` / `errors[]`; `LICENSE_SYNC_STRICT=1` fails request on sync error. **Tested:** `license-suspend.test.ts`. **Manual E2E:** not signed off.
 
 PRIORITY: High  
-EFFORT: Medium — **UI + tenant path done; verify in staging**
+EFFORT: Medium — **done (staging verify recommended)**
 
 ---
 
 ### 1.4 License Expiry Notification System
 
-⚠️ **Milestone schedule (3mo, 2mo, 1mo, 15d, 7d, 3d, 2d, 1d)** — **Partial (plan #10).** Implemented as **90/60/30/15/7/3/2/1** days (`LICENSE_EXPIRY_MILESTONE_DAYS`, `license-expire-followup.ts`) when `daysLeft` matches exactly. Still runs inline on worker/API follow-up, not per-milestone queue. **Tested:** `apps/api/tests/license-expiry-milestones.test.ts`.
+✅ **Milestone schedule (3mo, 2mo, 1mo, 15d, 7d, 3d, 2d, 1d)** — Canonical **90/60/30/15/7/3/2/1** days (~3mo/2mo/1mo). **Tested:** `license-expiry-milestones.test.ts`.
 
 PRIORITY: Critical  
-EFFORT: High — **milestones in code; worker/BullMQ split still open**
+EFFORT: High — **done**
 
-🔲 **BullMQ / dedicated cron per milestone** — No BullMQ in `apps/api`. Worker polls every 5 minutes (`infra/worker-service/src/worker.ts`) with inline `expireDueLicenses`; not a milestone queue.
+✅ **BullMQ / dedicated cron per milestone** — `apps/api/src/jobs/license-expiry-queue.ts` + worker when `CONTROL_PLANE_REDIS_URL` set; idempotent `jobId=licenseId:milestone`; inline fallback without Redis. Log: `license_expiry_milestone_fired`.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: High — **done**
 
 ✅ **Notification deduplication (milestones)** — **Fixed for milestone path (plan #10).** Email idempotency `license-expiring/{licenseId}/{milestoneDays}`; in-app dedupe via `meta.milestoneDays` + `hasLicenseExpiryMilestoneNotification`. Legacy non-milestone key still used if `milestoneDays` omitted. **Tested:** `license-expiry-email.test.ts`, `license-expiry-milestones.test.ts`.
 

@@ -28,6 +28,7 @@ import { z } from "zod";
 import { logAudit } from "./audit.js";
 import {
   generateLicenseKey,
+  generateLicenseKeyForTenant,
   getActiveLicenseForTenant,
   getPlanLimits,
   insertLicenseHistory,
@@ -375,6 +376,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       gracePeriodDays: z.number().int().min(0).max(365).default(DEFAULT_GRACE_PERIOD_DAYS),
       notes: z.string().max(500).optional(),
       tenantId: z.string().uuid().optional(),
+      scopedLocationId: z.string().min(1).max(64).optional(),
     })
     .refine((data) => data.isPerpetual || data.expiresAt !== undefined, {
       message: "expiresAt is required when isPerpetual is false",
@@ -432,7 +434,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     const created = await db.transaction(async (tx) => {
       const out: (typeof licenses.$inferSelect)[] = [];
       for (let i = 0; i < body.count; i++) {
-        let licenseKey = generateLicenseKey();
+        const keyMeta =
+          body.tenantId && body.scopedLocationId
+            ? generateLicenseKeyForTenant({
+                tenantId: body.tenantId,
+                locationId: body.scopedLocationId,
+                signingSecret: apiConfig.licenseSigningSecret,
+                modules: body.modules,
+              })
+            : {
+                licenseKey: generateLicenseKey(),
+                keyFormat: "stkx" as const,
+                scopedLocationId: null,
+              };
+        let licenseKey = keyMeta.licenseKey;
         for (let attempt = 0; attempt < 3; attempt++) {
           const clash = await tx
             .select({ id: licenses.id })
@@ -440,7 +455,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             .where(eq(licenses.licenseKey, licenseKey))
             .limit(1);
           if (clash.length === 0) break;
-          licenseKey = generateLicenseKey();
+          const regen =
+            body.tenantId && body.scopedLocationId
+              ? generateLicenseKeyForTenant({
+                  tenantId: body.tenantId,
+                  locationId: body.scopedLocationId,
+                  signingSecret: apiConfig.licenseSigningSecret,
+                  modules: body.modules,
+                })
+              : {
+                  licenseKey: generateLicenseKey(),
+                  keyFormat: "stkx" as const,
+                  scopedLocationId: null,
+                };
+          licenseKey = regen.licenseKey;
         }
         const status = body.tenantId ? "active" : "unassigned";
         const assignNow = Boolean(body.tenantId);
@@ -449,6 +477,8 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           .insert(licenses)
           .values({
             licenseKey,
+            keyFormat: keyMeta.keyFormat,
+            scopedLocationId: keyMeta.scopedLocationId,
             product: body.product,
             modules: JSON.stringify(body.modules),
             planSlug: body.planSlug,
@@ -1683,8 +1713,24 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       ipAddress: clientIp(c),
       userAgent: c.req.header("user-agent") ?? null,
     });
-    void triggerFinanceLicenseSync(db, lic.tenantId).catch(() => undefined);
+    let financeSync: "ok" | "failed" | "skipped" = lic.tenantId ? "ok" : "skipped";
+    let posSync: "ok" | "failed" | "skipped" = lic.tenantId ? "ok" : "skipped";
+    const syncErrors: string[] = [];
     if (lic.tenantId) {
+      try {
+        await triggerFinanceLicenseSync(db, lic.tenantId);
+      } catch (err) {
+        financeSync = "failed";
+        syncErrors.push(
+          `finance: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      try {
+        await suspendPosOrgForLicense(db, lic.tenantId, body.reason ?? "license_suspended");
+      } catch (err) {
+        posSync = "failed";
+        syncErrors.push(`pos: ${err instanceof Error ? err.message : String(err)}`);
+      }
       void import("./notification-helpers.js").then(({ notifyLicenseForTenant }) => {
         notifyLicenseForTenant(db, {
           tenantId: lic.tenantId!,
@@ -1693,11 +1739,20 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           body: body.reason?.trim() || "License has been suspended.",
         });
       });
-      void suspendPosOrgForLicense(db, lic.tenantId, body.reason ?? "license_suspended").catch(
-        () => undefined,
+    }
+    const strict = process.env.LICENSE_SYNC_STRICT === "1";
+    if (strict && syncErrors.length > 0) {
+      return c.json(
+        { error: "license_sync_failed", financeSync, posSync, errors: syncErrors },
+        502,
       );
     }
-    return c.json({ suspended: true });
+    return c.json({
+      suspended: true,
+      financeSync,
+      posSync,
+      ...(syncErrors.length ? { errors: syncErrors } : {}),
+    });
   });
 
   app.post("/licenses/:licenseId/reactivate", async (c) => {

@@ -15,6 +15,7 @@ export type Owner = {
   email: string;
   name: string;
   role: Role;
+  roleName?: string | null;
   hasPassword?: boolean;
   mfaEnabled: boolean;
   createdAt: string;
@@ -39,7 +40,7 @@ export function useOwnersPage() {
 
   const inviteForm = useForm<InviteOwnerValues>({
     resolver: zodResolver(inviteOwnerSchema),
-    defaultValues: { email: "", name: "", role: ROLE.READ_ONLY },
+    defaultValues: { email: "", name: "", roleId: undefined, role: ROLE.READ_ONLY },
   });
 
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
@@ -79,6 +80,7 @@ export function useOwnersPage() {
         email: o.email,
         name: o.name,
         role: o.role,
+        roleName: o.roleName ?? null,
         hasPassword: o.hasPassword,
         mfaEnabled: o.mfaEnabled ?? false,
         createdAt: o.createdAt,
@@ -106,7 +108,7 @@ export function useOwnersPage() {
         body: JSON.stringify({
           email: values.email,
           name: values.name,
-          role: values.role,
+          ...(values.roleId ? { roleId: values.roleId } : { role: values.role ?? ROLE.READ_ONLY }),
         }),
       });
       const data = (await res.json()) as {

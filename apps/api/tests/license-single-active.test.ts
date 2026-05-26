@@ -158,6 +158,7 @@ describe("single active license enforcement", () => {
         product: "platform",
         planSlug: "starter",
         tenantId,
+        isPerpetual: true,
       }),
     });
     const body = await res.json();

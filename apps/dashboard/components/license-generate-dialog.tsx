@@ -232,6 +232,21 @@ export default function LicenseGenerateDialog({
             onSubmit={(e) => void onSubmit(e)}
             noValidate
           >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  form.setValue("product", "platform");
+                  form.setValue("modules", sortModules(["accounting", "pos"]));
+                  form.setValue("term", "fixed");
+                  form.setValue("expiresAt", defaultExpiresAt());
+                }}
+              >
+                Preset: Platform + Accounting
+              </Button>
+            </div>
             <FormField
               control={form.control}
               name="product"

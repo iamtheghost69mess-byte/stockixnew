@@ -20,16 +20,20 @@ export const tenantProfileSchema = z.object({
 });
 export type TenantProfileValues = z.infer<typeof tenantProfileSchema>;
 
-export const inviteOwnerSchema = z.object({
-  email: z.string().email("Must be a valid email address"),
-  name: z
-    .string()
-    .min(2, "Name must be at least 2 characters")
-    .max(100, "Name must be at most 100 characters"),
-  role: z.enum(ROLES, {
-    required_error: "Please select a role",
-  }),
-});
+export const inviteOwnerSchema = z
+  .object({
+    email: z.string().email("Must be a valid email address"),
+    name: z
+      .string()
+      .min(2, "Name must be at least 2 characters")
+      .max(100, "Name must be at most 100 characters"),
+    roleId: z.string().uuid().optional(),
+    role: z.enum(ROLES).optional(),
+  })
+  .refine((data) => Boolean(data.roleId || data.role), {
+    message: "Please select a role",
+    path: ["roleId"],
+  });
 export type InviteOwnerValues = z.infer<typeof inviteOwnerSchema>;
 
 /**

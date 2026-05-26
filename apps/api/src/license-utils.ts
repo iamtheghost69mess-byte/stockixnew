@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { generateStxiLicenseKey } from "@repo/shared/stxi-license-key";
 import { apiConfig } from "@repo/config";
 import { licenseHistory, licenses, plans } from "@repo/db/schema";
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
@@ -290,6 +291,32 @@ export function generateLicenseKey(): string {
     raw += CHARSET[b! % CHARSET.length];
   }
   return `STKX-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+export function generateLicenseKeyForTenant(opts: {
+  tenantId: string;
+  locationId?: string | null;
+  signingSecret: string;
+  modules: LicenseModuleId[];
+}): { licenseKey: string; keyFormat: "stkx" | "stxi"; scopedLocationId: string | null } {
+  const needsLocation =
+    opts.modules.includes("pos") || opts.modules.includes("pms");
+  if (opts.locationId && needsLocation) {
+    return {
+      licenseKey: generateStxiLicenseKey({
+        tenantId: opts.tenantId,
+        locationId: opts.locationId,
+        secret: opts.signingSecret,
+      }),
+      keyFormat: "stxi",
+      scopedLocationId: opts.locationId,
+    };
+  }
+  return {
+    licenseKey: generateLicenseKey(),
+    keyFormat: "stkx",
+    scopedLocationId: null,
+  };
 }
 
 export type OfflineTokenPayload = {

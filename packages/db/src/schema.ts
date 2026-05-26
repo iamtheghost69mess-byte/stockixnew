@@ -376,6 +376,10 @@ export const licenses = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     licenseKey: text("license_key").notNull(),
+    /** `stkx` legacy random keys; `stxi` tenant+location+checksum keys. */
+    keyFormat: text("key_format").notNull().default("stkx"),
+    /** POS location ObjectId string when key is location-scoped (STXI). */
+    scopedLocationId: text("scoped_location_id"),
     product: text("product").notNull().default("platform"),
     /** JSON array of product modules this license grants. */
     modules: text("modules").notNull().default('["accounting"]'),

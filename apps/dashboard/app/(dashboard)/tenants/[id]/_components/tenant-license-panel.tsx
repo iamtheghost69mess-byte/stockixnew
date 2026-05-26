@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useHasPermission } from "@/hooks/use-permissions";
 import { format } from "date-fns";
 import { Copy, History } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
@@ -62,6 +63,10 @@ export function TenantLicensePanel({
   const [licenseHistory, setLicenseHistory] = useState<LicenseRow[]>([]);
   const [licenseHistoryLoading, setLicenseHistoryLoading] = useState(false);
   const [licenseHistoryOpen, setLicenseHistoryOpen] = useState(false);
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [reactivateOpen, setReactivateOpen] = useState(false);
+  const canSuspend = useHasPermission("licenses.suspend");
 
   const loadLicense = async () => {
     setLicenseLoading(true);
@@ -230,10 +235,22 @@ export function TenantLicensePanel({
                     <Button variant="outline" size="sm" onClick={() => setExtendLicenseOpen(true)}>
                       Extend
                     </Button>
+                    {canSuspend ? (
+                      <Button variant="outline" size="sm" onClick={() => setSuspendOpen(true)}>
+                        Suspend
+                      </Button>
+                    ) : null}
                     <Button variant="outline" size="sm" onClick={() => setRevokeLicenseOpen(true)}>
                       Revoke
                     </Button>
                   </>
+                ) : null}
+                {canSuspend &&
+                tenantLicense &&
+                (tenantLicense.status === "suspended" || tenantLicense.status === "expired") ? (
+                  <Button variant="outline" size="sm" onClick={() => setReactivateOpen(true)}>
+                    Reactivate
+                  </Button>
                 ) : null}
               </div>
               <div className="border-t pt-4">
@@ -417,6 +434,89 @@ export function TenantLicensePanel({
               }}
             >
               Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={suspendOpen} onOpenChange={setSuspendOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend license</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="tenant-suspend-reason">Reason (optional)</Label>
+            <Input
+              id="tenant-suspend-reason"
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSuspendOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!tenantLicense) return;
+                void (async () => {
+                  const res = await fetch(`/api/licenses/${tenantLicense.id}/suspend`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reason: suspendReason || undefined }),
+                  });
+                  const body = await readJson(res);
+                  if (!res.ok) {
+                    toast.error(formatApiError(body, "Suspend failed"));
+                    return;
+                  }
+                  const data = body as { errors?: string[]; financeSync?: string; posSync?: string };
+                  if (data.errors?.length) {
+                    toast.warning(`License suspended with sync warnings: ${data.errors.join("; ")}`);
+                  } else {
+                    toast.success("License suspended");
+                  }
+                  setSuspendOpen(false);
+                  setSuspendReason("");
+                  void loadLicense();
+                })();
+              }}
+            >
+              Suspend
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reactivateOpen} onOpenChange={setReactivateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reactivate license</DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReactivateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!tenantLicense) return;
+                void (async () => {
+                  const res = await fetch(`/api/licenses/${tenantLicense.id}/reactivate`, {
+                    method: "POST",
+                  });
+                  const body = await readJson(res);
+                  if (!res.ok) {
+                    toast.error(formatApiError(body, "Reactivate failed"));
+                    return;
+                  }
+                  toast.success("License reactivated");
+                  setReactivateOpen(false);
+                  void loadLicense();
+                })();
+              }}
+            >
+              Reactivate
             </Button>
           </DialogFooter>
         </DialogContent>
