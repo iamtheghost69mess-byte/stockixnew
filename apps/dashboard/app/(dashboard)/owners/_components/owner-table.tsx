@@ -245,6 +245,11 @@ export function OwnerTable({
                       >
                         {o.hasPassword ? "Active" : "Pending invite"}
                       </Badge>
+                      {!o.hasPassword && o.inviteTokenExpiresAt ? (
+                        <p className="text-[10px] text-muted-foreground">
+                          Expires {formatDate(o.inviteTokenExpiresAt)}
+                        </p>
+                      ) : null}
                       <TooltipProvider delay={200}>
                         <Tooltip>
                           <TooltipTrigger

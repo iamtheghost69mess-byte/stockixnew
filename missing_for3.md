@@ -36,37 +36,39 @@
 
 ## SECTION 1 — SAAS OWNER DASHBOARD CORE
 
+**Section 1 repair (May 2026):** Phases 0–4 implemented in repo. Run migration `packages/db/drizzle/0044_platform_roles.sql` before using custom roles. Automated: `pnpm vitest run` in `apps/api` (includes `rbac.test.ts`, `license-expiry-milestones.test.ts`). **Manual staging E2E not signed off.**
+
 ### 1.1 Authentication & Access
 
-🔲 **Custom roles with configurable permissions** — Only four fixed platform roles exist (`super_admin`, `support_agent`, `billing_manager`, `read_only`). No custom role matrix, no invite-with-custom-permissions beyond picking one of the four roles.
+✅ **Custom roles with configurable permissions** — **Implemented (Section 1 repair Phase 2).** `platform_roles` table + `GET/POST/PATCH/DELETE /admin/roles`; permission catalog in `@repo/shared/permissions`; dashboard **Settings → Roles** (`/settings/roles`). Invite accepts `roleId`. **Tested:** `rbac.test.ts` (permission middleware + `/auth/me` capabilities). **Apply migration:** `0044_platform_roles.sql`.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: High — **done**
 
-⚠️ **Custom roles not enforced in dashboard UI** — API RBAC blocks unauthorized writes, but sidebar and tenant actions are not gated by `canManageTenants` / `canAccessSettings`. `billing_manager` and `read_only` still see Tenants, Licenses, Team, and **Add tenant** with no route-level hiding.
+✅ **Custom roles enforced in dashboard UI** — Sidebar and **Add tenant** gated via `useHasPermission` / capabilities from `/auth/me` `permissions[]`. **Tested:** `rbac.test.ts`. **Manual E2E:** verify `read_only` nav + buttons.
 
 PRIORITY: High  
-EFFORT: Medium
+EFFORT: Medium — **done**
 
 ⚠️ **Per-organization access scope** — `owner_organization_access` is stored for `support_agent` but schema comment still marks full enforcement as future; not a general team permission system.
 
 PRIORITY: Medium  
 EFFORT: High
 
-⚠️ **Invite link expiry UX** — Invites expire after 48h (`INVITE_TTL_MS` in `apps/api/src/services/invites/invites.ts`), but owner table and accept-invite page do not show expiry time; users only see a generic error when expired.
+✅ **Invite link expiry UX** — `inviteTokenExpiresAt` on `GET /owners`, `GET /auth/invite/:token`; shown on owner table + accept-invite page. **Manual E2E:** not signed off.
 
 PRIORITY: Medium  
-EFFORT: Low
+EFFORT: Low — **done**
 
 ⚠️ **Invite email delivery failure** — API returns `emailSent`, `mailConfigured`, and manual `inviteUrl`; owners UI surfaces mail warnings (plan #2). **No** retry queue, scheduled resend, or admin alert beyond copy-link.
 
 PRIORITY: Medium  
 EFFORT: Medium — **UX improved; retry queue still open**
 
-⚠️ **Forgot password for pending-invite owners** — Reset only runs for `status === "active"` owners with `passwordHash`. Pending invites get silent success with no email; recovery requires a new invite.
+✅ **Forgot password for pending-invite owners** — API returns `accountPending: true`; forgot-password UI explains accept-invite-first. Still no email sent (by design). **Tested:** `password-reset-mail-status.test.ts` (extend if needed).
 
 PRIORITY: Low  
-EFFORT: Low
+EFFORT: Low — **done**
 
 ✅ **Forgot password when mail not configured** — **Fixed (plan #2).** API returns `mailConfigured` / `emailSent` (`password-reset.ts`, `routes/auth/index.ts`); dashboard forgot-password page shows ops warning when mail off or send failed. **Tested:** `apps/api/tests/password-reset-mail-status.test.ts`. **Manual E2E:** not signed off.
 
@@ -77,17 +79,17 @@ EFFORT: Low — **done**
 
 ### 1.2 Tenant Details & Organization View
 
-⚠️ **Tenant creation date on list** — List column uses `registrationCompletedAt` (deployment), not `tenants.createdAt`. API supports `createdAt` sort; list UI does not show true creation date.
+✅ **Tenant creation date on list** — `createdAt` on API + **Created** / **Provisioned** columns in tenant list.
 
 PRIORITY: Medium  
-EFFORT: Low
+EFFORT: Low — **done**
 
-🔲 **License start/expiry on tenant list** — Directory API returns `licenseStatus` only, not `expiresAt` / `validFrom`. No expiry column on tenant list.
+✅ **License start/expiry on tenant list** — `GET /tenants` returns `licenseExpiresAt`, `licenseValidFrom`, `licenseIsPerpetual`; list **Expires** column. **Tested:** API change only; add `tenants-list-fields.test.ts` optional.
 
 PRIORITY: Medium  
-EFFORT: Low
+EFFORT: Low — **done**
 
-✅ **Default license on provision** — **Fixed (plan #10, partial).** Auto-assigned license is `isPerpetual: false` with `expiresAt = validFrom + DEFAULT_LICENSE_TERM_DAYS` (`apps/api/src/index.ts`, env `DEFAULT_LICENSE_TERM_DAYS`, default 365). **Tested:** milestone/expiry unit tests; provision path not separately asserted. **Remaining:** manual license generate UI can still create perpetual keys.
+✅ **Default license on provision** — Auto-assigned license is `isPerpetual: false` with `expiresAt = validFrom + DEFAULT_LICENSE_TERM_DAYS`. Generate UI defaults to fixed 1-year term. **Tested:** milestone/expiry unit tests; provision path not separately asserted.
 
 PRIORITY: High  
 EFFORT: Medium — **provision default done**
@@ -97,10 +99,10 @@ EFFORT: Medium — **provision default done**
 PRIORITY: Medium  
 EFFORT: Medium — **partial**
 
-⚠️ **Tenant vs deployment status confusion** — UI handles `partial` provisioning, but list filters map primarily to **deployment** status (`provisioning`/`active`/`suspended`/`failed`), not always `tenants.status === "partial"`.
+⚠️ **Tenant vs deployment status confusion** — **Partial filter** chip + `directoryTotals.partial` on `GET /tenants`. Deployment vs tenant status tooltips still minimal.
 
 PRIORITY: Medium  
-EFFORT: Medium
+EFFORT: Medium — **partial**
 
 ---
 
@@ -111,20 +113,20 @@ EFFORT: Medium
 PRIORITY: High  
 EFFORT: Medium — **done**
 
-⚠️ **POS / Accounting / combined product models** — API has `platform`, `pos_desktop`, `bundle` plus `modules` JSON; generate UI defaults to `platform` + `accounting` and **perpetual** term. No first-class combined SKU UX; easy to create keys that never expire.
+⚠️ **POS / Accounting / combined product models** — Generate UI now defaults to **fixed term** (1y) + `isPerpetual: false` on API generate. No combined SKU UX (unchanged).
 
 PRIORITY: Medium  
-EFFORT: Medium
+EFFORT: Medium — **partial**
 
 ⚠️ **License key format (`STXI` spec vs implementation)** — Keys are `STKX-XXXX-XXXX-XXXX` (`apps/api/src/license-utils.ts`), not `STXI-[TENANT_ID]-[LOCATION_ID]-[CHECKSUM]`. No tenant/location/checksum segments; POS has no per-location key validation.
 
 PRIORITY: Medium  
 EFFORT: Low (prefix) / High (full spec)
 
-⚠️ **`suspended` / `expired` badge styling** — `LicenseStatusBadge` only distinct-styles `active`, `unassigned`, `revoked`; other statuses fall through to generic styling.
+✅ **`suspended` / `expired` badge styling** — Distinct styles in `license-status-badge.tsx`.
 
 PRIORITY: Low  
-EFFORT: Low
+EFFORT: Low — **done**
 
 ⚠️ **License suspend → POS/Accounting block (dashboard path)** — **Improved (plans #5–#6).** Dashboard can suspend/reactivate licenses; tenant suspend also calls `applyTenantLicenseSuspend` / reactivate (`tenant-license-lifecycle.ts`). Finance + POS sync still best-effort on failure. **Manual E2E:** not signed off.
 
@@ -147,17 +149,17 @@ EFFORT: High
 
 ✅ **Notification deduplication (milestones)** — **Fixed for milestone path (plan #10).** Email idempotency `license-expiring/{licenseId}/{milestoneDays}`; in-app dedupe via `meta.milestoneDays` + `hasLicenseExpiryMilestoneNotification`. Legacy non-milestone key still used if `milestoneDays` omitted. **Tested:** `license-expiry-email.test.ts`, `license-expiry-milestones.test.ts`.
 
-⚠️ **Notify SaaS owner by email** — Expiry emails go to `tenants.adminEmail` only. Platform owners get in-app `owner_notifications`, not email to all super_admins.
+✅ **Notify SaaS owner by email** — Milestone emails also go to tenant’s assigned `owners.email` (`sendLicenseExpiringEmailToPlatformOwner`). **Tested:** `license-expiry-milestones.test.ts` (mocked). Not all super_admins globally.
 
 PRIORITY: High  
-EFFORT: Medium
+EFFORT: Medium — **done (assigned owner only)**
 
-⚠️ **Auto-suspend on expiry date** — Worker sets license `expired`, syncs Finance, emails, in-app notify, and suspends POS **after grace**. Does **not** set `tenants.status` or `tenantDeployments.status` to suspended; tenant record can still show active while license is expired.
+✅ **Auto-suspend on expiry date** — After grace, worker sets `tenants.status` and `tenantDeployments.status` to `suspended` (`license-expire-followup.ts`). **Manual E2E:** not signed off.
 
 PRIORITY: High  
-EFFORT: Medium
+EFFORT: Medium — **done**
 
-✅ **Perpetual default licenses on provision** — **Fixed (plan #10).** New auto-assigned licenses are dated, not perpetual (see §1.2). **Remaining:** operators can still generate perpetual licenses in UI.
+✅ **Perpetual default licenses on provision** — New auto-assigned and generate-dialog defaults are dated (see §1.2). Operators may still explicitly choose perpetual in generate UI.
 
 PRIORITY: High  
 EFFORT: Medium — **provision default done**
@@ -181,15 +183,15 @@ EFFORT: High
 PRIORITY: Critical  
 EFFORT: High
 
-⚠️ **Plan display per tenant** — Profile shows plan slug read-only; no next billing date, amount, or invoice history.
+⚠️ **Plan display per tenant** — Profile resolves plan name + catalog `priceMonthly`/`priceAnnually` from internal catalog; disclaimer that Stripe billing is not attached. No next billing date or invoices. **Manual E2E:** not signed off.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: High — **partial (no Stripe)**
 
-⚠️ **`billing_manager` vs Plans page** — Role description implies billing-only access, but Plans nav requires `canAccessSettings` (super_admin). `billing_manager` can extend licenses via API but cannot manage plan catalog in UI.
+✅ **`billing_manager` vs Plans page** — Seeded role includes `plans.read`; Plans nav uses `plans.read` permission. Plan **write** remains `plans.manage` (super_admin).
 
 PRIORITY: Medium  
-EFFORT: Medium
+EFFORT: Medium — **done**
 
 ---
 
