@@ -21,6 +21,7 @@ import { NavMain, type NavMainItem } from "@/components/nav-main";
 import { NavSecondary, type NavSecondaryItem } from "@/components/nav-secondary";
 import { NavUser, type NavUserAccount } from "@/components/nav-user";
 import { useMe } from "@/hooks/use-me";
+import { useHasPermission } from "@/hooks/use-permissions";
 import { usePosNavVisible } from "@/hooks/use-pos-nav";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
@@ -36,6 +37,16 @@ import {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const me = useMe();
   const posNavVisible = usePosNavVisible();
+  const canReadTenants = useHasPermission("tenants.read");
+  const canReadLicenses = useHasPermission("licenses.read");
+  const canReadPlans =
+    useHasPermission("plans.read") || Boolean(me?.capabilities.canReadPlans);
+  const canManageOwners = useHasPermission("owners.manage");
+  const canAudit = useHasPermission("audit.read");
+  const canEmailLogs = useHasPermission("email_logs.read");
+  const canApiKeys = useHasPermission("api_keys.manage");
+  const canSettings = useHasPermission("settings.access");
+  const canRoles = useHasPermission("roles.manage");
 
   const navMain = React.useMemo((): NavMainItem[] => {
     const items: NavMainItem[] = [
@@ -44,16 +55,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/",
         icon: <LayoutDashboardIcon />,
       },
-      {
-        title: "Tenants",
-        url: "/tenants",
-        icon: <Building2Icon />,
-      },
-      {
-        title: "Licenses",
-        url: "/licenses",
-        icon: <KeyRoundIcon />,
-      },
+      ...(canReadTenants
+        ? [
+            {
+              title: "Tenants",
+              url: "/tenants",
+              icon: <Building2Icon />,
+            },
+          ]
+        : []),
+      ...(canReadLicenses
+        ? [
+            {
+              title: "Licenses",
+              url: "/licenses",
+              icon: <KeyRoundIcon />,
+            },
+          ]
+        : []),
       ...(posNavVisible
         ? [
             {
@@ -68,7 +87,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/pms",
         icon: <Building2Icon />,
       },
-      ...(me?.capabilities.canAccessSettings
+      ...(canReadPlans
         ? [
             {
               title: "Plans",
@@ -77,28 +96,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             },
           ]
         : []),
-      {
-        title: "Team & access",
-        url: "/owners",
-        icon: <UsersIcon />,
-      },
+      ...(canManageOwners
+        ? [
+            {
+              title: "Team & access",
+              url: "/owners",
+              icon: <UsersIcon />,
+            },
+          ]
+        : []),
     ];
-    if (me?.capabilities.canAccessSettings) {
+    if (canAudit) {
       items.push({
         title: "Audit log",
         url: "/audit-log",
         icon: <ScrollTextIcon />,
       });
+    }
+    if (canEmailLogs) {
       items.push({
         title: "Email log",
         url: "/email-logs",
         icon: <MailIcon />,
       });
+    }
+    if (canApiKeys) {
       items.push({
         title: "API keys",
         url: "/api-keys",
         icon: <KeyRoundIcon />,
       });
+    }
+    if (canRoles) {
+      items.push({
+        title: "Roles",
+        url: "/settings/roles",
+        icon: <UsersIcon />,
+      });
+    }
+    if (canSettings) {
       items.push({
         title: "Security & settings",
         url: "/settings",
@@ -106,7 +142,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       });
     }
     return items;
-  }, [me?.capabilities.canAccessSettings, posNavVisible]);
+  }, [
+    canReadTenants,
+    canReadLicenses,
+    canReadPlans,
+    canManageOwners,
+    canAudit,
+    canEmailLogs,
+    canApiKeys,
+    canRoles,
+    canSettings,
+    posNavVisible,
+  ]);
 
   const documents = React.useMemo((): NavDocumentItem[] => {
     return [

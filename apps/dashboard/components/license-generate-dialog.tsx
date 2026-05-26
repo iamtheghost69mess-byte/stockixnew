@@ -57,13 +57,19 @@ type Props = {
   onSuccess: () => void;
 };
 
+function defaultExpiresAt(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + 365);
+  return d;
+}
+
 function emptyFormValues(): GenerateLicenseValues {
   return {
     product: "platform",
     planSlug: "starter",
     modules: ["accounting"],
-    term: "perpetual",
-    expiresAt: undefined,
+    term: "fixed",
+    expiresAt: defaultExpiresAt(),
     maxActivations: 1,
     gracePeriodDays: 7,
     notes: "",

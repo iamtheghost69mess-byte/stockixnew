@@ -18,6 +18,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/email-logs": "Email log",
   "/api-keys": "API keys",
   "/settings": "Security & settings",
+  "/settings/roles": "Platform roles",
   "/pos": "POS",
   "/pos/organizations": "Organizations",
   "/pos/devices": "Devices",

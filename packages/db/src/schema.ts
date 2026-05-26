@@ -12,6 +12,28 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+/** Configurable platform roles (system + custom). */
+export const platformRoles = pgTable(
+  "platform_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    isSystem: boolean("is_system").notNull().default(false),
+    permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("platform_roles_slug_unique").on(t.slug)],
+);
+
+export type PlatformRole = typeof platformRoles.$inferSelect;
+export type NewPlatformRole = typeof platformRoles.$inferInsert;
+
 /** SaaS platform operators (Stockix owners). Auth fields come in a later phase. */
 export const owners = pgTable(
   "owners",
@@ -21,6 +43,9 @@ export const owners = pgTable(
     name: text("name").notNull(),
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("super_admin"),
+    roleId: uuid("role_id").references(() => platformRoles.id, {
+      onDelete: "restrict",
+    }),
     status: text("status").notNull().default("active"),
     sessionVersion: integer("session_version").notNull().default(1),
     failedLoginCount: integer("failed_login_count").notNull().default(0),

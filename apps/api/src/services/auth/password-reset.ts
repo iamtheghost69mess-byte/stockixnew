@@ -30,7 +30,13 @@ export async function requestOwnerPasswordReset(
     userAgent?: string | null;
   },
 ): Promise<
-  ApiServiceResult<{ ok: true; emailSent?: boolean; mailConfigured: boolean; mailStatus?: string }>
+  ApiServiceResult<{
+    ok: true;
+    emailSent?: boolean;
+    mailConfigured: boolean;
+    mailStatus?: string;
+    accountPending?: boolean;
+  }>
 > {
   const mailConfigured = isMailConfigured();
   const email = input.email.trim().toLowerCase();
@@ -46,7 +52,16 @@ export async function requestOwnerPasswordReset(
     .where(eq(owners.email, email))
     .limit(1);
 
-  if (!owner?.passwordHash || owner.status !== "active") {
+  if (!owner) {
+    return { success: true, data: { ok: true, mailConfigured } };
+  }
+  if (!owner.passwordHash) {
+    return {
+      success: true,
+      data: { ok: true, mailConfigured, accountPending: true },
+    };
+  }
+  if (owner.status !== "active") {
     return { success: true, data: { ok: true, mailConfigured } };
   }
 

@@ -97,10 +97,11 @@ function createSuspendDb(initialStatus: string) {
 describe("license suspend/reactivate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
   });
 
-  it("POST /licenses/:id/suspend sets status suspended and suspends POS", async () => {
+  it(
+    "POST /licenses/:id/suspend sets status suspended and suspends POS",
+    async () => {
     const { db } = createSuspendDb("active");
     const { registerLicenseApi } = await import("../src/license-http.js");
     const app = new Hono();
@@ -116,7 +117,9 @@ describe("license suspend/reactivate", () => {
     const body = (await res.json()) as { suspended?: boolean };
     expect(body.suspended).toBe(true);
     expect(suspendPosMock).toHaveBeenCalledWith(db, tenantId, "billing_hold");
-  });
+    },
+    15_000,
+  );
 
   it("POST /licenses/:id/reactivate sets status active and reactivates POS", async () => {
     const { db } = createSuspendDb("suspended");

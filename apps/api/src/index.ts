@@ -60,6 +60,13 @@ import { requiredApiRole } from "./middleware/rbac.js";
 import { logAudit } from "./audit.js";
 import { handleAuditLogList } from "./routes/audit-log.js";
 import { handleEmailLogsList } from "./routes/email-logs.js";
+import {
+  handlePlatformRoleCreate,
+  handlePlatformRoleDelete,
+  handlePlatformRolePatch,
+  handlePlatformRolesList,
+} from "./routes/platform-roles.js";
+import { platformRoles } from "@repo/db/schema";
 import { registerNotificationsApi } from "./routes/notifications.js";
 import {
   notifyJobLifecycle,
@@ -2115,9 +2122,16 @@ app.get("/owners", async (c) => {
       hasPassword: sql<boolean>`${owners.passwordHash} IS NOT NULL`,
       mfaEnabled: owners.mfaEnabled,
       createdAt: owners.createdAt,
+      inviteTokenExpiresAt: owners.inviteTokenExpiresAt,
     })
     .from(owners);
-  return c.json({ owners: rows });
+  return c.json({
+    owners: rows.map((r) => ({
+      ...r,
+      createdAt: r.createdAt.toISOString(),
+      inviteTokenExpiresAt: r.inviteTokenExpiresAt?.toISOString() ?? null,
+    })),
+  });
 });
 
 const ownerBody = z.object({
@@ -2180,7 +2194,8 @@ app.post("/owners", async (c) => {
 const inviteBody = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
-  role: ownerRoleSchema,
+  role: ownerRoleSchema.optional(),
+  roleId: z.string().uuid().optional(),
 });
 
 app.post("/owners/invite", async (c) => {
@@ -2197,12 +2212,35 @@ app.post("/owners/invite", async (c) => {
       400,
     );
   }
+  if (!body.roleId && !body.role) {
+    return c.json({ error: "role_or_roleId_required" }, 400);
+  }
   const existing = await db
     .select({ id: owners.id })
     .from(owners)
     .where(eq(owners.email, body.email))
     .limit(1);
   if (existing.length > 0) return c.json({ error: "email_already_exists" }, 409);
+
+  let roleSlug = body.role ?? "read_only";
+  let roleId: string | null = body.roleId ?? null;
+  if (roleId) {
+    const [pr] = await db
+      .select({ id: platformRoles.id, slug: platformRoles.slug })
+      .from(platformRoles)
+      .where(eq(platformRoles.id, roleId))
+      .limit(1);
+    if (!pr) return c.json({ error: "invalid_role_id" }, 400);
+    roleSlug = pr.slug;
+    roleId = pr.id;
+  } else {
+    const [pr] = await db
+      .select({ id: platformRoles.id })
+      .from(platformRoles)
+      .where(eq(platformRoles.slug, roleSlug))
+      .limit(1);
+    roleId = pr?.id ?? null;
+  }
 
   const inviteToken = randomUUID();
   const inviteTokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -2211,7 +2249,8 @@ app.post("/owners/invite", async (c) => {
     .values({
       email: body.email,
       name: body.name,
-      role: body.role,
+      role: roleSlug,
+      roleId,
       inviteToken,
       inviteTokenExpiresAt,
       invitedById: (c.get("actorId") as string | undefined) ?? null,
@@ -2551,6 +2590,30 @@ app.get("/admin/email-logs", async (c) => {
   return handleEmailLogsList(c, db);
 });
 
+app.get("/admin/roles", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  return handlePlatformRolesList(c, db);
+});
+
+app.post("/admin/roles", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  return handlePlatformRoleCreate(c, db);
+});
+
+app.patch("/admin/roles/:roleId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("roleId"));
+  if (!parsed.success) return c.json({ error: "roleId must be a UUID" }, 400);
+  return handlePlatformRolePatch(c, db, parsed.data);
+});
+
+app.delete("/admin/roles/:roleId", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const parsed = z.string().uuid().safeParse(c.req.param("roleId"));
+  if (!parsed.success) return c.json({ error: "roleId must be a UUID" }, 400);
+  return handlePlatformRoleDelete(c, db, parsed.data);
+});
+
 const apiKeyCreateBody = z.object({
   name: z.string().min(1).max(255),
 });
@@ -2721,6 +2784,8 @@ app.get("/tenants", async (c) => {
       conditions.push(
         or(eq(tenantDeployments.status, "provisioning"), eq(tenantDeployments.status, "pending"))!,
       );
+    } else if (statusFilter === "partial") {
+      conditions.push(eq(tenants.status, "partial"));
     } else {
       conditions.push(eq(tenantDeployments.status, statusFilter));
     }
@@ -2759,6 +2824,7 @@ app.get("/tenants", async (c) => {
       composeProject: tenantDeployments.composeProjectName,
       lastError: tenantDeployments.lastError,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
+      createdAt: tenants.createdAt,
     })
     .from(tenants)
     .leftJoin(tenantDeployments, joinDeployments)
@@ -2769,8 +2835,16 @@ app.get("/tenants", async (c) => {
 
   const dirJoin = joinDeployments;
 
-  const [countResult, rows, totalAllRow, activeRow, suspendedRow, provisioningRow, failedRow] =
-    await Promise.all([
+  const [
+    countResult,
+    rows,
+    totalAllRow,
+    activeRow,
+    suspendedRow,
+    provisioningRow,
+    failedRow,
+    partialRow,
+  ] = await Promise.all([
       countQuery,
       dataQuery,
       db
@@ -2803,25 +2877,44 @@ app.get("/tenants", async (c) => {
         .from(tenants)
         .leftJoin(tenantDeployments, dirJoin)
         .where(and(childOrgFilter, eq(tenantDeployments.status, "failed"))),
+      db
+        .select({ c: count() })
+        .from(tenants)
+        .leftJoin(tenantDeployments, dirJoin)
+        .where(and(childOrgFilter, eq(tenants.status, "partial"))),
     ]);
 
   const total = Number(countResult[0]?.c ?? 0);
   const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
 
   const tenantIds = rows.map((r) => r.tenantId);
-  const licenseStatusByTenant = new Map<string, string>();
+  type LicenseSummary = {
+    status: string;
+    expiresAt: string | null;
+    validFrom: string | null;
+    isPerpetual: boolean;
+  };
+  const licenseByTenant = new Map<string, LicenseSummary>();
   if (tenantIds.length > 0) {
     const licRows = await db
       .select({
         tenantId: licenses.tenantId,
         status: licenses.status,
+        expiresAt: licenses.expiresAt,
+        validFrom: licenses.validFrom,
+        isPerpetual: licenses.isPerpetual,
       })
       .from(licenses)
       .where(and(inArray(licenses.tenantId, tenantIds), ne(licenses.status, "unassigned")))
       .orderBy(desc(licenses.updatedAt));
     for (const lr of licRows) {
-      if (lr.tenantId && !licenseStatusByTenant.has(lr.tenantId)) {
-        licenseStatusByTenant.set(lr.tenantId, lr.status);
+      if (lr.tenantId && !licenseByTenant.has(lr.tenantId)) {
+        licenseByTenant.set(lr.tenantId, {
+          status: lr.status,
+          expiresAt: lr.expiresAt?.toISOString() ?? null,
+          validFrom: lr.validFrom?.toISOString() ?? null,
+          isPerpetual: lr.isPerpetual,
+        });
       }
     }
   }
@@ -2832,13 +2925,22 @@ app.get("/tenants", async (c) => {
     suspended: Number(suspendedRow[0]?.c ?? 0),
     provisioning: Number(provisioningRow[0]?.c ?? 0),
     failed: Number(failedRow[0]?.c ?? 0),
+    partial: Number(partialRow[0]?.c ?? 0),
   };
 
   return c.json({
-    tenants: rows.map((r) => ({
-      ...r,
-      licenseStatus: licenseStatusByTenant.get(r.tenantId) ?? null,
-    })),
+    tenants: rows.map((r) => {
+      const lic = licenseByTenant.get(r.tenantId);
+      return {
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        registrationCompletedAt: r.registrationCompletedAt?.toISOString() ?? null,
+        licenseStatus: lic?.status ?? null,
+        licenseExpiresAt: lic?.expiresAt ?? null,
+        licenseValidFrom: lic?.validFrom ?? null,
+        licenseIsPerpetual: lic?.isPerpetual ?? null,
+      };
+    }),
     total,
     page,
     pageSize,

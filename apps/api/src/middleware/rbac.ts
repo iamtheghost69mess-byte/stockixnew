@@ -2,8 +2,11 @@ import type { MiddlewareHandler } from "hono";
 import { eq } from "drizzle-orm";
 import { owners } from "@repo/db/schema";
 import { ROLE_RANK, type Role } from "@repo/shared/roles";
+import { hasAllPermissions } from "@repo/shared/permissions";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { loadOwnerAuthById } from "../permissions/resolve-owner-permissions.js";
+import { requiredPermissionsForRoute } from "../permissions/route-permissions.js";
 
 export { ROLE_RANK };
 
@@ -14,86 +17,48 @@ type RbacEnv = {
     actorId: string;
     actorRole: string;
     actorEffectiveRole?: string;
+    actorPermissions?: string[];
     requestId: string;
     requestStartMs: number;
   };
 };
 
 /**
- * Minimum role required for a dashboard / platform API route.
- * POS and public routes return null (no owner RBAC — other layers apply).
+ * @deprecated Use requiredPermissionsForRoute — kept for tests and gradual migration.
  */
 export function requiredApiRole(pathname: string, method: string): Role | null {
-  const m = method.toUpperCase();
-  if (pathname === "/health") return null;
-  if (pathname.startsWith("/auth")) return null;
-  if (pathname.startsWith("/webhooks/")) return null;
-  if (pathname.startsWith("/internal/jobs")) return null;
-  if (pathname.startsWith("/internal/organizations")) return null;
-  if (m === "POST" && pathname === "/licenses/activate") return null;
-  if (m === "POST" && pathname === "/licenses/verify-offline") return null;
-  if (m === "GET" && pathname.startsWith("/public/tenant-orgs/")) return null;
-
-  if (pathname === "/admin/orphan-check" && m === "GET") return "super_admin";
-
-  if (pathname.startsWith("/plans")) {
-    if (m === "GET") return "read_only";
+  const perms = requiredPermissionsForRoute(pathname, method);
+  if (!perms) return null;
+  if (perms.includes("*")) return "super_admin";
+  if (
+    perms.includes("owners.manage") ||
+    perms.includes("api_keys.manage") ||
+    perms.includes("roles.manage") ||
+    perms.includes("audit.read") ||
+    perms.includes("email_logs.read")
+  ) {
     return "super_admin";
   }
-
-  if (pathname === "/tenants/export.csv" && m === "GET") return "read_only";
-  if (pathname === "/licenses/export.csv" && m === "GET") return "read_only";
-  if (pathname === "/search" && m === "GET") return "read_only";
-
-  if (pathname.startsWith("/licenses")) {
-    if (m === "GET" && /^\/licenses\/sync-audit\/[^/]+$/.test(pathname)) {
-      return "super_admin";
-    }
-    if (m === "GET") return "read_only";
-    if (m === "POST" && pathname.endsWith("/extend")) return "billing_manager";
-    if (m === "POST" && pathname.endsWith("/reactivate")) return "billing_manager";
-    if (m === "POST" && pathname.endsWith("/suspend")) return "super_admin";
-    if (m === "PATCH") return "billing_manager";
-    if (pathname.endsWith("/deactivate")) return "support_agent";
+  if (perms.includes("licenses.suspend") || perms.includes("plans.manage")) {
     return "super_admin";
   }
-  if (pathname.startsWith("/fingerprints")) return "super_admin";
-  if (pathname.startsWith("/audit-log")) return "super_admin";
-  if (pathname.startsWith("/admin/email-logs")) return "super_admin";
-  if (pathname.startsWith("/api-keys")) return "super_admin";
-  if (pathname.startsWith("/owners")) {
-    if (m === "GET") return "read_only";
-    return "super_admin";
+  if (perms.includes("licenses.write") && !pathname.includes("/generate")) {
+    return "billing_manager";
   }
-  if (pathname.startsWith("/tenants")) {
-    if (/\/users(?:\/|$)/.test(pathname)) {
-      if (m === "GET") return "read_only";
-      return "support_agent";
-    }
-    if (pathname.includes("/impersonate")) return "super_admin";
-    if (pathname.includes("/pos-credentials")) return "support_agent";
-    if (pathname.includes("/finance-password")) return "support_agent";
-    if (pathname.includes("/add-module") || pathname.includes("/remove-module")) {
-      return "super_admin";
-    }
-    if (pathname.includes("/organization-access")) return "super_admin";
-    if (pathname.includes("/provision")) return "support_agent";
-    if (pathname.includes("/organizations") && m !== "GET") return "support_agent";
-    if (m === "GET") return "read_only";
-    return "super_admin";
+  if (perms.includes("licenses.write")) return "super_admin";
+  if (perms.includes("tenants.provision") || perms.includes("tenants.write")) {
+    return "support_agent";
   }
+  if (perms.includes("licenses.extend")) return "billing_manager";
   return "read_only";
 }
 
-/**
- * Creates the RBAC enforcement middleware.
- */
 export function createRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> {
   return async (c, next) => {
     const method = c.req.method.toUpperCase();
     const path = c.req.path;
-    const minRole = requiredApiRole(path, method);
-    if (!minRole) return next();
+    const required = requiredPermissionsForRoute(path, method);
+    if (!required) return next();
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
     const actorId = c.get("actorId") as string | undefined;
@@ -113,17 +78,19 @@ export function createRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> 
     if (!actor || actor.status !== "active") {
       return c.json({ error: "forbidden_actor" }, 403);
     }
-    if (!(actor.role in ROLE_RANK)) {
-      return c.json({ error: "forbidden_role" }, 403);
+
+    const auth = await loadOwnerAuthById(db, actorId);
+    if (!auth) {
+      return c.json({ error: "forbidden_actor" }, 403);
     }
-    const effectiveRole = (c.get("actorEffectiveRole") as Role | undefined) ?? (actor.role as Role);
-    if (!(effectiveRole in ROLE_RANK)) {
-      return c.json({ error: "forbidden_role" }, 403);
+
+    c.set("actorRole", auth.roleSlug);
+    c.set("actorPermissions", [...auth.permissions]);
+
+    if (!hasAllPermissions(auth.permissions, required)) {
+      return c.json({ error: "forbidden_permission" }, 403);
     }
-    const actorRank = ROLE_RANK[effectiveRole];
-    if (actorRank < ROLE_RANK[minRole]) {
-      return c.json({ error: "forbidden_role" }, 403);
-    }
+
     await next();
   };
 }
