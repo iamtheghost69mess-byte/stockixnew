@@ -24,6 +24,8 @@ const {
   getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
+  consumeProvisioningCredentials,
+  repairOrgCredentials,
   patchOrgLifecycle,
   suspendOrg,
   patchOrgLicense,
@@ -151,6 +153,16 @@ router.get(
   "/organizations/:id/provisioning-status",
   requirePlatformPermission(P.ORG_READ),
   getOrgProvisioningStatus
+);
+router.post(
+  "/organizations/:id/provisioning-credentials/consume",
+  requirePlatformPermission(P.ORG_WRITE),
+  consumeProvisioningCredentials
+);
+router.post(
+  "/organizations/:id/repair-credentials",
+  requirePlatformPermission(P.ORG_WRITE),
+  repairOrgCredentials
 );
 router.post(
   "/organizations/:id/provisioning/retry",

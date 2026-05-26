@@ -11,8 +11,10 @@ const { recordEvent } = require("../services/productEventService");
 const { bootstrapOrganization } = require("../services/orgBootstrapService");
 const {
   storeFullCredentials,
+  peekFullCredentials,
   consumeFullCredentials,
 } = require("../services/bootstrapCredentialReveal");
+const { syncDefaultCredentialsFromUsers } = require("../services/defaultCredentialsSync");
 const { isDisposableEmail, trackSignupIp, maybeOpenFraudCase } = require(
   "../services/abuseSignals"
 );
@@ -522,7 +524,7 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       provisioningSteps: org.provisioningSteps || [],
     };
     if (readyForPinLogin) {
-      const fullCredentials = await consumeFullCredentials(orgId);
+      const fullCredentials = await peekFullCredentials(orgId);
       if (fullCredentials?.length) {
         payload.fullCredentials = fullCredentials;
       }
@@ -535,7 +537,52 @@ const getOrgProvisioningStatus = async (req, res, next) => {
     next(e);
   }
 };
- 
+
+/** Rebuild masked defaultCredentials from bootstrap users (no plaintext PIN recovery). */
+const repairOrgCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const result = await syncDefaultCredentialsFromUsers(orgId);
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.credentials_repaired",
+      organization: orgId,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { syncedCount: result.syncedCount },
+    });
+    res.json({ success: true, data: result });
+  } catch (e) {
+    if (e?.status === 404) return next(createHttpError(404, e.message));
+    next(e);
+  }
+};
+
+/** Delete one-time bootstrap PINs from the reveal store after Stockix persisted them. */
+const consumeProvisioningCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId).select("_id slug").lean();
+    if (!org) return next(createHttpError(404, "Organization not found."));
+    const consumed = await consumeFullCredentials(orgId);
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.provisioning_credentials_consumed",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { hadCredentials: Array.isArray(consumed) && consumed.length > 0 },
+    });
+    res.status(204).send();
+  } catch (e) {
+    next(e);
+  }
+};
+
 /** Manually trigger or resume a failed provisioning orchestrator for an organization. */
 const retryProvisioning = async (req, res, next) => {
   try {
@@ -1266,6 +1313,8 @@ module.exports = {
   getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
+  consumeProvisioningCredentials,
+  repairOrgCredentials,
   patchOrgLifecycle,
   suspendOrg,
   patchOrgLicense,

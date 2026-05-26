@@ -174,6 +174,17 @@ export type ProvisionPosStackInput = {
 
   financeInternalPort?: number;
 
+  /** Stockix licensed modules for POS entitlements. */
+  tenantModules?: string[];
+
+  planSlug?: string;
+
+  maxUsers?: number | null;
+
+  maxLocations?: number | null;
+
+  maxOrdersPerMonth?: number | null;
+
 };
 
 
@@ -387,6 +398,14 @@ export async function provisionPosStack(
     log: opts.log,
 
     licenseExpiresAt: opts.licenseExpiresAt,
+
+    tenantModules: opts.tenantModules,
+
+    maxUsers: opts.maxUsers,
+
+    maxLocations: opts.maxLocations,
+
+    maxOrdersPerMonth: opts.maxOrdersPerMonth,
 
     posHostPort: backendPort,
 

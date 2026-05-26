@@ -84,6 +84,7 @@ async function runPosProvisionStep(params: {
   tenantId: string | undefined;
   tenantName: string;
   adminEmail: string;
+  planSlug?: string;
   financeInternalPort?: number;
   db: PostgresJsDatabase<typeof dbSchema>;
   log: (m: string) => void;
@@ -101,6 +102,8 @@ async function runPosProvisionStep(params: {
         licenseErr instanceof Error ? licenseErr.message : String(licenseErr);
       params.log(`[provision][pos] license expiry lookup failed (using default): ${msg}`);
     }
+    const planSlug = params.planSlug?.trim() || "starter";
+    const planLimits = await getPlanLimits(params.db, planSlug);
     const posResult = await provisionPosStackTracked(
       {
         slug: params.slug,
@@ -111,6 +114,9 @@ async function runPosProvisionStep(params: {
         log: params.log,
         financeInternalPort: params.financeInternalPort,
         licenseExpiresAt,
+        tenantModules: params.licensedModules,
+        planSlug,
+        maxUsers: planLimits.maxUsers,
       },
       params.trace,
     );
@@ -529,6 +535,7 @@ export async function executeProvisionRuntime(
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        planSlug: input.planSlug,
         financeInternalPort: port,
         db,
         log,
@@ -719,6 +726,7 @@ export async function executeProvisionRuntime(
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        planSlug: input.planSlug,
         financeInternalPort: port,
         db,
         log,
@@ -1398,6 +1406,7 @@ export async function executeProvisionRuntime(
       tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      planSlug: input.planSlug,
       financeInternalPort: port,
       db,
       log,
@@ -1759,6 +1768,7 @@ export async function executeAddModuleRuntime(
       tenantId: input.tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      planSlug: input.planSlug,
       financeInternalPort: financeInternalPort ?? undefined,
       db,
       log,

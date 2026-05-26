@@ -64,6 +64,17 @@ Mismatch causes STXI keys generated on the API to fail validation on POS login.
 - Milestone log line: `license_expiry_milestone_fired`.
 - If Redis is down or URL unset, milestones still run **inline** in the worker scan (degraded but functional).
 
+## POS bootstrap credentials repair
+
+When `defaultCredentials` on a POS org drifts from bootstrap users (masked rows missing or wrong counts):
+
+```bash
+curl -X POST "https://api.${ROOT_DOMAIN}/api/platform/v1/organizations/{posOrgId}/repair-credentials" \
+  -H "X-Api-Key: $POS_PLATFORM_API_KEY"
+```
+
+Or run `node services/posnew/apps/pos-backend/scripts/repairCredentials.js` (uses the same sync logic). Plaintext PINs cannot be recovered — use dashboard **Reset PIN** per role.
+
 ## Rollout checklist
 
 1. Backup Postgres (`stockix_platform`).

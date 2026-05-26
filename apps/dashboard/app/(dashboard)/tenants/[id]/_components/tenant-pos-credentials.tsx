@@ -232,6 +232,54 @@ export function TenantPosCredentials({
             <p className="text-sm text-muted-foreground">
               No staff roles found on the POS organization. Complete POS bootstrap first.
             </p>
+          ) : posCredentials.every((row) => row.masked) ? (
+            <>
+              <Alert>
+                <AlertDescription>
+                  Bootstrap PINs are not stored in plaintext after provisioning. Each role below
+                  shows a masked value — use <strong>Reset PIN</strong> to issue a new PIN you can
+                  copy once.
+                </AlertDescription>
+              </Alert>
+              <ScrollArea className="max-h-[360px] rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>PIN</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {posCredentials.map((row) => (
+                      <TableRow key={`${row.role}-${row.username}`}>
+                        <TableCell className="font-medium capitalize">{row.role}</TableCell>
+                        <TableCell className="font-mono text-xs">{row.username}</TableCell>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {row.pin || "••••••"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={posPinResettingRole === row.role}
+                            onClick={() => void resetPosPin(row.role)}
+                          >
+                            {posPinResettingRole === row.role ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Reset PIN"
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </>
           ) : (
             <ScrollArea className="max-h-[360px] rounded-md border">
               <Table>
