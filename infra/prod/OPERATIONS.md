@@ -57,12 +57,15 @@ Each provisioned POS backend reads `LICENSE_SIGNING_SECRET` from its tenant env 
 
 Mismatch causes STXI keys generated on the API to fail validation on POS login.
 
-## License expiry queue (BullMQ)
+## Control plane queues (BullMQ)
 
 - Redis service: `control-plane-redis` (internal Docker network only).
-- API logs on start: `License expiry BullMQ worker started` when `CONTROL_PLANE_REDIS_URL` is set.
-- Milestone log line: `license_expiry_milestone_fired`.
-- If Redis is down or URL unset, milestones still run **inline** in the worker scan (degraded but functional).
+- API logs on start when `CONTROL_PLANE_REDIS_URL` is set:
+  - `License expiry BullMQ worker started`
+  - `Owner invite mail BullMQ worker started`
+- License milestone log line: `license_expiry_milestone_fired`.
+- Owner invite mail log line: `owner_invite_mail_sent`; exhausted retries audit `invite.email_failed`.
+- If Redis is down or URL unset, license milestones and owner invite mail run **inline** in the API request (degraded but functional).
 
 ## POS bootstrap credentials repair
 

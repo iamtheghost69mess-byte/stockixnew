@@ -333,6 +333,15 @@ export async function bootstrapPosOrganization(
           log(`[provision][pos] org bootstrap ready orgId=${orgId}`);
           break;
         }
+        const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
+        if (fromOrg.length > 0) {
+          credentials = fromOrg;
+          bootstrapReady = true;
+          log(
+            `[provision][pos] org bootstrap ready (legacy plaintext defaultCredentials) orgId=${orgId}`,
+          );
+          break;
+        }
         if (readySince != null && Date.now() - readySince >= BOOTSTRAP_CREDENTIALS_WAIT_MS) {
           break;
         }
@@ -341,16 +350,6 @@ export async function bootstrapPosOrganization(
         readySince = null;
       }
       await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
-    }
-    if (!bootstrapReady) {
-      const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
-      if (fromOrg.length > 0) {
-        credentials = fromOrg;
-        bootstrapReady = true;
-        log(
-          `[provision][pos] org bootstrap credentials recovered from legacy org record orgId=${orgId}`,
-        );
-      }
     }
     if (!bootstrapReady) {
       throw new Error(

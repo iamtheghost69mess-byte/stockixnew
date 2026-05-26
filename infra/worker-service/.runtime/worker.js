@@ -1870,7 +1870,7 @@ var noop2 = () => {
 function Subscribe(postgres2, options) {
   const subscribers = /* @__PURE__ */ new Map(), slot = "postgresjs_" + Math.random().toString(36).slice(2), state = {};
   let connection2, stream, ended = false;
-  const sql3 = subscribe.sql = postgres2({
+  const sql4 = subscribe.sql = postgres2({
     ...options,
     transform: { column: {}, value: {}, row: {} },
     max: 1,
@@ -1886,18 +1886,18 @@ function Subscribe(postgres2, options) {
         return;
       stream = null;
       state.pid = state.secret = void 0;
-      connected(await init(sql3, slot, options.publications));
+      connected(await init(sql4, slot, options.publications));
       subscribers.forEach((event) => event.forEach(({ onsubscribe }) => onsubscribe()));
     },
     no_subscribe: true
   });
-  const end = sql3.end, close = sql3.close;
-  sql3.end = async () => {
+  const end = sql4.end, close = sql4.close;
+  sql4.end = async () => {
     ended = true;
     stream && await new Promise((r) => (stream.once("close", r), stream.end()));
     return end();
   };
-  sql3.close = async () => {
+  sql4.close = async () => {
     stream && await new Promise((r) => (stream.once("close", r), stream.end()));
     return close();
   };
@@ -1905,7 +1905,7 @@ function Subscribe(postgres2, options) {
   async function subscribe(event, fn, onsubscribe = noop2, onerror = noop2) {
     event = parseEvent(event);
     if (!connection2)
-      connection2 = init(sql3, slot, options.publications);
+      connection2 = init(sql4, slot, options.publications);
     const subscriber = { fn, onsubscribe };
     const fns = subscribers.has(event) ? subscribers.get(event).add(subscriber) : subscribers.set(event, /* @__PURE__ */ new Set([subscriber])).get(event);
     const unsubscribe = () => {
@@ -1916,7 +1916,7 @@ function Subscribe(postgres2, options) {
       connected(x);
       onsubscribe();
       stream && stream.on("error", onerror);
-      return { unsubscribe, state, sql: sql3 };
+      return { unsubscribe, state, sql: sql4 };
     });
   }
   function connected(x) {
@@ -1924,14 +1924,14 @@ function Subscribe(postgres2, options) {
     state.pid = x.state.pid;
     state.secret = x.state.secret;
   }
-  async function init(sql4, slot2, publications) {
+  async function init(sql5, slot2, publications) {
     if (!publications)
       throw new Error("Missing publication names");
-    const xs = await sql4.unsafe(
+    const xs = await sql5.unsafe(
       `CREATE_REPLICATION_SLOT ${slot2} TEMPORARY LOGICAL pgoutput NOEXPORT_SNAPSHOT`
     );
     const [x] = xs;
-    const stream2 = await sql4.unsafe(
+    const stream2 = await sql5.unsafe(
       `START_REPLICATION SLOT ${slot2} LOGICAL ${x.consistent_point} (proto_version '1', publication_names '${publications}')`
     ).writable();
     const state2 = {
@@ -1939,14 +1939,14 @@ function Subscribe(postgres2, options) {
     };
     stream2.on("data", data);
     stream2.on("error", error);
-    stream2.on("close", sql4.close);
+    stream2.on("close", sql5.close);
     return { stream: stream2, state: xs.state };
     function error(e) {
       console.error("Unexpected error during logical streaming - reconnecting", e);
     }
     function data(x2) {
       if (x2[0] === 119) {
-        parse(x2.subarray(25), state2, sql4.options.parsers, handle, options.transform);
+        parse(x2.subarray(25), state2, sql5.options.parsers, handle, options.transform);
       } else if (x2[0] === 107 && x2[17]) {
         state2.lsn = x2.subarray(1, 9);
         pong();
@@ -2078,22 +2078,22 @@ function parseEvent(x) {
 
 // ../../node_modules/.pnpm/postgres@3.4.9/node_modules/postgres/src/large.js
 import Stream2 from "stream";
-function largeObject(sql3, oid, mode = 131072 | 262144) {
+function largeObject(sql4, oid, mode = 131072 | 262144) {
   return new Promise(async (resolve, reject) => {
-    await sql3.begin(async (sql4) => {
+    await sql4.begin(async (sql5) => {
       let finish;
-      !oid && ([{ oid }] = await sql4`select lo_creat(-1) as oid`);
-      const [{ fd }] = await sql4`select lo_open(${oid}, ${mode}) as fd`;
+      !oid && ([{ oid }] = await sql5`select lo_creat(-1) as oid`);
+      const [{ fd }] = await sql5`select lo_open(${oid}, ${mode}) as fd`;
       const lo = {
         writable,
         readable,
-        close: () => sql4`select lo_close(${fd})`.then(finish),
-        tell: () => sql4`select lo_tell64(${fd})`,
-        read: (x) => sql4`select loread(${fd}, ${x}) as data`,
-        write: (x) => sql4`select lowrite(${fd}, ${x})`,
-        truncate: (x) => sql4`select lo_truncate64(${fd}, ${x})`,
-        seek: (x, whence = 0) => sql4`select lo_lseek64(${fd}, ${x}, ${whence})`,
-        size: () => sql4`
+        close: () => sql5`select lo_close(${fd})`.then(finish),
+        tell: () => sql5`select lo_tell64(${fd})`,
+        read: (x) => sql5`select loread(${fd}, ${x}) as data`,
+        write: (x) => sql5`select lowrite(${fd}, ${x})`,
+        truncate: (x) => sql5`select lo_truncate64(${fd}, ${x})`,
+        seek: (x, whence = 0) => sql5`select lo_lseek64(${fd}, ${x}, ${whence})`,
+        size: () => sql5`
           select
             lo_lseek64(${fd}, location, 0) as position,
             seek.size
@@ -2168,12 +2168,12 @@ function Postgres(a, b2) {
   let ending = false;
   const queries = queue_default(), connecting = queue_default(), reserved = queue_default(), closed = queue_default(), ended = queue_default(), open = queue_default(), busy = queue_default(), full = queue_default(), queues = { connecting, reserved, closed, ended, open, busy, full };
   const connections = [...Array(options.max)].map(() => connection_default(options, queues, { onopen, onend, onclose }));
-  const sql3 = Sql(handler);
-  Object.assign(sql3, {
+  const sql4 = Sql(handler);
+  Object.assign(sql4, {
     get parameters() {
       return options.parameters;
     },
-    largeObject: largeObject.bind(null, sql3),
+    largeObject: largeObject.bind(null, sql4),
     subscribe,
     CLOSE,
     END: CLOSE,
@@ -2185,14 +2185,14 @@ function Postgres(a, b2) {
     close,
     end
   });
-  return sql3;
+  return sql4;
   function Sql(handler2) {
     handler2.debug = options.debug;
     Object.entries(options.types).reduce((acc, [name, type]) => {
       acc[name] = (x) => new Parameter(x, type.to);
       return acc;
     }, typed);
-    Object.assign(sql4, {
+    Object.assign(sql5, {
       types: typed,
       typed,
       unsafe,
@@ -2201,11 +2201,11 @@ function Postgres(a, b2) {
       json,
       file
     });
-    return sql4;
+    return sql5;
     function typed(value, type) {
       return new Parameter(value, type);
     }
-    function sql4(strings, ...args) {
+    function sql5(strings, ...args) {
       const query = strings && Array.isArray(strings.raw) ? new Query(strings, args, handler2, cancel) : typeof strings === "string" && !args.length ? new Identifier(options.transform.column.to ? options.transform.column.to(strings) : strings) : new Builder(strings, args);
       return query;
     }
@@ -2236,7 +2236,7 @@ function Postgres(a, b2) {
   }
   async function listen(name, fn, onlisten) {
     const listener = { fn, onlisten };
-    const sql4 = listen.sql || (listen.sql = Postgres({
+    const sql5 = listen.sql || (listen.sql = Postgres({
       ...options,
       max: 1,
       idle_timeout: null,
@@ -2260,7 +2260,7 @@ function Postgres(a, b2) {
       listener.onlisten && listener.onlisten();
       return { state: result2.state, unlisten };
     }
-    channels[name] = { result: sql4`listen ${sql4.unsafe('"' + name.replace(/"/g, '""') + '"')}`, listeners: [listener] };
+    channels[name] = { result: sql5`listen ${sql5.unsafe('"' + name.replace(/"/g, '""') + '"')}`, listeners: [listener] };
     const result = await channels[name].result;
     listener.onlisten && listener.onlisten();
     return { state: result.state, unlisten };
@@ -2271,30 +2271,30 @@ function Postgres(a, b2) {
       if (channels[name].listeners.length)
         return;
       delete channels[name];
-      return sql4`unlisten ${sql4.unsafe('"' + name.replace(/"/g, '""') + '"')}`;
+      return sql5`unlisten ${sql5.unsafe('"' + name.replace(/"/g, '""') + '"')}`;
     }
   }
   async function notify(channel, payload) {
-    return await sql3`select pg_notify(${channel}, ${"" + payload})`;
+    return await sql4`select pg_notify(${channel}, ${"" + payload})`;
   }
   async function reserve() {
-    const queue = queue_default();
+    const queue2 = queue_default();
     const c = open.length ? open.shift() : await new Promise((resolve, reject) => {
       const query = { reserve: resolve, reject };
       queries.push(query);
       closed.length && connect(closed.shift(), query);
     });
     move(c, reserved);
-    c.reserved = () => queue.length ? c.execute(queue.shift()) : move(c, reserved);
+    c.reserved = () => queue2.length ? c.execute(queue2.shift()) : move(c, reserved);
     c.reserved.release = true;
-    const sql4 = Sql(handler2);
-    sql4.release = () => {
+    const sql5 = Sql(handler2);
+    sql5.release = () => {
       c.reserved = null;
       onopen(c);
     };
-    return sql4;
+    return sql5;
     function handler2(q) {
-      c.queue === full ? queue.push(q) : c.execute(q) || move(c, full);
+      c.queue === full ? queue2.push(q) : c.execute(q) || move(c, full);
     }
   }
   async function begin(options2, fn) {
@@ -2302,7 +2302,7 @@ function Postgres(a, b2) {
     const queries2 = queue_default();
     let savepoints = 0, connection2, prepare = null;
     try {
-      await sql3.unsafe("begin " + options2.replace(/[^a-z ]/ig, ""), [], { onexecute }).execute();
+      await sql4.unsafe("begin " + options2.replace(/[^a-z ]/ig, ""), [], { onexecute }).execute();
       return await Promise.race([
         scope(connection2, fn),
         new Promise((_, reject) => connection2.onclose = reject)
@@ -2311,29 +2311,29 @@ function Postgres(a, b2) {
       throw error;
     }
     async function scope(c, fn2, name) {
-      const sql4 = Sql(handler2);
-      sql4.savepoint = savepoint;
-      sql4.prepare = (x) => prepare = x.replace(/[^a-z0-9$-_. ]/gi);
+      const sql5 = Sql(handler2);
+      sql5.savepoint = savepoint;
+      sql5.prepare = (x) => prepare = x.replace(/[^a-z0-9$-_. ]/gi);
       let uncaughtError, result;
-      name && await sql4`savepoint ${sql4(name)}`;
+      name && await sql5`savepoint ${sql5(name)}`;
       try {
         result = await new Promise((resolve, reject) => {
-          const x = fn2(sql4);
+          const x = fn2(sql5);
           Promise.resolve(Array.isArray(x) ? Promise.all(x) : x).then(resolve, reject);
         });
         if (uncaughtError)
           throw uncaughtError;
       } catch (e) {
-        await (name ? sql4`rollback to ${sql4(name)}` : sql4`rollback`);
+        await (name ? sql5`rollback to ${sql5(name)}` : sql5`rollback`);
         throw e instanceof PostgresError && e.code === "25P02" && uncaughtError || e;
       }
       if (!name) {
-        prepare ? await sql4`prepare transaction '${sql4.unsafe(prepare)}'` : await sql4`commit`;
+        prepare ? await sql5`prepare transaction '${sql5.unsafe(prepare)}'` : await sql5`commit`;
       }
       return result;
       function savepoint(name2, fn3) {
         if (name2 && Array.isArray(name2.raw))
-          return savepoint((sql5) => sql5.apply(sql5, arguments));
+          return savepoint((sql6) => sql6.apply(sql6, arguments));
         arguments.length === 1 && (fn3 = name2, name2 = null);
         return scope(c, fn3, "s" + savepoints++ + (name2 ? "_" + name2 : ""));
       }
@@ -2348,11 +2348,11 @@ function Postgres(a, b2) {
       c.reserved = () => queries2.length ? c.execute(queries2.shift()) : move(c, reserved);
     }
   }
-  function move(c, queue) {
+  function move(c, queue2) {
     c.queue.remove(c);
-    queue.push(c);
-    c.queue = queue;
-    queue === open ? c.idleTimer.start() : c.idleTimer.cancel();
+    queue2.push(c);
+    c.queue = queue2;
+    queue2 === open ? c.idleTimer.start() : c.idleTimer.cancel();
     return c;
   }
   function json(x) {
@@ -2561,6 +2561,7 @@ __export(schema_exports, {
   ownerOrganizationAccess: () => ownerOrganizationAccess,
   owners: () => owners,
   plans: () => plans,
+  platformRoles: () => platformRoles,
   pmsBookings: () => pmsBookings,
   pmsCalendarEvents: () => pmsCalendarEvents,
   pmsCleanerAssignments: () => pmsCleanerAssignments,
@@ -2597,6 +2598,19 @@ import {
   uuid,
   varchar
 } from "drizzle-orm/pg-core";
+var platformRoles = pgTable(
+  "platform_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    isSystem: boolean("is_system").notNull().default(false),
+    permissions: jsonb("permissions").$type().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => [uniqueIndex("platform_roles_slug_unique").on(t.slug)]
+);
 var owners = pgTable(
   "owners",
   {
@@ -2605,6 +2619,9 @@ var owners = pgTable(
     name: text("name").notNull(),
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("super_admin"),
+    roleId: uuid("role_id").references(() => platformRoles.id, {
+      onDelete: "restrict"
+    }),
     status: text("status").notNull().default("active"),
     sessionVersion: integer("session_version").notNull().default(1),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
@@ -2868,6 +2885,10 @@ var licenses = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     licenseKey: text("license_key").notNull(),
+    /** `stkx` legacy random keys; `stxi` tenant+location+checksum keys. */
+    keyFormat: text("key_format").notNull().default("stkx"),
+    /** POS location ObjectId string when key is location-scoped (STXI). */
+    scopedLocationId: text("scoped_location_id"),
     product: text("product").notNull().default("platform"),
     /** JSON array of product modules this license grants. */
     modules: text("modules").notNull().default('["accounting"]'),
@@ -3483,13 +3504,29 @@ function createDb(connectionString) {
 }
 
 // ../../infra/worker-service/src/worker.ts
-import { and as and4, eq as eq15, sql as sql2, isNotNull as isNotNull2, lte as lte2 } from "drizzle-orm";
+import { and as and4, eq as eq15, sql as sql3, isNotNull as isNotNull2, lte as lte2 } from "drizzle-orm";
 
 // src/license-expire-followup.ts
 import { and as and3, eq as eq9, gte as gte2, isNotNull, lte } from "drizzle-orm";
 
+// src/license-constants.ts
+var DEFAULT_GRACE_PERIOD_DAYS = 7;
+var DEFAULT_MAX_USERS = 999;
+var LICENSE_EXPIRY_MILESTONE_DAYS = [90, 60, 30, 15, 7, 3, 2, 1];
+function readDefaultLicenseTermDays() {
+  const raw = process.env.DEFAULT_LICENSE_TERM_DAYS?.trim();
+  const n = raw ? Number(raw) : 365;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 365;
+}
+var DEFAULT_LICENSE_TERM_DAYS = readDefaultLicenseTermDays();
+
 // src/license-utils.ts
 import { randomBytes } from "crypto";
+
+// ../../packages/shared/src/stxi-license-key.ts
+import { createHmac } from "crypto";
+
+// src/license-utils.ts
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 var LICENSE_MODULE_IDS = ["accounting", "pos", "pms", "chat"];
 function parseLicenseModulesJson(raw) {
@@ -3581,12 +3618,6 @@ import { eq as eq4 } from "drizzle-orm";
 
 // src/finance-license.client.ts
 import { eq as eq2 } from "drizzle-orm";
-
-// src/license-constants.ts
-var DEFAULT_GRACE_PERIOD_DAYS = 7;
-var DEFAULT_MAX_USERS = 999;
-
-// src/finance-license.client.ts
 var FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS = DEFAULT_MAX_USERS;
 function resolveFinanceLicenseLimitFields(license, planLimits) {
   let maxOrganizations = license?.maxOrganizations ?? planLimits.maxOrganizations;
@@ -3952,6 +3983,7 @@ async function sendLicenseExpiringEmail(opts) {
     )
   );
   const expiryDay = opts.expiresAt.toISOString().split("T")[0];
+  const idempotencyKey = opts.idempotencyKey ?? (opts.licenseId != null && opts.milestoneDays != null ? `license-expiring/${opts.licenseId}/${opts.milestoneDays}` : `license-expiring/${opts.tenantId}/${expiryDay}`);
   const result = await sendMail({
     to: opts.to,
     subject: "Your Stockix license expires soon",
@@ -3960,7 +3992,7 @@ async function sendLicenseExpiringEmail(opts) {
       expiresAt: opts.expiresAt,
       daysRemaining
     }),
-    idempotencyKey: `license-expiring/${opts.tenantId}/${expiryDay}`,
+    idempotencyKey,
     templateKey: "license-expiring",
     tenantId: opts.tenantId
   });
@@ -4052,11 +4084,14 @@ async function sendLicenseExpiringEmailForTenant(db, tenantId, opts) {
       console.warn("[sendLicenseExpiringEmail] No admin email for tenant", tenantId);
       return;
     }
+    const licenseIdForMail = opts.licenseId;
     const result = await sendLicenseExpiringEmail({
       to: tenant.adminEmail,
       tenantName: tenant.name,
       tenantId,
-      expiresAt: opts.expiresAt
+      expiresAt: opts.expiresAt,
+      licenseId: licenseIdForMail,
+      milestoneDays: opts.milestoneDays
     });
     const license = opts.licenseId != null ? (await db.select({ id: licenses.id }).from(licenses).where(eq3(licenses.id, opts.licenseId)).limit(1))[0] : await getActiveLicenseForTenant(db, tenantId);
     if (license?.id && mailSendSucceeded(result)) {
@@ -4065,13 +4100,37 @@ async function sendLicenseExpiringEmailForTenant(db, tenantId, opts) {
         action: "expiry_warning_sent",
         newValues: {
           to: tenant.adminEmail,
-          expiresAt: opts.expiresAt.toISOString()
+          expiresAt: opts.expiresAt.toISOString(),
+          ...opts.milestoneDays != null ? { milestoneDays: opts.milestoneDays } : {}
         }
       });
     }
   } catch (err) {
     console.error(
       "[sendLicenseExpiringEmail] Failed for tenant",
+      tenantId,
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+async function sendLicenseExpiringEmailToPlatformOwner(db, tenantId, opts) {
+  try {
+    const [tenant] = await db.select({ name: tenants.name, ownerId: tenants.ownerId }).from(tenants).where(eq3(tenants.id, tenantId)).limit(1);
+    if (!tenant?.ownerId) return;
+    const [owner] = await db.select({ email: owners.email }).from(owners).where(eq3(owners.id, tenant.ownerId)).limit(1);
+    if (!owner?.email) return;
+    await sendLicenseExpiringEmail({
+      to: owner.email,
+      tenantName: tenant.name,
+      tenantId,
+      expiresAt: opts.expiresAt,
+      licenseId: opts.licenseId,
+      milestoneDays: opts.milestoneDays,
+      idempotencyKey: `license-expiring-owner/${opts.licenseId}/${opts.milestoneDays}`
+    });
+  } catch (err) {
+    console.error(
+      "[sendLicenseExpiringEmailToPlatformOwner] Failed",
       tenantId,
       err instanceof Error ? err.message : err
     );
@@ -4213,7 +4272,7 @@ async function suspendPosOrgForLicense(db, tenantId, reason, log) {
 }
 
 // src/notification-service.ts
-import { and as and2, asc, count, desc as desc2, eq as eq6, gte, isNull as isNull2, lt } from "drizzle-orm";
+import { and as and2, asc, count, desc as desc2, eq as eq6, gte, isNull as isNull2, lt, sql as sql2 } from "drizzle-orm";
 async function createNotification(db, input) {
   const [notification] = await db.insert(ownerNotifications).values({
     ownerId: input.ownerId,
@@ -4238,20 +4297,14 @@ function safeCreateNotification(db, input) {
     );
   });
 }
-async function hasRecentNotification(db, opts) {
-  const withinHours = opts.withinHours ?? 24;
-  const since = new Date(Date.now() - withinHours * 60 * 60 * 1e3);
-  const conditions = [
-    eq6(ownerNotifications.type, opts.type),
-    gte(ownerNotifications.createdAt, since)
-  ];
-  if (opts.licenseId) {
-    conditions.push(eq6(ownerNotifications.licenseId, opts.licenseId));
-  }
-  if (opts.tenantId) {
-    conditions.push(eq6(ownerNotifications.tenantId, opts.tenantId));
-  }
-  const [row] = await db.select({ c: count() }).from(ownerNotifications).where(and2(...conditions));
+async function hasLicenseExpiryMilestoneNotification(db, opts) {
+  const [row] = await db.select({ c: count() }).from(ownerNotifications).where(
+    and2(
+      eq6(ownerNotifications.type, "license.expiring"),
+      eq6(ownerNotifications.licenseId, opts.licenseId),
+      sql2`${ownerNotifications.meta}->>'milestoneDays' = ${String(opts.milestoneDays)}`
+    )
+  );
   return Number(row?.c ?? 0) > 0;
 }
 
@@ -4286,7 +4339,10 @@ function notifyLicenseForTenant(db, opts) {
       licenseId: opts.licenseId,
       actionUrl: licenseDetailPath(opts.licenseId),
       actionLabel: opts.type === "license.expiring" ? "Extend license" : "View license",
-      meta: opts.daysLeft != null ? { daysLeft: opts.daysLeft } : void 0
+      meta: opts.daysLeft != null || opts.milestoneDays != null ? {
+        ...opts.daysLeft != null ? { daysLeft: opts.daysLeft } : {},
+        ...opts.milestoneDays != null ? { milestoneDays: opts.milestoneDays } : {}
+      } : void 0
     });
   })().catch((err) => {
     console.error(
@@ -4296,7 +4352,101 @@ function notifyLicenseForTenant(db, opts) {
   });
 }
 
+// src/jobs/license-expiry-queue.ts
+import { Queue as Queue2, Worker } from "bullmq";
+
+// src/jobs/license-expiry-milestone.ts
+async function runLicenseExpiryMilestoneJob(db, job, log = console.log) {
+  const expiresAt = new Date(job.expiresAt);
+  const alreadyNotified = await hasLicenseExpiryMilestoneNotification(db, {
+    licenseId: job.licenseId,
+    milestoneDays: job.milestoneDays
+  });
+  if (alreadyNotified) return;
+  try {
+    await sendLicenseExpiringEmailForTenant(db, job.tenantId, {
+      expiresAt,
+      gracePeriodDays: job.gracePeriodDays,
+      licenseId: job.licenseId,
+      milestoneDays: job.milestoneDays
+    });
+    await sendLicenseExpiringEmailToPlatformOwner(db, job.tenantId, {
+      expiresAt,
+      licenseId: job.licenseId,
+      milestoneDays: job.milestoneDays
+    });
+  } catch (err) {
+    console.error(
+      "[expireDueLicenses] Milestone email failed",
+      job.tenantId,
+      job.milestoneDays,
+      err
+    );
+  }
+  notifyLicenseForTenant(db, {
+    tenantId: job.tenantId,
+    licenseId: job.licenseId,
+    type: "license.expiring",
+    body: `License expires in ${job.milestoneDays} day${job.milestoneDays === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
+    daysLeft: job.milestoneDays,
+    milestoneDays: job.milestoneDays
+  });
+  log(
+    `[license_expiry_milestone_fired] licenseId=${job.licenseId} milestoneDays=${job.milestoneDays}`
+  );
+}
+
+// src/jobs/license-expiry-queue.ts
+var QUEUE_NAME = "license-expiry-milestones";
+var queue = null;
+function redisConnection() {
+  const url = process.env.CONTROL_PLANE_REDIS_URL?.trim();
+  if (!url) return null;
+  return { url };
+}
+function getLicenseExpiryQueue() {
+  const conn = redisConnection();
+  if (!conn) return null;
+  if (!queue) {
+    queue = new Queue2(QUEUE_NAME, {
+      connection: conn,
+      defaultJobOptions: {
+        removeOnComplete: 500,
+        removeOnFail: 200
+      }
+    });
+  }
+  return queue;
+}
+async function enqueueLicenseExpiryMilestone(data) {
+  const q = getLicenseExpiryQueue();
+  const jobId = `${data.licenseId}:${data.milestoneDays}`;
+  if (q) {
+    await q.add("milestone", data, { jobId });
+    return "queued";
+  }
+  return "inline";
+}
+
 // src/license-expire-followup.ts
+var MS_PER_DAY = 1e3 * 60 * 60 * 24;
+function daysUntilExpiry(expiresAt, now) {
+  return Math.max(
+    0,
+    Math.ceil((expiresAt.getTime() - now.getTime()) / MS_PER_DAY)
+  );
+}
+function pickExpiryMilestone(daysLeft) {
+  for (const milestone of LICENSE_EXPIRY_MILESTONE_DAYS) {
+    if (daysLeft === milestone) return milestone;
+  }
+  return null;
+}
+async function suspendTenantRecordsAfterGrace(db, tenantId, log) {
+  await db.update(tenants).set({ status: "suspended" }).where(eq9(tenants.id, tenantId));
+  await db.update(tenantDeployments).set({ status: "suspended" }).where(eq9(tenantDeployments.tenantId, tenantId));
+  log(`[expireDueLicenses] Tenant ${tenantId} marked suspended after license grace`);
+}
 async function processLicenseExpiryFollowUp(db, opts) {
   const log = opts.log ?? ((message) => console.log(message));
   const now = opts.now ?? /* @__PURE__ */ new Date();
@@ -4327,6 +4477,15 @@ async function processLicenseExpiryFollowUp(db, opts) {
         } catch (err) {
           console.error(
             "[expireDueLicenses] POS suspend failed for tenant",
+            license.tenantId,
+            err
+          );
+        }
+        try {
+          await suspendTenantRecordsAfterGrace(db, license.tenantId, log);
+        } catch (err) {
+          console.error(
+            "[expireDueLicenses] Tenant status suspend failed",
             license.tenantId,
             err
           );
@@ -4380,9 +4539,21 @@ async function processPostGracePosSuspensions(db, now, log) {
         err
       );
     }
+    try {
+      await suspendTenantRecordsAfterGrace(db, license.tenantId, log);
+    } catch (err) {
+      console.error(
+        "[expireDueLicenses] Post-grace tenant suspend failed",
+        license.tenantId,
+        err
+      );
+    }
   }
 }
 async function processExpiringSoonWarnings(db, now) {
+  const maxMilestone = Math.max(...LICENSE_EXPIRY_MILESTONE_DAYS);
+  const horizon = new Date(now);
+  horizon.setDate(horizon.getDate() + maxMilestone);
   const candidates = await db.select({
     id: licenses.id,
     tenantId: licenses.tenantId,
@@ -4394,44 +4565,30 @@ async function processExpiringSoonWarnings(db, now) {
       eq9(licenses.isPerpetual, false),
       isNotNull(licenses.tenantId),
       isNotNull(licenses.expiresAt),
-      gte2(licenses.expiresAt, now)
+      gte2(licenses.expiresAt, now),
+      lte(licenses.expiresAt, horizon)
     )
   );
   for (const license of candidates) {
     if (!license.tenantId || !license.expiresAt) continue;
-    const warningWindowEnd = new Date(now);
-    warningWindowEnd.setDate(warningWindowEnd.getDate() + 30);
-    if (license.expiresAt > warningWindowEnd) continue;
-    try {
-      await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
-        expiresAt: license.expiresAt,
-        gracePeriodDays: license.gracePeriodDays ?? 7,
-        licenseId: license.id
-      });
-    } catch (err) {
-      console.error(
-        "[expireDueLicenses] Warning email failed",
-        license.tenantId,
-        err
-      );
-    }
-    const alreadyNotified = await hasRecentNotification(db, {
-      type: "license.expiring",
+    const daysLeft = daysUntilExpiry(license.expiresAt, now);
+    const milestoneDays = pickExpiryMilestone(daysLeft);
+    if (milestoneDays == null) continue;
+    const alreadyNotified = await hasLicenseExpiryMilestoneNotification(db, {
       licenseId: license.id,
-      withinHours: 24
+      milestoneDays
     });
-    if (!alreadyNotified) {
-      const daysLeft = Math.max(
-        1,
-        Math.ceil((license.expiresAt.getTime() - now.getTime()) / (1e3 * 60 * 60 * 24))
-      );
-      notifyLicenseForTenant(db, {
-        tenantId: license.tenantId,
-        licenseId: license.id,
-        type: "license.expiring",
-        body: `License expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Extend now to avoid service interruption.`,
-        daysLeft
-      });
+    if (alreadyNotified) continue;
+    const job = {
+      licenseId: license.id,
+      tenantId: license.tenantId,
+      milestoneDays,
+      expiresAt: license.expiresAt.toISOString(),
+      gracePeriodDays: license.gracePeriodDays ?? 7
+    };
+    const mode = await enqueueLicenseExpiryMilestone(job);
+    if (mode === "inline") {
+      await runLicenseExpiryMilestoneJob(db, job);
     }
   }
 }
@@ -5323,9 +5480,36 @@ var publicConfig = {
 // ../../infra/worker-service/src/module-stacks.ts
 import { eq as eq11 } from "drizzle-orm";
 
+// ../../packages/shared/src/pos-entitlements-from-modules.ts
+var DEFAULT_PLAN_LIMITS = {
+  maxUsers: 25,
+  maxLocations: 5,
+  maxOrdersPerMonth: 1e4
+};
+function posModuleEntitlementsFromStockixModules(modules) {
+  const normalized = (modules ?? []).map((m) => String(m).trim().toLowerCase()).filter(Boolean);
+  const hasAccounting = normalized.includes("accounting");
+  const hasPos = normalized.includes("pos");
+  if (hasPos && !hasAccounting) {
+    return { inventory: true, accounting: false };
+  }
+  return { inventory: true, accounting: true };
+}
+function buildPosEntitlementsForProvision(input) {
+  return {
+    maxUsers: input.maxUsers ?? DEFAULT_PLAN_LIMITS.maxUsers,
+    maxLocations: input.maxLocations ?? DEFAULT_PLAN_LIMITS.maxLocations,
+    maxOrdersPerMonth: input.maxOrdersPerMonth ?? DEFAULT_PLAN_LIMITS.maxOrdersPerMonth,
+    modules: posModuleEntitlementsFromStockixModules(input.modules)
+  };
+}
+
 // ../../infra/worker-service/domain/provisioning/adapters/bootstrap-pos-org.ts
-var BOOTSTRAP_POLL_TIMEOUT_MS = 6e4;
-var BOOTSTRAP_POLL_INTERVAL_MS = 1500;
+var BOOTSTRAP_POLL_TIMEOUT_MS = Number(process.env.BOOTSTRAP_POLL_TIMEOUT_MS ?? 6e4);
+var BOOTSTRAP_CREDENTIALS_WAIT_MS = Number(
+  process.env.BOOTSTRAP_CREDENTIALS_WAIT_MS ?? 12e4
+);
+var BOOTSTRAP_POLL_INTERVAL_MS = Number(process.env.BOOTSTRAP_POLL_INTERVAL_MS ?? 1500);
 var POS_HEALTH_TIMEOUT_MS = 9e4;
 var POS_HEALTH_INTERVAL_MS = 2e3;
 var PLATFORM_AUTH_TIMEOUT_MS = 3e4;
@@ -5365,6 +5549,13 @@ function readOrgId(body) {
   const id = data._id ?? data.id;
   return typeof id === "string" && id.length > 0 ? id : null;
 }
+function isPlaintextCredentialPin(pin) {
+  const p = pin.trim();
+  if (p.length < 4) return false;
+  if (p.includes("\u2022") || p.includes("*")) return false;
+  if (/^[*•]+$/.test(p)) return false;
+  return /^\d{4,6}$/.test(p);
+}
 function normalizeCredentials(raw) {
   if (!Array.isArray(raw)) return [];
   const out = [];
@@ -5373,7 +5564,7 @@ function normalizeCredentials(raw) {
     const role = typeof row.role === "string" ? row.role : "";
     const username = typeof row.username === "string" ? row.username : typeof row.name === "string" ? row.name : role;
     const pin = typeof row.pin === "string" ? row.pin : "";
-    if (!role || !pin) continue;
+    if (!role || !pin || !isPlaintextCredentialPin(pin)) continue;
     out.push({ role, username, pin });
   }
   return out;
@@ -5484,6 +5675,12 @@ async function bootstrapPosOrganization(input) {
     input.licenseExpiresAt != null ? new Date(input.licenseExpiresAt).getTime() : Date.now() + 365 * 24 * 60 * 60 * 1e3
   ).toISOString();
   const idempotencyKey = `stockix-provision-${input.tenantId}`;
+  const entitlements = buildPosEntitlementsForProvision({
+    modules: input.tenantModules,
+    maxUsers: input.maxUsers,
+    maxLocations: input.maxLocations,
+    maxOrdersPerMonth: input.maxOrdersPerMonth
+  });
   log(`[provision][pos] creating organization slug=${input.slug}`);
   const createRes = await platformFetch(base, "/api/platform/v1/organizations", {
     method: "POST",
@@ -5496,7 +5693,8 @@ async function bootstrapPosOrganization(input) {
       ownerEmail: input.adminEmail,
       timezone: "UTC",
       licenseStartsAt,
-      licenseEndsAt
+      licenseEndsAt,
+      entitlements
     })
   });
   if (!createRes.ok) {
@@ -5518,6 +5716,7 @@ async function bootstrapPosOrganization(input) {
   if (bootstrapMode !== "sync_fallback") {
     const pollStarted = Date.now();
     let bootstrapReady = false;
+    let readySince = null;
     log(`[provision][pos] waiting for org bootstrap orgId=${orgId}`);
     while (Date.now() - pollStarted < BOOTSTRAP_POLL_TIMEOUT_MS) {
       const statusRes = await platformFetch(
@@ -5533,6 +5732,7 @@ async function bootstrapPosOrganization(input) {
       const data = isRecord2(statusRes.json) && isRecord2(statusRes.json.data) ? statusRes.json.data : null;
       const readyForPinLogin = data?.readyForPinLogin === true;
       if (readyForPinLogin) {
+        if (readySince == null) readySince = Date.now();
         const fromStatus = readFullCredentialsFromJson(statusRes.json);
         if (fromStatus.length > 0) {
           credentials = fromStatus;
@@ -5545,22 +5745,17 @@ async function bootstrapPosOrganization(input) {
           credentials = fromOrg;
           bootstrapReady = true;
           log(
-            `[provision][pos] org bootstrap ready (legacy defaultCredentials) orgId=${orgId}`
+            `[provision][pos] org bootstrap ready (legacy plaintext defaultCredentials) orgId=${orgId}`
           );
           break;
         }
+        if (readySince != null && Date.now() - readySince >= BOOTSTRAP_CREDENTIALS_WAIT_MS) {
+          break;
+        }
+      } else {
+        readySince = null;
       }
       await sleep(BOOTSTRAP_POLL_INTERVAL_MS);
-    }
-    if (!bootstrapReady) {
-      const fromOrg = await fetchCredentialsFromOrg(base, orgId, apiKey);
-      if (fromOrg.length > 0) {
-        credentials = fromOrg;
-        bootstrapReady = true;
-        log(
-          `[provision][pos] org bootstrap credentials recovered from org record orgId=${orgId}`
-        );
-      }
     }
     if (!bootstrapReady) {
       throw new Error(
@@ -5571,6 +5766,16 @@ async function bootstrapPosOrganization(input) {
   if (credentials.length === 0) {
     throw new Error(
       `POS org bootstrap finished but fullCredentials missing for orgId=${orgId}`
+    );
+  }
+  const consumeRes = await platformFetch(
+    base,
+    `/api/platform/v1/organizations/${orgId}/provisioning-credentials/consume`,
+    { method: "POST", apiKey }
+  );
+  if (consumeRes.status !== 204 && consumeRes.status !== 200) {
+    log(
+      `[provision][pos] warning: provisioning-credentials/consume returned ${consumeRes.status} orgId=${orgId}`
     );
   }
   return {
@@ -5818,6 +6023,10 @@ ${stderrTail}`);
     adminEmail: opts.adminEmail,
     log: opts.log,
     licenseExpiresAt: opts.licenseExpiresAt,
+    tenantModules: opts.tenantModules,
+    maxUsers: opts.maxUsers,
+    maxLocations: opts.maxLocations,
+    maxOrdersPerMonth: opts.maxOrdersPerMonth,
     posHostPort: backendPort
   });
   if (rootDomain === "localhost") {
@@ -5985,6 +6194,8 @@ async function runPosProvisionStep(params) {
       const msg = licenseErr instanceof Error ? licenseErr.message : String(licenseErr);
       params.log(`[provision][pos] license expiry lookup failed (using default): ${msg}`);
     }
+    const planSlug = params.planSlug?.trim() || "starter";
+    const planLimits = await getPlanLimits(params.db, planSlug);
     const posResult = await provisionPosStackTracked(
       {
         slug: params.slug,
@@ -5994,7 +6205,10 @@ async function runPosProvisionStep(params) {
         db: params.db,
         log: params.log,
         financeInternalPort: params.financeInternalPort,
-        licenseExpiresAt
+        licenseExpiresAt,
+        tenantModules: params.licensedModules,
+        planSlug,
+        maxUsers: planLimits.maxUsers
       },
       params.trace
     );
@@ -6321,6 +6535,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        planSlug: input.planSlug,
         financeInternalPort: port,
         db,
         log,
@@ -6473,6 +6688,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
         tenantId,
         tenantName: input.name,
         adminEmail: input.adminEmail,
+        planSlug: input.planSlug,
         financeInternalPort: port,
         db,
         log,
@@ -7103,6 +7319,7 @@ async function executeProvisionRuntime(deps, db, input, log, correlationId, asse
       tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      planSlug: input.planSlug,
       financeInternalPort: port,
       db,
       log,
@@ -7370,6 +7587,7 @@ async function executeAddModuleRuntime(db, input, log, correlationId) {
       tenantId: input.tenantId,
       tenantName: input.name,
       adminEmail: input.adminEmail,
+      planSlug: input.planSlug,
       financeInternalPort: financeInternalPort ?? void 0,
       db,
       log,
@@ -7499,7 +7717,7 @@ var TenantProvisionService = class {
 };
 
 // ../../infra/worker-service/domain/provisioning/adapters/crypto-tenant-secret-generator.ts
-import { createHmac, randomBytes as randomBytes4 } from "crypto";
+import { createHmac as createHmac2, randomBytes as randomBytes4 } from "crypto";
 var CryptoTenantSecretGenerator = class {
   persistSecret(plaintext) {
     return plaintext;
@@ -7514,7 +7732,7 @@ var CryptoTenantSecretGenerator = class {
     }
     const secretHex = apiConfig.deploymentSecretKey;
     const hmacKey = Buffer.from(secretHex, "hex");
-    return createHmac("sha256", hmacKey).update(`bootstrap:${key}`, "utf8").digest("base64url");
+    return createHmac2("sha256", hmacKey).update(`bootstrap:${key}`, "utf8").digest("base64url");
   }
 };
 
@@ -8819,10 +9037,10 @@ async function loop() {
             lastError: `worker_fallback_failure_persist:${message}`,
             claimedAt: null,
             claimedBy: null,
-            runAt: nextRunAt ?? sql2`${tenantLifecycleJobs.runAt}`,
+            runAt: nextRunAt ?? sql3`${tenantLifecycleJobs.runAt}`,
             updatedAt: /* @__PURE__ */ new Date(),
             completedAt: fallbackNoRetry ? /* @__PURE__ */ new Date() : null,
-            attempts: sql2`${tenantLifecycleJobs.attempts} + 1`
+            attempts: sql3`${tenantLifecycleJobs.attempts} + 1`
           }).where(eq15(tenantLifecycleJobs.id, job.id));
           if (job.type === "tenant.provision" && job.tenantId) {
             await tx.update(tenants).set({ status: "failed" }).where(eq15(tenants.id, job.tenantId));

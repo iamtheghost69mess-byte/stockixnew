@@ -115,6 +115,7 @@ export function useOwnersPage() {
         owner?: Owner;
         inviteUrl?: string;
         emailSent?: boolean;
+        emailQueued?: boolean;
         mailConfigured?: boolean;
         error?: string;
       };
@@ -127,6 +128,9 @@ export function useOwnersPage() {
         toast.warning(
           "Email is not configured on this server. Copy the invite link below to share manually.",
         );
+      } else if (data.emailQueued === true) {
+        setInviteUrl("");
+        toast.success("Invitation queued; email will be sent shortly.");
       } else if (data.emailSent === false) {
         setInviteUrl(data.inviteUrl ?? "");
         toast.warning(
@@ -289,6 +293,7 @@ export function useOwnersPage() {
       });
       const data = (await res.json()) as {
         emailSent?: boolean;
+        emailQueued?: boolean;
         mailConfigured?: boolean;
         inviteUrl?: string;
         error?: string;
@@ -302,6 +307,8 @@ export function useOwnersPage() {
         toast.warning(
           "Email is not configured. Copy the invite link from the banner above.",
         );
+      } else if (data.emailQueued === true) {
+        toast.success("Invitation queued; email will be sent shortly.");
       } else if (data.emailSent === false && data.inviteUrl) {
         setInviteUrl(data.inviteUrl);
         toast.warning("Email not sent. Copy the invite link from the banner above.");

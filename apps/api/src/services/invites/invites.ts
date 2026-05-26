@@ -5,8 +5,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { owners } from "@repo/db/schema";
 import { apiConfig, isMailConfigured } from "@repo/config";
-import { sendOwnerInviteEmail } from "../../mail/send.js";
-import { mailSendSucceeded } from "../../mail/mailer.js";
+import { deliverOwnerInviteEmail } from "./owner-invite-delivery.js";
 import type { ApiServiceResult } from "../auth/types.js";
 
 const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
@@ -65,9 +64,11 @@ export async function acceptInvite(
 export async function resendOwnerInvite(
   db: PostgresJsDatabase<typeof schema>,
   ownerId: string,
+  actorId?: string | null,
 ): Promise<
   ApiServiceResult<{
     emailSent: boolean;
+    emailQueued?: boolean;
     mailConfigured: boolean;
     inviteUrl?: string;
     owner: { id: string; email: string; name: string; role: string };
@@ -111,32 +112,39 @@ export async function resendOwnerInvite(
   const dashboardUrl = apiConfig.dashboardUrl?.replace(/\/+$/, "");
   const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
 
-  let mailResult = await sendOwnerInviteEmail({
+  const delivery = await deliverOwnerInviteEmail(db, {
+    ownerId: owner.id,
     to: owner.email,
     name: owner.name,
     role: owner.role,
     inviteUrl,
-    ownerId: owner.id,
+    actorId: actorId ?? null,
+    source: "resend",
   });
-  if (!mailSendSucceeded(mailResult)) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    mailResult = await sendOwnerInviteEmail({
-      to: owner.email,
-      name: owner.name,
-      role: owner.role,
-      inviteUrl,
-      ownerId: owner.id,
-    });
-  }
 
-  const emailSent = mailSendSucceeded(mailResult);
+  if (delivery.mode === "queued") {
+    return {
+      success: true,
+      data: {
+        emailSent: false,
+        emailQueued: true,
+        mailConfigured: delivery.mailConfigured,
+        owner: {
+          id: owner.id,
+          email: owner.email,
+          name: owner.name,
+          role: owner.role,
+        },
+      },
+    };
+  }
 
   return {
     success: true,
     data: {
-      emailSent,
-      mailConfigured: isMailConfigured(),
-      inviteUrl: emailSent ? undefined : inviteUrl,
+      emailSent: delivery.emailSent,
+      mailConfigured: delivery.mailConfigured,
+      inviteUrl: delivery.inviteUrl,
       owner: {
         id: owner.id,
         email: owner.email,

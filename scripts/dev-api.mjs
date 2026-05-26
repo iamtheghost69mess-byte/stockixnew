@@ -5,8 +5,10 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findFreePort } from "./find-free-port.mjs";
+import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+loadEnvFilesAtRoot(repoRoot);
 const apiDir = path.join(repoRoot, "apps", "api");
 
 const preferred = parseInt(process.env.PORT || "4000", 10);
