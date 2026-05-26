@@ -5,14 +5,18 @@ import { useEffect, useState } from "react";
 type Me = {
   id: string;
   role: string;
+  roleId?: string | null;
+  roleName?: string | null;
   email: string;
   name: string;
+  permissions?: string[];
   capabilities: {
     canAccessSettings: boolean;
     canManageOwners: boolean;
     canManageTenants: boolean;
-    /** License extend / notes PATCH (billing_manager and above). */
     canExtendLicenses?: boolean;
+    canManagePlans?: boolean;
+    canReadPlans?: boolean;
   };
 };
 

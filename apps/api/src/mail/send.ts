@@ -1,4 +1,4 @@
-import { licenses, tenants } from "@repo/db/schema";
+import { licenses, owners, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
@@ -236,6 +236,7 @@ export async function sendLicenseExpiringEmail(opts: {
   expiresAt: Date;
   licenseId?: string;
   milestoneDays?: number;
+  idempotencyKey?: string;
 }): Promise<MailSendResult> {
   const daysRemaining = Math.max(
     0,
@@ -245,9 +246,10 @@ export async function sendLicenseExpiringEmail(opts: {
   );
   const expiryDay = opts.expiresAt.toISOString().split("T")[0];
   const idempotencyKey =
-    opts.licenseId != null && opts.milestoneDays != null
+    opts.idempotencyKey ??
+    (opts.licenseId != null && opts.milestoneDays != null
       ? `license-expiring/${opts.licenseId}/${opts.milestoneDays}`
-      : `license-expiring/${opts.tenantId}/${expiryDay}`;
+      : `license-expiring/${opts.tenantId}/${expiryDay}`);
 
   const result = await sendMail({
     to: opts.to,
@@ -433,6 +435,49 @@ export async function sendLicenseExpiringEmailForTenant(
   } catch (err) {
     console.error(
       "[sendLicenseExpiringEmail] Failed for tenant",
+      tenantId,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/** Notify the tenant's assigned platform owner (SaaS operator). */
+export async function sendLicenseExpiringEmailToPlatformOwner(
+  db: MailDb,
+  tenantId: string,
+  opts: {
+    expiresAt: Date;
+    licenseId: string;
+    milestoneDays: number;
+  },
+): Promise<void> {
+  try {
+    const [tenant] = await db
+      .select({ name: tenants.name, ownerId: tenants.ownerId })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (!tenant?.ownerId) return;
+
+    const [owner] = await db
+      .select({ email: owners.email })
+      .from(owners)
+      .where(eq(owners.id, tenant.ownerId))
+      .limit(1);
+    if (!owner?.email) return;
+
+    await sendLicenseExpiringEmail({
+      to: owner.email,
+      tenantName: tenant.name,
+      tenantId,
+      expiresAt: opts.expiresAt,
+      licenseId: opts.licenseId,
+      milestoneDays: opts.milestoneDays,
+      idempotencyKey: `license-expiring-owner/${opts.licenseId}/${opts.milestoneDays}`,
+    });
+  } catch (err) {
+    console.error(
+      "[sendLicenseExpiringEmailToPlatformOwner] Failed",
       tenantId,
       err instanceof Error ? err.message : err,
     );

@@ -14,14 +14,33 @@ const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
 export async function getInviteByToken(
   db: PostgresJsDatabase<typeof schema>,
   token: string,
-): Promise<ApiServiceResult<{ name: string; email: string }>> {
+): Promise<
+  ApiServiceResult<{
+    name: string;
+    email: string;
+    inviteTokenExpiresAt: string;
+  }>
+> {
   const [owner] = await db
-    .select({ name: owners.name, email: owners.email })
+    .select({
+      name: owners.name,
+      email: owners.email,
+      inviteTokenExpiresAt: owners.inviteTokenExpiresAt,
+    })
     .from(owners)
     .where(and(eq(owners.inviteToken, token), gt(owners.inviteTokenExpiresAt, new Date())))
     .limit(1);
-  if (!owner) return { success: false, error: "Invite token invalid or expired", status: 404 };
-  return { success: true, data: owner };
+  if (!owner?.inviteTokenExpiresAt) {
+    return { success: false, error: "Invite token invalid or expired", status: 404 };
+  }
+  return {
+    success: true,
+    data: {
+      name: owner.name,
+      email: owner.email,
+      inviteTokenExpiresAt: owner.inviteTokenExpiresAt.toISOString(),
+    },
+  };
 }
 
 export async function acceptInvite(

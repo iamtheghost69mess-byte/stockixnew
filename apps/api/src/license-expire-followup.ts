@@ -1,4 +1,4 @@
-import { licenses } from "@repo/db/schema";
+import { licenses, tenantDeployments, tenants } from "@repo/db/schema";
 import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
@@ -9,6 +9,7 @@ import { suspendPosOrgForLicense } from "./pos-license-sync.js";
 import {
   sendLicenseExpiredEmailForTenant,
   sendLicenseExpiringEmailForTenant,
+  sendLicenseExpiringEmailToPlatformOwner,
 } from "./mail/send.js";
 import {
   hasLicenseExpiryMilestoneNotification,
@@ -40,6 +41,19 @@ export function pickExpiryMilestone(daysLeft: number): number | null {
     if (daysLeft === milestone) return milestone;
   }
   return null;
+}
+
+async function suspendTenantRecordsAfterGrace(
+  db: Db,
+  tenantId: string,
+  log: (message: string) => void,
+): Promise<void> {
+  await db.update(tenants).set({ status: "suspended" }).where(eq(tenants.id, tenantId));
+  await db
+    .update(tenantDeployments)
+    .set({ status: "suspended" })
+    .where(eq(tenantDeployments.tenantId, tenantId));
+  log(`[expireDueLicenses] Tenant ${tenantId} marked suspended after license grace`);
 }
 
 /**
@@ -86,6 +100,15 @@ export async function processLicenseExpiryFollowUp(
         } catch (err) {
           console.error(
             "[expireDueLicenses] POS suspend failed for tenant",
+            license.tenantId,
+            err,
+          );
+        }
+        try {
+          await suspendTenantRecordsAfterGrace(db, license.tenantId, log);
+        } catch (err) {
+          console.error(
+            "[expireDueLicenses] Tenant status suspend failed",
             license.tenantId,
             err,
           );
@@ -153,6 +176,15 @@ async function processPostGracePosSuspensions(
         err,
       );
     }
+    try {
+      await suspendTenantRecordsAfterGrace(db, license.tenantId, log);
+    } catch (err) {
+      console.error(
+        "[expireDueLicenses] Post-grace tenant suspend failed",
+        license.tenantId,
+        err,
+      );
+    }
   }
 }
 
@@ -197,6 +229,11 @@ async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
       await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
         expiresAt: license.expiresAt,
         gracePeriodDays: license.gracePeriodDays ?? 7,
+        licenseId: license.id,
+        milestoneDays,
+      });
+      await sendLicenseExpiringEmailToPlatformOwner(db, license.tenantId, {
+        expiresAt: license.expiresAt,
         licenseId: license.id,
         milestoneDays,
       });

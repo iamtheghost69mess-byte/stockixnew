@@ -25,6 +25,7 @@ type ForgotPasswordResponse = {
   error?: string;
   mailConfigured?: boolean;
   emailSent?: boolean;
+  accountPending?: boolean;
 };
 
 export default function ForgotPasswordPage() {
@@ -34,6 +35,7 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [mailConfigured, setMailConfigured] = useState(true);
   const [emailSent, setEmailSent] = useState(true);
+  const [accountPending, setAccountPending] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +54,7 @@ export default function ForgotPasswordPage() {
       }
       setMailConfigured(data.mailConfigured !== false);
       setEmailSent(data.emailSent !== false);
+      setAccountPending(data.accountPending === true);
       setSubmitted(true);
     } catch {
       setError("Network error — please try again");
@@ -75,7 +78,15 @@ export default function ForgotPasswordPage() {
         <CardContent>
           {submitted ? (
             <div className="space-y-4 text-center">
-              {!mailConfigured ? (
+              {accountPending ? (
+                <Alert className="text-left">
+                  <AlertTitle>Accept your invite first</AlertTitle>
+                  <AlertDescription>
+                    This email is linked to a pending team invitation. Open the invite link from your
+                    email to set a password, or ask an administrator to resend the invitation.
+                  </AlertDescription>
+                </Alert>
+              ) : !mailConfigured ? (
                 <Alert variant="destructive" className="text-left">
                   <AlertTitle>Email delivery not configured</AlertTitle>
                   <AlertDescription>

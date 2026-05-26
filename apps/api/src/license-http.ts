@@ -368,7 +368,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         .default(["accounting"]),
       planSlug: z.string().min(1),
       count: z.number().int().min(1).max(100).default(1),
-      isPerpetual: z.boolean().default(true),
+      isPerpetual: z.boolean().default(false),
       expiresAt: z.string().datetime().optional(),
       validFrom: z.string().datetime().optional(),
       maxActivations: z.number().int().min(1).max(50).default(1),

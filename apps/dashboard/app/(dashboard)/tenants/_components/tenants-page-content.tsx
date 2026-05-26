@@ -684,9 +684,11 @@ export function TenantsPageContent() {
             >
               Refresh
             </Button>
-            <Button type="button" size="sm" className="h-9" onClick={() => setAddTenantOpen(true)}>
-              Add tenant
-            </Button>
+            {me?.capabilities.canManageTenants ? (
+              <Button type="button" size="sm" className="h-9" onClick={() => setAddTenantOpen(true)}>
+                Add tenant
+              </Button>
+            ) : null}
           </div>
         </div>
         <TenantList

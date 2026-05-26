@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 
@@ -39,6 +40,28 @@ export function TenantProfileForm({
   onSave,
   modulesSection,
 }: TenantProfileFormProps) {
+  const [planSummary, setPlanSummary] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tenant.planSlug) {
+      setPlanSummary(null);
+      return;
+    }
+    void fetch("/api/plans")
+      .then((r) => r.json())
+      .then((data: { plans?: Array<{ slug: string; name: string; priceMonthly?: number | null }> }) => {
+        const plan = (data.plans ?? []).find((p) => p.slug === tenant.planSlug);
+        if (!plan) {
+          setPlanSummary(tenant.planSlug);
+          return;
+        }
+        const price =
+          plan.priceMonthly != null ? ` — $${(plan.priceMonthly / 100).toFixed(2)}/mo catalog` : "";
+        setPlanSummary(`${plan.name} (${plan.slug})${price}`);
+      })
+      .catch(() => setPlanSummary(tenant.planSlug));
+  }, [tenant.planSlug]);
+
   return (
     <Card className="md:col-span-2">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -73,7 +96,10 @@ export function TenantProfileForm({
                 Owner ID: <span className="font-mono">{tenant.ownerId}</span>
               </p>
               <p>
-                Plan: <span className="capitalize">{tenant.planSlug}</span>
+                Plan: <span className="capitalize">{planSummary ?? tenant.planSlug}</span>
+              </p>
+              <p className="text-muted-foreground text-xs md:col-span-2">
+                Internal plan catalog only — no Stripe subscription billing is attached to this tenant.
               </p>
               <p>Created: {formatDateTime(tenant.createdAt)}</p>
             </div>

@@ -348,7 +348,7 @@ export function TenantList(props: Props) {
 
       <div className="flex flex-wrap gap-2">
         <span className="mr-1 self-center text-xs font-medium text-muted-foreground">Status:</span>
-        {(["all", "active", "suspended", "provisioning", "failed"] as const).map((status) => (
+        {(["all", "active", "partial", "suspended", "provisioning", "failed"] as const).map((status) => (
           <Badge
             key={status}
             variant={statusFilter === status ? "default" : "outline"}
@@ -368,7 +368,9 @@ export function TenantList(props: Props) {
               <TableHead className="whitespace-normal">Admin</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="hidden sm:table-cell">License</TableHead>
-              <TableHead className="hidden md:table-cell">Registered</TableHead>
+              <TableHead className="hidden md:table-cell">Expires</TableHead>
+              <TableHead className="hidden lg:table-cell">Created</TableHead>
+              <TableHead className="hidden xl:table-cell">Provisioned</TableHead>
               <TableHead className="hidden min-w-[140px] whitespace-normal lg:table-cell">
                 Public URL
               </TableHead>
@@ -379,7 +381,7 @@ export function TenantList(props: Props) {
             {listLoading && tenants.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
-                  colSpan={7}
+                  colSpan={9}
                   className="py-12 text-center text-sm text-muted-foreground"
                 >
                   Loading tenants…
@@ -391,7 +393,7 @@ export function TenantList(props: Props) {
                 {tenants.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell
-                      colSpan={7}
+                      colSpan={9}
                       className="h-[min(50vh,22rem)] align-top whitespace-normal px-4 py-10 md:py-14"
                     >
                       <div className="flex max-w-lg flex-col gap-3 text-left">
@@ -482,6 +484,16 @@ export function TenantList(props: Props) {
                       )}
                     </TableCell>
                     <TableCell className="hidden align-top text-muted-foreground md:table-cell">
+                      {t.licenseIsPerpetual
+                        ? "Perpetual"
+                        : t.licenseExpiresAt
+                          ? formatDateTime(t.licenseExpiresAt)
+                          : "—"}
+                    </TableCell>
+                    <TableCell className="hidden align-top text-muted-foreground lg:table-cell">
+                      {t.createdAt ? formatDateTime(t.createdAt) : "—"}
+                    </TableCell>
+                    <TableCell className="hidden align-top text-muted-foreground xl:table-cell">
                       {t.registrationCompletedAt ? formatDateTime(t.registrationCompletedAt) : "—"}
                     </TableCell>
                     <TableCell className="hidden max-w-[200px] align-top lg:table-cell">

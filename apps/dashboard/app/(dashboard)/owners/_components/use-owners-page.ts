@@ -18,6 +18,7 @@ export type Owner = {
   hasPassword?: boolean;
   mfaEnabled: boolean;
   createdAt: string;
+  inviteTokenExpiresAt?: string | null;
 };
 
 export function useOwnersPage() {
@@ -81,6 +82,7 @@ export function useOwnersPage() {
         hasPassword: o.hasPassword,
         mfaEnabled: o.mfaEnabled ?? false,
         createdAt: o.createdAt,
+        inviteTokenExpiresAt: o.inviteTokenExpiresAt ?? null,
       }));
       setOwners(parsed);
     } catch (e) {

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./roles": "./src/roles.ts",
+    "./permissions": "./src/permissions.ts",
     "./audit-log": "./src/audit-log.ts",
     "./finance-api": "./src/finance-api.ts"
   }
