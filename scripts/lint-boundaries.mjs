@@ -39,6 +39,8 @@ function shouldScanForRuntimeEnv(filePath) {
   if (!inRuntimeTree) return false;
   if (filePath.startsWith("packages/config/")) return false;
   if (filePath.includes("/scripts/")) return false;
+  if (filePath.includes("/e2e/")) return false;
+  if (path.basename(filePath) === "playwright.config.ts") return false;
   if (TOOLING_ENV_ALLOWLIST.has(filePath)) return false;
   return true;
 }
