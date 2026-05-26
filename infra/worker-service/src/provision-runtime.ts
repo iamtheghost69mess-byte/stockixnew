@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { execa } from "execa";
@@ -994,6 +995,7 @@ export async function executeProvisionRuntime(
       mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,
+      socketAllowedOrigins: baseUrl,
       jwtSecret,
       dbPassword,
       dbRootPassword,
@@ -1628,7 +1630,7 @@ export async function executeProvisionRuntime(
       );
     }
 
-    let forceWireRerun = wireOnlyRetry;
+    let forceWireRerun: boolean = wireOnlyRetry;
     if (tenantId) {
       const [partialRow] = await db
         .select({
@@ -1882,7 +1884,7 @@ export type AddModuleInput = {
   slug: string;
   name: string;
   adminEmail: string;
-  module: "pos" | "pms" | "chat";
+  module: "pos" | "pms" | "chat" | "accounting";
   planSlug?: string;
 };
 
@@ -1959,6 +1961,9 @@ export async function executeAddModuleRuntime(
     let cardAccountId = row.financeCardAccountId ?? undefined;
     let serviceChargeItemId: number | undefined;
     let discountItemId: number | undefined;
+    let defaultVendorId: number | undefined;
+    let inventoryAccountId: number | undefined;
+    let inventoryVarianceAccountId: number | undefined;
 
     const hasAccounting = licensedModules.includes("accounting");
     if (

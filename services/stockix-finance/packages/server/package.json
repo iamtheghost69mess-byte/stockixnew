@@ -38,7 +38,6 @@
     "@stockix/pdf-templates": "workspace:*",
     "@stockix/sdk-ts": "workspace:*",
     "@stockix/utils": "workspace:*",
-    "@repo/shared": "workspace:*",
     "@casl/ability": "^5.4.3",
     "@lemonsqueezy/lemonsqueezy.js": "^2.2.0",
     "@liaoliaots/nestjs-redis": "^10.0.0",

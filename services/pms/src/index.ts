@@ -24,10 +24,18 @@ import { guestFormsRouter } from "./routes/guest-forms.js";
 
 const app = new Hono<PmsEnv>();
 
-// CORS — restrict to configured origins; falls back to wildcard only when explicitly unset
-const corsOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean);
+// CORS — require explicit allowlist (no wildcard fallback)
+const corsOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? [];
+if (corsOrigins.length === 0) {
+  throw new Error(
+    "CORS_ALLOWED_ORIGINS must be set. Example: https://dashboard.stockix.cloud,https://stockix.cloud",
+  );
+}
 app.use("*", cors({
-  origin: corsOrigins?.length ? corsOrigins : "*",
+  origin: (origin) => {
+    if (!origin) return null;
+    return corsOrigins.includes(origin) ? origin : null;
+  },
   allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization", "x-stockix-internal-secret", "x-stockix-tenant-id"],
 }));

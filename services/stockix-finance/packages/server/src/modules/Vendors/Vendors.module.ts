@@ -48,5 +48,6 @@ import { VendorsWriteGLOpeningSubscriber } from './subscribers/VendorGLEntriesSu
     VendorGLEntriesStorage,
     VendorsWriteGLOpeningSubscriber,
   ],
+  exports: [VendorsApplication, VendorsExportable, VendorsImportable],
 })
 export class VendorsModule { }

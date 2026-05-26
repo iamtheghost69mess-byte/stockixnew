@@ -53,7 +53,7 @@ async function run() {
   }
 
   await db.delete(owners).where(eq(owners.email, LEGACY_DEV_OWNER_EMAIL));
-  console.log(`Platform admin synced: ${email}`);
+  process.stdout.write(`Platform admin synced: ${email}\n`);
 }
 
 void run();

@@ -20,6 +20,7 @@ services:
       - POS_BACKEND_URL=${POS_BACKEND_URL}
       - POS_FRONTEND_URL=${POS_FRONTEND_URL}
       - PUBLIC_APP_URL=${POS_FRONTEND_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
     depends_on:
       - pos-mongo

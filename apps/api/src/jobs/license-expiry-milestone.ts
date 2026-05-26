@@ -1,6 +1,7 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
+import { logLine } from "../lib/logger.js";
 import {
   hasLicenseExpiryMilestoneNotification,
 } from "../notification-service.js";
@@ -23,7 +24,7 @@ export type LicenseMilestoneJob = {
 export async function runLicenseExpiryMilestoneJob(
   db: Db,
   job: LicenseMilestoneJob,
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = logLine,
 ): Promise<void> {
   const expiresAt = new Date(job.expiresAt);
   const alreadyNotified = await hasLicenseExpiryMilestoneNotification(db, {

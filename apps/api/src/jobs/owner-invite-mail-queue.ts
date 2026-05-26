@@ -5,6 +5,7 @@ import * as schema from "@repo/db/schema";
 import { owners } from "@repo/db/schema";
 import { z } from "zod";
 
+import { logLine } from "../lib/logger.js";
 import { logAudit } from "../audit.js";
 import { sendOwnerInviteEmail } from "../mail/send.js";
 import { mailSendSucceeded } from "../mail/mailer.js";
@@ -133,7 +134,7 @@ export async function auditOwnerInviteMailFailed(
 
 export function startOwnerInviteMailWorker(
   db: PostgresJsDatabase<typeof schema>,
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = logLine,
 ): Worker<OwnerInviteMailJob> | null {
   const conn = redisConnection();
   if (!conn) return null;

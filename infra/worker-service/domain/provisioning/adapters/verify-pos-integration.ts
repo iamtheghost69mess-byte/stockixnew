@@ -49,6 +49,7 @@ export async function verifyPosBigcapitalIntegration(params: {
     const body = JSON.parse(text) as {
       success?: boolean;
       data?: {
+        financeTenantId?: number;
         bigcapitalIntegrationEnabled?: boolean;
         integration?: { bigcapital?: { financeTenantId?: number } };
       };

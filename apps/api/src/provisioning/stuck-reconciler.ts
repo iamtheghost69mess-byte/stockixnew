@@ -7,6 +7,7 @@ import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
 
+import { logger } from "../lib/logger.js";
 import { resolveAndPersistFinanceTenantId } from "../finance-tenant-resolve.js";
 import { parseTenantModules } from "../services/auth/stockix-product-token.js";
 
@@ -15,7 +16,13 @@ type Db = PostgresJsDatabase<typeof schema>;
 const STUCK_MS = 10 * 60 * 1000;
 
 function modulesIncludeAccounting(modulesJson: unknown): boolean {
-  const modules = parseTenantModules(modulesJson);
+  const raw =
+    typeof modulesJson === "string"
+      ? modulesJson
+      : modulesJson == null
+        ? undefined
+        : String(modulesJson);
+  const modules = parseTenantModules(raw);
   return modules.includes("accounting");
 }
 
@@ -72,7 +79,7 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
     ) {
       await db
         .update(tenants)
-        .set({ status: "active", updatedAt: new Date() })
+        .set({ status: "active" })
         .where(eq(tenants.id, row.tenantId));
       await db
         .update(tenantDeployments)
@@ -81,14 +88,10 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
           updatedAt: new Date(),
         })
         .where(eq(tenantDeployments.tenantId, row.tenantId));
-      console.log(
-        JSON.stringify({
-          level: "info",
-          message: "[reconciler] aligned tenant status after completed job",
-          tenantId: row.tenantId,
-          slug: row.slug,
-        }),
-      );
+      logger.info("[reconciler] aligned tenant status after completed job", {
+        tenantId: row.tenantId,
+        slug: row.slug,
+      });
     }
 
     if (
@@ -98,15 +101,11 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
     ) {
       const resolved = await resolveAndPersistFinanceTenantId(db, row.tenantId);
       if (resolved.ok) {
-        console.log(
-          JSON.stringify({
-            level: "info",
-            message: "[reconciler] auto-linked finance_tenant_id",
-            tenantId: row.tenantId,
-            financeTenantId: resolved.financeTenantId,
-            source: resolved.source,
-          }),
-        );
+        logger.info("[reconciler] auto-linked finance_tenant_id", {
+          tenantId: row.tenantId,
+          financeTenantId: resolved.financeTenantId,
+          source: resolved.source,
+        });
       }
     }
   }

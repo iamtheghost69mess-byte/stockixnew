@@ -2,6 +2,7 @@ import { tenantDeployments, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { logLine } from "./lib/logger.js";
 import { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 import { getActiveLicenseForTenant } from "./license-utils.js";
 import { sendLicenseExpiringEmail } from "./mail/send.js";
@@ -15,7 +16,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 export async function triggerFinanceLicenseSync(
   db: Db,
   stockixTenantId: string | null | undefined,
-  log: (message: string) => void = console.log,
+  log: (message: string) => void = logLine,
 ): Promise<void> {
   if (!stockixTenantId) return;
 

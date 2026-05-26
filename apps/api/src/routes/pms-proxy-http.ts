@@ -1,4 +1,5 @@
 import { apiConfig } from "@repo/config";
+import { requireEnv } from "../lib/require-env.js";
 import { pmsProxyJson } from "../pms-proxy.js";
 import type { registerLicenseApi } from "../license-http.js";
 
@@ -21,10 +22,15 @@ export function registerPmsProxyRoutes(
   app: Parameters<typeof registerLicenseApi>[0],
 ): void {
   app.get("/pms/status", async (c) => {
-    return c.json({
-      configured: true,
-      baseUrl: process.env.PMS_BASE_URL ?? "http://localhost:3003",
-    });
+    try {
+      return c.json({
+        configured: true,
+        baseUrl: requireEnv("PMS_BASE_URL", "http://localhost:3003"),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ configured: false, error: message }, 503);
+    }
   });
 
   app.get("/pms/health", async (c) => {

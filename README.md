@@ -261,6 +261,37 @@ main  ←  pull request (reviewed + passing)  ←  feature/your-branch
 
 > Branch naming: `feature/`, `fix/`, `chore/` prefixes. Example: `feature/tenant-billing`, `fix/login-redirect`.
 
+## Branch Protection
+
+The following branch protection rules should be enabled on GitHub:
+
+### main branch
+
+- Require pull request reviews (minimum 1)
+- Require status checks to pass:
+  - Type check (API, Worker, Dashboard)
+  - API tests
+  - Architecture boundary check
+- Do not allow bypassing the above settings
+- Require branches to be up to date before merging
+
+### Setup
+
+Go to: GitHub → Settings → Branches → Add rule → `main`
+
+## CI/CD
+
+All merges to `main` run the **quality** job in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) before production deploy:
+
+- TypeScript compilation (`apps/api`, `infra/worker-service`, `apps/dashboard`, `packages/*`, `services/pms`)
+- API, POS, and Finance test suites (zero failures required)
+- Dashboard production build and static bundle size check (informational warning above 10MB)
+- Architecture boundary and phase validation
+
+Deploy to production only runs after the quality job passes.
+
+If `.env` or `infra/prod/.env` was ever committed to git history, rotate affected secrets on the server before the next deploy.
+
 ## Stockix (`services/stockix-finance`)
 
 Stockix is **vendored** as normal files (tag `v0.9.9`, commit `485138344c6b266c2034214d6f1233259adf6c32`). See [services/README.md](services/README.md) for boundaries and how to refresh from upstream.

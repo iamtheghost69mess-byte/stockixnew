@@ -1,3 +1,8 @@
+/**
+ * SMTP transport (Nodemailer). Production uses Resend SMTP — not the Resend SDK.
+ * Configure MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_*.
+ * RESEND_API_KEY is not required when using SMTP mode.
+ */
 import { createTransport } from "nodemailer";
 import { isMailConfigured, mailConfig } from "@repo/config";
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { logger } from "./lib/logger.js";
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,7 +57,7 @@ async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void>
   await processLicenseExpiryFollowUp(db, {
     justExpired,
     now,
-    log: (message) => console.log(message),
+    log: (message) => logger.info(message),
   });
 }
 /** Prefer 127.0.0.1 on Windows to avoid localhost → ::1 while API listens on IPv4. */
@@ -104,7 +105,7 @@ function isApiConnectionError(error: unknown): boolean {
 async function waitForApiReady(): Promise<void> {
   const healthUrl = `${apiBaseUrl}/health`;
   const started = Date.now();
-  console.log(
+  logger.info(
     JSON.stringify({
       level: "info",
       type: "worker_waiting_for_api",
@@ -116,7 +117,7 @@ async function waitForApiReady(): Promise<void> {
     try {
       const res = await fetch(healthUrl, { signal: timeoutSignal(5_000) });
       if (res.ok) {
-        console.log(JSON.stringify({ level: "info", type: "worker_api_ready", healthUrl }));
+        logger.info(JSON.stringify({ level: "info", type: "worker_api_ready", healthUrl }));
         return;
       }
     } catch {
@@ -131,7 +132,7 @@ function logApiUnreachable(): void {
   const now = Date.now();
   if (now - lastApiUnreachableLogMs < apiUnreachableLogIntervalMs) return;
   lastApiUnreachableLogMs = now;
-  console.warn(
+  logger.warn(
     `[worker] API unreachable at ${apiBaseUrl} (is \`api\` dev running?). Will retry job claims.`,
   );
 }
@@ -167,7 +168,7 @@ async function emitWorkerMetric(name: string, value: number, tags: Record<string
     }),
     signal: timeoutSignal(requestTimeoutMs),
   }).catch((error) => {
-    console.error(
+    logger.error(
       `[worker] metric emit failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   });
@@ -326,7 +327,7 @@ async function markJobFailure(jobId: string, message: string, noRetry = false): 
 function startJobHeartbeatLoop(jobId: string): () => void {
   const timer = setInterval(() => {
     void markJobHeartbeat(jobId).catch((error) => {
-      console.error(
+      logger.error(
         `[worker][${jobId}] heartbeat failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
@@ -455,7 +456,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
       controlPlaneOrgId: payload.organizationId ?? undefined,
       retryModules: payload.retryModules,
     },
-    (m) => console.log(`[worker][${job.id}] ${m}`),
+    (m) => logger.info(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
     guard,
   );
@@ -483,7 +484,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
           jobId: job.id,
         },
       }).catch((nestedError) => {
-        console.error(
+        logger.error(
           `[worker][${job.id}] failed to persist audit failure event: ${
             nestedError instanceof Error ? nestedError.message : String(nestedError)
           }`,
@@ -539,7 +540,7 @@ async function runOrgProvisionJob(
       stockixTenantId: payload.stockixTenantId,
       correlationId: job.correlationId ?? randomUUID(),
     },
-    (m) => console.log(`[worker][${job.id}] ${m}`),
+    (m) => logger.info(`[worker][${job.id}] ${m}`),
     guard,
   );
 }
@@ -574,7 +575,7 @@ async function runAddModuleJob(
       module: payload.module,
       planSlug: payload.planSlug,
     },
-    (m) => console.log(`[worker][${job.id}] ${m}`),
+    (m) => logger.info(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
   );
   return {
@@ -594,12 +595,12 @@ async function runRemoveModuleJob(
   const payload = removeModulePayloadSchema.parse(job.payload);
   if (payload.module === "pos" || payload.module === "pms") {
     await stopModuleStack(payload.slug, payload.module, (m) =>
-      console.log(`[worker][${job.id}] ${m}`),
+      logger.info(`[worker][${job.id}] ${m}`),
     );
   }
   if (payload.module === "accounting") {
     await stopFinanceStack(payload.slug, (m) =>
-      console.log(`[worker][${job.id}] ${m}`),
+      logger.info(`[worker][${job.id}] ${m}`),
     );
   }
 }
@@ -615,7 +616,7 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   const result = await deprovisionTenant(db, job.tenantId, {
     removeVolumes,
     removeImages,
-    log: (m) => console.log(`[worker][${job.id}] ${m}`),
+    log: (m) => logger.info(`[worker][${job.id}] ${m}`),
   });
   if (!result.ok) throw new Error(result.message);
 }
@@ -681,7 +682,7 @@ async function loop() {
     throw new Error("DATABASE_URL is required for infra worker");
   }
   const db = createDb(databaseUrl);
-  console.log(
+  logger.info(
     JSON.stringify({
       level: "info",
       type: "worker_start",
@@ -691,13 +692,13 @@ async function loop() {
     }),
   );
   await waitForApiReady().catch((error) => {
-    console.error(
+    logger.error(
       `[worker] ${error instanceof Error ? error.message : String(error)} — start the API (pnpm dev apps) then restart the worker.`,
     );
     process.exit(1);
   });
   await checkRequiredTenantImages().catch((error) => {
-    console.warn(
+    logger.warn(
       `[worker] image pre-check failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   });
@@ -707,7 +708,7 @@ async function loop() {
         logApiUnreachable();
         return null;
       }
-      console.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     });
     if (!job) {
@@ -715,7 +716,7 @@ async function loop() {
       if (nowMs - lastLicenseExpireScanMs >= LICENSE_EXPIRE_SCAN_INTERVAL_MS) {
         lastLicenseExpireScanMs = nowMs;
         await expireDueLicenses(db).catch((error) => {
-          console.error(
+          logger.error(
             `[worker] license expire scan failed: ${error instanceof Error ? error.message : String(error)}`,
           );
         });
@@ -761,7 +762,7 @@ async function loop() {
       }
       await markJobComplete(job.id, provisionComplete);
       await emitWorkerMetric("worker.job.success", 1, { jobType: job.type });
-      console.log(
+      logger.info(
         JSON.stringify({
           level: "info",
           type: "worker_job_result",
@@ -773,7 +774,7 @@ async function loop() {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[worker][${job.id}] failed: ${message}`);
+      logger.error(`[worker][${job.id}] failed: ${message}`);
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
         // Provisioning should fail fast and never retry automatically.
@@ -785,7 +786,7 @@ async function loop() {
           || isPermanentProvisionError(message);
         await markJobFailure(job.id, message, noRetry);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
-        console.log(
+        logger.info(
           JSON.stringify({
             level: "error",
             type: "worker_job_result",
@@ -797,7 +798,7 @@ async function loop() {
           }),
         );
       } catch (reportError) {
-        console.error(
+        logger.error(
           `[worker][${job.id}] failed to report failure: ${reportError instanceof Error ? reportError.message : String(reportError)}`,
         );
         const fallbackNoRetry =
@@ -842,7 +843,7 @@ async function loop() {
               .where(eq(tenants.id, job.tenantId));
           }
         }).catch((fallbackError) => {
-          console.error(
+          logger.error(
             `[worker][${job.id}] fallback failure persistence failed: ${
               fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
             }`,
@@ -857,11 +858,11 @@ async function loop() {
 
 process.on("SIGTERM", () => {
   shuttingDown = true;
-  console.log(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGTERM", workerId }));
+  logger.info(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGTERM", workerId }));
 });
 process.on("SIGINT", () => {
   shuttingDown = true;
-  console.log(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGINT", workerId }));
+  logger.info(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGINT", workerId }));
 });
 
 void loop();
