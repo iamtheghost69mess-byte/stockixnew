@@ -101,6 +101,7 @@ function createAssignMockDb() {
 describe("single active license enforcement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tenantHasActiveLicenseMock.mockReset();
   });
 
   it("POST /licenses/:id/assign returns 409 when tenant already licensed", async () => {

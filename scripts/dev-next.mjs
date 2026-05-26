@@ -12,10 +12,8 @@ const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
 const dashboardDir = path.join(repoRoot, "apps", "dashboard");
 
-const preferred = parseInt(
-  process.env.DASHBOARD_PORT || process.env.PORT || "3000",
-  10,
-);
+// Do not fall back to PORT — root .env sets PORT=4000 for the API.
+const preferred = parseInt(process.env.DASHBOARD_PORT || "3000", 10);
 const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
 const port = strict ? preferred : await findFreePort(preferred);
 

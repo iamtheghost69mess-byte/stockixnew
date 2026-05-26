@@ -17,9 +17,9 @@ const reactAliases = {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: repoRoot,
   reactStrictMode: true,
   transpilePackages: [
-    "@repo/ui",
     "@base-ui/react",
     "react-hook-form",
     "@hookform/resolvers",
@@ -27,16 +27,20 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["@base-ui/react", "lucide-react", "react-hook-form"],
   },
+  // Turbopack: same client-only dedupe (opt-in via STOCKIX_NEXT_TURBOPACK=1).
   turbopack: {
     resolveAlias: reactAliases,
   },
-  webpack: (config) => {
-    config.resolve ??= {};
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      ...reactAliases,
-    };
-    config.resolve.dedupe = [...(config.resolve.dedupe ?? []), "react", "react-dom"];
+  webpack: (config, { isServer }) => {
+    // Client bundle only — aliasing react on the server breaks react-server exports
+    // and causes "Invalid hook call" / null dispatcher in layout-router.
+    if (!isServer) {
+      config.resolve ??= {};
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        ...reactAliases,
+      };
+    }
     return config;
   },
 };

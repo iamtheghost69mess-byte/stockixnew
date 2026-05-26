@@ -8,14 +8,6 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 
-function resolveSocketAllowedOrigins(): string[] {
-  const raw =
-    process.env.SOCKET_ALLOWED_ORIGINS?.trim()
-    || process.env.PUBLIC_BASE_URL?.trim()
-    || 'http://localhost:3000';
-  return raw.split(',').map((o) => o.trim()).filter(Boolean);
-}
-
 @WebSocketGateway({
   namespace: '/',
   path: '/socket',
@@ -24,12 +16,29 @@ function resolveSocketAllowedOrigins(): string[] {
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      const allowed = resolveSocketAllowedOrigins();
-      if (!origin || allowed.some((entry) => origin === entry || origin.startsWith(entry))) {
-        callback(null, true);
-        return;
+      const rawOrigins = process.env.SOCKET_ALLOWED_ORIGINS;
+
+      const defaultOrigins =
+        process.env.NODE_ENV !== 'production'
+          ? 'http://localhost:3000,http://localhost:3001'
+          : '';
+
+      if (!rawOrigins && process.env.NODE_ENV === 'production') {
+        return callback(
+          new Error('SOCKET_ALLOWED_ORIGINS must be set in production'),
+        );
       }
-      callback(new Error(`WebSocket CORS: ${origin} not allowed`));
+
+      const allowed = (rawOrigins || defaultOrigins)
+        .split(',')
+        .map((o: string) => o.trim())
+        .filter(Boolean);
+
+      if (!origin || allowed.some((a: string) => origin.startsWith(a))) {
+        callback(null, true);
+      } else {
+        callback(new Error(`WebSocket CORS: origin ${origin} not allowed`));
+      }
     },
     credentials: true,
     methods: ['GET', 'POST'],
@@ -54,17 +63,13 @@ export class SocketGateway
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
-  // Method to emit NEW_TRANSACTIONS_DATA event
   emitNewTransactionsData() {
     this.server.emit('NEW_TRANSACTIONS_DATA');
     this.logger.log('Emitted NEW_TRANSACTIONS_DATA event');
   }
 
-  // Method to emit SUBSCRIPTION_CHANGED event
   emitSubscriptionChanged() {
     this.server.emit('SUBSCRIPTION_CHANGED');
     this.logger.log('Emitted SUBSCRIPTION_CHANGED event');
   }
 }
-
-

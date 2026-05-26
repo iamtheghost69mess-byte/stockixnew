@@ -21,7 +21,11 @@ reportsRouter.get("/occupancy", async (c) => {
 
   const { page, limit, offset } = parsePagination(c);
 
-  const rooms = await db.select().from(pmsRooms).where(eq(pmsRooms.tenantId, tid));
+  const rooms = await db
+    .select()
+    .from(pmsRooms)
+    .where(eq(pmsRooms.tenantId, tid))
+    .limit(1000);
   const bookings = await db
     .select()
     .from(pmsBookings)

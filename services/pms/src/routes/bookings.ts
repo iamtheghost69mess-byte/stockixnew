@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq, gt, lt, gte, lte } from "drizzle-orm";
 import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsProperties, pmsGuests } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import { syncBookingToFinance } from "../lib/finance-sync.js";
 import type { PmsEnv } from "../types.js";
 
@@ -209,8 +209,15 @@ bookingsRouter.get("/", async (c) => {
   const conditions = [eq(pmsBookings.tenantId, tenantId(c))];
   if (propertyId) conditions.push(eq(pmsBookings.propertyId, propertyId));
   if (status) conditions.push(eq(pmsBookings.bookingStatus, status));
-  const rows = await db.select().from(pmsBookings).where(and(...conditions)).orderBy(desc(pmsBookings.checkIn));
-  return c.json({ bookings: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsBookings)
+    .where(and(...conditions))
+    .orderBy(desc(pmsBookings.checkIn))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ bookings: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 bookingsRouter.post("/", async (c) => {

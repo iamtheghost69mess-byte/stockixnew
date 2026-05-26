@@ -146,6 +146,7 @@ import {
 import { startStuckProvisioningReconciler } from "./provisioning/stuck-reconciler.js";
 import { securityHeadersMiddleware } from "./middleware/security-headers.js";
 import { globalRateLimitMiddleware } from "./middleware/global-rate-limit.js";
+import { isKnownControlPlanePath } from "./middleware/known-api-paths.js";
 import { logger } from "./lib/logger.js";
 
 if (process.env.SENTRY_DSN?.trim()) {
@@ -741,6 +742,17 @@ app.use("/*", async (c, next) => {
     }
     await next();
     return;
+  }
+  if (!isKnownControlPlanePath(pubPath)) {
+    return c.json(
+      {
+        success: false,
+        error: "Not found",
+        path: pubPath,
+        method: pubMethod,
+      },
+      404,
+    );
   }
   if (!platformApiSecret) {
     return c.json({ error: "unauthorized" }, 401);

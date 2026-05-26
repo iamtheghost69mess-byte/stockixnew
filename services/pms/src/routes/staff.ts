@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsStaff, pmsPropertyManagers, pmsPropertyManagerInvites } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import { randomBytes } from "node:crypto";
 import type { PmsEnv } from "../types.js";
 
@@ -13,9 +13,15 @@ export const staffRouter = new Hono<PmsEnv>();
 
 staffRouter.get("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
-  const rows = await db.select().from(pmsStaff)
-    .where(eq(pmsStaff.tenantId, tenantId(c))).orderBy(desc(pmsStaff.createdAt));
-  return c.json({ staff: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsStaff)
+    .where(eq(pmsStaff.tenantId, tenantId(c)))
+    .orderBy(desc(pmsStaff.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ staff: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 staffRouter.post("/", async (c) => {
@@ -66,9 +72,15 @@ staffRouter.delete("/managers/:id", async (c) => {
 
 staffRouter.get("/invites", async (c) => {
   if (!db) return errors.dbUnavailable(c);
-  const rows = await db.select().from(pmsPropertyManagerInvites)
-    .where(eq(pmsPropertyManagerInvites.tenantId, tenantId(c))).orderBy(desc(pmsPropertyManagerInvites.createdAt));
-  return c.json({ invites: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsPropertyManagerInvites)
+    .where(eq(pmsPropertyManagerInvites.tenantId, tenantId(c)))
+    .orderBy(desc(pmsPropertyManagerInvites.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ invites: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 staffRouter.post("/invites", async (c) => {

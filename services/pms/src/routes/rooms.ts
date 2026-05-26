@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsRooms, pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const roomsRouter = new Hono<PmsEnv>();
@@ -37,8 +37,15 @@ roomsRouter.get("/", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conditions = [eq(pmsRooms.tenantId, tenantId(c))];
   if (propertyId) conditions.push(eq(pmsRooms.propertyId, propertyId));
-  const rows = await db.select().from(pmsRooms).where(and(...conditions)).orderBy(desc(pmsRooms.createdAt));
-  return c.json({ rooms: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsRooms)
+    .where(and(...conditions))
+    .orderBy(desc(pmsRooms.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ rooms: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 // POST /api/rooms
