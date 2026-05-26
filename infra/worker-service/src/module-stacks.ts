@@ -532,6 +532,21 @@ export async function unpublishPosTraefik(slug: string): Promise<void> {
 
 }
 
+/** Stop Finance tenant stack (remove accounting module). Data volumes are retained. */
+export async function stopFinanceStack(
+  slug: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const composeFile = join(repoRoot(), "infra", "tenant-stack", "docker-compose.yml");
+  const project = composeProjectName(slug);
+  log(`[module-stop][accounting] compose stop project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "stop"],
+    { stdio: "pipe", reject: false },
+  );
+}
+
 /** Stop a module stack without removing volumes (remove-module). */
 export async function stopModuleStack(
   slug: string,

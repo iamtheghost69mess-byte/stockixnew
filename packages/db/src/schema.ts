@@ -114,6 +114,8 @@ export const organizations = pgTable("organizations", {
   // provisioning | active | suspended | failed
   isPrimary: boolean("is_primary").notNull().default(false),
   financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
+  /** Mongo ObjectId of the POS organization wired to this control-plane org. */
+  posOrganizationId: text("pos_organization_id"),
   provisioningError: text("provisioning_error"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

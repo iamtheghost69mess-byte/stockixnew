@@ -29,8 +29,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const stockixTenantIdParam = z.string().uuid();
 
-const addableModuleSchema = z.enum(["pos", "pms", "chat"]);
-const removableModuleSchema = z.enum(["pos", "pms", "chat"]);
+const addableModuleSchema = z.enum(["pos", "pms", "chat", "accounting"]);
+const removableModuleSchema = z.enum(["pos", "pms", "chat", "accounting"]);
 
 const moduleBodySchema = z.object({
   module: addableModuleSchema,
@@ -210,6 +210,19 @@ export function registerTenantModulesRoutes(app: Hono<ApiEnv>, db: Db | null): v
         .set({ posUrl: null, posOrganizationId: null, updatedAt: new Date() })
         .where(eq(tenantDeployments.tenantId, row.id));
     }
+    if (moduleToRemove === "accounting") {
+      await db
+        .update(tenantDeployments)
+        .set({
+          financeTenantId: null,
+          financeDefaultWarehouseId: null,
+          financeWalkInCustomerId: null,
+          financeCashAccountId: null,
+          financeCardAccountId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantDeployments.tenantId, row.id));
+    }
 
     const correlationId = randomUUID();
     const job = await insertTenantJob(db, {
@@ -222,7 +235,7 @@ export function registerTenantModulesRoutes(app: Hono<ApiEnv>, db: Db | null): v
       },
     });
 
-    if (row.financeTenantId && row.financeTenantId > 0) {
+    if (row.financeTenantId && row.financeTenantId > 0 && moduleToRemove !== "accounting") {
       void syncFinanceLicenseForStockixTenant(db, {
         stockixTenantId: row.id,
         financeTenantId: row.financeTenantId,

@@ -7,6 +7,7 @@ const stockBalanceService = require("./stockBalanceService");
 const inventoryCostService = require("./inventoryCostService");
 const stockLotService = require("./stockLotService");
 const accountingService = require("./accountingService");
+const { enqueueBigcapitalGrnBillIfEnabled } = require("./bigcapitalSyncEnqueue");
 const { recordInventoryAudit } = require("./inventoryAuditService");
 const { emitPos } = require("../utils/socketEmit");
 
@@ -207,6 +208,12 @@ async function confirmGRN(grnId, organizationId, userId, req = null) {
   } catch (err) {
     console.error("[grnService] GRNI accrual failed:", err.message);
   }
+
+  enqueueBigcapitalGrnBillIfEnabled(grnOut, {
+    originatedBy: "grnService.confirmGRN",
+  }).catch((err) => {
+    console.error("[grnService] Finance GRN bill enqueue failed:", err.message);
+  });
 
   if (req) {
     emitPos(req, "inventory:updated", { ingredientIds: [], at: Date.now() });

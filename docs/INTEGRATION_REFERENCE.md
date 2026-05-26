@@ -69,7 +69,10 @@ sequenceDiagram
 | Accounting outbox | `models/accountingIntegrationOutboxModel.js`, `services/accountingIntegrationOutbox.js` | ✅ |
 | Sync processor | `services/bigcapitalSyncProcessor.js` | ✅ |
 | Sync worker | `workers/bigcapitalSyncWorker.js` | ✅ In compose as `pos-bigcapital-worker` |
-| Integration REST routes | `routes/integrationRoute.js` (8 routes) | ✅ |
+| Integration REST routes | `routes/integrationRoute.js` | ✅ |
+| Event catalog + dispatch | `services/accountingIntegrationEvents.js` | ✅ |
+| Mapping coverage API | `GET /api/integration/mapping-coverage` | ✅ |
+| Outbox ops API | `GET /api/integration/outbox`, retry | ✅ |
 | Finance receipt ingress | `InternalPos.controller.ts`, `InternalPosReceipts.service.ts` | ✅ |
 | Platform wire API | `PUT /api/platform/v1/organizations/:id/integration/bigcapital` | ✅ |
 | Integration health | `GET /api/platform/v1/organizations/:id/integration/bigcapital/health` | ✅ (provision resume) |
@@ -79,6 +82,10 @@ sequenceDiagram
 | persistFinanceDeploymentIds | `tenant_deployments.finance_tenant_id`, etc. | ✅ |
 | Void sync | `void_receipt` jobs on reverse-order + full refund | ✅ |
 | Partial refund sync | `partial_refund` → `PATCH .../partial-refund` (credit note) | ✅ |
+| GRN → Finance AP | `grn_bill` → `POST /internal/pos/inventory/grn-bill` | ✅ |
+| Stock adjust / stock take | `inventory_adjustment`, `stock_take_variance` → variance journal | ✅ |
+| Ingredient / vendor mapping | `integrationIngredientMappingModel`, `integrationVendorMappingModel` | ✅ |
+| Recipe COGS on sale | `unitCost` on receipt entries → Finance item `costPrice` | ✅ |
 | Multi-tender deposits | `depositPayments[]` + Finance manual journal split | ✅ |
 | Unmapped-item alerts | Backoffice notification + `accountingSaleStatus: failed` | ✅ |
 | Line discounts in receipt | Per mapped line; service charge in `statement` only | ⚠️ Partial |
@@ -264,7 +271,7 @@ Copies from provision result / deployment row:
 |-----|----------|--------|
 | Stockix JWT accepted but no `req.user` bridge | Critical | **OPEN** — SSO into POS tenant API non-functional |
 | Partial refund without full void | Medium | **FIXED** — credit note via internal partial-refund API |
-| Live E2E burger scenario | — | **NOT RUN** — required on staging |
+| Live E2E burger scenario | — | **NOT RUN** — use [section-4-integration-e2e-checklist.md](./section-4-integration-e2e-checklist.md) |
 
 ### Production readiness by bundle
 

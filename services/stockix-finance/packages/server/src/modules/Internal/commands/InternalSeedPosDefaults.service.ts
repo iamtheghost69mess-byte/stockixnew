@@ -14,15 +14,19 @@ import { Customer } from '@/modules/Customers/models/Customer';
 import { Account } from '@/modules/Accounts/models/Account.model';
 import { Item } from '@/modules/Items/models/Item';
 import { CustomersApplication } from '@/modules/Customers/CustomersApplication.service';
+import { VendorsApplication } from '@/modules/Vendors/VendorsApplication.service';
 import { ItemsApplicationService } from '@/modules/Items/ItemsApplication.service';
 import { CreateCustomerDto } from '@/modules/Customers/dtos/CreateCustomer.dto';
+import { CreateVendorDto } from '@/modules/Vendors/dtos/CreateVendor.dto';
 import { CreateItemDto } from '@/modules/Items/dtos/Item.dto';
+import { Vendor } from '@/modules/Vendors/models/Vendor';
 import {
   POS_BRIDGE_ITEM_CODES,
   POS_BRIDGE_ITEM_NAMES,
 } from '../pos-bridge-items.constants';
 
 const WALK_IN_DISPLAY_NAME = 'Walk-in Customer';
+const POS_VENDOR_DISPLAY_NAME = 'POS Trade Vendor';
 
 export type SeedPosDefaultsResult = {
   success: true;
@@ -31,6 +35,9 @@ export type SeedPosDefaultsResult = {
   cardAccountId: number;
   serviceChargeItemId?: number;
   discountItemId?: number;
+  defaultVendorId?: number;
+  inventoryAccountId?: number;
+  inventoryVarianceAccountId?: number;
 };
 
 @Injectable()
@@ -40,6 +47,7 @@ export class InternalSeedPosDefaultsService {
   constructor(
     private readonly cls: ClsService,
     private readonly customersApplication: CustomersApplication,
+    private readonly vendorsApplication: VendorsApplication,
     private readonly itemsApplication: ItemsApplicationService,
 
     @Inject(TenantModel.name)
@@ -56,6 +64,9 @@ export class InternalSeedPosDefaultsService {
 
     @Inject(Item.name)
     private readonly itemModel: TenantModelProxy<typeof Item>,
+
+    @Inject(Vendor.name)
+    private readonly vendorModel: TenantModelProxy<typeof Vendor>,
   ) {}
 
   private async resolveTenantContext(tenantId: number) {
@@ -104,6 +115,49 @@ export class InternalSeedPosDefaultsService {
 
     const created = await this.customersApplication.createCustomer(dto);
     return Number(created.id);
+  }
+
+  private async resolveDefaultVendorId(currencyCode: string): Promise<number> {
+    const existing = await this.vendorModel()
+      .query()
+      .where('displayName', POS_VENDOR_DISPLAY_NAME)
+      .first();
+
+    if (existing?.id) {
+      return Number(existing.id);
+    }
+
+    const dto = new CreateVendorDto();
+    dto.displayName = POS_VENDOR_DISPLAY_NAME;
+    dto.currencyCode = currencyCode;
+    dto.active = true;
+
+    const created = await this.vendorsApplication.createVendor(dto);
+    return Number(created.id);
+  }
+
+  private async resolveInventoryAccountIds(): Promise<{
+    inventoryAccountId?: number;
+    inventoryVarianceAccountId?: number;
+  }> {
+    const inventory = await this.accountModel()
+      .query()
+      .where('accountType', ACCOUNT_TYPE.INVENTORY)
+      .where('active', true)
+      .orderBy('id', 'asc')
+      .first();
+
+    const variance = await this.accountModel()
+      .query()
+      .where('accountType', ACCOUNT_TYPE.EXPENSE)
+      .where('active', true)
+      .orderBy('id', 'asc')
+      .first();
+
+    return {
+      inventoryAccountId: inventory?.id ? Number(inventory.id) : undefined,
+      inventoryVarianceAccountId: variance?.id ? Number(variance.id) : undefined,
+    };
   }
 
   private async resolveDepositAccountIds(): Promise<{
@@ -235,7 +289,9 @@ export class InternalSeedPosDefaultsService {
       (tenant.metadata?.baseCurrency as string | undefined)?.trim() || 'USD';
 
     const walkInCustomerId = await this.resolveWalkInCustomerId(currencyCode);
+    const defaultVendorId = await this.resolveDefaultVendorId(currencyCode);
     const { cashAccountId, cardAccountId } = await this.resolveDepositAccountIds();
+    const inventoryAccounts = await this.resolveInventoryAccountIds();
     const bridgeItems = await this.resolvePosBridgeItemIds();
 
     return {
@@ -243,6 +299,8 @@ export class InternalSeedPosDefaultsService {
       walkInCustomerId,
       cashAccountId,
       cardAccountId,
+      defaultVendorId,
+      ...inventoryAccounts,
       ...bridgeItems,
     };
   }

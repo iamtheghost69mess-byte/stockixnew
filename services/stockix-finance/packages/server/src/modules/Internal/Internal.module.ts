@@ -11,7 +11,10 @@ import { InternalResolveController } from './InternalResolve.controller';
 import { InternalResolveTenantService } from './commands/InternalResolveTenant.service';
 import { InternalPosController } from './InternalPos.controller';
 import { InternalPosReceiptsService } from './commands/InternalPosReceipts.service';
+import { InternalPosInventoryService } from './commands/InternalPosInventory.service';
 import { SaleReceiptsModule } from '@/modules/SaleReceipts/SaleReceipts.module';
+import { BillsModule } from '@/modules/Bills/Bills.module';
+import { VendorsModule } from '@/modules/Vendors/Vendors.module';
 import { CreditNotesModule } from '@/modules/CreditNotes/CreditNotes.module';
 import { ManualJournalsModule } from '@/modules/ManualJournals/ManualJournals.module';
 import { WarehousesModule } from '@/modules/Warehouses/Warehouses.module';
@@ -41,6 +44,8 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     SaleReceiptsModule,
     CreditNotesModule,
     ManualJournalsModule,
+    BillsModule,
+    VendorsModule,
     WarehousesModule,
     CustomersModule,
     AccountsModule,
@@ -64,6 +69,7 @@ import { UsersModule } from '@/modules/UsersModule/Users.module';
     SyncLicenseService,
     InternalUsersService,
     InternalPosReceiptsService,
+    InternalPosInventoryService,
     InternalActivateWarehousesService,
     InternalSeedPosDefaultsService,
     InternalSyncOrganizationBrandingService,

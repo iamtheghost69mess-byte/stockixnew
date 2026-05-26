@@ -20,6 +20,7 @@
 | POS §2.3 license enforcement | `pos-license-sync.ts` (`PosSyncResult`, metadata sync), `patchOrgLicense` STXI fields, `authedTenantLocation` middleware order, `getOrgProvisioningStatus` STXI gate; docs: [docs/section-2.3-license-e2e-checklist.md](docs/section-2.3-license-e2e-checklist.md). Tests: `license-suspend.test.ts`, `pos-license-sync.test.ts`, `stxi-license-validate.test.js`. **Manual E2E / `test:saas-integration`:** not signed off. |
 | Low/Low audit repairs | Bootstrap PIN 4–6 (`orgBootstrapService.js`), POS floor VIP badge (`pos-floor-page.tsx`), provision SSE bus + `pg_notify` (`provision-bus.ts`, worker `provision-trace.ts`, API `provision-notify-listener.ts`). Tests: `provision-pin-allocation.test.js`, `provision-bus.test.ts`. |
 | Accounting §3.2–3.4 (May 2026) | `maxOrganizations` sync on `organization.provision`; Finance `LicenseGuard` expired read-only + `useLicenseWriteAllowed` null block; `tenant_config` CRUD + tenant `.env` branding vars + dashboard Branding tab; `POST /api/internal/organization/branding/sync`; partial BigCapital cleanup (PDF/email defaults, auth persist migration). **Remaining:** Finance self-service multi-org, full CSS/mail rebrand, per-tenant webapp rebuild automation. |
+| POS + Accounting §4 Phases 0–5 (May 2026) | Wire health + combined-org guard (0); outbox + partial refund + multi-tender (1); multi-org provision + module lifecycle (2); GRN/variance/COGS bridge (3); event catalog + ops APIs + mapping guard (4); Finance bridge UI + owner `bridge-summary` (5). Tests: `npm run test:accounting-integration`. **Remaining:** staging E2E [section-4-integration-e2e-checklist.md](docs/section-4-integration-e2e-checklist.md) Phases 0–5 not signed off. |
 
 ### Legend (plan fixes 1–10)
 
@@ -44,7 +45,7 @@
 | 9 | Email log API + dashboard page | ✅ | ✅ `apps/api/tests/email-logs.test.ts` | ⚠️ Not signed off | `GET /admin/email-logs` + `/email-logs` page. Resend webhook still needs ops config. |
 | 10 | Expiry milestones + default dated license | ✅ | ✅ `license-expiry-milestones.test.ts`, `license-expiry-email.test.ts` | ⚠️ Not signed off | Milestones **90/60/30/15/7/3/2/1**; owner email to assigned `ownerId`; tenant auto-suspend after grace; BullMQ when Redis configured. Generate UI defaults fixed term; perpetual still selectable. |
 
-**Deferred (large initiatives):** Stripe billing, event bus, GRN/stock bridge, NeDB/LAN offline, combined module add/remove, Finance whitelabel, partial refund sync — not in plan 1–10 / §2.1 scope.
+**Deferred (large initiatives):** Stripe billing, NeDB/LAN offline, Finance whitelabel (full CSS/mail rebuild) — not in plan 1–10 / §2.1 scope. **Done elsewhere:** accounting bridge event catalog (§4 Phase 4), GRN/stock→Finance (Phase 3), partial refund (Phase 1), combined add/remove accounting (Phase 2), mapping UI (Phase 5).
 
 ---
 
@@ -87,7 +88,7 @@ EFFORT: Medium — **done**
 
 **§2.1:** Implemented in repo — see [Completed work](#completed-work-may-2026) and [docs/section-2.1-e2e-checklist.md](docs/section-2.1-e2e-checklist.md). Tests: `organization-provisioning-status.test.js`, `bootstrap-credential-reveal.test.js`, `bootstrap-pos-org.test.ts`, `pos-entitlements-from-modules.test.ts`, `pos-credentials-http.test.ts`.
 
-**Remaining:** staging **manual E2E sign-off** only (Phases 0–4 in checklist). No open code gaps listed here.
+**Remaining:** staging **manual E2E sign-off** only (Phases 0–5 in §4 checklist where applicable). No open code gaps listed here.
 
 ---
 
@@ -251,10 +252,10 @@ EFFORT: Medium
 PRIORITY: High  
 EFFORT: —
 
-⚠️ **Second POS org does not auto-create Finance org** — **Phase 0:** combined stacks block ad-hoc `POST /organizations` when `FINANCE_INTERNAL_BASE_URL` is set (`combinedOrgProvisionGuard.js`). Full orchestration (control-plane + Finance + wire) → Phase 2.
+✅ **Second POS org does not auto-create Finance org** — **Phase 2 (May 2026):** `organization.provision` creates Finance sub-org; non-primary orgs get POS bootstrap + wire (`combined-org-pos-provision.ts`, `pos_organization_id` on `organizations`). Ad-hoc platform `POST /organizations` blocked on combined stacks (Phase 0).
 
 PRIORITY: High  
-EFFORT: High (orchestration remaining)
+EFFORT: Low — staging verify multi-org E2E
 
 ⚠️ **Sync one-way (POS → Finance)** — No Finance org/COA changes propagated back to POS.
 
@@ -270,10 +271,10 @@ EFFORT: Low — verify on staging
 
 ### 4.2 Sales → Accounting Flow
 
-⚠️ **Cross-product event bus / `originatedBy`** — **Phase 1 (May 2026):** Durable `AccountingIntegrationOutbox` + `originatedBy` on enqueue paths; worker drains pending rows when Redis down. Full cross-product bus still deferred.
+✅ **Cross-product event bus / `originatedBy`** — **Phase 4 (May 2026):** `accountingIntegrationEvents.js` catalog (6 event types); all enqueue paths use `dispatchAccountingIntegrationEvent`; ops APIs `GET /integration/events`, `/outbox`, `POST /outbox/:id/retry`. Not a global product event bus — accounting bridge only.
 
 PRIORITY: High  
-EFFORT: Medium (bus remaining)
+EFFORT: Low — staging verify
 
 ⚠️ **Paid orders only** — Enqueue from paid paths + `syncOfflineOrders`; other sale types not unified.
 
@@ -290,10 +291,10 @@ EFFORT: Low — staging verify
 PRIORITY: Medium  
 EFFORT: Low — staging verify
 
-⚠️ **Manual item mapping required** — Unmapped lines dropped; partial cart totals can diverge.
+✅ **Manual item mapping (operator UI)** — **Phase 5 (May 2026):** POS Studio **Finance bridge** (`/dashboard/accounting/finance-integration`) for menu/ingredient/vendor mappings; `GET /integration/mapping-coverage`; default `allowPartialUnmappedReceipt: false` blocks receipt if any sellable line unmapped. Owner dashboard **Bridge readiness** via `GET /tenants/:id/integration/bridge-summary`.
 
 PRIORITY: High  
-EFFORT: High (product)
+EFFORT: Low — staging verify UI + coverage
 
 ⚠️ **Offline accounting replay** — **Phase 1:** Mongo outbox + worker drain; offline pay still depends on server accept. Batch `offlineSyncKey` on patch/pay remains §2.7.
 
@@ -304,25 +305,28 @@ EFFORT: Medium
 
 ### 4.3 Stock → Accounting Flow
 
-🔲 **GRN / purchase → Finance AP** — Not in `bigcapitalSyncProcessor.js` (receipt-only).
+✅ **GRN / purchase → Finance AP** — `grn_bill` outbox event; `POST /api/internal/pos/inventory/grn-bill`; enqueue on `grnService.confirmGRN`; native `postGrniAccrual` skipped when `bigcapitalIntegrationEnabled`.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: High  
+**Verify:** Map ingredients + vendor (or `defaultVendorId` from wire); confirm GRN → Finance bill with `referenceNo` `pos-grn-{id}`.
 
-🔲 **POS ingredient adjustments → Finance inventory** — POS deducts ingredients; Finance COGS uses item `costPrice`, not recipe cost.
-
-PRIORITY: High  
-EFFORT: High
-
-⚠️ **COGS on sale via Finance receipt only** — POS does not send unit cost; wrong Finance item cost → wrong COGS.
+✅ **POS ingredient adjustments → Finance** — `inventory_adjustment` + `stock_take_variance` events; `POST /api/internal/pos/inventory/variance-journal`; hooks on `inventoryController.adjust` (manual_adjust/waste/correction) and `stockTakeController.postSession`; native stock-take journal skipped when integration on.
 
 PRIORITY: High  
-EFFORT: Medium
+EFFORT: High  
+**Verify:** Ingredient→Finance item mappings; post adjust + stock take; GL in Finance matches POS variance.
 
-🔲 **Stock adjustments reflected in accounting** — No bridge for stock-take/adjustment events.
+✅ **COGS on sale — recipe unit cost** — `buildMappedEntries` sends optional `unitCost` from POS recipe BOM; Finance `InternalPosReceipts` updates item `costPrice` before receipt when `syncRecipeCostOnSale` (default true).
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Medium  
+**Verify:** Paid order with mapped menu item + recipe; Finance item cost matches POS ingredient costs before COGS posts.
+
+✅ **Ingredient / vendor mapping** — **Phase 3–5:** REST `ingredient-mappings`, `vendor-mappings`; provision seeds `defaultVendorId` + inventory GL ids; operator UI on **Finance bridge** (Phase 5). Finance item picker / auto-map-by-SKU not built.
+
+PRIORITY: High  
+EFFORT: Low — staging verify mappings + GRN/variance flows
 
 ---
 
@@ -333,15 +337,15 @@ EFFORT: High
 PRIORITY: High  
 EFFORT: Low — **verify in staging**
 
-🔲 **Downgrade combined → POS-only** — `remove-module` allows `pos` | `pms` | `chat` only; does not stop Finance stack (`tenant-modules-http.ts`, `worker.ts`).
+✅ **Downgrade combined → POS-only** — **Phase 2:** `remove-module: accounting` stops Finance compose (`stopFinanceStack`), clears deployment Finance IDs.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Low — staging verify
 
-🔲 **Upgrade POS-only → combined mid-cycle** — `add-module` schema excludes `accounting`; requires full reprovision/ops.
+⚠️ **Upgrade POS-only → combined mid-cycle** — **Phase 2:** `add-module: accounting` seeds defaults + wires existing POS org when Finance stack already provisioned; greenfield Finance still needs initial `tenant.provision` / retry-provision.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Medium
 
 ⚠️ **Combined license suspend both products** — Possible via license API suspend path; tenant Docker suspend alone does not sync Finance/POS license state.
 
@@ -357,20 +361,20 @@ EFFORT: Medium
 PRIORITY: Medium  
 EFFORT: —
 
-🔲 **Two POS orgs ≠ two Finance orgs** — Single `financeTenantId` on `IntegrationConfig`.
+✅ **Two control-plane orgs → two Finance tenants + two POS orgs** — **Phase 2:** `organization.provision` orchestrates Finance sub-org + POS bootstrap per org (`combined-org-pos-provision.ts`, `posOrganizationId` on control-plane row). Each POS org has its own `IntegrationConfig.financeTenantId`.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: Low — [docs/section-4-integration-e2e-checklist.md](docs/section-4-integration-e2e-checklist.md) Phase 2
 
 ⚠️ **Reports scoped per Finance organization** — Mixing only if wrong org context selected; no cross-org consolidation in bridge.
 
 PRIORITY: Medium  
 EFFORT: —
 
-⚠️ **Multi-org combined E2E not validated in repo** — Docs mark live scenarios NOT RUN.
+⚠️ **Multi-org combined E2E not signed off on staging** — **Phase 4:** `npm run test:accounting-integration` (unit smoke); [docs/section-4-integration-e2e-checklist.md](docs/section-4-integration-e2e-checklist.md); `apps/api/tests/combined-org-integration.test.ts` (idempotency contract).
 
 PRIORITY: High  
-EFFORT: Medium (QA)
+EFFORT: Medium (QA sign-off)
 
 ---
 
@@ -434,22 +438,24 @@ Open and partial gaps only (completed items: [Completed work](#completed-work-ma
 | 1 | Stripe / owner SaaS billing | 🔲 Missing | Critical |
 | 2 | Plan change / upgrade-downgrade | 🔲 Missing | Critical |
 | 3 | Failed payment / dunning | 🔲 Missing | Critical |
-| 4 | Cross-product event bus / `originatedBy` | 🔲 Missing | High |
-| 5 | GRN / stock → Finance accounting | 🔲 Missing | High |
-| 6 | Combined module upgrade/downgrade | 🔲 Missing | High |
-| 7 | POS multi-org ↔ Finance multi-org | 🔲 Missing | High |
-| 8 | `tenant_config` whitelabel → Finance UI | 🔲 Missing | High |
-| 9 | Partial refund → Finance adjustment | ❌ Broken | High |
-| 10 | `offlineSyncKey` / orders sync idempotency | ⚠️ Partial (create only) | High |
-| 11 | PIN login offline / NeDB / LAN POS | 🔲 Missing | High |
-| 12 | Deferred accounting + print offline | 🔲 / ⚠️ Partial | High |
-| 14 | STXI enforcement E2E (all tenants/locations) | ⚠️ Partial | Medium |
+| 4 | Accounting bridge events / `originatedBy` | ✅ Phase 4 (not global product bus) | High |
+| 5 | GRN / stock → Finance accounting | ✅ Phase 3 | High |
+| 6 | Combined module upgrade/downgrade | ✅ Phase 2 | High |
+| 7 | POS multi-org ↔ Finance multi-org | ✅ Phase 2 code; ⚠️ staging E2E | High |
+| 8 | Menu / ingredient / vendor mapping UI | ✅ Phase 5 (`finance-integration` + `bridge-summary`) | High |
+| 9 | `tenant_config` whitelabel → Finance webapp bundle | 🔲 Missing (env written; rebuild manual) | High |
+| 10 | Partial refund → Finance adjustment | ✅ Phase 1 | High |
+| 11 | `offlineSyncKey` / orders sync idempotency | ⚠️ Partial (create only; §2.7) | High |
+| 12 | PIN login offline / NeDB / LAN POS | 🔲 Missing | High |
+| 13 | Deferred accounting + print offline | ⚠️ Partial (outbox on replay; no offline print queue) | High |
+| 14 | STXI / license enforcement E2E | ⚠️ Code done; staging not signed off | Medium |
 | 15 | `defaultCredentials` on tenant staff PIN change | ⚠️ Partial (§2.2) | Medium |
-| 16 | Visual spatial floor plan (POS) | ⚠️ Partial | Medium / High |
+| 16 | Visual spatial floor plan (POS) | ⚠️ Partial | Medium |
 | 17 | Plan display (no Stripe invoices) | ⚠️ Partial | High |
 | 18 | Resend webhook / delivery status | ⚠️ Partial | Medium |
-| 19 | Combined bundle `partial` / wire retry | ⚠️ Partial | High |
-| 20 | Staging E2E (§1, §2.1, §2.5 inventory playbook) | ⚠️ Not signed off | High |
+| 19 | 1:1 Finance wire per POS org (provision-time) | ⚠️ By design (not multi-Finance per org) | Medium |
+| 20 | Wire health re-apply on provision resume | ✅ Phase 0; ⚠️ staging verify | High |
+| 21 | Staging E2E (§1, §2.1, §2.3, §2.5, §4 Phases 0–5) | ⚠️ Not signed off | High |
 
 ---
 
@@ -461,6 +467,7 @@ Open and partial gaps only (completed items: [Completed work](#completed-work-ma
 
 - [ ] [docs/section-1-e2e-checklist.md](docs/section-1-e2e-checklist.md) — all phases (incl. invite `emailQueued` when Redis + mail on)
 - [ ] [docs/section-2.1-e2e-checklist.md](docs/section-2.1-e2e-checklist.md) — provisioning Phases 0–4
+- [ ] [docs/section-4-integration-e2e-checklist.md](docs/section-4-integration-e2e-checklist.md) — POS+Finance Phases 0–5; `npm run test:accounting-integration` (pos-backend)
 - [ ] [services/posnew/mdfiles/inventory-professional-test-playbook.md](services/posnew/mdfiles/inventory-professional-test-playbook.md) — §6–7 (serial stock take, offline stock mirror + adjust queue)
 - [ ] `npm run test:saas-integration` (POS) — not re-run in last repo verification
 - [ ] Migrations `0044`–`0046` + `CONTROL_PLANE_REDIS_URL` on target env ([infra/prod/OPERATIONS.md](infra/prod/OPERATIONS.md)); confirm API logs both BullMQ workers (license expiry + owner invite mail)
@@ -470,12 +477,12 @@ Open and partial gaps only (completed items: [Completed work](#completed-work-ma
 | Priority | Item |
 |----------|------|
 | Critical | Stripe billing + plan change + failed payment (§1.5) |
-| High | Offline POS (NeDB/LAN), `offlineSyncKey` remainder (§2.7), partial refund sync (§4.2) |
-| High | Event bus, GRN/stock bridge, combined module add/remove (§4) |
-| Medium | Staff PIN → `defaultCredentials` (§2.2), Finance whitelabel (§3.4), §2.3 staging E2E sign-off |
+| High | Offline POS (NeDB/LAN), `offlineSyncKey` remainder (§2.7), offline pay → accounting replay (§4.2) |
+| High | Staging sign-off §4 integration checklist Phases 0–5 (mapping UI, bridge-summary, sales/stock flows) |
+| Medium | Staff PIN → `defaultCredentials` (§2.2), Finance whitelabel + webapp rebuild (§3.4), §2.3 license E2E |
 
-**Defer (large):** Full offline POS stack (catalog/tables/PIN mirror), cross-product event bus, GRN accounting bridge, Stripe — track in Summary Table above.
+**Defer (large):** Full offline POS stack (catalog/tables/PIN mirror), Stripe — see Summary Table.
 
 ---
 
-*Last updated May 2026 after §2.5 inventory/stock repair and §1.1 invite mail queue. Re-run staging E2E before production commitments.*
+*Last updated May 2026 after §4 Phases 0–5 (POS+Finance bridge) and §2.5 inventory/stock repair. Re-run staging E2E before production commitments.*

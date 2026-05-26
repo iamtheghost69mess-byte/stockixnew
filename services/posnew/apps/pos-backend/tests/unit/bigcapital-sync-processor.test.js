@@ -68,7 +68,7 @@ test("buildDepositPayments maps each split to cash or card account", () => {
   assert.equal(payments[1].depositAccountId, 10002);
 });
 
-test("buildMappedEntries passes line discount amount", () => {
+test("buildMappedEntries passes line discount amount", async () => {
   const menuId = new mongoose.Types.ObjectId();
   const itemMap = { [String(menuId)]: { id: 9 } };
   const order = {
@@ -82,12 +82,12 @@ test("buildMappedEntries passes line discount amount", () => {
       },
     ],
   };
-  const entries = buildMappedEntries(order, itemMap);
+  const entries = await buildMappedEntries(order, itemMap, { syncRecipeCost: false });
   assert.equal(entries.length, 1);
   assert.equal(entries[0].discount, 2);
 });
 
-test("buildMappedEntries skips unmapped lines", () => {
+test("buildMappedEntries skips unmapped lines", async () => {
   const order = {
     items: [
       {
@@ -105,23 +105,36 @@ test("buildMappedEntries skips unmapped lines", () => {
     ],
   };
   const itemMap = { [String(menuBurger)]: { id: 5 } };
-  const entries = buildMappedEntries(order, itemMap);
+  const entries = await buildMappedEntries(order, itemMap, { syncRecipeCost: false });
   assert.equal(entries.length, 1);
   assert.equal(entries[0].itemId, 5);
   assert.equal(entries[0].quantity, 2);
   assert.equal(entries[0].rate, 12);
 });
 
-test("buildMappedEntries returns empty when nothing mapped", () => {
+test("buildMappedEntries returns empty when nothing mapped", async () => {
   const order = {
     items: [{ menuItem: menuCustom, name: "X", quantity: 1, pricePerQuantity: 1 }],
   };
-  assert.equal(buildMappedEntries(order, {}).length, 0);
+  assert.equal((await buildMappedEntries(order, {}, { syncRecipeCost: false })).length, 0);
 });
 
 test("buildSaleReceiptPayload returns null when all items unmapped", async () => {
   const IntegrationItemMapping = require("../../models/integrationItemMappingModel");
+  const backofficePath = require.resolve("../../services/backofficeNotificationEvents");
+  const prevBackoffice = require.cache[backofficePath];
+  require.cache[backofficePath] = {
+    id: backofficePath,
+    filename: backofficePath,
+    loaded: true,
+    exports: {
+      NOTIFICATION_EVENTS: { INTEGRATION_SYNC_UNMAPPED: "integration.sync_unmapped" },
+      createBackofficeNotificationFromEvent: async () => {},
+    },
+  };
+
   const findMock = mock.method(IntegrationItemMapping, "find", () => ({
+    select: () => ({ lean: async () => [] }),
     lean: async () => [],
   }));
 
@@ -133,9 +146,14 @@ test("buildSaleReceiptPayload returns null when all items unmapped", async () =>
     ],
   };
 
-  const result = await buildSaleReceiptPayload(order, { bigcapital: baseCfg });
-  assert.equal(result, null);
-  findMock.mock.restore();
+  try {
+    const result = await buildSaleReceiptPayload(order, { bigcapital: baseCfg });
+    assert.equal(result, null);
+  } finally {
+    findMock.mock.restore();
+    if (prevBackoffice) require.cache[backofficePath] = prevBackoffice;
+    else delete require.cache[backofficePath];
+  }
 });
 
 test("resolveLocationMapping uses mapping row when order location matches", () => {

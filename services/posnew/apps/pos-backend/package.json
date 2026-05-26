@@ -25,6 +25,7 @@
     "test:org-tenant-url": "node scripts/organization-tenant-url-selftest.js",
     "test:saas-owner-dashboard": "node scripts/saas-owner-dashboard-api-test.js",
     "test:saas-integration": "node scripts/saas-integration-selftest.js",
+    "test:accounting-integration": "node scripts/accounting-integration-selftest.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "seed:dev": "node scripts/seedDevStaff.js",
     "seed:inventory-ui": "node scripts/seedInventoryUiShowcase.js",

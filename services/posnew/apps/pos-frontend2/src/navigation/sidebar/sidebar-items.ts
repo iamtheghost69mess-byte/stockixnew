@@ -329,6 +329,12 @@ export const sidebarItems: NavGroup[] = [
         icon: LayoutDashboard,
       },
       {
+        title: "Finance bridge",
+        url: "/dashboard/accounting/finance-integration",
+        icon: GitCompareArrows,
+        permission: "backoffice.accounting.write",
+      },
+      {
         title: "Chart of accounts",
         url: "/dashboard/accounting/accounts",
         icon: Landmark,

@@ -25,7 +25,7 @@ import {
 } from "../domain/provisioner.js";
 import { executeOrgProvisionRuntime } from "./org-provision-runtime.js";
 import { executeAddModuleRuntime } from "./provision-runtime.js";
-import { stopModuleStack } from "./module-stacks.js";
+import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
@@ -383,6 +383,8 @@ const provisionPayloadSchema = z.object({
 
 const orgProvisionPayloadSchema = z.object({
   organizationId: z.string().uuid(),
+  organizationSlug: z.string().min(1).optional(),
+  isPrimary: z.boolean().optional(),
   adminEmail: z.string().email(),
   adminFirstName: z.string().min(1),
   adminLastName: z.string().min(1),
@@ -399,12 +401,12 @@ const addModulePayloadSchema = z.object({
   name: z.string().min(1),
   adminEmail: z.string().email(),
   planSlug: z.string().optional(),
-  module: z.enum(["pos", "pms", "chat"]),
+  module: z.enum(["pos", "pms", "chat", "accounting"]),
 });
 
 const removeModulePayloadSchema = z.object({
   slug: z.string().min(1),
-  module: z.enum(["pos", "pms", "chat"]),
+  module: z.enum(["pos", "pms", "chat", "accounting"]),
 });
 
 async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
@@ -526,6 +528,8 @@ async function runOrgProvisionJob(
     db,
     {
       organizationId: payload.organizationId,
+      organizationSlug: payload.organizationSlug ?? payload.parentTenantSlug,
+      isPrimary: Boolean(payload.isPrimary),
       adminEmail: payload.adminEmail,
       adminFirstName: payload.adminFirstName,
       adminLastName: payload.adminLastName,
@@ -590,6 +594,11 @@ async function runRemoveModuleJob(
   const payload = removeModulePayloadSchema.parse(job.payload);
   if (payload.module === "pos" || payload.module === "pms") {
     await stopModuleStack(payload.slug, payload.module, (m) =>
+      console.log(`[worker][${job.id}] ${m}`),
+    );
+  }
+  if (payload.module === "accounting") {
+    await stopFinanceStack(payload.slug, (m) =>
       console.log(`[worker][${job.id}] ${m}`),
     );
   }

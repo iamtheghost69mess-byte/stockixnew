@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 
-import { BarChart3, CalendarDays, Landmark, ScrollText, Settings2, Table2, Timer } from "lucide-react";
+import {
+  BarChart3,
+  CalendarDays,
+  GitCompareArrows,
+  Landmark,
+  ScrollText,
+  Settings2,
+  Table2,
+  Timer,
+} from "lucide-react";
 
 import { AccountingOverviewMoreMenu } from "@/app/(main)/dashboard/accounting/_components/accounting-overview-more-menu";
 import { Button } from "@/components/ui/button";
@@ -16,6 +25,7 @@ export default function AccountingOverviewPage() {
   const canGlRead = posCan(permissions, "backoffice.accounting.gl.read");
   const canArRead = posCan(permissions, "backoffice.accounting.ar.read");
   const canApRead = posCan(permissions, "backoffice.accounting.ap.read");
+  const canWrite = posCan(permissions, "backoffice.accounting.write");
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-6">
@@ -39,6 +49,14 @@ export default function AccountingOverviewPage() {
               Chart of accounts
             </Link>
           </Button>
+          {canWrite ? (
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/accounting/finance-integration">
+                <GitCompareArrows className="mr-2 size-4" />
+                Finance bridge
+              </Link>
+            </Button>
+          ) : null}
           {canRead ? (
             <Button variant="outline" asChild>
               <Link href="/dashboard/accounting/settings">

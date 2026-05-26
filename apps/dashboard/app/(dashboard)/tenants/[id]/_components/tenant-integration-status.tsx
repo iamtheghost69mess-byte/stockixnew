@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { Copy, Loader2, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckCircle2, Copy, Loader2, RotateCw, TriangleAlert } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -12,6 +12,27 @@ import { cn } from "@/lib/utils";
 import type { TenantDetail } from "@/types/tenant";
 
 import { readJson } from "./tenant-detail-utils";
+
+type BridgeSummaryPayload = {
+  success?: boolean;
+  data?: {
+    healthy?: boolean;
+    healthReason?: string | null;
+    integrationEnabled?: boolean;
+    financeTenantId?: number | null;
+    mappingCoverage?: {
+      bridgeReady?: boolean;
+      sales?: { mappedMenuItemCount?: number; sellableMenuItemCount?: number; ready?: boolean };
+      inventory?: {
+        mappedIngredientCount?: number;
+        ingredientCount?: number;
+        ready?: boolean;
+      };
+    };
+  };
+  error?: string;
+  message?: string;
+};
 
 export type TenantIntegrationStatusProps = {
   tenant: TenantDetail;
@@ -25,6 +46,11 @@ export function TenantIntegrationStatus({
   onTenantReload,
 }: TenantIntegrationStatusProps) {
   const [repairingFinanceLink, setRepairingFinanceLink] = useState(false);
+  const [bridgeLoading, setBridgeLoading] = useState(false);
+  const [bridgeSummary, setBridgeSummary] = useState<BridgeSummaryPayload["data"] | null>(
+    null,
+  );
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
   const autoRepairAttempted = useRef(false);
 
   const tenantModules = tenant.modules ?? [];
@@ -41,6 +67,27 @@ export function TenantIntegrationStatus({
     }
   };
 
+  const loadBridgeSummary = useCallback(async () => {
+    if (!hasAccountingAndPos) return;
+    setBridgeLoading(true);
+    setBridgeError(null);
+    try {
+      const res = await fetch(`/api/tenants/${tenant.id}/integration/bridge-summary`);
+      const body = (await readJson(res)) as BridgeSummaryPayload;
+      if (!res.ok) {
+        setBridgeSummary(null);
+        setBridgeError(formatApiError(body, "Could not load bridge summary."));
+        return;
+      }
+      setBridgeSummary(body.data ?? null);
+    } catch {
+      setBridgeSummary(null);
+      setBridgeError("Could not load bridge summary.");
+    } finally {
+      setBridgeLoading(false);
+    }
+  }, [hasAccountingAndPos, tenant.id]);
+
   const repairFinanceLink = async () => {
     setRepairingFinanceLink(true);
     try {
@@ -54,10 +101,15 @@ export function TenantIntegrationStatus({
       }
       toast.success("Finance tenant linked.");
       await onTenantReload();
+      await loadBridgeSummary();
     } finally {
       setRepairingFinanceLink(false);
     }
   };
+
+  useEffect(() => {
+    void loadBridgeSummary();
+  }, [loadBridgeSummary]);
 
   useEffect(() => {
     if (autoRepairAttempted.current) return;
@@ -117,6 +169,63 @@ export function TenantIntegrationStatus({
         </div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
+        <div className="rounded-md border px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium text-foreground">Bridge readiness</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={bridgeLoading}
+              onClick={() => void loadBridgeSummary()}
+            >
+              {bridgeLoading ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCw className="mr-1 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
+          </div>
+          {bridgeError ? (
+            <p className="mt-2 text-xs text-destructive">{bridgeError}</p>
+          ) : bridgeSummary ? (
+            <div className="mt-2 space-y-2 text-xs">
+              <p className="flex items-center gap-1">
+                {bridgeSummary.healthy ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                ) : (
+                  <TriangleAlert className="h-3.5 w-3.5 text-amber-600" />
+                )}
+                Wire {bridgeSummary.healthy ? "healthy" : "unhealthy"}
+                {bridgeSummary.healthReason ? ` — ${bridgeSummary.healthReason}` : ""}
+              </p>
+              <p>
+                Sales: {bridgeSummary.mappingCoverage?.sales?.mappedMenuItemCount ?? 0}/
+                {bridgeSummary.mappingCoverage?.sales?.sellableMenuItemCount ?? 0} menu items
+                {bridgeSummary.mappingCoverage?.sales?.ready ? " (ready)" : " (incomplete)"}
+              </p>
+              <p>
+                Inventory:{" "}
+                {bridgeSummary.mappingCoverage?.inventory?.mappedIngredientCount ?? 0}/
+                {bridgeSummary.mappingCoverage?.inventory?.ingredientCount ?? 0} ingredients
+                {bridgeSummary.mappingCoverage?.inventory?.ready
+                  ? " (ready)"
+                  : " (incomplete)"}
+              </p>
+              <p className="font-medium">
+                Bridge{" "}
+                {bridgeSummary.mappingCoverage?.bridgeReady ? "ready for sync" : "not ready"}
+              </p>
+              <p className="text-muted-foreground">
+                Operators map catalog in POS Studio → Accounting → Finance bridge.
+              </p>
+            </div>
+          ) : bridgeLoading ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading…</p>
+          ) : null}
+        </div>
+
         {[
           {
             label: "Finance tenant ID",
