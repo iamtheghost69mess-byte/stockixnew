@@ -33,7 +33,6 @@ export function NavMain({ items }: { items: NavMainItem[] }) {
                 <SidebarMenuButton
                   tooltip={item.title}
                   isActive={isActive}
-                  suppressHydrationWarning
                   render={<Link href={item.url} />}
                 >
                   {item.icon}
