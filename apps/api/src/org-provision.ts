@@ -54,7 +54,7 @@ export async function enqueueOrgProvisioning(
     .orderBy(asc(tenantDeployments.createdAt))
     .limit(1);
 
-  const internalHost = process.env.TENANT_INTERNAL_HOST?.trim() || apiConfig.tenantInternalHost;
+  const internalHost = apiConfig.tenantInternalHost;
   const mainTenantInternalBaseUrl =
     parentDeployment !== undefined
       ? `http://${internalHost}:${parentDeployment.internalPort}`
@@ -97,8 +97,8 @@ export async function enqueueOrgProvisioning(
       stockixTenantId: tenantId,
       tenantModules: tenant.modules,
       stockixApiUrl:
-        process.env.STOCKIX_API_URL?.trim()
-        ?? process.env.NEXT_PUBLIC_STOCKIX_API_URL?.trim()
+        apiConfig.stockixApiUrl?.trim()
+        ?? apiConfig.nextPublicStockixApiUrl?.trim()
         ?? "",
     },
   });

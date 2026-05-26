@@ -293,35 +293,50 @@ bookingsRouter.post("/:id/check-in", async (c) => {
 bookingsRouter.post("/:id/check-out", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const tid = tenantId(c);
-  const [row] = await db.update(pmsBookings)
-    .set({ bookingStatus: "checked_out", checkOutActualAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(pmsBookings.id, c.req.param("id")), eq(pmsBookings.tenantId, tid)))
-    .returning();
+  const bookingId = c.req.param("id");
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Wrap all three mutations in a single transaction so a partial failure
+  // (e.g. room-status update or cleaning-task insert fails) rolls back the
+  // booking status change rather than leaving the record in a split state.
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(pmsBookings)
+      .set({ bookingStatus: "checked_out", checkOutActualAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(pmsBookings.id, bookingId), eq(pmsBookings.tenantId, tid)))
+      .returning();
+    if (!updated) return null;
+
+    await tx.update(pmsRooms)
+      .set({ status: "cleaning", updatedAt: new Date() })
+      .where(and(eq(pmsRooms.id, updated.roomId), eq(pmsRooms.tenantId, tid)));
+
+    const [existing] = await tx
+      .select({ id: pmsCleaningTasks.id })
+      .from(pmsCleaningTasks)
+      .where(and(
+        eq(pmsCleaningTasks.roomId, updated.roomId),
+        eq(pmsCleaningTasks.scheduledDate, today),
+        eq(pmsCleaningTasks.tenantId, tid),
+      ))
+      .limit(1);
+
+    if (!existing) {
+      await tx.insert(pmsCleaningTasks).values({
+        tenantId: tid,
+        propertyId: updated.propertyId,
+        roomId: updated.roomId,
+        scheduledDate: today,
+        notes: `Auto-created on checkout of booking ${updated.id}`,
+      });
+    }
+
+    return updated;
+  });
+
   if (!row) return errors.notFound(c, "booking");
 
-  // Tenant-scoped room update (fix #11)
-  await db.update(pmsRooms).set({ status: "cleaning", updatedAt: new Date() })
-    .where(and(eq(pmsRooms.id, row.roomId), eq(pmsRooms.tenantId, tid)));
-
-  // Auto-create cleaning task — skip if one already exists for this room today (fix #10)
-  const today = new Date().toISOString().slice(0, 10);
-  const [existing] = await db.select({ id: pmsCleaningTasks.id }).from(pmsCleaningTasks)
-    .where(and(
-      eq(pmsCleaningTasks.roomId, row.roomId),
-      eq(pmsCleaningTasks.scheduledDate, today),
-      eq(pmsCleaningTasks.tenantId, tid),
-    )).limit(1);
-  if (!existing) {
-    await db.insert(pmsCleaningTasks).values({
-      tenantId: tid,
-      propertyId: row.propertyId,
-      roomId: row.roomId,
-      scheduledDate: today,
-      notes: `Auto-created on checkout of booking ${row.id}`,
-    });
-  }
-
-  // Fire Finance sync without blocking the HTTP response (fix #12)
+  // Fire Finance sync after the transaction commits — fire-and-forget (fix #12)
   void syncBookingToFinance(db, {
     id: row.id,
     tenantId: tid,

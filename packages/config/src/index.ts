@@ -132,6 +132,13 @@ function validateRequiredEnvForProfile(profile: string) {
 }
 
 export const env = {
+  FINANCE_LICENSE_SYNC_OPTIONAL: readOptionalString("FINANCE_LICENSE_SYNC_OPTIONAL"),
+  CONTROL_PLANE_REDIS_URL: readOptionalString("CONTROL_PLANE_REDIS_URL"),
+  LICENSE_SYNC_STRICT: readOptionalString("LICENSE_SYNC_STRICT"),
+  BRAND_NAME: readString("BRAND_NAME", "Stockix"),
+  PROVISION_RECONCILE_INTERVAL_MS: readNumber("PROVISION_RECONCILE_INTERVAL_MS", 60_000),
+  POS_FRONTEND_URL: readOptionalString("POS_FRONTEND_URL"),
+  SENTRY_DSN: readOptionalString("SENTRY_DSN"),
   DATABASE_URL: readOptionalString("DATABASE_URL"),
   DB_WAIT_TIMEOUT_MS: readNumber("DB_WAIT_TIMEOUT_MS", 90_000),
   PORT: readNumber("PORT", 4000),
@@ -416,6 +423,34 @@ export const apiConfig = {
   get tenantDbNamePrefix() {
     return env.TENANT_DB_NAME_PREFIX ?? env.TENANT_DB_NAME_PERFIX;
   },
+  /** Control-plane API URL used in worker/org-provision payloads. */
+  get stockixApiUrl() {
+    return env.STOCKIX_API_URL;
+  },
+  /** NEXT_PUBLIC variant of the API URL (used by dashboard and org-provision). */
+  get nextPublicStockixApiUrl() {
+    return env.NEXT_PUBLIC_STOCKIX_API_URL;
+  },
+  /** When true, finance license sync failures are non-fatal (dev only). */
+  get financeLicenseSyncOptional(): boolean {
+    const flag = env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
+    if (flag === "1" || flag === "true") {
+      return env.NODE_ENV === "development";
+    }
+    return false;
+  },
+  /** Brand display name (default: "Stockix"). */
+  get brandName() {
+    return env.BRAND_NAME;
+  },
+  /** Public URL for POS frontend (used in proxy error messages). */
+  get posFrontendUrl() {
+    return env.POS_FRONTEND_URL;
+  },
+  /** DSN for Sentry error reporting (optional). */
+  get sentryDsn() {
+    return env.SENTRY_DSN;
+  },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);
   },
@@ -479,6 +514,14 @@ export const dbConfig = {
 } as const;
 
 export const infraConfig = {
+  /** Redis URL for control-plane queues (BullMQ). Optional — queues disabled when unset. */
+  get controlPlaneRedisUrl() {
+    return env.CONTROL_PLANE_REDIS_URL;
+  },
+  /** How often the stuck-provisioning reconciler runs in ms (default: 60 000). */
+  get provisionReconcileIntervalMs() {
+    return env.PROVISION_RECONCILE_INTERVAL_MS;
+  },
   get rootDomain() {
     return env.ROOT_DOMAIN;
   },
@@ -519,6 +562,10 @@ export const posConfig = {
   platformApiKey: process.env.POS_PLATFORM_API_KEY ?? "",
   /** Absolute path to POS app root for worker provisioning */
   appRoot: process.env.POS_APP_ROOT ?? "services/posnew",
+  /** Public URL of the POS frontend (used in error messages / provisioning payloads) */
+  get frontendUrl() {
+    return env.POS_FRONTEND_URL ?? "";
+  },
 } as const;
 
 export const pmsConfig = {
@@ -532,6 +579,8 @@ export const pmsConfig = {
   icalSyncIntervalMs: parseInt(process.env.PMS_ICAL_SYNC_INTERVAL_MS ?? "600000", 10),
   /** Google Gemini API key for passport OCR (optional) */
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  /** Internal base URL for Finance API (used by PMS finance-sync). */
+  financeInternalBaseUrl: process.env.FINANCE_INTERNAL_BASE_URL ?? "http://localhost:3000",
 } as const;
 
 export const chatwootConfig = {
@@ -560,5 +609,9 @@ export const moduleGatingConfig = {
 
 export const licenseConfig = {
   defaultTermDays: parseInt(process.env.DEFAULT_LICENSE_TERM_DAYS ?? "365", 10),
+  /** When true, license sync failures return HTTP 502 instead of soft-failing. */
+  get syncStrict() {
+    return env.LICENSE_SYNC_STRICT === "1";
+  },
 } as const;
 

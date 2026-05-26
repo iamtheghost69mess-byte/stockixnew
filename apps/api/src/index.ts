@@ -154,10 +154,10 @@ import { isValidPublicDiscoverySlug } from "./lib/tenant-discovery-slug.js";
 import { isKnownControlPlanePath } from "./middleware/known-api-paths.js";
 import { logger } from "./lib/logger.js";
 
-if (process.env.SENTRY_DSN?.trim()) {
+if (apiConfig.sentryDsn?.trim()) {
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV ?? "development",
+    dsn: apiConfig.sentryDsn,
+    environment: apiConfig.nodeEnv,
     tracesSampleRate: 0.1,
   });
 }
@@ -196,10 +196,6 @@ const organizationAccessPostBody = z.object({
 });
 
 function rootDomainForOrganizationSubdomain(): string {
-  const fromEnv = process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN;
-  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) {
-    return fromEnv.trim();
-  }
   const fromApi = apiConfig.rootDomain;
   if (typeof fromApi === "string" && fromApi.trim().length > 0) {
     return fromApi.trim();
@@ -655,7 +651,7 @@ function isTransientDbError(err: unknown): boolean {
 }
 
 app.onError((err, c) => {
-  if (process.env.SENTRY_DSN?.trim()) {
+  if (apiConfig.sentryDsn?.trim()) {
     Sentry.captureException(err);
   }
   logger.error("Unhandled API error", err, { path: c.req.path, method: c.req.method });
@@ -6008,7 +6004,7 @@ registerPosProxyRoutes(app);
 registerPmsProxyRoutes(app);
 
 process.on("unhandledRejection", (reason, promise) => {
-  if (process.env.SENTRY_DSN?.trim()) {
+  if (apiConfig.sentryDsn?.trim()) {
     Sentry.captureException(reason);
   }
   logger.error("unhandled_rejection", reason, {
@@ -6018,7 +6014,7 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 process.on("uncaughtException", (error) => {
-  if (process.env.SENTRY_DSN?.trim()) {
+  if (apiConfig.sentryDsn?.trim()) {
     Sentry.captureException(error);
   }
   logger.error("uncaught_exception", error, { type: "uncaught_exception" });
