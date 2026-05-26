@@ -51,20 +51,27 @@ export default function PmsGuestsPage() {
     idType: "passport", idNumber: "", passportNumber: "",
   });
 
-  async function load(q?: string) {
+  async function load(q: string | undefined, signal: AbortSignal) {
     if (!tenantId) return;
     const qs = q ? `?search=${encodeURIComponent(q)}` : "";
-    const res = await pmsFetch(`guests${qs}`, tenantId);
-    const data = (await res.json()) as { guests?: Guest[] };
-    setGuests(data.guests ?? []);
+    try {
+      const res = await pmsFetch(`guests${qs}`, tenantId, { signal });
+      const data = (await res.json()) as { guests?: Guest[] };
+      setGuests(data.guests ?? []);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+    }
   }
 
-  useEffect(() => { void load(); }, [tenantId]);
-
-  function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
-    setSearch(e.target.value);
-    void load(e.target.value);
-  }
+  // Single effect drives both tenant changes (instant) and search (debounced 300 ms).
+  useEffect(() => {
+    if (!tenantId) return;
+    const ctrl = new AbortController();
+    const q = search.trim() || undefined;
+    const delay = q ? 300 : 0;
+    const timer = setTimeout(() => { void load(q, ctrl.signal); }, delay);
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, [tenantId, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate() {
     if (!tenantId || !form.name) return;
@@ -72,7 +79,8 @@ export default function PmsGuestsPage() {
     await pmsFetch("guests", tenantId, { method: "POST", body: JSON.stringify(form) });
     setSaving(false);
     setOpen(false);
-    void load();
+    const ctrl = new AbortController();
+    void load(undefined, ctrl.signal);
   }
 
   if (!tenantId) {
@@ -92,7 +100,7 @@ export default function PmsGuestsPage() {
             className="pl-8"
             placeholder="Search by name…"
             value={search}
-            onChange={handleSearch}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <Button size="sm" onClick={() => setOpen(true)}>

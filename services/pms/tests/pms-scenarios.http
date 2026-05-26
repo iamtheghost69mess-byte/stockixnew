@@ -1,0 +1,884 @@
+# ============================================================
+# Stockix PMS — End-to-end HTTP Test Scenarios
+# ============================================================
+# Tool:  VS Code REST Client  (or Insomnia / Postman import)
+# Run:   Each ### block is one request. Execute top-to-bottom.
+#        Copy UUIDs from responses into the @variables below.
+#
+# Prerequisites:
+#   pnpm dev   (services/pms on :3003, apps/api on :4000)
+#   Or set PMS_DIRECT=true to hit :3003 directly.
+#
+# Auth: Direct PMS mode uses x-stockix-internal-secret + x-stockix-tenant-id.
+#       Via control API uses Bearer PLATFORM_API_SECRET.
+# ============================================================
+
+# ── Variables — fill these in or copy from responses ──────────────────────────
+@pmsUrl        = http://localhost:3003
+@apiUrl        = http://localhost:4000
+@secret        = changeme-dev
+@tenantId      = 00000000-0000-0000-0000-000000000099
+@otherTenantId = 00000000-0000-0000-0000-000000000098
+
+# Populated by earlier requests (copy-paste from response):
+@propertyId   = FILL_FROM_RESPONSE
+@roomId       = FILL_FROM_RESPONSE
+@guestId      = FILL_FROM_RESPONSE
+@bookingId    = FILL_FROM_RESPONSE
+@channelId    = FILL_FROM_RESPONSE
+@exportToken  = FILL_FROM_RESPONSE
+@shareToken   = FILL_FROM_RESPONSE
+@templateId   = FILL_FROM_RESPONSE
+@staffId      = FILL_FROM_RESPONSE
+@inviteToken  = FILL_FROM_RESPONSE
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 0. HEALTH
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 0.1 PMS health check — expect { status: "ok", service: "pms" }
+GET {{pmsUrl}}/health
+
+### 0.2 Via control API — expect { status: "ok" }
+GET {{apiUrl}}/pms/health
+Authorization: Bearer {{secret}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. PROPERTIES  (pesan-pms pattern: multi-property per tenant)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 1.1 Create property — expect 201 + property.id
+POST {{pmsUrl}}/api/properties
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Sunset Villa",
+  "address": "123 Beach Road, Hurghada",
+  "checkInTime": "15:00",
+  "checkOutTime": "11:00",
+  "minNights": 2,
+  "cleaningEnabled": true
+}
+
+### 1.2 List properties — expect array containing "Sunset Villa"
+GET {{pmsUrl}}/api/properties
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 1.3 Get single property
+GET {{pmsUrl}}/api/properties/{{propertyId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 1.4 Property audit (RentTools pattern) — expect findings array
+# Expect info finding: feedSlug not set, no channels configured
+GET {{pmsUrl}}/api/properties/{{propertyId}}/audit
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 1.5 IDOR: other tenant cannot see this property — expect 404
+GET {{pmsUrl}}/api/properties/{{propertyId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{otherTenantId}}
+
+### 1.6 Update property
+PATCH {{pmsUrl}}/api/properties/{{propertyId}}
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "minNights": 3,
+  "bookingWindow": 180
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. ROOMS  (pesan-pms: room management with status lifecycle)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 2.1 Create room — expect 201 + room.id
+POST {{pmsUrl}}/api/rooms
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "name": "Ocean Suite 101",
+  "type": "suite",
+  "capacity": 2,
+  "rateCents": 15000,
+  "floor": 1
+}
+
+### 2.2 IDOR: create room with propertyId from other tenant — expect 404
+POST {{pmsUrl}}/api/rooms
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{otherTenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "name": "Stolen Room",
+  "type": "standard",
+  "capacity": 1,
+  "rateCents": 5000
+}
+
+### 2.3 List rooms by property — expect rooms array
+GET {{pmsUrl}}/api/rooms?propertyId={{propertyId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 2.4 Room status should be "available" by default
+GET {{pmsUrl}}/api/rooms/{{roomId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. GUESTS  (pesan-pms: compliance fields — nationality, passport, visa)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 3.1 Create guest with full compliance fields — expect 201
+POST {{pmsUrl}}/api/guests
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Ahmed Hassan",
+  "email": "ahmed@example.com",
+  "phone": "+20501234567",
+  "nationality": "EG",
+  "idType": "passport",
+  "passportNumber": "A12345678",
+  "passportExpiry": "2028-05-01",
+  "hasVisa": true,
+  "visaNumber": "V-987654",
+  "visaFrom": "2024-06-01",
+  "visaTo": "2024-12-01"
+}
+
+### 3.2 Search guests by name — expect results containing "Ahmed"
+GET {{pmsUrl}}/api/guests?search=Ahmed
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 3.3 Search — other tenant sees no results for same query
+GET {{pmsUrl}}/api/guests?search=Ahmed
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{otherTenantId}}
+
+### 3.4 Create second guest for date-overlap test
+POST {{pmsUrl}}/api/guests
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Sara Khalil",
+  "email": "sara@example.com"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. BOOKINGS  (full lifecycle: create → check-in → check-out)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 4.1 Create booking — expect 201 + bookingStatus: "confirmed"
+POST {{pmsUrl}}/api/bookings
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "roomId": "{{roomId}}",
+  "guestId": "{{guestId}}",
+  "checkIn": "2024-09-01",
+  "checkOut": "2024-09-07",
+  "totalAmountCents": 90000,
+  "platform": "airbnb",
+  "adults": 2,
+  "children": 0
+}
+
+### 4.2 IDOR: create booking with foreign propertyId — expect 404
+POST {{pmsUrl}}/api/bookings
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{otherTenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "roomId": "{{roomId}}",
+  "guestId": "{{guestId}}",
+  "checkIn": "2024-09-01",
+  "checkOut": "2024-09-07",
+  "totalAmountCents": 0,
+  "platform": "direct"
+}
+
+### 4.3 List bookings — expect array with our booking
+GET {{pmsUrl}}/api/bookings
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.4 Filter by status — confirmed only
+GET {{pmsUrl}}/api/bookings?status=confirmed
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.5 Invalid status is silently ignored (returns all)
+GET {{pmsUrl}}/api/bookings?status=INVALID_STATUS_INJECTION
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.6 Check-in — expect bookingStatus: "checked_in", room status: "occupied"
+POST {{pmsUrl}}/api/bookings/{{bookingId}}/check-in
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 4.7 Verify room is now "occupied"
+GET {{pmsUrl}}/api/rooms/{{roomId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.8 Check-out — atomic transaction: booking→checked_out, room→cleaning, cleaning task auto-created
+POST {{pmsUrl}}/api/bookings/{{bookingId}}/check-out
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 4.9 Verify room is now "cleaning"
+GET {{pmsUrl}}/api/rooms/{{roomId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.10 Verify auto-created cleaning task exists for today
+GET {{pmsUrl}}/api/cleaning/tasks
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.11 Checkout again (already checked_out) — should not error, booking scoped to tenant
+POST {{pmsUrl}}/api/bookings/{{bookingId}}/check-out
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 4.12 Create second booking for cancel test
+POST {{pmsUrl}}/api/bookings
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "roomId": "{{roomId}}",
+  "guestId": "{{guestId}}",
+  "checkIn": "2024-10-01",
+  "checkOut": "2024-10-05",
+  "totalAmountCents": 60000,
+  "platform": "booking"
+}
+
+### 4.13 Cancel booking — expect bookingStatus: "cancelled", room→available
+POST {{pmsUrl}}/api/bookings/SECOND_BOOKING_ID/cancel
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 4.14 Bookings CSV export — expect Content-Type: text/csv
+GET {{pmsUrl}}/api/bookings/export
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.15 Bookings CSV export with date filter
+GET {{pmsUrl}}/api/bookings/export?from=2024-09-01&to=2024-09-30
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 4.16 CSV import dry-run — expect summary.dryRun: true
+POST {{pmsUrl}}/api/bookings/import?dryRun=true
+Content-Type: text/csv
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+propertyId,roomId,guestId,checkIn,checkOut,platform
+{{propertyId}},{{roomId}},{{guestId}},2024-11-01,2024-11-05,direct
+
+### 4.17 CSV import — bad checkOut (before checkIn) — expect error row
+POST {{pmsUrl}}/api/bookings/import
+Content-Type: text/csv
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+propertyId,roomId,guestId,checkIn,checkOut
+{{propertyId}},{{roomId}},{{guestId}},2024-11-10,2024-11-05
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. PAYMENTS  (pesan-pms: payment recording against bookings)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 5.1 Record payment — expect 201
+POST {{pmsUrl}}/api/payments
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "bookingId": "{{bookingId}}",
+  "amountCents": 45000,
+  "method": "card",
+  "status": "completed",
+  "transactionId": "txn_stripe_001"
+}
+
+### 5.2 IDOR: record payment for foreign booking — expect 404
+POST {{pmsUrl}}/api/payments
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{otherTenantId}}
+
+{
+  "bookingId": "{{bookingId}}",
+  "amountCents": 99999,
+  "method": "cash"
+}
+
+### 5.3 List payments for booking
+GET {{pmsUrl}}/api/payments?bookingId={{bookingId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. ICAL CHANNELS  (RentTools: iCal import/export with buffer days)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 6.1 Create iCal channel with SSRF-safe test URL — expect 201 + exportToken
+POST {{pmsUrl}}/api/channels
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "platform": "airbnb",
+  "importUrl": "https://www.airbnb.com/calendar/ical/12345.ics?s=abc",
+  "bufferBefore": 1,
+  "bufferAfter": 1,
+  "enabled": true
+}
+
+### 6.2 SSRF protection: reject private IP in importUrl — expect 400/422
+POST {{pmsUrl}}/api/channels
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "platform": "other",
+  "importUrl": "http://192.168.1.1/internal",
+  "bufferBefore": 0,
+  "bufferAfter": 0
+}
+
+### 6.3 SSRF protection: reject localhost — expect 400/422
+POST {{pmsUrl}}/api/channels/validate-url
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "url": "http://localhost:8080/admin"
+}
+
+### 6.4 Validate safe external URL
+POST {{pmsUrl}}/api/channels/validate-url
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "url": "https://www.airbnb.com/calendar/ical/test.ics"
+}
+
+### 6.5 List channels — expect the created channel
+GET {{pmsUrl}}/api/channels?propertyId={{propertyId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 6.6 Manual sync trigger — expect { synced: true } or { error }
+POST {{pmsUrl}}/api/channels/sync
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "channelId": "{{channelId}}"
+}
+
+### 6.7 Get sync logs — expect logs array, max 200
+GET {{pmsUrl}}/api/channels/logs
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 6.8 Get alerts (3-strike failures) — expect empty or alerts array
+GET {{pmsUrl}}/api/channels/alerts
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 6.9 Platform presets (RentTools RT-17.1) — expect 13 platforms
+GET {{pmsUrl}}/api/channels/platform-presets
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 6.10 Rotate export token — expect new exportToken
+POST {{pmsUrl}}/api/channels/{{channelId}}/rotate-token
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 6.11 iCal export feed (PUBLIC — no auth) — expect text/calendar
+# Replace {{exportToken}} with the token from 6.1 or 6.10 response
+GET {{pmsUrl}}/api/ical/{{exportToken}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. CALENDAR EVENTS  (synced OTA events — range cap enforced)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 7.1 List calendar events — default range
+GET {{pmsUrl}}/api/calendar/events?propertyId={{propertyId}}&from=2024-07-01
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 7.2 With explicit to — 730-day cap applies on backend
+GET {{pmsUrl}}/api/calendar/events?from=2024-01-01&to=2025-01-01
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 7.3 Attempt unbounded query (no to) — backend caps at from+730
+GET {{pmsUrl}}/api/calendar/events?from=2024-01-01
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. DATE OVERRIDES  (pesan-pms: per-property pricing/availability overrides)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 8.1 Create date override (close dates) — expect 201
+POST {{pmsUrl}}/api/date-overrides
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "date": "2024-12-25",
+  "type": "closed",
+  "note": "Christmas — closed"
+}
+
+### 8.2 Upsert — same date should update, not duplicate
+POST {{pmsUrl}}/api/date-overrides
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "date": "2024-12-25",
+  "type": "open",
+  "rateCents": 30000,
+  "minNights": 5,
+  "note": "Christmas — now open at premium rate"
+}
+
+### 8.3 List overrides — expect single entry for 2024-12-25 (upserted)
+GET {{pmsUrl}}/api/date-overrides?propertyId={{propertyId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. CLEANING  (RentTools: auto-create on checkout + manual CRUD)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 9.1 Create cleaner — expect 201
+POST {{pmsUrl}}/api/cleaning/cleaners
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Fatima Al-Amin",
+  "phone": "+20509876543",
+  "propertyIds": ["{{propertyId}}"]
+}
+
+### 9.2 List cleaners
+GET {{pmsUrl}}/api/cleaning/cleaners
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 9.3 Create cleaning task — expect 201
+# IDOR check: roomId must belong to tenant
+POST {{pmsUrl}}/api/cleaning/tasks
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "propertyId": "{{propertyId}}",
+  "roomId": "{{roomId}}",
+  "scheduledDate": "2024-09-07",
+  "notes": "Full deep clean after checkout"
+}
+
+### 9.4 List tasks for today
+GET {{pmsUrl}}/api/cleaning/tasks
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 9.5 Mark task as started — status: "in_progress"
+PATCH {{pmsUrl}}/api/cleaning/tasks/TASK_ID
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "status": "in_progress"
+}
+
+### 9.6 Mark task as done — expect doneAt timestamp populated
+PATCH {{pmsUrl}}/api/cleaning/tasks/TASK_ID
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "status": "done"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. STAFF  (property managers, invites — pesan-pms pattern)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 10.1 Create staff member — expect 201
+POST {{pmsUrl}}/api/staff
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Omar Sayed",
+  "email": "omar@sunsetvilla.com",
+  "role": "manager",
+  "phone": "+20512345678"
+}
+
+### 10.2 List staff
+GET {{pmsUrl}}/api/staff
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 10.3 Create property access (manager ↔ property)
+POST {{pmsUrl}}/api/staff/managers
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "staffId": "{{staffId}}",
+  "propertyId": "{{propertyId}}"
+}
+
+### 10.4 Create staff invite — expect 201 + invite.token
+POST {{pmsUrl}}/api/staff/invites
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "email": "newstaff@sunsetvilla.com",
+  "role": "receptionist",
+  "propertyId": "{{propertyId}}"
+}
+
+### 10.5 List invites — expect pending invite
+GET {{pmsUrl}}/api/staff/invites
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 10.6 Accept invite — expect 200 + staff record created
+POST {{pmsUrl}}/api/staff/invites/{{inviteToken}}/accept
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "New Staff Member"
+}
+
+### 10.7 Accept same invite again — expect 409 (already accepted)
+POST {{pmsUrl}}/api/staff/invites/{{inviteToken}}/accept
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Duplicate Attempt"
+}
+
+### 10.8 Revoke a pending invite
+POST {{pmsUrl}}/api/staff/invites/INVITE_ID/revoke
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. REPORTS  (analytics — occupancy, revenue by month+platform, guest stats)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 11.1 Occupancy report — expect day-by-day occupancy
+GET {{pmsUrl}}/api/reports/occupancy?from=2024-09-01&to=2024-09-30
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 11.2 Revenue report — by month and by platform
+GET {{pmsUrl}}/api/reports/revenue?from=2024-01-01&to=2024-12-31
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 11.3 Guest stats — unique guests, bookings per guest, status split
+GET {{pmsUrl}}/api/reports/guests
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. MESSAGE TEMPLATES  (storage layer — trigger/channel/offset fields)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 12.1 Create pre-arrival email template — expect 201
+POST {{pmsUrl}}/api/message-templates
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Pre-arrival welcome",
+  "channel": "email",
+  "trigger": "pre_arrival",
+  "sendOffsetDays": -3,
+  "subject": "Your stay at Sunset Villa is coming up!",
+  "body": "Hi {{guest_name}}, we look forward to welcoming you on {{check_in_date}}. Your pre-arrival form: {{form_link}}"
+}
+
+### 12.2 Create check-out follow-up template
+POST {{pmsUrl}}/api/message-templates
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Post-stay review request",
+  "channel": "email",
+  "trigger": "post_stay",
+  "sendOffsetDays": 1,
+  "subject": "How was your stay?",
+  "body": "Dear {{guest_name}}, thank you for staying with us. Please leave a review!"
+}
+
+### 12.3 List templates — expect both
+GET {{pmsUrl}}/api/message-templates
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 12.4 Update template — change sendOffsetDays
+PATCH {{pmsUrl}}/api/message-templates/{{templateId}}
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "sendOffsetDays": -5
+}
+
+### 12.5 Delete template
+DELETE {{pmsUrl}}/api/message-templates/{{templateId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 13. GUEST FORMS  (pesan-pms + RentTools: pre-arrival form end-to-end)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 13.1 Create form template with field definitions — expect 201
+POST {{pmsUrl}}/api/guest-forms
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{
+  "name": "Pre-arrival form",
+  "propertyId": "{{propertyId}}",
+  "fields": "[{\"id\":\"full_name\",\"type\":\"text\",\"label\":\"Full name\",\"required\":true},{\"id\":\"nationality\",\"type\":\"text\",\"label\":\"Nationality\",\"required\":true},{\"id\":\"passport_no\",\"type\":\"text\",\"label\":\"Passport number\",\"required\":true},{\"id\":\"arrival_time\",\"type\":\"text\",\"label\":\"Estimated arrival time\",\"required\":false},{\"id\":\"special_requests\",\"type\":\"textarea\",\"label\":\"Special requests\",\"required\":false},{\"id\":\"terms\",\"type\":\"checkbox\",\"label\":\"I agree to the house rules\",\"required\":true}]"
+}
+
+### 13.2 List templates — expect the template
+GET {{pmsUrl}}/api/guest-forms
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 13.3 Booking lookup — before share token generated
+GET {{pmsUrl}}/api/guest-forms/booking/{{bookingId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 13.4 Generate share token — expect shareToken in response
+POST {{pmsUrl}}/api/guest-forms/booking/{{bookingId}}/share
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 13.5 Generate share token again (idempotent) — same token returned
+POST {{pmsUrl}}/api/guest-forms/booking/{{bookingId}}/share
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+{}
+
+### 13.6 PUBLIC: Guest loads the form — no auth headers
+# shareToken from response 13.4
+GET {{pmsUrl}}/public/g/{{shareToken}}
+
+### 13.7 PUBLIC: Guest submits form — expect { ok: true }
+POST {{pmsUrl}}/public/g/{{shareToken}}
+Content-Type: application/json
+
+{
+  "answers": {
+    "full_name": "Ahmed Hassan",
+    "nationality": "Egyptian",
+    "passport_no": "A12345678",
+    "arrival_time": "15:00",
+    "special_requests": "Extra towels please",
+    "terms": "true"
+  }
+}
+
+### 13.8 PUBLIC: Submit again — expect 409 already_submitted
+POST {{pmsUrl}}/public/g/{{shareToken}}
+Content-Type: application/json
+
+{
+  "answers": {
+    "full_name": "Ahmed Hassan",
+    "nationality": "Egyptian",
+    "passport_no": "A12345678",
+    "terms": "true"
+  }
+}
+
+### 13.9 PUBLIC: Missing required field — expect 400 with field name
+POST {{pmsUrl}}/public/g/{{shareToken}}
+Content-Type: application/json
+
+{
+  "answers": {
+    "full_name": "Partial Submit"
+  }
+}
+
+### 13.10 Dashboard: View submission with answers
+GET {{pmsUrl}}/api/guest-forms/booking/{{bookingId}}
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 13.11 IDOR: other tenant cannot use this share token for share generation
+POST {{pmsUrl}}/api/guest-forms/booking/{{bookingId}}/share
+Content-Type: application/json
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{otherTenantId}}
+
+{}
+
+### 13.12 Token too short — expect 400 invalid_token
+GET {{pmsUrl}}/public/g/short
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. PROPERTY AUDIT  (RentTools pattern: full health scan)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 14.1 Run property audit — expects findings array
+# After all the above: expect "info" findings (low failure count, no overlaps)
+GET {{pmsUrl}}/api/properties/{{propertyId}}/audit
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 15. END-TO-END VIA CONTROL API  (verify the 3-hop tenant routing works)
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 15.1 Properties via control API (tenant ID in query param → forwarded as header)
+GET {{apiUrl}}/pms/api/properties?tenantId={{tenantId}}
+Authorization: Bearer {{secret}}
+
+### 15.2 Bookings via control API
+GET {{apiUrl}}/pms/api/bookings?tenantId={{tenantId}}
+Authorization: Bearer {{secret}}
+
+### 15.3 Guest form templates via control API
+GET {{apiUrl}}/pms/api/guest-forms?tenantId={{tenantId}}
+Authorization: Bearer {{secret}}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. EDGE CASES & SECURITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+### 16.1 No auth headers — expect 401
+GET {{pmsUrl}}/api/properties
+
+### 16.2 Wrong internal secret — expect 401
+GET {{pmsUrl}}/api/properties
+x-stockix-internal-secret: wrong-secret
+x-stockix-tenant-id: {{tenantId}}
+
+### 16.3 Valid secret but missing tenant header — expect 401
+GET {{pmsUrl}}/api/properties
+x-stockix-internal-secret: {{secret}}
+
+### 16.4 Non-UUID tenant ID — expect 401 (UUID validation fails)
+GET {{pmsUrl}}/api/properties
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: not-a-uuid
+
+### 16.5 SQL injection attempt in search — expect 200 (empty results, not error)
+GET {{pmsUrl}}/api/guests?search=' OR 1=1 --
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 16.6 Bookings: no_show status filter (missing from UI but backend supports it)
+GET {{pmsUrl}}/api/bookings?status=no_show
+x-stockix-internal-secret: {{secret}}
+x-stockix-tenant-id: {{tenantId}}
+
+### 16.7 iCal export with old (rotated) token — expect 404
+GET {{pmsUrl}}/api/ical/OLD_TOKEN_BEFORE_ROTATION

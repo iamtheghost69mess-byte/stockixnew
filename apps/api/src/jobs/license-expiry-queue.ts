@@ -1,6 +1,7 @@
 import { Queue, Worker } from "bullmq";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { infraConfig } from "@repo/config";
 
 import { logLine } from "../lib/logger.js";
 import {
@@ -15,7 +16,7 @@ type MilestoneJobData = LicenseMilestoneJob;
 let queue: Queue<MilestoneJobData> | null = null;
 
 function redisConnection() {
-  const url = process.env.CONTROL_PLANE_REDIS_URL?.trim();
+  const url = infraConfig.controlPlaneRedisUrl?.trim();
   if (!url) return null;
   return { url };
 }
