@@ -294,7 +294,7 @@ export async function setTenant(
       sessionStorage.setItem("pms-tenant-name", name);
       sessionStorage.setItem("pms-tenant-slug", "sunset-hospitality");
     },
-    [tenantId, tenantName],
+    [tenantId, tenantName] as [string, string],
   );
 }
 
