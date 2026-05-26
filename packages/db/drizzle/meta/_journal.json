@@ -288,6 +288,13 @@
       "when": 1781000000000,
       "tag": "0042_owner_notifications_owner_created_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1781100000000,
+      "tag": "0047_partial_failure_kind",
+      "breakpoints": true
     }
   ]
 }

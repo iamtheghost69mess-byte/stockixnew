@@ -57,6 +57,12 @@ Each provisioned POS backend reads `LICENSE_SIGNING_SECRET` from its tenant env 
 
 Mismatch causes STXI keys generated on the API to fail validation on POS login.
 
+## License ↔ POS sync strict mode
+
+- `LICENSE_SYNC_STRICT=1` on the control-plane API: license suspend and tenant suspend **fail with HTTP 502** when Finance or POS sync fails (instead of returning success with `posSync: "failed"`).
+- Recommended for production **after** staging verification of suspend/reactivate and STXI flows ([docs/section-2.3-license-e2e-checklist.md](../../docs/section-2.3-license-e2e-checklist.md)).
+- Default (unset): license row updates succeed; POS sync failures are logged and surfaced in API JSON (`posSync`, `errors`).
+
 ## Control plane queues (BullMQ)
 
 - Redis service: `control-plane-redis` (internal Docker network only).

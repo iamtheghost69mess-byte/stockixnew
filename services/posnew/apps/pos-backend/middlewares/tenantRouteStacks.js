@@ -24,11 +24,11 @@ const authedTenantLocation = [
   isVerifiedUser,
   attachTenantOrganization,
   requireTenantOrganization(),
+  locationScope,
+  locationMiddleware,
   requireActiveOrganization,
   requireSetupComplete,
   meterTenantApiCall,
-  locationScope,
-  locationMiddleware,
   productEventMutation,
 ];
 

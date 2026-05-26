@@ -1,6 +1,10 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { env } from "@repo/config";
+import { apiConfig, env } from "@repo/config";
+import {
+  encryptDeploymentSecret,
+  isEncryptedDeploymentSecret,
+} from "@repo/shared/deployment-secrets";
 
 export type TenantEnvFileParams = {
   mysqlVolumeName: string;
@@ -43,9 +47,18 @@ function mailSecureEnvValue(): string {
   return env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
 }
 
+function maybeEncryptEnvValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || isEncryptedDeploymentSecret(trimmed)) return trimmed;
+  return encryptDeploymentSecret(trimmed, apiConfig.deploymentSecretKey);
+}
+
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
 export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, string> {
   const signup = buildTenantSignupEnv();
+  const mailPassword = env.MAIL_PASSWORD ?? "";
+  const s3AccessKeyId = params.s3AccessKeyId;
+  const s3SecretAccessKey = params.s3SecretAccessKey;
   return {
     MYSQL_VOLUME_NAME: params.mysqlVolumeName,
     STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
@@ -76,7 +89,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     ...signup,
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
-    MAIL_PASSWORD: env.MAIL_PASSWORD ?? "",
+    MAIL_PASSWORD: mailPassword ? maybeEncryptEnvValue(mailPassword) : "",
     MAIL_PORT: env.MAIL_PORT ?? "",
     MAIL_SECURE: mailSecureEnvValue(),
     MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
@@ -88,14 +101,15 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     QUEUE_HOST: "redis",
     QUEUE_PORT: "6379",
     S3_REGION: params.s3Region,
-    S3_ACCESS_KEY_ID: params.s3AccessKeyId,
-    S3_SECRET_ACCESS_KEY: params.s3SecretAccessKey,
+    S3_ACCESS_KEY_ID: s3AccessKeyId ? maybeEncryptEnvValue(s3AccessKeyId) : "",
+    S3_SECRET_ACCESS_KEY: s3SecretAccessKey ? maybeEncryptEnvValue(s3SecretAccessKey) : "",
     S3_ENDPOINT: params.s3Endpoint,
     S3_BUCKET: params.s3Bucket,
     S3_FORCE_PATH_STYLE: params.s3ForcePathStyle,
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
+    DEPLOYMENT_SECRET_KEY: apiConfig.deploymentSecretKey,
     BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",

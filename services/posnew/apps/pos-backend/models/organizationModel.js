@@ -93,6 +93,8 @@ const organizationSchema = new mongoose.Schema(
     /** Stockix control-plane license key (STXI or legacy STKX). */
     licenseKey: { type: String, trim: true, default: null },
     licenseKeyFormat: { type: String, trim: true, default: null },
+    /** STXI location scope synced from Stockix license row. */
+    scopedLocationId: { type: String, trim: true, default: null },
     acceptStkxUntil: { type: Date, default: null },
     invoiceCurrency: { type: String, trim: true, uppercase: true, default: "USD" },
 

@@ -1,11 +1,8 @@
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  createHmac,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
+  decryptDeploymentSecret,
+  encryptDeploymentSecret,
+} from "@repo/shared/deployment-secrets";
 import { rm } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { apiConfig, getMailHealthStatus, isMailConfigured } from "@repo/config";
@@ -138,6 +135,7 @@ import {
   getTenantReadiness,
   invalidateTenantReadinessCache,
 } from "./provisioning/readiness-engine.js";
+import { startStuckProvisioningReconciler } from "./provisioning/stuck-reconciler.js";
 import { securityHeadersMiddleware } from "./middleware/security-headers.js";
 
 const databaseUrl = apiConfig.databaseUrl;
@@ -378,29 +376,11 @@ const PROVISION_STUCK_AFTER_MS = 10 * 60 * 1000;
 const RECONCILE_INTERVAL_MS = 30 * 1000;
 
 function encryptProvisionSecret(plaintext: string): string {
-  const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+  return encryptDeploymentSecret(plaintext, apiConfig.deploymentSecretKey);
 }
 
 function decryptProvisionSecret(ciphertext: string): string | null {
-  try {
-    const parts = ciphertext.split(":");
-    if (parts.length !== 5 || parts[0] !== "enc" || parts[1] !== "v1") return null;
-    const key = Buffer.from(apiConfig.deploymentSecretKey, "hex");
-    const iv = Buffer.from(parts[2]!, "base64url");
-    const tag = Buffer.from(parts[3]!, "base64url");
-    const data = Buffer.from(parts[4]!, "base64url");
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(tag);
-    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
-    return decrypted.toString("utf8");
-  } catch {
-    return null;
-  }
+  return decryptDeploymentSecret(ciphertext, apiConfig.deploymentSecretKey);
 }
 
 function maskPinForDisplay(pin: string): string {
@@ -1366,6 +1346,14 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     );
     if (fromJournal) financeTenantIdFromResult = fromJournal;
   }
+  if (
+    currentJob.type === "tenant.provision"
+    && currentJob.tenantId
+    && (!Number.isFinite(financeTenantIdFromResult) || financeTenantIdFromResult <= 0)
+  ) {
+    const resolved = await resolveAndPersistFinanceTenantId(db, currentJob.tenantId);
+    if (resolved.ok) financeTenantIdFromResult = resolved.financeTenantId;
+  }
   if (workerId && currentJob.claimedBy && currentJob.claimedBy !== workerId) {
     return c.json({ error: "job_claim_mismatch" }, 409);
   }
@@ -1487,6 +1475,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         .set({
           status: deploymentStatus,
           lastError: deploymentLastError,
+          ...(finalTenantStatus === "active" ? { partialFailureKind: null } : {}),
           registrationCompletedAt: new Date(),
           updatedAt: new Date(),
           ...(oneTimeAdminPassword
@@ -4755,6 +4744,7 @@ app.get("/tenants/:tenantId", async (c) => {
       financeAdminPasswordStored: tenantDeployments.financeAdminPassword,
       financeOrganizationId: organizations.financeOrganizationId,
       deploymentLastError: tenantDeployments.lastError,
+      partialFailureKind: tenantDeployments.partialFailureKind,
       registrationCompletedAt: tenantDeployments.registrationCompletedAt,
       deploymentCreatedAt: tenantDeployments.createdAt,
       deploymentUpdatedAt: tenantDeployments.updatedAt,
@@ -4870,6 +4860,7 @@ app.get("/tenants/:tenantId", async (c) => {
               financeCardAccountId: row.financeCardAccountId,
               financeAdminPassword,
               lastError: row.deploymentLastError,
+              partialFailureKind: row.partialFailureKind,
               registrationCompletedAt: row.registrationCompletedAt
                 ? row.registrationCompletedAt.toISOString()
                 : null,
@@ -4910,6 +4901,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       planSlug: tenants.planSlug,
       modules: tenants.modules,
       deploymentStatus: tenantDeployments.status,
+      partialFailureKind: tenantDeployments.partialFailureKind,
     })
     .from(tenants)
     .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -4918,21 +4910,68 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
 
   if (!row) return c.json({ error: "tenant_not_found" }, 404);
   const body = await c.req.json().catch(() => ({}));
+  const retryModulesRaw = (body as { retryModules?: unknown }).retryModules;
+  const retryModulesArr = Array.isArray(retryModulesRaw)
+    ? retryModulesRaw.filter((m): m is string => typeof m === "string")
+    : [];
   const retryPosOnly =
     (body as { retryPosOnly?: unknown }).retryPosOnly === true
-    || (Array.isArray((body as { retryModules?: unknown }).retryModules)
-      && (body as { retryModules: string[] }).retryModules.includes("pos")
-      && (body as { retryModules: string[] }).retryModules.length === 1);
+    || (retryModulesArr.includes("pos") && retryModulesArr.length === 1);
+  const retryWireOnly =
+    (body as { retryWireOnly?: unknown }).retryWireOnly === true
+    || (retryModulesArr.includes("wire") && retryModulesArr.length === 1);
 
   const failed =
     row.status === "failed" || row.deploymentStatus === "failed" || row.deploymentStatus === null;
   const partial = row.status === "partial";
+  const stuckProvisioning = row.status === "provisioning";
+
   if (retryPosOnly) {
     if (!partial) {
       return c.json(
         {
           error: "tenant_not_partial",
           message: "POS-only retry is available when tenant status is partial (Finance active, POS failed).",
+        },
+        409,
+      );
+    }
+  } else if (retryWireOnly) {
+    if (!partial) {
+      return c.json(
+        {
+          error: "tenant_not_partial",
+          message: "Wire-only retry is available when tenant status is partial.",
+        },
+        409,
+      );
+    }
+    if (row.partialFailureKind === "pos_failed") {
+      return c.json(
+        {
+          error: "tenant_pos_failed",
+          message: "Use POS-only retry when POS provisioning failed.",
+        },
+        409,
+      );
+    }
+  } else if (stuckProvisioning) {
+    const [runningJob] = await db
+      .select({ id: tenantLifecycleJobs.id })
+      .from(tenantLifecycleJobs)
+      .where(
+        and(
+          eq(tenantLifecycleJobs.tenantId, row.id),
+          eq(tenantLifecycleJobs.type, "tenant.provision"),
+          eq(tenantLifecycleJobs.status, "running"),
+        ),
+      )
+      .limit(1);
+    if (runningJob) {
+      return c.json(
+        {
+          error: "provision_job_running",
+          message: "Provisioning is still running for this tenant.",
         },
         409,
       );
@@ -4947,7 +4986,27 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
     );
   }
 
-  const correlationId = randomUUID();
+  const [latestProvisionJob] = await db
+    .select({
+      correlationId: tenantLifecycleJobs.correlationId,
+      status: tenantLifecycleJobs.status,
+    })
+    .from(tenantLifecycleJobs)
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, row.id),
+        eq(tenantLifecycleJobs.type, "tenant.provision"),
+      ),
+    )
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+
+  const correlationId =
+    stuckProvisioning
+    && latestProvisionJob?.correlationId
+    && latestProvisionJob.status !== "completed"
+      ? latestProvisionJob.correlationId
+      : randomUUID();
   const log = (m: string) => {
     console.log(JSON.stringify({ level: "info", correlationId, message: m }));
   };
@@ -4960,7 +5019,12 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
     .where(eq(tenants.id, row.id));
   await db
     .update(tenantDeployments)
-    .set({ status: "provisioning", lastError: null, updatedAt: new Date() })
+    .set({
+      status: "provisioning",
+      lastError: null,
+      partialFailureKind: null,
+      updatedAt: new Date(),
+    })
     .where(eq(tenantDeployments.tenantId, row.id));
 
   const job = await insertTenantJob(db, {
@@ -4979,6 +5043,7 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       stockixTenantId: row.id,
       provisionRequestedById: c.get("actorId") as string,
       ...(retryPosOnly ? { retryModules: ["pos"] as const } : {}),
+      ...(retryWireOnly ? { retryModules: ["wire"] as const } : {}),
     },
   });
 
@@ -5707,6 +5772,7 @@ process.on("uncaughtException", (error) => {
 
 const port = apiConfig.port;
 startReadinessReconciler();
+if (db) startStuckProvisioningReconciler(db);
 
 void import("./jobs/license-expiry-queue.js").then(
   ({ startLicenseExpiryWorker, isLicenseExpiryQueueEnabled }) => {

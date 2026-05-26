@@ -4,7 +4,7 @@
 
 **Method:** Static code audit (May 2026). **Only open and partial gaps are listed below** — completed work is summarized in [Completed work](#completed-work-may-2026) (not repeated as individual bullets).
 
-**Last implementation review:** May 2026 — plan fixes **1–10**, Section **1.1–1.4** repair, Section **2.1** provisioning repair. Code verified in repo; **staging manual E2E not signed off** unless a row says otherwise.
+**Last implementation review:** May 2026 — plan fixes **1–10**, Section **1.1–1.4** repair (incl. owner invite BullMQ), Section **2.1** provisioning repair, Section **2.3** license enforcement repair, Section **2.5** inventory & stock repair. Code verified in repo; **staging manual E2E not signed off** unless a row says otherwise.
 
 ### Completed work (May 2026) {#completed-work-may-2026}
 
@@ -15,14 +15,14 @@
 | Plan fixes 1–7, 9–10 | [Recommended Fix Order](#recommended-fix-order) table |
 | STXI license keys (control plane + POS validate) | `@repo/shared/stxi-license-key`, `stxiLicenseValidate.js`, migrations `0046` |
 | Custom roles + dashboard RBAC | `platform_roles`, `/settings/roles`, `rbac.test.ts` |
-| Owner invite email durable queue (BullMQ) | `owner-invite-mail-queue.ts`, `owner-invite-delivery.ts`, `CONTROL_PLANE_REDIS_URL` |
-| POS §2.5 inventory & stock | `offline-stock-mirror.ts`, `adjustInventoryWithOfflineSupport`, stock-take serial guard, `mdfiles/offline-inventory.md` |
+| Owner invite email durable queue (BullMQ) | `apps/api/src/jobs/owner-invite-mail-queue.ts`, `owner-invite-delivery.ts`, `emailQueued` in owners UI; tests: `owner-invite-mail-queue.test.ts`. Requires `CONTROL_PLANE_REDIS_URL` for queue path; inline 2s retry when Redis unset. |
+| POS §2.5 inventory & stock | `offline-stock-mirror.ts` (IDB `stock_snapshot`), `adjustInventoryWithOfflineSupport`, `stock-take-serial-guard.ts`, `STOCK_TAKE_SERIAL_VARIANCE`; docs: `mdfiles/offline-inventory.md`, playbook §7. Tests: `inventory-adjust-offline-key.test.js`, `stock-take-serial-guard.test.js`, `offline-stock-mirror.test.js`. **Manual E2E:** not signed off. |
+| POS §2.3 license enforcement | `pos-license-sync.ts` (`PosSyncResult`, metadata sync), `patchOrgLicense` STXI fields, `authedTenantLocation` middleware order, `getOrgProvisioningStatus` STXI gate; docs: [docs/section-2.3-license-e2e-checklist.md](docs/section-2.3-license-e2e-checklist.md). Tests: `license-suspend.test.ts`, `pos-license-sync.test.ts`, `stxi-license-validate.test.js`. **Manual E2E / `test:saas-integration`:** not signed off. |
 
 ### Legend (plan fixes 1–10)
 
 | Label | Meaning |
 |-------|---------|
-| ✅ Tested | Implemented; named automated test(s) pass in repo |
 | ⚠️ Code | Implemented in repo; automated test missing, flaky, or E2E not run |
 | ⚠️ Partial | Some requirements met; gaps listed |
 | 🔲 Open | Not implemented (or explicitly deferred) |
@@ -32,7 +32,7 @@
 | # | Fix | Code | Automated tests | Manual E2E | Remaining / notes |
 |---|-----|------|-----------------|------------|-------------------|
 | 1 | Finance license sync fail-fast on provision | ✅ | ✅ `apps/api/tests/sync-finance-license-adapter.test.ts` | ⚠️ Not signed off | `FINANCE_LICENSE_SYNC_OPTIONAL=1` only in `development`. Rebuild worker: `pnpm infra:worker:build`. |
-| 2 | Mail-not-configured on forgot-password / invite | ✅ | ✅ `apps/api/tests/password-reset-mail-status.test.ts` | ⚠️ Not signed off | Dashboard forgot-password + owners invite UI wired. `auth-routes.test.ts` does **not** assert forgot-password shape. |
+| 2 | Mail-not-configured on forgot-password / invite | ✅ | ✅ `password-reset-mail-status.test.ts`, `owner-invite-mail-queue.test.ts` | ⚠️ Not signed off | Forgot-password + owners invite UI; invite uses BullMQ when `CONTROL_PLANE_REDIS_URL` set (`emailQueued`). Password-reset mail **not** queued (out of §1.1 scope). |
 | 3 | POS lifecycle blocks login + tenant API | ✅ | ✅ `services/posnew/apps/pos-backend/tests/unit/organization-lifecycle-access.test.js` | ⚠️ Not signed off | `get-organization-access-state.js` + `.ts` synced. `npm run test:saas-integration` **not re-run** in last verification. |
 | 4 | `readyForPinLogin` requires `lifecycle === "active"` | ✅ | ✅ `organization-provisioning-status.test.js` | ⚠️ Not signed off | `platformOrgController.js`; §2.1 also covers peek/consume PIN flow. |
 | 5 | Dashboard license suspend / reactivate | ✅ | ⚠️ `apps/api/tests/license-suspend.test.ts` (1 case timed out at 5s) | ⚠️ Not signed off | Proxies: `apps/dashboard/app/api/licenses/[licenseId]/suspend|reactivate/`. UI: license detail header. Optional tenant panel actions **not** added. |
@@ -110,17 +110,9 @@ EFFORT: Low
 
 ### 2.3 License Enforcement in POS
 
-**Lifecycle block (plan #3):** Done — see [Completed work](#completed-work-may-2026). **Manual E2E / `test:saas-integration`:** not signed off.
+**Implemented in repo** — see [Completed work](#completed-work-may-2026) and [docs/section-2.3-license-e2e-checklist.md](docs/section-2.3-license-e2e-checklist.md).
 
-⚠️ **License suspend → POS org lifecycle** — Dashboard/license API path uses `pos-license-sync` + `applyTenantLicenseSuspend` (sets POS org lifecycle). **Staging verify** recommended; async sync can still fail non-fatally unless `LICENSE_SYNC_STRICT=1`.
-
-PRIORITY: High  
-EFFORT: Low — **verify in staging**
-
-⚠️ **STXI key vs date-only enforcement** — `stxiLicenseValidate.js` on login/middleware when org has `licenseKey` + `LICENSE_SIGNING_SECRET`; legacy orgs may still rely on `licenseStartsAt` / `licenseEndsAt` only. **Not** full “startup gate” for all tenants; location mismatch / checksum failures need E2E.
-
-PRIORITY: Medium  
-EFFORT: Medium — **partial**
+**Remaining:** staging manual E2E and `npm run test:saas-integration` sign-off. Optional ops: `LICENSE_SYNC_STRICT=1` in production after checklist (`infra/prod/OPERATIONS.md`).
 
 ---
 
@@ -141,10 +133,24 @@ EFFORT: Low
 PRIORITY: Medium  
 EFFORT: Low
 
-⚠️ **Table session ↔ inventory** — Orders enforce stock server-side (`assertOrderLinesFulfillable`); client uses cached menu availability (~15s stale). No dedicated “table session stock check” bridge beyond order save/pay paths; race between tills possible under `strictOversell`.
+⚠️ **Table session ↔ inventory** — Online: TanStack menu availability (~15s stale). Offline: IndexedDB stock snapshot + in-session portion ledger (`offline-stock-mirror.ts`, `use-pos-session.ts`); server still authoritative on queue flush (`assertOrderLinesFulfillable`). Multi-till race on reconnect still possible.
 
 PRIORITY: Medium  
-EFFORT: Medium
+EFFORT: Medium — **partial (offline mirror added May 2026)**
+
+---
+
+### 2.5 Inventory & Stock
+
+**§2.5:** Implemented in repo — see [Completed work](#completed-work-may-2026). **No open code gaps** listed here.
+
+| Former gap | Status |
+|------------|--------|
+| Live stock check offline | **Done** — menu-availability snapshot in IDB; strict oversell uses snapshot + ledger offline; conflict toast on flush |
+| Stock take serial-tracked lines | **Done** — API `isSerialTracked` + `STOCK_TAKE_SERIAL_VARIANCE`; detail UI banner + disabled finalize |
+| Offline `inventory_adjust` queue | **Done** — `adjustInventoryWithOfflineSupport` enqueues when offline |
+
+**Remaining:** staging **manual E2E** only ([inventory-professional-test-playbook.md](services/posnew/mdfiles/inventory-professional-test-playbook.md) §6–7). Offline mirror is best-effort; serial-tracked adjusts offline still need serial payload on flush (documented in `mdfiles/offline-inventory.md`).
 
 ---
 
@@ -179,10 +185,10 @@ EFFORT: High
 PRIORITY: High  
 EFFORT: High
 
-⚠️ **IndexedDB write queue only** — `offline-queue.ts` / `pos-check-sync.ts` for create/patch/pay; no read model for catalog/tables offline.
+⚠️ **IndexedDB write queue + partial read model** — `offline-queue.ts` / `pos-check-sync.ts`: `create_order`, `patch_order_items`, `pay_order`, **`inventory_adjust`**. Read model: menu-availability **`stock_snapshot`** only (`offline-stock-mirror.ts`); catalog/tables/PIN still require network.
 
 PRIORITY: High  
-EFFORT: High
+EFFORT: High — **partial (adjust + stock snapshot added May 2026)**
 
 ⚠️ **`offlineSyncKey` / `POST /api/orders/sync`** — **Partial (plan #8).** Offline **create** sets `offlineSyncKey` (`offline-queue.ts`, `pos-check-sync.ts`, `pos-order-api.ts`); `addOrder` dedupes by key. Flush still replays individual create/patch APIs, **not** batch `POST /api/orders/sync`. Patch/pay offline mutations have **no** key. **No** automated duplicate-replay test. **Manual E2E:** not signed off.
 
@@ -208,31 +214,7 @@ EFFORT: Low
 
 ## SECTION 3 — ACCOUNTING AUDIT (BigCapital)
 
-### 3.1 Provisioning
 
-**Finance license sync (plan #1):** Done — see [Completed work](#completed-work-may-2026).
-
-⚠️ **Combined bundle `partial` state** — Finance stack active while POS bootstrap/wire failed; operator must retry/repair.
-
-PRIORITY: High  
-EFFORT: Medium
-
-⚠️ **Stuck `provisioning` / missing `finance_tenant_id`** — Legacy/failed bootstrap paths; repair flows exist but ops burden.
-
-PRIORITY: High  
-EFFORT: Medium
-
-⚠️ **Tenant `.env` secrets plaintext on disk** — Documented until Finance can decrypt (`crypto-tenant-secret-generator.ts`).
-
-PRIORITY: Medium  
-EFFORT: High
-
-🔲 **Mandatory first-login setup wizard not enforced by worker** — `setup_completed_at` in Finance DB; worker pre-builds org/COA but does not set completion flag.
-
-PRIORITY: Medium  
-EFFORT: Medium
-
----
 
 ### 3.2 Organization Model
 
@@ -499,27 +481,27 @@ Open and partial gaps only (completed items: [Completed work](#completed-work-ma
 | 10 | `offlineSyncKey` / orders sync idempotency | ⚠️ Partial (create only) | High |
 | 11 | PIN login offline / NeDB / LAN POS | 🔲 Missing | High |
 | 12 | Deferred accounting + print offline | 🔲 / ⚠️ Partial | High |
-| 13 | Invite durable mail queue | ⚠️ Partial | Medium |
 | 14 | STXI enforcement E2E (all tenants/locations) | ⚠️ Partial | Medium |
 | 15 | `defaultCredentials` on tenant staff PIN change | ⚠️ Partial (§2.2) | Medium |
 | 16 | Visual floor plan + VIP on POS floor | ⚠️ Partial | Medium / Low |
 | 17 | Plan display (no Stripe invoices) | ⚠️ Partial | High |
 | 18 | Resend webhook / delivery status | ⚠️ Partial | Medium |
 | 19 | Combined bundle `partial` / wire retry | ⚠️ Partial | High |
-| 20 | Staging E2E (§1 + §2.1 checklists) | ⚠️ Not signed off | High |
+| 20 | Staging E2E (§1, §2.1, §2.5 inventory playbook) | ⚠️ Not signed off | High |
 
 ---
 
 ## Recommended Fix Order {#recommended-fix-order}
 
-**Plan fixes 1–10 and §2.1:** code complete — see [Plan fixes 1–10](#plan-fixes-110--status) and [Completed work](#completed-work-may-2026).
+**Plan fixes 1–10, §2.1, and §2.5:** code complete — see [Plan fixes 1–10](#plan-fixes-110--status) and [Completed work](#completed-work-may-2026).
 
 ### Verification backlog (do before prod)
 
-- [ ] [docs/section-1-e2e-checklist.md](docs/section-1-e2e-checklist.md) — all phases
+- [ ] [docs/section-1-e2e-checklist.md](docs/section-1-e2e-checklist.md) — all phases (incl. invite `emailQueued` when Redis + mail on)
 - [ ] [docs/section-2.1-e2e-checklist.md](docs/section-2.1-e2e-checklist.md) — provisioning Phases 0–4
+- [ ] [services/posnew/mdfiles/inventory-professional-test-playbook.md](services/posnew/mdfiles/inventory-professional-test-playbook.md) — §6–7 (serial stock take, offline stock mirror + adjust queue)
 - [ ] `npm run test:saas-integration` (POS) — not re-run in last repo verification
-- [ ] Migrations `0044`–`0046` + `CONTROL_PLANE_REDIS_URL` on target env ([infra/prod/OPERATIONS.md](infra/prod/OPERATIONS.md))
+- [ ] Migrations `0044`–`0046` + `CONTROL_PLANE_REDIS_URL` on target env ([infra/prod/OPERATIONS.md](infra/prod/OPERATIONS.md)); confirm API logs both BullMQ workers (license expiry + owner invite mail)
 
 ### Next engineering priorities (open gaps)
 
@@ -528,10 +510,10 @@ Open and partial gaps only (completed items: [Completed work](#completed-work-ma
 | Critical | Stripe billing + plan change + failed payment (§1.5) |
 | High | Offline POS (NeDB/LAN), `offlineSyncKey` remainder (§2.7), partial refund sync (§4.2) |
 | High | Event bus, GRN/stock bridge, combined module add/remove (§4) |
-| Medium | Invite mail queue (§1.1), staff PIN → `defaultCredentials` (§2.2), Finance whitelabel (§3.4) |
+| Medium | Staff PIN → `defaultCredentials` (§2.2), Finance whitelabel (§3.4), §2.3 staging E2E sign-off |
 
-**Defer (large):** Full offline POS stack, cross-product event bus, GRN accounting bridge, Stripe — track in Summary Table above.
+**Defer (large):** Full offline POS stack (catalog/tables/PIN mirror), cross-product event bus, GRN accounting bridge, Stripe — track in Summary Table above.
 
 ---
 
-*Last updated May 2026 after §2.1 provisioning repair. Re-run staging E2E before production commitments.*
+*Last updated May 2026 after §2.5 inventory/stock repair and §1.1 invite mail queue. Re-run staging E2E before production commitments.*

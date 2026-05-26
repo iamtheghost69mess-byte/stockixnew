@@ -46,7 +46,7 @@ function validateStxi(key, { stockixTenantId, locationId, secret }) {
  * @param {string} opts.signingSecret
  * @param {Date|null} [opts.acceptStkxUntil]
  */
-export function assertLicenseKeyForLocation(opts) {
+function assertLicenseKeyForLocation(opts) {
   const key = opts.licenseKey?.trim();
   if (!key) return { ok: true };
 
@@ -73,3 +73,9 @@ export function assertLicenseKeyForLocation(opts) {
 
   return { ok: false, code: "license_key_invalid" };
 }
+
+module.exports = {
+  assertLicenseKeyForLocation,
+  validateStxi,
+  parseStxi,
+};

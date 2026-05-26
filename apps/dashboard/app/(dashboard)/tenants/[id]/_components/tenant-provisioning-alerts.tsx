@@ -24,6 +24,30 @@ export type TenantProvisioningAlertsProps = {
   onError: (message: string) => void;
 };
 
+async function queueProvisionRetry(
+  tenantId: string,
+  body: Record<string, unknown>,
+  successMessage: string,
+  onError: (message: string) => void,
+  onReload: () => Promise<void>,
+  onReloadEvents: () => Promise<void>,
+): Promise<boolean> {
+  const res = await fetch(`/api/tenants/${tenantId}/retry-provision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await readJson(res)) as { error?: string; message?: string };
+  if (!res.ok) {
+    onError(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
+    return false;
+  }
+  toast.success(successMessage);
+  await onReload();
+  await onReloadEvents();
+  return true;
+}
+
 export function TenantProvisioningAlerts({
   tenant,
   isProvisioning,
@@ -37,6 +61,9 @@ export function TenantProvisioningAlerts({
   onError,
 }: TenantProvisioningAlertsProps) {
   const [retryingProvision, setRetryingProvision] = useState(false);
+  const partialKind = tenant.deployment?.partialFailureKind ?? null;
+  const wireFailed = partialKind === "wire_failed";
+  const posFailed = partialKind === "pos_failed" || partialKind === null;
 
   return (
     <>
@@ -95,45 +122,101 @@ export function TenantProvisioningAlerts({
           <AlertTitle>Partial provisioning</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
-              {tenant.deployment?.lastError
-                ? tenant.deployment.lastError
-                : "Finance completed, but POS provisioning or Bigcapital integration wiring did not finish successfully."}
+              {wireFailed
+                ? "Finance and POS stacks are up, but Stockix → POS → Finance integration wiring did not complete."
+                : posFailed
+                  ? tenant.deployment?.lastError
+                    ? tenant.deployment.lastError
+                    : "Finance completed, but POS provisioning did not finish successfully."
+                  : tenant.deployment?.lastError
+                    ? tenant.deployment.lastError
+                    : "Finance completed, but POS provisioning or integration wiring did not finish."}
             </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="border-amber-600/40"
-              disabled={retryingProvision}
-              onClick={async () => {
-                setRetryingProvision(true);
-                onError("");
-                try {
-                  const res = await fetch(`/api/tenants/${tenant.id}/retry-provision`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ retryPosOnly: true }),
-                  });
-                  const data = (await readJson(res)) as { error?: string; message?: string };
-                  if (!res.ok) {
-                    onError(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
-                    return;
-                  }
-                  toast.success("POS provisioning retry queued");
-                  await onReload();
-                  await onReloadEvents();
-                } finally {
-                  setRetryingProvision(false);
-                }
-              }}
-            >
-              {retryingProvision ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <RotateCw className="mr-1 h-4 w-4" />
-              )}
-              Retry POS only
-            </Button>
+            <ul className="list-inside list-disc text-sm opacity-90">
+              <li>
+                Finance tenant id:{" "}
+                <span className="font-mono">
+                  {tenant.deployment?.financeTenantId ?? "missing"}
+                </span>
+              </li>
+              <li>
+                POS organization:{" "}
+                <span className="font-mono">
+                  {tenant.posOrganizationId ?? tenant.deployment?.posUrl ?? "missing"}
+                </span>
+              </li>
+              {partialKind ? (
+                <li>
+                  Failure kind: <span className="font-mono">{partialKind}</span>
+                </li>
+              ) : null}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              {posFailed ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-600/40"
+                  disabled={retryingProvision}
+                  onClick={async () => {
+                    setRetryingProvision(true);
+                    onError("");
+                    try {
+                      await queueProvisionRetry(
+                        tenant.id,
+                        { retryPosOnly: true },
+                        "POS provisioning retry queued",
+                        onError,
+                        onReload,
+                        onReloadEvents,
+                      );
+                    } finally {
+                      setRetryingProvision(false);
+                    }
+                  }}
+                >
+                  {retryingProvision ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCw className="mr-1 h-4 w-4" />
+                  )}
+                  Retry POS only
+                </Button>
+              ) : null}
+              {wireFailed ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-600/40"
+                  disabled={retryingProvision}
+                  onClick={async () => {
+                    setRetryingProvision(true);
+                    onError("");
+                    try {
+                      await queueProvisionRetry(
+                        tenant.id,
+                        { retryWireOnly: true },
+                        "Integration wiring retry queued",
+                        onError,
+                        onReload,
+                        onReloadEvents,
+                      );
+                    } finally {
+                      setRetryingProvision(false);
+                    }
+                  }}
+                >
+                  {retryingProvision ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCw className="mr-1 h-4 w-4" />
+                  )}
+                  Retry integration wiring
+                </Button>
+              ) : null}
+            </div>
           </AlertDescription>
         </Alert>
       ) : null}

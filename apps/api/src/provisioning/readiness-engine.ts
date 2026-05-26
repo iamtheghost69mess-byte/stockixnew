@@ -2,6 +2,7 @@ import { access } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { execa } from "execa";
 import { apiConfig } from "@repo/config";
+import { parseTenantModules } from "../services/auth/stockix-product-token.js";
 import type { createDb } from "@repo/db";
 import {
   tenantDeployments,
@@ -22,6 +23,7 @@ export type TenantReadiness = {
     tenantResponding: boolean;
     authReady: boolean;
     routeActive: boolean;
+    financeTenantLinked: boolean;
   };
   reasons: string[];
 };
@@ -118,6 +120,8 @@ export async function getTenantReadiness(
             composeProjectName: tenantDeployments.composeProjectName,
             internalPort: tenantDeployments.internalPort,
             deploymentLastError: tenantDeployments.lastError,
+            financeTenantId: tenantDeployments.financeTenantId,
+            tenantModules: tenants.modules,
           })
           .from(tenants)
           .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -160,6 +164,13 @@ export async function getTenantReadiness(
       }
     }
 
+    const needsFinanceLink = parseTenantModules(
+      typeof tenant?.tenantModules === "string" ? tenant.tenantModules : null,
+    ).includes("accounting");
+    const financeTenantLinked =
+      !needsFinanceLink
+      || (tenant?.financeTenantId != null && Number(tenant.financeTenantId) > 0);
+
     const checks = {
       jobCompleted,
       tenantExists,
@@ -167,6 +178,7 @@ export async function getTenantReadiness(
       tenantResponding,
       authReady,
       routeActive,
+      financeTenantLinked,
     };
 
     const reasons: string[] = [];
@@ -176,8 +188,10 @@ export async function getTenantReadiness(
     if (!checks.routeActive) reasons.push("traefik_route_pending");
     if (!checks.authReady) reasons.push("bootstrap_admin_not_confirmed");
     if (!checks.tenantResponding) reasons.push("tenant_ping_unreachable");
+    if (!checks.financeTenantLinked) reasons.push("finance_tenant_id_missing");
     if (tenant?.deploymentLastError) reasons.push(`deployment_error:${tenant.deploymentLastError}`);
     if (tenant?.tenantStatus === "failed") reasons.push("tenant_status_failed");
+    if (tenant?.tenantStatus === "partial") reasons.push("tenant_status_partial");
 
     const allGreen = Object.values(checks).every(Boolean);
     const status: TenantReadinessStatus = allGreen
@@ -202,6 +216,7 @@ export async function getTenantReadiness(
         routeActive: false,
         authReady: false,
         tenantResponding: false,
+        financeTenantLinked: false,
       },
       reasons: [
         "readiness_evaluation_error",

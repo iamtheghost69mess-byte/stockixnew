@@ -68,7 +68,29 @@ Same as A without steps 8–10 (no POS stack).
 
 ### Partial failure (accounting + pos)
 
-If POS fails after Finance succeeds → tenant status **`partial`**, Finance deployment `active`, `last_error` set. Monitor dashboard.
+If POS fails after Finance succeeds → tenant status **`partial`**, Finance deployment `active`, `last_error` set, `partial_failure_kind` = `pos_failed` | `wire_failed`.
+
+| Repair | API | When |
+|--------|-----|------|
+| POS only | `POST /tenants/:id/retry-provision` `{ "retryPosOnly": true }` | `partial_failure_kind=pos_failed` |
+| Wire only | `POST /tenants/:id/retry-provision` `{ "retryWireOnly": true }` | `partial_failure_kind=wire_failed` |
+| Stuck provisioning | Same endpoint when `tenants.status=provisioning` and no running job | Resumes journal via prior `correlationId` when available |
+
+Dashboard tenant detail shows targeted CTAs and integration checklist fields.
+
+### Finance tenant link & stuck provisioning
+
+- On provision job **complete**, API calls `resolveAndPersistFinanceTenantId` when the worker result omits `financeTenantId`.
+- Background **stuck reconciler** (60s): aligns completed jobs still marked `provisioning`; auto-links `finance_tenant_id` when deployment is `active`.
+- Readiness check `finance_tenant_id_missing` when `accounting` ∈ modules.
+
+### Encrypted tenant `.env`
+
+Sensitive keys in `infra/tenant-env/{slug}/.env` use **`enc:v1:`** (AES-256-GCM, `DEPLOYMENT_SECRET_KEY`). Finance server decrypts at boot (`bootstrap-decrypt-env.ts`). After upgrading Finance images, run `node apps/api/scripts/reencrypt-tenant-envs.mjs` for existing tenants.
+
+### Setup wizard (SaaS-provisioned)
+
+Worker calls `POST /api/internal/organization/setup/complete` after `tenant.build_organization` (journaled as `tenant.complete_setup_wizard`). First Finance login should skip `/setup/complete`.
 
 ### Finance internal API responses (snake_case)
 
@@ -372,7 +394,7 @@ Stockix worker passes `entitlements` on org create using `@repo/shared/pos-entit
 | Gap | Severity | Status |
 |-----|----------|--------|
 | `PROVISION_MODULE_GATING=0` by default | Critical | **OPEN** — set `=1` in prod after validation |
-| POS failure non-fatal on combined path | Medium | **OPEN** — can mark active with broken POS |
+| POS failure non-fatal on combined path | Medium | **Mitigated** — `partial` + targeted retry (POS / wire) |
 | `TENANT_ID` env unused in POS backend | High | **OPEN** — weak Stockix↔POS link except org field |
 | Dashboard tenant detail lacks modules display | Low | **OPEN** |
 | Walk-in / warehouse for integrations | Medium | **Partial** — bundle seed only |

@@ -44,6 +44,7 @@ import {
 import { buildFinanceLicenseLimitFields } from "./finance-license.client.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 import {
+  posSyncResultToStatus,
   reactivatePosOrgForLicense,
   suspendPosOrgForLicense,
   syncPosOrgLicenseFromLicense,
@@ -523,6 +524,15 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         newValues: licenseHistorySnapshot(license),
         ipAddress: clientIp(c),
         userAgent: c.req.header("user-agent") ?? null,
+      });
+    }
+
+    if (body.tenantId && created[0]) {
+      void syncPosOrgLicenseFromLicense(db, body.tenantId, created[0]).catch((err) => {
+        console.error(
+          "[license] POS license sync failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
       });
     }
 
@@ -1725,11 +1735,14 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
           `finance: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
-      try {
-        await suspendPosOrgForLicense(db, lic.tenantId, body.reason ?? "license_suspended");
-      } catch (err) {
-        posSync = "failed";
-        syncErrors.push(`pos: ${err instanceof Error ? err.message : String(err)}`);
+      const posResult = await suspendPosOrgForLicense(
+        db,
+        lic.tenantId,
+        body.reason ?? "license_suspended",
+      );
+      posSync = posSyncResultToStatus(posResult, true);
+      if (!posResult.ok) {
+        syncErrors.push(`pos: ${posResult.error}`);
       }
       void import("./notification-helpers.js").then(({ notifyLicenseForTenant }) => {
         notifyLicenseForTenant(db, {

@@ -376,7 +376,9 @@ const provisionPayloadSchema = z.object({
   stockixApiUrl: z.string().optional(),
   parentTenantSlug: z.string().optional(),
   mainTenantInternalBaseUrl: z.string().optional(),
-  retryModules: z.array(z.enum(["accounting", "pos", "pms", "chat"])).optional(),
+  retryModules: z
+    .array(z.enum(["accounting", "pos", "pms", "chat", "wire"]))
+    .optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({

@@ -8,6 +8,16 @@ import { posProxyJson } from "./pos-proxy.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+export type PosSyncResult = { ok: true } | { ok: false; error: string };
+
+export type PosLicenseMetadataPayload = {
+  licenseKey?: string | null;
+  stockixTenantId?: string | null;
+  licenseKeyFormat?: string | null;
+  acceptStkxUntil?: Date | string | null;
+  scopedLocationId?: string | null;
+};
+
 type PosTenantLink = {
   posOrgId: string;
   modules: ReturnType<typeof parseLicenseModulesJson>;
@@ -18,6 +28,9 @@ type LicenseWindowSource = {
   expiresAt: Date | null;
   validFrom?: Date | null;
   activatedAt?: Date | null;
+  licenseKey?: string | null;
+  keyFormat?: string | null;
+  scopedLocationId?: string | null;
 };
 
 /** Resolve POS org license window dates from a Stockix license row. */
@@ -35,6 +48,16 @@ export function resolveLicenseWindowDates(license: LicenseWindowSource): {
     startsAt,
     endsAt: license.expiresAt ?? new Date(),
   };
+}
+
+function proxyErrorMessage(
+  data: unknown,
+  status: number,
+): string {
+  if (data && typeof data === "object" && "message" in data) {
+    return String((data as { message?: unknown }).message);
+  }
+  return `HTTP ${status}`;
 }
 
 async function getPosTenantLink(
@@ -60,23 +83,31 @@ async function getPosTenantLink(
   return { posOrgId, modules };
 }
 
+function logPosSyncLine(
+  line: string,
+  log?: (message: string) => void,
+): void {
+  if (log) log(line);
+  else if (line.includes("failed")) console.error(line);
+  else console.log(line);
+}
+
 /**
  * Push Stockix license window dates to the linked POS organization.
- * Non-fatal: logs and returns on missing POS link or proxy failure.
  */
 export async function syncPosOrgLicenseWindow(
   db: Db,
   tenantId: string,
   window: { startsAt?: Date; endsAt?: Date },
   log?: (message: string) => void,
-): Promise<void> {
+): Promise<PosSyncResult> {
   const link = await getPosTenantLink(db, tenantId);
-  if (!link) return;
+  if (!link) return { ok: true };
 
   const payload: Record<string, string> = {};
   if (window.startsAt) payload.licenseStartsAt = window.startsAt.toISOString();
   if (window.endsAt) payload.licenseEndsAt = window.endsAt.toISOString();
-  if (Object.keys(payload).length === 0) return;
+  if (Object.keys(payload).length === 0) return { ok: true };
 
   const { data, status } = await posProxyJson(
     `/organizations/${encodeURIComponent(link.posOrgId)}/license`,
@@ -85,43 +116,113 @@ export async function syncPosOrgLicenseWindow(
   );
 
   if (status < 200 || status >= 300) {
-    const message =
-      data && typeof data === "object" && "message" in data
-        ? String((data as { message?: unknown }).message)
-        : `HTTP ${status}`;
-    const line = `[pos-license-sync] license window sync failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`;
-    if (log) log(line);
-    else console.error(line);
-    return;
+    const message = proxyErrorMessage(data, status);
+    logPosSyncLine(
+      `[pos-license-sync] license window sync failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`,
+      log,
+    );
+    return { ok: false, error: message };
   }
 
-  const okLine = `[pos-license-sync] synced POS license window tenantId=${tenantId} posOrgId=${link.posOrgId}`;
-  if (log) log(okLine);
-  else console.log(okLine);
+  logPosSyncLine(
+    `[pos-license-sync] synced POS license window tenantId=${tenantId} posOrgId=${link.posOrgId}`,
+    log,
+  );
+  return { ok: true };
 }
 
-/** Sync POS org window from a Stockix license row. */
+/** Push license key metadata (STXI/STKX) to the linked POS organization. */
+export async function syncPosOrgLicenseMetadata(
+  db: Db,
+  tenantId: string,
+  metadata: PosLicenseMetadataPayload,
+  log?: (message: string) => void,
+): Promise<PosSyncResult> {
+  const link = await getPosTenantLink(db, tenantId);
+  if (!link) return { ok: true };
+
+  const payload: Record<string, string | null> = {};
+  if (metadata.licenseKey !== undefined) {
+    payload.licenseKey = metadata.licenseKey?.trim() || null;
+  }
+  if (metadata.stockixTenantId !== undefined) {
+    payload.stockixTenantId = metadata.stockixTenantId?.trim() || null;
+  }
+  if (metadata.licenseKeyFormat !== undefined) {
+    payload.licenseKeyFormat = metadata.licenseKeyFormat?.trim() || null;
+  }
+  if (metadata.scopedLocationId !== undefined) {
+    payload.scopedLocationId = metadata.scopedLocationId?.trim() || null;
+  }
+  if (metadata.acceptStkxUntil !== undefined) {
+    const v = metadata.acceptStkxUntil;
+    payload.acceptStkxUntil =
+      v == null ? null : v instanceof Date ? v.toISOString() : String(v);
+  }
+
+  if (Object.keys(payload).length === 0) return { ok: true };
+
+  const { data, status } = await posProxyJson(
+    `/organizations/${encodeURIComponent(link.posOrgId)}/license`,
+    "PATCH",
+    payload,
+  );
+
+  if (status < 200 || status >= 300) {
+    const message = proxyErrorMessage(data, status);
+    logPosSyncLine(
+      `[pos-license-sync] license metadata sync failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`,
+      log,
+    );
+    return { ok: false, error: message };
+  }
+
+  logPosSyncLine(
+    `[pos-license-sync] synced POS license metadata tenantId=${tenantId} posOrgId=${link.posOrgId}`,
+    log,
+  );
+  return { ok: true };
+}
+
+/** Sync POS org window + optional metadata from a Stockix license row. */
 export async function syncPosOrgLicenseFromLicense(
   db: Db,
   tenantId: string,
   license: LicenseWindowSource,
   log?: (message: string) => void,
-): Promise<void> {
+): Promise<PosSyncResult> {
   const { startsAt, endsAt } = resolveLicenseWindowDates(license);
-  await syncPosOrgLicenseWindow(db, tenantId, { startsAt, endsAt }, log);
+  const windowResult = await syncPosOrgLicenseWindow(db, tenantId, { startsAt, endsAt }, log);
+  if (!windowResult.ok) return windowResult;
+
+  const hasMetadata =
+    license.licenseKey != null ||
+    license.keyFormat != null ||
+    license.scopedLocationId != null;
+
+  if (!hasMetadata) return { ok: true };
+
+  return syncPosOrgLicenseMetadata(
+    db,
+    tenantId,
+    {
+      licenseKey: license.licenseKey ?? null,
+      stockixTenantId: tenantId,
+      licenseKeyFormat: license.keyFormat ?? null,
+      scopedLocationId: license.scopedLocationId ?? null,
+    },
+    log,
+  );
 }
 
-/**
- * Reactivate a suspended POS org after license extend/reactivate.
- * Non-fatal: logs and returns on missing POS link or proxy failure.
- */
+/** Reactivate a suspended POS org after license extend/reactivate. */
 export async function reactivatePosOrgForLicense(
   db: Db,
   tenantId: string,
   log?: (message: string) => void,
-): Promise<void> {
+): Promise<PosSyncResult> {
   const link = await getPosTenantLink(db, tenantId);
-  if (!link) return;
+  if (!link) return { ok: true };
 
   const { data, status } = await posProxyJson(
     `/organizations/${encodeURIComponent(link.posOrgId)}/lifecycle`,
@@ -130,33 +231,30 @@ export async function reactivatePosOrgForLicense(
   );
 
   if (status < 200 || status >= 300) {
-    const message =
-      data && typeof data === "object" && "message" in data
-        ? String((data as { message?: unknown }).message)
-        : `HTTP ${status}`;
-    const line = `[pos-license-sync] reactivate failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`;
-    if (log) log(line);
-    else console.error(line);
-    return;
+    const message = proxyErrorMessage(data, status);
+    logPosSyncLine(
+      `[pos-license-sync] reactivate failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`,
+      log,
+    );
+    return { ok: false, error: message };
   }
 
-  const okLine = `[pos-license-sync] reactivated POS org tenantId=${tenantId} posOrgId=${link.posOrgId}`;
-  if (log) log(okLine);
-  else console.log(okLine);
+  logPosSyncLine(
+    `[pos-license-sync] reactivated POS org tenantId=${tenantId} posOrgId=${link.posOrgId}`,
+    log,
+  );
+  return { ok: true };
 }
 
-/**
- * Suspend the linked POS organization when Stockix license is revoked or expired.
- * Non-fatal: logs and returns on missing POS link or proxy failure.
- */
+/** Suspend the linked POS organization when Stockix license is revoked or expired. */
 export async function suspendPosOrgForLicense(
   db: Db,
   tenantId: string,
   reason: string,
   log?: (message: string) => void,
-): Promise<void> {
+): Promise<PosSyncResult> {
   const link = await getPosTenantLink(db, tenantId);
-  if (!link) return;
+  if (!link) return { ok: true };
 
   const { data, status } = await posProxyJson(
     `/organizations/${encodeURIComponent(link.posOrgId)}/suspend`,
@@ -165,17 +263,25 @@ export async function suspendPosOrgForLicense(
   );
 
   if (status < 200 || status >= 300) {
-    const message =
-      data && typeof data === "object" && "message" in data
-        ? String((data as { message?: unknown }).message)
-        : `HTTP ${status}`;
-    const line = `[pos-license-sync] suspend failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`;
-    if (log) log(line);
-    else console.error(line);
-    return;
+    const message = proxyErrorMessage(data, status);
+    logPosSyncLine(
+      `[pos-license-sync] suspend failed tenantId=${tenantId} posOrgId=${link.posOrgId}: ${message}`,
+      log,
+    );
+    return { ok: false, error: message };
   }
 
-  const okLine = `[pos-license-sync] suspended POS org tenantId=${tenantId} posOrgId=${link.posOrgId} reason=${reason}`;
-  if (log) log(okLine);
-  else console.log(okLine);
+  logPosSyncLine(
+    `[pos-license-sync] suspended POS org tenantId=${tenantId} posOrgId=${link.posOrgId} reason=${reason}`,
+    log,
+  );
+  return { ok: true };
+}
+
+export function posSyncResultToStatus(
+  result: PosSyncResult,
+  hasTenant: boolean,
+): "ok" | "failed" | "skipped" {
+  if (!hasTenant) return "skipped";
+  return result.ok ? "ok" : "failed";
 }

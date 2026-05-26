@@ -9,6 +9,7 @@
     "./stxi-license-key": "./src/stxi-license-key.ts",
     "./audit-log": "./src/audit-log.ts",
     "./finance-api": "./src/finance-api.ts",
-    "./pos-entitlements-from-modules": "./src/pos-entitlements-from-modules.ts"
+    "./pos-entitlements-from-modules": "./src/pos-entitlements-from-modules.ts",
+    "./deployment-secrets": "./src/deployment-secrets.ts"
   }
 }
