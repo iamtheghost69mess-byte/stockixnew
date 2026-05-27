@@ -26,7 +26,7 @@ function setSecret(value: string | undefined) {
 // A valid UUID for use in session token payloads (sub must be UUID per schema).
 const VALID_UUID = "550e8400-e29b-41d4-a716-446655440000";
 
-describe("signSessionToken + verifySessionToken", () => {
+describe.sequential("signSessionToken + verifySessionToken", () => {
   beforeEach(() => {
     setSecret(VALID_SECRET);
     // Reset module cache so @repo/config re-reads process.env for each group.
@@ -230,7 +230,7 @@ describe("signSessionToken + verifySessionToken", () => {
   });
 });
 
-describe("signMfaToken + verifyMfaToken", () => {
+describe.sequential("signMfaToken + verifyMfaToken", () => {
   beforeEach(() => {
     setSecret(VALID_SECRET);
     vi.resetModules();

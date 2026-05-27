@@ -44,7 +44,7 @@ function formatFromHeader(): string {
 
 /** Resend API key in MAIL_PASSWORD returns webhook-compatible email ids. */
 function shouldUseResendApi(): boolean {
-  if (process.env.MAIL_TRANSPORT?.trim().toLowerCase() === "smtp") return false;
+  if (mailConfig.transport === "smtp") return false;
   const apiKey = mailConfig.password?.trim() ?? "";
   return apiKey.startsWith("re_");
 }
