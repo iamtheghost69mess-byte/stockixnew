@@ -132,7 +132,7 @@ describe("owner invite mail queue", () => {
     vi.useRealTimers();
   });
 
-  it("deliverOwnerInviteEmailInline exposes inviteUrl when both attempts fail", async () => {
+  it("deliverOwnerInviteEmailInline does not expose inviteUrl when both attempts fail", async () => {
     vi.useFakeTimers();
     sendOwnerInviteEmailMock.mockResolvedValue({ status: "failed", error: "timeout" });
 
@@ -146,8 +146,9 @@ describe("owner invite mail queue", () => {
     expect(result).toMatchObject({
       mode: "inline",
       emailSent: false,
-      inviteUrl: sampleJob.inviteUrl,
+      mailConfigured: expect.any(Boolean),
     });
+    expect(result).not.toHaveProperty("inviteUrl");
     vi.useRealTimers();
   });
 });

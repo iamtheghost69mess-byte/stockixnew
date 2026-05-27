@@ -21,7 +21,6 @@ export type OwnerInviteDeliveryResult =
       mode: "inline";
       emailSent: boolean;
       mailConfigured: boolean;
-      inviteUrl?: string;
     };
 
 async function deliverOwnerInviteInline(
@@ -50,7 +49,6 @@ async function deliverOwnerInviteInline(
     mode: "inline",
     emailSent,
     mailConfigured,
-    inviteUrl: emailSent ? undefined : payload.inviteUrl,
   };
 }
 

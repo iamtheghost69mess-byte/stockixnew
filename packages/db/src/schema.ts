@@ -55,6 +55,7 @@ export const owners = pgTable(
     mfaEnabled: boolean("mfa_enabled").notNull().default(false),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     inviteToken: text("invite_token"),
+    inviteTokenHash: text("invite_token_hash"),
     inviteTokenExpiresAt: timestamp("invite_token_expires_at", {
       withTimezone: true,
     }),

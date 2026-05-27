@@ -2,7 +2,7 @@ import { isAbsolute, join } from "node:path";
 
 import { execa } from "execa";
 
-import { apiConfig, moduleGatingConfig, posConfig } from "@repo/config";
+import { apiConfig, env, moduleGatingConfig, posConfig } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
 
 import { allocateTenantPort } from "@repo/db";
@@ -318,6 +318,11 @@ export async function provisionPosStack(
   opts.log(`[provision][pos] compose up project=${project}`);
 
   const stockixRepoRoot = repoRoot();
+  const resendApiKey =
+    process.env.RESEND_API_KEY?.trim() || env.MAIL_PASSWORD?.trim() || "";
+  const resendFromEmail =
+    process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
+
   const composeEnv = {
     ...process.env,
     COMPOSE_PROJECT_NAME: project,
@@ -332,6 +337,8 @@ export async function provisionPosStack(
     POS_FRONTEND_URL: posUrl,
     CORS_ORIGINS: buildPosCorsOrigins(opts.slug),
     ROOT_DOMAIN: rootDomain,
+    RESEND_API_KEY: resendApiKey,
+    RESEND_FROM_EMAIL: resendFromEmail,
     ...(financeInternalBaseUrl
       ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
       : {}),

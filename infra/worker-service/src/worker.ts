@@ -35,7 +35,10 @@ import {
   licenses,
 } from "@repo/db/schema";
 import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
-import { processLicenseExpiryFollowUp } from "@repo/platform-worker-shared";
+import {
+  initEmailLogging,
+  processLicenseExpiryFollowUp,
+} from "@repo/platform-worker-shared";
 import { z } from "zod";
 import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import {
@@ -742,6 +745,8 @@ async function loop() {
     throw new Error("DATABASE_URL is required for infra worker");
   }
   const db = createDb(databaseUrl);
+  initEmailLogging(db);
+  logger.info("Email logging initialized in worker", { event: "worker_email_logging_init" });
   logger.info(
     JSON.stringify({
       level: "info",

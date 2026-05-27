@@ -365,6 +365,13 @@
       "when": 1781140000000,
       "tag": "0050_tenant_public_discovery_slug",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781150000000,
+      "tag": "0053_owner_invite_token_hash",
+      "breakpoints": true
     }
   ]
 }

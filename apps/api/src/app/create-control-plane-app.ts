@@ -2,7 +2,12 @@ import * as Sentry from "@sentry/node";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { apiConfig } from "@repo/config";
+import {
+  apiConfig,
+  getMailHealthStatus,
+  isMailConfigured,
+  mailConfig,
+} from "@repo/config";
 import { createDb } from "@repo/db";
 
 import { initEmailLogging } from "../mail/email-log.js";
@@ -71,6 +76,22 @@ export function createControlPlaneApp(): ControlPlaneApp {
   // Auth + webhooks before CORS: session cookies and webhook signature verification.
   if (db) {
     initEmailLogging(db);
+    if (!isMailConfigured()) {
+      logger.warn(
+        "EMAIL NOT CONFIGURED — all mail sends will be skipped. Set MAIL_PASSWORD (Resend API key) and MAIL_FROM_ADDRESS in infra/prod/.env",
+        {
+          event: "mail_not_configured_startup",
+          MAIL_PASSWORD: mailConfig.password?.trim() ? "<SET>" : "<EMPTY>",
+          MAIL_FROM_ADDRESS: mailConfig.fromAddress?.trim() ? "<SET>" : "<EMPTY>",
+        },
+      );
+    } else {
+      logger.info("Email configured", {
+        event: "mail_configured_startup",
+        from: mailConfig.fromAddress,
+        transport: getMailHealthStatus().transport,
+      });
+    }
     registerAuthRoutes(app, db);
     registerWebhooks(app, db);
     if (apiConfig.nodeEnv !== "production") {

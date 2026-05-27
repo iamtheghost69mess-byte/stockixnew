@@ -1,14 +1,25 @@
 import bcrypt from "bcryptjs";
-import { randomUUID } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { owners } from "@repo/db/schema";
 import { apiConfig, isMailConfigured } from "@repo/config";
 import { deliverOwnerInviteEmail } from "./owner-invite-delivery.js";
+import {
+  generateOwnerInviteToken,
+  hashOwnerInviteToken,
+} from "./invite-token.js";
 import type { ApiServiceResult } from "../auth/types.js";
 
 const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
+
+function ownerInviteTokenMatch(token: string) {
+  const tokenHash = hashOwnerInviteToken(token);
+  return or(
+    eq(owners.inviteTokenHash, tokenHash),
+    eq(owners.inviteToken, token),
+  );
+}
 
 export async function getInviteByToken(
   db: PostgresJsDatabase<typeof schema>,
@@ -27,7 +38,9 @@ export async function getInviteByToken(
       inviteTokenExpiresAt: owners.inviteTokenExpiresAt,
     })
     .from(owners)
-    .where(and(eq(owners.inviteToken, token), gt(owners.inviteTokenExpiresAt, new Date())))
+    .where(
+      and(ownerInviteTokenMatch(token), gt(owners.inviteTokenExpiresAt, new Date())),
+    )
     .limit(1);
   if (!owner?.inviteTokenExpiresAt) {
     return { success: false, error: "Invite token invalid or expired", status: 404 };
@@ -49,14 +62,21 @@ export async function acceptInvite(
   const [owner] = await db
     .select({ id: owners.id })
     .from(owners)
-    .where(and(eq(owners.inviteToken, input.token), gt(owners.inviteTokenExpiresAt, new Date())))
+    .where(
+      and(ownerInviteTokenMatch(input.token), gt(owners.inviteTokenExpiresAt, new Date())),
+    )
     .limit(1);
   if (!owner) return { success: false, error: "Invite token invalid or expired", status: 404 };
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   await db
     .update(owners)
-    .set({ passwordHash, inviteToken: null, inviteTokenExpiresAt: null })
+    .set({
+      passwordHash,
+      inviteToken: null,
+      inviteTokenHash: null,
+      inviteTokenExpiresAt: null,
+    })
     .where(eq(owners.id, owner.id));
   return { success: true, data: { ok: true } };
 }
@@ -70,7 +90,6 @@ export async function resendOwnerInvite(
     emailSent: boolean;
     emailQueued?: boolean;
     mailConfigured: boolean;
-    inviteUrl?: string;
     owner: { id: string; email: string; name: string; role: string };
   }>
 > {
@@ -101,16 +120,20 @@ export async function resendOwnerInvite(
     return { success: false, error: "Owner is not active", status: 400 };
   }
 
-  const inviteToken = randomUUID();
+  const { raw, hash } = generateOwnerInviteToken();
   const inviteTokenExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
 
   await db
     .update(owners)
-    .set({ inviteToken, inviteTokenExpiresAt })
+    .set({
+      inviteToken: null,
+      inviteTokenHash: hash,
+      inviteTokenExpiresAt,
+    })
     .where(eq(owners.id, owner.id));
 
   const dashboardUrl = apiConfig.dashboardUrl?.replace(/\/+$/, "");
-  const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+  const inviteUrl = `${dashboardUrl ?? "http://localhost:3000"}/accept-invite?token=${raw}`;
 
   const delivery = await deliverOwnerInviteEmail(db, {
     ownerId: owner.id,
@@ -144,7 +167,6 @@ export async function resendOwnerInvite(
     data: {
       emailSent: delivery.emailSent,
       mailConfigured: delivery.mailConfigured,
-      inviteUrl: delivery.inviteUrl,
       owner: {
         id: owner.id,
         email: owner.email,
@@ -154,4 +176,3 @@ export async function resendOwnerInvite(
     },
   };
 }
-

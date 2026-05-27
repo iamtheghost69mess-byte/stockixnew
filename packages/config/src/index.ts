@@ -290,10 +290,24 @@ export function isMailConfigured(): boolean {
 export function getMailHealthStatus(): {
   configured: boolean;
   fromAddressSet: boolean;
+  transport: "resend-api" | "smtp" | "unconfigured";
 } {
+  const password = mailConfig.password?.trim() ?? "";
+  const configured = isMailConfigured();
+  let transport: "resend-api" | "smtp" | "unconfigured" = "unconfigured";
+  if (configured) {
+    if (process.env.MAIL_TRANSPORT?.trim().toLowerCase() === "smtp") {
+      transport = "smtp";
+    } else if (password.startsWith("re_")) {
+      transport = "resend-api";
+    } else {
+      transport = "smtp";
+    }
+  }
   return {
-    configured: isMailConfigured(),
+    configured,
     fromAddressSet: Boolean(mailConfig.fromAddress?.trim()),
+    transport,
   };
 }
 

@@ -8,3 +8,5 @@ export { processLicenseExpiryFollowUp } from "../../../apps/api/src/license-expi
 export { syncFinanceLicenseForStockixTenant } from "../../../apps/api/src/finance-license.client.js";
 
 export { sendPosWelcomeEmail } from "../../../apps/api/src/mail/send.js";
+
+export { initEmailLogging } from "../../../apps/api/src/mail/email-log.js";
