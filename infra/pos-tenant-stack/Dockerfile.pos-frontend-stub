@@ -1,9 +1,9 @@
 # Minimal placeholder for compose health checks only — NOT the real POS UI.
 # Use: pnpm pos:images:build  (default builds apps/pos-frontend2/Dockerfile)
 # Stub only: pnpm pos:images:build -- --stub-frontend
-FROM nginx:alpine
+FROM busybox:1.37.0-musl
 LABEL io.stockix.image=pos-frontend-stub
-RUN printf 'server { listen 3000; location / { return 200 "POS frontend placeholder\\n"; add_header Content-Type text/plain; } }\n' \
-    > /etc/nginx/conf.d/default.conf
+RUN mkdir -p /www \
+    && printf 'POS frontend placeholder\n' > /www/index.html
 EXPOSE 3000
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["httpd", "-f", "-p", "3000", "-h", "/www"]

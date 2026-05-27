@@ -29,6 +29,7 @@
     "get-password": "node scripts/get-bootstrap-password.mjs",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "env:sync-prod": "node scripts/sync-prod-env-to-root.mjs --confirm-server",
+    "prod:scale-smoke": "bash scripts/prod-scale-smoke.sh",
     "env:audit": "node scripts/audit-env.mjs",
     "env:sync-pos": "node scripts/sync-pos-env-from-root.mjs",
     "env:align-local": "node scripts/align-root-env-gaps.mjs && node scripts/sync-pos-env-from-root.mjs",

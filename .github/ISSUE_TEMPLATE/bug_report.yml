@@ -1,0 +1,82 @@
+name: Bug report
+description: Report something broken in Stockix.
+title: "[bug] "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Include reproduction steps and environment details so we can fix it quickly.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Control plane API (`apps/api`)
+        - Dashboard (`apps/dashboard`)
+        - Worker / provisioning
+        - PMS
+        - POS
+        - Finance (Stockix accounting)
+        - Production infra / CI
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local development
+        - Staging
+        - Production
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: tenant
+    attributes:
+      label: Tenant slug (if applicable)
+      placeholder: e.g. acme
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots / request IDs
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit SHA or release (if known)
+      placeholder: e.g. abc1234 or main @ 2026-05-27

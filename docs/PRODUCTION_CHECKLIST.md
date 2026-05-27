@@ -27,6 +27,20 @@ Run through this in order before going live.
 - [ ] `pnpm infra:worker:build` after worker changes; redeploy worker container
 - [ ] `cd infra/prod && docker compose --env-file .env config` — no errors
 - [ ] `cd infra/prod && docker compose --env-file .env up -d --build`
+- [ ] Secret rotation completed per [SECRET_ROTATION_RUNBOOK.md](./SECRET_ROTATION_RUNBOOK.md) (set date in `infra/prod/OPERATIONS.md`)
+- [ ] `CONTROL_PLANE_REDIS_URL=redis://control-plane-redis:6379/0` in `infra/prod/.env`
+- [ ] `DB_POOL_MAX` and related `DB_*` pool vars set (required in production by `@repo/config`)
+- [ ] `BACKUP_S3_BUCKET` + `BACKUP_AWS_*` for `db-backup` sidecar
+- [ ] `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` set for production
+
+## Scale-first control plane (2+ API replicas)
+
+Compose runs **`api` × 2** (`RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq` × 1** (`RUN_BULLMQ_CONSUMERS=true`). Do not enable BullMQ on scaled `api` replicas.
+
+- [ ] `docker compose ps` shows 2 `api` and 1 `api-bullmq` healthy
+- [ ] `GET https://api.${ROOT_DOMAIN}/ready` → `ready: true`, `database: ok`, `redis: ok`
+- [ ] `bash scripts/prod-scale-smoke.sh` passes on the deploy host
+- [ ] Rate limits shared across replicas (optional: exceed `/auth/*` limit from one IP — 429 on repeat requests)
 
 ## Docker Images Required
 
@@ -75,7 +89,8 @@ Run through this in order before going live.
 - [ ] Worker processing jobs (`tenant.provision` completes)
 - [ ] Traefik routing Finance (`{slug}.{domain}`) and POS (`{slug}-pos.{domain}`)
 - [ ] API `GET /health` → `{"status":"ok"}`
-- [ ] Postgres, api, dashboard, traefik healthchecks passing
+- [ ] API `GET /ready` → `ready: true` with `database` + `redis` ok
+- [ ] Postgres, api, api-bullmq, dashboard, traefik healthchecks passing
 
 ## Type / Test Gate (pre-merge baseline)
 
@@ -89,6 +104,7 @@ pnpm --filter api test
 
 ## Post-Deploy Smoke
 
+- [ ] `bash scripts/prod-scale-smoke.sh` (automated `/ready`, `/health`, replica counts)
 - [ ] Dashboard login + MFA if enabled
 - [ ] Create tenant via wizard with module selection
 - [ ] Finance users CRUD from tenant detail

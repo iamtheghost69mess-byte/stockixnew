@@ -2,10 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
+    "moduleResolution": "node",
     "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./",
-    "strict": false,
     "allowJs": true,
     "checkJs": false,
     "noEmit": true,
@@ -13,6 +11,20 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["**/*.js", "middlewares/**/*.js", "utils/**/*.js"],
+  "files": ["app.js"],
+  "include": [
+    "config/**/*.js",
+    "constants/**/*.js",
+    "controllers/**/*.js",
+    "middlewares/**/*.js",
+    "migrations/**/*.js",
+    "models/**/*.js",
+    "plugins/**/*.js",
+    "routes/**/*.js",
+    "scripts/**/*.js",
+    "services/**/*.js",
+    "utils/**/*.js",
+    "workers/**/*.js"
+  ],
   "exclude": ["node_modules", "dist", "tests"]
 }

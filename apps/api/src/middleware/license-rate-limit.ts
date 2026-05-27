@@ -7,8 +7,10 @@ import {
 
 import { getControlPlaneRedisClient } from "../lib/redis.js";
 import { logger } from "../lib/logger.js";
+import { shouldFailClosedOnRateLimitStoreError } from "./rate-limit-redis-policy.js";
 
 const redisClient = getControlPlaneRedisClient();
+const failClosed = shouldFailClosedOnRateLimitStoreError();
 
 const ipLimiter = redisClient
   ? new RateLimiterRedis({
@@ -17,7 +19,9 @@ const ipLimiter = redisClient
       points: 5,
       duration: 60,
     })
-  : new RateLimiterMemory({ points: 5, duration: 60 });
+  : failClosed
+    ? null
+    : new RateLimiterMemory({ points: 5, duration: 60 });
 
 const keyLimiter = redisClient
   ? new RateLimiterRedis({
@@ -26,7 +30,9 @@ const keyLimiter = redisClient
       points: 10,
       duration: 900,
     })
-  : new RateLimiterMemory({ points: 10, duration: 900 });
+  : failClosed
+    ? null
+    : new RateLimiterMemory({ points: 10, duration: 900 });
 
 function clientIp(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for") ?? headers.get("x-real-ip") ?? "";
@@ -39,7 +45,10 @@ export function licenseKeyFingerprint(raw: string): string {
 
 export async function consumeLicenseActivateKeyLimit(
   licenseKey: string,
-): Promise<{ ok: true } | { ok: false; retryAfterSec: number }> {
+): Promise<{ ok: true } | { ok: false; retryAfterSec: number } | { ok: false; unavailable: true }> {
+  if (!keyLimiter) {
+    return { ok: false, unavailable: true };
+  }
   const key = licenseKeyFingerprint(licenseKey);
   try {
     await keyLimiter.consume(key);
@@ -47,6 +56,10 @@ export async function consumeLicenseActivateKeyLimit(
   } catch (err) {
     if (err instanceof RateLimiterRes) {
       return { ok: false, retryAfterSec: Math.ceil(err.msBeforeNext / 1000) };
+    }
+    if (failClosed) {
+      logger.error("license_activate_key_limit_store_error", { key });
+      return { ok: false, unavailable: true };
     }
     return { ok: true };
   }
@@ -63,6 +76,12 @@ export function licenseActivateRateLimitMiddleware(): MiddlewareHandler {
       await next();
       return;
     }
+    if (!ipLimiter) {
+      return c.json(
+        { success: false, error: "Rate limiting temporarily unavailable" },
+        503,
+      );
+    }
     const ip = clientIp(c.req.raw.headers);
     try {
       await ipLimiter.consume(ip);
@@ -72,8 +91,11 @@ export function licenseActivateRateLimitMiddleware(): MiddlewareHandler {
         logger.warn("license_activate_rate_limit", { ip, event: "ip_limit" });
         return c.json({ success: false, error: "invalid_license" }, 429);
       }
-      logger.warn("license_activate_rate_limit_redis_error", { ip });
-      await next();
+      logger.error("license_activate_rate_limit_redis_error", { ip });
+      return c.json(
+        { success: false, error: "Rate limiting temporarily unavailable" },
+        503,
+      );
     }
   };
 }

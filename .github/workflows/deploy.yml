@@ -1,29 +1,39 @@
 name: Deploy Stockix
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: deploy-stockix
+  group: stockix-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PNPM_VERSION: "9.15.9"
+  NODE_VERSION: "20"
+  TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+
 jobs:
-  quality:
+  quality-gate:
+    name: Quality gate
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.15.9
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
@@ -40,9 +50,9 @@ jobs:
 
       - name: Type check — Packages
         run: |
-          pnpm --filter @repo/db exec tsc --noEmit
           pnpm --filter @repo/auth exec tsc --noEmit
           pnpm --filter @repo/config exec tsc --noEmit
+          pnpm --filter @repo/db exec tsc --noEmit
 
       - name: Type check — PMS
         run: pnpm --filter @stockix/pms exec tsc --noEmit
@@ -52,12 +62,12 @@ jobs:
 
       - name: License test stability check
         run: |
-          for i in 1 2 3; do
+          for i in 1 2 3 4 5; do
             pnpm --filter api exec vitest run tests/license-single-active.test.ts || exit 1
           done
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
           SESSION_SECRET: test-session-secret-32-chars-minimum-length
           AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum
           PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum
@@ -70,7 +80,7 @@ jobs:
         run: pnpm --filter api test
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
           SESSION_SECRET: test-session-secret-32-chars-minimum-length
           AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum
           PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum
@@ -84,16 +94,12 @@ jobs:
           STOCKIX_FINANCE_INTERNAL_HOST: 127.0.0.1
 
       - name: Run POS tests
-        working-directory: services/posnew/apps/pos-backend
-        run: npm test
+        run: pnpm --filter pos-backend test
         timeout-minutes: 5
-        continue-on-error: false
 
       - name: Run Finance tests
-        run: |
-          cd services/stockix-finance/packages/server
-          pnpm test
-        continue-on-error: false
+        run: pnpm --filter @stockix/server test
+        timeout-minutes: 10
 
       - name: Build dashboard
         run: pnpm --filter dashboard build
@@ -113,8 +119,14 @@ jobs:
         run: pnpm architecture:validate
 
   deploy:
-    needs: quality
+    name: Deploy production
+    needs: quality-gate
+    if: github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://stockix.cloud
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:

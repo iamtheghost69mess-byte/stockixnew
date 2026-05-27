@@ -6,9 +6,10 @@
 - `productionready.md` (prior phase audit A–J, 68/100 — superseded by this file)
 - `PRODUCTION_READINESS_AUDIT.md` (master audit, 50 sections)
 
-**Overall status:** NOT CLEARED FOR PRODUCTION  
-**Items confirmed fixed:** 52 ✅  
-**Items still open:** 47 ❌  
+**Overall status:** NOT CLEARED FOR PRODUCTION (ops: secret rotation on prod host still required)  
+**Scale-first (2026-05-27):** `api`×2 + `api-bullmq`, Redis-required `/ready`, fail-closed rate limits — see [docs/VERIFICATION_REPORT.md](docs/VERIFICATION_REPORT.md)  
+**Items confirmed fixed:** 52+ ✅  
+**Items still open:** ~40 ❌ (see sections below; several P1 items closed in code since May 26 audit)  
 **Items partially fixed (residual gap):** 11 ⚠️
 
 ---

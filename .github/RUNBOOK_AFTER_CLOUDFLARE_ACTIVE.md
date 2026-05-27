@@ -6,7 +6,7 @@ Assume **stockix.cloud** is already **Active** in Cloudflare. Follow **in order*
 
 ## Step 1 — DNS records (Cloudflare)
 
-**DNS → Records** for `stockix.cloud`. Use **your VPS IPv4** everywhere (e.g. Hostinger: `76.13.139.176` — replace if yours differs).
+**DNS → Records** for `stockix.cloud`. Use **your VPS IPv4** everywhere (replace `YOUR_VPS_IP` with your server address).
 
 | Type | Name | Content | Proxy |
 |------|------|---------|--------|

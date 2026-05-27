@@ -153,6 +153,7 @@ describe("license suspend/reactivate", () => {
     process.env.LICENSE_SYNC_STRICT = "1";
     suspendPosMock.mockResolvedValueOnce({ ok: false, error: "HTTP 502" });
     try {
+      vi.resetModules();
       const { db } = createSuspendDb("active");
       const { registerLicenseApi } = await import("../src/license-http.js");
       const app = new Hono();

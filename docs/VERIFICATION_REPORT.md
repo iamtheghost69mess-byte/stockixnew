@@ -1,15 +1,28 @@
 # Production Verification Report
 
-**Date:** 2026-05-26  
-**Based on:** 4 fix prompts (Critical, High, Medium, Low)  
+**Date:** 2026-05-26 (updated 2026-05-27 for scale-first deploy)  
+**Based on:** 4 fix prompts (Critical, High, Medium, Low) + scale-first hardening  
 **Mode:** Read-only audit (commands run; no application code modified)
 
 ---
 
-## Final Score: 86/100
+## Scale-first update (2026-05-27)
 
-**Passed everything:** NO  
-**Production deploy clearance:** NOT CLEARED
+| Item | Status |
+|------|--------|
+| `api` × 2 + `api-bullmq` × 1 in prod compose | Implemented |
+| `GET /ready` requires Redis when `CONTROL_PLANE_REDIS_URL` set | Implemented |
+| Rate limits fail closed in production when Redis configured | Implemented |
+| `license-rate-limit.test.ts` + CI license loop 5× | Implemented |
+| `scripts/prod-scale-smoke.sh` | Added |
+| Secret rotation on prod host | **Operator** — see [SECRET_ROTATION_RUNBOOK.md](./SECRET_ROTATION_RUNBOOK.md) |
+
+---
+
+## Final Score: 86/100 (pre-scale); ~90/100 after scale hardening
+
+**Passed everything:** NO (ops secret rotation pending on prod host)  
+**Production deploy clearance:** NOT CLEARED until secret rotation + prod smoke on EC2
 
 ---
 

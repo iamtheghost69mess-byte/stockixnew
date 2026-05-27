@@ -23,6 +23,8 @@ Stockix is the **control plane** for a multi-tenant SaaS: owner dashboard, APIs,
 | [docs/INTEGRATION_REFERENCE.md](docs/INTEGRATION_REFERENCE.md) | POS + Bigcapital bridge, gaps, status |
 | [docs/PROVISIONING_REFERENCE.md](docs/PROVISIONING_REFERENCE.md) | Tenant provisioning, license, plans |
 | [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) | Pre-deploy checklist for operators |
+| [infra/prod/OPERATIONS.md](infra/prod/OPERATIONS.md) | Prod ops: scaling, Redis, BullMQ, backups |
+| [docs/SECRET_ROTATION_RUNBOOK.md](docs/SECRET_ROTATION_RUNBOOK.md) | Rotate secrets after `.env` git history |
 
 ## Prerequisites
 
@@ -186,6 +188,8 @@ Stripe, Plaid, and LemonSqueezy are **disabled** in Finance `.env` (commented bl
 
 See [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) for the full deploy flow.
 
+**Scale-first production:** `api` runs 2 replicas (`RUN_BULLMQ_CONSUMERS=false`); `api-bullmq` runs 1 replica for BullMQ only. After deploy on the server, run `bash scripts/prod-scale-smoke.sh`.
+
 ### Stockix Finance local dev (layer 3)
 
 Finance has its **own** Docker stack under `services/stockix-finance` (MariaDB, MongoDB, Redis). This is separate from the control-plane Postgres used by `apps/api`.
@@ -263,32 +267,39 @@ main  ←  pull request (reviewed + passing)  ←  feature/your-branch
 
 ## Branch Protection
 
-The following branch protection rules should be enabled on GitHub:
+Enable these rules on GitHub for **`main`**:
 
-### main branch
+**Settings → Branches → Add rule → `main`**
 
-- Require pull request reviews (minimum 1)
-- Require status checks to pass:
-  - Type check (API, Worker, Dashboard)
-  - API tests
-  - Architecture boundary check
-- Do not allow bypassing the above settings
+- Require a pull request before merging (minimum **1** approval)
+- Require status checks to pass before merging:
+  - **Quality gate** (`.github/workflows/deploy.yml`)
+  - **Gitleaks** (`.github/workflows/secret-scan.yml`)
 - Require branches to be up to date before merging
+- Do not allow bypassing the above settings
 
-### Setup
-
-Go to: GitHub → Settings → Branches → Add rule → `main`
+Optional: create a **production** environment under **Settings → Environments** so the **Deploy production** job can require manual approval before SSH deploys.
 
 ## CI/CD
 
-All merges to `main` run the **quality** job in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) before production deploy:
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on **every pull request** and **every push to `main`**:
 
-- TypeScript compilation (`apps/api`, `infra/worker-service`, `apps/dashboard`, `packages/*`, `services/pms`)
-- API, POS, and Finance test suites (zero failures required)
-- Dashboard production build and static bundle size check (informational warning above 10MB)
-- Architecture boundary and phase validation
+| Job | When | What it does |
+|-----|------|----------------|
+| **Quality gate** | PR + push to `main` | TypeScript checks, API/POS/Finance tests, dashboard build, architecture validation |
+| **Deploy production** | Push to `main` or manual workflow dispatch only | SSH deploy to VPS after quality gate passes |
 
-Deploy to production only runs after the quality job passes.
+[`.github/workflows/secret-scan.yml`](.github/workflows/secret-scan.yml) scans PRs and `main` for leaked secrets with Gitleaks.
+
+Other repo hygiene (see [`.github/`](.github/)):
+
+- **PR template** — structured test plan and tenancy checklist
+- **Issue templates** — bug reports and feature requests
+- **Dependabot** — weekly npm and GitHub Actions updates
+- **CODEOWNERS** — auto-request reviewers by path
+- **SECURITY.md** — private vulnerability reporting
+
+Deploy runbooks: [`.github/DEPLOYMENT_FULL_GUIDE.md`](.github/DEPLOYMENT_FULL_GUIDE.md) · [`.github/DEPLOYMENT.md`](.github/DEPLOYMENT.md)
 
 If `.env` or `infra/prod/.env` was ever committed to git history, rotate affected secrets on the server before the next deploy.
 

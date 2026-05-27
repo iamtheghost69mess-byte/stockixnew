@@ -9,7 +9,7 @@ The workflow **does not** use AWS keys, ECR, or Docker Hub. Add **only**:
 | **Name** | **Value** |
 |----------|-----------|
 | **`EC2_SSH_PRIVATE_KEY`** | Contents of the **private** key file (`.pem`) that matches the **public** key allowed on the VPS for **`EC2_USER`**. |
-| **`EC2_HOST`** | VPS IPv4 (e.g. `76.13.139.176`) or DNS hostname. |
+| **`EC2_HOST`** | VPS IPv4 (e.g. `YOUR_VPS_IP`) or DNS hostname. |
 | **`EC2_USER`** | SSH login name on the VPS (**`root`**, **`ubuntu`**, etc.). |
 
 Repository → **Settings → Secrets and variables → Actions → New repository secret** (three rows).
@@ -143,7 +143,7 @@ Add under **Repository → Settings → Secrets and variables → Actions**.
 
 **Note:** Names say **EC2** but work for **any Linux SSH host** (e.g. Hostinger).
 
-**Workflow behavior:** On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`source infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose up -d --build`**.
+**Workflow behavior:** On **pull request**, GitHub runs quality checks only. On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`source infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose up -d --build`**.
 
 **Feedback:**
 
@@ -194,7 +194,11 @@ This prints **`docker compose ps`**, ports **80/443**, **API `/health`** from in
 
 | Doc | Purpose |
 |-----|---------|
-| [workflows/deploy.yml](workflows/deploy.yml) | CI job definition |
+| [workflows/deploy.yml](workflows/deploy.yml) | CI quality gate + production deploy |
+| [workflows/secret-scan.yml](workflows/secret-scan.yml) | Gitleaks secret scanning |
+| [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) | PR checklist |
+| [dependabot.yml](dependabot.yml) | Dependency update automation |
+| [CODEOWNERS](CODEOWNERS) | Review routing |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | AWS/VPS notes, shared VPS |
 | [RUNBOOK_AFTER_CLOUDFLARE_ACTIVE.md](RUNBOOK_AFTER_CLOUDFLARE_ACTIVE.md) | Steps after Cloudflare Active |
 | `infra/prod/docker-compose.yml` | Prod stack |
