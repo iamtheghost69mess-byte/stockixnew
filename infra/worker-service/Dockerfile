@@ -6,7 +6,7 @@ RUN apk add --no-cache docker-cli docker-cli-compose \
 WORKDIR /app
 
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter api...
 RUN pnpm infra:worker:build
 
 FROM node:22-alpine AS worker

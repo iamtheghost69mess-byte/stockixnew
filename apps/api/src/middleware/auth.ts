@@ -58,6 +58,10 @@ export function createPlatformAuthGate(
       await next();
       return;
     }
+    if (pubPath.startsWith("/webhooks/")) {
+      await next();
+      return;
+    }
     if (
       c.req.path.startsWith("/internal/jobs")
       || c.req.path.startsWith("/internal/organizations")

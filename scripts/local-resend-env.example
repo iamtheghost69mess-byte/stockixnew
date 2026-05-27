@@ -1,0 +1,16 @@
+# Copy to .env.local (repo root) for local email + webhook testing.
+# Merge with your existing .env.local — do not commit secrets.
+
+MAIL_HOST=smtp.resend.com
+MAIL_PORT=587
+MAIL_USERNAME=resend
+MAIL_PASSWORD=re_your_key_from_resend
+MAIL_SECURE=false
+MAIL_FROM_NAME=Stockix
+# Use the domain verified in Resend (your test used send.stockix.cloud)
+MAIL_FROM_ADDRESS=noreply@send.stockix.cloud
+
+# Same whsec_ as Resend → Webhooks → Signing Secret
+RESEND_WEBHOOK_SECRET=whsec_your_signing_secret
+
+PLATFORM_ADMIN_EMAIL=your@email.com
