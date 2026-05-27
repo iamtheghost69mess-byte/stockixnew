@@ -1,6 +1,6 @@
 # Production operations — control plane
 
-# SECRETS ROTATED: _pending_ — complete rotation on server then set date (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
+# SECRETS ROTATED: 2026-05-27 — credentials rotated on production host after git history exposure (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
 
 Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored). After editing, sync and redeploy:
 

@@ -254,6 +254,7 @@ export const env = {
   DEPLOYMENT_SECRET_KEY: readOptionalString("DEPLOYMENT_SECRET_KEY"),
   MAIL_FROM_NAME: readOptionalString("MAIL_FROM_NAME"),
   MAIL_FROM_ADDRESS: readOptionalString("MAIL_FROM_ADDRESS"),
+  MAIL_TRANSPORT: readOptionalString("MAIL_TRANSPORT"),
   RESEND_WEBHOOK_SECRET: readOptionalString("RESEND_WEBHOOK_SECRET"),
   MONGODB_DATABASE_URL: readOptionalString("MONGODB_DATABASE_URL"),
   AGENDA_DB_COLLECTION: readOptionalString("AGENDA_DB_COLLECTION"),
@@ -280,6 +281,7 @@ export const mailConfig = {
   secure: env.MAIL_SECURE === 'true' || env.MAIL_SECURE === '1',
   fromName: env.MAIL_FROM_NAME ?? 'Stockix',
   fromAddress: env.MAIL_FROM_ADDRESS ?? '',
+  transport: (env.MAIL_TRANSPORT ?? '').trim().toLowerCase(),
 } as const;
 
 /** True when Resend SMTP can send (API key + verified from address). */
@@ -296,7 +298,7 @@ export function getMailHealthStatus(): {
   const configured = isMailConfigured();
   let transport: "resend-api" | "smtp" | "unconfigured" = "unconfigured";
   if (configured) {
-    if (process.env.MAIL_TRANSPORT?.trim().toLowerCase() === "smtp") {
+    if (mailConfig.transport === "smtp") {
       transport = "smtp";
     } else if (password.startsWith("re_")) {
       transport = "resend-api";
