@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 import type { Redis } from "ioredis";
 
+import { apiConfig } from "@repo/config";
+
 import { logger } from "./logger.js";
 
 const require = createRequire(import.meta.url);
@@ -13,7 +15,7 @@ let controlPlaneRedis: Redis | null = null;
 
 /** Shared Redis client for rate limiting (CONTROL_PLANE_REDIS_URL). */
 export function getControlPlaneRedisClient(): Redis | null {
-  const url = process.env.CONTROL_PLANE_REDIS_URL?.trim();
+  const url = apiConfig.controlPlaneRedisUrl;
   if (!url) return null;
   if (!controlPlaneRedis) {
     const client = new RedisCtor(url, {

@@ -5,7 +5,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { owners } from "@repo/db/schema";
 import { z } from "zod";
-import { infraConfig } from "@repo/config";
+import { apiConfig, infraConfig } from "@repo/config";
 
 import { logLine } from "../lib/logger.js";
 import { logAudit } from "../audit.js";
@@ -94,7 +94,7 @@ export async function runOwnerInviteMailJob(
       `[owner_invite_mail_skipped] ownerId=${data.ownerId} reason=${result.reason} — ` +
         "Set SMTP credentials in production to enable delivery.",
     );
-    if (process.env.NODE_ENV === "production" && process.env.SENTRY_DSN?.trim()) {
+    if (apiConfig.nodeEnv === "production" && apiConfig.sentryDsn) {
       Sentry.captureMessage("Owner invite mail skipped in production — SMTP not configured", {
         level: "warning",
         extra: { ownerId: data.ownerId, reason: result.reason, source: data.source },
