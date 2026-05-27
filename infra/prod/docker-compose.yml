@@ -34,7 +34,6 @@ x-stockix-platform-env: &stockix-platform-env
   DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
   LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
   CONTROL_PLANE_REDIS_URL: ${CONTROL_PLANE_REDIS_URL:-}
-  RUN_BULLMQ_CONSUMERS: ${RUN_BULLMQ_CONSUMERS:-true}
   JWT_SECRET: ${JWT_SECRET:-}
   SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
   SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
@@ -196,6 +195,8 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     cpus: "0.5"
+    deploy:
+      replicas: 2
     depends_on:
       postgres:
         condition: service_healthy
@@ -203,6 +204,7 @@ services:
         condition: service_healthy
     environment:
       <<: *stockix-platform-env
+      RUN_BULLMQ_CONSUMERS: "false"
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
     networks:
@@ -228,6 +230,39 @@ services:
       - traefik.http.routers.stockix-api.tls.certresolver=cloudflare
       - traefik.http.services.stockix-api.loadbalancer.server.port=4000
 
+  # Single BullMQ consumer — not exposed via Traefik. HTTP replicas use RUN_BULLMQ_CONSUMERS=false.
+  api-bullmq:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.25"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
+    environment:
+      <<: *stockix-platform-env
+      RUN_BULLMQ_CONSUMERS: "true"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+      PORT: "4000"
+    networks:
+      - stockix_internal
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
   infra-worker:
     build:
       context: ../..
@@ -238,7 +273,13 @@ services:
     expose:
       - "9090"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9090/health"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -249,6 +290,8 @@ services:
       control-plane-redis:
         condition: service_healthy
       api:
+        condition: service_healthy
+      api-bullmq:
         condition: service_healthy
       socket-proxy:
         condition: service_started

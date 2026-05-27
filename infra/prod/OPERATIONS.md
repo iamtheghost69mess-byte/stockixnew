@@ -7,7 +7,31 @@ Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignore
 ```bash
 pnpm env:sync-prod          # copies infra/prod/.env → repo root .env (worker fallback)
 cd infra/prod
-docker compose --env-file .env up -d --build api infra-worker control-plane-redis
+docker compose --env-file .env up -d --build api api-bullmq infra-worker control-plane-redis
+```
+
+## Secret rotation (required before first paying-customer traffic)
+
+`.env` appeared in git history. Follow [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md) on the **production host**:
+
+1. Rotate every secret in the runbook table (Postgres password, session, API keys, signing secrets, mail, webhooks, Cloudflare, Chatwoot, per-tenant `INTERNAL_API_SECRET`).
+2. `UPDATE owners SET session_version = session_version + 1;`
+3. Update `infra/prod/.env` only on the server (never commit).
+4. `pnpm env:sync-prod` then redeploy (command above).
+5. Re-sync `LICENSE_SIGNING_SECRET` to all POS tenant env files.
+6. Set `SECRETS ROTATED: YYYY-MM-DD` in this file header.
+
+## Horizontal API scaling (2+ replicas)
+
+| Service | Replicas | `RUN_BULLMQ_CONSUMERS` | Traefik |
+|---------|----------|------------------------|---------|
+| `api` | 2 (`deploy.replicas`) | `false` | yes — `api.${ROOT_DOMAIN}` |
+| `api-bullmq` | 1 | `true` | no — internal only |
+
+Post-deploy smoke (from repo root on server):
+
+```bash
+bash scripts/prod-scale-smoke.sh
 ```
 
 ## Database migrations
@@ -79,7 +103,7 @@ Mismatch causes STXI keys generated on the API to fail validation on POS login.
 `CONTROL_PLANE_REDIS_URL` is **required**. The API exits on startup if unset in production.
 Rate limits and BullMQ are not safe across multiple API replicas without shared Redis.
 
-Set `RUN_BULLMQ_CONSUMERS=true` on exactly one API instance when scaling horizontally.
+Prod compose runs **`api`** (2 replicas, `RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq`** (1 replica, `RUN_BULLMQ_CONSUMERS=true`). Do not set `RUN_BULLMQ_CONSUMERS=true` on scaled `api` replicas.
 
 ## Docker socket-proxy
 

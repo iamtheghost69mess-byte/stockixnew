@@ -8,6 +8,11 @@ This document walks from zero to **automatic deploys on every push to `main`** (
 
 What the workflow does **on each run**:
 
+1. **Pull requests:** runs the **Quality gate** job only (types, tests, build, architecture checks).
+2. **Push to `main` / manual dispatch:** runs **Quality gate**, then **Deploy production** if checks pass.
+
+Deploy steps:
+
 1. Starts an SSH agent with your **private** key (from GitHub Secrets).
 2. Connects to your **deploy host** (AWS EC2, Hostinger VPS, any SSH server) as `EC2_USER`.
 3. On the server: `git pull`, loads **`infra/prod/.env`**, runs **`pnpm install`**, **`db:migrate`**, then **`docker compose up -d --build`** in **`infra/prod`**.
@@ -22,8 +27,8 @@ The workflow is **not AWS-specific**. If you use **Hostinger KVM** (or Hetzner, 
 
 | Concept | On your Hostinger VPS |
 |--------|-------------------------|
-| Public IP | **`76.13.139.176`** (use for DNS **A** records and GitHub secret **`EC2_HOST`**) |
-| SSH | **`ssh root@76.13.139.176`** — GitHub secret **`EC2_USER`** = **`root`** *or* create a **`deploy`** user with Docker access and use that instead of root |
+| Public IP | **`YOUR_VPS_IP`** (use for DNS **A** records and GitHub secret **`EC2_HOST`**) |
+| SSH | **`ssh root@YOUR_VPS_IP`** — GitHub secret **`EC2_USER`** = **`root`** *or* create a **`deploy`** user with Docker access and use that instead of root |
 | OS | **Ubuntu 24.04 LTS** is fine; install Docker + Compose v2 + git + Node/corepack per **`scripts/setup-ec2.sh`** / Docker docs |
 | Firewall | Hostinger **Firewall rules: 0** means nothing is opened in the panel — add **TCP 22, 80, 443** (world or scoped IPs). Optionally mirror with **`ufw`** on the server |
 | Repo path | Still **`/opt/stockix/app`** (clone + **`infra/prod/.env`** as documented) |
@@ -215,8 +220,9 @@ Notes:
 
 The workflow triggers on:
 
-- **Push** to branch **`main`**
-- **Manual run**: **Actions → Deploy Stockix → Run workflow** (if `workflow_dispatch` is enabled in the workflow file)
+- **Pull request** — quality checks only (no deploy)
+- **Push** to branch **`main`** — quality checks, then production deploy
+- **Manual run**: **Actions → Deploy Stockix → Run workflow** (quality + deploy)
 
 Ensure your default branch is **`main`** and that you merge feature branches into **`main`** to trigger deploys.
 

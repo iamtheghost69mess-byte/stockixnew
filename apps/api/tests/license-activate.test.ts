@@ -7,6 +7,10 @@ vi.mock("@repo/config", () => ({
   apiConfig: {
     licenseSigningSecret: "test-license-signing-secret-32chars",
   },
+  licenseConfig: {
+    defaultTermDays: 365,
+    syncStrict: false,
+  },
 }));
 
 vi.mock("../src/audit.js", () => ({

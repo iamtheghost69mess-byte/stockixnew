@@ -872,6 +872,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
 
     const keyLimit = await consumeLicenseActivateKeyLimit(keyNorm);
     if (!keyLimit.ok) {
+      if ("unavailable" in keyLimit) {
+        return c.json(
+          { success: false, error: "Rate limiting temporarily unavailable" },
+          503,
+        );
+      }
       c.header("Retry-After", String(keyLimit.retryAfterSec));
       return c.json({ success: false, error: "invalid_license" }, 429);
     }
@@ -1110,6 +1116,12 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
     }
     const keyLimit = await consumeLicenseActivateKeyLimit(body.offlineToken);
     if (!keyLimit.ok) {
+      if ("unavailable" in keyLimit) {
+        return c.json(
+          { success: false, error: "Rate limiting temporarily unavailable" },
+          503,
+        );
+      }
       c.header("Retry-After", String(keyLimit.retryAfterSec));
       return c.json({ success: false, error: "invalid_license" }, 429);
     }

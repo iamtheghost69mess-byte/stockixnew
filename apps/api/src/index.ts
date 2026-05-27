@@ -1076,16 +1076,22 @@ app.get("/ready", async (c) => {
     }
   }
 
+  const redisUrl = process.env.CONTROL_PLANE_REDIS_URL?.trim();
   const redisClient = (await import("./lib/redis.js")).getControlPlaneRedisClient();
-  if (redisClient) {
-    try {
-      const pong = await redisClient.ping();
-      checks.redis = pong === "PONG" ? "ok" : "fail";
-      if (checks.redis === "fail") isReady = false;
-    } catch (err) {
+  if (redisUrl) {
+    if (!redisClient) {
       checks.redis = "fail";
       isReady = false;
-      logger.error("Readiness check: redis failed", err);
+    } else {
+      try {
+        const pong = await redisClient.ping();
+        checks.redis = pong === "PONG" ? "ok" : "fail";
+        if (checks.redis === "fail") isReady = false;
+      } catch (err) {
+        checks.redis = "fail";
+        isReady = false;
+        logger.error("Readiness check: redis failed", err);
+      }
     }
   }
 
@@ -2462,7 +2468,7 @@ app.post("/owners/invite", async (c) => {
   if (!dashUrl && apiConfig.nodeEnv === "production") {
     throw new Error("DASHBOARD_URL must be set in production — cannot generate invite URL");
   }
-  const inviteUrl = `${dashUrl ?? "http://localhost:3000"}/accept-invite?token=${inviteToken}`;
+  const inviteUrl = `${(dashUrl ?? "http://localhost:3000").replace(/\/+$/, "")}/accept-invite?token=${inviteToken}`;
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "owner.invite",
