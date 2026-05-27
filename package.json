@@ -59,10 +59,10 @@
     "license:scan": "license-checker --production --excludeLicenses \"MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;CC0-1.0;Python-2.0;Unlicense\" --out license-report.txt"
   },
   "devDependencies": {
-    "concurrently": "9.1.2",
+    "concurrently": "9.2.1",
     "license-checker": "^25.0.1",
     "prettier": "^3.7.4",
-    "tsx": "4.20.6",
+    "tsx": "4.22.3",
     "turbo": "^2.9.14",
     "typescript": "5.9.2"
   },
@@ -113,7 +113,7 @@
     "ioredis": "^5.4.2",
     "knex": "^3.1.0",
     "mysql2": "^3.11.3",
-    "nodemailer": "^6.9.13",
+    "nodemailer": "^8.0.9",
     "postgres": "^3.4.7",
     "zod": "^3.24.1"
   }
