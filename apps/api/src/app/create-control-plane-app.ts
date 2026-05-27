@@ -6,6 +6,7 @@ import { apiConfig } from "@repo/config";
 import { createDb } from "@repo/db";
 
 import { initEmailLogging } from "../mail/email-log.js";
+import { registerDevTestEmailRoute } from "../dev/test-email.js";
 import { emitMetric } from "../lib/metrics.js";
 import { logger } from "../lib/logger.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
@@ -72,6 +73,9 @@ export function createControlPlaneApp(): ControlPlaneApp {
     initEmailLogging(db);
     registerAuthRoutes(app, db);
     registerWebhooks(app, db);
+    if (apiConfig.nodeEnv !== "production") {
+      registerDevTestEmailRoute(app, db);
+    }
   }
 
   app.onError((err, c) => {
