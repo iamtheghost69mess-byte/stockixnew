@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Hono } from "hono";
-import { getResendWebhookSecret } from "@repo/config";
+import { apiConfig, getResendWebhookSecret } from "@repo/config";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { updateEmailLogDelivery } from "../../mail/email-log.js";
@@ -50,9 +50,9 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
     const rawBody = await c.req.text();
-    const resendWebhookSecret = process.env.RESEND_WEBHOOK_SECRET?.trim() || getResendWebhookSecret();
+    const resendWebhookSecret = getResendWebhookSecret();
 
-    if (!resendWebhookSecret && process.env.NODE_ENV === "production") {
+    if (!resendWebhookSecret && apiConfig.nodeEnv === "production") {
       logger.error(
         "RESEND_WEBHOOK_SECRET not set in production — rejecting request",
         undefined,

@@ -1,14 +1,15 @@
+import { apiConfig } from "@repo/config";
+
 import { getControlPlaneRedisClient } from "../lib/redis.js";
 
 /** Production with shared Redis — rate limits must not silently fall back to per-process memory. */
 export function isProductionRedisRateLimitRequired(): boolean {
-  if (process.env.NODE_ENV !== "production") return false;
-  const url = process.env.CONTROL_PLANE_REDIS_URL?.trim();
-  return Boolean(url);
+  if (apiConfig.nodeEnv !== "production") return false;
+  return Boolean(apiConfig.controlPlaneRedisUrl);
 }
 
 export function controlPlaneRedisConfigured(): boolean {
-  return Boolean(process.env.CONTROL_PLANE_REDIS_URL?.trim());
+  return Boolean(apiConfig.controlPlaneRedisUrl);
 }
 
 /** True when production expects Redis but the shared client is unavailable. */

@@ -374,7 +374,7 @@ const platformApiSecret = apiConfig.platformApiSecret;
 const workerSecret = apiConfig.workerSecret;
 apiConfig.validateRequiredEnv();
 
-if (apiConfig.nodeEnv === "production" && !process.env.CONTROL_PLANE_REDIS_URL?.trim()) {
+if (apiConfig.nodeEnv === "production" && !apiConfig.controlPlaneRedisUrl) {
   logger.error(
     "CONTROL_PLANE_REDIS_URL is required in production for distributed rate limiting",
     undefined,
@@ -1076,7 +1076,7 @@ app.get("/ready", async (c) => {
     }
   }
 
-  const redisUrl = process.env.CONTROL_PLANE_REDIS_URL?.trim();
+  const redisUrl = apiConfig.controlPlaneRedisUrl;
   const redisClient = (await import("./lib/redis.js")).getControlPlaneRedisClient();
   if (redisUrl) {
     if (!redisClient) {
@@ -1152,18 +1152,9 @@ app.post("/internal/jobs/claim", async (c) => {
   if (!workerId) {
     return c.json({ error: "worker_id_required" }, 400);
   }
-  const heartbeatStaleMs = Number.parseInt(
-    process.env.WORKER_HEARTBEAT_STALE_MS ?? "600000",
-    10,
-  );
-  const staleLeaseMs = Number.parseInt(
-    process.env.WORKER_STALE_LEASE_THRESHOLD_MS ?? "3000000",
-    10,
-  );
-  const effectiveStaleMs = Math.min(
-    Number.isFinite(heartbeatStaleMs) ? heartbeatStaleMs : 600_000,
-    Number.isFinite(staleLeaseMs) ? staleLeaseMs : 3_000_000,
-  );
+  const heartbeatStaleMs = apiConfig.workerHeartbeatStaleMs;
+  const staleLeaseMs = apiConfig.workerStaleLeaseThresholdMs;
+  const effectiveStaleMs = Math.min(heartbeatStaleMs, staleLeaseMs);
   const staleBefore = new Date(Date.now() - effectiveStaleMs);
   const staleBeforeIso = staleBefore.toISOString();
   const staleProvisionAlerts: Array<{
