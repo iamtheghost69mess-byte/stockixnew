@@ -3,14 +3,20 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { logger } from "./lib/logger.js";
 
-if (process.env.SENTRY_DSN) {
+if (process.env.SENTRY_DSN?.trim()) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV ?? "development",
+    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
     release: process.env.RELEASE_VERSION,
     tracesSampleRate: 0.1,
     integrations: [Sentry.httpIntegration()],
   });
+} else if (process.env.NODE_ENV === "production") {
+  logger.warn(
+    "SENTRY_DSN not configured — errors will not be tracked in Sentry. " +
+      "Set SENTRY_DSN in infra/prod/.env to enable production error monitoring.",
+    { event: "sentry_dsn_missing_startup" },
+  );
 }
 import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -29,7 +35,7 @@ import {
   licenses,
 } from "@repo/db/schema";
 import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
-import { processLicenseExpiryFollowUp } from "../../../apps/api/src/license-expire-followup.js";
+import { processLicenseExpiryFollowUp } from "@repo/platform-worker-shared";
 import { z } from "zod";
 import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import {

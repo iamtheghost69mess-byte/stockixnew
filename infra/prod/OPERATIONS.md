@@ -1,6 +1,6 @@
 # Production operations — control plane
 
-# SECRETS ROTATED: _pending_ — replace date after git-history rotation (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
+# SECRETS ROTATED: _pending_ — complete rotation on server then set date (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
 
 Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored). After editing, sync and redeploy:
 
@@ -43,6 +43,21 @@ cd /opt/stockix/stockixnew
 pnpm --filter @repo/db db:migrate
 pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
 ```
+
+## Schema verification
+
+Runs automatically in CI deploy immediately after migrations.
+
+Manual production run:
+
+```bash
+source infra/prod/.env
+pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
+```
+
+Expected output: `✅ Schema verified: all N required columns present.`
+
+If it fails, resolve listed missing columns/types before serving traffic.
 
 After migrate, backfill public discovery slugs and sync tenant Finance `.env` files:
 
@@ -98,6 +113,19 @@ Mismatch causes STXI keys generated on the API to fail validation on POS login.
 - Recommended for production **after** staging verification of suspend/reactivate and STXI flows ([docs/section-2.3-license-e2e-checklist.md](../../docs/section-2.3-license-e2e-checklist.md)).
 - Default (unset): license row updates succeed; POS sync failures are logged and surfaced in API JSON (`posSync`, `errors`).
 
+## Email configuration
+
+### Resend webhook setup
+
+1. Log in to [resend.com](https://resend.com) → **Webhooks** → **Add Endpoint**
+2. URL: `https://api.${ROOT_DOMAIN}/webhooks/resend` (replace with your API host)
+3. Events: `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`
+4. Copy the **Signing Secret** (`whsec_…`)
+5. Set in `infra/prod/.env`: `RESEND_WEBHOOK_SECRET=<signing-secret>`
+6. `pnpm env:sync-prod` then restart: `docker compose --env-file .env restart api api-bullmq`
+
+Without `RESEND_WEBHOOK_SECRET`, production rejects unsigned webhooks (401). `email_logs` delivery status will not update.
+
 ## Redis (mandatory in production)
 
 `CONTROL_PLANE_REDIS_URL` is **required**. The API exits on startup if unset in production.
@@ -105,10 +133,32 @@ Rate limits and BullMQ are not safe across multiple API replicas without shared 
 
 Prod compose runs **`api`** (2 replicas, `RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq`** (1 replica, `RUN_BULLMQ_CONSUMERS=true`). Do not set `RUN_BULLMQ_CONSUMERS=true` on scaled `api` replicas.
 
+## Cloudflare DNS API token
+
+`CF_DNS_API_TOKEN` is **required** for Traefik automatic TLS (Let's Encrypt DNS-01 via Cloudflare).
+
+- **Source:** Cloudflare dashboard → API Tokens → Create Token
+- **Permission:** Zone → DNS → Edit (scoped to your zone)
+- **Variable:** `CF_DNS_API_TOKEN` in `infra/prod/.env`
+- **If missing:** certificate issuance and renewal fail → HTTPS breaks for `api.*` and tenant routes
+
 ## Docker socket-proxy
 
-Worker Docker access is restricted via `socket-proxy` (`BUILD=0` — images must be pre-built).
-Any new Docker API verb requires an explicit proxy env change and security review.
+The socket-proxy restricts Docker API access for the worker.
+
+Current permissions:
+- `CONTAINERS=1`
+- `NETWORKS=1`
+- `IMAGES=1`
+- `POST=1`
+- `BUILD=0` — tenant images are pre-built (`pnpm docker:prebuild`)
+
+If you need `docker build` during provision:
+1. Set `BUILD=1` in `socket-proxy` environment
+2. Document the reason in this file
+3. Re-run security review before rollout
+
+Security note: socket-proxy compromise = host root access. Never expose port `2375` outside internal Docker networks.
 
 ## Control plane queues (BullMQ)
 
@@ -131,19 +181,67 @@ curl -X POST "https://api.${ROOT_DOMAIN}/api/platform/v1/organizations/{posOrgId
 
 Or run `node services/posnew/apps/pos-backend/scripts/repairCredentials.js` (uses the same sync logic). Plaintext PINs cannot be recovered — use dashboard **Reset PIN** per role.
 
-## Database backup and restore
+## Database Backup (Backblaze B2)
 
-Automated backups: `db-backup` service runs `infra/prod/backup/backup.sh` daily (02:00 cron) to S3.
+Backups run automatically at **02:00 and 14:00 UTC** via the `db-backup` container.  
+Storage: Backblaze B2 (S3-compatible), bucket: `$BACKUP_B2_BUCKET`.
 
-Required env: `BACKUP_S3_BUCKET`, `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY`.
+Required env: `BACKUP_B2_BUCKET`, `BACKUP_B2_KEY_ID`, `BACKUP_B2_APP_KEY`, `BACKUP_B2_ENDPOINT`.
 
-**Restore:**
+### Verify last backup
 
 ```bash
-aws s3 cp s3://$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX/<backup-file>.dump.gz /tmp/restore.dump.gz
-gunzip /tmp/restore.dump.gz
-docker exec -i stockix-postgres-1 pg_restore -U postgres -d stockix_platform --clean --if-exists < /tmp/restore.dump
+docker compose -f infra/prod/docker-compose.yml logs db-backup --tail=20
+# Expect: "[backup] Backup complete."
 ```
+
+### List available backups
+
+```bash
+AWS_ACCESS_KEY_ID=$BACKUP_B2_KEY_ID \
+AWS_SECRET_ACCESS_KEY=$BACKUP_B2_APP_KEY \
+aws s3 ls "s3://$BACKUP_B2_BUCKET/$BACKUP_B2_PREFIX/" \
+  --endpoint-url "$BACKUP_B2_ENDPOINT" \
+  | sort | tail -10
+```
+
+### Restore procedure
+
+```bash
+# 1. Download the backup
+AWS_ACCESS_KEY_ID=$BACKUP_B2_KEY_ID \
+AWS_SECRET_ACCESS_KEY=$BACKUP_B2_APP_KEY \
+aws s3 cp \
+  "s3://$BACKUP_B2_BUCKET/$BACKUP_B2_PREFIX/<filename>.dump.gz" \
+  /tmp/restore.dump.gz \
+  --endpoint-url "$BACKUP_B2_ENDPOINT"
+
+# 2. Decompress
+gunzip /tmp/restore.dump.gz
+
+# 3. Stop API to prevent writes during restore
+cd infra/prod
+docker compose --env-file .env stop api api-bullmq
+
+# 4. Restore
+docker exec -i stockix-postgres-1 pg_restore \
+  -U "$POSTGRES_USER" \
+  -d "${POSTGRES_DB:-stockix_platform}" \
+  --clean \
+  --if-exists \
+  --verbose \
+  < /tmp/restore.dump
+
+# 5. Restart API
+docker compose --env-file .env start api api-bullmq
+
+# 6. Verify
+curl -fsS "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready"
+```
+
+### Estimated RPO
+
+Maximum data loss: ~12 hours (between 02:00 and 14:00 UTC windows). For &lt;1 hour RPO, add continuous WAL archiving later.
 
 ## Rollout checklist
 
@@ -153,3 +251,16 @@ docker exec -i stockix-postgres-1 pg_restore -U postgres -d stockix_platform --c
 4. Deploy `control-plane-redis`, `api`, `infra-worker`.
 5. Confirm API health and one test milestone (staging license) if possible.
 6. Propagate `LICENSE_SIGNING_SECRET` to POS tenant envs before issuing new STXI keys.
+
+## GitHub branch protection
+
+Status: **PENDING**
+
+Required checks:
+- Quality gate (`.github/workflows/deploy.yml`)
+- Gitleaks (`.github/workflows/secret-scan.yml`)
+
+Minimum reviewers: 1  
+Admin bypass: DISABLED (required)
+
+Verified by: [NAME] on [DATE]

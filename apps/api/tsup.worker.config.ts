@@ -13,7 +13,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // Bundle jose (not hoisted to repo root). nodemailer stays external — listed in root package.json for worker runtime.
-  noExternal: [/^@repo\//, "jose"],
+  noExternal: [/^@repo\//, "jose", /^@repo\/platform-worker-shared/],
   esbuildOptions(options) {
     options.alias = {
       "@repo/config/public": path.resolve(
@@ -26,6 +26,10 @@ export default defineConfig({
       "@repo/shared/finance-api": path.resolve(
         dirname,
         "../../packages/shared/src/finance-api.ts",
+      ),
+      "@repo/platform-worker-shared": path.resolve(
+        dirname,
+        "../../packages/platform-worker-shared/src/index.ts",
       ),
     };
   },

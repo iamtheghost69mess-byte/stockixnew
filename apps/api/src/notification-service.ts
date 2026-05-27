@@ -3,11 +3,13 @@ import { and, asc, count, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 
+import { publishOwnerNotification } from "./lib/notification-pubsub.js";
+
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Poll interval for GET /notifications/stream (multi-instance safe). */
-export const NOTIFICATION_STREAM_POLL_MS = 2500;
-export const NOTIFICATION_STREAM_PING_MS = 15_000;
+/** Fallback poll when Redis pub/sub is unavailable (dev without Redis). */
+export const NOTIFICATION_STREAM_POLL_MS = 10_000;
+export const NOTIFICATION_STREAM_PING_MS = 30_000;
 /** Rows already in inbox at connect — primed into sent set without SSE emit. */
 export const NOTIFICATION_STREAM_PRIME_LIMIT = 50;
 export const NOTIFICATION_STREAM_POLL_ROW_LIMIT = 100;
@@ -61,6 +63,24 @@ export async function createNotification(
       meta: input.meta ?? null,
     })
     .returning();
+
+  if (notification) {
+    void publishOwnerNotification(input.ownerId, {
+      id: notification.id,
+      type: notification.type,
+      severity: notification.severity,
+      title: notification.title,
+      body: notification.body,
+      tenantId: notification.tenantId,
+      licenseId: notification.licenseId,
+      correlationId: notification.correlationId,
+      actionUrl: notification.actionUrl,
+      actionLabel: notification.actionLabel,
+      readAt: notification.readAt?.toISOString() ?? null,
+      meta: notification.meta,
+      createdAt: notification.createdAt.toISOString(),
+    });
+  }
 
   return notification ?? null;
 }

@@ -20,6 +20,13 @@
 /docs/ENV_REFERENCE.md                          @iamtheghost69mess-byte
 /docs/PRODUCTION_CHECKLIST.md                   @iamtheghost69mess-byte
 
+# Critical security paths
+/apps/api/src/routes/auth/                      @iamtheghost69mess-byte
+/apps/api/src/routes/webhooks/                  @iamtheghost69mess-byte
+/packages/config/                               @iamtheghost69mess-byte
+/packages/db/drizzle/                           @iamtheghost69mess-byte
+/.github/workflows/                             @iamtheghost69mess-byte
+
 # Root tooling
 /package.json                                   @iamtheghost69mess-byte
 /pnpm-lock.yaml                                 @iamtheghost69mess-byte

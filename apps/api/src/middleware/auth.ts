@@ -1,16 +1,27 @@
+import { ROLES } from "@repo/shared/roles";
+import { and, asc, eq } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
-import { apiConfig } from "@repo/config";
+import { owners } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+
+import { isKnownControlPlanePath } from "./known-api-paths.js";
+import {
+  findActiveApiKeyByRaw,
+  scheduleApiKeyLastUsedTouch,
+} from "../services/api-keys.js";
 import { validateOwnerSession } from "../services/auth/session-validation.js";
 import { verifySessionToken } from "../services/auth/tokens.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-type AuthEnv = {
+export type ControlPlaneAuthEnv = {
   Variables: {
     actorId: string;
     actorRole: string;
+    actorEffectiveRole?: string;
+    actorPermissions?: string[];
+    apiKeyId?: string;
     requestId: string;
     requestStartMs: number;
   };
@@ -24,26 +35,33 @@ function readCookie(req: Request, name: string): string {
   return decodeURIComponent(pair.slice(name.length + 1));
 }
 
-/**
- * Creates the platform-secret + worker-secret gate middleware.
- * Must run before the actor session resolver.
- */
-export function createAuthGate(
+/** Platform secret, worker secret, and session-cookie gate before actor resolution. */
+export function createPlatformAuthGate(
   platformApiSecret: string | undefined,
   workerSecret: string | undefined,
-): MiddlewareHandler<AuthEnv> {
+): MiddlewareHandler<ControlPlaneAuthEnv> {
   return async (c, next) => {
-    if (c.req.path === "/health") {
+    const pubPath = c.req.path;
+    const pubMethod = c.req.method.toUpperCase();
+    if (pubPath === "/health" || pubPath === "/ready") {
       await next();
       return;
     }
-    // Internal job routes are protected by WORKER_SECRET, not PLATFORM_API_SECRET.
-    // A dashboard operator must not be able to reach these endpoints (CRIT-01).
-    if (c.req.path.startsWith("/webhooks/")) {
+    if (pubMethod === "GET" && pubPath.startsWith("/public/tenant/")) {
       await next();
       return;
     }
-    if (c.req.path.startsWith("/internal/jobs")) {
+    if (
+      pubMethod === "POST"
+      && (pubPath === "/licenses/activate" || pubPath === "/licenses/verify-offline")
+    ) {
+      await next();
+      return;
+    }
+    if (
+      c.req.path.startsWith("/internal/jobs")
+      || c.req.path.startsWith("/internal/organizations")
+    ) {
       const auth = c.req.header("Authorization") ?? "";
       if (!workerSecret || auth !== `Bearer ${workerSecret}`) {
         return c.json({ error: "unauthorized" }, 401);
@@ -51,15 +69,30 @@ export function createAuthGate(
       await next();
       return;
     }
+    if (!isKnownControlPlanePath(pubPath)) {
+      return c.json(
+        {
+          success: false,
+          error: "Not found",
+          path: pubPath,
+          method: pubMethod,
+        },
+        404,
+      );
+    }
     if (!platformApiSecret) {
       return c.json({ error: "unauthorized" }, 401);
     }
     const auth = c.req.header("Authorization") ?? "";
+    const bearer = auth.replace(/^Bearer\s+/i, "").trim();
     if (auth === `Bearer ${platformApiSecret}`) {
       await next();
       return;
     }
-    // Allow valid owner session cookie as fallback for dashboard-origin requests.
+    if (bearer.startsWith("sk_live_")) {
+      await next();
+      return;
+    }
     const cookieToken = readCookie(c.req.raw, "stockix-session");
     if (cookieToken) {
       const session = await verifySessionToken(cookieToken);
@@ -72,32 +105,104 @@ export function createAuthGate(
   };
 }
 
-/**
- * Creates the actor session resolution middleware.
- * Bypasses /health, /auth, and /internal/jobs routes.
- * Sets actorId and actorRole on context.
- */
-export function createActorResolver(db: Db | null): MiddlewareHandler<AuthEnv> {
+/** Resolves actorId / actorRole from session cookie, API key, or platform secret. */
+export function createActorResolver(
+  db: Db | null,
+  platformApiSecret: string | undefined,
+): MiddlewareHandler<ControlPlaneAuthEnv> {
   return async (c, next) => {
+    const method = c.req.method.toUpperCase();
     const path = c.req.path;
     if (
       path === "/health"
+      || path === "/ready"
       || path.startsWith("/auth")
       || path.startsWith("/webhooks/")
       || path.startsWith("/internal/jobs")
+      || path.startsWith("/internal/organizations")
     ) {
+      await next();
+      return;
+    }
+    if (method === "GET" && path.startsWith("/public/tenant/")) {
+      await next();
+      return;
+    }
+    if (method === "POST" && (path === "/licenses/activate" || path === "/licenses/verify-offline")) {
       await next();
       return;
     }
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
     const cookieToken = readCookie(c.req.raw, "stockix-session");
-    // Dashboard calls include platform Authorization; actor identity should come from session cookie first.
-    const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-    const token = cookieToken || headerToken;
-    if (!token) return c.json({ error: "unauthorized_actor" }, 401);
+    const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
 
-    const session = await verifySessionToken(token);
+    if (cookieToken) {
+      const session = await verifySessionToken(cookieToken);
+      if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+      const sessionCheck = await validateOwnerSession(db, {
+        ownerId: session.sub,
+        role: session.role,
+        sessionVersion: session.sessionVersion,
+      });
+      if (!sessionCheck.success) {
+        return c.json({ error: "forbidden_actor" }, 403);
+      }
+      c.set("actorId", session.sub);
+      c.set("actorRole", session.role);
+      await next();
+      return;
+    }
+
+    if (headerToken.startsWith("sk_live_")) {
+      const resolved = await findActiveApiKeyByRaw(db, headerToken);
+      if (!resolved) {
+        return c.json({ error: "unauthorized_actor" }, 401);
+      }
+      const [ownerRow] = await db
+        .select({ id: owners.id, status: owners.status })
+        .from(owners)
+        .where(eq(owners.id, resolved.ownerId))
+        .limit(1);
+      if (!ownerRow || ownerRow.status !== "active") {
+        return c.json({ error: "forbidden_actor" }, 403);
+      }
+      c.set("actorId", resolved.ownerId);
+      c.set("actorRole", "read_only");
+      c.set("actorEffectiveRole", "read_only");
+      c.set("apiKeyId", resolved.keyId);
+      scheduleApiKeyLastUsedTouch(db, resolved.keyId);
+      await next();
+      return;
+    }
+
+    if (platformApiSecret && headerToken === platformApiSecret) {
+      const [platformActor] = await db
+        .select({ id: owners.id })
+        .from(owners)
+        .where(and(eq(owners.role, ROLES[0]), eq(owners.status, "active")))
+        .orderBy(asc(owners.createdAt))
+        .limit(1);
+      if (!platformActor) {
+        return c.json(
+          {
+            error: "platform_actor_unresolved",
+            message: "No active super_admin owner for platform API secret auth",
+          },
+          503,
+        );
+      }
+      c.set("actorId", platformActor.id);
+      c.set("actorRole", "super_admin");
+      await next();
+      return;
+    }
+
+    if (!headerToken) {
+      return c.json({ error: "unauthorized_actor" }, 401);
+    }
+
+    const session = await verifySessionToken(headerToken);
     if (!session) return c.json({ error: "unauthorized_actor" }, 401);
     const sessionCheck = await validateOwnerSession(db, {
       ownerId: session.sub,

@@ -279,7 +279,7 @@
       "idx": 39,
       "version": "7",
       "when": 1780850000000,
-      "tag": "0038_one_active_license_per_tenant",
+      "tag": "0052_one_active_license_per_tenant",
       "breakpoints": true
     },
     {

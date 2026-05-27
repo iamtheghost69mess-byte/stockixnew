@@ -93,7 +93,9 @@
       "brace-expansion@>=5.0.0 <5.0.6": ">=5.0.6",
       "uuid@<11.1.1": ">=11.1.1",
       "request>uuid": "3.4.0",
-      "qs@>=6.11.1 <=6.15.1": ">=6.15.2"
+      "qs@>=6.11.1 <=6.15.1": ">=6.15.2",
+      "request": "npm:@cypress/request@^3.0.8",
+      "tmp": ">=0.2.6"
     }
   },
   "dependencies": {
@@ -101,6 +103,7 @@
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",
+    "@repo/platform-worker-shared": "workspace:*",
     "bullmq": "^5.40.2",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.45.1",

@@ -7,8 +7,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const indexPath = join(dirname(fileURLToPath(import.meta.url)), "../src/index.ts");
-const source = readFileSync(indexPath, "utf8");
+const srcRoot = join(dirname(fileURLToPath(import.meta.url)), "../src");
+const source = ["index.ts", "routes/tenants.ts"]
+  .map((f) => readFileSync(join(srcRoot, f), "utf8"))
+  .join("\n");
 
 const routeRe =
   /app\.(get|post|patch|delete|put)\(\s*["'`]\/tenants\/:tenantId[^"'`]*["'`]/g;

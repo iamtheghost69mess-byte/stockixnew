@@ -1,0 +1,66 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: stockix-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    name: Quality gate
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: quality-gate
+    if: github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+
+      - name: Deploy over SSH
+        env:
+          STAGING_EC2_HOST: ${{ secrets.STAGING_EC2_HOST }}
+          STAGING_EC2_USER: ${{ secrets.STAGING_EC2_USER }}
+          ROOT_DOMAIN: ${{ secrets.ROOT_DOMAIN }}
+        run: |
+          set -euo pipefail
+          test -n "${STAGING_EC2_HOST:-}" && test -n "${STAGING_EC2_USER:-}"
+          ssh -o StrictHostKeyChecking=accept-new "${STAGING_EC2_USER}@${STAGING_EC2_HOST}" bash -s << 'REMOTE'
+          set -euo pipefail
+          cd /opt/stockix/stockixnew
+          git fetch --prune
+          git checkout staging
+          git pull --ff-only origin staging
+          set -a
+          source infra/staging/.env
+          set +a
+          corepack enable && corepack prepare pnpm@9.15.9 --activate
+          pnpm install --frozen-lockfile
+          pnpm infra:worker:build
+          pnpm --filter @repo/db db:migrate
+          cd infra/staging
+          docker compose --env-file .env up -d --build --wait
+          REMOTE
+
+      - name: Verify staging health
+        env:
+          ROOT_DOMAIN: ${{ secrets.ROOT_DOMAIN }}
+        run: |
+          sleep 15
+          curl --fail --retry 5 --retry-delay 5 \
+            "https://staging-api.${ROOT_DOMAIN}/ready"

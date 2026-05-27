@@ -28,7 +28,7 @@ function sampleNotification(
   };
 }
 
-describe("notification stream (DB-poll architecture)", () => {
+describe("notification stream (Redis pub/sub with DB fallback)", () => {
   it("createNotification persists without in-memory bus", async () => {
     const row = sampleNotification();
     const returning = vi.fn().mockResolvedValue([row]);

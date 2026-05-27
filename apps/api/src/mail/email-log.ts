@@ -3,6 +3,7 @@ import { emailLogs } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { logger } from "../lib/logger.js";
 import type { MailSendResult } from "./mailer.js";
 import { registerEmailLogHook } from "./mailer.js";
 
@@ -37,17 +38,29 @@ export async function logEmailAttempt(
         ? opts.result.reason
         : null;
 
+  const providerMessageId =
+    opts.result.status === "sent" ? opts.result.messageId ?? null : null;
+
   await db.insert(emailLogs).values({
     templateKey: opts.templateKey,
     recipientHash: hashRecipientEmail(opts.to),
     status: statusFromResult(opts.result),
-    providerMessageId:
-      opts.result.status === "sent" ? opts.result.messageId ?? null : null,
+    providerMessageId,
     error: errorText,
     tenantId: opts.tenantId ?? null,
     ownerId: opts.ownerId ?? null,
     idempotencyKey: opts.idempotencyKey ?? null,
   });
+
+  if (opts.result.status === "sent") {
+    logger.info("email send correlation debug", {
+      event: "email_send_correlation_debug",
+      provider_message_id: providerMessageId,
+      recipient: opts.to,
+      timestamp: new Date().toISOString(),
+      template_key: opts.templateKey,
+    });
+  }
 }
 
 export function initEmailLogging(db: Db): void {
@@ -60,9 +73,11 @@ export async function updateEmailLogDelivery(
   db: Db,
   providerMessageId: string,
   deliveryStatus: string,
-): Promise<void> {
-  await db
+): Promise<number> {
+  const updated = await db
     .update(emailLogs)
     .set({ deliveryStatus })
-    .where(eq(emailLogs.providerMessageId, providerMessageId));
+    .where(eq(emailLogs.providerMessageId, providerMessageId))
+    .returning({ id: emailLogs.id });
+  return updated.length;
 }

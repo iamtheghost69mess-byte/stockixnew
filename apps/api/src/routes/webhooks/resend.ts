@@ -88,17 +88,37 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
       return c.json({ error: "invalid_json" }, 400);
     }
 
-    const messageId =
-      payload.data?.email_id ?? payload.data?.message_id ?? null;
+    const emailId = payload.data?.email_id ?? null;
+    const payloadMessageId = payload.data?.message_id ?? null;
+    const eventType = payload.type ?? "unknown";
+
+    logger.info("resend webhook correlation debug", {
+      event: "resend_webhook_correlation_debug",
+      email_id: emailId,
+      message_id: payloadMessageId,
+      type: eventType,
+    });
+
+    const messageId = emailId ?? payloadMessageId ?? null;
     if (!messageId || typeof messageId !== "string") {
       return c.json({ ok: true, skipped: "no_message_id" });
     }
 
-    const eventType = payload.type ?? "unknown";
     const deliveryStatus = eventType.replace(/^email\./, "");
 
     try {
-      await updateEmailLogDelivery(db, messageId, deliveryStatus);
+      const rowsAffected = await updateEmailLogDelivery(
+        db,
+        messageId,
+        deliveryStatus,
+      );
+      logger.info("resend webhook correlation debug update", {
+        event: "resend_webhook_correlation_debug",
+        lookup_provider_message_id: messageId,
+        delivery_status: deliveryStatus,
+        db_row_matched: rowsAffected > 0,
+        rows_affected: rowsAffected,
+      });
     } catch (err) {
       console.error(
         "[webhooks/resend] update failed:",

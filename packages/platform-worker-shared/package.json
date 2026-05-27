@@ -1,0 +1,22 @@
+{
+  "name": "@repo/platform-worker-shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@repo/config": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "5.9.2"
+  }
+}

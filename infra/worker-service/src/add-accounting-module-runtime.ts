@@ -9,7 +9,7 @@ import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activ
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
 import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
-import { getPlanLimits } from "../../../apps/api/src/license-utils.js";
+import { getPlanLimits } from "@repo/platform-worker-shared";
 import type { AddModuleInput, AddModuleResult } from "./provision-runtime.js";
 
 function parseTenantModulesJson(json: string | null | undefined): string[] {

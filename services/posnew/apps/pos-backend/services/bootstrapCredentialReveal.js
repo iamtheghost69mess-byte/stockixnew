@@ -83,8 +83,17 @@ async function consumeFullCredentials(orgId) {
   return readFullCredentials(orgId, { deleteAfterRead: true });
 }
 
+/** @internal test-only */
+function resetClientForTests() {
+  if (client && client !== null && typeof client.quit === "function") {
+    void client.quit().catch(() => {});
+  }
+  client = undefined;
+}
+
 module.exports = {
   storeFullCredentials,
   peekFullCredentials,
   consumeFullCredentials,
+  __test: { resetClientForTests, getRedisClient: () => client },
 };
