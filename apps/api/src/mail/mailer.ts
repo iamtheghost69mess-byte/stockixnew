@@ -1,10 +1,12 @@
 /**
- * SMTP transport (Nodemailer). Production uses Resend SMTP — not the Resend SDK.
+ * Mail transport (Resend). Default: REST API when MAIL_PASSWORD is a Resend key (`re_*`)
+ * so provider_message_id matches webhook data.email_id. Set MAIL_TRANSPORT=smtp for Nodemailer.
  * Configure MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_*.
- * RESEND_API_KEY is not required when using SMTP mode.
  */
 import { createTransport } from "nodemailer";
 import { isMailConfigured, mailConfig } from "@repo/config";
+
+import { sendViaResendApi } from "./resend-api.js";
 
 export type MailSendResult =
   | { status: "sent"; messageId: string }
@@ -38,6 +40,43 @@ export const mailer = createTransport({
 
 function formatFromHeader(): string {
   return `${mailConfig.fromName} <${mailConfig.fromAddress}>`;
+}
+
+/** Resend API key in MAIL_PASSWORD returns webhook-compatible email ids. */
+function shouldUseResendApi(): boolean {
+  if (process.env.MAIL_TRANSPORT?.trim().toLowerCase() === "smtp") return false;
+  const apiKey = mailConfig.password?.trim() ?? "";
+  return apiKey.startsWith("re_");
+}
+
+async function sendViaConfiguredTransport(options: SendMailOptions): Promise<string> {
+  if (shouldUseResendApi()) {
+    const apiResult = await sendViaResendApi({
+      from: formatFromHeader(),
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      idempotencyKey: options.idempotencyKey,
+      apiKey: mailConfig.password!.trim(),
+    });
+    if ("error" in apiResult) {
+      throw new Error(apiResult.error);
+    }
+    return apiResult.id;
+  }
+
+  const info = await mailer.sendMail({
+    from: formatFromHeader(),
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    headers: options.idempotencyKey
+      ? { "Resend-Idempotency-Key": options.idempotencyKey }
+      : undefined,
+  });
+  const messageId =
+    typeof info.messageId === "string" ? info.messageId : undefined;
+  return messageId ?? "";
 }
 
 let logEmailAttemptFn: ((opts: {
@@ -80,18 +119,11 @@ export async function sendMail(options: SendMailOptions): Promise<MailSendResult
   }
 
   try {
-    const info = await mailer.sendMail({
-      from: formatFromHeader(),
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      headers: options.idempotencyKey
-        ? { "Resend-Idempotency-Key": options.idempotencyKey }
-        : undefined,
-    });
-    const messageId =
-      typeof info.messageId === "string" ? info.messageId : undefined;
-    const result: MailSendResult = { status: "sent", messageId: messageId ?? "" };
+    const providerMessageId = await sendViaConfiguredTransport(options);
+    const result: MailSendResult = {
+      status: "sent",
+      messageId: providerMessageId,
+    };
     if (logEmailAttemptFn) {
       await logEmailAttemptFn({
         templateKey,

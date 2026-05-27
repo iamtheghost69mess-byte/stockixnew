@@ -3,7 +3,8 @@ import type { Hono } from "hono";
 import { apiConfig, getResendWebhookSecret } from "@repo/config";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
-import { updateEmailLogDelivery } from "../../mail/email-log.js";
+import { updateEmailLogDeliveryByCandidates } from "../../mail/email-log.js";
+import { providerMessageIdCandidates } from "../../mail/provider-message-id.js";
 import { logger } from "../../lib/logger.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -105,16 +106,15 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
     }
 
     const deliveryStatus = eventType.replace(/^email\./, "");
+    const lookupIds = providerMessageIdCandidates(emailId, payloadMessageId);
 
     try {
-      const rowsAffected = await updateEmailLogDelivery(
-        db,
-        messageId,
-        deliveryStatus,
-      );
+      const { rowsAffected, matchedProviderMessageId } =
+        await updateEmailLogDeliveryByCandidates(db, lookupIds, deliveryStatus);
       logger.info("resend webhook correlation debug update", {
         event: "resend_webhook_correlation_debug",
-        lookup_provider_message_id: messageId,
+        lookup_provider_message_ids: lookupIds,
+        matched_provider_message_id: matchedProviderMessageId,
         delivery_status: deliveryStatus,
         db_row_matched: rowsAffected > 0,
         rows_affected: rowsAffected,

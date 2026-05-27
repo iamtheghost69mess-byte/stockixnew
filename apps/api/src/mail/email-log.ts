@@ -5,6 +5,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { logger } from "../lib/logger.js";
 import type { MailSendResult } from "./mailer.js";
+import { providerMessageIdCandidates } from "./provider-message-id.js";
 import { registerEmailLogHook } from "./mailer.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -80,4 +81,22 @@ export async function updateEmailLogDelivery(
     .where(eq(emailLogs.providerMessageId, providerMessageId))
     .returning({ id: emailLogs.id });
   return updated.length;
+}
+
+export async function updateEmailLogDeliveryByCandidates(
+  db: Db,
+  providerMessageIds: string[],
+  deliveryStatus: string,
+): Promise<{ rowsAffected: number; matchedProviderMessageId: string | null }> {
+  for (const providerMessageId of providerMessageIds) {
+    const rowsAffected = await updateEmailLogDelivery(
+      db,
+      providerMessageId,
+      deliveryStatus,
+    );
+    if (rowsAffected > 0) {
+      return { rowsAffected, matchedProviderMessageId: providerMessageId };
+    }
+  }
+  return { rowsAffected: 0, matchedProviderMessageId: null };
 }
