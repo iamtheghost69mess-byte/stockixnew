@@ -6,7 +6,7 @@ import {
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 
-import { syncFinanceLicenseForStockixTenant } from "../../../apps/api/src/finance-license.client.js";
+import { syncFinanceLicenseForStockixTenant } from "@repo/platform-worker-shared";
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
 import { provisionCombinedPosForOrganization } from "../domain/provisioning/combined-org-pos-provision.js";
 import { CryptoTenantSecretGenerator } from "../domain/provisioning/adapters/crypto-tenant-secret-generator.js";

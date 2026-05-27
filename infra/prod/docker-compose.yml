@@ -22,6 +22,7 @@ x-stockix-platform-env: &stockix-platform-env
   CORS_ORIGINS: ${CORS_ORIGINS:-}
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
   RELEASE_VERSION: ${RELEASE_VERSION:-}
   DB_POOL_MAX: ${DB_POOL_MAX:-20}
   DB_IDLE_TIMEOUT_SECONDS: ${DB_IDLE_TIMEOUT_SECONDS:-30}
@@ -45,6 +46,7 @@ x-stockix-platform-env: &stockix-platform-env
   MAIL_SECURE: ${MAIL_SECURE:-false}
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Stockix}
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+  RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
   MONGODB_DATABASE_URL: ${MONGODB_DATABASE_URL:-mongodb://mongo/stockix}
   MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
   WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
@@ -75,31 +77,44 @@ x-stockix-worker-env: &stockix-worker-env
 
 services:
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.2
+    image: tecnativa/docker-socket-proxy:0.1.1
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      LOG_LEVEL: warning
       CONTAINERS: 1
-      IMAGES: 1
       NETWORKS: 1
-      VOLUMES: 1
-      POST: 1
-      BUILD: 0
+      VOLUMES: 0
+      IMAGES: 1
+      INFO: 0
+      NODES: 0
+      SERVICES: 0
+      SWARM: 0
+      TASKS: 0
       AUTH: 0
       SECRETS: 0
       CONFIGS: 0
-      SWARM: 0
-      NODES: 0
       PLUGINS: 0
-      SERVICES: 0
-      TASKS: 0
-      DISTRIBUTION: 0
+      POST: 1
+      BUILD: 0
+      LOG_LEVEL: warning
     networks:
-      - stockix_internal
+      - socket_proxy_network
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: "0.1"
+    mem_swappiness: 0
+    read_only: true
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2375/_ping 2>/dev/null | grep -q OK || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   traefik:
     image: traefik:v3.1.2
@@ -139,6 +154,7 @@ services:
     networks:
       - stockix_public
       - stockix_internal
+      - socket_proxy_network
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -177,12 +193,22 @@ services:
   control-plane-redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    mem_limit: 320m
+    memswap_limit: 320m
+    cpus: "0.25"
+    mem_swappiness: 0
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 5s
     networks:
       - stockix_internal
     security_opt:
@@ -294,7 +320,7 @@ services:
       api-bullmq:
         condition: service_healthy
       socket-proxy:
-        condition: service_started
+        condition: service_healthy
     environment:
       <<: *stockix-worker-env
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
@@ -307,6 +333,7 @@ services:
     networks:
       - stockix_public
       - stockix_internal
+      - socket_proxy_network
     security_opt:
       - no-new-privileges:true
 
@@ -318,6 +345,7 @@ services:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
         NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     mem_limit: 256m
     cpus: "0.25"
     restart: unless-stopped
@@ -328,6 +356,10 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ORG: ${SENTRY_ORG:-}
+      SENTRY_PROJECT: ${SENTRY_PROJECT:-}
       SESSION_SECRET: ${SESSION_SECRET}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
@@ -368,6 +400,10 @@ services:
       dockerfile: docker/Dockerfile
     image: stockix-chatlive:local
     restart: unless-stopped
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpus: "0.75"
+    mem_swappiness: 0
     command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
     environment:
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
@@ -410,6 +446,9 @@ services:
   chatwoot-postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: "0.25"
     environment:
       - POSTGRES_DB=chatwoot
       - POSTGRES_USER=chatwoot
@@ -428,6 +467,9 @@ services:
   chatwoot-redis:
     image: redis:7-alpine
     restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: "0.1"
     volumes:
       - chatwoot_redis:/data
     networks:
@@ -442,27 +484,30 @@ services:
   db-backup:
     image: amazon/aws-cli:2.15.0
     restart: unless-stopped
-    mem_limit: 64m
+    mem_limit: 128m
     cpus: "0.1"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./backup/backup.sh:/backup.sh:ro
     environment:
-      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
-      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-stockix-platform-backups}
+      BACKUP_B2_BUCKET: ${BACKUP_B2_BUCKET:-}
+      BACKUP_B2_KEY_ID: ${BACKUP_B2_KEY_ID:-}
+      BACKUP_B2_APP_KEY: ${BACKUP_B2_APP_KEY:-}
+      BACKUP_B2_ENDPOINT: ${BACKUP_B2_ENDPOINT:-}
+      BACKUP_B2_PREFIX: ${BACKUP_B2_PREFIX:-stockix-platform-backups}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
       BACKUP_POSTGRES_CONTAINER: ${BACKUP_POSTGRES_CONTAINER:-stockix-postgres-1}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
-      AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
-      AWS_DEFAULT_REGION: ${BACKUP_AWS_REGION:-us-east-1}
     entrypoint:
       - sh
       - -c
       - |
-        echo '0 2 * * * /backup.sh >> /var/log/backup.log 2>&1' | crontab -
-        crond -f
+        printf '%s\n' \
+          '0 2 * * * /bin/bash /backup.sh >> /var/log/backup.log 2>&1' \
+          '0 14 * * * /bin/bash /backup.sh >> /var/log/backup.log 2>&1' \
+          | crontab -
+        crond -f -l 2
     depends_on:
       postgres:
         condition: service_healthy
@@ -475,6 +520,9 @@ networks:
   stockix_internal:
     name: stockix_internal
     internal: true
+  socket_proxy_network:
+    internal: true
+    driver: bridge
 
 volumes:
   postgres_data:

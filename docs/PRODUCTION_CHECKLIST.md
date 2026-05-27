@@ -76,6 +76,16 @@ Compose runs **`api` × 2** (`RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq` ×
 - [ ] Suspended license → HTTP 402 on Finance API
 - [ ] Revoke propagates to Finance within cache window (~60s)
 
+## Branch Protection Status
+
+| Item | Status | Date | By |
+|------|--------|------|----|
+| Branch protection rule on `main` | ☐ PENDING — configure in GitHub UI |  |  |
+| Required status checks configured | ☐ PENDING — `Quality gate`, `Gitleaks` |  |  |
+| Admin bypass disabled | ☐ PENDING |  |  |
+| CODEOWNERS file added | ✅ Done | 2026-05-27 |  |
+| Production environment in GitHub | ☐ PENDING — see [BRANCH_PROTECTION_SETUP.md](./BRANCH_PROTECTION_SETUP.md) |  |  |
+
 ## Integration (accounting + pos)
 
 - [ ] `pos-bigcapital-worker` running in POS tenant compose

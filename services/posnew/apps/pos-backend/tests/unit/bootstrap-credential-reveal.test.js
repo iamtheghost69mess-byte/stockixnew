@@ -2,8 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const revealPath = require.resolve("../../services/bootstrapCredentialReveal");
+const configPath = require.resolve("../../config/config");
 
 function loadReveal() {
+  process.env.REDIS_URL = "";
+  delete require.cache[configPath];
   delete require.cache[revealPath];
   return require("../../services/bootstrapCredentialReveal");
 }

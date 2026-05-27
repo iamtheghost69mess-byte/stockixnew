@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import type { Hono } from "hono";
+import { Hono as HonoApp } from "hono";
 import { z } from "zod";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
@@ -34,7 +35,7 @@ function readCookie(req: Request, name: string): string {
 }
 
 export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
-  const auth = new Hono();
+  const auth = new HonoApp();
   const rateLimits = new Map<string, { count: number; resetAt: number }>();
   const RATE_LIMITS = {
     "/auth/login": { windowMs: 60_000, max: 10 },
@@ -441,3 +442,23 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   return auth;
 }
 
+type AuthMountEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    actorEffectiveRole?: string;
+    actorPermissions?: string[];
+    apiKeyId?: string;
+    requestId: string;
+    requestStartMs: number;
+  };
+};
+
+/** Mounts `/auth/*` login, MFA, invite, and password-reset routes. */
+export function registerAuthRoutes(
+  app: Hono<AuthMountEnv>,
+  db: PostgresJsDatabase<typeof schema> | null,
+): void {
+  if (!db) return;
+  app.route("/auth", buildAuthRoutes(db));
+}

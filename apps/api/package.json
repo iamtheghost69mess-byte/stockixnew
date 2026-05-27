@@ -18,7 +18,10 @@
     "lint": "eslint .",
     "check-types": "tsc --noEmit",
     "test": "vitest run",
-    "check:tenant-scope": "node scripts/audit-tenant-scope.mjs"
+    "check:tenant-scope": "node scripts/audit-tenant-scope.mjs",
+    "check:routes": "node scripts/audit-no-inline-routes.mjs",
+    "check:known-paths": "node scripts/audit-known-paths.mjs",
+    "check:api-structure": "pnpm run check-types && pnpm test && pnpm run check:tenant-scope && pnpm run check:routes && pnpm run check:known-paths"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",

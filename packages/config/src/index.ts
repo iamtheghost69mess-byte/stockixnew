@@ -91,6 +91,20 @@ function parseOrigins(raw: string | undefined): string[] {
     });
 }
 
+/** Logged at startup when unset — does not block boot (optional integrations). */
+const recommendedByProfile: Record<string, string[]> = {
+  production: ["RESEND_WEBHOOK_SECRET", "SENTRY_DSN"],
+  staging: ["RESEND_WEBHOOK_SECRET", "SENTRY_DSN"],
+};
+
+function validateRecommendedEnvForProfile(profile: string): string[] {
+  const recommended = recommendedByProfile[profile] ?? [];
+  return recommended.filter((name) => {
+    const value = process.env[name];
+    return !value || value.trim().length === 0;
+  });
+}
+
 function validateRequiredEnvForProfile(profile: string) {
   const requiredByProfile: Record<string, string[]> = {
     development: [],
@@ -465,6 +479,10 @@ export const apiConfig = {
   },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);
+  },
+  /** Missing recommended vars for the current NODE_ENV (non-fatal). */
+  getMissingRecommendedEnv(): string[] {
+    return validateRecommendedEnvForProfile(env.NODE_ENV);
   },
 } as const;
 

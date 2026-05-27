@@ -1,77 +1,111 @@
-# Secret rotation runbook — git history exposure
+# Secret Rotation Runbook
 
-**Created:** 2026-05-26  
-**Trigger:** `.env` and related env files appeared in git history.
+## When to rotate
 
-## Exposure scope (from `git log`)
+- `.env` committed to git history (current incident — see `infra/prod/OPERATIONS.md`)
+- Team member offboarded
+- Security incident
+- Annual policy rotation
 
-| Path | Commits |
-|------|---------|
-| `.env` | `9c0184ad`, `4b5a2e61`, `a730543a` (removed in `09a7152d`) |
-| `infra/prod/.env` | `9c0184ad`, `4b5a2e61`, `09a7152d` |
-| `apps/api/.env` | (none in sampled history) |
-| `apps/dashboard/.env` | (none in sampled history) |
-| `services/stockix-finance/.env` | `4b2539c2`, `4b5a2e61`, `09a7152d` |
+## Generate new secrets
 
-Inspect each commit (do **not** paste values into tickets):
+64-byte hex (session, API secrets):
 
 ```bash
-git show <commit-hash>:.env
-git show <commit-hash>:infra/prod/.env
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-## Rotation checklist
-
-Rotate **every** value that was ever committed. Generate new values:
+32-byte hex (shorter keys):
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-| Secret | Action |
-|--------|--------|
-| `DATABASE_URL` / Postgres password | `ALTER USER` + update all compose env |
-| `SESSION_SECRET` | New 64-char hex |
-| `PLATFORM_API_SECRET` | New 64-char hex |
-| `WORKER_SECRET` | New 32+ char hex |
-| `AUTH_TOKEN_SECRET` | New 64-char hex |
-| `DEPLOYMENT_SECRET_KEY` | New 64-char hex |
-| `LICENSE_SIGNING_SECRET` | New ≥32 char string; **re-sync all POS tenant envs** |
-| `RESEND_WEBHOOK_SECRET` | Regenerate in Resend dashboard |
-| `RESEND_API_KEY` / `MAIL_PASSWORD` | Regenerate in Resend |
-| `CLOUDFLARE_API_TOKEN` | Regenerate in Cloudflare |
-| `CHATWOOT_SECRET_KEY_BASE` / `CHATWOOT_DB_PASSWORD` | Regenerate |
-| Per-tenant `INTERNAL_API_SECRET` | Rotate per tenant stack under `TENANT_ENV_ROOT` |
-
-## Production steps
-
-1. Update `infra/prod/.env` on the server (never commit).
-2. `pnpm env:sync-prod` if using root `.env` fallback.
-3. Invalidate sessions:
-   ```sql
-   UPDATE owners SET session_version = session_version + 1;
-   ```
-4. Redeploy: `docker compose --env-file .env up -d --build api dashboard infra-worker`
-5. Re-clone or `git fetch && git reset --hard origin/main` after history purge.
-
-## Git history purge (coordinate with team)
+Or use the repo helper:
 
 ```bash
-# BFG: https://rtyley.github.io/bfg-repo-cleaner/
-java -jar bfg.jar --delete-files .env
+node scripts/generate-env-secrets.js
+```
+
+## Rotation checklist
+
+### Step 1 — Generate and record new values
+
+- [ ] `DATABASE_URL` / Postgres password
+- [ ] `SESSION_SECRET` (128+ char hex)
+- [ ] `PLATFORM_API_SECRET`
+- [ ] `WORKER_SECRET`
+- [ ] `AUTH_TOKEN_SECRET`
+- [ ] `DEPLOYMENT_SECRET_KEY`
+- [ ] `LICENSE_SIGNING_SECRET` (min 48 chars; sync to every POS tenant stack)
+- [ ] `INTERNAL_API_SECRET` (per-tenant Finance `.env` where used)
+- [ ] `RESEND_WEBHOOK_SECRET` (Resend dashboard → Webhooks → signing secret)
+- [ ] `MAIL_PASSWORD` (Resend API key for SMTP)
+- [ ] `CF_DNS_API_TOKEN` (Cloudflare API token)
+- [ ] `BACKUP_B2_*` (Backblaze application key if compromised)
+- [ ] `CHATWOOT_API_ACCESS_TOKEN` (after Chatwoot admin login)
+
+### Step 2 — Update production server only
+
+```bash
+ssh deploy@<EC2_HOST>
+nano /opt/stockix/stockixnew/infra/prod/.env
+# Update every rotated value — never commit this file
+pnpm env:sync-prod --confirm-server
+```
+
+### Step 3 — Invalidate active owner sessions
+
+```sql
+UPDATE owners SET session_version = COALESCE(session_version, 0) + 1;
+```
+
+### Step 4 — Restart control plane
+
+```bash
+cd /opt/stockix/stockixnew/infra/prod
+docker compose --env-file .env up -d --build api api-bullmq infra-worker dashboard
+```
+
+### Step 5 — Verify
+
+```bash
+curl -fsS "https://api.${ROOT_DOMAIN}/ready"
+```
+
+Re-sync `LICENSE_SIGNING_SECRET` to all POS tenant env files under `TENANT_ENV_ROOT`.
+
+### Step 6 — Purge git history (coordinate with team)
+
+**Warning:** force-push required. All developers must re-clone or hard-reset after this.
+
+```bash
+# BFG Repo-Cleaner — https://rtyley.github.io/bfg-repo-cleaner/
+java -jar bfg.jar --delete-files ".env" --no-blob-protection
 git reflog expire --expire=now --all
 git gc --prune=now --aggressive
 git push origin --force --all
 git push origin --force --tags
 ```
 
-## Verification
+After force push, each developer:
 
 ```bash
-grep -r "OLD_SECRET_VALUE" .   # 0 matches after rotation
-git log --oneline -- .env      # empty after BFG
+git fetch origin && git reset --hard origin/main
 ```
 
-## CI prevention
+### Step 7 — Record completion
 
-`.github/workflows/secret-scan.yml` runs gitleaks on every push/PR.
+In `infra/prod/OPERATIONS.md` header:
+
+```text
+SECRETS ROTATED: YYYY-MM-DD — all credentials replaced after git history exposure
+Rotated by: <name>
+Verified by: <name>
+```
+
+## Prevention
+
+- `scripts/git-hooks/pre-commit-env-block.sh` — install via `bash scripts/install-pre-commit-env-hook.sh`
+- `.github/workflows/secret-scan.yml` — Gitleaks on every push/PR
+- Never store secrets in source — use `infra/prod/.env` on the server only

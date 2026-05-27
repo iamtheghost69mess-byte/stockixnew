@@ -16,6 +16,16 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const STUCK_MS = 10 * 60 * 1000;
 
+let stuckReconcilerInterval: ReturnType<typeof setInterval> | null = null;
+
+export function stopStuckProvisioningReconciler(): void {
+  if (stuckReconcilerInterval) {
+    clearInterval(stuckReconcilerInterval);
+    stuckReconcilerInterval = null;
+    logger.info("[reconciler] stuck provisioning reconciler stopped");
+  }
+}
+
 function modulesIncludeAccounting(modulesJson: unknown): boolean {
   const raw =
     typeof modulesJson === "string"
@@ -53,24 +63,51 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
     )
     .limit(50);
 
-  for (const row of stuckRows) {
-    if (!row.tenantId) continue;
+  const stuckTenantIds = stuckRows
+    .map((row) => row.tenantId)
+    .filter((id): id is string => Boolean(id));
 
-    const [latestJob] = await db
+  const latestJobByTenantId = new Map<
+    string,
+    {
+      id: string;
+      status: string;
+      correlationId: string | null;
+    }
+  >();
+
+  if (stuckTenantIds.length > 0) {
+    const provisionJobs = await db
       .select({
         id: tenantLifecycleJobs.id,
+        tenantId: tenantLifecycleJobs.tenantId,
         status: tenantLifecycleJobs.status,
         correlationId: tenantLifecycleJobs.correlationId,
+        createdAt: tenantLifecycleJobs.createdAt,
       })
       .from(tenantLifecycleJobs)
       .where(
         and(
-          eq(tenantLifecycleJobs.tenantId, row.tenantId),
+          inArray(tenantLifecycleJobs.tenantId, stuckTenantIds),
           eq(tenantLifecycleJobs.type, "tenant.provision"),
         ),
       )
-      .orderBy(desc(tenantLifecycleJobs.createdAt))
-      .limit(1);
+      .orderBy(desc(tenantLifecycleJobs.createdAt));
+
+    for (const job of provisionJobs) {
+      if (!job.tenantId || latestJobByTenantId.has(job.tenantId)) continue;
+      latestJobByTenantId.set(job.tenantId, {
+        id: job.id,
+        status: job.status,
+        correlationId: job.correlationId,
+      });
+    }
+  }
+
+  for (const row of stuckRows) {
+    if (!row.tenantId) continue;
+
+    const latestJob = latestJobByTenantId.get(row.tenantId);
 
     if (
       latestJob?.status === "completed"
@@ -113,6 +150,7 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
 }
 
 export function startStuckProvisioningReconciler(db: Db): void {
+  if (stuckReconcilerInterval) return;
   const intervalMs = infraConfig.provisionReconcileIntervalMs;
   const tick = async () => {
     try {
@@ -124,7 +162,7 @@ export function startStuckProvisioningReconciler(db: Db): void {
       );
     }
   };
-  setInterval(() => {
+  stuckReconcilerInterval = setInterval(() => {
     void tick();
   }, intervalMs);
   void tick();

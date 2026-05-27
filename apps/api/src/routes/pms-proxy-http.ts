@@ -1,7 +1,9 @@
 import { apiConfig } from "@repo/config";
+import type { Hono } from "hono";
+
+import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { requireEnv } from "../lib/require-env.js";
 import { pmsProxyJson } from "../pms-proxy.js";
-import type { registerLicenseApi } from "../license-http.js";
 
 function proxyHeaders(c: {
   req: { header: (name: string) => string | undefined; query: (k: string) => string | undefined };
@@ -18,9 +20,7 @@ function proxyHeaders(c: {
   return headers;
 }
 
-export function registerPmsProxyRoutes(
-  app: Parameters<typeof registerLicenseApi>[0],
-): void {
+export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>): void {
   app.get("/pms/status", async (c) => {
     try {
       return c.json({

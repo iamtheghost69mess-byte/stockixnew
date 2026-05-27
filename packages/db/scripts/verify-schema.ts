@@ -26,6 +26,18 @@ async function main() {
   let failed = false;
 
   console.log("Verifying schema columns...\n");
+  try {
+    await sql`SELECT 1`;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "❌ verify-schema: Cannot connect to database.\n" +
+        "   Ensure DATABASE_URL is set correctly.\n" +
+        "   Local dev: start postgres with pnpm infra:up\n" +
+        `   Error: ${message}`,
+    );
+    process.exit(1);
+  }
 
   for (const { table, column, type } of REQUIRED_COLUMNS) {
     const rows = await sql`
@@ -58,7 +70,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("\n✅ All columns verified. Schema is in sync.");
+  console.log(`\n✅ Schema verified: all ${REQUIRED_COLUMNS.length} required columns present.`);
   process.exit(0);
 }
 

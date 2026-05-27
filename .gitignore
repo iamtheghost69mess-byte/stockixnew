@@ -12,14 +12,18 @@ package-lock.json
 .env.local
 .env.staging
 .env.production
+.env.production.local
 .env.*.local
 apps/api/.env
 apps/dashboard/.env
+apps/**/.env
 infra/prod/.env
+**/infra/prod/.env
 infra/staging/.env
 services/**/.env
 **/.env
 !**/.env.example
+!.env.example
 
 # Per-tenant Stockix env (provisioner)
 .stockix/

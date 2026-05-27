@@ -39,8 +39,11 @@ import {
   clearTenantPartialState,
   markTenantPartial,
 } from "../domain/provisioning/partial-provision.js";
-import { getLicenseExpiry, getPlanLimits } from "../../../apps/api/src/license-utils.js";
-import { sendPosWelcomeEmail } from "../../../apps/api/src/mail/send.js";
+import {
+  getLicenseExpiry,
+  getPlanLimits,
+  sendPosWelcomeEmail,
+} from "@repo/platform-worker-shared";
 import {
   FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
   syncFinanceLicense,

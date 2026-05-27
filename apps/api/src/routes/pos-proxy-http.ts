@@ -1,10 +1,10 @@
+import type { Hono } from "hono";
+
+import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { requireEnv } from "../lib/require-env.js";
 import { getPosOrgByStockixTenantId, posProxyJson } from "../pos-proxy.js";
-import type { registerLicenseApi } from "../license-http.js";
 
-export function registerPosProxyRoutes(
-  app: Parameters<typeof registerLicenseApi>[0],
-): void {
+export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>): void {
   app.get("/pos/tenant-org", async (c) => {
     const tenantId =
       c.req.query("tenantId")?.trim()

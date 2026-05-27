@@ -1,0 +1,111 @@
+import { apiConfig, getMailHealthStatus } from "@repo/config";
+import { tenantConfig, tenants } from "@repo/db/schema";
+import type { createDb } from "@repo/db";
+import { eq, sql } from "drizzle-orm";
+import type { Hono } from "hono";
+
+import { isValidPublicDiscoverySlug } from "../lib/tenant-discovery-slug.js";
+import { logger } from "../lib/logger.js";
+
+type Db = ReturnType<typeof createDb>;
+
+type ApiEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    actorEffectiveRole?: string;
+    actorPermissions?: string[];
+    apiKeyId?: string;
+    requestId: string;
+    requestStartMs: number;
+  };
+};
+
+export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
+  app.get("/ready", async (c) => {
+    const checks: Record<string, "ok" | "fail"> = {};
+    let isReady = true;
+
+    if (!db) {
+      checks.database = "fail";
+      isReady = false;
+    } else {
+      try {
+        await db.execute(sql`SELECT 1`);
+        checks.database = "ok";
+      } catch (err) {
+        checks.database = "fail";
+        isReady = false;
+        logger.error("Readiness check: database failed", err);
+      }
+    }
+
+    const redisUrl = apiConfig.controlPlaneRedisUrl;
+    const redisClient = (await import("../lib/redis.js")).getControlPlaneRedisClient();
+    if (redisUrl) {
+      if (!redisClient) {
+        checks.redis = "fail";
+        isReady = false;
+      } else {
+        try {
+          const pong = await redisClient.ping();
+          checks.redis = pong === "PONG" ? "ok" : "fail";
+          if (checks.redis === "fail") isReady = false;
+        } catch (err) {
+          checks.redis = "fail";
+          isReady = false;
+          logger.error("Readiness check: redis failed", err);
+        }
+      }
+    }
+
+    const status = isReady ? 200 : 503;
+    return c.json(
+      { ready: isReady, checks, timestamp: new Date().toISOString() },
+      status,
+    );
+  });
+
+  app.get("/health", (c) =>
+    c.json({
+      status: "ok",
+      mail: getMailHealthStatus(),
+    }),
+  );
+
+  /** Deprecated — UUID-based discovery removed (use slug route). */
+  app.get("/public/tenant-orgs/:tenantId", (c) =>
+    c.json({ success: false, error: "Not found", path: c.req.path }, 404),
+  );
+
+  /** Public tenant branding by discovery slug (not tenant UUID). */
+  app.get("/public/tenant/:slug", async (c) => {
+    const slug = c.req.param("slug");
+    if (!isValidPublicDiscoverySlug(slug)) {
+      return c.json({ success: false, error: "Not found" }, 404);
+    }
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+    const [row] = await db
+      .select({
+        appName: tenantConfig.appName,
+        logoUrl: tenantConfig.logoUrl,
+        primaryColor: tenantConfig.primaryColor,
+        tenantName: tenants.name,
+      })
+      .from(tenantConfig)
+      .innerJoin(tenants, eq(tenants.id, tenantConfig.tenantId))
+      .where(eq(tenantConfig.publicDiscoverySlug, slug))
+      .limit(1);
+
+    if (!row) {
+      return c.json({ success: false, error: "Not found" }, 404);
+    }
+
+    return c.json({
+      displayName: row.appName ?? row.tenantName,
+      logoUrl: row.logoUrl,
+      primaryColor: row.primaryColor,
+    });
+  });
+}
