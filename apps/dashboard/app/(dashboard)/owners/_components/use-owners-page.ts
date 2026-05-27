@@ -124,17 +124,17 @@ export function useOwnersPage() {
         return;
       }
       if (data.mailConfigured === false) {
-        setInviteUrl(data.inviteUrl ?? "");
+        setInviteUrl("");
         toast.warning(
-          "Email is not configured on this server. Copy the invite link below to share manually.",
+          "Email is not configured on this server. Configure MAIL_PASSWORD and MAIL_FROM_ADDRESS, then resend the invitation.",
         );
       } else if (data.emailQueued === true) {
         setInviteUrl("");
         toast.success("Invitation queued; email will be sent shortly.");
       } else if (data.emailSent === false) {
-        setInviteUrl(data.inviteUrl ?? "");
+        setInviteUrl("");
         toast.warning(
-          "Invitation created but email was not sent. Copy the invite link below.",
+          "Invitation created but email was not sent. Check mail configuration and use Resend invitation.",
         );
       } else {
         setInviteUrl("");
@@ -302,16 +302,16 @@ export function useOwnersPage() {
         toast.error(formatApiError(data, data.error ?? `HTTP ${res.status}`));
         return;
       }
-      if (data.mailConfigured === false && data.inviteUrl) {
-        setInviteUrl(data.inviteUrl);
+      if (data.mailConfigured === false) {
         toast.warning(
-          "Email is not configured. Copy the invite link from the banner above.",
+          "Email is not configured. Configure mail settings on the server, then resend the invitation.",
         );
       } else if (data.emailQueued === true) {
         toast.success("Invitation queued; email will be sent shortly.");
-      } else if (data.emailSent === false && data.inviteUrl) {
-        setInviteUrl(data.inviteUrl);
-        toast.warning("Email not sent. Copy the invite link from the banner above.");
+      } else if (data.emailSent === false) {
+        toast.warning(
+          "Email was not sent. Check mail configuration and try resending the invitation.",
+        );
       } else {
         toast.success("Invitation resent");
       }

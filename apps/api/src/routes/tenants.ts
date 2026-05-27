@@ -92,7 +92,6 @@ import {
 } from "../finance-tenant-resolve.js";
 import { syncFinanceLicenseForStockixTenant } from "../finance-license.client.js";
 import { mailSendSucceeded } from "../mail/mailer.js";
-import { sendTenantWelcomeEmail } from "../mail/send.js";
 
 type Db = ReturnType<typeof createDb>;
 type DbClient = NonNullable<Db>;

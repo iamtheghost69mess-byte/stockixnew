@@ -102,8 +102,7 @@ const config = Object.freeze({
     "7d",
   redisUrl,
   resendApiKey,
-  resendFromEmail:
-    process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || "",
   sentryDsn,
   fieldEncryptionKeyB64,
   impersonationEnabled,
@@ -145,5 +144,20 @@ const config = Object.freeze({
     : "",
   isWildcardPosOrigin,
 });
+
+if (config.nodeEnv === "production") {
+  if (!config.resendApiKey) {
+    console.warn(
+      "[WARN] RESEND_API_KEY not set — POS org invitation and platform emails will be skipped",
+    );
+  }
+  if (!config.resendFromEmail) {
+    console.warn(
+      "[WARN] RESEND_FROM_EMAIL not set — POS emails require a verified Resend from address",
+    );
+  }
+} else if (!config.resendApiKey) {
+  console.warn("[WARN] RESEND_API_KEY not set — POS email jobs will be skipped");
+}
 
 module.exports = config;

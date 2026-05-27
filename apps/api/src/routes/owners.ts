@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { apiConfig } from "@repo/config";
 import type { createDb } from "@repo/db";
 import {
@@ -19,6 +18,7 @@ import { logAudit } from "../audit.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { logger } from "../lib/logger.js";
 import { deliverOwnerInviteEmail } from "../services/invites/owner-invite-delivery.js";
+import { generateOwnerInviteToken } from "../services/invites/invite-token.js";
 import { resendOwnerInvite } from "../services/invites/invites.js";
 import { isOwnerInviteMailQueueEnabled } from "../jobs/owner-invite-mail-queue.js";
 type Db = ReturnType<typeof createDb>;
@@ -164,7 +164,7 @@ app.post("/owners/invite", async (c) => {
     roleId = pr?.id ?? null;
   }
 
-  const inviteToken = randomUUID();
+  const { raw: inviteRawToken, hash: inviteTokenHash } = generateOwnerInviteToken();
   const inviteTokenExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
   const [owner] = await db
     .insert(owners)
@@ -173,7 +173,8 @@ app.post("/owners/invite", async (c) => {
       name: body.name,
       role: roleSlug,
       roleId,
-      inviteToken,
+      inviteToken: null,
+      inviteTokenHash,
       inviteTokenExpiresAt,
       invitedById: (c.get("actorId") as string | undefined) ?? null,
     })
@@ -189,7 +190,7 @@ app.post("/owners/invite", async (c) => {
   if (!dashUrl && apiConfig.nodeEnv === "production") {
     throw new Error("DASHBOARD_URL must be set in production — cannot generate invite URL");
   }
-  const inviteUrl = `${(dashUrl ?? "http://localhost:3000").replace(/\/+$/, "")}/accept-invite?token=${inviteToken}`;
+  const inviteUrl = `${(dashUrl ?? "http://localhost:3000").replace(/\/+$/, "")}/accept-invite?token=${inviteRawToken}`;
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "owner.invite",
@@ -238,7 +239,6 @@ app.post("/owners/invite", async (c) => {
       owner,
       emailSent,
       mailConfigured: delivery.mailConfigured,
-      inviteUrl: delivery.inviteUrl,
     },
     201,
   );

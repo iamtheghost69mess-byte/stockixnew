@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { apiConfig } from "@repo/config";
+import { logger } from "../../lib/logger.js";
 
 import {
   capabilitiesFromPermissions,
@@ -392,14 +393,16 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       userAgent: c.req.header("user-agent"),
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
-    return c.json({
-      success: true,
-      ok: true,
-      emailSent: result.data.emailSent,
-      mailConfigured: result.data.mailConfigured,
-      mailStatus: result.data.mailStatus,
-      accountPending: result.data.accountPending,
-    });
+    if (result.data.ok) {
+      logger.info("Password reset requested", {
+        event: "auth_password_reset_requested",
+        emailSent: result.data.emailSent,
+        mailConfigured: result.data.mailConfigured,
+        mailStatus: result.data.mailStatus,
+        accountPending: result.data.accountPending,
+      });
+    }
+    return c.json({ success: true, ok: true });
   });
 
   auth.post("/password/reset", async (c) => {
