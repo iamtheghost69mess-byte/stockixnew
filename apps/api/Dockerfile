@@ -5,7 +5,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter api...
 RUN pnpm --filter api build
 RUN pnpm deploy --filter api --prod /deploy
 

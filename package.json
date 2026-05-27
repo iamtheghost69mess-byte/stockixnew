@@ -31,6 +31,8 @@
     "env:sync-prod": "node scripts/sync-prod-env-to-root.mjs --confirm-server",
     "prod:scale-smoke": "bash scripts/prod-scale-smoke.sh",
     "env:audit": "node scripts/audit-env.mjs",
+    "test:resend:local": "node scripts/test-resend-email-webhook.mjs --env infra/prod/.env --api http://127.0.0.1:4000",
+    "test:resend:replay": "node scripts/replay-resend-webhook.mjs --env infra/prod/.env",
     "env:sync-pos": "node scripts/sync-pos-env-from-root.mjs",
     "env:align-local": "node scripts/align-root-env-gaps.mjs && node scripts/sync-pos-env-from-root.mjs",
     "env:fill-prod-gaps": "node scripts/fill-prod-env-gaps.mjs",
