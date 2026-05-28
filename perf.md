@@ -284,8 +284,8 @@ flowchart TB
 
 1. Quality gate passes on `main`.
 2. Job `deploy` uses `webfactory/ssh-agent` + `EC2_SSH_PRIVATE_KEY`.
-3. Remote: `git pull`, `source infra/prod/.env`, `pnpm install`, `pnpm infra:worker:build`, `pnpm --filter @repo/db db:migrate`.
-4. `cd infra/prod && docker compose --env-file .env up -d --build --wait`.
+3. Remote: `git pull`, `. scripts/load-env-file.sh infra/prod/.env`, `pnpm install`, `db:migrate`, `docker compose build`, image inspect, `up --no-build`.
+4. `pnpm docker:prebuild` (tenant images, non-fatal).
 5. Health: `curl` `{PUBLIC_BASE_URL_SCHEME}://{API_DOMAIN}/ready`; verify `api` container running.
 6. On failure: `git reset --hard` previous commit + compose rollback (trap in workflow).
 

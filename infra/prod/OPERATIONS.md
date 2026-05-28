@@ -25,11 +25,11 @@ docker compose --env-file .env up -d --build api api-bullmq infra-worker control
 5. Re-sync `LICENSE_SIGNING_SECRET` to all POS tenant env files.
 6. Set `SECRETS ROTATED: YYYY-MM-DD` in this file header.
 
-## Horizontal API scaling (2+ replicas)
+## API and BullMQ layout
 
 | Service | Replicas | `RUN_BULLMQ_CONSUMERS` | Traefik |
 |---------|----------|------------------------|---------|
-| `api` | 2 (`deploy.replicas`) | `false` | yes — `api.${ROOT_DOMAIN}` |
+| `api` | 1 (Compose; `deploy.replicas` needs Swarm) | `false` | yes — `api.${ROOT_DOMAIN}` |
 | `api-bullmq` | 1 | `true` | no — internal only |
 
 Post-deploy smoke (from repo root on server):
@@ -55,7 +55,8 @@ Runs automatically in CI deploy immediately after migrations.
 Manual production run:
 
 ```bash
-source infra/prod/.env
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
+. scripts/load-env-file.sh infra/prod/.env
 pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
 ```
 
@@ -135,7 +136,7 @@ Without `RESEND_WEBHOOK_SECRET`, production rejects unsigned webhooks (401). `em
 `CONTROL_PLANE_REDIS_URL` is **required**. The API exits on startup if unset in production.
 Rate limits and BullMQ are not safe across multiple API replicas without shared Redis.
 
-Prod compose runs **`api`** (2 replicas, `RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq`** (1 replica, `RUN_BULLMQ_CONSUMERS=true`). Do not set `RUN_BULLMQ_CONSUMERS=true` on scaled `api` replicas.
+Prod compose runs **`api`** (1 replica, `RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq`** (1 replica, `RUN_BULLMQ_CONSUMERS=true`). Do not set `RUN_BULLMQ_CONSUMERS=true` on `api`.
 
 ## Cloudflare DNS API token
 

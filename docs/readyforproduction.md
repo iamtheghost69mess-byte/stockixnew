@@ -189,7 +189,8 @@ Present in `deploy.yml` quality gate: `tsc`, `api test`, dashboard/PMS/POS/Finan
 ```bash
 # On production host (after deploy)
 cd /opt/stockix/stockixnew  # or /opt/stockix/app
-set -a && source infra/prod/.env && set +a
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
+. scripts/load-env-file.sh infra/prod/.env
 
 curl -fsS "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN:-api.stockix.cloud}/ready"
 curl -fsS "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN:-api.stockix.cloud}/health"

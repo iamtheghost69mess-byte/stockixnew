@@ -8,11 +8,8 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 COPY . .
 
 RUN pnpm install --frozen-lockfile --filter api...
-# @repo/* packages export ./dist/* — must be compiled before API tsup bundles them.
-RUN pnpm --filter @repo/auth build \
-  && pnpm --filter @repo/config build \
-  && pnpm --filter @repo/db build \
-  && pnpm --filter @repo/shared build
+# @repo/auth ships dist/; other @repo/* are bundled from TypeScript source via tsup.
+RUN pnpm --filter @repo/auth build
 RUN pnpm --filter api build
 RUN pnpm deploy --filter api --prod /deploy
 

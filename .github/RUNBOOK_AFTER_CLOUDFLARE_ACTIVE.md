@@ -169,7 +169,8 @@ Save and exit.
 cd /opt/stockix/app
 pnpm install --frozen-lockfile
 
-set -a && source infra/prod/.env && set +a
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
+. scripts/load-env-file.sh infra/prod/.env
 export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
 pnpm --filter @repo/db db:migrate
 

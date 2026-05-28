@@ -308,7 +308,7 @@ jobs:
           export COMPOSE_FILE=docker-compose.yml
           export COMPOSE_PARALLEL_LIMIT=1
           docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
-          docker compose --env-file .env build --no-cache --progress=plain api dashboard infra-worker
+          docker compose --env-file .env build --progress=plain api dashboard infra-worker
           echo "=== Verifying images exist ==="
           for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
             if ! docker image inspect "$img" >/dev/null 2>&1; then
@@ -334,6 +334,12 @@ jobs:
             docker compose --env-file .env logs infra-worker --tail=200
             exit 1
           fi
+          cd "${REPO_ROOT}"
+          echo "=== Building tenant images ==="
+          pnpm docker:prebuild 2>&1 | tail -20 || \
+            echo "WARNING: Tenant images build failed — provisioning may not work until pnpm docker:prebuild succeeds"
+          echo "Tenant images step finished."
+          cd infra/prod
           docker image prune -f --filter "until=168h" || true
           trap - ERR
           echo "Deploy completed successfully."
