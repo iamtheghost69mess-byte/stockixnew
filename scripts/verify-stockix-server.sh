@@ -19,10 +19,8 @@ if [[ ! -f "${PROD}/.env" ]]; then
 fi
 
 cd "${PROD}"
-set -a
 # shellcheck disable=SC1091
-source .env
-set +a
+. "${STOCKIX_ROOT}/scripts/load-env-file.sh" .env
 
 echo "=== docker compose ps ==="
 docker compose --env-file .env ps
