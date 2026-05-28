@@ -1,7 +1,7 @@
 # Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
 # Run from repo root on the server (e.g. /opt/stockix/stockixnew):
 #   cd infra/prod && docker compose --env-file .env up -d --build
-# Chat (Chatwoot): optional — docker compose --profile chat --env-file .env up -d
+# Chat (Chatwoot): optional — see docker-compose.chat.yml (not used in deploy)
 #
 # Prerequisites:
 #   1. Copy infra/prod/.env.example → infra/prod/.env and fill secrets (never commit .env).
@@ -396,97 +396,6 @@ services:
       timeout: 5s
       retries: 6
 
-  # Chat (Chatwoot / chatlive) — disabled by default. Enable: docker compose --profile chat up -d
-  chatwoot:
-    profiles: ["chat"]
-    build:
-      context: ../../services/chatlive
-      dockerfile: docker/Dockerfile
-    image: stockix-chatlive:local
-    restart: unless-stopped
-    mem_limit: 1g
-    memswap_limit: 1g
-    cpus: "0.75"
-    mem_swappiness: 0
-    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
-    environment:
-      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
-      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-https://chat.${ROOT_DOMAIN}}
-      - INSTALLATION_NAME=${CHATWOOT_INSTALLATION_NAME:-Stockix}
-      - BRAND_NAME=${CHATWOOT_BRAND_NAME:-}
-      - BRAND_URL=${CHATWOOT_BRAND_URL:-}
-      - WIDGET_BRAND_URL=${CHATWOOT_WIDGET_BRAND_URL:-}
-      - LOGO=${CHATWOOT_LOGO_URL:-/brand-assets/logo.svg}
-      - LOGO_DARK=${CHATWOOT_LOGO_DARK_URL:-/brand-assets/logo_dark.svg}
-      - LOGO_THUMBNAIL=${CHATWOOT_LOGO_THUMBNAIL_URL:-/brand-assets/logo_thumbnail.svg}
-      - DISPLAY_MANIFEST=${CHATWOOT_DISPLAY_MANIFEST:-false}
-      - HELPCENTER_URL=${CHATWOOT_HELPCENTER_URL:-}
-      - POSTGRES_HOST=chatwoot-postgres
-      - POSTGRES_DATABASE=chatwoot
-      - POSTGRES_USERNAME=chatwoot
-      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
-      - REDIS_URL=redis://chatwoot-redis:6379
-      - MAILER_SENDER_EMAIL=${MAIL_FROM_ADDRESS:-}
-      - SMTP_ADDRESS=${MAIL_HOST:-}
-      - SMTP_PORT=${MAIL_PORT:-587}
-      - SMTP_USERNAME=${MAIL_USERNAME:-}
-      - SMTP_PASSWORD=${MAIL_PASSWORD:-}
-    ports:
-      - "127.0.0.1:3200:3000"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/auth/sign_in >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    depends_on:
-      chatwoot-postgres:
-        condition: service_healthy
-      chatwoot-redis:
-        condition: service_healthy
-    networks:
-      - stockix_internal
-
-  chatwoot-postgres:
-    profiles: ["chat"]
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    mem_limit: 512m
-    memswap_limit: 512m
-    cpus: "0.25"
-    environment:
-      - POSTGRES_DB=chatwoot
-      - POSTGRES_USER=chatwoot
-      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
-    volumes:
-      - chatwoot_postgres:/var/lib/postgresql/data
-    networks:
-      - stockix_internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chatwoot -d chatwoot"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  chatwoot-redis:
-    profiles: ["chat"]
-    image: redis:7-alpine
-    restart: unless-stopped
-    mem_limit: 128m
-    memswap_limit: 128m
-    cpus: "0.1"
-    volumes:
-      - chatwoot_redis:/data
-    networks:
-      - stockix_internal
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-
   db-backup:
     image: amazon/aws-cli:2.15.0
     restart: unless-stopped
@@ -535,5 +444,3 @@ volumes:
   traefik_letsencrypt:
   traefik_dynamic:
   stockix_tenants:
-  chatwoot_postgres:
-  chatwoot_redis:
