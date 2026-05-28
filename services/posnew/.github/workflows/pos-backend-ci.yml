@@ -24,8 +24,8 @@ permissions:
   contents: read
 
 env:
-  JWT_SECRET: ci_jwt_secret_must_be_32_chars_min___
-  PLATFORM_JWT_SECRET: ci_platform_jwt_secret_32_char_min__
+  JWT_SECRET: ci_jwt_secret_must_be_32_chars_min___ # gitleaks:allow
+  PLATFORM_JWT_SECRET: ci_platform_jwt_secret_32_char_min__ # gitleaks:allow
 
 jobs:
   test:
