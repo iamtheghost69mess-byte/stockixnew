@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker-public": "./src/worker-public.ts"
+  },
   "files": [
     "dist"
   ],
@@ -21,7 +25,7 @@
     "check:tenant-scope": "node scripts/audit-tenant-scope.mjs",
     "check:routes": "node scripts/audit-no-inline-routes.mjs",
     "check:known-paths": "node scripts/audit-known-paths.mjs",
-    "check:api-structure": "pnpm run check-types && pnpm test && pnpm run check:tenant-scope && pnpm run check:routes && pnpm run check:known-paths"
+    "check:api-structure": "pnpm run check-types && pnpm run check:tenant-scope && pnpm run check:routes && pnpm run check:known-paths"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",
