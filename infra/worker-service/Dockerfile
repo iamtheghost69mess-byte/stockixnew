@@ -7,7 +7,10 @@ WORKDIR /app
 
 COPY . .
 RUN pnpm install --frozen-lockfile --filter api...
-RUN pnpm infra:worker:build
+# Bundle is produced on the host before compose (pnpm infra:worker:build). Re-running
+# tsup inside the image often OOMs on small VPS hosts when many services build in parallel.
+RUN test -f infra/worker-service/.runtime/worker.js \
+  || (echo "Missing infra/worker-service/.runtime/worker.js — run: pnpm infra:worker:build" && exit 1)
 
 FROM node:22-alpine AS worker
 # Patch Alpine OS packages; drop bundled npm (build uses pnpm via corepack in the build stage only).
