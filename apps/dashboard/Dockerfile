@@ -19,7 +19,9 @@ ENV NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME=${NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME}
 ARG NEXT_PUBLIC_SENTRY_DSN=
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 
-RUN pnpm --filter dashboard build
+# Built on the host during deploy (pnpm --filter dashboard build with NEXT_PUBLIC_* from .env).
+RUN test -f apps/dashboard/.next/standalone/apps/dashboard/server.js \
+  || (echo "Missing dashboard standalone build — run: pnpm --filter dashboard build" && exit 1)
 
 FROM node:20-alpine AS runner
 WORKDIR /app
