@@ -42,7 +42,6 @@ export default function RFQPage() {
   const {
     data: rfqs = [],
     isLoading,
-    isError,
   } = useQuery({
     queryKey: ["procurement-rfqs"],
     queryFn: () => posFetchRFQs(),

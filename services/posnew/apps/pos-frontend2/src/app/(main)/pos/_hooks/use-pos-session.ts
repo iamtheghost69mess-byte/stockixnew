@@ -15,7 +15,7 @@ import {
 } from "@/lib/inventory-api";
 import { posFetchAccountingConfig } from "@/lib/pos-accounting-api";
 import { posApiJson } from "@/lib/pos-api-fetch";
-import { type BillBreakdown, calculateOrderBills } from "@/lib/pos-bill-utils";
+import { calculateOrderBills } from "@/lib/pos-bill-utils";
 import {
   type PosCategory,
   type PosMenuItem,
@@ -36,7 +36,6 @@ import {
   writeStockSnapshot,
 } from "@/lib/offline-stock-mirror";
 import { persistPosCheckToServer } from "@/lib/pos-check-sync";
-import { posFetchTaxConfig } from "@/lib/pos-config-api";
 import { unitPriceForDocumentCurrency } from "@/lib/pos-menu-prices";
 import {
   describeAccountingPostingFailures,
@@ -304,7 +303,7 @@ export function usePosSession(tableId: string) {
       cancelled = true;
       clearSession();
     };
-  }, [tableId, validId, router]);
+  }, [tableId, validId, router, hydrateFromServerOrder, setTableContext, posUser, policyQuery.data?.strictOversell, clearSession]);
 
   const storeSetLineQuantity = usePosOrderStore((s) => s.setLineQuantity);
   const setLineQuantity = useCallback(
@@ -522,12 +521,11 @@ export function usePosSession(tableId: string) {
       setSendingToKitchen(false);
     }
   }, [
-    activeOrderId,
-    cart,
-    sendingToKitchen,
-    availabilityMap,
-    policyQuery.data,
-    replaceCartFromPopulatedOrder,
+    activeOrderId, 
+    cart, 
+    sendingToKitchen, 
+    policyQuery.data, 
+    replaceCartFromPopulatedOrder, stockSnapshotUnavailable, getAvailabilityForMenuItem
   ]);
 
   const handlePayment = useCallback(

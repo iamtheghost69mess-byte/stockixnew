@@ -73,7 +73,7 @@ export function ResourceTable({
   const canGoNext = pageIndex < totalPages - 1;
 
   const getNestedValue = (obj: any, path: string) => {
-    return path.split(".").reduce((acc, part) => acc && acc[part], obj);
+    return path.split(".").reduce((acc, part) => acc?.[part], obj);
   };
 
   const renderCell = (row: any, field: ResourceField) => {
@@ -82,7 +82,7 @@ export function ResourceTable({
     switch (field.type) {
       case "link":
         return (
-          <Link href={field.href ? field.href(row) : "#"} className="text-primary hover:underline font-medium">
+          <Link href={field.href ? field.href(row) : "#"} className="font-medium text-primary hover:underline">
             {val || "---"}
           </Link>
         );
@@ -112,9 +112,9 @@ export function ResourceTable({
         );
       case "progress":
         return (
-          <div className="flex flex-col gap-1 w-24">
+          <div className="flex w-24 flex-col gap-1">
             <Progress value={typeof val === "number" ? val : 0} className="h-1.5" />
-            <span className="text-[10px] text-muted-foreground font-mono">{val}%</span>
+            <span className="font-mono text-[10px] text-muted-foreground">{val}%</span>
           </div>
         );
       case "image":
@@ -133,14 +133,14 @@ export function ResourceTable({
   };
 
   return (
-    <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+    <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
       <Table>
         <TableHeader className="bg-muted/50">
           <TableRow>
             {columns.map((col) => (
               <TableHead
                 key={col.key}
-                className={cn("text-xs font-semibold uppercase tracking-wider", getColumnAlignClass(col.align))}
+                className={cn("font-semibold text-xs uppercase tracking-wider", getColumnAlignClass(col.align))}
               >
                 {col.label}
               </TableHead>
@@ -153,7 +153,7 @@ export function ResourceTable({
               <TableCell colSpan={columns.length} className="h-24 text-center">
                 <div className="flex items-center justify-center gap-2">
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  <span className="text-muted-foreground text-sm font-medium">Synchronizing resource state...</span>
+                  <span className="font-medium text-muted-foreground text-sm">Synchronizing resource state...</span>
                 </div>
               </TableCell>
             </TableRow>
@@ -165,7 +165,7 @@ export function ResourceTable({
             </TableRow>
           ) : (
             paginatedRows.map((row, idx) => (
-              <TableRow key={row._id || idx} className="hover:bg-muted/30 transition-colors">
+              <TableRow key={row._id || idx} className="transition-colors hover:bg-muted/30">
                 {columns.map((col) => (
                   <TableCell key={col.key} className={cn("py-4", getColumnAlignClass(col.align))}>
                     {renderCell(row, col)}

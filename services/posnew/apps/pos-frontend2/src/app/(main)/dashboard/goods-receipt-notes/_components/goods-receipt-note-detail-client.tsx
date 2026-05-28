@@ -494,7 +494,7 @@ export function GoodsReceiptNoteDetailClient({ grnId }: { grnId: string }) {
                             }}
                             disabled={!isDraft}
                             placeholder="—"
-                            className="h-9 w-full min-w-0 justify-start text-xs font-normal"
+                            className="h-9 w-full min-w-0 justify-start font-normal text-xs"
                           />
                         </div>
                         <div className="space-y-1">
@@ -516,7 +516,7 @@ export function GoodsReceiptNoteDetailClient({ grnId }: { grnId: string }) {
                             }}
                             disabled={!isDraft}
                             placeholder="—"
-                            className="h-9 w-full min-w-0 justify-start text-xs font-normal"
+                            className="h-9 w-full min-w-0 justify-start font-normal text-xs"
                           />
                         </div>
                         <div className="space-y-1">

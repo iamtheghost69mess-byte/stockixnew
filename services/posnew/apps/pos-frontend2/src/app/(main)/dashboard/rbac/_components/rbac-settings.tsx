@@ -59,6 +59,10 @@ import {
 } from "@/lib/rbac-ui";
 import { usePosAuthStore } from "@/stores/pos-auth-store";
 
+const NOOP = () => {
+  // Intentionally disable optional table handlers for this view.
+};
+
 const EDITABLE_BUILTIN = ["manager", "waiter", "cashier", "kitchen", "hostess"] as const;
 
 /** Built-in parents for custom-role inheritance (includes accounting templates; not all are staff login roles). */
@@ -397,7 +401,7 @@ export function RbacSettings() {
 
   useEffect(() => {
     setCatalogPageIndex(0);
-  }, [selectedBuiltin]);
+  }, []);
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(Math.max(customRows.length, 1) / customRolesPageSize) - 1);
@@ -707,7 +711,7 @@ export function RbacSettings() {
                                     className="bg-card/80 p-1 text-center align-middle"
                                   >
                                     <span
-                                      className="text-muted-foreground text-[10px] tabular-nums"
+                                      className="text-[10px] text-muted-foreground tabular-nums"
                                       title="Not applicable"
                                     >
                                       N/A
@@ -762,7 +766,7 @@ export function RbacSettings() {
                   <summary className="cursor-pointer select-none px-3 py-2 font-medium text-foreground text-sm marker:content-['']">
                     <span className="ml-1 inline-flex items-center gap-2">
                       <span className="text-muted-foreground group-open:hidden">▸</span>
-                      <span className="text-muted-foreground hidden group-open:inline">▾</span>
+                      <span className="hidden text-muted-foreground group-open:inline">▾</span>
                       Advanced: all permission ids (catalog)
                     </span>
                   </summary>
@@ -850,14 +854,14 @@ export function RbacSettings() {
                   emptyMessage='No custom roles yet. Use "Add custom role" to create a permission profile.'
                   searchPlaceholder=""
                   searchValue=""
-                  onSearchValueChange={() => {}}
+                  onSearchValueChange={NOOP}
                   pageIndex={customRolesPageIndex}
                   pageSize={customRolesPageSize}
                   totalRows={customRolesTotal}
                   onPageChange={setCustomRolesPageIndex}
-                  onPageSizeChange={() => {}}
+                  onPageSizeChange={NOOP}
                   sorting={[]}
-                  onSortingChange={() => {}}
+                  onSortingChange={NOOP}
                   showToolbar={false}
                 />
               </CardContent>
@@ -972,7 +976,7 @@ export function RbacSettings() {
                               className="bg-card/80 p-1 text-center align-middle"
                             >
                               <span
-                                className="text-muted-foreground text-[10px] tabular-nums"
+                                className="text-[10px] text-muted-foreground tabular-nums"
                                 title="Not applicable"
                               >
                                 N/A

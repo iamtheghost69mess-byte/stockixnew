@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -49,9 +49,12 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "recommended": false,
       "correctness": {
-        "noUndeclaredVariables": "error"
+        "noUndeclaredVariables": "error",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "warn"
       },
       "nursery": {
         "useSortedClasses": "on"
@@ -71,9 +74,14 @@
       },
       "suspicious": {
         "noArrayIndexKey": "warn",
+        "noExplicitAny": "warn",
         "noConstantBinaryExpressions": "error",
         "noEmptyBlockStatements": "error",
         "noUnknownAtRules": "off"
+      },
+      "a11y": {
+        "useAriaPropsSupportedByRole": "warn",
+        "useSemanticElements": "warn"
       },
       "complexity": {
         "noImportantStyles": "off"

@@ -79,11 +79,10 @@ export function ResourcePage({
     <AccessGate permission={resource.permission}>
       <div className="space-y-6">
         {!minimal && (
-          <>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between font-outfit">
+          <div className="flex flex-col gap-4 font-outfit sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{title || resource.label}</h1>
-                <p className="text-sm text-muted-foreground">
+                <h1 className="font-bold text-2xl tracking-tight">{title || resource.label}</h1>
+                <p className="text-muted-foreground text-sm">
                   {description || `Manage ${resource.label.toLowerCase()} operations.`}
                 </p>
               </div>
@@ -99,13 +98,12 @@ export function ResourcePage({
                 {extraActions}
               </div>
             </div>
-          </>
         )}
 
         {isError && (
           <Alert variant="destructive" className="border-destructive/10 bg-destructive/5">
             <AlertTitle className="font-semibold">Sync Failure</AlertTitle>
-            <AlertDescription className="flex items-center justify-between mt-2">
+            <AlertDescription className="mt-2 flex items-center justify-between">
               <span className="text-sm opacity-90">
                 {error instanceof Error ? error.message : "The remote resource could not be fetched."}
               </span>

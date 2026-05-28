@@ -187,7 +187,7 @@ export default function NotificationsPage() {
           ) : notificationsQuery.error instanceof Error ? (
             <p className="text-destructive text-sm">{notificationsQuery.error.message}</p>
           ) : data.length === 0 ? (
-            <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-muted-foreground text-sm">
               No notifications found for current filters.
             </div>
           ) : (

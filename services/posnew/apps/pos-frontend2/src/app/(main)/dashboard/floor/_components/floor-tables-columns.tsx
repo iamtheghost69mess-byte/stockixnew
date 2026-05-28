@@ -111,7 +111,7 @@ function FloorTableStatusControl(
           {table.status}
         </Badge>
         {posLockedForHostess ? (
-          <span className="text-muted-foreground text-[10px] leading-tight">On POS — admin only</span>
+          <span className="text-[10px] text-muted-foreground leading-tight">On POS — admin only</span>
         ) : null}
       </div>
     );
@@ -153,7 +153,7 @@ export function buildFloorTableColumns(opts: Readonly<FloorTableColumnOptions>):
           <span className="font-medium">{row.original.name}</span>
           <div className="flex flex-wrap items-center gap-1">
             {row.original.reservatorIsVip && row.original.reservatorName?.trim() ? (
-              <Badge variant="outline" className="border-amber-500/50 text-amber-600 text-[10px]">
+              <Badge variant="outline" className="border-amber-500/50 text-[10px] text-amber-600">
                 VIP
               </Badge>
             ) : null}
@@ -171,7 +171,7 @@ export function buildFloorTableColumns(opts: Readonly<FloorTableColumnOptions>):
               </Button>
             ) : null}
             {opts.hostessJob && row.original.visibleInPos ? (
-              <Badge variant="outline" className="border-amber-600/40 text-amber-700 text-[10px] dark:text-amber-500">
+              <Badge variant="outline" className="border-amber-600/40 text-[10px] text-amber-700 dark:text-amber-500">
                 On POS
               </Badge>
             ) : null}

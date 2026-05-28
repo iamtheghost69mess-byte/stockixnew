@@ -128,11 +128,11 @@ export default function CombosPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold">Combo Meals</h1>
-        <p className="text-sm text-muted-foreground">Create fixed/choice combos and configure slots with allowed menu items.</p>
+        <h1 className="font-bold text-2xl">Combo Meals</h1>
+        <p className="text-muted-foreground text-sm">Create fixed/choice combos and configure slots with allowed menu items.</p>
       </div>
 
-      <div className="rounded-xl border p-4 space-y-4">
+      <div className="space-y-4 rounded-xl border p-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label>Name</Label>
@@ -166,7 +166,7 @@ export default function CombosPage() {
           <Switch checked={draft.isActive} onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, isActive: checked }))} />
         </div>
 
-        <div className="rounded-lg border p-3 space-y-3">
+        <div className="space-y-3 rounded-lg border p-3">
           <div className="font-medium">Add slot</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Input value={slotName} onChange={(event) => setSlotName(event.target.value)} placeholder="Slot name (Main, Side...)" />
@@ -183,7 +183,7 @@ export default function CombosPage() {
             <Label>Required</Label>
             <Switch checked={slotRequired} onCheckedChange={setSlotRequired} />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Available menu item IDs: {(menuItemsQuery.data || []).map((item) => item._id).join(", ")}
           </p>
         </div>
@@ -194,7 +194,7 @@ export default function CombosPage() {
               <div className="font-medium">
                 {slot.name} {slot.required ? "(required)" : "(optional)"}
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-muted-foreground text-xs">
                 {slot.items.map((entry) => menuItemsById.get(String(entry.menuItemId)) || entry.menuItemId).join(", ")}
               </div>
             </div>
@@ -228,7 +228,7 @@ export default function CombosPage() {
                 <div className="font-medium">
                   {combo.name} - ${Number(combo.price || 0).toFixed(2)}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   {combo.type} · {combo.isActive ? "active" : "inactive"} · {combo.slots.length} slots
                 </div>
               </div>

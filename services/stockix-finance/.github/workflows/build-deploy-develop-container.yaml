@@ -5,6 +5,10 @@ on:
     branches:
       - develop
 
+concurrency:
+  group: develop-container-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   WEBAPP_IMAGE_NAME: bigcapitalhq/webapp
   SERVER_IMAGE_NAME: bigcapitalhq/server
@@ -15,7 +19,7 @@ jobs:
       fail-fast: false
     name: Build and deploy webapp container
     runs-on: ubuntu-latest
-    environment: production
+    environment: staging
     steps:
       - name: Prepare
         run: |

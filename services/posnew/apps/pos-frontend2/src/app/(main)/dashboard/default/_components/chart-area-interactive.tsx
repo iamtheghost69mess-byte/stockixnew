@@ -157,7 +157,7 @@ export function ChartAreaInteractive({
         ) : isLoading ? (
           <Skeleton className="aspect-auto h-62 w-full rounded-lg" />
         ) : rows.length === 0 ? (
-          <div className="text-muted-foreground flex aspect-auto h-62 items-center justify-center text-sm">
+          <div className="flex aspect-auto h-62 items-center justify-center text-muted-foreground text-sm">
             No data in this range.
           </div>
         ) : (
@@ -211,7 +211,7 @@ export function ChartAreaInteractive({
                       return (
                         <div className="flex w-full flex-1 justify-between leading-none">
                           <span className="text-muted-foreground">{isRevenue ? "Revenue" : "Visitors"}</span>
-                          <span className="font-mono font-medium text-foreground tabular-nums">{text}</span>
+                          <span className="font-medium font-mono text-foreground tabular-nums">{text}</span>
                         </div>
                       );
                     }}

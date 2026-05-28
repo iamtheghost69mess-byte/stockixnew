@@ -2,7 +2,7 @@
 
 import type { ComponentProps } from "react";
 
-import { DashboardAppSidebar, NavUser, SidebarSupportCard } from "@restaurant-pos/ui/shell";
+import { DashboardAppSidebar, NavUser, } from "@restaurant-pos/ui/shell";
 import { Command } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 

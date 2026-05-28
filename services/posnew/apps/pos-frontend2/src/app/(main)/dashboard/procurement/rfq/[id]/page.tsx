@@ -127,7 +127,7 @@ export default function RFQDetailPage() {
               {rfq.status}
             </Badge>
           </div>
-          <p className="text-muted-foreground mt-1">
+          <p className="mt-1 text-muted-foreground">
             Requested on {rfq.createdAt ? new Date(rfq.createdAt).toLocaleDateString() : "Unknown date"}
           </p>
         </div>
@@ -164,7 +164,7 @@ export default function RFQDetailPage() {
                   <TableRow key={i}>
                     <TableCell className="font-medium">
                       {(line.ingredient as any)?.name || line.ingredient}
-                      <p className="text-xs text-muted-foreground">{(line.ingredient as any)?.unit}</p>
+                      <p className="text-muted-foreground text-xs">{(line.ingredient as any)?.unit}</p>
                     </TableCell>
                     <TableCell>{line.quantity}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">{line.description || "—"}</TableCell>
@@ -190,7 +190,7 @@ export default function RFQDetailPage() {
             </div>
             <div>
               <Label className="text-muted-foreground">Invited Suppliers</Label>
-              <div className="flex flex-wrap gap-1 mt-1">
+              <div className="mt-1 flex flex-wrap gap-1">
                 {(rfq.suppliers as any[]).map((s) => (
                   <Badge key={s._id} variant="secondary">
                     {s.name}
@@ -209,7 +209,7 @@ export default function RFQDetailPage() {
         </CardHeader>
         <CardContent>
           {rfq.responses.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground italic">No responses recorded yet.</p>
+            <p className="py-8 text-center text-muted-foreground italic">No responses recorded yet.</p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {rfq.responses.map((resp: any) => (
@@ -226,7 +226,7 @@ export default function RFQDetailPage() {
                         const cost = resp.lineCosts?.find((lc: any) => String(lc.rfqLineId) === String(line._id));
                         return (
                           <div key={line._id} className="flex justify-between text-xs">
-                            <span className="text-muted-foreground text-truncate max-w-[120px]">
+                            <span className="max-w-[120px] text-muted-foreground text-truncate">
                               {(line.ingredient as any)?.name}
                             </span>
                             <span className="font-mono">{cost ? formatCurrency(cost.unitCost) : "—"}</span>
@@ -235,21 +235,21 @@ export default function RFQDetailPage() {
                       })}
                     </div>
                     {resp.availableDate && (
-                      <div className="pt-2 border-t">
-                        <Label className="text-[10px] uppercase text-muted-foreground">Availability</Label>
+                      <div className="border-t pt-2">
+                        <Label className="text-[10px] text-muted-foreground uppercase">Availability</Label>
                         <p>{new Date(resp.availableDate).toLocaleDateString()}</p>
                       </div>
                     )}
                     {resp.notes && (
                       <div className="pt-1">
-                        <Label className="text-[10px] uppercase text-muted-foreground">Supplier Notes</Label>
+                        <Label className="text-[10px] text-muted-foreground uppercase">Supplier Notes</Label>
                         <p className="line-clamp-2 text-xs">{resp.notes}</p>
                       </div>
                     )}
 
                     {!rfq.convertedToPurchaseOrder && rfq.status === "received" && (
                       <Button
-                        className="w-full mt-2"
+                        className="mt-2 w-full"
                         size="sm"
                         onClick={() => {
                           setSelectedResponseId(resp._id);
@@ -295,11 +295,11 @@ export default function RFQDetailPage() {
               <Label>Line Item Quotes (Unit Cost)</Label>
               {rfq.lines.map((line: any) => (
                 <div key={line._id} className="flex items-center gap-3">
-                  <span className="text-xs flex-1 truncate">{(line.ingredient as any)?.name}</span>
+                  <span className="flex-1 truncate text-xs">{(line.ingredient as any)?.name}</span>
                   <Input
                     type="number"
                     step="0.01"
-                    className="w-24 h-8"
+                    className="h-8 w-24"
                     placeholder="0.00"
                     value={respLineCosts[line._id] || ""}
                     onChange={(e) => setRespLineCosts({ ...respLineCosts, [line._id]: e.target.value })}

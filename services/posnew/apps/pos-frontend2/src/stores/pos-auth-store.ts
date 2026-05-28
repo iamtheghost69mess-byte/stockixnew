@@ -26,7 +26,7 @@ export const usePosAuthStore = create<PosAuthState>((set, get) => ({
     try {
       await get().fetchMe();
       return !!get().user;
-    } catch (err) {
+    } catch (_err) {
       return false;
     }
   },
@@ -39,7 +39,7 @@ export const usePosAuthStore = create<PosAuthState>((set, get) => ({
         return;
       }
       set({ user: null });
-    } catch (err) {
+    } catch (_err) {
       set({ user: null });
     }
   },

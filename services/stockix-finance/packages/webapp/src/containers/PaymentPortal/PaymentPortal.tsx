@@ -12,6 +12,12 @@ import { DRAWERS } from '@/constants/drawers';
 import { downloadFile } from '@/hooks/useDownloadFile';
 import styles from './PaymentPortal.module.scss';
 
+const safeMultilineText = (input: string | null | undefined): string =>
+  (input ?? '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .trim();
+
 export function PaymentPortal() {
   const { openDrawer } = useDrawerActions();
   const { sharableLinkMeta, linkId } = usePaymentPortalBoot();
@@ -96,11 +102,9 @@ export function PaymentPortal() {
             </Box>
 
             {sharableLinkMeta?.formattedCustomerAddress && (
-              <Box
-                dangerouslySetInnerHTML={{
-                  __html: sharableLinkMeta?.formattedCustomerAddress,
-                }}
-              />
+              <Box style={{ whiteSpace: 'pre-line' }}>
+                {safeMultilineText(sharableLinkMeta?.formattedCustomerAddress)}
+              </Box>
             )}
           </Stack>
 
@@ -203,11 +207,9 @@ export function PaymentPortal() {
       </Stack>
 
       <Stack spacing={18} className={styles.footer}>
-        <Box
-          dangerouslySetInnerHTML={{
-            __html: sharableLinkMeta?.organization?.addressTextFormatted || '',
-          }}
-        ></Box>
+        <Box style={{ whiteSpace: 'pre-line' }}>
+          {safeMultilineText(sharableLinkMeta?.organization?.addressTextFormatted)}
+        </Box>
 
         <Stack spacing={0} className={styles.footerText}>
           © 2024 Stockix Technology, Inc.

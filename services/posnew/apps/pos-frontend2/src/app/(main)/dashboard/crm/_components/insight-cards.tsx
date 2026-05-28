@@ -59,7 +59,7 @@ function buildTopItemsBarRows(items: readonly TopItemRow[]): { name: string; qua
   });
 }
 
-function formatPercent(value: number): string {
+function _formatPercent(value: number): string {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}%`;
 }
 

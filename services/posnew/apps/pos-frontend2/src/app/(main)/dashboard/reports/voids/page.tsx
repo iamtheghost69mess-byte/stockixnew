@@ -175,7 +175,7 @@ export default function VoidsReportPage() {
                       <TableCell>{row.tableNumber || "—"}</TableCell>
                       <TableCell>{row.voidedBy || "—"}</TableCell>
                       <TableCell>{row.reason || "—"}</TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
+                      <TableCell className="text-right text-muted-foreground text-xs">
                         {row.createdAt ? new Date(row.createdAt).toLocaleString() : "—"}
                       </TableCell>
                     </TableRow>

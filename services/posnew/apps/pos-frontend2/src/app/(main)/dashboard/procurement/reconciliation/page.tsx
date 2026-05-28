@@ -56,8 +56,8 @@ export default function ReconciliationPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">3-Way Match HUB</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="font-bold text-3xl tracking-tight">3-Way Match HUB</h1>
+          <p className="mt-1 text-muted-foreground">
             Reconcile Purchase Orders, Goods Receipts, and Vendor Bills to ensure financial accuracy.
           </p>
         </div>
@@ -66,44 +66,44 @@ export default function ReconciliationPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Reconciliation Accuracy</CardTitle>
+            <CardTitle className="font-medium text-sm">Reconciliation Accuracy</CardTitle>
             <ShieldCheck className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="font-bold text-2xl">
               {stats.total > 0 ? Math.round((stats.matched / stats.total) * 100) : 0}%
             </div>
-            <p className="text-xs text-muted-foreground">Overall match rate across all sessions</p>
+            <p className="text-muted-foreground text-xs">Overall match rate across all sessions</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Auditor Review</CardTitle>
+            <CardTitle className="font-medium text-sm">Pending Auditor Review</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-500">{stats.mismatched}</div>
-            <p className="text-xs text-muted-foreground">Sessions flagging price or quantity gaps</p>
+            <div className="font-bold text-2xl text-amber-500">{stats.mismatched}</div>
+            <p className="text-muted-foreground text-xs">Sessions flagging price or quantity gaps</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Audited</CardTitle>
+            <CardTitle className="font-medium text-sm">Total Audited</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.matched}</div>
-            <p className="text-xs text-muted-foreground">Sessions that passed the 3-Way Match check</p>
+            <div className="font-bold text-2xl">{stats.matched}</div>
+            <p className="text-muted-foreground text-xs">Sessions that passed the 3-Way Match check</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[300px]">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative min-w-[300px] flex-1">
+          <Search className="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search PO or Bill number..."
-            className="pl-8 bg-card shadow-sm"
+            className="bg-card pl-8 shadow-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -125,7 +125,7 @@ export default function ReconciliationPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
@@ -153,7 +153,7 @@ export default function ReconciliationPage() {
                     <Skeleton className="h-4 w-20" />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Skeleton className="h-8 w-8 ml-auto" />
+                    <Skeleton className="ml-auto h-8 w-8" />
                   </TableCell>
                 </TableRow>
               ))
@@ -168,12 +168,12 @@ export default function ReconciliationPage() {
               </TableRow>
             ) : (
               filteredMatches.map((match: any) => (
-                <TableRow key={match._id} className="hover:bg-muted/30 transition-colors">
+                <TableRow key={match._id} className="transition-colors hover:bg-muted/30">
                   <TableCell className="font-medium">{match.purchaseOrder.reference}</TableCell>
                   <TableCell>
                     <div className="flex flex-col">
                       <span>{match.vendorBill.vendorBillNumber}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-muted-foreground text-xs">
                         Total: ${match.vendorBill.total.toLocaleString()}
                       </span>
                     </div>
@@ -181,7 +181,7 @@ export default function ReconciliationPage() {
                   <TableCell>
                     <MatchStatusBadge status={match.matchStatus} />
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-xs">
                     {format(new Date(match.lastMatchedAt), "MMM d, yyyy HH:mm")}
                   </TableCell>
                   <TableCell className="text-right">
@@ -205,19 +205,19 @@ function MatchStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "matched":
       return (
-        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1.5 py-1">
+        <Badge variant="outline" className="gap-1.5 border-emerald-200 bg-emerald-50 py-1 text-emerald-700">
           <CheckCircle2 className="h-3.5 w-3.5" /> Matched
         </Badge>
       );
     case "quantity_mismatch":
       return (
-        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1.5 py-1">
+        <Badge variant="outline" className="gap-1.5 border-amber-200 bg-amber-50 py-1 text-amber-700">
           <AlertCircle className="h-3.5 w-3.5" /> Qty Mismatch
         </Badge>
       );
     case "price_mismatch":
       return (
-        <Badge variant="outline" className="bg-destructive/5 text-destructive border-destructive/20 gap-1.5 py-1">
+        <Badge variant="outline" className="gap-1.5 border-destructive/20 bg-destructive/5 py-1 text-destructive">
           <AlertTriangle className="h-3.5 w-3.5" /> Price Mismatch
         </Badge>
       );

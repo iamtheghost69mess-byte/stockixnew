@@ -79,7 +79,7 @@ export default function ConsolidatedReportsPage() {
           </Link>
         </Button>
         <h1 className="font-bold text-3xl tracking-tight">Consolidated trial balance</h1>
-        <p className="text-muted-foreground text-sm max-w-3xl text-pretty">
+        <p className="max-w-3xl text-pretty text-muted-foreground text-sm">
           V1 sums each child organization&apos;s trial balance and merges rows by account code. Child tenants must
           have <span className="font-mono">parentOrganization</span> pointing at this Studio org. Intercompany
           eliminations are not applied.
@@ -104,7 +104,7 @@ export default function ConsolidatedReportsPage() {
                   <input
                     id={`org-${c._id}`}
                     type="checkbox"
-                    className="border-input size-4 rounded border"
+                    className="size-4 rounded border border-input"
                     checked={!!selected[c._id]}
                     onChange={(e) =>
                       setSelected((prev) => ({ ...prev, [c._id]: e.target.checked }))
@@ -113,7 +113,7 @@ export default function ConsolidatedReportsPage() {
                   <label htmlFor={`org-${c._id}`} className="text-sm">
                     {c.name || c.slug || c._id}
                     {c.slug ? (
-                      <span className="text-muted-foreground ml-2 font-mono text-xs">({c.slug})</span>
+                      <span className="ml-2 font-mono text-muted-foreground text-xs">({c.slug})</span>
                     ) : null}
                   </label>
                 </li>

@@ -3085,7 +3085,7 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
     );
   }
 
-  const impersonateUrl = `${origin}/api/auth/impersonate?t=${encodeURIComponent(accessToken)}`;
+  const impersonatePostUrl = `${origin}/api/auth/impersonate`;
 
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
@@ -3096,7 +3096,7 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
     metadata: { tenantSlug: row.slug, adminEmail: row.adminEmail },
   });
 
-  return c.json({ impersonateUrl });
+  return c.json({ impersonatePostUrl, token: accessToken });
 });
 
 app.post("/tenants/:tenantId/stop", async (c) => {

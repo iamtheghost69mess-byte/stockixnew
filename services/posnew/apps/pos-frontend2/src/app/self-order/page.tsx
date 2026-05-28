@@ -390,7 +390,7 @@ function SelfOrderPageContent() {
         {hasAnySection ? (
           <>
             {sections.map(({ root, directItems, subsections }) => (
-              <section id={`cat-${root._id}`} key={root._id} className="space-y-4 scroll-mt-24">
+              <section id={`cat-${root._id}`} key={root._id} className="scroll-mt-24 space-y-4">
                 <h2 className="font-semibold text-xl" style={{ color: root.color || accent }}>
                   {root.name || "Category"}
                 </h2>

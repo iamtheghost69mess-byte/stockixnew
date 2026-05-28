@@ -113,7 +113,7 @@ export function SectionCards({ summary, todayKpis, displayCurrency, isLoading, i
             <CardHeader>
               <CardDescription>{c.label}</CardDescription>
               {isLoading ? (
-                <Skeleton className="mt-1 h-9 w-32 @[250px]/card:h-10 @[250px]/card:w-40" />
+                <Skeleton className="mt-1 @[250px]/card:h-10 h-9 @[250px]/card:w-40 w-32" />
               ) : (
                 <CardTitle className="font-semibold @[250px]/card:text-3xl text-2xl tabular-nums">{c.value}</CardTitle>
               )}
