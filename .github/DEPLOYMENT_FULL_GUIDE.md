@@ -204,3 +204,45 @@ This prints **`docker compose ps`**, ports **80/443**, **API `/health`** from in
 | `infra/prod/docker-compose.yml` | Prod stack |
 | `infra/prod/.env.example` | Template for server **`.env`** |
 | `scripts/verify-stockix-server.sh` | On-VPS checks: compose, ports, health |
+
+---
+
+## **J. Release governance (required before merge to main)**
+
+Configure branch protection using `docs/BRANCH_PROTECTION_SETUP.md` and enforce these required checks:
+
+- `Quality gate`
+- `Gitleaks Secret Scan`
+
+Release sign-off checklist (must be confirmed for every production release):
+
+1. Secrets rotation record updated in `infra/prod/OPERATIONS.md` when rotation happened.
+2. DB migration + schema verification completed on target host.
+3. Backup target (`BACKUP_B2_*`) verified non-empty and healthy.
+4. Post-deploy script passes: `scripts/verify-stockix-server.sh`.
+5. `/ready` and `/health` pass on public API endpoint.
+
+---
+
+## **K. Deployment targets (current and future)**
+
+### Current baseline (single host + Docker Compose)
+
+- Runtime: one Linux host, Docker Compose (`infra/prod/docker-compose.yml`)
+- Secrets: host-local `infra/prod/.env` (never committed)
+- Data plane: host Postgres + mounted volumes
+- Gates: GitHub Actions `Quality gate` + `Gitleaks Secret Scan`
+
+### Target baseline (managed cloud)
+
+- Runtime: managed container platform (Kubernetes/ECS/App Service equivalent)
+- Secrets: managed secret store (Vault/SM/KeyVault), no `.env` file distribution
+- Data plane: managed PostgreSQL + managed Redis
+- Observability: centralized logs/metrics/traces + alerting SLOs
+
+### Parity requirements before cloud cutover
+
+1. Same required CI gates and branch protection as current baseline.
+2. Same `/ready` and `/health` semantics and rollout health checks.
+3. Deterministic rollback path documented and tested.
+4. Secret rotation runbook validated against managed secret store.

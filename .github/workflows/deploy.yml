@@ -49,6 +49,27 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: Repository hygiene — block tracked local env files
+        run: |
+          set -euo pipefail
+          tracked_env_files="$(git ls-files | grep -E '(^|/)\.env($|(\.[^/]+)$)' | grep -Ev '\.env\.example$' || true)"
+          if [ -n "${tracked_env_files}" ]; then
+            echo "Tracked .env files are not allowed in repository history:"
+            echo "${tracked_env_files}"
+            exit 1
+          fi
+
+      - name: Repository hygiene — block tracked build artifacts
+        run: |
+          set -euo pipefail
+          tracked_generated="$(git ls-files | grep -E '(^|/)(\.next/|dist/|build/|coverage/|\.runtime/|\.tmp-worker/)' || true)"
+          if [ -n "${tracked_generated}" ]; then
+            echo "Tracked generated artifacts detected (must not be committed):"
+            echo "${tracked_generated}"
+            exit 1
+          fi
 
       - name: Type check — API
         run: pnpm --filter api exec tsc --noEmit
@@ -71,6 +92,12 @@ jobs:
 
       - name: Tenant scope audit
         run: pnpm --filter api check:tenant-scope
+
+      - name: API route registry checks
+        run: |
+          pnpm --filter api check:routes
+          pnpm --filter api check:known-paths
+          pnpm --filter api check:api-structure
 
       - name: License test stability check
         run: |
@@ -218,9 +245,16 @@ jobs:
           docker compose --env-file .env up -d --build --wait
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 \
+            "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
           if ! docker compose --env-file .env ps --status running | grep -q "api"; then
             echo "API service is not running after deploy"
             docker compose --env-file .env logs --tail=200
+            exit 1
+          fi
+          if ! docker compose --env-file .env ps --status running | grep -q "infra-worker"; then
+            echo "infra-worker service is not running after deploy"
+            docker compose --env-file .env logs infra-worker --tail=200
             exit 1
           fi
           trap - ERR

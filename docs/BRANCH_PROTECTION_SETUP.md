@@ -15,8 +15,8 @@ Branch name pattern: `main`
 - Require status checks to pass before merging
   - Require branches to be up to date before merging
   - Required checks:
-    - `Quality gate` (deploy workflow)
-    - `Gitleaks / gitleaks` (secret-scan workflow)
+    - `Quality gate` (from `Deploy Stockix`)
+    - `Gitleaks Secret Scan` (from `Secret scan`)
 - Require conversation resolution before merging
 - Do not allow bypassing the above settings (including admins)
 - Restrict who can push to matching branches
@@ -45,13 +45,16 @@ To confirm exact names used by GitHub checks:
 3. Copy exact check names
 4. Add those exact names to required status checks
 
-Common names:
-- `Quality gate` or `quality-gate`
-- `Gitleaks` (from `secret-scan.yml`)
+Expected check names with current workflows:
+- `Quality gate`
+- `Gitleaks Secret Scan`
+- (optional informational checks/artifacts may appear, but only enforce gates above)
 
 ## After enabling
 
 1. Create a test PR
-2. Attempt merge before CI completes (must be blocked)
-3. Merge after CI passes (must be allowed)
-4. Record completion date in `infra/prod/OPERATIONS.md`
+2. Confirm `Quality gate` is required and blocks merge until green
+3. Confirm `Gitleaks Secret Scan` is required and blocks merge until green
+4. Attempt merge before CI completes (must be blocked)
+5. Merge after CI passes (must be allowed)
+6. Record completion date in `infra/prod/OPERATIONS.md`
