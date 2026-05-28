@@ -60,6 +60,9 @@ apps/api/.tmp-worker/**
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+gitleaks-results.sarif
+results.sarif
+results-working-tree.sarif
 
 # Misc
 .DS_Store

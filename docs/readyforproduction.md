@@ -243,3 +243,42 @@ curl -fsS http://127.0.0.1:9090/health  # if exposed on host
 ---
 
 *Initial audit 2026-05-27; six blockers fixed same day. Verdict **CLEARED FOR PRODUCTION** with Chatwoot token and branch protection as accepted follow-ups.*
+
+---
+
+## FINAL ENFORCEMENT BASELINE (2026-05-28)
+
+### CI hard gates now required
+
+- `Quality gate` (from `Deploy Stockix`) must pass.
+- `Gitleaks Secret Scan` (from `Secret scan`) must pass.
+- Repository hygiene check blocks tracked `.env` files (except `.env.example`) and tracked generated artifacts.
+- API route structure checks are enforced in CI (`check:routes`, `check:known-paths`, `check:api-structure`).
+
+### Mandatory release sign-off (each production release)
+
+1. Branch protection enabled on `main` with required checks exactly matching workflow names.
+2. Post-deploy verification script passes on host: `scripts/verify-stockix-server.sh`.
+3. Public API endpoints pass:
+   - `https://api.<ROOT_DOMAIN>/ready`
+   - `https://api.<ROOT_DOMAIN>/health`
+4. Required services running after deploy: `postgres`, `traefik`, `api`, `dashboard`, `infra-worker`.
+5. Backup config present and non-empty (`BACKUP_B2_*`).
+
+### Dual-target baseline (current + future)
+
+#### Current (single-host production)
+- Deployment model: Docker Compose on one host.
+- Secret model: host-local `.env` under `infra/prod`.
+- Rollback model: reset to previous commit + compose restart.
+
+#### Future (managed-cloud target)
+- Deployment model: managed container orchestration.
+- Secret model: managed secret store, zero plaintext env-file distribution.
+- Rollback model: platform-native rollback with health gate parity.
+
+#### Non-negotiable parity controls
+- Same branch protection and required checks.
+- Same readiness/health contract.
+- Same secret rotation cadence and runbook evidence.
+- Same post-deploy verification coverage.

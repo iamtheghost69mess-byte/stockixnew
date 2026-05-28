@@ -14,13 +14,13 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
       DASHBOARD_URL: "http://localhost:3000",
-      SESSION_SECRET: "test-session-secret-32-chars-minimum-length",
-      AUTH_TOKEN_SECRET: "test-auth-token-secret-32-chars-minimum",
-      PLATFORM_API_SECRET: "test-platform-api-secret-32-chars-minimum",
-      INTERNAL_API_SECRET: "test-internal-api-secret-32-chars-min",
-      DEPLOYMENT_SECRET_KEY: "test-deployment-secret-key-32-chars-min",
-      LICENSE_SIGNING_SECRET: "test-license-signing-secret-32-chars-min",
-      WORKER_SECRET: "test-worker-secret-32-chars-minimum-length",
+      SESSION_SECRET: "test-session-secret-32-chars-minimum-length", // gitleaks:allow
+      AUTH_TOKEN_SECRET: "test-auth-token-secret-32-chars-minimum", // gitleaks:allow
+      PLATFORM_API_SECRET: "test-platform-api-secret-32-chars-minimum", // gitleaks:allow
+      INTERNAL_API_SECRET: "test-internal-api-secret-32-chars-min", // gitleaks:allow
+      DEPLOYMENT_SECRET_KEY: "test-deployment-secret-key-32-chars-min", // gitleaks:allow
+      LICENSE_SIGNING_SECRET: "test-license-signing-secret-32-chars-min", // gitleaks:allow
+      WORKER_SECRET: "test-worker-secret-32-chars-minimum-length", // gitleaks:allow
       POS_PLATFORM_BASE_URL: "http://127.0.0.1:8010",
       POS_FRONTEND_URL: "http://127.0.0.1:3001",
       PMS_BASE_URL: "http://127.0.0.1:3003",
