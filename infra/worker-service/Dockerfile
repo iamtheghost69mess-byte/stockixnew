@@ -9,9 +9,6 @@ COPY . .
 ENV NODE_OPTIONS=--max-old-space-size=3072
 RUN pnpm install --frozen-lockfile --filter api...
 RUN pnpm --filter @repo/auth build \
-  && pnpm --filter @repo/config build \
-  && pnpm --filter @repo/db build \
-  && pnpm --filter @repo/shared build \
   && pnpm infra:worker:build
 RUN test -f infra/worker-service/.runtime/worker.js
 

@@ -84,9 +84,10 @@ sleep 20
 ```
 
 ```bash
-set -a && source /opt/stockix/stockixnew/infra/prod/.env && set +a
-export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
 cd /opt/stockix/stockixnew
+. scripts/load-env-file.sh infra/prod/.env
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
 pnpm --filter @repo/db db:migrate
 ```
 
@@ -127,7 +128,7 @@ docker compose --env-file .env logs traefik --tail 80
 
 Optional: **`CORS_ORIGINS`** (comma-separated).
 
-**Feedback:** Pasting shell commands **inside** `.env` breaks **`source`** — file must be **`KEY=value`** lines only.
+**Feedback:** Pasting shell commands **inside** `.env` breaks naive **`source`** — use **`scripts/load-env-file.sh`**; file must be **`KEY=value`** lines only.
 
 ---
 
@@ -143,7 +144,7 @@ Add under **Repository → Settings → Secrets and variables → Actions**.
 
 **Note:** Names say **EC2** but work for **any Linux SSH host** (e.g. Hostinger).
 
-**Workflow behavior:** On **pull request**, GitHub runs quality checks only. On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`source infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose build`** (self-contained images tagged `stockix-*:latest`), verifies images exist, then **`docker compose up -d --no-build`**.
+**Workflow behavior:** On **pull request**, GitHub runs quality checks only. On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`. scripts/load-env-file.sh infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose build`** (self-contained images tagged `stockix-*:latest`), verifies images exist, then **`docker compose up -d --no-build`**, then **`pnpm docker:prebuild`** (tenant images, non-fatal).
 
 **Feedback:**
 
@@ -151,7 +152,7 @@ Add under **Repository → Settings → Secrets and variables → Actions**.
 |---------|----------------|
 | **SSH fails from Actions** | **SG/firewall:** GitHub IPs need **:22** (or use self-hosted runner / VPN) |
 | **`git pull` fails** | PAT/SSH on server; **`main`** not present |
-| **`source infra/prod/.env` fails** | Missing/malformed **`.env`** on server |
+| **Env load fails** | Missing/malformed **`.env`** on server; use **`load-env-file.sh`**, not **`source`** |
 | **`migrate` fails** | Postgres down; **`DATABASE_URL`** vs **`.env`** mismatch |
 | **`docker compose` fails** | Not in **`infra/prod`**; Docker daemon stopped |
 

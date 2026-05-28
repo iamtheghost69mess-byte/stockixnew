@@ -223,8 +223,7 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     cpus: "0.5"
-    deploy:
-      replicas: 2
+    # Single api container (deploy.replicas requires Docker Swarm; not used here).
     depends_on:
       postgres:
         condition: service_healthy

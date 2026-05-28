@@ -377,12 +377,12 @@ From `infra/prod/OPERATIONS.md` and `.github/workflows/deploy.yml` (verified cur
 cd /opt/stockix/stockixnew   # or /opt/stockix/app
 git fetch --prune && git checkout main && git pull --ff-only origin main
 
-set -a && source infra/prod/.env && set +a
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
+. scripts/load-env-file.sh infra/prod/.env
 export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
 
 corepack enable && corepack prepare pnpm@9.15.9 --activate
 pnpm install --frozen-lockfile
-pnpm infra:worker:build
 pnpm --filter @repo/db db:migrate
 pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
 

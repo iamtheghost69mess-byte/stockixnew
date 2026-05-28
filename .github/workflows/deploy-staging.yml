@@ -45,6 +45,40 @@ jobs:
           export CI=true
           export PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
           cd /opt/stockix/stockixnew
+          REPO_ROOT="$(pwd)"
+          PREV_API="$(docker image inspect stockix-api:latest --format '{{.Id}}' 2>/dev/null || true)"
+          PREV_DASH="$(docker image inspect stockix-dashboard:latest --format '{{.Id}}' 2>/dev/null || true)"
+          PREV_WORKER="$(docker image inspect stockix-infra-worker:latest --format '{{.Id}}' 2>/dev/null || true)"
+          rollback() {
+            echo "Deploy failed — attempting rollback to previous images."
+            if [ -d "${REPO_ROOT}/infra/staging" ]; then
+              cd "${REPO_ROOT}/infra/staging"
+              docker compose --env-file .env logs --tail=300 || true
+            fi
+            rolled_back=0
+            if [ -n "${PREV_API:-}" ]; then
+              docker tag "${PREV_API}" stockix-api:latest 2>/dev/null || true
+              rolled_back=1
+            fi
+            if [ -n "${PREV_DASH:-}" ]; then
+              docker tag "${PREV_DASH}" stockix-dashboard:latest 2>/dev/null || true
+              rolled_back=1
+            fi
+            if [ -n "${PREV_WORKER:-}" ]; then
+              docker tag "${PREV_WORKER}" stockix-infra-worker:latest 2>/dev/null || true
+              rolled_back=1
+            fi
+            if [ "$rolled_back" -eq 1 ] && [ -d "${REPO_ROOT}/infra/staging" ]; then
+              cd "${REPO_ROOT}/infra/staging"
+              docker compose --env-file .env up -d --no-build \
+                api api-bullmq dashboard infra-worker || true
+              echo "Rolled back to previous images."
+            else
+              echo "No previous images to roll back to."
+            fi
+            exit 1
+          }
+          trap rollback ERR
           fetch_origin() {
             if git fetch --prune --force origin; then
               return 0
@@ -58,16 +92,42 @@ jobs:
           fetch_origin
           git checkout staging
           git merge --ff-only origin/staging
+          echo "Deploy commit: $(git rev-parse HEAD)"
           chmod +x scripts/load-env-file.sh 2>/dev/null || true
+          # IMPORTANT: Never use 'source infra/staging/.env' — semicolons in values break bash.
           # shellcheck disable=SC1091
           . scripts/load-env-file.sh infra/staging/.env
+          export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
           rm -rf node_modules
           pnpm install --frozen-lockfile --ignore-scripts
-          pnpm infra:worker:build
           pnpm --filter @repo/db db:migrate
+          pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
           cd infra/staging
-          docker compose --env-file .env up -d --build --wait
+          export COMPOSE_FILE=docker-compose.yml
+          export COMPOSE_PARALLEL_LIMIT=1
+          docker compose --env-file .env build --progress=plain api dashboard infra-worker
+          echo "=== Verifying images exist ==="
+          for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
+            if ! docker image inspect "$img" >/dev/null 2>&1; then
+              echo "Missing image: $img — Docker build failed. Check logs above."
+              exit 1
+            fi
+            echo "OK: $img"
+          done
+          docker compose --env-file .env up -d --no-build --wait \
+            traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
+          sleep 10
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "${DASHBOARD_URL}/" >/dev/null
+          cd "${REPO_ROOT}"
+          echo "=== Building tenant images ==="
+          pnpm docker:prebuild 2>&1 | tail -20 || \
+            echo "WARNING: Tenant images build failed — provisioning may not work until pnpm docker:prebuild succeeds"
+          trap - ERR
+          echo "Staging deploy completed successfully."
           REMOTE
 
       - name: Verify staging health

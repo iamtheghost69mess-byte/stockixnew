@@ -44,7 +44,8 @@ corepack enable && pnpm install --frozen-lockfile
 4. Download latest B2 backup:
 
 ```bash
-source infra/prod/.env
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
+. scripts/load-env-file.sh infra/prod/.env
 AWS_ACCESS_KEY_ID=$BACKUP_B2_KEY_ID \
 AWS_SECRET_ACCESS_KEY=$BACKUP_B2_APP_KEY \
 aws s3 ls "s3://$BACKUP_B2_BUCKET/$BACKUP_B2_PREFIX/" \
