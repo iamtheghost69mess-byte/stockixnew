@@ -101,11 +101,30 @@ function ensureFinanceDeps() {
   process.exit(1);
 }
 
+function buildFinanceSharedPackages() {
+  run(
+    "Finance shared build",
+    "pnpm",
+    [
+      "run",
+      "build",
+      "--scope",
+      "@stockix/utils",
+      "--scope",
+      "@stockix/email-components",
+      "--scope",
+      "@stockix/pdf-templates",
+    ],
+    { cwd: financeRoot, env: { ...testEnv, HUSKY: "0" } },
+  );
+}
+
 console.log("Stockix quality gate (local CI mirror)");
 console.log(`Root: ${root}`);
 
 run("Install", "pnpm", ["install", "--frozen-lockfile"]);
 ensureFinanceDeps();
+buildFinanceSharedPackages();
 sh("Security audit", "pnpm audit --prod --audit-level=high");
 sh(
   "Build workspace packages",

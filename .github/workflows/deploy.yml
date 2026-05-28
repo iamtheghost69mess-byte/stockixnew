@@ -169,6 +169,7 @@ jobs:
         run: |
           cd services/stockix-finance
           pnpm install --frozen-lockfile
+          pnpm run build --scope "@stockix/utils" --scope "@stockix/email-components" --scope "@stockix/pdf-templates"
           cd packages/server
           pnpm test
         env:
