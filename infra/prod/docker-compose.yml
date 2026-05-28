@@ -1,6 +1,7 @@
 # Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
 # Run from repo root on the server (e.g. /opt/stockix/stockixnew):
 #   cd infra/prod && docker compose --env-file .env up -d --build
+# Chat (Chatwoot): optional — docker compose --profile chat --env-file .env up -d
 #
 # Prerequisites:
 #   1. Copy infra/prod/.env.example → infra/prod/.env and fill secrets (never commit .env).
@@ -260,9 +261,6 @@ services:
   # Single BullMQ consumer — not exposed via Traefik. HTTP replicas use RUN_BULLMQ_CONSUMERS=false.
   api-bullmq:
     image: stockix-api:prod
-    build:
-      context: ../..
-      dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     mem_limit: 256m
     cpus: "0.25"
@@ -398,7 +396,9 @@ services:
       timeout: 5s
       retries: 6
 
+  # Chat (Chatwoot / chatlive) — disabled by default. Enable: docker compose --profile chat up -d
   chatwoot:
+    profiles: ["chat"]
     build:
       context: ../../services/chatlive
       dockerfile: docker/Dockerfile
@@ -448,6 +448,7 @@ services:
       - stockix_internal
 
   chatwoot-postgres:
+    profiles: ["chat"]
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     mem_limit: 512m
@@ -469,6 +470,7 @@ services:
       start_period: 10s
 
   chatwoot-redis:
+    profiles: ["chat"]
     image: redis:7-alpine
     restart: unless-stopped
     mem_limit: 128m

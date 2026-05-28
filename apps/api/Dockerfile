@@ -8,10 +8,17 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 COPY . .
 
 RUN pnpm install --frozen-lockfile --filter api...
-# Built on the host during deploy (pnpm --filter api build). Re-running tsup here
-# often OOMs when compose builds api, dashboard, infra-worker, and chatwoot in parallel.
-RUN test -f apps/api/dist/index.js \
-  || (echo "Missing apps/api/dist/index.js — run: pnpm --filter api build" && exit 1)
+# @repo/* packages export ./dist/* — must be compiled before API tsup bundles them.
+RUN pnpm --filter @repo/auth build \
+  && pnpm --filter @repo/config build \
+  && pnpm --filter @repo/db build \
+  && pnpm --filter @repo/shared build
+# Prefer host-built dist from deploy (see .dockerignore); rebuild only if missing from context.
+RUN if [ -f apps/api/dist/index.js ]; then \
+      echo "Using API dist from deploy host build"; \
+    else \
+      pnpm --filter api build; \
+    fi
 RUN pnpm deploy --filter api --prod /deploy
 
 FROM node:20-alpine AS runner

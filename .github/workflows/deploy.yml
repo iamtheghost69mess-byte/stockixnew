@@ -280,10 +280,7 @@ jobs:
           cd infra/prod
           # Small VPS: build one image at a time; compile on host above (not inside Docker).
           export COMPOSE_PARALLEL_LIMIT=1
-          if ! docker image inspect stockix-chatlive:local >/dev/null 2>&1; then
-            echo "Building Chatwoot image (first deploy or missing tag)..."
-            docker compose --env-file .env build --parallel 1 chatwoot
-          fi
+          docker compose --env-file .env --profile chat stop 2>/dev/null || true
           docker compose --env-file .env build --parallel 1 api dashboard infra-worker
           docker compose --env-file .env up -d --wait
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
