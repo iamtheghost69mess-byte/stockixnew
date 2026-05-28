@@ -52,6 +52,7 @@
     "provision:modules": "pnpm --filter api exec node scripts/provision-module-matrix.mjs --",
     "lint": "turbo run lint",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
+    "quality-gate:local": "node scripts/quality-gate-local.mjs",
     "architecture:validate": "node scripts/architecture-validation.mjs",
     "test:phase2": "pnpm --filter api test && pnpm --filter dashboard test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
