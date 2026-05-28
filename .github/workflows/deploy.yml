@@ -167,7 +167,9 @@ jobs:
 
       - name: Run Finance tests
         run: |
-          cd services/stockix-finance/packages/server
+          cd services/stockix-finance
+          pnpm install --frozen-lockfile --ignore-scripts
+          cd packages/server
           pnpm test
         timeout-minutes: 10
 
