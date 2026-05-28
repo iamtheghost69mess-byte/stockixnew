@@ -169,6 +169,12 @@ jobs:
         run: pnpm --filter @stockix/server test
         timeout-minutes: 10
 
+      - name: Build API
+        run: pnpm --filter api build
+
+      - name: Build infra worker bundle
+        run: pnpm infra:worker:build
+
       - name: Build dashboard
         run: pnpm --filter dashboard build
 
@@ -229,7 +235,7 @@ jobs:
             git reset --hard "${PREV_COMMIT}"
             cd infra/prod
             docker compose --env-file .env logs --tail=300 || true
-            docker compose --env-file .env up -d --build || true
+            docker compose --env-file .env up -d || true
           }
           trap rollback ERR
           fetch_origin() {
@@ -252,7 +258,18 @@ jobs:
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
           pnpm install --frozen-lockfile
+          export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+          pnpm --filter @repo/auth build
+          pnpm --filter @repo/config build
+          pnpm --filter @repo/db build
+          pnpm --filter @repo/shared build
+          pnpm --filter api build
           pnpm infra:worker:build
+          export NEXT_PUBLIC_STOCKIX_API_URL="${NEXT_PUBLIC_STOCKIX_API_URL:-${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}}"
+          export NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN="${ROOT_DOMAIN}"
+          export NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME="${PUBLIC_BASE_URL_SCHEME:-https}"
+          export NEXT_PUBLIC_SENTRY_DSN="${NEXT_PUBLIC_SENTRY_DSN:-}"
+          pnpm --filter dashboard build
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
           if [ -z "${BACKUP_B2_BUCKET:-}" ]; then
@@ -261,7 +278,14 @@ jobs:
           fi
           echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
           cd infra/prod
-          docker compose --env-file .env up -d --build --wait
+          # Small VPS: build one image at a time; compile on host above (not inside Docker).
+          export COMPOSE_PARALLEL_LIMIT=1
+          if ! docker image inspect stockix-chatlive:local >/dev/null 2>&1; then
+            echo "Building Chatwoot image (first deploy or missing tag)..."
+            docker compose --env-file .env build --parallel 1 chatwoot
+          fi
+          docker compose --env-file .env build --parallel 1 api dashboard infra-worker
+          docker compose --env-file .env up -d --wait
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
