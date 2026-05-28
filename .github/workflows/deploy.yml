@@ -250,7 +250,18 @@ jobs:
           }
           fetch_origin
           git checkout main
-          git merge --ff-only origin/main
+          git reset --hard origin/main
+          echo "Deploy commit: $(git rev-parse HEAD)"
+          if ! grep -q '@repo/auth build' apps/api/Dockerfile; then
+            echo "ERROR: apps/api/Dockerfile on the server is stale (missing deploy fixes)."
+            echo "Expected @repo/auth build step; got:"
+            sed -n '8,22p' apps/api/Dockerfile
+            exit 1
+          fi
+          if grep -A8 '^  api-bullmq:' infra/prod/docker-compose.yml | grep -q '^    build:'; then
+            echo "ERROR: api-bullmq must not have its own build: (use image: stockix-api:prod only)."
+            exit 1
+          fi
           set -a
           # shellcheck disable=SC1091
           source infra/prod/.env
@@ -281,8 +292,8 @@ jobs:
           # Small VPS: build one image at a time; compile on host above (not inside Docker).
           export COMPOSE_PARALLEL_LIMIT=1
           docker compose --env-file .env --profile chat stop 2>/dev/null || true
-          docker compose --env-file .env build --parallel 1 api dashboard infra-worker
-          docker compose --env-file .env up -d --wait
+          docker compose --env-file .env build --no-cache api dashboard infra-worker
+          docker compose --env-file .env up -d --no-build --wait
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
