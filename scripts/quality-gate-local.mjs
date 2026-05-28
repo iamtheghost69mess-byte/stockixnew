@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const isWin = process.platform === "win32";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const financeRoot = path.join(root, "services/stockix-finance");
+const financeServer = path.join(financeRoot, "packages/server");
 
 function gitLsFiles() {
   const r = spawnSync("git", ["ls-files"], {
@@ -63,10 +65,47 @@ function sh(name, script, opts = {}) {
   run(name, isWin ? "cmd" : "sh", isWin ? ["/c", script] : ["-c", script], opts);
 }
 
+function financeDepsReady() {
+  return existsSync(path.join(financeServer, "node_modules/jest"));
+}
+
+function ensureFinanceDeps() {
+  const env = { ...testEnv, HUSKY: "0" };
+  const maxAttempts = isWin ? 3 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`\n=== Finance install${attempt > 1 ? ` (${attempt}/${maxAttempts})` : ""} ===`);
+    const r = spawnSync("pnpm", ["install", "--frozen-lockfile"], {
+      cwd: financeRoot,
+      env,
+      stdio: "inherit",
+      shell: isWin,
+    });
+    if (r.status === 0) {
+      console.log("OK: Finance install");
+      return;
+    }
+    if (attempt < maxAttempts) {
+      console.warn(`Finance install failed (exit ${r.status ?? "signal"}), retrying...`);
+    }
+  }
+
+  if (financeDepsReady()) {
+    console.warn(
+      "WARN: Finance install failed but server node_modules look usable; continuing with tests.",
+    );
+    return;
+  }
+
+  console.error("\nFAILED: Finance install");
+  process.exit(1);
+}
+
 console.log("Stockix quality gate (local CI mirror)");
 console.log(`Root: ${root}`);
 
 run("Install", "pnpm", ["install", "--frozen-lockfile"]);
+ensureFinanceDeps();
 sh("Security audit", "pnpm audit --prod --audit-level=high");
 sh(
   "Build workspace packages",
@@ -136,11 +175,10 @@ run("POS tests", "npm", ["run", "test:ci"], {
   cwd: path.join(root, "services/posnew/apps/pos-backend"),
   env: { ...testEnv, RUN_RBAC_ORG_ISOLATION: "0", REDIS_URL: "", MONGODB_URI: "" },
 });
-sh(
-  "Finance tests",
-  "cd services/stockix-finance && pnpm install --frozen-lockfile --ignore-scripts && cd packages/server && pnpm test",
-  { env: testEnv },
-);
+run("Finance tests", "pnpm", ["test"], {
+  cwd: financeServer,
+  env: { ...testEnv, CI: "true" },
+});
 
 run("Build API", "pnpm", ["--filter", "api", "build"]);
 run("Build worker", "pnpm", ["infra:worker:build"]);

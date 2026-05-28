@@ -168,9 +168,12 @@ jobs:
       - name: Run Finance tests
         run: |
           cd services/stockix-finance
-          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm install --frozen-lockfile
           cd packages/server
           pnpm test
+        env:
+          HUSKY: "0"
+          CI: "true"
         timeout-minutes: 10
 
       - name: Build API
