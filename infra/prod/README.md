@@ -32,8 +32,11 @@ docker compose --env-file .env up -d --build
 ```bash
 pnpm env:sync-prod
 cd infra/prod
-docker compose --env-file .env up -d
+docker compose --env-file .env build api dashboard infra-worker
+docker compose --env-file .env up -d --no-build
 ```
+
+Or rebuild and start in one step: `docker compose --env-file .env up -d --build`
 
 ## Mail (control plane + tenants)
 

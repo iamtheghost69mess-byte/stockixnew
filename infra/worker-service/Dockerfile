@@ -6,11 +6,14 @@ RUN apk add --no-cache docker-cli docker-cli-compose \
 WORKDIR /app
 
 COPY . .
+ENV NODE_OPTIONS=--max-old-space-size=3072
 RUN pnpm install --frozen-lockfile --filter api...
-# Bundle is produced on the host before compose (pnpm infra:worker:build). Re-running
-# tsup inside the image often OOMs on small VPS hosts when many services build in parallel.
-RUN test -f infra/worker-service/.runtime/worker.js \
-  || (echo "Missing infra/worker-service/.runtime/worker.js — run: pnpm infra:worker:build" && exit 1)
+RUN pnpm --filter @repo/auth build \
+  && pnpm --filter @repo/config build \
+  && pnpm --filter @repo/db build \
+  && pnpm --filter @repo/shared build \
+  && pnpm infra:worker:build
+RUN test -f infra/worker-service/.runtime/worker.js
 
 FROM node:22-alpine AS worker
 # Patch Alpine OS packages; drop bundled npm (build uses pnpm via corepack in the build stage only).
