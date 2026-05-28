@@ -53,7 +53,7 @@ function createLicenseApp(db: PostgresJsDatabase<typeof schema>) {
 function createAssignMockDb() {
   const unassignedLicense = {
     id: licenseId,
-    licenseKey: "STKX-UNAS-IGNED-KEY1",
+    licenseKey: "license-key-placeholder",
     product: "platform",
     planSlug: "starter",
     tenantId: null,

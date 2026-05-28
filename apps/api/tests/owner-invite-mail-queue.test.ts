@@ -39,7 +39,7 @@ const sampleJob = {
   to: "invitee@example.com",
   name: "Invitee",
   role: "read_only",
-  inviteUrl: "http://localhost:3000/accept-invite?token=abc123456789",
+  inviteUrl: "http://localhost:3000/accept-invite?token=invite-token-placeholder",
   actorId: "22222222-2222-2222-2222-222222222222",
   source: "invite" as const,
 };
@@ -65,7 +65,7 @@ describe("owner invite mail queue", () => {
 
   it("ownerInviteMailJobId uses owner id and invite url suffix", () => {
     expect(ownerInviteMailJobId(sampleJob.ownerId, sampleJob.inviteUrl)).toBe(
-      `owner-invite:${sampleJob.ownerId}:abc123456789`,
+      `owner-invite:${sampleJob.ownerId}:-placeholder`,
     );
   });
 
