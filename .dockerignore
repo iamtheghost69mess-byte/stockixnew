@@ -1,8 +1,15 @@
 **/node_modules
 **/.next
 **/dist
-# POS backend image copies packages/auth with file: dependency (pnpm pos:images:build)
-!packages/auth/dist
+# Host-built artifacts for production images (deploy runs pnpm build before compose)
+!packages/auth/dist/**
+!packages/config/dist/**
+!packages/db/dist/**
+!packages/shared/dist/**
+!apps/api/dist/**
+!apps/dashboard/.next/standalone/**
+!apps/dashboard/.next/static/**
+!infra/worker-service/.runtime/**
 .git
 .github
 .turbo
