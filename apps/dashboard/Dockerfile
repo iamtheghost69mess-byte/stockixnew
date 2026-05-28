@@ -2,6 +2,7 @@
 FROM node:20-alpine AS build
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=3072
 
 COPY . .
 
@@ -19,9 +20,8 @@ ENV NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME=${NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME}
 ARG NEXT_PUBLIC_SENTRY_DSN=
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 
-# Built on the host during deploy (pnpm --filter dashboard build with NEXT_PUBLIC_* from .env).
-RUN test -f apps/dashboard/.next/standalone/apps/dashboard/server.js \
-  || (echo "Missing dashboard standalone build — run: pnpm --filter dashboard build" && exit 1)
+RUN pnpm --filter dashboard build
+RUN test -f apps/dashboard/.next/standalone/apps/dashboard/server.js
 
 FROM node:20-alpine AS runner
 WORKDIR /app

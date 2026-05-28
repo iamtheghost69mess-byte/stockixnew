@@ -13,12 +13,7 @@ RUN pnpm --filter @repo/auth build \
   && pnpm --filter @repo/config build \
   && pnpm --filter @repo/db build \
   && pnpm --filter @repo/shared build
-# Prefer host-built dist from deploy (see .dockerignore); rebuild only if missing from context.
-RUN if [ -f apps/api/dist/index.js ]; then \
-      echo "Using API dist from deploy host build"; \
-    else \
-      pnpm --filter api build; \
-    fi
+RUN pnpm --filter api build
 RUN pnpm deploy --filter api --prod /deploy
 
 FROM node:20-alpine AS runner

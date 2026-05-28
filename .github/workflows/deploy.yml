@@ -230,10 +230,19 @@ jobs:
           elif [ -d /opt/stockix/app/.git ]; then cd /opt/stockix/app
           else echo "Clone repo to /opt/stockix/stockixnew or /opt/stockix/app"; exit 1; fi
           rollback() {
-            echo "Deploy failed — keeping latest code on disk; restarting last known containers."
+            echo "Deploy failed — attempting rollback to previous images."
             cd infra/prod
             docker compose --env-file .env logs --tail=300 || true
-            docker compose --env-file .env up -d --no-build || true
+            if [ -n "${PREV_API:-}" ] && [ -n "${PREV_DASH:-}" ] && [ -n "${PREV_WORKER:-}" ]; then
+              docker tag "${PREV_API}" stockix-api:latest 2>/dev/null || true
+              docker tag "${PREV_DASH}" stockix-dashboard:latest 2>/dev/null || true
+              docker tag "${PREV_WORKER}" stockix-infra-worker:latest 2>/dev/null || true
+              docker compose --env-file .env up -d --no-build \
+                api api-bullmq dashboard infra-worker || true
+              echo "Rolled back to previous images."
+            else
+              echo "No previous images to roll back to."
+            fi
           }
           trap rollback ERR
           fetch_origin() {
@@ -250,14 +259,13 @@ jobs:
           git checkout main
           git reset --hard origin/main
           echo "Deploy commit: $(git rev-parse HEAD)"
-          if ! grep -q '@repo/auth build' apps/api/Dockerfile; then
-            echo "ERROR: apps/api/Dockerfile on the server is stale (missing deploy fixes)."
-            echo "Expected @repo/auth build step; got:"
+          if ! grep -q 'pnpm --filter api build' apps/api/Dockerfile; then
+            echo "ERROR: apps/api/Dockerfile on the server is stale (missing in-image API build)."
             sed -n '8,22p' apps/api/Dockerfile
             exit 1
           fi
           if grep -A8 '^  api-bullmq:' infra/prod/docker-compose.yml | grep -q '^    build:'; then
-            echo "ERROR: api-bullmq must not have its own build: (use image: stockix-api:prod only)."
+            echo "ERROR: api-bullmq must not have its own build: (use image: stockix-api:latest only)."
             exit 1
           fi
           set -a
@@ -267,18 +275,6 @@ jobs:
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
           pnpm install --frozen-lockfile
-          export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
-          pnpm --filter @repo/auth build
-          pnpm --filter @repo/config build
-          pnpm --filter @repo/db build
-          pnpm --filter @repo/shared build
-          pnpm --filter api build
-          pnpm infra:worker:build
-          export NEXT_PUBLIC_STOCKIX_API_URL="${NEXT_PUBLIC_STOCKIX_API_URL:-${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}}"
-          export NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN="${ROOT_DOMAIN}"
-          export NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME="${PUBLIC_BASE_URL_SCHEME:-https}"
-          export NEXT_PUBLIC_SENTRY_DSN="${NEXT_PUBLIC_SENTRY_DSN:-}"
-          pnpm --filter dashboard build
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
           if [ -z "${BACKUP_B2_BUCKET:-}" ]; then
@@ -289,9 +285,15 @@ jobs:
           cd infra/prod
           export COMPOSE_FILE=docker-compose.yml
           export COMPOSE_PARALLEL_LIMIT=1
+          PREV_API=$(docker image inspect stockix-api:latest --format '{{.Id}}' 2>/dev/null || true)
+          PREV_DASH=$(docker image inspect stockix-dashboard:latest --format '{{.Id}}' 2>/dev/null || true)
+          PREV_WORKER=$(docker image inspect stockix-infra-worker:latest --format '{{.Id}}' 2>/dev/null || true)
           docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
-          docker builder prune -f
-          docker compose --env-file .env build --no-cache api dashboard infra-worker
+          docker compose --env-file .env build --no-cache --progress=plain api dashboard infra-worker
+          for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
+            docker image inspect "$img" >/dev/null || { echo "Missing image: $img"; exit 1; }
+          done
+          echo "All control-plane images built and verified."
           docker compose --env-file .env up -d --no-build --wait \
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \

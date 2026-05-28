@@ -1,22 +1,15 @@
 **/node_modules
 **/.next
 **/dist
-# Host-built artifacts for production images (deploy runs pnpm build before compose)
-!packages/auth/dist/**
-!packages/config/dist/**
-!packages/db/dist/**
-!packages/shared/dist/**
-!apps/api/dist/**
-!apps/dashboard/.next/standalone/**
-!apps/dashboard/.next/static/**
-!infra/worker-service/.runtime/**
+**/.turbo
+**/coverage
+infra/worker-service/.runtime/
+infra/worker-service/.tmp-dist/
 .git
 .github
-.turbo
 *.md
 .env
 .env.*
 !.env.example
-**/coverage
 services/stockix-finance/node_modules
 services/stockix-finance/**/.next

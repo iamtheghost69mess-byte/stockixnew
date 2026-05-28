@@ -216,7 +216,7 @@ services:
       - no-new-privileges:true
 
   api:
-    image: stockix-api:prod
+    image: stockix-api:latest
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
@@ -260,7 +260,7 @@ services:
 
   # Single BullMQ consumer — not exposed via Traefik. HTTP replicas use RUN_BULLMQ_CONSUMERS=false.
   api-bullmq:
-    image: stockix-api:prod
+    image: stockix-api:latest
     restart: unless-stopped
     mem_limit: 256m
     cpus: "0.25"
@@ -290,7 +290,7 @@ services:
       retries: 6
 
   infra-worker:
-    image: stockix-infra-worker:prod
+    image: stockix-infra-worker:latest
     build:
       context: ../..
       dockerfile: infra/worker-service/Dockerfile
@@ -339,7 +339,7 @@ services:
       - no-new-privileges:true
 
   dashboard:
-    image: stockix-dashboard:prod
+    image: stockix-dashboard:latest
     build:
       context: ../..
       dockerfile: apps/dashboard/Dockerfile

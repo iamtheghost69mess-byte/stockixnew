@@ -143,7 +143,7 @@ Add under **Repository → Settings → Secrets and variables → Actions**.
 
 **Note:** Names say **EC2** but work for **any Linux SSH host** (e.g. Hostinger).
 
-**Workflow behavior:** On **pull request**, GitHub runs quality checks only. On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`source infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose up -d --build`**.
+**Workflow behavior:** On **pull request**, GitHub runs quality checks only. On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`source infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose build`** (self-contained images tagged `stockix-*:latest`), verifies images exist, then **`docker compose up -d --no-build`**.
 
 **Feedback:**
 
