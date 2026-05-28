@@ -17,7 +17,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PNPM_VERSION: "9.15.9"
-  NODE_VERSION: "20"
+  NODE_VERSION: "22.22.1"
   TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
           SESSION_SECRET: test-session-secret-32-chars-minimum-length
           AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum
           PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum
-          INTERNAL_API_SECRET: test-internal-api-secret-32-chars-min
+          INTERNAL_API_SECRET: ci-internal-secret-placeholder
           DEPLOYMENT_SECRET_KEY: test-deployment-secret-key-32-chars-min
           LICENSE_SIGNING_SECRET: test-license-signing-secret-32-chars-min
           WORKER_SECRET: test-worker-secret-32-chars-minimum-length
@@ -96,7 +96,7 @@ jobs:
           SESSION_SECRET: test-session-secret-32-chars-minimum-length
           AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum
           PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum
-          INTERNAL_API_SECRET: test-internal-api-secret-32-chars-min
+          INTERNAL_API_SECRET: ci-internal-secret-placeholder
           DEPLOYMENT_SECRET_KEY: test-deployment-secret-key-32-chars-min
           LICENSE_SIGNING_SECRET: test-license-signing-secret-32-chars-min
           WORKER_SECRET: test-worker-secret-32-chars-minimum-length
