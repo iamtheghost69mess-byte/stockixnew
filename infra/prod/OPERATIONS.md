@@ -2,7 +2,11 @@
 
 # SECRETS ROTATED: 2026-05-27 — credentials rotated on production host after git history exposure (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
 
-Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored). After editing, sync and redeploy:
+Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored).
+
+**Do not run `source infra/prod/.env` in bash** — values like `SECURITY_HSTS` contain semicolons and can cause exit 127. Use `scripts/load-env-file.sh infra/prod/.env` or let CI/deploy load env safely.
+
+After editing, sync and redeploy:
 
 ```bash
 pnpm env:sync-prod          # copies infra/prod/.env → repo root .env (worker fallback)

@@ -42,6 +42,8 @@ jobs:
           test -n "${STAGING_EC2_HOST:-}" && test -n "${STAGING_EC2_USER:-}"
           ssh -o StrictHostKeyChecking=accept-new "${STAGING_EC2_USER}@${STAGING_EC2_HOST}" bash -s << 'REMOTE'
           set -euo pipefail
+          export CI=true
+          export PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
           cd /opt/stockix/stockixnew
           fetch_origin() {
             if git fetch --prune --force origin; then
@@ -56,11 +58,12 @@ jobs:
           fetch_origin
           git checkout staging
           git merge --ff-only origin/staging
-          set -a
-          source infra/staging/.env
-          set +a
+          chmod +x scripts/load-env-file.sh 2>/dev/null || true
+          # shellcheck disable=SC1091
+          . scripts/load-env-file.sh infra/staging/.env
           corepack enable && corepack prepare pnpm@9.15.9 --activate
-          pnpm install --frozen-lockfile
+          rm -rf node_modules
+          pnpm install --frozen-lockfile --ignore-scripts
           pnpm infra:worker:build
           pnpm --filter @repo/db db:migrate
           cd infra/staging
