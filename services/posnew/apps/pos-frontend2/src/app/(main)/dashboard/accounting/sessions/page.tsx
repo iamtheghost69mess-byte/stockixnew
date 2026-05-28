@@ -151,7 +151,7 @@ function SessionSummaryContent({ sessionId }: Readonly<{ sessionId: string }>) {
               <TableBody>
                 {recon.map((row, idx) => (
                   <TableRow key={`${String(row.at)}-${idx}`}>
-                    <TableCell className="pl-3 whitespace-nowrap text-xs tabular-nums">
+                    <TableCell className="whitespace-nowrap pl-3 text-xs tabular-nums">
                       {row.at ? format(new Date(row.at), "yyyy-MM-dd HH:mm") : "—"}
                     </TableCell>
                     <TableCell className="text-right text-xs tabular-nums">
@@ -163,7 +163,7 @@ function SessionSummaryContent({ sessionId }: Readonly<{ sessionId: string }>) {
                     <TableCell className="text-right text-xs tabular-nums">
                       {row.variance != null ? formatCurrency(Number(row.variance)) : "—"}
                     </TableCell>
-                    <TableCell className="pr-3 max-w-[14rem] truncate text-xs">{row.note || "—"}</TableCell>
+                    <TableCell className="max-w-[14rem] truncate pr-3 text-xs">{row.note || "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -188,7 +188,7 @@ function SessionSummaryContent({ sessionId }: Readonly<{ sessionId: string }>) {
             <TableBody>
               {entries.map((e: JournalEntryDoc) => (
                 <TableRow key={e._id}>
-                  <TableCell className="pl-3 font-mono text-xs font-medium">
+                  <TableCell className="pl-3 font-medium font-mono text-xs">
                     {formatJournalEntryReference(e.entryNumber)}
                   </TableCell>
                   <TableCell>
@@ -373,7 +373,7 @@ export default function AccountingSessionsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-6">
-      <header className="grid gap-6 border-b border-border/60 pb-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <header className="grid gap-6 border-border/60 border-b pb-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="min-w-0 space-y-2">
           <Button
             variant="ghost"
@@ -411,7 +411,7 @@ export default function AccountingSessionsPage() {
 
       <Card>
         <CardHeader className="border-b pb-4">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+          <CardTitle className="flex items-center gap-2 font-semibold text-base">
             <ClipboardList className="size-5 text-muted-foreground" aria-hidden />
             Cash close checklist
           </CardTitle>
@@ -449,20 +449,20 @@ export default function AccountingSessionsPage() {
 
       <Card>
         <CardHeader className="gap-y-2 border-b pb-6 @max-md/card-header:has-data-[slot=card-action]:grid-cols-1 @max-md/card-header:has-data-[slot=card-action]:gap-y-4">
-          <CardTitle className="text-lg font-semibold leading-tight">Sessions</CardTitle>
+          <CardTitle className="font-semibold text-lg leading-tight">Sessions</CardTitle>
           <CardDescription className="text-pretty">
             {total === 0
               ? "No sessions in this result set."
               : `Showing ${rangeStart}–${rangeEnd} of ${total.toLocaleString()}`}
           </CardDescription>
-          <CardAction className="w-full max-w-full pt-3 @max-md/card-header:col-start-1 @max-md/card-header:row-start-3 @max-md/card-header:row-span-1 @max-md/card-header:justify-self-stretch @max-md/card-header:self-stretch @md/card-header:max-w-[min(100%,28rem)] @md/card-header:pt-0 @md/card-header:self-end">
+          <CardAction className="@max-md/card-header:col-start-1 @max-md/card-header:row-span-1 @max-md/card-header:row-start-3 w-full @md/card-header:max-w-[min(100%,28rem)] max-w-full @md/card-header:self-end @max-md/card-header:self-stretch @max-md/card-header:justify-self-stretch @md/card-header:pt-0 pt-3">
             <div
               role="toolbar"
               aria-label="Session list filters and pagination"
-              className="flex w-full flex-col gap-3 @md/card-header:flex-row @md/card-header:flex-wrap @md/card-header:items-end @md/card-header:justify-end @md/card-header:gap-x-4 @md/card-header:gap-y-2"
+              className="flex w-full @md/card-header:flex-row flex-col @md/card-header:flex-wrap @md/card-header:items-end @md/card-header:justify-end gap-3 @md/card-header:gap-x-4 @md/card-header:gap-y-2"
             >
-              <div className="grid w-full min-w-0 gap-1.5 @md/card-header:w-[10.5rem]">
-                <Label htmlFor="sess-status" className="text-xs font-medium text-muted-foreground">
+              <div className="grid @md/card-header:w-[10.5rem] w-full min-w-0 gap-1.5">
+                <Label htmlFor="sess-status" className="font-medium text-muted-foreground text-xs">
                   Status
                 </Label>
                 <Select
@@ -482,8 +482,8 @@ export default function AccountingSessionsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid w-full min-w-0 gap-1.5 @md/card-header:w-[5.75rem]">
-                <Label htmlFor="sess-page-size" className="text-xs font-medium text-muted-foreground">
+              <div className="grid @md/card-header:w-[5.75rem] w-full min-w-0 gap-1.5">
+                <Label htmlFor="sess-page-size" className="font-medium text-muted-foreground text-xs">
                   Rows per page
                 </Label>
                 <Select
@@ -505,8 +505,8 @@ export default function AccountingSessionsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid w-full min-w-0 gap-1.5 @md/card-header:w-auto @md/card-header:min-w-[9.5rem]">
-                <span className="text-xs font-medium text-muted-foreground">Page</span>
+              <div className="grid @md/card-header:w-auto w-full @md/card-header:min-w-[9.5rem] min-w-0 gap-1.5">
+                <span className="font-medium text-muted-foreground text-xs">Page</span>
                 <div
                   aria-label={`Page ${page} of ${totalPages}`}
                   className="flex h-9 items-center gap-0.5 rounded-md border border-input bg-background px-0.5 shadow-xs"
@@ -590,7 +590,7 @@ export default function AccountingSessionsPage() {
                 <TableBody>
                   {sessions.map((s) => (
                     <TableRow key={s._id}>
-                      <TableCell className="pl-3 font-mono text-xs font-medium tabular-nums">
+                      <TableCell className="pl-3 font-medium font-mono text-xs tabular-nums">
                         {formatRegisterSessionReference(s.sessionNumber)}
                       </TableCell>
                       <TableCell>

@@ -74,7 +74,7 @@ export default function PosConfigHubPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-6 lg:p-10">
       <div>
-        <h1 className="font-bold text-3xl tracking-tight text-foreground">POS configuration</h1>
+        <h1 className="font-bold text-3xl text-foreground tracking-tight">POS configuration</h1>
         <p className="mt-2 text-muted-foreground text-sm lg:text-base">
           Central index for branch defaults, printing, tax, and catalog settings that affect the live floor and Open POS
           terminals.
@@ -101,7 +101,7 @@ export default function PosConfigHubPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <span className="text-primary text-xs font-medium underline-offset-4 group-hover:underline">
+                  <span className="font-medium text-primary text-xs underline-offset-4 group-hover:underline">
                     Open
                   </span>
                 </CardContent>

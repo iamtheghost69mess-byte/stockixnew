@@ -284,8 +284,8 @@ export default function IngredientsPage() {
               <Label htmlFor="ing-name">Name</Label>
               <Input id="ing-name" {...form.register("name")} placeholder="e.g. Tomatoes" />
             </div>
-            <div className="rounded-md border bg-muted/20 p-3 space-y-3">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 font-bold text-muted-foreground text-xs uppercase tracking-wider">
                 <LayoutGrid className="h-3 w-3" /> Procurement Forecasting
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -339,8 +339,8 @@ export default function IngredientsPage() {
                 />
               </div>
             </div>
-            <div className="rounded-md border bg-muted/20 p-3 space-y-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <div className="font-bold text-muted-foreground text-xs uppercase tracking-wider">
                 Identification & Serialization
               </div>
               <div className="space-y-2">

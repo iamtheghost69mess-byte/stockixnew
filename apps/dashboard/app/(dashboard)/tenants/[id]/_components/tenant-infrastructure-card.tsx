@@ -116,17 +116,32 @@ export function TenantInfrastructureCard({
                       const data = (await readJson(res)) as {
                         error?: string;
                         message?: string;
-                        impersonateUrl?: string;
+                        impersonatePostUrl?: string;
+                        token?: string;
                       };
                       if (!res.ok) {
                         toast.error(data.message ?? "Failed to impersonate tenant");
                         return;
                       }
-                      if (!data.impersonateUrl) {
+                      if (!data.impersonatePostUrl || !data.token) {
                         toast.error("Failed to impersonate tenant");
                         return;
                       }
-                      window.open(data.impersonateUrl, "_blank", "noopener");
+                      const tab = window.open("about:blank", "_blank", "noopener");
+                      if (!tab) {
+                        toast.error("Popup blocked by browser");
+                        return;
+                      }
+                      const form = tab.document.createElement("form");
+                      form.method = "POST";
+                      form.action = data.impersonatePostUrl;
+                      const tokenInput = tab.document.createElement("input");
+                      tokenInput.type = "hidden";
+                      tokenInput.name = "t";
+                      tokenInput.value = data.token;
+                      form.appendChild(tokenInput);
+                      tab.document.body.appendChild(form);
+                      form.submit();
                       toast.success("Impersonation session opened in new tab");
                     } catch {
                       toast.error("Failed to impersonate tenant");

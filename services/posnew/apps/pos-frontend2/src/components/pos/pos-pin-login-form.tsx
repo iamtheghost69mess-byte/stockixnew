@@ -123,7 +123,7 @@ export function PosPinLoginForm() {
       if (pinDisabled || pin.length >= maxPinLength) return;
       setPin((current) => (current.length >= maxPinLength ? current : `${current}${digit}`));
     },
-    [maxPinLength, pin, pinDisabled]
+    [pin, pinDisabled]
   );
 
   const handleClearPin = useCallback(() => {
@@ -140,15 +140,15 @@ export function PosPinLoginForm() {
     <Card className="relative mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden border-border bg-card text-card-foreground shadow-xl sm:max-h-[calc(100dvh-2rem)]">
       <div className="pointer-events-none absolute inset-x-0 -top-24 h-52 bg-primary/10 blur-3xl" />
 
-      <CardHeader className="space-y-4 border-b border-border/60 pb-5 text-center">
+      <CardHeader className="space-y-4 border-border/60 border-b pb-5 text-center">
         <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
           <Loader2 className={cn("size-5", pending ? "animate-spin" : "")} />
         </div>
         <div className="space-y-1">
-          <CardTitle className="text-2xl font-semibold tracking-tight">Terminal Login</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">Secure PIN authentication</CardDescription>
+          <CardTitle className="font-semibold text-2xl tracking-tight">Terminal Login</CardTitle>
+          <CardDescription className="text-muted-foreground text-sm">Secure PIN authentication</CardDescription>
         </div>
-        <div className="inline-flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
+        <div className="inline-flex items-center justify-center gap-2 font-medium text-muted-foreground text-xs">
           <ShieldCheck className="size-4" />
           <span>Enterprise POS v2</span>
         </div>
@@ -178,7 +178,7 @@ export function PosPinLoginForm() {
               <div className="space-y-2 text-center">
                 <Label
                   htmlFor="pos-pin-otp"
-                  className="justify-center text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                  className="justify-center font-semibold text-muted-foreground text-xs uppercase tracking-[0.18em]"
                 >
                   Identification Number
                 </Label>
@@ -203,7 +203,7 @@ export function PosPinLoginForm() {
                         key={idx}
                         index={idx}
                         mask
-                        className="size-12 rounded-lg border-border bg-background text-xl font-semibold"
+                        className="size-12 rounded-lg border-border bg-background font-semibold text-xl"
                       />
                     ))}
                   </InputOTPGroup>
@@ -214,7 +214,7 @@ export function PosPinLoginForm() {
                         key={idx}
                         index={idx}
                         mask
-                        className="size-12 rounded-lg border-border bg-background text-xl font-semibold"
+                        className="size-12 rounded-lg border-border bg-background font-semibold text-xl"
                       />
                     ))}
                   </InputOTPGroup>
@@ -235,7 +235,7 @@ export function PosPinLoginForm() {
                   size="lg"
                   disabled={pinDisabled || pin.length >= maxPinLength}
                   onClick={() => handleAppendDigit(digit)}
-                  className="h-12 text-lg font-semibold"
+                  className="h-12 font-semibold text-lg"
                 >
                   {digit}
                 </Button>
@@ -247,7 +247,7 @@ export function PosPinLoginForm() {
                 size="lg"
                 disabled={pinDisabled}
                 onClick={handleClearPin}
-                className="h-12 text-xs font-semibold uppercase tracking-[0.16em]"
+                className="h-12 font-semibold text-xs uppercase tracking-[0.16em]"
               >
                 Clear
               </Button>
@@ -258,7 +258,7 @@ export function PosPinLoginForm() {
                 size="lg"
                 disabled={pinDisabled || pin.length >= maxPinLength}
                 onClick={() => handleAppendDigit(0)}
-                className="h-12 text-lg font-semibold"
+                className="h-12 font-semibold text-lg"
               >
                 0
               </Button>
@@ -279,13 +279,13 @@ export function PosPinLoginForm() {
         ) : null}
       </CardContent>
 
-      <CardFooter className="flex flex-col gap-4 border-t border-border/60 pt-5">
+      <CardFooter className="flex flex-col gap-4 border-border/60 border-t pt-5">
         <Button
           type="button"
           size="lg"
           disabled={pinDisabled || !pinReady}
           onClick={() => void handleSubmit()}
-          className={cn("h-12 w-full text-sm font-semibold uppercase tracking-[0.18em]", pending && "pointer-events-none")}
+          className={cn("h-12 w-full font-semibold text-sm uppercase tracking-[0.18em]", pending && "pointer-events-none")}
         >
           {pending ? (
             <span className="flex items-center justify-center gap-2">

@@ -23,7 +23,7 @@ jobs:
 
       - name: Run Codacy Analysis CLI
         # Pinned to v4.4.7 for supply-chain safety.
-        uses: codacy/codacy-analysis-cli-action@master
+        uses: codacy/codacy-analysis-cli-action@v4.4.7
         with:
           verbose: true
           output: results.sarif

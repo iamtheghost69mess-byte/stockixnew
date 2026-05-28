@@ -345,7 +345,7 @@ export default function FinanceIntegrationPage() {
           </CardDescription>
         </CardHeader>
         {unmappedMenu.length > 0 && tab !== "menu" ? (
-          <CardContent className="text-sm text-muted-foreground">
+          <CardContent className="text-muted-foreground text-sm">
             {unmappedMenu.length} unmapped menu item(s) — open Menu items tab to fix.
           </CardContent>
         ) : null}
@@ -424,8 +424,8 @@ export default function FinanceIntegrationPage() {
                   className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{refName(row.posMenuItemId)}</p>
-                    <p className="text-muted-foreground text-xs font-mono">
+                    <p className="truncate font-medium">{refName(row.posMenuItemId)}</p>
+                    <p className="font-mono text-muted-foreground text-xs">
                       Finance #{row.bigcapitalItemId}
                       {row.bigcapitalItemName ? ` · ${row.bigcapitalItemName}` : ""}
                     </p>
@@ -510,7 +510,7 @@ export default function FinanceIntegrationPage() {
                 >
                   <div>
                     <p className="font-medium">{refName(row.posIngredientId)}</p>
-                    <p className="text-muted-foreground text-xs font-mono">
+                    <p className="font-mono text-muted-foreground text-xs">
                       Finance item #{row.bigcapitalItemId}
                     </p>
                   </div>
@@ -598,7 +598,7 @@ export default function FinanceIntegrationPage() {
                 >
                   <div>
                     <p className="font-medium">{refName(row.posSupplierId)}</p>
-                    <p className="text-muted-foreground text-xs font-mono">
+                    <p className="font-mono text-muted-foreground text-xs">
                       Finance vendor #{row.bigcapitalVendorId}
                     </p>
                   </div>
@@ -632,7 +632,7 @@ export default function FinanceIntegrationPage() {
             <CardContent className="grid gap-2 sm:grid-cols-2">
               {(eventsQ.data ?? []).map((ev) => (
                 <div key={ev.eventType} className="rounded-md border px-3 py-2 text-sm">
-                  <p className="font-mono font-medium">{ev.eventType}</p>
+                  <p className="font-medium font-mono">{ev.eventType}</p>
                   <p className="text-muted-foreground text-xs">{ev.description}</p>
                 </div>
               ))}
@@ -653,7 +653,7 @@ export default function FinanceIntegrationPage() {
                     <p className="font-mono">
                       {row.eventType} · {row.status}
                     </p>
-                    <p className="text-muted-foreground text-xs truncate">
+                    <p className="truncate text-muted-foreground text-xs">
                       {row.originatedBy || "—"} · {row.idempotencyKey}
                     </p>
                     {row.lastError ? (

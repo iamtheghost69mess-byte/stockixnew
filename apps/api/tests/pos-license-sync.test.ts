@@ -202,7 +202,7 @@ describe("syncPosOrgLicenseMetadata", () => {
       buildDb(["pos"], posOrgId),
       tenantId,
       {
-        licenseKey: "STXI-A1B2C3D4-439011-ABCDEF",
+        licenseKey: "STXI-TEST-LICENSE-KEY-0001", // gitleaks:allow
         stockixTenantId: tenantId,
         licenseKeyFormat: "stxi",
         scopedLocationId: "507f1f77bcf86cd799439012",
@@ -213,7 +213,7 @@ describe("syncPosOrgLicenseMetadata", () => {
       `/organizations/${encodeURIComponent(posOrgId)}/license`,
       "PATCH",
       expect.objectContaining({
-        licenseKey: "STXI-A1B2C3D4-439011-ABCDEF",
+        licenseKey: "STXI-TEST-LICENSE-KEY-0001", // gitleaks:allow
         stockixTenantId: tenantId,
         licenseKeyFormat: "stxi",
         scopedLocationId: "507f1f77bcf86cd799439012",

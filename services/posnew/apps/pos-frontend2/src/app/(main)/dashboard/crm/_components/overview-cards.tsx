@@ -85,7 +85,7 @@ function formatOrdersCountTooltipRow(value: unknown) {
   return (
     <div className="flex w-full flex-1 justify-between gap-4 leading-none">
       <span className="text-muted-foreground">Orders</span>
-      <span className="font-mono font-medium text-foreground tabular-nums">{formatInteger(value)}</span>
+      <span className="font-medium font-mono text-foreground tabular-nums">{formatInteger(value)}</span>
     </div>
   );
 }
@@ -95,7 +95,7 @@ function formatAovTooltipRow(money: Intl.NumberFormat, value: unknown) {
   return (
     <div className="flex w-full flex-1 justify-between gap-4 leading-none">
       <span className="text-muted-foreground">AOV</span>
-      <span className="font-mono font-medium text-foreground tabular-nums">
+      <span className="font-medium font-mono text-foreground tabular-nums">
         {money.format(Number.isFinite(n) ? n : 0)}
       </span>
     </div>
@@ -115,7 +115,7 @@ function BusyHoursCard({ rangeLabel, data, totalOrders, isLoading }: BusyHoursCa
     body = <Skeleton className="size-full min-h-24 rounded-lg" />;
   } else if (data.length === 0) {
     body = (
-      <div className="text-muted-foreground flex min-h-24 items-center justify-center text-sm">No hourly data.</div>
+      <div className="flex min-h-24 items-center justify-center text-muted-foreground text-sm">No hourly data.</div>
     );
   } else {
     body = (
@@ -173,7 +173,7 @@ function AovTrendCard({ rangeLabel, data, isLoading }: AovTrendCardProps) {
     body = <Skeleton className="size-full min-h-24 rounded-none" />;
   } else if (data.length === 0) {
     body = (
-      <div className="text-muted-foreground flex min-h-24 items-center justify-center px-4 text-sm">
+      <div className="flex min-h-24 items-center justify-center px-4 text-muted-foreground text-sm">
         No daily buckets.
       </div>
     );
@@ -264,7 +264,7 @@ function TopProductCard({ rangeLabel, topProductName, topProductQuantity, isLoad
   if (isLoading) {
     body = <Skeleton className="mt-4 h-9 w-32" />;
   } else if (topProductName == null || topProductName.length === 0) {
-    body = <p className="text-muted-foreground mt-2 text-sm">No line items in range.</p>;
+    body = <p className="mt-2 text-muted-foreground text-sm">No line items in range.</p>;
   } else {
     const qtyLabel =
       topProductQuantity === null || topProductQuantity === undefined
@@ -308,7 +308,7 @@ function DailyOrderVolumeCard({ rangeLabel, data, isLoading }: DailyOrderVolumeC
     body = <Skeleton className="h-24 w-full rounded-lg" />;
   } else if (data.length === 0) {
     body = (
-      <div className="text-muted-foreground flex h-24 items-center justify-center text-sm">
+      <div className="flex h-24 items-center justify-center text-muted-foreground text-sm">
         No paid orders in this range.
       </div>
     );
@@ -363,7 +363,7 @@ function DailyOrderVolumeCard({ rangeLabel, data, isLoading }: DailyOrderVolumeC
       </CardHeader>
       <CardContent>{body}</CardContent>
       <CardFooter>
-        <p className="text-muted-foreground flex items-center gap-2 text-sm">
+        <p className="flex items-center gap-2 text-muted-foreground text-sm">
           <BarChart3 className="size-4 shrink-0 opacity-70" aria-hidden />
           Paid order count per day (same window as above).
         </p>

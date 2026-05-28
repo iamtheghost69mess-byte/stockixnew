@@ -5,6 +5,12 @@ import { lighten } from 'polished';
 import { Box, Group, Stack } from '@/components';
 import styles from './PaymentPortal.module.scss';
 
+const safeMultilineText = (input: string | null | undefined): string =>
+  (input ?? '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .trim();
+
 export interface PaymentPageProps {
   // # Company name
   companyLogoUri: string;
@@ -150,7 +156,9 @@ export function InvoicePaymentPage({
             <Box className={styles.customerName}>{customerName}</Box>
 
             {customerAddress && (
-              <Box dangerouslySetInnerHTML={{ __html: customerAddress }} />
+              <Box style={{ whiteSpace: 'pre-line' }}>
+                {safeMultilineText(customerAddress)}
+              </Box>
             )}
           </Stack>
 
@@ -244,14 +252,14 @@ export function InvoicePaymentPage({
       </Stack>
 
       <Stack spacing={18} className={styles.footer}>
-        <Box dangerouslySetInnerHTML={{ __html: organizationAddress }}></Box>
+        <Box style={{ whiteSpace: 'pre-line' }}>
+          {safeMultilineText(organizationAddress)}
+        </Box>
 
         {copyrightText && (
-          <Stack
-            spacing={0}
-            className={styles.footerText}
-            dangerouslySetInnerHTML={{ __html: copyrightText }}
-          ></Stack>
+          <Stack spacing={0} className={styles.footerText} style={{ whiteSpace: 'pre-line' }}>
+            {safeMultilineText(copyrightText)}
+          </Stack>
         )}
       </Stack>
     </Box>

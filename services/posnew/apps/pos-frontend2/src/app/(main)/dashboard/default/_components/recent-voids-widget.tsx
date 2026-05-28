@@ -57,7 +57,7 @@ export function RecentVoidsWidget({ rows, isLoading }: RecentVoidsWidgetProps) {
                   <TableCell>{row.tableNumber || "—"}</TableCell>
                   <TableCell>{row.voidedBy || "—"}</TableCell>
                   <TableCell className="max-w-[320px] truncate">{row.reason || "—"}</TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">{formatCreatedAt(row.createdAt)}</TableCell>
+                  <TableCell className="text-right text-muted-foreground text-xs">{formatCreatedAt(row.createdAt)}</TableCell>
                 </TableRow>
               ))
             )}

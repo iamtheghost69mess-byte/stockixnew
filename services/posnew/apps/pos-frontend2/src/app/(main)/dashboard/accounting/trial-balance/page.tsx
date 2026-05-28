@@ -212,7 +212,7 @@ export default function TrialBalancePage() {
                 </TableBody>
                 {rows.length > 0 ? (
                   <TableFooter>
-                    <TableRow className="border-t-2 border-border bg-muted/60 font-semibold hover:bg-muted/60">
+                    <TableRow className="border-border border-t-2 bg-muted/60 font-semibold hover:bg-muted/60">
                       <TableCell colSpan={3} className="pl-4 text-foreground">
                         Totals
                       </TableCell>

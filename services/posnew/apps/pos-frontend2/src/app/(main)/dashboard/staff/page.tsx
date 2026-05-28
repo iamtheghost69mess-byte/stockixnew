@@ -542,7 +542,7 @@ export default function StaffPage() {
                       </TableCell>
                       <TableCell className="align-middle">
                         <div className="flex max-w-56 flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5 text-sm font-medium">
+                          <div className="flex items-center gap-1.5 font-medium text-sm">
                             <KeyRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                             {staff.hasLoginPin ? (
                               <span className="text-xs">Configured</span>
@@ -551,7 +551,7 @@ export default function StaffPage() {
                             )}
                           </div>
                           <span className="pl-5 text-[11px] text-muted-foreground leading-snug">Hidden for security.</span>
-                          <div className="pl-5 pt-1">
+                          <div className="pt-1 pl-5">
                             <div className="flex flex-wrap gap-1.5">
                               <Button
                                 type="button"
@@ -736,7 +736,7 @@ export default function StaffPage() {
               <div className="space-y-3 rounded-md border p-3">
                 <div>
                   <Label>Assigned branches</Label>
-                  <p className="text-xs text-muted-foreground">Select one or more branches this staff member can access.</p>
+                  <p className="text-muted-foreground text-xs">Select one or more branches this staff member can access.</p>
                 </div>
                 <Controller
                   control={form.control}
@@ -746,7 +746,7 @@ export default function StaffPage() {
                     return (
                       <div className="space-y-2">
                         {locationOptions.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No branches found.</p>
+                          <p className="text-muted-foreground text-xs">No branches found.</p>
                         ) : (
                           locationOptions.map((location) => {
                             const checked = selected.includes(location._id);

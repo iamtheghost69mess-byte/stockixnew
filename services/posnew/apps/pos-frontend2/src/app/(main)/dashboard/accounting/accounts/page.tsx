@@ -71,7 +71,7 @@ export default function ChartOfAccountsPage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" className="-ml-2 mb-1" asChild>
+      <Button variant="ghost" size="sm" className="mb-1 -ml-2" asChild>
         <Link href="/dashboard/accounting">
           <ArrowLeft className="mr-2 size-4" />
           Accounting overview

@@ -4,7 +4,7 @@ describe("bootstrapPosOrganization", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    process.env.POS_PLATFORM_API_KEY = "pk_live_test_key_1234567890";
+    process.env.POS_PLATFORM_API_KEY = "pk_live_test_key_1234567890"; // gitleaks:allow
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

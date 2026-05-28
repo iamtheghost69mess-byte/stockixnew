@@ -125,7 +125,7 @@ export default function ReconciliationDetailPage() {
   const comparisonData = buildComparisonData(match);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <Button asChild variant="ghost" className="-ml-4 h-8 text-muted-foreground hover:text-foreground">
@@ -134,7 +134,7 @@ export default function ReconciliationDetailPage() {
             </Link>
           </Button>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">Audit Session</h1>
+            <h1 className="font-bold text-3xl tracking-tight">Audit Session</h1>
             <MatchStatusBadge status={match.matchStatus} />
           </div>
           <p className="text-muted-foreground">
@@ -254,7 +254,7 @@ export default function ReconciliationDetailPage() {
       </div>
 
       {match.matchStatus !== "matched" && (
-        <Alert className="bg-amber-50 border-amber-200 text-amber-800">
+        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
           <AlertCircle className="h-5 w-5 text-amber-600" />
           <AlertTitle className="font-semibold">Discrepancy Detected</AlertTitle>
           <AlertDescription className="text-amber-700">
@@ -265,7 +265,7 @@ export default function ReconciliationDetailPage() {
       )}
 
       <Card className="border shadow-md">
-        <CardHeader className="bg-muted/30 border-b">
+        <CardHeader className="border-b bg-muted/30">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Reconciliation Audit Matrix</CardTitle>
@@ -280,51 +280,51 @@ export default function ReconciliationDetailPage() {
             <TableHeader className="bg-muted/20">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-[200px] border-r">Item Description</TableHead>
-                <TableHead className="text-center font-bold text-blue-600 bg-blue-50/30 border-r">
+                <TableHead className="border-r bg-blue-50/30 text-center font-bold text-blue-600">
                   Ordered (PO)
                 </TableHead>
-                <TableHead className="text-center font-bold text-amber-600 bg-amber-50/30 border-r">
+                <TableHead className="border-r bg-amber-50/30 text-center font-bold text-amber-600">
                   Received (GRN)
                 </TableHead>
-                <TableHead colSpan={2} className="text-center font-bold text-emerald-600 bg-emerald-50/30">
+                <TableHead colSpan={2} className="bg-emerald-50/30 text-center font-bold text-emerald-600">
                   Billed (Invoice)
                 </TableHead>
               </TableRow>
-              <TableRow className="bg-muted/10 h-10 text-[10px] uppercase tracking-wider text-muted-foreground hover:bg-transparent">
+              <TableRow className="h-10 bg-muted/10 text-[10px] text-muted-foreground uppercase tracking-wider hover:bg-transparent">
                 <TableHead className="border-r">Ingredient Name / SKU</TableHead>
-                <TableHead className="text-center border-r">Qty (PO)</TableHead>
-                <TableHead className="text-center border-r">Qty (GRN)</TableHead>
+                <TableHead className="border-r text-center">Qty (PO)</TableHead>
+                <TableHead className="border-r text-center">Qty (GRN)</TableHead>
                 <TableHead className="text-center">Qty (Bill)</TableHead>
                 <TableHead className="text-center">Price (Bill)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {comparisonData.map((row: any) => (
-                <TableRow key={row.ingredientId} className="group transition-colors h-16">
-                  <TableCell className="border-r align-middle py-0">
-                    <div className="flex flex-col justify-center h-full">
+                <TableRow key={row.ingredientId} className="group h-16 transition-colors">
+                  <TableCell className="border-r py-0 align-middle">
+                    <div className="flex h-full flex-col justify-center">
                       <span className="font-semibold text-sm">{row.name}</span>
                       <span className="text-[10px] text-muted-foreground uppercase">{row.sku}</span>
                     </div>
                   </TableCell>
 
                   {/* PO Column */}
-                  <TableCell className="text-center border-r bg-blue-50/5 align-middle font-medium tabular-nums text-sm">
+                  <TableCell className="border-r bg-blue-50/5 text-center align-middle font-medium text-sm tabular-nums">
                     {row.orderedQty} {row.unit}
-                    <div className="text-[10px] text-muted-foreground font-normal">${row.orderedPrice} / unit</div>
+                    <div className="font-normal text-[10px] text-muted-foreground">${row.orderedPrice} / unit</div>
                   </TableCell>
 
                   {/* GRN Column */}
                   <TableCell
-                    className={`text-center border-r align-middle tabular-nums text-sm ${
+                    className={`border-r text-center align-middle text-sm tabular-nums ${
                       row.receivedQty !== row.orderedQty
-                        ? "bg-amber-50 text-amber-700 font-bold"
+                        ? "bg-amber-50 font-bold text-amber-700"
                         : "bg-amber-50/5 text-muted-foreground"
                     }`}
                   >
                     {row.receivedQty} {row.unit}
                     {row.receivedQty !== row.orderedQty && (
-                      <div className="text-[9px] flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1 text-[9px]">
                         <AlertTriangle className="h-2.5 w-2.5" />
                         {row.receivedQty > row.orderedQty ? "Over-receipt" : "Short-receipt"}
                       </div>
@@ -333,15 +333,15 @@ export default function ReconciliationDetailPage() {
 
                   {/* Bill Qty Column */}
                   <TableCell
-                    className={`text-center align-middle tabular-nums text-sm ${
+                    className={`text-center align-middle text-sm tabular-nums ${
                       row.billedQty !== row.receivedQty
-                        ? "bg-red-50 text-destructive font-bold"
+                        ? "bg-red-50 font-bold text-destructive"
                         : "bg-emerald-50/5 text-muted-foreground"
                     }`}
                   >
                     {row.billedQty} {row.unit}
                     {row.billedQty !== row.receivedQty && (
-                      <div className="text-[9px] flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1 text-[9px]">
                         <AlertCircle className="h-2.5 w-2.5" /> Mismatch
                       </div>
                     )}
@@ -349,15 +349,15 @@ export default function ReconciliationDetailPage() {
 
                   {/* Bill Price Column */}
                   <TableCell
-                    className={`text-center align-middle tabular-nums text-sm border-l ${
+                    className={`border-l text-center align-middle text-sm tabular-nums ${
                       row.billedPrice !== row.orderedPrice
-                        ? "bg-emerald-100/50 text-emerald-900 font-bold"
+                        ? "bg-emerald-100/50 font-bold text-emerald-900"
                         : "bg-emerald-50/5 text-muted-foreground"
                     }`}
                   >
                     ${row.billedPrice}
                     {row.billedPrice !== row.orderedPrice && (
-                      <div className="text-[9px] font-normal flex items-center justify-center gap-1 opacity-80 uppercase tracking-tighter">
+                      <div className="flex items-center justify-center gap-1 font-normal text-[9px] uppercase tracking-tighter opacity-80">
                         vs ${row.orderedPrice} PO
                       </div>
                     )}
@@ -372,7 +372,7 @@ export default function ReconciliationDetailPage() {
       <div className="flex flex-col gap-6 lg:flex-row">
         <Card className="flex-1">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
               <Truck className="h-5 w-5 text-muted-foreground" />
               Warehouse Receipt History
             </CardTitle>
@@ -380,12 +380,12 @@ export default function ReconciliationDetailPage() {
           <CardContent>
             <div className="space-y-4">
               {match.associatedGrns?.map((grn: any) => (
-                <div key={grn._id} className="flex items-center justify-between p-3 rounded-md border bg-muted/20">
+                <div key={grn._id} className="flex items-center justify-between rounded-md border bg-muted/20 p-3">
                   <div className="flex items-center gap-3">
                     <PackageCheck className="h-4 w-4 text-green-500" />
                     <div className="flex flex-col">
                       <span className="font-medium text-sm">Receipt #{grn._id.slice(-6).toUpperCase()}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-muted-foreground text-xs">
                         Finalized on {new Date(grn.receivedAt).toLocaleDateString()}
                       </span>
                     </div>
@@ -404,8 +404,8 @@ export default function ReconciliationDetailPage() {
             <CardTitle className="text-lg">Audit Narrative</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border p-4 text-sm bg-muted/10 leading-relaxed text-muted-foreground">
-              <Info className="h-4 w-4 inline mr-2 -mt-1" />
+            <div className="rounded-md border bg-muted/10 p-4 text-muted-foreground text-sm leading-relaxed">
+              <Info className="-mt-1 mr-2 inline h-4 w-4" />
               This automated audit compares the finalized states of the Procurement Chain. Gaps between **Received** and
               **Billed** quantities usually indicate billing errors for unreceived stock. Gaps between **PO Unit Price**
               and **Bill Unit Price** indicate vendor price spikes not reflected in the agreement.
@@ -426,14 +426,14 @@ function StatCard({ icon, title, value, label, subLabel }: any) {
   return (
     <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="font-medium text-sm">{title}</CardTitle>
         {icon}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          <Badge variant="outline" className="text-[10px] font-normal px-2 bg-muted/50">
+        <div className="font-bold text-2xl">{value}</div>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-muted-foreground text-xs">{label}</span>
+          <Badge variant="outline" className="bg-muted/50 px-2 font-normal text-[10px]">
             {subLabel}
           </Badge>
         </div>
@@ -445,15 +445,15 @@ function StatCard({ icon, title, value, label, subLabel }: any) {
 function MatchStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "matched":
-      return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">Strictly Matched</Badge>;
+      return <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">Strictly Matched</Badge>;
     case "quantity_mismatch":
-      return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Qty Discrepancy</Badge>;
+      return <Badge className="border-amber-200 bg-amber-50 text-amber-700">Qty Discrepancy</Badge>;
     case "price_mismatch":
-      return <Badge className="bg-destructive/5 text-destructive border-destructive/20">Price Audit Required</Badge>;
+      return <Badge className="border-destructive/20 bg-destructive/5 text-destructive">Price Audit Required</Badge>;
     case "overridden":
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-300">Overridden</Badge>;
+      return <Badge className="border-amber-300 bg-amber-100 text-amber-800">Overridden</Badge>;
     case "resolved":
-      return <Badge className="bg-sky-50 text-sky-700 border-sky-200">Resolved</Badge>;
+      return <Badge className="border-sky-200 bg-sky-50 text-sky-700">Resolved</Badge>;
     default:
       return <Badge variant="secondary">In Review</Badge>;
   }

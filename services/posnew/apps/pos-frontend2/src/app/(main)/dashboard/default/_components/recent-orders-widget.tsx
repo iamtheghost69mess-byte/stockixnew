@@ -80,7 +80,7 @@ export function RecentOrdersWidget({ rows, isLoading }: RecentOrdersWidgetProps)
                     />
                   </TableCell>
                   <TableCell className="text-right">{formatCurrency(row.totalAmount || 0)}</TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">
+                  <TableCell className="text-right text-muted-foreground text-xs">
                     {formatCreatedAt(row.createdAt)}
                   </TableCell>
                 </TableRow>

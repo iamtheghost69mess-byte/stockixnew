@@ -71,7 +71,7 @@ export function FinanceSyncStatusBadge({
         {compact ? "Finance ✗" : "✗ Finance sync failed"}
       </Badge>
       {!compact && error?.trim() ? (
-        <span className="text-destructive max-w-[240px] truncate text-xs" title={error}>
+        <span className="max-w-[240px] truncate text-destructive text-xs" title={error}>
           {error.trim()}
         </span>
       ) : null}

@@ -17,8 +17,6 @@ import {
   Save,
   Search,
   Send,
-  TrendingDown,
-  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -465,7 +463,7 @@ export default function StockTakeDetailPage() {
                       </div>
                     </TableCell>
                     {showBinColumn ? (
-                      <TableCell className="text-muted-foreground max-w-[140px] truncate text-sm">
+                      <TableCell className="max-w-[140px] truncate text-muted-foreground text-sm">
                         {binLabel(line.bin)}
                       </TableCell>
                     ) : null}

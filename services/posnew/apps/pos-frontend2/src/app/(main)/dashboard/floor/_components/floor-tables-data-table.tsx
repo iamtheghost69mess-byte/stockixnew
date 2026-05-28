@@ -520,13 +520,6 @@ export function FloorTablesDataTable(props: Readonly<FloorTablesDataTableProps>)
   React.useEffect(() => {
     setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
   }, [
-    filters.search,
-    filters.status,
-    filters.vip,
-    filters.seatsMin,
-    filters.seatsMax,
-    filters.priceMin,
-    filters.priceMax,
   ]);
 
   const ccy = currency.trim().toUpperCase() || "USD";

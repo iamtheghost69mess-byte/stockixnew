@@ -273,8 +273,8 @@ export function SetupWizardClient() {
     <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 p-6 lg:grid-cols-[220px_1fr]">
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
       <Card className="h-fit">
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+        <CardHeader className="px-4 pt-4 pb-2">
+          <CardTitle className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
             Setup
           </CardTitle>
         </CardHeader>
@@ -292,8 +292,8 @@ export function SetupWizardClient() {
                 className={[
                   "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
                   isCurrent
-                    ? "bg-primary text-primary-foreground font-medium"
-                    : "hover:bg-muted text-foreground",
+                    ? "bg-primary font-medium text-primary-foreground"
+                    : "text-foreground hover:bg-muted",
                   locked ? "cursor-not-allowed opacity-40" : "cursor-pointer",
                 ].join(" ")}
               >
@@ -345,7 +345,7 @@ export function SetupWizardClient() {
                   onChange={(e) => set("displayName")(e.target.value)}
                   placeholder="e.g. The Coffee House"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Shown on receipts, menus, and customer-facing screens.
                 </p>
               </div>
@@ -431,10 +431,10 @@ export function SetupWizardClient() {
                   disabled={isUploadingLogo}
                 />
                 {isUploadingLogo && (
-                  <p className="text-xs text-muted-foreground">Uploading…</p>
+                  <p className="text-muted-foreground text-xs">Uploading…</p>
                 )}
                 {form.logoUrl && !isUploadingLogo && (
-                  <p className="text-xs text-emerald-600">Logo uploaded successfully.</p>
+                  <p className="text-emerald-600 text-xs">Logo uploaded successfully.</p>
                 )}
               </div>
 
@@ -489,14 +489,14 @@ export function SetupWizardClient() {
                   </SelectContent>
                 </Select>
                 {form.defaultCostMethod && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {COST_METHOD_HELP[form.defaultCostMethod]}
                   </p>
                 )}
                 {isFifoOrFefo && (
                   <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                    <p className="text-amber-700 text-xs dark:text-amber-400">
                       FIFO/FEFO requires opening stock before processing live orders.
                       You can add it from Inventory after launch.
                     </p>
@@ -531,7 +531,7 @@ export function SetupWizardClient() {
                 </Select>
               </div>
 
-              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="rounded-md border bg-muted/30 p-3 text-muted-foreground text-xs">
                 Advanced inventory controls — alerts, webhooks, reservation strategy — are
                 auto-configured with safe defaults and adjustable later in Settings.
               </div>
@@ -550,7 +550,7 @@ export function SetupWizardClient() {
                   onChange={(e) => set("mainLocationName")(e.target.value)}
                   placeholder="e.g. Main Branch"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Your primary branch name. Can be updated later from Locations.
                 </p>
               </div>
@@ -564,13 +564,13 @@ export function SetupWizardClient() {
                   onChange={(e) => set("zoneName")(e.target.value)}
                   placeholder="e.g. Main Dining, Ground Floor, Rooftop"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Tables and orders are assigned to zones. Add more zones from Locations after
                   launch.
                 </p>
               </div>
 
-              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="rounded-md border bg-muted/30 p-3 text-muted-foreground text-xs">
                 POS defaults, order flow, and staff permission baselines are automatically
                 applied when you complete this step.
               </div>
@@ -584,7 +584,7 @@ export function SetupWizardClient() {
             <div className="space-y-6">
               {/* Required items */}
               <div className="space-y-2">
-                <p className="text-sm font-medium">Required before launch</p>
+                <p className="font-medium text-sm">Required before launch</p>
                 {Object.entries(status?.checklist ?? {})
                   .filter(
                     ([k]) => k !== "requiresOpeningStock" && CHECKLIST_META[k]?.tier === "required"
@@ -611,7 +611,7 @@ export function SetupWizardClient() {
 
               {/* Advisory items */}
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Complete after launch</p>
+                <p className="font-medium text-muted-foreground text-sm">Complete after launch</p>
                 {Object.entries(status?.checklist ?? {})
                   .filter(
                     ([k]) => k !== "requiresOpeningStock" && CHECKLIST_META[k]?.tier === "advisory"
@@ -630,7 +630,7 @@ export function SetupWizardClient() {
                         <div>
                           <p className="text-sm">{CHECKLIST_META[k]?.label ?? k}</p>
                           {!v && CHECKLIST_META[k]?.hint && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
+                            <p className="mt-0.5 text-muted-foreground text-xs">
                               {CHECKLIST_META[k].hint}
                             </p>
                           )}
@@ -647,7 +647,7 @@ export function SetupWizardClient() {
               {!status?.readyToGoLive && (status?.failedItems?.length ?? 0) > 0 && (
                 <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                  <p className="text-xs text-destructive">
+                  <p className="text-destructive text-xs">
                     Complete the missing required items above before launching.
                   </p>
                 </div>
@@ -656,7 +656,7 @@ export function SetupWizardClient() {
           )}
 
           {/* ── Sticky footer ──────────────────────────────────────────── */}
-          <div className="sticky bottom-0 left-0 right-0 -mx-1 border-t bg-background/95 px-1 pt-4 backdrop-blur supports-backdrop-filter:bg-background/80">
+          <div className="sticky right-0 bottom-0 left-0 -mx-1 border-t bg-background/95 px-1 pt-4 backdrop-blur supports-backdrop-filter:bg-background/80">
             <div className="flex items-center justify-between gap-2">
               <Button
                 variant="outline"

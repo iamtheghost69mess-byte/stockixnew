@@ -149,7 +149,7 @@ export function FinanceDemoOverview(): ReactElement {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="font-medium text-xl text-emerald-600 tabular-nums">
+            <p className="font-medium text-emerald-600 text-xl tabular-nums">
               +{formatCurrency(DEMO_NET_OPERATING_MTD, { noDecimals: false })}
             </p>
             <p className="text-muted-foreground text-xs">MTD accrual netOperating (illustrative).</p>

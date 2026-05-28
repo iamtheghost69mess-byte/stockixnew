@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { OfflineStatusBanner } from "@/components/pos/offline-status-banner";
@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { posDeleteOrder, posMarkOrderPaid, posUpdateOrderStatus } from "@/lib/pos-order-api";
+import { posDeleteOrder, } from "@/lib/pos-order-api";
 import { posAccountingPostOrderRefund } from "@/lib/pos-accounting-api";
 import { postInventoryReturn } from "@/lib/inventory-api";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ import type { PosMenuItem, PosModifierGroup, PosCombo } from "@/lib/pos-catalog-
 import { usePosSession } from "../_hooks/use-pos-session";
 import { PosCartSidebar } from "./pos-cart-sidebar";
 import { PosCategorySidebar } from "./pos-category-sidebar";
-import { type PosPaymentConfirmPayload, PosPaymentDialog } from "./pos-payment-dialog";
+import { PosPaymentDialog } from "./pos-payment-dialog";
 import { PosProductGrid } from "./pos-product-grid";
 import { PosReceiptPreviewDialog } from "./pos-receipt-preview-dialog";
 import { type PosRefundConfirmPayload, PosRefundDialog } from "./pos-refund-dialog";
@@ -53,7 +53,6 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
     setLineQuantity,
     removeLineWithReason,
     paying,
-    setPaying,
     handlePayment,
     handlePrintReceipt,
     printingReceipt,
@@ -326,32 +325,32 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-8 bg-zinc-950">
         <div className="relative">
-          <div className="absolute inset-0 blur-2xl bg-emerald-500/20 animate-pulse rounded-full" />
-          <Loader2 className="h-12 w-12 animate-spin text-emerald-500 relative z-10" />
+          <div className="absolute inset-0 animate-pulse rounded-full bg-emerald-500/20 blur-2xl" />
+          <Loader2 className="relative z-10 h-12 w-12 animate-spin text-emerald-500" />
         </div>
         <div className="flex flex-col items-center gap-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Professional POS</p>
+          <p className="font-black text-[10px] text-zinc-500 uppercase tracking-[0.3em]">Professional POS</p>
           <div className="h-px w-12 bg-zinc-800" />
-          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-700">Syncing Catalog...</p>
+          <p className="font-bold text-[9px] text-zinc-700 uppercase tracking-widest">Syncing Catalog...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 overflow-hidden text-zinc-100">
+    <div className="flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100">
       {/* Header */}
-      <header className="flex h-16 shrink-0 items-center justify-between border-zinc-800/50 border-b bg-zinc-950/50 px-4 md:px-6 backdrop-blur-xl z-30">
+      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-zinc-800/50 border-b bg-zinc-950/50 px-4 backdrop-blur-xl md:px-6">
         <div className="flex items-center gap-6">
-          <Link href="/pos" className="text-zinc-500 hover:text-white transition-colors">
+          <Link href="/pos" className="text-zinc-500 transition-colors hover:text-white">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="flex flex-col relative">
+          <div className="relative flex flex-col">
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
-              <h1 className="text-xl font-black text-white uppercase leading-none tracking-tight">Table {tableNo}</h1>
+              <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+              <h1 className="font-black text-white text-xl uppercase leading-none tracking-tight">Table {tableNo}</h1>
             </div>
-            <span className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] mt-1.5 ps-4">
+            <span className="mt-1.5 ps-4 font-black text-[9px] text-zinc-500 uppercase tracking-[0.2em]">
               {activeOrderId ? `Order #${activeOrderId.slice(-6)}` : "Live Session"}
             </span>
           </div>
@@ -371,21 +370,21 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
               </Alert>
             ) : null}
           </div>
-          <div className="h-8 w-px bg-zinc-800 mx-2" />
+          <div className="mx-2 h-8 w-px bg-zinc-800" />
           <div className="text-right">
-            <div className="text-xs font-black text-white uppercase">{posUser?.name}</div>
-            <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{posUser?.role}</div>
+            <div className="font-black text-white text-xs uppercase">{posUser?.name}</div>
+            <div className="font-bold text-[10px] text-zinc-500 uppercase tracking-widest">{posUser?.role}</div>
           </div>
         </div>
       </header>
 
       {/* 3-Column Layout: Stacks vertically on mobile, spreads horizontally on tablets and desktops */}
-      <main className="flex flex-1 flex-col md:flex-row overflow-hidden relative min-h-0">
+      <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {/* Sidebar Toggle Button (Floating on Border) - Only visible when side-by-side */}
         <button
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           className={cn(
-            "absolute top-1/2 -translate-y-1/2 z-50 hidden md:flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-500 shadow-xl hover:text-emerald-500 transition-all duration-300 active:scale-95",
+            "absolute top-1/2 z-50 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-500 shadow-xl transition-all duration-300 hover:text-emerald-500 active:scale-95 md:flex",
             isSidebarCollapsed ? "left-[60px]" : "left-[268px]",
           )}
         >
@@ -397,7 +396,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
         {/* Left: Nested Categories */}
         <aside
           className={cn(
-            "shrink-0 bg-zinc-950 transition-all duration-300 relative",
+            "relative shrink-0 bg-zinc-950 transition-all duration-300",
             "hidden md:block", // Hide categories on mobile to save space
             isSidebarCollapsed ? "w-20" : "w-72",
           )}
@@ -414,7 +413,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
         </aside>
 
         {/* Middle: Product Selection */}
-        <div className="flex-1 overflow-hidden relative min-h-0">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <PosProductGrid
             items={items}
             selectedCategoryId={selectedCategoryId}
@@ -432,7 +431,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
         </div>
 
         {/* Check Ledger (Sidebar): Fixed height on mobile, full height on tablets/desktop */}
-        <aside className="w-full md:w-[340px] xl:w-[380px] shrink-0 border-t md:border-t-0 md:border-l border-zinc-800 bg-zinc-950/40 backdrop-blur-xl flex flex-col h-[460px] md:h-full overflow-hidden">
+        <aside className="flex h-[460px] w-full shrink-0 flex-col overflow-hidden border-zinc-800 border-t bg-zinc-950/40 backdrop-blur-xl md:h-full md:w-[340px] md:border-t-0 md:border-l xl:w-[380px]">
           <PosCartSidebar
             cart={cart}
             items={items}
@@ -614,15 +613,15 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
             <DialogTitle>Select combo components</DialogTitle>
             <DialogDescription>{comboTarget?.name || "Combo"}</DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto space-y-4">
+          <div className="max-h-[60vh] space-y-4 overflow-y-auto">
             {(comboTarget?.slots || []).map((slot) => {
               const selectedMenuItemId = comboSelections[slot.name] || "";
               return (
                 <div key={slot.name} className="rounded-lg border border-zinc-800 p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold text-zinc-100">{slot.name}</div>
+                    <div className="font-semibold text-sm text-zinc-100">{slot.name}</div>
                     {slot.required ? (
-                      <span className="text-[10px] uppercase tracking-widest text-amber-400">Required</span>
+                      <span className="text-[10px] text-amber-400 uppercase tracking-widest">Required</span>
                     ) : null}
                   </div>
                   <Select
@@ -671,18 +670,18 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
               {modifierTargetItem?.name || "Item"}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto space-y-4">
+          <div className="max-h-[60vh] space-y-4 overflow-y-auto">
             {(modifierTargetItem ? modifierGroupsByItem(modifierTargetItem) : []).map((group) => {
               const selected = modifierSelections[String(group._id)] || [];
               const maxSelections = Math.max(1, Number(group.maxSelections || 1));
               return (
                 <div key={group._id} className="rounded-lg border border-zinc-800 p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold text-zinc-100">
+                    <div className="font-semibold text-sm text-zinc-100">
                       {group.name}
                     </div>
                     {group.required ? (
-                      <span className="text-[10px] uppercase tracking-widest text-amber-400">Required</span>
+                      <span className="text-[10px] text-amber-400 uppercase tracking-widest">Required</span>
                     ) : null}
                   </div>
                   <div className="space-y-2">
@@ -719,7 +718,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
               );
             })}
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-zinc-100">Note</div>
+              <div className="font-semibold text-sm text-zinc-100">Note</div>
               <textarea
                 value={modifierNote}
                 onChange={(event) => setModifierNote(event.target.value)}
@@ -753,13 +752,13 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
       <Dialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
         <DialogContent className="border-red-900/50 bg-zinc-950 text-zinc-100 sm:max-w-md">
           <DialogHeader>
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-950/50 border border-red-500/20">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-red-500/20 bg-red-950/50">
               <AlertTriangle className="h-8 w-8 text-red-500" />
             </div>
-            <DialogTitle className="text-center text-xl font-black text-zinc-50 uppercase tracking-tight">
+            <DialogTitle className="text-center font-black text-xl text-zinc-50 uppercase tracking-tight">
               Void Entire Order?
             </DialogTitle>
-            <DialogDescription className="text-center text-sm text-zinc-400 mt-2">
+            <DialogDescription className="mt-2 text-center text-sm text-zinc-400">
               This will permanently cancel{" "}
               <span className="font-bold text-zinc-200">Order #{activeOrderId?.slice(-6)}</span> and remove all items
               from the check. This action <span className="font-bold text-red-400">cannot be undone</span>.
@@ -768,7 +767,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
           <DialogFooter className="mt-6 flex gap-3 sm:justify-center">
             <Button
               variant="ghost"
-              className="flex-1 h-12 text-zinc-400 hover:text-white hover:bg-zinc-900 uppercase text-xs font-black tracking-widest"
+              className="h-12 flex-1 font-black text-xs text-zinc-400 uppercase tracking-widest hover:bg-zinc-900 hover:text-white"
               disabled={deleting}
               onClick={() => setVoidConfirmOpen(false)}
             >
@@ -776,7 +775,7 @@ export function PosTableSessionPage({ tableId }: Readonly<{ tableId: string }>) 
             </Button>
             <Button
               variant="destructive"
-              className="flex-1 h-12 bg-red-600 hover:bg-red-500 text-white uppercase text-xs font-black tracking-widest shadow-lg shadow-red-950/50 active:scale-[0.97] transition-all"
+              className="h-12 flex-1 bg-red-600 font-black text-white text-xs uppercase tracking-widest shadow-lg shadow-red-950/50 transition-all hover:bg-red-500 active:scale-[0.97]"
               disabled={deleting}
               onClick={() => void handleVoidOrder()}
             >

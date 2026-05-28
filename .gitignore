@@ -63,6 +63,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 gitleaks-results.sarif
+gitleaks-results.json
 results.sarif
 results-working-tree.sarif
 

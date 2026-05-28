@@ -8,7 +8,6 @@ import {
   BarChart3,
   BookOpen,
   ClipboardList,
-  CreditCard,
   FileText,
   History,
   LayoutDashboard,
@@ -22,7 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const REPORT_GROUPS = [
@@ -189,7 +188,7 @@ export default function ReportsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-10">
       <div className="flex flex-col gap-2">
-        <h1 className="font-bold text-3xl tracking-tight text-zinc-100 lg:text-4xl">Reports & Analytics</h1>
+        <h1 className="font-bold text-3xl text-zinc-100 tracking-tight lg:text-4xl">Reports & Analytics</h1>
         <p className="text-zinc-500 lg:text-lg">
           Consolidated business intelligence for financial oversight and inventory control.
         </p>
@@ -217,7 +216,7 @@ export default function ReportsPage() {
                         <item.icon className="size-5" />
                       </div>
                       <div className="flex-1 space-y-0.5">
-                        <CardTitle className="text-sm font-medium text-zinc-300 group-hover:text-zinc-100">
+                        <CardTitle className="font-medium text-sm text-zinc-300 group-hover:text-zinc-100">
                           {item.name}
                         </CardTitle>
                       </div>

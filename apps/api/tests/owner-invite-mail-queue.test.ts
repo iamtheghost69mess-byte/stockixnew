@@ -39,7 +39,7 @@ const sampleJob = {
   to: "invitee@example.com",
   name: "Invitee",
   role: "read_only",
-  inviteUrl: "http://localhost:3000/accept-invite?token=abc123456789",
+  inviteUrl: "http://localhost:3000/accept-invite?token=test-invite-token-placeholder", // gitleaks:allow
   actorId: "22222222-2222-2222-2222-222222222222",
   source: "invite" as const,
 };

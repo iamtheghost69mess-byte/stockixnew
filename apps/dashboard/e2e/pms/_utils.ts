@@ -9,7 +9,7 @@ export const ROOM_ID = "cccccccc-0000-0000-0000-000000000001";
 export const GUEST_ID = "dddddddd-0000-0000-0000-000000000001";
 export const BOOKING_ID = "eeeeeeee-0000-0000-0000-000000000001";
 export const CHANNEL_ID = "ffffffff-0000-0000-0000-000000000001";
-export const SHARE_TOKEN = "abc123def456xyz789qrst01";
+export const SHARE_TOKEN = "e2e-guest-form-share-token-fixture"; // gitleaks:allow
 
 // ─── Fixture data ─────────────────────────────────────────────────────────────
 

@@ -125,7 +125,7 @@ export async function refreshStockSnapshotFromApi(opts?: {
   const res = await fetchInventoryMenuAvailability(
     locationId ? { locationId } : undefined,
   );
-  const items = Array.isArray(res.data?.items) ? res.data!.items! : [];
+  const items = Array.isArray(res.data?.items) ? res.data?.items! : [];
   const snapshot: StockSnapshot = {
     locationId: res.data?.locationId
       ? String(res.data.locationId)
