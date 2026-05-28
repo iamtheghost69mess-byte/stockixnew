@@ -229,13 +229,11 @@ jobs:
           if [ -d /opt/stockix/stockixnew/.git ]; then cd /opt/stockix/stockixnew
           elif [ -d /opt/stockix/app/.git ]; then cd /opt/stockix/app
           else echo "Clone repo to /opt/stockix/stockixnew or /opt/stockix/app"; exit 1; fi
-          PREV_COMMIT="$(git rev-parse HEAD)"
           rollback() {
-            echo "Deploy failed. Rolling back to ${PREV_COMMIT}"
-            git reset --hard "${PREV_COMMIT}"
+            echo "Deploy failed — keeping latest code on disk; restarting last known containers."
             cd infra/prod
             docker compose --env-file .env logs --tail=300 || true
-            docker compose --env-file .env up -d || true
+            docker compose --env-file .env up -d --no-build || true
           }
           trap rollback ERR
           fetch_origin() {
@@ -289,11 +287,13 @@ jobs:
           fi
           echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
           cd infra/prod
-          # Small VPS: build one image at a time; compile on host above (not inside Docker).
+          export COMPOSE_FILE=docker-compose.yml
           export COMPOSE_PARALLEL_LIMIT=1
-          docker compose --env-file .env --profile chat stop 2>/dev/null || true
+          docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
+          docker builder prune -f
           docker compose --env-file .env build --no-cache api dashboard infra-worker
-          docker compose --env-file .env up -d --no-build --wait
+          docker compose --env-file .env up -d --no-build --wait \
+            traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 3 \
