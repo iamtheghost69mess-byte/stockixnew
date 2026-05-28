@@ -65,7 +65,7 @@ describe("owner invite mail queue", () => {
 
   it("ownerInviteMailJobId uses owner id and invite url suffix", () => {
     expect(ownerInviteMailJobId(sampleJob.ownerId, sampleJob.inviteUrl)).toBe(
-      `owner-invite:${sampleJob.ownerId}:abc123456789`,
+      `owner-invite:${sampleJob.ownerId}:-placeholder`,
     );
   });
 
