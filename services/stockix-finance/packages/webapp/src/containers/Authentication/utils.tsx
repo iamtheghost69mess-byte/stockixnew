@@ -29,7 +29,7 @@ export const RegisterSchema = Yup.object().shape({
 export const ResetPasswordSchema = Yup.object().shape({
   password: Yup.string().min(6).required().label(intl.get('password')),
   confirm_password: Yup.string()
-    .oneOf([Yup.ref('password'), null])
+    .oneOf([Yup.ref('password'), null], intl.get('passwords_must_match') || 'Passwords must match')
     .required()
     .label(intl.get('confirm_password')),
 });
