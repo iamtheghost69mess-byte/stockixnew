@@ -115,6 +115,7 @@ services:
       - ALL
     tmpfs:
       - /run
+      - /usr/local/etc/haproxy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:2375/_ping 2>/dev/null | grep -q OK || exit 1"]
       interval: 15s
