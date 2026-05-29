@@ -1,4 +1,4 @@
-FROM node:14.21.3 as deps
+FROM node:20-alpine as deps
 
 USER root
 

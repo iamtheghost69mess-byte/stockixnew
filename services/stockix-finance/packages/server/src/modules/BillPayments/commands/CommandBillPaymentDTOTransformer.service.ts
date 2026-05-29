@@ -47,8 +47,6 @@ export class CommandBillPaymentDTOTransformer {
       exchangeRate: billPaymentDTO.exchangeRate || 1,
       entries,
     };
-    return R.compose(this.branchDTOTransform.transformDTO<BillPayment>)(
-      initialDTO,
-    );
+    return this.branchDTOTransform.transformDTO(initialDTO);
   }
 }

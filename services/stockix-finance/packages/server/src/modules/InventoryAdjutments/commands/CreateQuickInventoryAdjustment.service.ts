@@ -80,8 +80,8 @@ export class CreateQuickInventoryAdjustmentService {
       entries,
     };
     return composeAsync(
-      this.warehouseDTOTransform.transformDTO<InventoryAdjustment>,
-      this.branchDTOTransform.transformDTO<InventoryAdjustment>,
+      (dto) => this.warehouseDTOTransform.transformDTO(dto),
+      (dto) => this.branchDTOTransform.transformDTO(dto),
     )(initialDTO) as InventoryAdjustment;
   }
 

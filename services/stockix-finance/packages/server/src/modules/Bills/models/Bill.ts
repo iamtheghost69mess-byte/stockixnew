@@ -2,11 +2,11 @@ import { Model, raw, mixin } from 'objection';
 import { castArray, difference } from 'lodash';
 import moment from 'moment';
 import TenantModel from 'models/TenantModel';
-import BillSettings from './Bill.Settings';
-import ModelSetting from './ModelSetting';
-import CustomViewBaseModel from './CustomViewBaseModel';
+import BillSettings from '@/models/Bill.Settings';
+import ModelSetting from '@/models/ModelSetting';
+import CustomViewBaseModel from '@/models/CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Purchases/constants';
-import ModelSearchable from './ModelSearchable';
+import ModelSearchable from '@/models/ModelSearchable';
 
 export default class Bill extends mixin(TenantModel,
   ModelSetting as any,

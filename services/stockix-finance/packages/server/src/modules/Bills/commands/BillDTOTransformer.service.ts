@@ -116,8 +116,8 @@ export class BillDTOTransformer {
     };
 
     const asyncDto = await composeAsync(
-      this.branchDTOTransform.transformDTO<Bill>,
-      this.warehouseDTOTransform.transformDTO<Bill>,
+      (dto) => this.branchDTOTransform.transformDTO(dto),
+      (dto) => this.warehouseDTOTransform.transformDTO(dto),
     )(initialDTO);
 
     return R.compose(

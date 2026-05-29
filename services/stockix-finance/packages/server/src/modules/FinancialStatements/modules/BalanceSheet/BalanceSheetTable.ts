@@ -10,17 +10,17 @@ import {
   IBalanceSheetSchemaNode,
 } from '@/interfaces';
 import { tableRowMapper } from 'utils';
-import FinancialSheet from '../FinancialSheet';
+import FinancialSheet from '../../common/FinancialSheet';
 import { BalanceSheetComparsionPreviousYear } from './BalanceSheetComparsionPreviousYear';
 import { IROW_TYPE, DISPLAY_COLUMNS_BY } from './constants';
 import { BalanceSheetComparsionPreviousPeriod } from './BalanceSheetComparsionPreviousPeriod';
 import { BalanceSheetPercentage } from './BalanceSheetPercentage';
-import { FinancialSheetStructure } from '../FinancialSheetStructure';
+import { FinancialSheetStructure } from '../../common/FinancialSheetStructure';
 import { BalanceSheetBase } from './BalanceSheetBase';
 import { BalanceSheetTablePercentage } from './BalanceSheetTablePercentage';
 import { BalanceSheetTablePreviousYear } from './BalanceSheetTablePreviousYear';
 import { BalanceSheetTablePreviousPeriod } from './BalanceSheetTablePreviousPeriod';
-import { FinancialTable } from '../FinancialTable';
+import { FinancialTable } from '../../common/FinancialTable';
 import { BalanceSheetQuery } from './BalanceSheetQuery';
 import { BalanceSheetTableDatePeriods } from './BalanceSheetTableDatePeriods';
 

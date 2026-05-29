@@ -41,7 +41,7 @@ export class InvoicePaymentIntegrationSubscriber {
           events.paymentIntegrationLink.onPaymentIntegrationLink,
           {
             ...payload,
-          } satisfies PaymentIntegrationTransactionLinkEventPayload,
+          } as PaymentIntegrationTransactionLinkEventPayload,
         );
       },
     );
@@ -65,7 +65,7 @@ export class InvoicePaymentIntegrationSubscriber {
           ...omit(paymentMethod, ['id']),
           oldSaleInvoiceId: oldSaleInvoice.id,
           trx,
-        } satisfies PaymentIntegrationTransactionLinkDeleteEventPayload;
+        } as PaymentIntegrationTransactionLinkDeleteEventPayload;
 
         await this.eventPublisher.emitAsync(
           events.paymentIntegrationLink.onPaymentIntegrationDeleteLink,
