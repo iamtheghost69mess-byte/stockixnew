@@ -1113,7 +1113,7 @@ export async function executeProvisionRuntime(
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
       log("database_migration");
-      await runComposeWithCancellation(["run", "--rm", "--no-build", "database_migration"]);
+      await runComposeWithCancellation(["run", "--rm", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs(),
