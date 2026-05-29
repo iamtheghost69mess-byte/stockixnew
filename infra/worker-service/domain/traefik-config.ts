@@ -1,5 +1,6 @@
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { execa } from "execa";
 import { apiConfig } from "@repo/config";
 
 function traefikDir(): string {
@@ -10,13 +11,51 @@ function tenantUpstreamHost(): string {
   return apiConfig.traefikTenantUpstreamHost;
 }
 
+/** Connect the nginx container to the Traefik network and return its direct URL.
+ *  Falls back to host.docker.internal:port if the network connect/inspect fails.
+ */
+async function resolveNginxDirectUrl(
+  composeProjectName: string,
+  fallbackPort: number,
+): Promise<string> {
+  const traefikNetwork = process.env.TRAEFIK_NETWORK ?? "stockix_public";
+  const containerName = `${composeProjectName}-nginx-1`;
+  try {
+    await execa("docker", ["network", "connect", traefikNetwork, containerName], {
+      stdio: "pipe",
+      reject: false,
+    });
+    const { stdout } = await execa(
+      "docker",
+      [
+        "inspect",
+        "--format",
+        `{{(index .NetworkSettings.Networks "${traefikNetwork}").IPAddress}}`,
+        containerName,
+      ],
+      { stdio: "pipe" },
+    );
+    const ip = stdout.trim();
+    if (ip && ip !== "<no value>" && ip !== "") {
+      return `http://${ip}:80`;
+    }
+  } catch {
+    // Fall through to host-port fallback.
+  }
+  return `http://${tenantUpstreamHost()}:${fallbackPort}`;
+}
+
 export async function writeTenantTraefikConfig(
   slug: string,
   port: number,
   domain: string,
+  composeProjectName?: string,
 ): Promise<void> {
   const dir = traefikDir();
   await mkdir(dir, { recursive: true });
+  const upstreamUrl = composeProjectName
+    ? await resolveNginxDirectUrl(composeProjectName, port)
+    : `http://${tenantUpstreamHost()}:${port}`;
   const config =
     `http:\n` +
     `  routers:\n` +
@@ -31,7 +70,7 @@ export async function writeTenantTraefikConfig(
     `    tenant-${slug}:\n` +
     `      loadBalancer:\n` +
     `        servers:\n` +
-    `          - url: "http://${tenantUpstreamHost()}:${port}"\n`;
+    `          - url: "${upstreamUrl}"\n`;
   await writeFile(join(dir, `tenant-${slug}.yml`), config, "utf8");
 }
 
