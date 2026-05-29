@@ -1,4 +1,3 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { Knex } from 'knex';
 import { Item } from '@/modules/Items/models/Item';
 // import { AbilitySubject } from '@/interfaces';
@@ -40,61 +39,42 @@ export interface IItem {
 }
 
 export class IItemDTO {
-  @ApiProperty()
   name: string;
 
-  @ApiProperty()
   type: string;
 
-  @ApiProperty()
   code: string;
 
-  @ApiProperty()
   sellable: boolean;
 
-  @ApiProperty()
   purchasable: boolean;
 
-  @ApiProperty()
   costPrice: number;
 
-  @ApiProperty()
   sellPrice: number;
 
-  @ApiProperty()
   currencyCode: string;
 
-  @ApiProperty()
   costAccountId: number;
 
-  @ApiProperty()
   sellAccountId: number;
 
-  @ApiProperty()
   inventoryAccountId: number;
 
-  @ApiProperty()
   sellDescription: string;
 
-  @ApiProperty()
   purchaseDescription: string;
 
-  @ApiProperty()
   sellTaxRateId: number;
 
-  @ApiProperty()
   purchaseTaxRateId: number;
 
-  @ApiProperty()
   quantityOnHand: number;
 
-  @ApiProperty()
   note: string;
 
-  @ApiProperty()
   active: boolean;
 
-  @ApiProperty()
   categoryId: number;
 }
 
