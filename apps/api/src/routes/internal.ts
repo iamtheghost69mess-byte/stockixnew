@@ -4,6 +4,7 @@ import type { createDb } from "@repo/db";
 import {
   licenses,
   organizations,
+  owners,
   tenantDeployments,
   tenantLifecycleJobs,
   tenants,
@@ -34,7 +35,7 @@ import {
 } from "../finance-tenant-resolve.js";
 import { syncFinanceLicenseForStockixTenant } from "../finance-license.client.js";
 import { mailSendSucceeded } from "../mail/mailer.js";
-import { sendTenantWelcomeEmail } from "../mail/send.js";
+import { sendTenantWelcomeEmail, sendLicenseActivatedEmailForTenant, sendProvisionCompleteOwnerEmail } from "../mail/send.js";
 import { rootDomainForOrganizationSubdomain } from "../lib/organization-domain.js";
 import { emitInternalJobAudit, emitMetric } from "../lib/metrics.js";
 import {
@@ -828,73 +829,103 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               organizationNumber: tenants.organizationNumber,
               slug: tenants.slug,
               modules: tenants.modules,
+              ownerId: tenants.ownerId,
+              planSlug: tenants.planSlug,
             })
             .from(tenants)
             .where(eq(tenants.id, targetTenantId))
             .limit(1);
-          if (!tenant?.adminEmail) return;
+          if (!tenant) return;
 
-          const baseUrlFromResult =
-            completeResult && typeof completeResult.baseUrl === "string"
-              ? completeResult.baseUrl
-              : null;
-          const root = rootDomainForOrganizationSubdomain();
-          const financeUrl =
-            baseUrlFromResult ??
-            (root && tenant.slug
-              ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
-              : apiConfig.dashboardUrl);
-          const provisionModules = parseTenantModules(tenant.modules);
-
-          let mailResult;
-          if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
-            const { sendFinanceWelcomeEmail } = await import("../mail/send.js");
-            mailResult = await sendFinanceWelcomeEmail({
-              to: tenant.adminEmail,
-              tenantName: tenant.name,
-              financeUrl,
-              adminEmail: tenant.adminEmail,
-              oneTimePassword: oneTimeAdminPassword,
-              modules: provisionModules,
-              tenantId: targetTenantId,
-            });
-          } else {
-            mailResult = await sendTenantWelcomeEmail({
-              to: tenant.adminEmail,
-              tenantName: tenant.name,
-              organizationNumber:
-                tenant.organizationNumber ??
-                financeOrganizationIdFromResult ??
-                "—",
-              loginUrl: financeUrl,
-              tenantId: targetTenantId,
+          const activeLicense = await getActiveLicenseForTenant(db, targetTenantId);
+          if (activeLicense?.id) {
+            void sendLicenseActivatedEmailForTenant(db, targetTenantId, {
+              licenseId: activeLicense.id,
+            }).catch((licenseMailErr) => {
+              logger.error("provision license activated email failed (non-fatal)", licenseMailErr);
             });
           }
 
-          if (!mailSendSucceeded(mailResult)) {
-            const mailDetail =
-              mailResult.status === "failed"
-                ? mailResult.error
-                : mailResult.status;
-            logger.error("provision welcome email not sent", undefined, {
-              tenantId: targetTenantId,
-              mailDetail,
-            });
-            const [tenantRow] = await db
-              .select({ ownerId: tenants.ownerId })
-              .from(tenants)
-              .where(eq(tenants.id, targetTenantId))
-              .limit(1);
-            if (tenantRow?.ownerId) {
-              safeCreateNotification(db, {
-                ownerId: tenantRow.ownerId,
-                type: "provision.partial",
-                severity: "warning",
-                title: "Welcome email not sent",
-                body: `Tenant ${tenant.name} is ready but the welcome email could not be delivered (${mailDetail}). Check MAIL_* configuration.`,
+          if (tenant.adminEmail) {
+            const baseUrlFromResult =
+              completeResult && typeof completeResult.baseUrl === "string"
+                ? completeResult.baseUrl
+                : null;
+            const root = rootDomainForOrganizationSubdomain();
+            const financeUrl =
+              baseUrlFromResult ??
+              (root && tenant.slug
+                ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
+                : apiConfig.dashboardUrl);
+            const provisionModules = parseTenantModules(tenant.modules);
+
+            let mailResult;
+            if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
+              const { sendFinanceWelcomeEmail } = await import("../mail/send.js");
+              mailResult = await sendFinanceWelcomeEmail({
+                to: tenant.adminEmail,
+                tenantName: tenant.name,
+                financeUrl,
+                adminEmail: tenant.adminEmail,
+                oneTimePassword: oneTimeAdminPassword,
+                modules: provisionModules,
                 tenantId: targetTenantId,
-                actionUrl: `/tenants/${targetTenantId}`,
-                actionLabel: "View tenant",
+              });
+            } else {
+              mailResult = await sendTenantWelcomeEmail({
+                to: tenant.adminEmail,
+                tenantName: tenant.name,
+                organizationNumber:
+                  tenant.organizationNumber ??
+                  financeOrganizationIdFromResult ??
+                  "—",
+                loginUrl: financeUrl,
+                tenantId: targetTenantId,
+              });
+            }
+
+            if (!mailSendSucceeded(mailResult)) {
+              const mailDetail =
+                mailResult.status === "failed"
+                  ? mailResult.error
+                  : mailResult.status;
+              logger.error("provision welcome email not sent", undefined, {
+                tenantId: targetTenantId,
+                mailDetail,
+              });
+              if (tenant.ownerId) {
+                safeCreateNotification(db, {
+                  ownerId: tenant.ownerId,
+                  type: "provision.partial",
+                  severity: "warning",
+                  title: "Welcome email not sent",
+                  body: `Tenant ${tenant.name} is ready but the welcome email could not be delivered (${mailDetail}). Check MAIL_* configuration.`,
+                  tenantId: targetTenantId,
+                  actionUrl: `/tenants/${targetTenantId}`,
+                  actionLabel: "View tenant",
+                });
+              }
+            }
+          }
+
+          if (tenant.ownerId) {
+            const [owner] = await db
+              .select({ id: owners.id, email: owners.email })
+              .from(owners)
+              .where(eq(owners.id, tenant.ownerId))
+              .limit(1);
+            if (owner?.email) {
+              void sendProvisionCompleteOwnerEmail({
+                to: owner.email,
+                ownerId: owner.id,
+                tenantId: targetTenantId,
+                tenantName: tenant.name,
+                tenantSlug: tenant.slug,
+                adminEmail: tenant.adminEmail ?? "—",
+                planSlug: tenant.planSlug ?? "starter",
+                modules: parseTenantModules(tenant.modules),
+              }).catch((ownerMailErr) => {
+                logger.error("provision owner notify email failed (non-fatal)", ownerMailErr);
               });
             }
           }
