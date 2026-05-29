@@ -472,3 +472,15 @@ export const useBillDueAmountFormatted = () => {
 
   return formattedAmount(dueAmount, values.currency_code);
 };
+
+export const useBillTotals = () => {
+  const total = useBillTotal();
+  const subtotal = useBillSubtotal();
+  const { values: { currency_code: currencyCode } } = useFormikContext();
+  return {
+    total,
+    subtotal,
+    formattedTotal: formattedAmount(total, currencyCode),
+    formattedSubtotal: formattedAmount(subtotal, currencyCode, { money: false }),
+  };
+};
