@@ -4,6 +4,11 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+    inputs:
+      skip_quality_gate:
+        description: Emergency staging deploy — skip quality gate (use with caution)
+        type: boolean
+        default: false
 
 concurrency:
   group: stockix-staging-${{ github.ref }}
@@ -15,14 +20,24 @@ permissions:
 jobs:
   quality-gate:
     name: Quality gate
+    if: |
+      (github.event_name != 'workflow_dispatch' || inputs.skip_quality_gate != true) &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     uses: ./.github/workflows/deploy.yml
+    with:
+      skip_quality_gate: ${{ inputs.skip_quality_gate }}
     secrets: inherit
 
   deploy-staging:
     name: Deploy to staging
     needs: quality-gate
-    if: github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
+    if: |
+      always() &&
+      (needs.quality-gate.result == 'success' || needs.quality-gate.result == 'skipped') &&
+      (github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment:
       name: staging
     steps:
@@ -93,7 +108,17 @@ jobs:
           git checkout staging
           git merge --ff-only origin/staging
           echo "Deploy commit: $(git rev-parse HEAD)"
-          chmod +x scripts/load-env-file.sh 2>/dev/null || true
+          if ! grep -q 'pnpm --filter api build' apps/api/Dockerfile; then
+            echo "ERROR: apps/api/Dockerfile on the server is stale (missing in-image API build)."
+            exit 1
+          fi
+          if grep -A8 '^  api-bullmq:' infra/prod/docker-compose.yml | grep -q '^    build:'; then
+            echo "ERROR: api-bullmq must not have its own build: (use image: stockix-api:latest only)."
+            exit 1
+          fi
+          if [ ! -x scripts/load-env-file.sh ]; then
+            chmod +x scripts/load-env-file.sh
+          fi
           # IMPORTANT: Never use 'source infra/staging/.env' — semicolons in values break bash.
           # shellcheck disable=SC1091
           . scripts/load-env-file.sh infra/staging/.env
@@ -104,9 +129,15 @@ jobs:
           NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
+          if [ -z "${BACKUP_B2_BUCKET:-}" ]; then
+            echo "BACKUP_B2_BUCKET is empty — backups will not work"
+            exit 1
+          fi
+          echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
           cd infra/staging
           export COMPOSE_FILE=docker-compose.yml
           export COMPOSE_PARALLEL_LIMIT=1
+          docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
           docker compose --env-file .env build --progress=plain api dashboard infra-worker
           echo "=== Verifying images exist ==="
           for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
@@ -117,17 +148,30 @@ jobs:
             echo "OK: $img"
           done
           docker compose --env-file .env pull traefik socket-proxy
-docker compose --env-file .env up -d --no-build --wait \
-  traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
+          docker compose --env-file .env up -d --no-build --wait \
+            traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           sleep 10
           curl --fail --silent --show-error --retry 5 --retry-delay 5 \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 5 \
             "${DASHBOARD_URL}/" >/dev/null
+          if ! docker compose --env-file .env ps --status running | grep -q "api"; then
+            echo "API service is not running after deploy"
+            docker compose --env-file .env logs --tail=200
+            exit 1
+          fi
+          if ! docker compose --env-file .env ps --status running | grep -q "infra-worker"; then
+            echo "infra-worker service is not running after deploy"
+            docker compose --env-file .env logs infra-worker --tail=200
+            exit 1
+          fi
           cd "${REPO_ROOT}"
           echo "=== Building tenant images ==="
           pnpm docker:prebuild 2>&1 | tail -20 || \
             echo "WARNING: Tenant images build failed — provisioning may not work until pnpm docker:prebuild succeeds"
+          echo "Tenant images step finished."
+          cd infra/staging
+          docker image prune -f --filter "until=168h" || true
           trap - ERR
           echo "Staging deploy completed successfully."
           REMOTE
