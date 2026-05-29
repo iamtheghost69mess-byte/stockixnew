@@ -201,6 +201,7 @@ services:
     oom_kill_disable: false
 
   mysql:
+    image: stockix-prebuild-mysql:latest
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/mariadb
     restart: unless-stopped
@@ -252,6 +253,7 @@ services:
       - no-new-privileges:true
 
   redis:
+    image: stockix-prebuild-redis:latest
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/redis
     restart: unless-stopped
