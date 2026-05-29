@@ -94,15 +94,15 @@ services:
       VERSION: 1
       INFO: 1
       VOLUMES: 0
-      IMAGES: 0
+      IMAGES: 1
       NODES: 0
       SWARM: 0
       AUTH: 0
       SECRETS: 0
       CONFIGS: 0
       PLUGINS: 0
-      POST: 0
-      BUILD: 0
+      POST: 1
+      BUILD: 1
       LOG_LEVEL: warning
     networks:
       - socket_proxy_network
