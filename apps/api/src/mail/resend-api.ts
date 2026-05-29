@@ -4,6 +4,7 @@ export async function sendViaResendApi(opts: {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   idempotencyKey?: string;
   apiKey: string;
 }): Promise<{ id: string } | { error: string }> {
@@ -23,6 +24,7 @@ export async function sendViaResendApi(opts: {
       to: [opts.to],
       subject: opts.subject,
       html: opts.html,
+      ...(opts.text !== undefined ? { text: opts.text } : {}),
     }),
   });
 

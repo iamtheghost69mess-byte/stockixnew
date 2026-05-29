@@ -17,6 +17,7 @@ export type SendMailOptions = {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   idempotencyKey?: string;
   templateKey?: string;
   tenantId?: string;
@@ -56,6 +57,7 @@ async function sendViaConfiguredTransport(options: SendMailOptions): Promise<str
       to: options.to,
       subject: options.subject,
       html: options.html,
+      text: options.text,
       idempotencyKey: options.idempotencyKey,
       apiKey: mailConfig.password!.trim(),
     });
@@ -70,6 +72,7 @@ async function sendViaConfiguredTransport(options: SendMailOptions): Promise<str
     to: options.to,
     subject: options.subject,
     html: options.html,
+    text: options.text,
     headers: options.idempotencyKey
       ? { "Resend-Idempotency-Key": options.idempotencyKey }
       : undefined,
