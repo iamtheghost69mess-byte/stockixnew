@@ -37,13 +37,21 @@ export class ProfitLossSheetTable extends R.compose(
    * @param {} date
    * @param {IProfitLossSheetQuery} query
    */
-  constructor(data: any, query: IProfitLossSheetQuery, i18n: any) {
+  private secondaryCurrency?: string;
+  private exchangeRate?: number;
+
+  constructor(data: any, query: IProfitLossSheetQuery, i18n: any, baseCurrency?: string, secondaryCurrency?: string, exchangeRate?: number) {
     super();
 
     this.query = new ProfitLossSheetQuery(query);
     this.reportData = data;
     this.i18n = i18n;
+    this.secondaryCurrency = secondaryCurrency;
+    this.exchangeRate = exchangeRate;
   }
+
+  private hasSecondaryCurrency = (): boolean =>
+    Boolean(this.secondaryCurrency && this.exchangeRate && this.exchangeRate > 0);
 
   // ----------------------------------
   // # Rows
@@ -217,6 +225,11 @@ export class ProfitLossSheetTable extends R.compose(
    * Retrieves the table columns.
    * @returns {ITableColumn[]}
    */
+  private secondaryTotalColumn = (): any[] => {
+    if (!this.hasSecondaryCurrency()) return [];
+    return [{ key: 'secondary_total', label: `Total (${this.secondaryCurrency})` }];
+  };
+
   public tableColumns = (): ITableColumn[] => {
     return R.compose(
       this.tableColumnsCellIndexing,
@@ -226,7 +239,7 @@ export class ProfitLossSheetTable extends R.compose(
       R.ifElse(
         this.query.isDatePeriodsColumnsType,
         R.concat(this.datePeriodsColumns()),
-        R.concat(this.totalColumn())
+        R.pipe(R.concat(this.totalColumn()), R.concat(this.secondaryTotalColumn()))
       )
     )([]);
   };

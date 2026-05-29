@@ -52,17 +52,45 @@ export default class BalanceSheetTable extends R.compose(
    * @param {IBalanceSheetStatementData} reportData -
    * @param {IBalanceSheetQuery} query -
    */
+  private secondaryCurrency?: string;
+  private exchangeRate?: number;
+
   constructor(
     reportData: IBalanceSheetStatementData,
     query: IBalanceSheetQuery,
-    i18n: any
+    i18n: any,
+    baseCurrency?: string,
+    secondaryCurrency?: string,
+    exchangeRate?: number
   ) {
     super();
 
     this.reportData = reportData;
     this.query = new BalanceSheetQuery(query);
     this.i18n = i18n;
+    this.secondaryCurrency = secondaryCurrency;
+    this.exchangeRate = exchangeRate;
   }
+
+  private hasSecondaryCurrency = (): boolean => {
+    return Boolean(this.secondaryCurrency && this.exchangeRate && this.exchangeRate > 0);
+  };
+
+  private formatSecondaryAmount = (amount: number): string => {
+    const converted = amount * (this.exchangeRate || 0);
+    return new Intl.NumberFormat('en-US').format(converted);
+  };
+
+  private secondaryTotalAccessor = (): ITableColumnAccessor[] => {
+    if (!this.hasSecondaryCurrency()) return [];
+    return [{
+      key: 'secondary_total',
+      accessor: (node: any) => {
+        const amount = node?.total?.amount;
+        return amount != null && amount !== 0 ? this.formatSecondaryAmount(amount) : '';
+      },
+    }];
+  };
 
   /**
    * Detarmines the node type of the given schema node.
@@ -89,7 +117,7 @@ export default class BalanceSheetTable extends R.compose(
       R.ifElse(
         R.always(this.isDisplayColumnsBy(DISPLAY_COLUMNS_BY.DATE_PERIODS)),
         R.concat(this.datePeriodsColumnsAccessors()),
-        R.concat(this.totalColumnAccessor())
+        R.pipe(R.concat(this.totalColumnAccessor()), R.concat(this.secondaryTotalAccessor()))
       )
     )([]);
   };
@@ -231,6 +259,11 @@ export default class BalanceSheetTable extends R.compose(
    * Retrieve the report table columns.
    * @returns {ITableColumn[]}
    */
+  private secondaryTotalColumn = (): ITableColumn[] => {
+    if (!this.hasSecondaryCurrency()) return [];
+    return [{ key: 'secondary_total', label: `Total (${this.secondaryCurrency})` }];
+  };
+
   public tableColumns = (): ITableColumn[] => {
     return R.compose(
       this.tableColumnsCellIndexing,
@@ -240,7 +273,7 @@ export default class BalanceSheetTable extends R.compose(
       R.ifElse(
         this.query.isDatePeriodsColumnsType,
         R.concat(this.datePeriodsColumns()),
-        R.concat(this.totalColumn())
+        R.pipe(R.concat(this.totalColumn()), R.concat(this.secondaryTotalColumn()))
       )
     )([]);
   };
