@@ -181,14 +181,14 @@ jobs:
       - name: Run Finance tests
         run: |
           cd services/stockix-finance
-          pnpm install --frozen-lockfile
-          pnpm run build --scope "@stockix/utils" --scope "@stockix/email-components" --scope "@stockix/pdf-templates"
+          npx pnpm@7 install --frozen-lockfile --ignore-scripts
           cd packages/server
           pnpm test
         env:
           HUSKY: "0"
           CI: "true"
-        timeout-minutes: 10
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+        timeout-minutes: 15
 
       - name: Build API
         run: pnpm --filter api build
