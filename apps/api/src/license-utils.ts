@@ -200,6 +200,7 @@ export type LicenseHistoryAction =
   | "synced_to_finance"
   | "expired_by_worker"
   | "expiry_warning_sent"
+  | "activated_email_sent"
   | "expired_email_sent"
   | "suspended"
   | "reactivated"

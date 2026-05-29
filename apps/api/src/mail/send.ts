@@ -17,11 +17,12 @@
  * RESEND_API_KEY is NOT required if using SMTP mode.
  */
 import { apiConfig } from "@repo/config";
-import { licenses, owners, tenants } from "@repo/db/schema";
+import { licenses, owners, plans, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
-import { getActiveLicenseForTenant, insertLicenseHistory } from "../license-utils.js";
+import { getActiveLicenseForTenant, insertLicenseHistory, parseLicenseModulesJson } from "../license-utils.js";
+import { rootDomainForOrganizationSubdomain } from "../lib/organization-domain.js";
 import {
   mailSendSucceeded,
   sendMail,
@@ -35,6 +36,14 @@ import { renderPasswordReset, renderPasswordResetText } from "./templates/passwo
 import { renderPasswordChanged, renderPasswordChangedText } from "./templates/password-changed.js";
 import { renderFinanceWelcome, renderFinanceWelcomeText } from "./templates/finance-welcome.js";
 import { renderPosWelcome, renderPosWelcomeText } from "./templates/pos-welcome.js";
+import {
+  renderLicenseActivated,
+  renderLicenseActivatedText,
+} from "./templates/license-activated.js";
+import {
+  renderProvisionCompleteOwner,
+  renderProvisionCompleteOwnerText,
+} from "./templates/provision-complete-owner.js";
 
 type MailDb = PostgresJsDatabase<typeof schema>;
 
@@ -195,6 +204,159 @@ export async function sendPosWelcomeEmail(opts: {
 
 /** @deprecated Use sendPosWelcomeEmail */
 export const sendPosCredentialsEmail = sendPosWelcomeEmail;
+
+export async function sendLicenseActivatedEmail(opts: {
+  to: string;
+  tenantName: string;
+  tenantId: string;
+  planName: string;
+  modules: string[];
+  validFrom: Date;
+  expiresAt: Date | null;
+  isPerpetual: boolean;
+  loginUrl: string;
+  licenseId: string;
+}): Promise<MailSendResult> {
+  const brandName = apiConfig.brandName;
+  const mailOpts = {
+    tenantName: opts.tenantName,
+    planName: opts.planName,
+    modules: opts.modules,
+    validFrom: opts.validFrom,
+    expiresAt: opts.expiresAt,
+    isPerpetual: opts.isPerpetual,
+    loginUrl: opts.loginUrl,
+  };
+
+  return sendMail({
+    to: opts.to,
+    subject: `Your ${brandName} license is active`,
+    html: renderLicenseActivated(mailOpts),
+    text: renderLicenseActivatedText(mailOpts),
+    idempotencyKey: `license-activated/${opts.licenseId}`,
+    templateKey: "license-activated",
+    tenantId: opts.tenantId,
+  });
+}
+
+export async function sendLicenseActivatedEmailForTenant(
+  db: MailDb,
+  tenantId: string,
+  opts: { licenseId: string },
+): Promise<void> {
+  try {
+    const [tenant] = await db
+      .select({
+        name: tenants.name,
+        adminEmail: tenants.adminEmail,
+        slug: tenants.slug,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (!tenant) {
+      console.warn("[sendLicenseActivatedEmail] Tenant not found:", tenantId);
+      return;
+    }
+
+    if (!tenant.adminEmail) {
+      console.warn("[sendLicenseActivatedEmail] No admin email for tenant", tenantId);
+      return;
+    }
+
+    const [license] = await db
+      .select({
+        id: licenses.id,
+        planSlug: licenses.planSlug,
+        modules: licenses.modules,
+        validFrom: licenses.validFrom,
+        expiresAt: licenses.expiresAt,
+        isPerpetual: licenses.isPerpetual,
+        activatedAt: licenses.activatedAt,
+      })
+      .from(licenses)
+      .where(eq(licenses.id, opts.licenseId))
+      .limit(1);
+
+    if (!license) {
+      console.warn("[sendLicenseActivatedEmail] License not found:", opts.licenseId);
+      return;
+    }
+
+    const [plan] = await db
+      .select({ name: plans.name })
+      .from(plans)
+      .where(eq(plans.slug, license.planSlug))
+      .limit(1);
+
+    const root = rootDomainForOrganizationSubdomain();
+    const loginUrl =
+      tenant.slug && root
+        ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
+        : apiConfig.dashboardUrl;
+
+    const result = await sendLicenseActivatedEmail({
+      to: tenant.adminEmail,
+      tenantName: tenant.name,
+      tenantId,
+      planName: plan?.name ?? license.planSlug,
+      modules: parseLicenseModulesJson(license.modules),
+      validFrom: license.validFrom ?? license.activatedAt ?? new Date(),
+      expiresAt: license.expiresAt,
+      isPerpetual: license.isPerpetual,
+      loginUrl,
+      licenseId: license.id,
+    });
+
+    if (mailSendSucceeded(result)) {
+      await insertLicenseHistory(db, {
+        licenseId: license.id,
+        action: "activated_email_sent",
+        newValues: { to: tenant.adminEmail },
+      });
+    }
+  } catch (err) {
+    console.error(
+      "[sendLicenseActivatedEmail] Failed for tenant",
+      tenantId,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+export async function sendProvisionCompleteOwnerEmail(opts: {
+  to: string;
+  ownerId?: string;
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  adminEmail: string;
+  planSlug: string;
+  modules: string[];
+}): Promise<MailSendResult> {
+  const dashboardBase = apiConfig.dashboardUrl.replace(/\/+$/, "");
+  const tenantDashboardUrl = `${dashboardBase}/tenants/${opts.tenantId}`;
+  const mailOpts = {
+    tenantName: opts.tenantName,
+    tenantSlug: opts.tenantSlug,
+    adminEmail: opts.adminEmail,
+    planSlug: opts.planSlug,
+    modules: opts.modules,
+    tenantDashboardUrl,
+  };
+
+  return sendMail({
+    to: opts.to,
+    subject: `Tenant provisioned: ${opts.tenantName}`,
+    html: renderProvisionCompleteOwner(mailOpts),
+    text: renderProvisionCompleteOwnerText(mailOpts),
+    idempotencyKey: `provision-complete-owner/${opts.tenantId}`,
+    templateKey: "provision-complete-owner",
+    tenantId: opts.tenantId,
+    ownerId: opts.ownerId,
+  });
+}
 
 export async function sendLicenseExpiringEmail(opts: {
   to: string;
