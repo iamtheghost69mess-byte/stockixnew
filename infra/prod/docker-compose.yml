@@ -151,7 +151,8 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --entrypoints.websecure.address=:443
       - --ping=true
-      - --ping.entrypoint=web
+      - --ping.entrypoint=traefik
+      - --entrypoints.traefik.address=:8080
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true

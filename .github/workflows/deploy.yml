@@ -5,7 +5,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_quality_gate:
+        description: Emergency deploy — skip quality gate (infra/hotfix only; use with caution)
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      skip_quality_gate:
+        description: Skip quality gate when invoked from another workflow
+        type: boolean
+        default: false
 
 concurrency:
   group: stockix-${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +33,9 @@ env:
 jobs:
   quality-gate:
     name: Quality gate
+    if: |
+      (github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_call' || inputs.skip_quality_gate != true) &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -203,7 +216,12 @@ jobs:
   deploy:
     name: Deploy production
     needs: quality-gate
-    if: github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    if: |
+      always() &&
+      (needs.quality-gate.result == 'success' || needs.quality-gate.result == 'skipped') &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment:
@@ -356,7 +374,7 @@ jobs:
           REMOTE
 
       - name: Create Sentry release
-        if: env.SENTRY_DSN != ''
+        if: secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != ''
         run: |
           RELEASE=$(git rev-parse --short HEAD)
           npx @sentry/cli releases new "$RELEASE" \
