@@ -1,88 +1,10 @@
 // @ts-nocheck
 import React from 'react';
 import axios from 'axios';
-import {
-  useAuthActions,
-  useAuthOrganizationId,
-  useSetGlobalErrors,
-  useAuthToken,
-} from './state';
-import { getCookie } from '../utils';
+import http from '@/services/axios';
+import { normalizeApiPath } from '../utils';
 
 export default function useApiRequest() {
-  const setGlobalErrors = useSetGlobalErrors();
-  const { setLogout } = useAuthActions();
-  const currentLocale = getCookie('locale');
-
-  // Authentication token.
-  const token = useAuthToken();
-
-  // Authentication organization id.
-  const organizationId = useAuthOrganizationId();
-
-  const http = React.useMemo(() => {
-    // Axios instance.
-    const instance = axios.create();
-
-    // Request interceptors.
-    instance.interceptors.request.use(
-      (request) => {
-        const locale = currentLocale;
-
-        if (token) {
-          request.headers.common['X-Access-Token'] = token;
-        }
-        if (organizationId) {
-          request.headers.common['organization-id'] = organizationId;
-        }
-        if (locale) {
-          request.headers.common['Accept-Language'] = locale;
-        }
-        return request;
-      },
-      (error) => {
-        return Promise.reject(error);
-      },
-    );
-    // Response interceptors.
-    instance.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        const { status, data } = error.response;
-
-        if (status >= 500) {
-          setGlobalErrors({ something_wrong: true });
-        }
-        if (status === 401) {
-          // Only treat as session-expired when the request included an organization-id.
-          // Without it we're on the setup page and the 401 just means "no org context yet".
-          const hadOrgHeader = !!error.config?.headers?.['organization-id'];
-          if (hadOrgHeader) {
-            setGlobalErrors({ session_expired: true });
-            setLogout();
-          }
-        }
-        if (status === 403) {
-          setGlobalErrors({ access_denied: true });
-        }
-        if (status === 400) {
-          const lockedError = data.errors.find(
-            (error) => error.type === 'TRANSACTIONS_DATE_LOCKED',
-          );
-          if (lockedError) {
-            setGlobalErrors({ transactionsLocked: { ...lockedError.data } });
-          }
-          if (data.errors.find((e) => e.type === 'USER_INACTIVE')) {
-            setGlobalErrors({ userInactive: true });
-            setLogout();
-          }
-        }
-        return Promise.reject(error);
-      },
-    );
-    return instance;
-  }, [token, organizationId, setGlobalErrors, setLogout]);
-
   return React.useMemo(
     () => ({
       http,
@@ -111,6 +33,35 @@ export default function useApiRequest() {
         return http.delete(`/api/${resource}`, params);
       },
     }),
-    [http],
+    [],
+  );
+}
+
+export function useAuthApiRequest() {
+  const httpInstance = React.useMemo(() => axios.create(), []);
+
+  return React.useMemo(
+    () => ({
+      http: httpInstance,
+      get(resource, params) {
+        return httpInstance.get(`/api/${normalizeApiPath(resource)}`, params);
+      },
+      post(resource, params, config) {
+        return httpInstance.post(`/api/${normalizeApiPath(resource)}`, params, config);
+      },
+      update(resource, slug, params) {
+        return httpInstance.put(`/api/${normalizeApiPath(resource)}/${slug}`, params);
+      },
+      put(resource, params) {
+        return httpInstance.put(`/api/${normalizeApiPath(resource)}`, params);
+      },
+      patch(resource, params, config) {
+        return httpInstance.patch(`/api/${normalizeApiPath(resource)}`, params, config);
+      },
+      delete(resource, params) {
+        return httpInstance.delete(`/api/${normalizeApiPath(resource)}`, params);
+      },
+    }),
+    [httpInstance],
   );
 }

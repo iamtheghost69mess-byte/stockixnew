@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3004",
+    "dev": "node ../../../scripts/dev-pms-frontend.mjs",
     "build": "next build",
     "start": "next start -p 3004",
     "check-types": "tsc --noEmit"

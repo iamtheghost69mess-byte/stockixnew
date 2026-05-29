@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
+import { NextRequest, NextResponse } from "next/server";
 
-type Ctx = { params: Promise<{ tenantId: string }> };
+type Params = { params: Promise<{ tenantId: string }> };
 
-export async function POST(req: Request, ctx: Ctx) {
-  const { tenantId } = await ctx.params;
+export async function POST(req: NextRequest, { params }: Params) {
+  const { tenantId } = await params;
   const res = await apiFetch(`/tenants/${tenantId}/repair-finance-link`, { method: "POST" }, req);
-  const body = await res.text();
-  return new NextResponse(body, {
+  const text = await res.text();
+  return new NextResponse(text, {
     status: res.status,
-    headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+    headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
   });
 }

@@ -1,4 +1,5 @@
 import { GlobalSearch } from "@/components/global-search";
+import { NotificationBell } from "@/components/notification-bell";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -18,9 +19,12 @@ export function SiteHeader({ title = "Overview" }: SiteHeaderProps) {
         <div className="min-w-0 flex-1 md:max-w-sm">
           <GlobalSearch />
         </div>
-        <h1 className="ml-auto min-w-0 max-w-[45%] shrink truncate text-base font-medium tracking-tight md:max-w-md">
-          {title}
-        </h1>
+        <div className="ml-auto flex min-w-0 shrink items-center gap-2">
+          <NotificationBell />
+          <h1 className="min-w-0 max-w-[45%] truncate text-base font-medium tracking-tight md:max-w-md">
+            {title}
+          </h1>
+        </div>
       </div>
     </header>
   );

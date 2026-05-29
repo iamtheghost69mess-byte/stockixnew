@@ -8,6 +8,13 @@ export interface CreateFinanceUserDto {
   roleId: number;
 }
 
+export interface InviteFinanceUserDto {
+  email: string;
+  roleId: number;
+  firstName?: string;
+  lastName?: string;
+}
+
 export interface UpdateFinanceUserDto {
   roleId?: number;
   isActive?: boolean;
@@ -30,6 +37,16 @@ export class FinanceUsersClient {
 
   private base(tenantId: number): string {
     return `${this.internalBaseUrl.replace(/\/+$/, "")}/api/internal/tenants/${tenantId}`;
+  }
+
+  async inviteUser(tenantId: number, data: InviteFinanceUserDto) {
+    const res = await fetch(`${this.base(tenantId)}/users/invite`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`inviteUser failed: ${res.status}`);
+    return res.json();
   }
 
   async createUser(tenantId: number, data: CreateFinanceUserDto) {

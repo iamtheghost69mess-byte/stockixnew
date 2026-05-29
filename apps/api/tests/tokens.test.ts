@@ -26,7 +26,7 @@ function setSecret(value: string | undefined) {
 // A valid UUID for use in session token payloads (sub must be UUID per schema).
 const VALID_UUID = "550e8400-e29b-41d4-a716-446655440000";
 
-describe("signSessionToken + verifySessionToken", () => {
+describe.sequential("signSessionToken + verifySessionToken", () => {
   beforeEach(() => {
     setSecret(VALID_SECRET);
     // Reset module cache so @repo/config re-reads process.env for each group.
@@ -78,11 +78,12 @@ describe("signSessionToken + verifySessionToken", () => {
       sessionVersion: 0,
     });
 
-    // Flip the last character of the signature segment.
+    // Tamper the encoded payload segment so HMAC verification must fail.
     const dot = token.lastIndexOf(".");
+    const encoded = token.slice(0, dot);
     const sig = token.slice(dot + 1);
-    const flippedChar = sig[sig.length - 1] === "A" ? "B" : "A";
-    const tamperedToken = token.slice(0, dot + 1) + sig.slice(0, -1) + flippedChar;
+    const flippedChar = encoded[encoded.length - 1] === "A" ? "B" : "A";
+    const tamperedToken = encoded.slice(0, -1) + flippedChar + "." + sig;
 
     const result = await verifySessionToken(tamperedToken);
     expect(result).toBeNull();
@@ -229,7 +230,7 @@ describe("signSessionToken + verifySessionToken", () => {
   });
 });
 
-describe("signMfaToken + verifyMfaToken", () => {
+describe.sequential("signMfaToken + verifyMfaToken", () => {
   beforeEach(() => {
     setSecret(VALID_SECRET);
     vi.resetModules();
@@ -260,11 +261,37 @@ describe("signMfaToken + verifyMfaToken", () => {
 
     const token = await signMfaToken("owner-xyz");
     const dot = token.lastIndexOf(".");
-    const sig = token.slice(dot + 1);
-    const flippedChar = sig[sig.length - 1] === "A" ? "B" : "A";
-    const tampered = token.slice(0, dot + 1) + sig.slice(0, -1) + flippedChar;
+    const invalidSig = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const tampered = `${token.slice(0, dot + 1)}${invalidSig}`;
 
     expect(await verifyMfaToken(tampered)).toBeNull();
+  });
+
+  it("tampered MFA token payload returns null", async () => {
+    const { signMfaToken, verifyMfaToken } = await import(
+      "../src/services/auth/tokens.js"
+    );
+
+    const token = await signMfaToken("owner-xyz");
+    const dot = token.lastIndexOf(".");
+    const encoded = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const flippedChar = encoded[encoded.length - 1] === "A" ? "B" : "A";
+    const tampered = encoded.slice(0, -1) + flippedChar + "." + sig;
+
+    expect(await verifyMfaToken(tampered)).toBeNull();
+  });
+
+  it("truncated MFA token (missing signature) returns null", async () => {
+    const { signMfaToken, verifyMfaToken } = await import(
+      "../src/services/auth/tokens.js"
+    );
+
+    const token = await signMfaToken("owner-xyz");
+    const dot = token.lastIndexOf(".");
+    const truncated = `${token.slice(0, dot)}.`;
+
+    expect(await verifyMfaToken(truncated)).toBeNull();
   });
 
   it("expired MFA token (iat set 6 minutes ago) returns null", async () => {

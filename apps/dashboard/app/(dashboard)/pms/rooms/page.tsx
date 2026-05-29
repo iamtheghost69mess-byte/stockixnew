@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 import { PlusIcon } from "lucide-react";
 
@@ -14,8 +16,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -33,6 +42,7 @@ import {
 } from "@/components/ui/table";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
 import { pmsFetch } from "@/lib/pms-fetch";
+import { pmsRoomCreateSchema, type PmsRoomCreateValues } from "@/lib/schemas";
 
 type Property = { id: string; name: string };
 type Room = {
@@ -60,7 +70,11 @@ export default function PmsRoomsPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", type: "standard", capacity: "2", rateCents: "0" });
+
+  const form = useForm<PmsRoomCreateValues>({
+    resolver: zodResolver(pmsRoomCreateSchema),
+    defaultValues: { name: "", type: "standard", capacity: 2, rateCents: 0 },
+  });
 
   async function loadProperties() {
     if (!tenantId) return;
@@ -71,33 +85,48 @@ export default function PmsRoomsPage() {
     if (!propertyId && list[0]) setPropertyId(list[0].id);
   }
 
-  async function loadRooms() {
+  async function loadRooms(signal?: AbortSignal) {
     if (!tenantId || !propertyId) return;
-    const res = await pmsFetch(`rooms?propertyId=${propertyId}`, tenantId);
-    const data = (await res.json()) as { rooms?: Room[] };
-    setRooms(data.rooms ?? []);
+    try {
+      const res = await pmsFetch(`rooms?propertyId=${propertyId}`, tenantId, { signal });
+      const data = (await res.json()) as { rooms?: Room[] };
+      setRooms(data.rooms ?? []);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+    }
   }
 
-  useEffect(() => { void loadProperties(); }, [tenantId]);
-  useEffect(() => { void loadRooms(); }, [tenantId, propertyId]);
+  useEffect(() => {
+    setPropertyId("");
+    setRooms([]);
+  }, [tenantId]);
 
-  async function handleCreate() {
-    if (!tenantId || !propertyId || !form.name) return;
+  useEffect(() => { void loadProperties(); }, [tenantId]);
+  useEffect(() => {
+    if (!tenantId || !propertyId) return;
+    const ctrl = new AbortController();
+    void loadRooms(ctrl.signal);
+    return () => ctrl.abort();
+  }, [tenantId, propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onCreate = form.handleSubmit(async (data) => {
+    if (!tenantId || !propertyId) return;
     setSaving(true);
     await pmsFetch("rooms", tenantId, {
       method: "POST",
       body: JSON.stringify({
         propertyId,
-        name: form.name,
-        type: form.type,
-        capacity: parseInt(form.capacity, 10),
-        rateCents: parseInt(form.rateCents, 10),
+        name: data.name,
+        type: data.type,
+        capacity: data.capacity,
+        rateCents: data.rateCents,
       }),
     });
     setSaving(false);
     setOpen(false);
+    form.reset();
     void loadRooms();
-  }
+  });
 
   if (!tenantId) {
     return (
@@ -116,7 +145,9 @@ export default function PmsRoomsPage() {
           </SelectTrigger>
           <SelectContent>
             {properties.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -150,9 +181,7 @@ export default function PmsRoomsPage() {
                   <TableCell className="font-medium">{r.name}</TableCell>
                   <TableCell className="capitalize">{r.type}</TableCell>
                   <TableCell>{r.capacity}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {(r.rateCents / 100).toFixed(2)}
-                  </TableCell>
+                  <TableCell className="tabular-nums">{(r.rateCents / 100).toFixed(2)}</TableCell>
                   <TableCell>{r.floor ?? "—"}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_COLORS[r.status] ?? "outline"} className="capitalize">
@@ -166,35 +195,93 @@ export default function PmsRoomsPage() {
         </Table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) form.reset();
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Add room</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Room 101" />
-            </div>
-            <div className="space-y-1">
-              <Label>Type</Label>
-              <Input value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} placeholder="standard" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Capacity</Label>
-                <Input type="number" min={1} value={form.capacity} onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))} />
+          <DialogHeader>
+            <DialogTitle>Add room</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={onCreate} className="space-y-3">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Room 101" autoComplete="off" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="standard" autoComplete="off" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={form.control}
+                  name="capacity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Capacity</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="rateCents"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Rate (cents)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
-              <div className="space-y-1">
-                <Label>Rate (cents)</Label>
-                <Input type="number" min={0} value={form.rateCents} onChange={(e) => setForm((f) => ({ ...f, rateCents: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreate()} disabled={saving || !form.name}>
-              {saving ? "Saving…" : "Add"}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Add"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </PmsPageShell>

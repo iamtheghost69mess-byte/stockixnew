@@ -48,6 +48,10 @@ import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
     BulkDeleteManualJournalsService,
     ValidateBulkDeleteManualJournalsService,
   ],
-  exports: [ManualJournalsExportable, ManualJournalImportable],
+  exports: [
+    ManualJournalsApplication,
+    ManualJournalsExportable,
+    ManualJournalImportable,
+  ],
 })
 export class ManualJournalsModule {}

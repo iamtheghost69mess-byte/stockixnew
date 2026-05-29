@@ -91,6 +91,20 @@ function parseOrigins(raw: string | undefined): string[] {
     });
 }
 
+/** Logged at startup when unset — does not block boot (optional integrations). */
+const recommendedByProfile: Record<string, string[]> = {
+  production: ["RESEND_WEBHOOK_SECRET", "SENTRY_DSN"],
+  staging: ["RESEND_WEBHOOK_SECRET", "SENTRY_DSN"],
+};
+
+function validateRecommendedEnvForProfile(profile: string): string[] {
+  const recommended = recommendedByProfile[profile] ?? [];
+  return recommended.filter((name) => {
+    const value = process.env[name];
+    return !value || value.trim().length === 0;
+  });
+}
+
 function validateRequiredEnvForProfile(profile: string) {
   const requiredByProfile: Record<string, string[]> = {
     development: [],
@@ -107,6 +121,10 @@ function validateRequiredEnvForProfile(profile: string) {
     ],
     production: [
       "DATABASE_URL",
+      "DB_POOL_MAX",
+      "DB_IDLE_TIMEOUT_SECONDS",
+      "DB_CONNECT_TIMEOUT_SECONDS",
+      "DB_MAX_LIFETIME_SECONDS",
       "PLATFORM_API_SECRET",
       "WORKER_SECRET",
       "SESSION_SECRET",
@@ -114,6 +132,7 @@ function validateRequiredEnvForProfile(profile: string) {
       "AUTH_TOKEN_SECRET",
       "DEPLOYMENT_SECRET_KEY",
       "LICENSE_SIGNING_SECRET",
+      "CONTROL_PLANE_REDIS_URL",
     ],
   };
   const required = requiredByProfile[profile] ?? requiredByProfile.production ?? [];
@@ -127,6 +146,13 @@ function validateRequiredEnvForProfile(profile: string) {
 }
 
 export const env = {
+  FINANCE_LICENSE_SYNC_OPTIONAL: readOptionalString("FINANCE_LICENSE_SYNC_OPTIONAL"),
+  CONTROL_PLANE_REDIS_URL: readOptionalString("CONTROL_PLANE_REDIS_URL"),
+  LICENSE_SYNC_STRICT: readOptionalString("LICENSE_SYNC_STRICT"),
+  BRAND_NAME: readString("BRAND_NAME", "Stockix"),
+  PROVISION_RECONCILE_INTERVAL_MS: readNumber("PROVISION_RECONCILE_INTERVAL_MS", 60_000),
+  POS_FRONTEND_URL: readOptionalString("POS_FRONTEND_URL"),
+  SENTRY_DSN: readOptionalString("SENTRY_DSN"),
   DATABASE_URL: readOptionalString("DATABASE_URL"),
   DB_WAIT_TIMEOUT_MS: readNumber("DB_WAIT_TIMEOUT_MS", 90_000),
   PORT: readNumber("PORT", 4000),
@@ -188,10 +214,13 @@ export const env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  RUN_BULLMQ_CONSUMERS: readOptionalString("RUN_BULLMQ_CONSUMERS"),
   /** Shared with stockix-finance for POST /api/internal/* (provisioning attach-user). */
   INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
   /** Max time (ms) the worker allows a single job to run before aborting (must be >= slow docker image builds). */
   WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1000),
+  WORKER_HEARTBEAT_STALE_MS: readNumber("WORKER_HEARTBEAT_STALE_MS", 600_000),
+  WORKER_STALE_LEASE_THRESHOLD_MS: readNumber("WORKER_STALE_LEASE_THRESHOLD_MS", 3_000_000),
   /** Max time (ms) for docker compose up/build/pull (first image pull can exceed 5m). */
   DOCKER_COMPOSE_UP_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_UP_TIMEOUT_MS", 30 * 60 * 1000),
   /** Max time (ms) for docker compose run (migrations). */
@@ -225,6 +254,8 @@ export const env = {
   DEPLOYMENT_SECRET_KEY: readOptionalString("DEPLOYMENT_SECRET_KEY"),
   MAIL_FROM_NAME: readOptionalString("MAIL_FROM_NAME"),
   MAIL_FROM_ADDRESS: readOptionalString("MAIL_FROM_ADDRESS"),
+  MAIL_TRANSPORT: readOptionalString("MAIL_TRANSPORT"),
+  RESEND_WEBHOOK_SECRET: readOptionalString("RESEND_WEBHOOK_SECRET"),
   MONGODB_DATABASE_URL: readOptionalString("MONGODB_DATABASE_URL"),
   AGENDA_DB_COLLECTION: readOptionalString("AGENDA_DB_COLLECTION"),
   AGENDA_POOL_TIME: readOptionalString("AGENDA_POOL_TIME"),
@@ -250,9 +281,48 @@ export const mailConfig = {
   secure: env.MAIL_SECURE === 'true' || env.MAIL_SECURE === '1',
   fromName: env.MAIL_FROM_NAME ?? 'Stockix',
   fromAddress: env.MAIL_FROM_ADDRESS ?? '',
+  transport: (env.MAIL_TRANSPORT ?? '').trim().toLowerCase(),
 } as const;
 
+/** True when Resend SMTP can send (API key + verified from address). */
+export function isMailConfigured(): boolean {
+  return Boolean(mailConfig.password?.trim() && mailConfig.fromAddress?.trim());
+}
+
+export function getMailHealthStatus(): {
+  configured: boolean;
+  fromAddressSet: boolean;
+  transport: "resend-api" | "smtp" | "unconfigured";
+} {
+  const password = mailConfig.password?.trim() ?? "";
+  const configured = isMailConfigured();
+  let transport: "resend-api" | "smtp" | "unconfigured" = "unconfigured";
+  if (configured) {
+    if (mailConfig.transport === "smtp") {
+      transport = "smtp";
+    } else if (password.startsWith("re_")) {
+      transport = "resend-api";
+    } else {
+      transport = "smtp";
+    }
+  }
+  return {
+    configured,
+    fromAddressSet: Boolean(mailConfig.fromAddress?.trim()),
+    transport,
+  };
+}
+
+export function getResendWebhookSecret(): string | undefined {
+  return env.RESEND_WEBHOOK_SECRET?.trim() || undefined;
+}
+
 export const apiConfig = {
+  get runBullMqConsumers() {
+    const raw = env.RUN_BULLMQ_CONSUMERS;
+    if (raw === undefined || raw === "") return true;
+    return raw === "1" || raw.toLowerCase() === "true";
+  },
   get databaseUrl() {
     return env.DATABASE_URL ?? readRequiredString("DATABASE_URL");
   },
@@ -385,8 +455,50 @@ export const apiConfig = {
   get tenantDbNamePrefix() {
     return env.TENANT_DB_NAME_PREFIX ?? env.TENANT_DB_NAME_PERFIX;
   },
+  /** Control-plane API URL used in worker/org-provision payloads. */
+  get stockixApiUrl() {
+    return env.STOCKIX_API_URL;
+  },
+  /** NEXT_PUBLIC variant of the API URL (used by dashboard and org-provision). */
+  get nextPublicStockixApiUrl() {
+    return env.NEXT_PUBLIC_STOCKIX_API_URL;
+  },
+  /** When true, finance license sync failures are non-fatal (dev only). */
+  get financeLicenseSyncOptional(): boolean {
+    const flag = env.FINANCE_LICENSE_SYNC_OPTIONAL?.trim().toLowerCase();
+    if (flag === "1" || flag === "true") {
+      return env.NODE_ENV === "development";
+    }
+    return false;
+  },
+  /** Brand display name (default: "Stockix"). */
+  get brandName() {
+    return env.BRAND_NAME;
+  },
+  /** Public URL for POS frontend (used in proxy error messages). */
+  get posFrontendUrl() {
+    return env.POS_FRONTEND_URL;
+  },
+  /** DSN for Sentry error reporting (optional). */
+  get sentryDsn() {
+    return env.SENTRY_DSN;
+  },
+  get controlPlaneRedisUrl() {
+    const raw = env.CONTROL_PLANE_REDIS_URL?.trim();
+    return raw && raw.length > 0 ? raw : undefined;
+  },
+  get workerHeartbeatStaleMs() {
+    return env.WORKER_HEARTBEAT_STALE_MS;
+  },
+  get workerStaleLeaseThresholdMs() {
+    return env.WORKER_STALE_LEASE_THRESHOLD_MS;
+  },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);
+  },
+  /** Missing recommended vars for the current NODE_ENV (non-fatal). */
+  getMissingRecommendedEnv(): string[] {
+    return validateRecommendedEnvForProfile(env.NODE_ENV);
   },
 } as const;
 
@@ -448,6 +560,14 @@ export const dbConfig = {
 } as const;
 
 export const infraConfig = {
+  /** Redis URL for control-plane queues (BullMQ). Optional — queues disabled when unset. */
+  get controlPlaneRedisUrl() {
+    return env.CONTROL_PLANE_REDIS_URL;
+  },
+  /** How often the stuck-provisioning reconciler runs in ms (default: 60 000). */
+  get provisionReconcileIntervalMs() {
+    return env.PROVISION_RECONCILE_INTERVAL_MS;
+  },
   get rootDomain() {
     return env.ROOT_DOMAIN;
   },
@@ -488,6 +608,10 @@ export const posConfig = {
   platformApiKey: process.env.POS_PLATFORM_API_KEY ?? "",
   /** Absolute path to POS app root for worker provisioning */
   appRoot: process.env.POS_APP_ROOT ?? "services/posnew",
+  /** Public URL of the POS frontend (used in error messages / provisioning payloads) */
+  get frontendUrl() {
+    return env.POS_FRONTEND_URL ?? "";
+  },
 } as const;
 
 export const pmsConfig = {
@@ -501,6 +625,8 @@ export const pmsConfig = {
   icalSyncIntervalMs: parseInt(process.env.PMS_ICAL_SYNC_INTERVAL_MS ?? "600000", 10),
   /** Google Gemini API key for passport OCR (optional) */
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  /** Internal base URL for Finance API (used by PMS finance-sync). */
+  financeInternalBaseUrl: process.env.FINANCE_INTERNAL_BASE_URL ?? "http://localhost:3000",
 } as const;
 
 export const chatwootConfig = {
@@ -518,10 +644,20 @@ export const chatwootConfig = {
 
 export const moduleGatingConfig = {
   /**
-   * When true, worker provisions only the Docker stacks matching
+   * When true (default), worker provisions only the Docker stacks matching
    * the tenant's modules[] array.
-   * When false (default), Finance stack always provisioned (safe default).
+   * Set PROVISION_MODULE_GATING=0 for legacy mode (always provisions Finance).
    */
-  enabled: process.env.PROVISION_MODULE_GATING === "1",
+  get enabled() {
+    return process.env.PROVISION_MODULE_GATING !== "0";
+  },
+} as const;
+
+export const licenseConfig = {
+  defaultTermDays: parseInt(process.env.DEFAULT_LICENSE_TERM_DAYS ?? "365", 10),
+  /** When true, license sync failures return HTTP 502 instead of soft-failing. */
+  get syncStrict() {
+    return env.LICENSE_SYNC_STRICT === "1";
+  },
 } as const;
 

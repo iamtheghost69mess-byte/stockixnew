@@ -1,48 +1,26 @@
 // @ts-nocheck
 import { Route, Switch, useLocation } from 'react-router-dom';
-import BodyClassName from 'react-body-classname';
-import styled from 'styled-components';
 import { Suspense } from 'react';
 import { TransitionGroup, CSSTransition } from 'react-transition-group';
 import { Spinner } from '@blueprintjs/core';
 
 import authenticationRoutes from '@/routes/authentication';
-import { Box, FormattedMessage as T } from '@/components';
-import { AuthMetaBootProvider } from './AuthMetaBoot';
-
-import '@/style/pages/Authentication/Auth.scss';
-import { useIsDarkMode } from '@/hooks/useDarkMode';
-import { StockixLogo } from '@/components/Icons/StockixLogo';
+import { Box } from '@/components';
+import { AuthPageShell } from './AuthPageShell';
 
 export function Authentication() {
-  const isDarkMode = useIsDarkMode();
-
   return (
-    <BodyClassName className={'authentication'}>
-      <AuthPage>
-        <AuthInsider>
-          <AuthLogo>
-            <StockixLogo
-              height={37}
-              width={214}
-              color={isDarkMode ? 'rgba(255, 255, 255, 0.6)' : undefined}
-            />
-          </AuthLogo>
-
-          <AuthMetaBootProvider>
-            <Suspense
-              fallback={
-                <Box style={{ marginTop: '5rem' }}>
-                  <Spinner size={30} />
-                </Box>
-              }
-            >
-              <AuthenticationRoutes />
-            </Suspense>
-          </AuthMetaBootProvider>
-        </AuthInsider>
-      </AuthPage>
-    </BodyClassName>
+    <AuthPageShell>
+      <Suspense
+        fallback={
+          <Box style={{ marginTop: '5rem' }}>
+            <Spinner size={30} />
+          </Box>
+        }
+      >
+        <AuthenticationRoutes />
+      </Suspense>
+    </AuthPageShell>
   );
 }
 
@@ -71,16 +49,3 @@ function AuthenticationRoutes() {
     </TransitionGroup>
   );
 }
-
-const AuthPage = styled.div``;
-const AuthInsider = styled.div`
-  width: 384px;
-  margin: 0 auto;
-  margin-bottom: 40px;
-  padding-top: 80px;
-`;
-
-const AuthLogo = styled.div`
-  text-align: center;
-  margin-bottom: 40px;
-`;

@@ -22,10 +22,13 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
       return "'self' ws: wss:";
     }
   })();
-  response.headers.set(
-    "Content-Security-Policy",
-    `${buildCspForRuntime(dashboardConfig.securityCspBase)}; connect-src ${connectSrc}`,
-  );
+  const builtCsp = buildCspForRuntime(dashboardConfig.securityCspBase);
+  const connectSrcDirective = `connect-src ${connectSrc}`;
+  const finalCsp = builtCsp.includes("connect-src")
+    ? builtCsp.replace(/connect-src[^;]*/, connectSrcDirective)
+    : `${builtCsp}; ${connectSrcDirective}`;
+
+  response.headers.set("Content-Security-Policy", finalCsp);
   response.headers.set("Strict-Transport-Security", dashboardConfig.securityHsts);
   response.headers.set("X-Frame-Options", dashboardConfig.securityXFrameOptions);
   response.headers.set("Referrer-Policy", dashboardConfig.securityReferrerPolicy);
@@ -34,7 +37,10 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
 }
 
 export async function proxy(request: NextRequest) {
-  void request;
+  // Stale service workers from older builds hit /sw.js and slow dev (500 + retries).
+  if (request.nextUrl.pathname === "/sw.js") {
+    return new NextResponse(null, { status: 404 });
+  }
   return withSecurityHeaders(NextResponse.next());
 }
 

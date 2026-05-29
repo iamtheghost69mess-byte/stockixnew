@@ -1,0 +1,271 @@
+# Production operations — control plane
+
+# SECRETS ROTATED: 2026-05-27 — credentials rotated on production host after git history exposure (see [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md))
+
+Reference for `infra/prod` deploys. Secrets live in `infra/prod/.env` (gitignored).
+
+**Do not run `source infra/prod/.env` in bash** — values like `SECURITY_HSTS` contain semicolons and can cause exit 127. Use `scripts/load-env-file.sh infra/prod/.env` or let CI/deploy load env safely.
+
+After editing, sync and redeploy:
+
+```bash
+pnpm env:sync-prod          # copies infra/prod/.env → repo root .env (worker fallback)
+cd infra/prod
+docker compose --env-file .env up -d --build api api-bullmq infra-worker control-plane-redis
+```
+
+## Secret rotation (required before first paying-customer traffic)
+
+`.env` appeared in git history. Follow [docs/SECRET_ROTATION_RUNBOOK.md](../../docs/SECRET_ROTATION_RUNBOOK.md) on the **production host**:
+
+1. Rotate every secret in the runbook table (Postgres password, session, API keys, signing secrets, mail, webhooks, Cloudflare, Chatwoot, per-tenant `INTERNAL_API_SECRET`).
+2. `UPDATE owners SET session_version = session_version + 1;`
+3. Update `infra/prod/.env` only on the server (never commit).
+4. `pnpm env:sync-prod` then redeploy (command above).
+5. Re-sync `LICENSE_SIGNING_SECRET` to all POS tenant env files.
+6. Set `SECRETS ROTATED: YYYY-MM-DD` in this file header.
+
+## API and BullMQ layout
+
+| Service | Replicas | `RUN_BULLMQ_CONSUMERS` | Traefik |
+|---------|----------|------------------------|---------|
+| `api` | 1 (Compose; `deploy.replicas` needs Swarm) | `false` | yes — `api.${ROOT_DOMAIN}` |
+| `api-bullmq` | 1 | `true` | no — internal only |
+
+Post-deploy smoke (from repo root on server):
+
+```bash
+bash scripts/prod-scale-smoke.sh
+```
+
+## Database migrations
+
+All migrations in `packages/db/drizzle/meta/_journal.json` (including 0044–0046 and `0050_tenant_public_discovery_slug`) apply via:
+
+```bash
+cd /opt/stockix/stockixnew
+pnpm --filter @repo/db db:migrate
+pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
+```
+
+## Schema verification
+
+Runs automatically in CI deploy immediately after migrations.
+
+Manual production run:
+
+```bash
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
+. scripts/load-env-file.sh infra/prod/.env
+pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
+```
+
+Expected output: `✅ Schema verified: all N required columns present.`
+
+If it fails, resolve listed missing columns/types before serving traffic.
+
+After migrate, backfill public discovery slugs and sync tenant Finance `.env` files:
+
+```bash
+node apps/api/scripts/backfill-discovery-slugs.mjs
+node apps/api/scripts/sync-tenant-discovery-env.mjs
+# Rebuild tenant webapp images so Vite bakes REACT_APP_STOCKIX_DISCOVERY_SLUG
+```
+
+Do **not** run `scripts/apply-orphan-migrations.ts` in CI — emergency recovery only.
+
+**Verify:**
+
+```bash
+docker exec -i stockix-postgres-1 psql -U postgres -d stockix_platform \
+  -c "SELECT slug FROM platform_roles ORDER BY 1;"
+```
+
+## Environment variables (Section 1)
+
+| Variable | Where | Notes |
+|----------|--------|--------|
+| `LICENSE_SIGNING_SECRET` | `infra/prod/.env` → api + worker via compose | Min 32 chars; generate with `node scripts/generate-env-secrets.js` |
+| `CONTROL_PLANE_REDIS_URL` | `infra/prod/.env` | `redis://control-plane-redis:6379/0` when using prod compose Redis |
+| `LICENSE_SIGNING_SECRET` | Each tenant **POS** `.env` | **Must match** control-plane value for STXI validation |
+
+### POS tenant stacks
+
+Each provisioned POS backend reads `LICENSE_SIGNING_SECRET` from its tenant env file. When provisioning or updating tenants, set the same value as production `LICENSE_SIGNING_SECRET` in:
+
+- Tenant stack env under `TENANT_ENV_ROOT`, or
+- `services/posnew/apps/pos-backend/.env` used by that tenant’s compose project
+
+Mismatch causes STXI keys generated on the API to fail validation on POS login.
+
+## Tenant branding (Finance webapp)
+
+- Edit via dashboard tenant detail **Branding** tab → `PUT /tenants/:id/config` (control-plane `tenant_config`).
+- Worker writes `REACT_APP_STOCKIX_APP_NAME`, `REACT_APP_STOCKIX_LOGO_URL`, `REACT_APP_STOCKIX_PRIMARY_COLOR` into `infra/tenant-env/{slug}/.env`.
+- Rebuild the tenant Finance webapp image so Vite bakes env vars: `node scripts/rebuild-tenant-webapp.mjs {slug}` (or your deployment equivalent).
+- API pushes metadata to Finance: `POST /api/internal/organization/branding/sync` on the tenant stack (requires `INTERNAL_API_SECRET`).
+
+## Finance license sync on provision
+
+- Worker and API sync plan `maxOrganizations` to Finance `tenant_licenses` after provision (`syncFinanceLicense` / `syncFinanceLicenseForStockixTenant`).
+- `organization.provision` syncs license for each new Finance sub-tenant using the parent Stockix tenant’s active license.
+- Provision readiness includes `finance_license_sync_missing` when accounting modules are enabled but no sync event was journaled.
+- `FINANCE_LICENSE_SYNC_OPTIONAL=1` (development only) allows provision to continue if sync fails.
+
+## License ↔ POS sync strict mode
+
+- `LICENSE_SYNC_STRICT=1` on the control-plane API: license suspend and tenant suspend **fail with HTTP 502** when Finance or POS sync fails (instead of returning success with `posSync: "failed"`).
+- Recommended for production **after** staging verification of suspend/reactivate and STXI flows ([docs/section-2.3-license-e2e-checklist.md](../../docs/section-2.3-license-e2e-checklist.md)).
+- Default (unset): license row updates succeed; POS sync failures are logged and surfaced in API JSON (`posSync`, `errors`).
+
+## Email configuration
+
+### Resend webhook setup
+
+1. Log in to [resend.com](https://resend.com) → **Webhooks** → **Add Endpoint**
+2. URL: `https://api.${ROOT_DOMAIN}/webhooks/resend` (replace with your API host)
+3. Events: `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`
+4. Copy the **Signing Secret** (`whsec_…`)
+5. Set in `infra/prod/.env`: `RESEND_WEBHOOK_SECRET=<signing-secret>`
+6. `pnpm env:sync-prod` then restart: `docker compose --env-file .env restart api api-bullmq`
+
+Without `RESEND_WEBHOOK_SECRET`, production rejects unsigned webhooks (401). `email_logs` delivery status will not update.
+
+## Redis (mandatory in production)
+
+`CONTROL_PLANE_REDIS_URL` is **required**. The API exits on startup if unset in production.
+Rate limits and BullMQ are not safe across multiple API replicas without shared Redis.
+
+Prod compose runs **`api`** (1 replica, `RUN_BULLMQ_CONSUMERS=false`) and **`api-bullmq`** (1 replica, `RUN_BULLMQ_CONSUMERS=true`). Do not set `RUN_BULLMQ_CONSUMERS=true` on `api`.
+
+## Cloudflare DNS API token
+
+`CF_DNS_API_TOKEN` is **required** for Traefik automatic TLS (Let's Encrypt DNS-01 via Cloudflare).
+
+- **Source:** Cloudflare dashboard → API Tokens → Create Token
+- **Permission:** Zone → DNS → Edit (scoped to your zone)
+- **Variable:** `CF_DNS_API_TOKEN` in `infra/prod/.env`
+- **If missing:** certificate issuance and renewal fail → HTTPS breaks for `api.*` and tenant routes
+
+## Docker socket-proxy
+
+The socket-proxy restricts Docker API access for the worker.
+
+Current permissions:
+- `CONTAINERS=1`
+- `NETWORKS=1`
+- `IMAGES=1`
+- `POST=1`
+- `BUILD=0` — tenant images are pre-built (`pnpm docker:prebuild`)
+
+If you need `docker build` during provision:
+1. Set `BUILD=1` in `socket-proxy` environment
+2. Document the reason in this file
+3. Re-run security review before rollout
+
+Security note: socket-proxy compromise = host root access. Never expose port `2375` outside internal Docker networks.
+
+## Control plane queues (BullMQ)
+
+- Redis service: `control-plane-redis` (internal Docker network only).
+- API logs on start when `CONTROL_PLANE_REDIS_URL` is set:
+  - `License expiry BullMQ worker started`
+  - `Owner invite mail BullMQ worker started`
+- License milestone log line: `license_expiry_milestone_fired`.
+- Owner invite mail log line: `owner_invite_mail_sent`; exhausted retries audit `invite.email_failed`.
+- If Redis is down or URL unset, license milestones and owner invite mail run **inline** in the API request (degraded but functional).
+
+## POS bootstrap credentials repair
+
+When `defaultCredentials` on a POS org drifts from bootstrap users (masked rows missing or wrong counts):
+
+```bash
+curl -X POST "https://api.${ROOT_DOMAIN}/api/platform/v1/organizations/{posOrgId}/repair-credentials" \
+  -H "X-Api-Key: $POS_PLATFORM_API_KEY"
+```
+
+Or run `node services/posnew/apps/pos-backend/scripts/repairCredentials.js` (uses the same sync logic). Plaintext PINs cannot be recovered — use dashboard **Reset PIN** per role.
+
+## Database Backup (Backblaze B2)
+
+Backups run automatically at **02:00 and 14:00 UTC** via the `db-backup` container.  
+Storage: Backblaze B2 (S3-compatible), bucket: `$BACKUP_B2_BUCKET`.
+
+Required env: `BACKUP_B2_BUCKET`, `BACKUP_B2_KEY_ID`, `BACKUP_B2_APP_KEY`, `BACKUP_B2_ENDPOINT`.
+
+### Verify last backup
+
+```bash
+docker compose -f infra/prod/docker-compose.yml logs db-backup --tail=20
+# Expect: "[backup] Backup complete."
+```
+
+### List available backups
+
+```bash
+AWS_ACCESS_KEY_ID=$BACKUP_B2_KEY_ID \
+AWS_SECRET_ACCESS_KEY=$BACKUP_B2_APP_KEY \
+aws s3 ls "s3://$BACKUP_B2_BUCKET/$BACKUP_B2_PREFIX/" \
+  --endpoint-url "$BACKUP_B2_ENDPOINT" \
+  | sort | tail -10
+```
+
+### Restore procedure
+
+```bash
+# 1. Download the backup
+AWS_ACCESS_KEY_ID=$BACKUP_B2_KEY_ID \
+AWS_SECRET_ACCESS_KEY=$BACKUP_B2_APP_KEY \
+aws s3 cp \
+  "s3://$BACKUP_B2_BUCKET/$BACKUP_B2_PREFIX/<filename>.dump.gz" \
+  /tmp/restore.dump.gz \
+  --endpoint-url "$BACKUP_B2_ENDPOINT"
+
+# 2. Decompress
+gunzip /tmp/restore.dump.gz
+
+# 3. Stop API to prevent writes during restore
+cd infra/prod
+docker compose --env-file .env stop api api-bullmq
+
+# 4. Restore
+docker exec -i stockix-postgres-1 pg_restore \
+  -U "$POSTGRES_USER" \
+  -d "${POSTGRES_DB:-stockix_platform}" \
+  --clean \
+  --if-exists \
+  --verbose \
+  < /tmp/restore.dump
+
+# 5. Restart API
+docker compose --env-file .env start api api-bullmq
+
+# 6. Verify
+curl -fsS "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready"
+```
+
+### Estimated RPO
+
+Maximum data loss: ~12 hours (between 02:00 and 14:00 UTC windows). For &lt;1 hour RPO, add continuous WAL archiving later.
+
+## Rollout checklist
+
+1. Backup Postgres (`stockix_platform`) or confirm S3 backup job healthy.
+2. Apply migrations 0044 → 0045 → 0046.
+3. Set `CONTROL_PLANE_REDIS_URL` in `infra/prod/.env`.
+4. Deploy `control-plane-redis`, `api`, `infra-worker`.
+5. Confirm API health and one test milestone (staging license) if possible.
+6. Propagate `LICENSE_SIGNING_SECRET` to POS tenant envs before issuing new STXI keys.
+
+## GitHub branch protection
+
+Status: **PENDING**
+
+Required checks:
+- Quality gate (`.github/workflows/deploy.yml`)
+- Gitleaks (`.github/workflows/secret-scan.yml`)
+
+Minimum reviewers: 1  
+Admin bypass: DISABLED (required)
+
+Verified by: [NAME] on [DATE]

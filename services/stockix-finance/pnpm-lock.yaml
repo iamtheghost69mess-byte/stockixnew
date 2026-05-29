@@ -279,6 +279,8 @@ importers:
       webpack-node-externals: 3.0.0
       webpack-watch-changed: 1.0.0
 
+  packages/shared: {}
+
   packages/webapp:
     specifiers:
       '@blueprintjs-formik/core': 0.3.3

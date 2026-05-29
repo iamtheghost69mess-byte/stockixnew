@@ -79,7 +79,7 @@ function VendorReturnDetailPageContent() {
         })),
       );
     }
-  }, [rtv?.lines]);
+  }, [rtv?.lines, localLines.length, hasUnsavedChanges]);
 
   // 2. Mutations
   const updateMutation = useMutation({
@@ -181,7 +181,7 @@ function VendorReturnDetailPageContent() {
             </Link>
           </Button>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-mono font-bold text-2xl uppercase tracking-widest">{rtv.returnNumber}</h1>
+            <h1 className="font-bold font-mono text-2xl uppercase tracking-widest">{rtv.returnNumber}</h1>
             <Badge variant="outline" className="capitalize">
               {rtv.status}
             </Badge>
@@ -243,7 +243,7 @@ function VendorReturnDetailPageContent() {
               </TableHeader>
               <TableBody>
                 {localLines.map((line, idx) => {
-                  const ing = ingredients.find((i) => i._id === line.ingredientId);
+                  const _ing = ingredients.find((i) => i._id === line.ingredientId);
                   return (
                     <TableRow key={idx}>
                       <TableCell>
@@ -352,12 +352,12 @@ function VendorReturnDetailPageContent() {
               </div>
               <div className="pt-2">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Created By</p>
-                <p className="text-sm font-medium">System Admin</p>
+                <p className="font-medium text-sm">System Admin</p>
               </div>
               {rtv.vendorCreditNoteRef && (
                 <div className="pt-2">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Credit Note Ref</p>
-                  <p className="text-sm font-mono">{rtv.vendorCreditNoteRef}</p>
+                  <p className="font-mono text-sm">{rtv.vendorCreditNoteRef}</p>
                 </div>
               )}
             </CardContent>
@@ -368,7 +368,7 @@ function VendorReturnDetailPageContent() {
               <CardTitle className="text-sm">Notes</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{rtv.notes || "No extra notes."}</p>
+              <p className="text-muted-foreground text-sm">{rtv.notes || "No extra notes."}</p>
             </CardContent>
           </Card>
         </div>

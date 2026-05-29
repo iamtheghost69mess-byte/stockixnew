@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -20,11 +21,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+type ForgotPasswordResponse = {
+  error?: string;
+  mailConfigured?: boolean;
+  emailSent?: boolean;
+  accountPending?: boolean;
+};
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mailConfigured, setMailConfigured] = useState(true);
+  const [emailSent, setEmailSent] = useState(true);
+  const [accountPending, setAccountPending] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,11 +47,14 @@ export default function ForgotPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as ForgotPasswordResponse;
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Try again in a moment.");
         return;
       }
+      setMailConfigured(data.mailConfigured !== false);
+      setEmailSent(data.emailSent !== false);
+      setAccountPending(data.accountPending === true);
       setSubmitted(true);
     } catch {
       setError("Network error — please try again");
@@ -64,15 +78,42 @@ export default function ForgotPasswordPage() {
         <CardContent>
           {submitted ? (
             <div className="space-y-4 text-center">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                If an account exists for <span className="font-medium text-foreground">{email}</span>
-                , you will receive an email with a link to choose a new password. The link expires in
-                one hour.
-              </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                In local development, the API logs a reset URL to the server console when email
-                delivery is not configured.
-              </p>
+              {accountPending ? (
+                <Alert className="text-left">
+                  <AlertTitle>Accept your invite first</AlertTitle>
+                  <AlertDescription>
+                    This email is linked to a pending team invitation. Open the invite link from your
+                    email to set a password, or ask an administrator to resend the invitation.
+                  </AlertDescription>
+                </Alert>
+              ) : !mailConfigured ? (
+                <Alert variant="destructive" className="text-left">
+                  <AlertTitle>Email delivery not configured</AlertTitle>
+                  <AlertDescription>
+                    This environment cannot send password reset emails. Ask your platform administrator
+                    to configure SMTP (MAIL_HOST, MAIL_PASSWORD, MAIL_FROM_ADDRESS) or use a development
+                    reset link from the API server logs.
+                  </AlertDescription>
+                </Alert>
+              ) : !emailSent ? (
+                <Alert variant="destructive" className="text-left">
+                  <AlertTitle>Email could not be sent</AlertTitle>
+                  <AlertDescription>
+                    Mail is configured but delivery failed. Try again later or contact your administrator.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  If an account exists for{" "}
+                  <span className="font-medium text-foreground">{email}</span>, you will receive an email
+                  with a link to choose a new password. The link expires in one hour.
+                </p>
+              )}
+              {mailConfigured && emailSent ? (
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Check your spam folder if the message does not arrive within a few minutes.
+                </p>
+              ) : null}
               <Link
                 href="/login"
                 className={cn(

@@ -7,6 +7,10 @@ vi.mock("@repo/config", () => ({
   apiConfig: {
     licenseSigningSecret: "test-license-signing-secret-32chars",
   },
+  licenseConfig: {
+    defaultTermDays: 365,
+    syncStrict: false,
+  },
 }));
 
 vi.mock("../src/audit.js", () => ({
@@ -24,6 +28,7 @@ vi.mock("../src/license-utils.js", async (importOriginal) => {
   return {
     ...mod,
     signOfflineToken: signOfflineTokenMock,
+    insertLicenseHistory: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -122,6 +127,7 @@ describe("POST /licenses/activate", () => {
   });
 
   it("returns 403 when license status is unassigned", async () => {
+    vi.resetModules();
     const { registerLicenseApi } = await import("../src/license-http.js");
     const testApp = new Hono();
     registerLicenseApi(

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -54,6 +55,33 @@ export class InternalOrgController {
       tenantId,
       parentTenantId,
     );
+  }
+
+  @Get(':tenantId/export-chart-of-accounts')
+  @HttpCode(HttpStatus.OK)
+  async exportChartOfAccounts(@Param('tenantId', ParseIntPipe) tenantId: number) {
+    return this.copyParentTenantSettingsService.exportChartOfAccounts(tenantId);
+  }
+
+  @Post(':tenantId/import-chart-of-accounts')
+  @HttpCode(HttpStatus.OK)
+  async importChartOfAccounts(
+    @Param('tenantId', ParseIntPipe) tenantId: number,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const accounts = Array.isArray(body.accounts) ? body.accounts : [];
+    const taxRates = Array.isArray(body.taxRates)
+      ? body.taxRates
+      : Array.isArray(body.tax_rates)
+        ? body.tax_rates
+        : [];
+    const settings = Array.isArray(body.settings) ? body.settings : [];
+
+    return this.copyParentTenantSettingsService.importChartOfAccounts(tenantId, {
+      accounts,
+      taxRates,
+      settings,
+    });
   }
 
   @Post(':tenantId/set-parent')

@@ -24,14 +24,24 @@ const {
   getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
+  consumeProvisioningCredentials,
+  repairOrgCredentials,
   patchOrgLifecycle,
+  suspendOrg,
   patchOrgLicense,
   patchOrgLocationSupport,
   patchEntitlements,
   deleteOrg,
+  getOrgCredentials,
   resetCredentialRolePin,
+  resetOrgPin,
   retryProvisioning,
 } = require("../controllers/platformOrgController");
+const {
+  wireBigcapitalIntegration,
+  getBigcapitalIntegrationHealth,
+  getIntegrationBridgeSummary,
+} = require("../controllers/platformIntegrationController");
 const {
   summary,
   kpis,
@@ -149,9 +159,29 @@ router.get(
   getOrgProvisioningStatus
 );
 router.post(
+  "/organizations/:id/provisioning-credentials/consume",
+  requirePlatformPermission(P.ORG_WRITE),
+  consumeProvisioningCredentials
+);
+router.post(
+  "/organizations/:id/repair-credentials",
+  requirePlatformPermission(P.ORG_WRITE),
+  repairOrgCredentials
+);
+router.post(
   "/organizations/:id/provisioning/retry",
   requirePlatformPermission(P.ORG_WRITE),
   retryProvisioning
+);
+router.get(
+  "/organizations/:id/credentials",
+  requirePlatformPermission(P.ORG_READ),
+  getOrgCredentials
+);
+router.post(
+  "/organizations/:id/reset-pin",
+  requirePlatformPermission(P.ORG_WRITE),
+  resetOrgPin
 );
 router.patch(
   "/organizations/:id/credentials/:role/reset-pin",
@@ -164,10 +194,30 @@ router.get(
   getOrgObservability
 );
 router.get("/organizations/:id", requirePlatformPermission(P.ORG_READ), getOrg);
+router.put(
+  "/organizations/:id/integration/bigcapital",
+  requirePlatformPermission(P.ORG_WRITE),
+  wireBigcapitalIntegration
+);
+router.get(
+  "/organizations/:id/integration/bigcapital/health",
+  requirePlatformPermission(P.ORG_READ),
+  getBigcapitalIntegrationHealth
+);
+router.get(
+  "/organizations/:id/integration/bridge-summary",
+  requirePlatformPermission(P.ORG_READ),
+  getIntegrationBridgeSummary
+);
 router.patch(
   "/organizations/:id/lifecycle",
   requirePlatformPermission(P.ORG_WRITE),
   patchOrgLifecycle
+);
+router.post(
+  "/organizations/:id/suspend",
+  requirePlatformPermission(P.ORG_WRITE),
+  suspendOrg
 );
 router.patch(
   "/organizations/:id/license",

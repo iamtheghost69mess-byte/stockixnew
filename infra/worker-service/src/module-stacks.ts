@@ -1,8 +1,9 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import { execa } from "execa";
 
-import { apiConfig, posConfig } from "@repo/config";
+import { apiConfig, env, moduleGatingConfig, posConfig } from "@repo/config";
+import { publicConfig } from "@repo/config/public";
 
 import { allocateTenantPort } from "@repo/db";
 
@@ -14,9 +15,11 @@ import * as dbSchema from "@repo/db/schema";
 
 import { tenantDeployments } from "@repo/db/schema";
 
-
+import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
 
 import type { ProvisionTracer } from "../domain/provision-trace.js";
+import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
+import { isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
 
 import {
 
@@ -25,6 +28,8 @@ import {
   type BootstrapPosOrgResult,
 
 } from "../domain/provisioning/adapters/bootstrap-pos-org.js";
+
+import { buildFinanceInternalUrlForPos } from "../domain/provisioning/build-finance-internal-url.js";
 
 import {
 
@@ -40,6 +45,15 @@ function repoRoot(): string {
 
   return apiConfig.repoRoot ?? process.cwd();
 
+}
+
+async function dockerImageExists(tag: string): Promise<boolean> {
+  try {
+    await execa("docker", ["image", "inspect", tag], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 
@@ -68,12 +82,9 @@ export function resolveTenantModules(inputModules?: string[] | null): string[] {
 
 
 
-/** True when `PROVISION_MODULE_GATING=1` (any other value disables gating). */
-
+/** True when module gating is enabled (default). Only `PROVISION_MODULE_GATING=0` disables it. */
 export function isModuleGatingEnabled(): boolean {
-
-  return process.env.PROVISION_MODULE_GATING === "1";
-
+  return moduleGatingConfig.enabled;
 }
 
 
@@ -158,6 +169,24 @@ export type ProvisionPosStackInput = {
 
   db?: PostgresJsDatabase<typeof dbSchema>;
 
+  /** Stockix license expiry passed to POS org bootstrap. */
+  licenseExpiresAt?: Date | null;
+
+  /** Finance stack host port (for POS container → Finance URL). */
+
+  financeInternalPort?: number;
+
+  /** Stockix licensed modules for POS entitlements. */
+  tenantModules?: string[];
+
+  planSlug?: string;
+
+  maxUsers?: number | null;
+
+  maxLocations?: number | null;
+
+  maxOrdersPerMonth?: number | null;
+
 };
 
 
@@ -167,6 +196,8 @@ export type ProvisionPosStackResult = BootstrapPosOrgResult & {
   posUrl: string;
 
   posApiUrl: string;
+
+  posHostPort: number;
 
 };
 
@@ -196,20 +227,23 @@ function defaultPosFrontendPort(): number {
 
 
 
-function buildPosPublicUrls(slug: string): { posUrl: string; posApiUrl: string } {
-
+function buildPosPublicUrls(
+  slug: string,
+  ports: { backendPort: number; frontendPort: number },
+): { posUrl: string; posApiUrl: string } {
   const rootDomain = apiConfig.rootDomain || "example.com";
-
-  const scheme = apiConfig.publicBaseUrlScheme || "https";
-
+  const scheme = (apiConfig.publicBaseUrlScheme || "https").replace(/:+$/, "");
+  if (rootDomain === "localhost") {
+    const host = publicConfig.stockixLocalTenantHost || "127.0.0.1";
+    return {
+      posUrl: `${scheme}://${host}:${ports.frontendPort}`,
+      posApiUrl: `${scheme}://${host}:${ports.backendPort}`,
+    };
+  }
   return {
-
     posUrl: `${scheme}://${slug}-pos.${rootDomain}`,
-
     posApiUrl: `${scheme}://${slug}-pos-api.${rootDomain}`,
-
   };
-
 }
 
 
@@ -258,61 +292,112 @@ export async function provisionPosStack(
 
   const project = `stockix-pos-${opts.slug}`;
 
-  const posAppRoot = process.env.POS_APP_ROOT ?? join(repoRoot(), "services", "posnew");
+  const posAppRootRaw = process.env.POS_APP_ROOT ?? join("services", "posnew");
+  const posAppRoot = isAbsolute(posAppRootRaw)
+    ? posAppRootRaw
+    : join(repoRoot(), posAppRootRaw);
 
   const platformApiKey = posConfig.platformApiKey.trim();
 
-  const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug);
-
   const rootDomain = apiConfig.rootDomain || "example.com";
 
-
-
   const { backendPort, frontendPort } = await resolvePosPorts(opts.db, opts.log);
+
+  const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug, { backendPort, frontendPort });
+
+  const financeInternalBaseUrl =
+    opts.financeInternalPort && opts.financeInternalPort > 0
+      ? buildFinanceInternalUrlForPos({
+          slug: opts.slug,
+          internalPort: opts.financeInternalPort,
+        })
+      : "";
 
 
 
   opts.log(`[provision][pos] compose up project=${project}`);
 
-  await execa(
+  const stockixRepoRoot = repoRoot();
+  const resendApiKey =
+    process.env.RESEND_API_KEY?.trim() || env.MAIL_PASSWORD?.trim() || "";
+  const resendFromEmail =
+    process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
 
-    "docker",
+  const composeEnv = {
+    ...process.env,
+    COMPOSE_PROJECT_NAME: project,
+    STOCKIX_REPO_ROOT: stockixRepoRoot,
+    POS_APP_ROOT: posAppRoot,
+    POS_HOST_PORT: String(backendPort),
+    POS_FRONTEND_HOST_PORT: String(frontendPort),
+    TENANT_ID: opts.tenantId,
+    AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+    POS_PLATFORM_API_KEY: platformApiKey,
+    POS_BACKEND_URL: posApiUrl,
+    POS_FRONTEND_URL: posUrl,
+    CORS_ORIGINS: buildPosCorsOrigins(opts.slug),
+    ROOT_DOMAIN: rootDomain,
+    RESEND_API_KEY: resendApiKey,
+    RESEND_FROM_EMAIL: resendFromEmail,
+    ...(financeInternalBaseUrl
+      ? { FINANCE_INTERNAL_BASE_URL: financeInternalBaseUrl }
+      : {}),
+  };
 
-    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+  if (!(await dockerImageExists("stockix-pos-backend:local"))) {
+    throw new Error(
+      "stockix-pos-backend:local not found — run pnpm pos:images:build before POS provision",
+    );
+  }
 
-    {
+  const upServices = [
+    "pos-mongo",
+    "pos-mongo-init",
+    "pos-redis",
+    "pos-backend",
+    "pos-platform-worker",
+    "pos-bigcapital-worker",
+  ];
+  if (await dockerImageExists("stockix-pos-frontend:local")) {
+    if (await isPosFrontendStubImage()) {
+      throw new Error(
+        "stockix-pos-frontend:local is the nginx stub (shows 'POS frontend placeholder'). " +
+          "Run: pnpm pos:images:build -- --force",
+      );
+    }
+    upServices.push("pos-frontend");
+  } else {
+    opts.log(
+      "[provision][pos] stockix-pos-frontend:local not found — skipping frontend container (pnpm pos:images:build)",
+    );
+  }
 
-      env: {
-
-        ...process.env,
-
-        COMPOSE_PROJECT_NAME: project,
-
-        POS_APP_ROOT: posAppRoot,
-
-        POS_HOST_PORT: String(backendPort),
-
-        POS_FRONTEND_HOST_PORT: String(frontendPort),
-
-        TENANT_ID: opts.tenantId,
-
-        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
-
-        POS_PLATFORM_API_KEY: platformApiKey,
-
-        POS_BACKEND_URL: posApiUrl,
-
-        POS_FRONTEND_URL: posUrl,
-
-        ROOT_DOMAIN: rootDomain,
-
-      },
-
-      stdio: "inherit",
-
-    },
-
-  );
+  // Use pre-built images only — do not pass --build (would rebuild pos-frontend from the full Next Dockerfile).
+  try {
+    const composeRun = await execa(
+      "docker",
+      ["compose", "-f", composeFile, "-p", project, "up", "-d", ...upServices],
+      { env: composeEnv, stdio: "pipe", reject: false },
+    );
+    if (composeRun.stdout) {
+      for (const line of composeRun.stdout.split("\n").slice(-20)) {
+        if (line.trim()) opts.log(`[provision][pos][compose] ${line}`);
+      }
+    }
+    if (composeRun.exitCode !== 0) {
+      const stderrTail = (composeRun.stderr ?? "").slice(-2048);
+      opts.log(`[provision][pos][compose] stderr (tail):\n${stderrTail}`);
+      throw new Error(
+        `docker compose exit ${composeRun.exitCode}: ${stderrTail.slice(0, 400) || "see worker logs"}`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("docker compose exit")) {
+      throw error;
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`POS compose failed: ${msg}`);
+  }
 
 
 
@@ -328,15 +413,30 @@ export async function provisionPosStack(
 
     log: opts.log,
 
+    licenseExpiresAt: opts.licenseExpiresAt,
+
+    tenantModules: opts.tenantModules,
+
+    maxUsers: opts.maxUsers,
+
+    maxLocations: opts.maxLocations,
+
+    maxOrdersPerMonth: opts.maxOrdersPerMonth,
+
     posHostPort: backendPort,
 
   });
 
 
 
-  opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
-
-  await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
+  if (rootDomain === "localhost") {
+    opts.log(
+      `[provision][pos] localhost dev: skipping Traefik (open POS at ${posUrl})`,
+    );
+  } else {
+    opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
+    await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
+  }
 
 
 
@@ -375,6 +475,8 @@ export async function provisionPosStack(
     posUrl,
 
     posApiUrl,
+
+    posHostPort: backendPort,
 
   };
 
@@ -444,6 +546,49 @@ export async function unpublishPosTraefik(slug: string): Promise<void> {
 
   await removePosTraefikConfig(slug);
 
+}
+
+/** Stop Finance tenant stack (remove accounting module). Data volumes are retained. */
+export async function stopFinanceStack(
+  slug: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const composeFile = join(repoRoot(), "infra", "tenant-stack", "docker-compose.yml");
+  const project = composeProjectName(slug);
+  log(`[module-stop][accounting] compose stop project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "stop"],
+    { stdio: "pipe", reject: false },
+  );
+}
+
+/** Stop a module stack without removing volumes (remove-module). */
+export async function stopModuleStack(
+  slug: string,
+  module: "pos" | "pms",
+  log: (m: string) => void,
+): Promise<void> {
+  if (module === "pos") {
+    const composeFile = join(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
+    const project = `stockix-pos-${slug}`;
+    log(`[module-stop][pos] compose down project=${project}`);
+    await execa(
+      "docker",
+      ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
+      { stdio: "pipe", reject: false },
+    );
+    await unpublishPosTraefik(slug);
+    return;
+  }
+  const composeFile = join(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
+  const project = `stockix-pms-${slug}`;
+  log(`[module-stop][pms] compose down project=${project}`);
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
+    { stdio: "pipe", reject: false },
+  );
 }
 
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -121,8 +121,8 @@ export function VariantsEditor({ open, onOpenChange, menuItemId, menuItemName }:
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          <form onSubmit={handleSubmit} className="space-y-4 rounded-md border p-4 bg-muted/20">
-            <h3 className="text-sm font-semibold">{editingVariant ? "Edit Variant" : "Add New Variant"}</h3>
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-md border bg-muted/20 p-4">
+            <h3 className="font-semibold text-sm">{editingVariant ? "Edit Variant" : "Add New Variant"}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="v-name">Variant Name</Label>

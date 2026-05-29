@@ -112,8 +112,8 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/plans/uuid-here", "DELETE")).toBe("super_admin");
   });
 
-  it("returns null for public tenant orgs", () => {
-    expect(requiredApiRole("/public/tenant-orgs/abc", "GET")).toBeNull();
+  it("returns null for public tenant discovery", () => {
+    expect(requiredApiRole("/public/tenant/abc123slug", "GET")).toBeNull();
   });
 
   it("GET /audit-log requires super_admin", () => {

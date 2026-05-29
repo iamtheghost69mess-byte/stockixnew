@@ -13,6 +13,7 @@ function toAccessInput(organization) {
     licenseStartDate: organization?.licenseStartDate ?? organization?.licenseStartsAt ?? null,
     licenseEndDate: organization?.licenseEndDate ?? organization?.licenseEndsAt ?? null,
     timezone: organization?.timezone ?? null,
+    lifecycle: organization?.lifecycle ?? null,
   };
 }
 
@@ -41,7 +42,11 @@ async function enforceOrganizationAccess(orgId, organization, context = {}) {
     route: context.routeKey,
   });
   if (config.licenseEnforcementMode === "shadow") return accessState;
-  throw createHttpError(403, accessState.reason);
+  const err = createHttpError(403, accessState.reason);
+  if (accessState.blockCode) {
+    err.code = accessState.blockCode;
+  }
+  throw err;
 }
 
 async function logWorkerSkipDueToBlockedOrg(orgId, accessState, context = {}) {

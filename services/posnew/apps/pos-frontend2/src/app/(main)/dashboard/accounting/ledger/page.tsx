@@ -221,7 +221,7 @@ export default function JournalLedgerPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <Label htmlFor="jf-page-size" className="text-muted-foreground whitespace-nowrap text-sm">
+              <Label htmlFor="jf-page-size" className="whitespace-nowrap text-muted-foreground text-sm">
                 Rows per page
               </Label>
               <Select
@@ -308,7 +308,7 @@ export default function JournalLedgerPage() {
                           <TableCell className="whitespace-nowrap pl-4 text-sm tabular-nums">
                             {row.entryDate ? format(new Date(row.entryDate), "yyyy-MM-dd") : "—"}
                           </TableCell>
-                          <TableCell className="font-mono text-xs font-medium tracking-tight">
+                          <TableCell className="font-medium font-mono text-xs tracking-tight">
                             {formatJournalEntryReference(row.entryNumber)}
                           </TableCell>
                           <TableCell>
@@ -316,7 +316,7 @@ export default function JournalLedgerPage() {
                               {row.sourceType}
                             </Badge>
                           </TableCell>
-                          <TableCell className="max-w-[min(28rem,45vw)] truncate text-sm text-foreground/90">
+                          <TableCell className="max-w-[min(28rem,45vw)] truncate text-foreground/90 text-sm">
                             {row.memo || "—"}
                           </TableCell>
                           <TableCell className="text-right font-mono text-sm tabular-nums">

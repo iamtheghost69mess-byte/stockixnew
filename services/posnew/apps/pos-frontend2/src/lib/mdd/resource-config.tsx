@@ -145,7 +145,7 @@ export const ResourceRegistry: Record<string, ResourceDefinition> = {
         label: "Price",
         type: "custom",
         render: (row: any) => (
-          <div className="flex flex-col gap-0.5 text-sm leading-tight tabular-nums">
+          <div className="flex flex-col gap-0.5 text-sm tabular-nums leading-tight">
             {(row.priceUsd || 0) > 0 && <span>{formatCurrency(row.priceUsd, { currency: "USD" })}</span>}
             {(row.priceLbp || 0) > 0 && (
               <span className="text-muted-foreground text-xs">
@@ -185,7 +185,7 @@ export const ResourceRegistry: Record<string, ResourceDefinition> = {
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs h-8 px-2"
+              className="h-8 px-2 text-xs"
               onClick={() => onAction?.(row, "open-recipe", null)}
             >
               Recipe
@@ -193,7 +193,7 @@ export const ResourceRegistry: Record<string, ResourceDefinition> = {
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs h-8 px-2"
+              className="h-8 px-2 text-xs"
               onClick={() => onAction?.(row, "variants", null)}
             >
               Variants

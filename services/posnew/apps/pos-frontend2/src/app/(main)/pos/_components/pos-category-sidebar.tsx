@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ChevronDown, ChevronRight, Folder, FolderOpen, LayoutGrid, Tag } from "lucide-react";
+import { ChevronDown, Folder, FolderOpen, LayoutGrid, Tag } from "lucide-react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { PosCategory } from "@/lib/pos-catalog-api";
@@ -44,7 +44,7 @@ export function PosCategorySidebar({
       const parentId = typeof cat.parentCategory === "string" ? cat.parentCategory : cat.parentCategory?._id;
 
       if (parentId && map.has(String(parentId))) {
-        map.get(String(parentId))!.children.push(node);
+        map.get(String(parentId))?.children.push(node);
       } else {
         roots.push(node);
       }
@@ -98,20 +98,20 @@ export function PosCategorySidebar({
   return (
     <div
       className={cn(
-        "flex h-full flex-col bg-zinc-950 border-r border-zinc-800 transition-all duration-300",
+        "flex h-full flex-col border-zinc-800 border-r bg-zinc-950 transition-all duration-300",
         collapsed ? "w-20" : "w-72",
       )}
     >
       {/* Sidebar Header Style */}
-      <div className={cn("shrink-0 py-8 px-4", collapsed ? "items-center" : "ps-6")}>
+      <div className={cn("shrink-0 px-4 py-8", collapsed ? "items-center" : "ps-6")}>
         {!collapsed && (
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-8 w-8 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-900/40">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-600 shadow-emerald-900/40 shadow-lg">
               <LayoutGrid className="h-4 w-4 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-black text-white uppercase tracking-widest leading-none">POS CATALOG</span>
-              <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter mt-1">
+              <span className="font-black text-white text-xs uppercase leading-none tracking-widest">POS CATALOG</span>
+              <span className="mt-1 font-bold text-[9px] text-zinc-600 uppercase tracking-tighter">
                 Enterprise Edition
               </span>
             </div>
@@ -121,15 +121,15 @@ export function PosCategorySidebar({
         <button
           onClick={() => onSelectCategory("all")}
           className={cn(
-            "group flex items-center transition-all duration-300 rounded-xl",
-            collapsed ? "h-12 w-12 justify-center mx-auto" : "w-full h-12 px-4 gap-3",
+            "group flex items-center rounded-xl transition-all duration-300",
+            collapsed ? "mx-auto h-12 w-12 justify-center" : "h-12 w-full gap-3 px-4",
             selectedCategoryId === "all"
-              ? "bg-emerald-600 text-white shadow-xl shadow-emerald-900/20"
+              ? "bg-emerald-600 text-white shadow-emerald-900/20 shadow-xl"
               : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200",
           )}
         >
           <LayoutGrid className={cn("h-5 w-5", selectedCategoryId === "all" ? "opacity-100" : "opacity-40")} />
-          {!collapsed && <span className="text-sm font-bold tracking-wide">All Items</span>}
+          {!collapsed && <span className="font-bold text-sm tracking-wide">All Items</span>}
         </button>
       </div>
 
@@ -197,28 +197,28 @@ function CategoryItem({
   };
 
   return (
-    <li className={cn("select-none mb-1 group relative", collapsed ? "px-0" : "px-2")}>
+    <li className={cn("group relative mb-1 select-none", collapsed ? "px-0" : "px-2")}>
       <button
         onClick={handleClick}
         className={cn(
-          "relative flex items-center transition-all duration-500 rounded-[1.25rem] font-black text-[11px] uppercase tracking-wider",
-          collapsed ? "h-14 w-14 justify-center mx-auto" : "h-14 w-full px-4 gap-3 justify-start",
+          "relative flex items-center rounded-[1.25rem] font-black text-[11px] uppercase tracking-wider transition-all duration-500",
+          collapsed ? "mx-auto h-14 w-14 justify-center" : "h-14 w-full justify-start gap-3 px-4",
           isSelected
-            ? "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-xl shadow-emerald-950/40 ring-1 ring-emerald-400/40"
+            ? "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-emerald-950/40 shadow-xl ring-1 ring-emerald-400/40"
             : "text-zinc-600 hover:bg-zinc-900/50 hover:text-zinc-300",
         )}
         style={{ paddingLeft: !collapsed ? `${node.level * 16 + 16}px` : undefined }}
       >
         {/* Active Indicator Bar */}
         {isSelected && !collapsed && (
-          <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-white rounded-full shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
+          <div className="absolute top-1/2 left-1.5 h-6 w-1.5 -translate-y-1/2 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
         )}
 
         {/* Category Icon */}
         <div
           className={cn(
             "flex h-6 w-6 shrink-0 items-center justify-center transition-all duration-300",
-            isSelected ? "text-white scale-110" : "text-zinc-700 group-hover:text-zinc-400",
+            isSelected ? "scale-110 text-white" : "text-zinc-700 group-hover:text-zinc-400",
           )}
         >
           {hasChildren ? (
@@ -232,7 +232,7 @@ function CategoryItem({
           )}
         </div>
 
-        {!collapsed && <span className="truncate flex-1 text-start leading-none pt-0.5">{node.name}</span>}
+        {!collapsed && <span className="flex-1 truncate pt-0.5 text-start leading-none">{node.name}</span>}
 
         {/* Arrow on the RIGHT */}
         {hasChildren && !collapsed && (
@@ -244,7 +244,7 @@ function CategoryItem({
 
       {/* Render Children Tree View */}
       {hasChildren && isExpanded && !collapsed && (
-        <ul className="mt-1 relative ml-5 pl-4 border-l border-zinc-800/50 space-y-1">
+        <ul className="relative mt-1 ml-5 space-y-1 border-zinc-800/50 border-l pl-4">
           {node.children.map((child) => (
             <CategoryItem
               key={child._id}

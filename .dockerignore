@@ -1,13 +1,15 @@
 **/node_modules
 **/.next
 **/dist
+**/.turbo
+**/coverage
+infra/worker-service/.runtime/
+infra/worker-service/.tmp-dist/
 .git
 .github
-.turbo
 *.md
 .env
 .env.*
 !.env.example
-**/coverage
 services/stockix-finance/node_modules
 services/stockix-finance/**/.next

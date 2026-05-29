@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -15,7 +15,7 @@ import {
 } from "@/lib/inventory-api";
 import { posFetchAccountingConfig } from "@/lib/pos-accounting-api";
 import { posApiJson } from "@/lib/pos-api-fetch";
-import { type BillBreakdown, calculateOrderBills } from "@/lib/pos-bill-utils";
+import { calculateOrderBills } from "@/lib/pos-bill-utils";
 import {
   type PosCategory,
   type PosMenuItem,
@@ -26,10 +26,20 @@ import {
   posFetchModifierGroups,
   posFetchMenuItems,
 } from "@/lib/pos-catalog-api";
+import { enqueueOfflineMutation } from "@/lib/offline-queue";
+import {
+  cloneMenuAvailabilityRows,
+  readStockSnapshot,
+  refreshStockSnapshotFromApi,
+  resolvePosLocationId,
+  stockSnapshotKey,
+  writeStockSnapshot,
+} from "@/lib/offline-stock-mirror";
 import { persistPosCheckToServer } from "@/lib/pos-check-sync";
-import { posFetchTaxConfig } from "@/lib/pos-config-api";
 import { unitPriceForDocumentCurrency } from "@/lib/pos-menu-prices";
 import {
+  describeAccountingPostingFailures,
+  describeFinanceSyncStatus,
   posApplyManualDiscount,
   posCreateSplitBill,
   posGetOpenOrderForTable,
@@ -84,6 +94,12 @@ export function usePosSession(tableId: string) {
 
   const [barcode, setBarcode] = useState("");
   const [barcodeBusy, setBarcodeBusy] = useState(false);
+  const [offlineAvailabilityRows, setOfflineAvailabilityRows] = useState<
+    import("@/lib/inventory-api").MenuAvailabilityRow[] | null
+  >(null);
+  const [offlineSnapshotChecked, setOfflineSnapshotChecked] = useState(true);
+  const offlinePortionLedgerRef = useRef<Map<string, number>>(new Map());
+  const posLocationId = useMemo(() => resolvePosLocationId(posUser), [posUser]);
   const waiterCanPrintReceipt =
     typeof posUser?.location === "object" &&
     posUser.location !== null &&
@@ -101,14 +117,68 @@ export function usePosSession(tableId: string) {
   });
 
   const availabilityQuery = useQuery({
-    queryKey: menuInventoryAvailabilityQueryKey(""),
+    queryKey: menuInventoryAvailabilityQueryKey(posLocationId),
     queryFn: async () => {
-      const res = await fetchInventoryMenuAvailability();
-      return Array.isArray(res.data?.items) ? res.data.items : [];
+      const res = await fetchInventoryMenuAvailability(
+        posLocationId ? { locationId: posLocationId } : undefined,
+      );
+      const items = Array.isArray(res.data?.items) ? res.data.items : [];
+      if (typeof window !== "undefined" && navigator.onLine) {
+        await writeStockSnapshot({
+          locationId: res.data?.locationId
+            ? String(res.data.locationId)
+            : stockSnapshotKey(posLocationId),
+          fetchedAt: Date.now(),
+          strictOversell: policyQuery.data?.strictOversell ?? false,
+          menuAvailability: cloneMenuAvailabilityRows(items),
+        });
+      }
+      return items;
     },
     enabled: validId && Boolean(posUser),
     staleTime: 15_000,
   });
+
+  const isOffline = typeof window !== "undefined" && !navigator.onLine;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const loadOfflineSnapshot = async () => {
+      if (navigator.onLine) {
+        setOfflineAvailabilityRows(null);
+        offlinePortionLedgerRef.current.clear();
+        setOfflineSnapshotChecked(true);
+        return;
+      }
+      setOfflineSnapshotChecked(false);
+      const snap = await readStockSnapshot(posLocationId);
+      if (snap?.menuAvailability?.length) {
+        setOfflineAvailabilityRows(cloneMenuAvailabilityRows(snap.menuAvailability));
+        offlinePortionLedgerRef.current.clear();
+      } else {
+        setOfflineAvailabilityRows([]);
+      }
+      setOfflineSnapshotChecked(true);
+    };
+    void loadOfflineSnapshot();
+    const onOffline = () => {
+      void loadOfflineSnapshot();
+    };
+    const onOnline = () => {
+      void refreshStockSnapshotFromApi({
+        locationId: posLocationId,
+        strictOversell: policyQuery.data?.strictOversell,
+      }).catch(() => undefined);
+      setOfflineAvailabilityRows(null);
+      offlinePortionLedgerRef.current.clear();
+    };
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [posLocationId, policyQuery.data?.strictOversell]);
 
   const fxQuery = useQuery({
     queryKey: posQueryKeys.fxRate("USD", "LBP"),
@@ -120,18 +190,60 @@ export function usePosSession(tableId: string) {
     staleTime: 60_000,
   });
 
+  const availabilityRows = isOffline ? offlineAvailabilityRows : availabilityQuery.data;
+
+  const stockSnapshotUnavailable = Boolean(
+    isOffline &&
+      offlineSnapshotChecked &&
+      policyQuery.data?.strictOversell &&
+      (!offlineAvailabilityRows || offlineAvailabilityRows.length === 0),
+  );
+
+  const getAvailabilityForMenuItem = useCallback(
+    (menuItemId: string) => {
+      const row = (availabilityRows ?? []).find((r) => String(r.menuItemId) === String(menuItemId));
+      if (!row) return undefined;
+      const ledgerPortions = offlinePortionLedgerRef.current.get(String(menuItemId));
+      const estimatedPortions =
+        ledgerPortions !== undefined ? ledgerPortions : (row.estimatedPortions ?? null);
+      const canFulfill =
+        ledgerPortions !== undefined
+          ? estimatedPortions == null || estimatedPortions > 0
+            ? row.canFulfill || (estimatedPortions ?? 0) > 0
+            : false
+          : !!row.canFulfill;
+      return {
+        canFulfill,
+        estimatedPortions,
+        reason: row.reason,
+      };
+    },
+    [availabilityRows],
+  );
+
   const availabilityMap = useMemo(() => {
-    const rows = availabilityQuery.data ?? [];
+    const rows = availabilityRows ?? [];
     const next = new Map<string, { canFulfill: boolean; estimatedPortions?: number | null; reason?: string }>();
     for (const row of rows) {
-      next.set(String(row.menuItemId), {
-        canFulfill: !!row.canFulfill,
-        estimatedPortions: row.estimatedPortions ?? null,
-        reason: row.reason,
-      });
+      const entry = getAvailabilityForMenuItem(String(row.menuItemId));
+      if (entry) {
+        next.set(String(row.menuItemId), entry);
+      }
     }
     return next;
-  }, [availabilityQuery.data]);
+  }, [availabilityRows, getAvailabilityForMenuItem]);
+
+  const applyOfflinePortionDebit = useCallback(
+    (menuItemId: string, quantityDelta: number) => {
+      if (!isOffline || quantityDelta <= 0) return;
+      const current = getAvailabilityForMenuItem(menuItemId);
+      if (!current || current.estimatedPortions == null) return;
+      const base =
+        offlinePortionLedgerRef.current.get(menuItemId) ?? current.estimatedPortions;
+      offlinePortionLedgerRef.current.set(menuItemId, Math.max(0, base - quantityDelta));
+    },
+    [getAvailabilityForMenuItem, isOffline],
+  );
 
   const taxRates = accountingConfigQuery.data?.taxRates ?? [];
   const serviceChargeEnabled = accountingConfigQuery.data?.serviceChargeEnabled === true;
@@ -168,6 +280,12 @@ export function usePosSession(tableId: string) {
         setItems(menu);
         setModifierGroups(Array.isArray(modifierRows) ? modifierRows : []);
         setCombos(Array.isArray(comboRows) ? comboRows : []);
+        if (typeof window !== "undefined" && navigator.onLine) {
+          void refreshStockSnapshotFromApi({
+            locationId: resolvePosLocationId(posUser),
+            strictOversell: policyQuery.data?.strictOversell,
+          }).catch(() => undefined);
+        }
       } catch (e) {
         if (!cancelled) {
           toast.error(e instanceof Error ? e.message : "Initialization failed.");
@@ -185,7 +303,7 @@ export function usePosSession(tableId: string) {
       cancelled = true;
       clearSession();
     };
-  }, [tableId, validId, router]);
+  }, [tableId, validId, router, hydrateFromServerOrder, setTableContext, posUser, policyQuery.data?.strictOversell, clearSession]);
 
   const storeSetLineQuantity = usePosOrderStore((s) => s.setLineQuantity);
   const setLineQuantity = useCallback(
@@ -195,19 +313,36 @@ export function usePosSession(tableId: string) {
       const line = cart.find((c) => c.id === lineId);
       if (!line) return;
 
+      if (stockSnapshotUnavailable) {
+        toast.error("Stock data unavailable offline. Reconnect to refresh availability.");
+        return;
+      }
+
       // Inventory Check for quantity increase
       if (quantity > line.quantity) {
-        const avail = availabilityMap.get(String(line.menuItem));
+        const avail = getAvailabilityForMenuItem(String(line.menuItem));
         const isStrict = policyQuery.data?.strictOversell;
         if (isStrict && avail && avail.estimatedPortions != null && quantity > avail.estimatedPortions) {
           toast.error(`Cannot add more "${line.name}". Only ${avail.estimatedPortions} portions available.`);
           return;
         }
+        if (isOffline && isStrict) {
+          applyOfflinePortionDebit(String(line.menuItem), quantity - line.quantity);
+        }
       }
 
       storeSetLineQuantity(lineId, quantity);
     },
-    [cart, orderLinesLocked, availabilityMap, policyQuery.data, storeSetLineQuantity],
+    [
+      cart,
+      orderLinesLocked,
+      getAvailabilityForMenuItem,
+      policyQuery.data,
+      storeSetLineQuantity,
+      stockSnapshotUnavailable,
+      isOffline,
+      applyOfflinePortionDebit,
+    ],
   );
 
   const removeLineWithReason = useCallback(
@@ -254,12 +389,20 @@ export function usePosSession(tableId: string) {
     ) => {
       if (orderLinesLocked) return;
 
+      if (stockSnapshotUnavailable) {
+        toast.error("Stock data unavailable offline. Reconnect to refresh availability.");
+        return;
+      }
+
       // Inventory Policy Check (Strict Oversell)
-      const avail = availabilityMap.get(String(it._id));
+      const avail = getAvailabilityForMenuItem(String(it._id));
       const isStrict = policyQuery.data?.strictOversell;
       if (isStrict && avail && !avail.canFulfill) {
         toast.error(`"${it.name}" is out of stock (${avail.reason || "Sold Out"}).`);
         return;
+      }
+      if (isOffline && isStrict) {
+        applyOfflinePortionDebit(String(it._id), 1);
       }
 
       const price = unitPriceForDocumentCurrency(it, "USD");
@@ -289,7 +432,15 @@ export function usePosSession(tableId: string) {
         selectedSlots: payload?.selectedSlots,
       });
     },
-    [addMenuItem, orderLinesLocked, availabilityMap, policyQuery.data],
+    [
+      addMenuItem,
+      orderLinesLocked,
+      getAvailabilityForMenuItem,
+      policyQuery.data,
+      stockSnapshotUnavailable,
+      isOffline,
+      applyOfflinePortionDebit,
+    ],
   );
 
   const handleBarcodeSubmit = useCallback(
@@ -327,11 +478,16 @@ export function usePosSession(tableId: string) {
     if (cart.length === 0 || sendingToKitchen) return;
 
     // Pre-flight Inventory Check
+    if (stockSnapshotUnavailable) {
+      toast.error("Stock data unavailable offline. Reconnect to refresh availability.");
+      return;
+    }
+
     const isStrict = policyQuery.data?.strictOversell;
     if (isStrict) {
       for (const line of cart) {
         // Only check lines that are not already locked/sent
-        const avail = availabilityMap.get(String(line.menuItem));
+        const avail = getAvailabilityForMenuItem(String(line.menuItem));
         if (avail && !avail.canFulfill) {
           toast.error(`"${line.name}" is now out of stock. Please remove it before sending.`);
           return;
@@ -365,12 +521,11 @@ export function usePosSession(tableId: string) {
       setSendingToKitchen(false);
     }
   }, [
-    activeOrderId,
-    cart,
-    sendingToKitchen,
-    availabilityMap,
-    policyQuery.data,
-    replaceCartFromPopulatedOrder,
+    activeOrderId, 
+    cart, 
+    sendingToKitchen, 
+    policyQuery.data, 
+    replaceCartFromPopulatedOrder, stockSnapshotUnavailable, getAvailabilityForMenuItem
   ]);
 
   const handlePayment = useCallback(
@@ -387,6 +542,30 @@ export function usePosSession(tableId: string) {
         }
 
         if (!targetId) throw new Error("Could not initialize order for payment.");
+
+        const queueOfflinePayment = async () => {
+          await enqueueOfflineMutation(
+            "pay_order",
+            {
+              orderId: targetId,
+              paymentMethod: payload.method,
+              paymentData: payload.paymentData,
+              paymentSplits: payload.paymentSplits,
+            },
+            `pay:${targetId}`,
+          );
+          toast.success("Payment queued — will sync when back online.");
+          clearSession();
+          router.replace("/pos");
+        };
+
+        if (typeof window !== "undefined" && !navigator.onLine) {
+          if (payload.entitySplitBill) {
+            throw new Error("Split-bill payment requires an internet connection.");
+          }
+          await queueOfflinePayment();
+          return;
+        }
 
         if (payload.entitySplitBill && payload.splitBillRows?.length) {
           const sum = payload.splitBillRows.reduce((s, row) => s + row.amount, 0);
@@ -415,19 +594,59 @@ export function usePosSession(tableId: string) {
               paymentMethod: payload.method,
             });
           }
-          await posMarkOrderPaid(targetId, payload.method, {
+          const paidRes = await posMarkOrderPaid(targetId, payload.method, {
             paymentData: payload.paymentData,
           });
+          const postingMsgs = [
+            ...describeAccountingPostingFailures(paidRes.accountingPosting),
+            describeFinanceSyncStatus(paidRes.accountingPosting),
+          ].filter((m): m is string => Boolean(m));
+          toast.success("Payment successful. Order closed.");
+          for (const msg of postingMsgs) {
+            toast.message(msg);
+          }
         } else {
-          await posMarkOrderPaid(targetId, payload.method, {
+          const paidRes = await posMarkOrderPaid(targetId, payload.method, {
             paymentData: payload.paymentData,
             paymentSplits: payload.paymentSplits,
           });
+          const postingMsgs = [
+            ...describeAccountingPostingFailures(paidRes.accountingPosting),
+            describeFinanceSyncStatus(paidRes.accountingPosting),
+          ].filter((m): m is string => Boolean(m));
+          toast.success("Payment successful. Order closed.");
+          for (const msg of postingMsgs) {
+            toast.message(msg);
+          }
         }
-        toast.success("Payment successful. Order closed.");
         clearSession();
         router.replace("/pos");
       } catch (e) {
+        if (
+          typeof window !== "undefined"
+          && !navigator.onLine
+          && activeOrderId
+          && !payload.entitySplitBill
+        ) {
+          try {
+            await enqueueOfflineMutation(
+              "pay_order",
+              {
+                orderId: activeOrderId,
+                paymentMethod: payload.method,
+                paymentData: payload.paymentData,
+                paymentSplits: payload.paymentSplits,
+              },
+              `pay:${activeOrderId}`,
+            );
+            toast.success("Payment queued — will sync when back online.");
+            clearSession();
+            router.replace("/pos");
+            return;
+          } catch {
+            /* fall through */
+          }
+        }
         toast.error(e instanceof Error ? e.message : "Payment failed.");
       } finally {
         setPaying(false);
@@ -507,6 +726,7 @@ export function usePosSession(tableId: string) {
     sendingToKitchen,
     hydrateFromServerOrder,
     availabilityMap,
+    stockSnapshotUnavailable,
     barcode,
     setBarcode,
     barcodeBusy,

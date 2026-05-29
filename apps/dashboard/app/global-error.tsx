@@ -2,8 +2,6 @@
 
 import { useEffect } from "react";
 
-import { Button } from "@/components/ui/button";
-
 export default function GlobalError({
   error,
   reset,
@@ -22,9 +20,13 @@ export default function GlobalError({
         <p className="max-w-md text-center text-sm text-muted-foreground">
           {error.message || "A critical error occurred. You can try reloading the page."}
         </p>
-        <Button type="button" onClick={() => reset()}>
+        <button
+          type="button"
+          onClick={() => reset()}
+          className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
           Try again
-        </Button>
+        </button>
       </body>
     </html>
   );

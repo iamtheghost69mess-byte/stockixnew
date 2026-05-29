@@ -198,10 +198,6 @@ export default function OrgDetailPage() {
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <span className="text-muted-foreground">Organizations</span>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
               <BreadcrumbPage>{orgId}</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
@@ -237,10 +233,6 @@ export default function OrgDetailPage() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <span className="text-muted-foreground">Organizations</span>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
             <BreadcrumbPage>{org.name}</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
@@ -266,6 +258,12 @@ export default function OrgDetailPage() {
           <p>
             <span className="text-muted-foreground">Subdomain:</span> {org.subdomain}
           </p>
+          {org.financeOrganizationId ? (
+            <p>
+              <span className="text-muted-foreground">Finance organization ID:</span>{" "}
+              <span className="font-mono">{org.financeOrganizationId}</span>
+            </p>
+          ) : null}
           <p>
             <span className="text-muted-foreground">Created:</span> {formatDateTime(org.createdAt)}
           </p>

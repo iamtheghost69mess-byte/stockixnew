@@ -13,11 +13,19 @@ export type TenantRow = {
   name: string;
   adminEmail: string;
   planSlug?: string;
+  /** Row in `tenants` (may differ from deployment when status is partial). */
+  tenantStatus?: string | null;
   deploymentStatus: string | null;
   internalPort: number | null;
   composeProject: string | null;
   lastError: string | null;
   registrationCompletedAt: string | null;
+  createdAt?: string | null;
+  /** Assigned license status (active, expired, suspended, revoked), or null if none. */
+  licenseStatus?: string | null;
+  licenseExpiresAt?: string | null;
+  licenseValidFrom?: string | null;
+  licenseIsPerpetual?: boolean | null;
 };
 
 /** Full-directory counts (child-org filter only), for headers and dashboard stats. */
@@ -27,6 +35,7 @@ export type TenantDirectoryTotals = {
   suspended: number;
   provisioning: number;
   failed: number;
+  partial?: number;
 };
 
 export type TenantDetail = {
@@ -45,6 +54,10 @@ export type TenantDetail = {
     adminPinMasked: string;
     allRoles: { role: string; username: string; pinMasked: string }[];
   } | null;
+  latestProvision: {
+    correlationId: string;
+    jobStatus: string;
+  } | null;
   createdAt: string;
   deployment: {
     status: string;
@@ -57,7 +70,10 @@ export type TenantDetail = {
     financeWalkInCustomerId: number | null;
     financeCashAccountId: number | null;
     financeCardAccountId: number | null;
+    publicUrl: string | null;
+    financeAdminPassword: string | null;
     lastError: string | null;
+    partialFailureKind: "pos_failed" | "wire_failed" | null;
     registrationCompletedAt: string | null;
     createdAt: string;
     updatedAt: string;

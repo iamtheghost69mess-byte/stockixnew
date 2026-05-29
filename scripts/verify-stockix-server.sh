@@ -19,13 +19,24 @@ if [[ ! -f "${PROD}/.env" ]]; then
 fi
 
 cd "${PROD}"
-set -a
 # shellcheck disable=SC1091
-source .env
-set +a
+. "${STOCKIX_ROOT}/scripts/load-env-file.sh" .env
 
 echo "=== docker compose ps ==="
 docker compose --env-file .env ps
+
+echo ""
+echo "=== required services running ==="
+required_services=(postgres traefik api dashboard infra-worker)
+for service in "${required_services[@]}"; do
+  if docker compose --env-file .env ps --status running | grep -q "${service}"; then
+    echo "OK: ${service} is running"
+  else
+    echo "ERROR: ${service} is not running"
+    docker compose --env-file .env logs "${service}" --tail 80 || true
+    exit 1
+  fi
+done
 
 echo ""
 echo "=== listening on 80 / 443 (host) ==="
@@ -44,6 +55,7 @@ fi
 echo ""
 if [[ -n "${ROOT_DOMAIN:-}" ]]; then
   echo "=== public HTTPS checks (need DNS → this host + certs issued) ==="
+  curl -sfS --max-time 15 "https://api.${ROOT_DOMAIN}/ready" && echo "" || echo "WARN: https://api.${ROOT_DOMAIN}/ready failed (readiness not yet healthy)."
   curl -sfS --max-time 15 "https://api.${ROOT_DOMAIN}/health" && echo "" || echo "WARN: https://api.${ROOT_DOMAIN}/health failed (DNS, firewall, or TLS not ready)."
   curl -sfS --max-time 15 -o /dev/null -w "dashboard HTTP %{http_code}\n" "https://${ROOT_DOMAIN}/" || echo "WARN: https://${ROOT_DOMAIN}/ failed."
 fi

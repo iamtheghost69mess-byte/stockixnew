@@ -7,8 +7,10 @@ export async function pmsFetch(
   const sep = normalized.includes("?") ? "&" : "?";
   return fetch(`/api/pms/${normalized}${sep}tenantId=${encodeURIComponent(tenantId)}`, {
     cache: "no-store",
-    headers: { "Content-Type": "application/json" },
     ...init,
-    ...(init?.body ? { headers: { "Content-Type": "application/json", ...init.headers } } : {}),
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers as Record<string, string> | undefined),
+    },
   });
 }

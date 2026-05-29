@@ -29,7 +29,7 @@ export type ProvisionInput = {
   stockixApiUrl?: string;
   /** Control-plane organization row id (UUID); set when provisioning a sub-org stack. */
   controlPlaneOrgId?: string;
-  /** When set to `["pos"]`, only re-provision the POS stack for an existing tenant. */
+  /** When set to `["pos"]` or `["wire"]`, only re-run that repair step for an existing tenant. */
   retryModules?: string[];
 };
 

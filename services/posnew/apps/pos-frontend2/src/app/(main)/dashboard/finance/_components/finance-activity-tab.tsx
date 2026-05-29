@@ -122,7 +122,7 @@ export function FinanceActivityTab() {
                           <TableCell className="whitespace-nowrap text-sm tabular-nums">
                             {row.entryDate ? format(new Date(row.entryDate), "yyyy-MM-dd") : "—"}
                           </TableCell>
-                          <TableCell className="font-mono text-xs font-medium">
+                          <TableCell className="font-medium font-mono text-xs">
                             {formatJournalEntryReference(row.entryNumber)}
                           </TableCell>
                           <TableCell>

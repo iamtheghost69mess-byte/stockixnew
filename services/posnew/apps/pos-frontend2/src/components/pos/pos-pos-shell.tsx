@@ -46,9 +46,9 @@ export function PosPosShell({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-border/70 border-b bg-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 md:px-6">
-        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+        <div className="flex items-center gap-2 font-semibold text-sm tracking-tight">
           <UtensilsCrossed className="size-5 text-muted-foreground" aria-hidden />
           <span>POS</span>
         </div>

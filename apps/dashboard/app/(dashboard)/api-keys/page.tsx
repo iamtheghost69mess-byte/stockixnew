@@ -46,7 +46,7 @@ type ApiKeyRow = {
 };
 
 export default function ApiKeysPage() {
-  const me = useMe();
+  const { me } = useMe();
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);

@@ -18,6 +18,24 @@ const integrationConfigSchema = new mongoose.Schema(
       defaultCardDepositAccountId: { type: Number },
       /** Fallback Bigcapital warehouse when order location has no mapping. */
       defaultWarehouseId: { type: Number },
+      /** Optional Finance item for service charge lines on receipts. */
+      serviceChargeItemId: { type: Number },
+      /** Optional Finance item for order-level discount lines on receipts. */
+      discountItemId: { type: Number },
+      /** Finance item for partial refund credit notes (falls back to discountItemId). */
+      refundAdjustmentItemId: { type: Number },
+      /** Default Finance vendor for GRN bills when supplier is not mapped. */
+      defaultVendorId: { type: Number },
+      /** Finance GL accounts for inventory variance journals from POS. */
+      inventoryAccountId: { type: Number },
+      inventoryVarianceAccountId: { type: Number },
+      /** When true, push recipe-based unit cost on sale receipt lines (default true). */
+      syncRecipeCostOnSale: { type: Boolean, default: true },
+      /**
+       * When false (default), any unmapped sellable menu line blocks the Finance receipt
+       * (avoids partial cart totals). Set true only for deliberate partial sync.
+       */
+      allowPartialUnmappedReceipt: { type: Boolean, default: false },
       /** POS location → Bigcapital branch/warehouse. */
       locationMapping: [
         {

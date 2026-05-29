@@ -9,6 +9,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyOrphanMigrations } from "./apply-orphan-migrations.js";
 import { postMigrateBootstrap } from "./post-migrate-bootstrap.js";
 
 const url =
@@ -22,6 +23,10 @@ const migrationsFolder = join(
 );
 
 const sql = postgres(url, { max: 1, onnotice: () => {} });
+
+async function ensurePostgresExtensions(): Promise<void> {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+}
 
 async function appliedHashes(): Promise<Set<string>> {
   try {
@@ -86,6 +91,8 @@ async function main(): Promise<void> {
     );
   }
 
+  await ensurePostgresExtensions();
+
   const db = drizzle(sql);
   await migrate(db, { migrationsFolder });
 
@@ -96,6 +103,11 @@ async function main(): Promise<void> {
   }
 
   const newlyApplied = appliedAfter.size - appliedBefore.size;
+
+  const orphanMessages = await applyOrphanMigrations(sql);
+  for (const msg of orphanMessages) {
+    console.log(`[migrate] ${msg}`);
+  }
 
   const bootstrapMessages = await postMigrateBootstrap(sql);
   for (const msg of bootstrapMessages) {

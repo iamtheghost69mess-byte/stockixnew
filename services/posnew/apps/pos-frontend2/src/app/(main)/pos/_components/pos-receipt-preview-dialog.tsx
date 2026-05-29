@@ -3,12 +3,11 @@
 import { useMemo } from "react";
 
 import { format } from "date-fns";
-import { Printer, X } from "lucide-react";
+import { Printer, } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import type { BillBreakdown } from "@/lib/pos-bill-utils";
 import type { PosMenuItem } from "@/lib/pos-catalog-api";
 import { formatCurrency } from "@/lib/utils";
@@ -43,29 +42,29 @@ export function PosReceiptPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[400px] bg-zinc-950 p-0 border-zinc-800" showCloseButton={false}>
+      <DialogContent className="max-w-[400px] border-zinc-800 bg-zinc-950 p-0" showCloseButton={false}>
         <DialogHeader className="p-6 pb-2">
-          <DialogTitle className="text-xl font-black tracking-tight text-white uppercase">Receipt Preview</DialogTitle>
+          <DialogTitle className="font-black text-white text-xl uppercase tracking-tight">Receipt Preview</DialogTitle>
         </DialogHeader>
 
         <div className="px-6 py-4">
-          <ScrollArea className="h-[520px] rounded-3xl border border-zinc-800 bg-[#f8f8f2] p-8 shadow-2xl relative overflow-hidden group">
+          <ScrollArea className="group relative h-[520px] overflow-hidden rounded-3xl border border-zinc-800 bg-[#f8f8f2] p-8 shadow-2xl">
             {/* Thermal Paper Texture Overlay */}
-            <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+            <div className="pointer-events-none absolute inset-0 opacity-[0.03]" 
                  style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/paper-fibers.png")' }} />
             
             {/* The "Paper" Receipt */}
-            <div className="flex flex-col items-center text-zinc-900 font-mono text-sm relative z-10">
+            <div className="relative z-10 flex flex-col items-center font-mono text-sm text-zinc-900">
               <div className="mb-6 flex flex-col items-center">
-                <div className="size-12 rounded-full border-2 border-zinc-900 flex items-center justify-center mb-3">
+                <div className="mb-3 flex size-12 items-center justify-center rounded-full border-2 border-zinc-900">
                   <span className="font-black text-xl">P</span>
                 </div>
-                <h3 className="text-base font-black tracking-[0.2em] uppercase">POS TERMINAL</h3>
-                <p className="text-[9px] font-bold opacity-60 mt-1 uppercase tracking-widest">Enterprise Edition v2.0</p>
+                <h3 className="font-black text-base uppercase tracking-[0.2em]">POS TERMINAL</h3>
+                <p className="mt-1 font-bold text-[9px] uppercase tracking-widest opacity-60">Enterprise Edition v2.0</p>
               </div>
 
-              <div className="w-full space-y-1 text-[10px] font-bold mb-6">
-                <div className="flex justify-between border-b border-zinc-200 pb-1 mb-1">
+              <div className="mb-6 w-full space-y-1 font-bold text-[10px]">
+                <div className="mb-1 flex justify-between border-zinc-200 border-b pb-1">
                   <span>Date: {format(now, "dd MMM yyyy")}</span>
                   <span>Time: {format(now, "HH:mm")}</span>
                 </div>
@@ -75,20 +74,20 @@ export function PosReceiptPreviewDialog({
                 </div>
               </div>
 
-              <div className="w-full border-t border-zinc-300 border-dashed my-4" />
+              <div className="my-4 w-full border-zinc-300 border-t border-dashed" />
 
-              <div className="w-full space-y-3 mb-6">
+              <div className="mb-6 w-full space-y-3">
                 {cart.map((line) => (
-                  <div key={line.id} className="flex justify-between items-start gap-4">
-                    <div className="text-left flex-1">
-                      <div className="font-black text-xs uppercase leading-tight mb-0.5">{line.name}</div>
-                      <div className="text-[9px] font-bold opacity-60">
+                  <div key={line.id} className="flex items-start justify-between gap-4">
+                    <div className="flex-1 text-left">
+                      <div className="mb-0.5 font-black text-xs uppercase leading-tight">{line.name}</div>
+                      <div className="font-bold text-[9px] opacity-60">
                         {line.quantity} x {formatCurrency(line.pricePerQuantity, { currency: "USD" })}
                       </div>
                       {Array.isArray(line.selectedSlots) && line.selectedSlots.length > 0 ? (
                         <div className="mt-1 space-y-0.5">
                           {line.selectedSlots.map((slot, idx) => (
-                            <div key={`${slot.slotName}-${slot.menuItemId}-${idx}`} className="text-[9px] font-bold opacity-60">
+                            <div key={`${slot.slotName}-${slot.menuItemId}-${idx}`} className="font-bold text-[9px] opacity-60">
                               * {slot.slotName}: {slot.menuItemName}
                             </div>
                           ))}
@@ -100,15 +99,15 @@ export function PosReceiptPreviewDialog({
                 ))}
               </div>
 
-              <div className="w-full border-t border-zinc-300 border-dashed my-4" />
+              <div className="my-4 w-full border-zinc-300 border-t border-dashed" />
 
-              <div className="w-full space-y-2 mb-6">
-                <div className="flex justify-between text-[11px] font-bold">
+              <div className="mb-6 w-full space-y-2">
+                <div className="flex justify-between font-bold text-[11px]">
                   <span>Subtotal</span>
                   <span className="tabular-nums">{formatCurrency(bills.subtotalUsd, { currency: "USD" })}</span>
                 </div>
                 {bills.taxes.map((t) => (
-                  <div key={t.code} className="flex justify-between text-[11px] font-bold opacity-70">
+                  <div key={t.code} className="flex justify-between font-bold text-[11px] opacity-70">
                     <span>
                       {t.name} ({t.rate}%)
                     </span>
@@ -116,23 +115,23 @@ export function PosReceiptPreviewDialog({
                   </div>
                 ))}
                 {bills.serviceChargeUsd > 0 ? (
-                  <div className="flex justify-between text-[11px] font-bold opacity-70">
+                  <div className="flex justify-between font-bold text-[11px] opacity-70">
                     <span>Service Charge ({bills.serviceChargeRate}%)</span>
                     <span className="tabular-nums">{formatCurrency(bills.serviceChargeUsd, { currency: "USD" })}</span>
                   </div>
                 ) : null}
-                <div className="flex justify-between text-lg font-black mt-4 pt-4 border-t-2 border-zinc-900 border-double">
+                <div className="mt-4 flex justify-between border-zinc-900 border-t-2 border-double pt-4 font-black text-lg">
                   <span>TOTAL</span>
                   <span className="tabular-nums">{formatCurrency(bills.totalUsd, { currency: "USD" })}</span>
                 </div>
               </div>
 
-              <div className="w-full text-center text-[9px] mt-8 space-y-2 font-bold opacity-70 uppercase tracking-widest">
+              <div className="mt-8 w-full space-y-2 text-center font-bold text-[9px] uppercase tracking-widest opacity-70">
                 {staffName && <p>Served by: {staffName}</p>}
                 <p>Thank you for dining with us!</p>
-                <div className="pt-6 flex flex-col items-center gap-2 opacity-30">
-                  <div className="h-10 w-48 bg-zinc-900 flex items-center justify-center">
-                    <div className="w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #000, #000 2px, transparent 2px, transparent 4px)' }} />
+                <div className="flex flex-col items-center gap-2 pt-6 opacity-30">
+                  <div className="flex h-10 w-48 items-center justify-center bg-zinc-900">
+                    <div className="h-full w-full" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #000, #000 2px, transparent 2px, transparent 4px)' }} />
                   </div>
                   <span className="text-[8px] tracking-[0.5em]">010101100101</span>
                 </div>
@@ -141,9 +140,9 @@ export function PosReceiptPreviewDialog({
           </ScrollArea>
         </div>
 
-        <div className="p-6 pt-2 bg-zinc-950 flex gap-3 border-t border-zinc-800/50 mt-2">
+        <div className="mt-2 flex gap-3 border-zinc-800/50 border-t bg-zinc-950 p-6 pt-2">
           <Button
-            className="flex-1 h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-2xl shadow-lg shadow-emerald-950/20 active:scale-95 transition-all"
+            className="h-14 flex-1 rounded-2xl bg-emerald-600 font-black text-[10px] text-white uppercase tracking-[0.2em] shadow-emerald-950/20 shadow-lg transition-all hover:bg-emerald-500 active:scale-95"
             onClick={onPrint}
             disabled={busy}
           >
@@ -152,7 +151,7 @@ export function PosReceiptPreviewDialog({
           </Button>
           <Button
             variant="ghost"
-            className="flex-1 h-14 text-zinc-500 hover:text-white hover:bg-zinc-900 uppercase tracking-widest text-[10px] font-black rounded-2xl"
+            className="h-14 flex-1 rounded-2xl font-black text-[10px] text-zinc-500 uppercase tracking-widest hover:bg-zinc-900 hover:text-white"
             onClick={() => onOpenChange(false)}
           >
             Go Back

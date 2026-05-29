@@ -71,6 +71,6 @@ import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
     ValidateBulkDeleteBillsService,
   ],
   controllers: [BillsController],
-  exports: [BillsExportable, BillsImportable],
+  exports: [BillsApplication, BillsExportable, BillsImportable],
 })
 export class BillsModule { }

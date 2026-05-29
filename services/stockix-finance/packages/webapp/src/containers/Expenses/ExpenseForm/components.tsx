@@ -15,9 +15,9 @@ import {
   InputGroupCell,
   MoneyFieldCell,
   AccountsListFieldCell,
-  ProjectsListFieldCell,
   CheckBoxFieldCell,
 } from '@/components/DataTableCells';
+import { ProjectsListFieldCell } from '@/components/DataTableCells/ProjectsListFieldCell';
 import { CellType, Features, Align } from '@/constants';
 
 import { useCurrentOrganization, useFeatureCan } from '@/hooks/state';

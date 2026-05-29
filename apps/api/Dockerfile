@@ -1,11 +1,15 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine AS build
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+RUN apk add --no-cache libc6-compat \
+  && corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=3072
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter api...
+# @repo/auth ships dist/; other @repo/* are bundled from TypeScript source via tsup.
+RUN pnpm --filter @repo/auth build
 RUN pnpm --filter api build
 RUN pnpm deploy --filter api --prod /deploy
 

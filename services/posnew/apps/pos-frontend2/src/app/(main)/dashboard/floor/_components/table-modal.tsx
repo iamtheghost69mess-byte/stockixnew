@@ -244,7 +244,7 @@ export function TableModal({
     if (status === "billed") return "Billed (check open)";
     if (status === "closed") return "Closed (cleared)";
     return "Available";
-  }, [form.personsSeated, form.reservatorName, form.seats, form.statusMode]);
+  }, [form.personsSeated, form.reservatorName, form.seats, form.statusMode, parseNum]);
 
   return (
     <>
@@ -287,14 +287,14 @@ export function TableModal({
               {!hostessJob ? (
                 <div className="flex flex-col gap-3 rounded-lg border bg-card/60 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                   <div className="grid min-w-0 flex-1 gap-1.5">
-                    <Label className="text-sm font-medium leading-none">Open POS floor</Label>
+                    <Label className="font-medium text-sm leading-none">Open POS floor</Label>
                     <p className="text-muted-foreground text-xs leading-relaxed">
                       When <span className="font-medium text-foreground">disabled</span>, this table is managed here only and
                       does not appear on the POS floor for servers.
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1.5 sm:items-end">
-                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase sm:text-right">
+                    <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide sm:text-right">
                       Floor visibility
                     </span>
                     <div
@@ -398,7 +398,7 @@ export function TableModal({
               </div>
               <div className="flex flex-col gap-3 rounded-lg border bg-card/60 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                 <div className="grid min-w-0 flex-1 gap-1.5">
-                  <Label htmlFor="floor-vip" className="text-sm font-medium leading-none">
+                  <Label htmlFor="floor-vip" className="font-medium text-sm leading-none">
                     VIP customer
                   </Label>
                   <p className="text-muted-foreground text-xs leading-relaxed">Shows a gold star on the floor card.</p>

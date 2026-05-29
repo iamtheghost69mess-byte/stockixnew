@@ -1,15 +1,20 @@
 export type OrganizationAccessState = {
-	status: "active" | "expired" | "not_started";
+	status: "active" | "expired" | "not_started" | "suspended";
 	reason: string;
 	blocked: boolean;
+	/** Machine-readable block reason for API error bodies. */
+	blockCode?: string;
 };
 
 export type OrganizationAccessInput = {
 	licenseStartDate?: string | Date | null;
 	licenseEndDate?: string | Date | null;
 	timezone?: string | null;
+	lifecycle?: string | null;
 	now?: Date;
 };
+
+const INACTIVE_LIFECYCLES = new Set(["suspended", "pending_closure", "deleted", "draft"]);
 
 function toEpochMs(value: string | Date | null | undefined): number | null {
 	if (!value) return null;
@@ -54,6 +59,24 @@ function formatDateInTimezone(value: Date, timezone: string): string {
 export function getOrganizationAccessState(
 	input: OrganizationAccessInput,
 ): OrganizationAccessState {
+	const lifecycle = String(input.lifecycle || "active").trim().toLowerCase();
+	if (INACTIVE_LIFECYCLES.has(lifecycle)) {
+		const label =
+			lifecycle === "suspended"
+				? "suspended"
+				: lifecycle === "pending_closure"
+					? "pending closure"
+					: lifecycle === "deleted"
+						? "deleted"
+						: "not active";
+		return {
+			status: "suspended",
+			reason: `Organization is ${label}. Contact support to restore access.`,
+			blocked: true,
+			blockCode: "ORGANIZATION_NOT_ACTIVE",
+		};
+	}
+
 	const timezoneRaw = String(input.timezone || "Asia/Beirut").trim();
 	const timezone = isValidTimezone(timezoneRaw) ? timezoneRaw : "Asia/Beirut";
 	const now = input.now instanceof Date ? input.now : new Date();

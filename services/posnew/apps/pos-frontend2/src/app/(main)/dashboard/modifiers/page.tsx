@@ -88,13 +88,13 @@ export default function ModifiersPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold">Modifier Groups</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="font-bold text-2xl">Modifier Groups</h1>
+        <p className="text-muted-foreground text-sm">
           Create and manage variant/add-on groups for menu items.
         </p>
       </div>
 
-      <div className="rounded-xl border p-4 space-y-4">
+      <div className="space-y-4 rounded-xl border p-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>Name</Label>
@@ -182,7 +182,7 @@ export default function ModifiersPage() {
             {(draft.options || []).map((option, index) => (
               <div key={`${option.name}-${index}`} className="flex items-center justify-between rounded border px-3 py-2">
                 <span>{option.name}</span>
-                <span className="text-xs text-muted-foreground">{option.priceAdjustment}</span>
+                <span className="text-muted-foreground text-xs">{option.priceAdjustment}</span>
               </div>
             ))}
           </div>
@@ -214,7 +214,7 @@ export default function ModifiersPage() {
             <div key={group._id} className="flex items-center justify-between px-4 py-3">
               <div>
                 <div className="font-medium">{group.name}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   {group.type} · {group.required ? "required" : "optional"} · {group.options.length} options
                 </div>
               </div>

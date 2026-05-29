@@ -3,6 +3,85 @@
 
 ___
 
+## Stockix local testing (Docker)
+
+Vendored Chatwoot fork used by Stockix provisioning (`chat` module). For integration testing, run the **prod-style** stack on **port 3200** so it does not conflict with the Stockix dashboard on port 3000.
+
+**UI:** http://localhost:3200 — first boot shows Super Admin onboarding (production mode does not seed demo users).
+
+### Quick start (from repo root)
+
+```bash
+# 1) Build image (slow first time, ~4–5 min)
+docker build -t stockix-chatlive:local -f services/chatlive/docker/Dockerfile services/chatlive/
+
+# 2) Start Postgres + Redis
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env up -d chatwoot-postgres chatwoot-redis
+
+# 3) First time only: create schema + seed installation config
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env run --rm chatwoot bundle exec rails db:chatwoot_prepare
+
+# 4) Start Rails (see Windows note below if localhost:3200 does not respond)
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env up -d chatwoot
+```
+
+Use `CHATWOOT_FRONTEND_URL=http://localhost:3200` when starting compose locally (override `infra/prod/.env` for this session or export before `up`).
+
+### Stockix platform `.env`
+
+After Super Admin setup, create an API token and point the control plane at local Chatwoot:
+
+```env
+CHATWOOT_BASE_URL=http://localhost:3200
+CHATWOOT_API_ACCESS_TOKEN=<super-admin-api-access-token>
+```
+
+See also `docs/ENV_REFERENCE.md` and `WHITELABEL.md` for branding env vars.
+
+### Stop
+
+```bash
+docker compose -f infra/prod/docker-compose.yml --env-file infra/prod/.env stop chatwoot chatwoot-postgres chatwoot-redis
+```
+
+To reset the DB: remove volumes `stockix_chatwoot_postgres` and `stockix_chatwoot_redis`, then run `db:chatwoot_prepare` again.
+
+### Windows Docker: host port on `stockix_internal`
+
+On Docker Desktop for Windows, publishing `ports` on the `stockix_internal` network often does **not** bind to the host. If http://localhost:3200 does not connect after `compose up chatwoot`:
+
+```powershell
+docker stop stockix-chatwoot-1; docker rm stockix-chatwoot-1
+
+docker run -d --name stockix-chatwoot-1 -p 3200:3000 `
+  -e SECRET_KEY_BASE=$env:CHATWOOT_SECRET_KEY_BASE `
+  -e FRONTEND_URL=http://localhost:3200 `
+  -e INSTALLATION_NAME=Stockix `
+  -e POSTGRES_HOST=chatwoot-postgres `
+  -e POSTGRES_DATABASE=chatwoot `
+  -e POSTGRES_USERNAME=chatwoot `
+  -e POSTGRES_PASSWORD=$env:CHATWOOT_DB_PASSWORD `
+  -e REDIS_URL=redis://chatwoot-redis:6379 `
+  --restart unless-stopped stockix-chatlive:local `
+  bundle exec rails s -p 3000 -b 0.0.0.0
+
+docker network connect stockix_internal stockix-chatwoot-1
+```
+
+Load `CHATWOOT_*` from `infra/prod/.env` (or repo root `.env` after `pnpm env:sync-prod`).
+
+### Other run modes
+
+| Mode | When to use |
+|------|-------------|
+| **`infra/prod/docker-compose.yml`** (above) | Stockix integration / provisioning smoke tests |
+| **`services/chatlive/docker-compose.yaml`** | Upstream full dev stack (Vite, Mailhog, hot reload) — conflicts with ports 3000, 5432, 6379 if Stockix dev is already running |
+| **`pnpm dev`** in this directory | Native dev — requires Ruby 3.4, pnpm 10, Postgres, Redis (`AGENTS.md`) |
+
+Upstream Chatwoot docs: [chatwoot.com/help-center](https://www.chatwoot.com/help-center).
+
+---
+
 # Chatwoot
 
 The modern customer support platform, an open-source alternative to Intercom, Zendesk, Salesforce Service Cloud etc.

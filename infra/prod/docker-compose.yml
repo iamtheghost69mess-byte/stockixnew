@@ -1,6 +1,7 @@
 # Production stack: Traefik (TLS + routing), Postgres, Stockix API + Dashboard.
 # Run from repo root on the server (e.g. /opt/stockix/stockixnew):
 #   cd infra/prod && docker compose --env-file .env up -d --build
+# Chat (Chatwoot): optional — see docker-compose.chat.yml (not used in deploy)
 #
 # Prerequisites:
 #   1. Copy infra/prod/.env.example → infra/prod/.env and fill secrets (never commit .env).
@@ -20,6 +21,14 @@ x-stockix-platform-env: &stockix-platform-env
   PUBLIC_BASE_URL_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
   DASHBOARD_URL: ${DASHBOARD_URL}
   CORS_ORIGINS: ${CORS_ORIGINS:-}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  RELEASE_VERSION: ${RELEASE_VERSION:-}
+  DB_POOL_MAX: ${DB_POOL_MAX:-20}
+  DB_IDLE_TIMEOUT_SECONDS: ${DB_IDLE_TIMEOUT_SECONDS:-30}
+  DB_CONNECT_TIMEOUT_SECONDS: ${DB_CONNECT_TIMEOUT_SECONDS:-10}
+  DB_MAX_LIFETIME_SECONDS: ${DB_MAX_LIFETIME_SECONDS:-1800}
   STOCKIX_API_URL: ${STOCKIX_API_URL:-}
   PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
   WORKER_SECRET: ${WORKER_SECRET}
@@ -28,6 +37,7 @@ x-stockix-platform-env: &stockix-platform-env
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
   DEPLOYMENT_SECRET_KEY: ${DEPLOYMENT_SECRET_KEY}
   LICENSE_SIGNING_SECRET: ${LICENSE_SIGNING_SECRET}
+  CONTROL_PLANE_REDIS_URL: ${CONTROL_PLANE_REDIS_URL:-}
   JWT_SECRET: ${JWT_SECRET:-}
   SIGNUP_DISABLED: ${SIGNUP_DISABLED:-true}
   SIGNUP_ALLOWED_DOMAINS: ${SIGNUP_ALLOWED_DOMAINS:-}
@@ -39,6 +49,7 @@ x-stockix-platform-env: &stockix-platform-env
   MAIL_SECURE: ${MAIL_SECURE:-false}
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Stockix}
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+  RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
   MONGODB_DATABASE_URL: ${MONGODB_DATABASE_URL:-mongodb://mongo/stockix}
   MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
   WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
@@ -69,32 +80,57 @@ x-stockix-worker-env: &stockix-worker-env
 
 services:
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.2
+    image: tecnativa/docker-socket-proxy:latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       CONTAINERS: 1
-      IMAGES: 1
       NETWORKS: 1
-      VOLUMES: 1
       SERVICES: 1
       TASKS: 1
-      POST: 1
-      BUILD: 1
+      VERSION: 1
+      INFO: 1
+      VOLUMES: 0
+      IMAGES: 0
+      NODES: 0
+      SWARM: 0
+      AUTH: 0
+      SECRETS: 0
+      CONFIGS: 0
+      PLUGINS: 0
+      POST: 0
+      BUILD: 0
+      LOG_LEVEL: warning
     networks:
-      - stockix_internal
+      - socket_proxy_network
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: "0.1"
+    mem_swappiness: 0
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /run
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2375/_ping 2>/dev/null | grep -q OK || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   traefik:
-    image: traefik:v3.1.2
+    image: traefik:v3.4
     restart: unless-stopped
-    depends_on:
-      - socket-proxy
+    mem_limit: 128m
+    cpus: "0.25"
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     environment:
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
     extra_hosts:
@@ -102,9 +138,12 @@ services:
     volumes:
       - traefik_letsencrypt:/letsencrypt
       - traefik_dynamic:/etc/traefik/dynamic
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
+      - --api=true
+      - --api.dashboard=true
       - --providers.docker=true
-      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=stockix_public
       - --providers.file.directory=/etc/traefik/dynamic
@@ -114,7 +153,8 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --entrypoints.websecure.address=:443
       - --ping=true
-      - --ping.entrypoint=web
+      - --ping.entrypoint=traefik
+      - --entrypoints.traefik.address=:8080
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
@@ -137,6 +177,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: "0.5"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -155,20 +197,53 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Dedicated Redis for control-plane BullMQ (license expiry milestones). Not shared with Chatwoot.
+  control-plane-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    mem_limit: 320m
+    memswap_limit: 320m
+    cpus: "0.25"
+    mem_swappiness: 0
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - stockix_internal
+    security_opt:
+      - no-new-privileges:true
+
   api:
+    image: stockix-api:latest
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
+    # Single api container (deploy.replicas requires Docker Swarm; not used here).
     depends_on:
       postgres:
         condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
     environment:
       <<: *stockix-platform-env
+      RUN_BULLMQ_CONSUMERS: "false"
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       PORT: "4000"
     networks:
       - stockix_public
+      - stockix_internal
     read_only: true
     cap_drop:
       - ALL
@@ -189,18 +264,70 @@ services:
       - traefik.http.routers.stockix-api.tls.certresolver=cloudflare
       - traefik.http.services.stockix-api.loadbalancer.server.port=4000
 
+  # Single BullMQ consumer — not exposed via Traefik. HTTP replicas use RUN_BULLMQ_CONSUMERS=false.
+  api-bullmq:
+    image: stockix-api:latest
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.25"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
+    environment:
+      <<: *stockix-platform-env
+      RUN_BULLMQ_CONSUMERS: "true"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+      PORT: "4000"
+    networks:
+      - stockix_internal
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
   infra-worker:
+    image: stockix-infra-worker:latest
     build:
       context: ../..
       dockerfile: infra/worker-service/Dockerfile
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: "1.0"
+    expose:
+      - "9090"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
       api:
         condition: service_healthy
+      api-bullmq:
+        condition: service_healthy
       socket-proxy:
-        condition: service_started
+        condition: service_healthy
     environment:
       <<: *stockix-worker-env
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
@@ -212,10 +339,13 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - stockix_public
+      - stockix_internal
+      - socket_proxy_network
     security_opt:
       - no-new-privileges:true
 
   dashboard:
+    image: stockix-dashboard:latest
     build:
       context: ../..
       dockerfile: apps/dashboard/Dockerfile
@@ -223,6 +353,9 @@ services:
         NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
         NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    mem_limit: 256m
+    cpus: "0.25"
     restart: unless-stopped
     depends_on:
       traefik:
@@ -231,10 +364,19 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ORG: ${SENTRY_ORG:-}
+      SENTRY_PROJECT: ${SENTRY_PROJECT:-}
       SESSION_SECRET: ${SESSION_SECRET}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
       PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
+      STOCKIX_API_URL: ${STOCKIX_API_URL:-http://api:4000}
+      POS_PLATFORM_BASE_URL: ${POS_PLATFORM_BASE_URL:-http://host.docker.internal:8010}
+      PMS_BASE_URL: ${PMS_BASE_URL:-http://host.docker.internal:3003}
+      NEXT_PUBLIC_PMS_API_URL: ${NEXT_PUBLIC_PMS_API_URL:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
       SECURITY_HSTS: ${SECURITY_HSTS}
       SECURITY_X_FRAME_OPTIONS: ${SECURITY_X_FRAME_OPTIONS}
@@ -265,60 +407,39 @@ services:
       timeout: 5s
       retries: 6
 
-  chatwoot:
-    build:
-      context: ../../services/chatlive
-      dockerfile: docker/Dockerfile
-    image: stockix-chatlive:local
+  db-backup:
+    # backup.sh needs docker exec (pg_dump) + aws s3 (B2). amazon/aws-cli has neither cron nor docker CLI.
+    image: alpine:3.20
     restart: unless-stopped
-    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    mem_limit: 128m
+    cpus: "0.1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./backup/backup.sh:/backup.sh:ro
     environment:
-      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
-      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-https://chat.${ROOT_DOMAIN}}
-      - INSTALLATION_NAME=${CHATWOOT_INSTALLATION_NAME:-Stockix}
-      - BRAND_NAME=${CHATWOOT_BRAND_NAME:-}
-      - BRAND_URL=${CHATWOOT_BRAND_URL:-}
-      - WIDGET_BRAND_URL=${CHATWOOT_WIDGET_BRAND_URL:-}
-      - LOGO=${CHATWOOT_LOGO_URL:-/brand-assets/logo.svg}
-      - LOGO_DARK=${CHATWOOT_LOGO_DARK_URL:-/brand-assets/logo_dark.svg}
-      - LOGO_THUMBNAIL=${CHATWOOT_LOGO_THUMBNAIL_URL:-/brand-assets/logo_thumbnail.svg}
-      - DISPLAY_MANIFEST=${CHATWOOT_DISPLAY_MANIFEST:-false}
-      - HELPCENTER_URL=${CHATWOOT_HELPCENTER_URL:-}
-      - POSTGRES_HOST=chatwoot-postgres
-      - POSTGRES_DATABASE=chatwoot
-      - POSTGRES_USERNAME=chatwoot
-      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
-      - REDIS_URL=redis://chatwoot-redis:6379
-      - MAILER_SENDER_EMAIL=${MAIL_FROM_ADDRESS:-}
-      - SMTP_ADDRESS=${MAIL_HOST:-}
-      - SMTP_PORT=${MAIL_PORT:-587}
-      - SMTP_USERNAME=${MAIL_USERNAME:-}
-      - SMTP_PASSWORD=${MAIL_PASSWORD:-}
-    ports:
-      - "127.0.0.1:3200:3000"
+      BACKUP_B2_BUCKET: ${BACKUP_B2_BUCKET:-}
+      BACKUP_B2_KEY_ID: ${BACKUP_B2_KEY_ID:-}
+      BACKUP_B2_APP_KEY: ${BACKUP_B2_APP_KEY:-}
+      BACKUP_B2_ENDPOINT: ${BACKUP_B2_ENDPOINT:-}
+      BACKUP_B2_PREFIX: ${BACKUP_B2_PREFIX:-stockix-platform-backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_POSTGRES_CONTAINER: ${BACKUP_POSTGRES_CONTAINER:-stockix-postgres-1}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache docker-cli aws-cli bash gzip
+        echo "[backup] scheduler started (every 12h, replaces 02:00/14:00 cron)"
+        while true; do
+          /bin/bash /backup.sh || echo "[backup] run failed: $$?"
+          sleep 43200
+        done
     depends_on:
-      - chatwoot-postgres
-      - chatwoot-redis
-    networks:
-      - stockix_internal
-
-  chatwoot-postgres:
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=chatwoot
-      - POSTGRES_USER=chatwoot
-      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
-    volumes:
-      - chatwoot_postgres:/var/lib/postgresql/data
-    networks:
-      - stockix_internal
-
-  chatwoot-redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - chatwoot_redis:/data
+      postgres:
+        condition: service_healthy
     networks:
       - stockix_internal
 
@@ -328,11 +449,12 @@ networks:
   stockix_internal:
     name: stockix_internal
     internal: true
+  socket_proxy_network:
+    internal: true
+    driver: bridge
 
 volumes:
   postgres_data:
   traefik_letsencrypt:
   traefik_dynamic:
   stockix_tenants:
-  chatwoot_postgres:
-  chatwoot_redis:

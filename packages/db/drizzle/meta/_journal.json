@@ -246,6 +246,132 @@
       "when": 1780400000000,
       "tag": "0034_finance_pos_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0035_plans_max_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780600000000,
+      "tag": "0036_finance_admin_password",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1780700000000,
+      "tag": "0037_pms_schema_upgrade",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780800000000,
+      "tag": "0038_pms_guest_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780850000000,
+      "tag": "0052_one_active_license_per_tenant",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780860000000,
+      "tag": "0039_licenses_max_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780870000000,
+      "tag": "0040_licenses_status_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780900000000,
+      "tag": "0041_owner_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0042_owner_notifications_owner_created_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1781050000000,
+      "tag": "0043_email_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1781060000000,
+      "tag": "0044_platform_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1781070000000,
+      "tag": "0045_tenants_org_scope_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781080000000,
+      "tag": "0046_stxi_license",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1781100000000,
+      "tag": "0047_partial_failure_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1781120000000,
+      "tag": "0048_organizations_pos_organization_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781130000000,
+      "tag": "0049_tenant_lifecycle_jobs_claim_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781140000000,
+      "tag": "0050_tenant_public_discovery_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781150000000,
+      "tag": "0053_owner_invite_token_hash",
+      "breakpoints": true
     }
   ]
 }

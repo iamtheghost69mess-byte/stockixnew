@@ -40,7 +40,7 @@ export function DashboardLocationHeader() {
 
   return (
     <div className="flex min-w-0 max-w-[min(100%,320px)] flex-col gap-1">
-      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Branch</Label>
+      <Label className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">Branch</Label>
       <Select
         value={scope.selectedBranchId}
         onValueChange={(v) => {

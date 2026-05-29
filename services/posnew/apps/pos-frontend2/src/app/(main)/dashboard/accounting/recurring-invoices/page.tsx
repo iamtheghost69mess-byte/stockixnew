@@ -491,7 +491,7 @@ export default function RecurringInvoicesPage() {
             Choose a billing customer (has email or VAT), set schedule window and timezone, then define template lines.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-muted-foreground">
+        <CardContent className="grid gap-2 text-muted-foreground text-sm">
           <p>Use this for subscriptions, retainers, maintenance contracts, or school monthly fees.</p>
           <p>It is not for one-off POS receipts; those stay in normal POS sales flow.</p>
           <p>Run logs below show worker/manual executions with success or failure reasons.</p>
@@ -674,7 +674,7 @@ export default function RecurringInvoicesPage() {
                     </div>
                     <p className="mt-2 text-muted-foreground">{log.message || "No message."}</p>
                     {log.invoiceNumber ? (
-                      <p className="mt-1 font-mono text-xs text-muted-foreground">Invoice #{log.invoiceNumber}</p>
+                      <p className="mt-1 font-mono text-muted-foreground text-xs">Invoice #{log.invoiceNumber}</p>
                     ) : null}
                   </div>
                 ))}

@@ -21,7 +21,12 @@ const stockLotService = require("../services/stockLotService");
 const { resolveStockableDemand } = require("../services/inventoryRecipeUtils");
 const { recordInventoryAudit } = require("../services/inventoryAuditService");
 const { assertTenantOrganization } = require("../utils/tenantOrg");
+const {
+  enqueueBigcapitalInventoryAdjustIfEnabled,
+} = require("../services/bigcapitalSyncEnqueue");
 const PosAuditLog = require("../models/posAuditLogModel");
+
+const FINANCE_SYNC_ADJUST_REASONS = ["manual_adjust", "waste", "correction"];
 
 function parseOptionalDate(value, label) {
   if (value == null || value === "") return null;
@@ -608,6 +613,33 @@ const adjust = async (req, res, next) => {
       reason: r,
       locationId: locId ? String(locId) : null,
     });
+
+    if (FINANCE_SYNC_ADJUST_REASONS.includes(r) && move?._id) {
+      const unitCostForFinance =
+        Math.abs(Number(moveCostAmount) || 0) ||
+        Math.abs(Number(ing.averageUnitCost) || Number(ing.unitCost) || 0);
+      enqueueBigcapitalInventoryAdjustIfEnabled(
+        {
+          organizationId: String(orgId),
+          ingredientId: String(ing._id),
+          delta,
+          unitCost: unitCostForFinance,
+          reason: r,
+          referenceNo: `pos-adjust-${move._id}`,
+          description: note != null ? String(note).slice(0, 200) : r,
+        },
+        {
+          idempotencyKey: `bigcapital_adj_${move._id}`,
+          originatedBy: "inventoryController.adjust",
+        }
+      ).catch((err) => {
+        console.error(
+          "[inventory.adjust] Finance variance enqueue failed:",
+          err.message
+        );
+      });
+    }
+
     res.status(200).json({
       success: true,
       data: {

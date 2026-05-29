@@ -1,0 +1,33 @@
+# CODEOWNERS — auto-request reviewers for changed paths.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+*                                               @iamtheghost69mess-byte
+
+# Control plane
+/apps/api/                                      @iamtheghost69mess-byte
+/apps/dashboard/                                @iamtheghost69mess-byte
+/packages/                                      @iamtheghost69mess-byte
+/infra/worker-service/                          @iamtheghost69mess-byte
+
+# Tenant services
+/services/pms/                                  @iamtheghost69mess-byte
+/services/posnew/                               @iamtheghost69mess-byte
+/services/stockix-finance/                      @iamtheghost69mess-byte
+
+# Production infra and CI
+/infra/prod/                                    @iamtheghost69mess-byte
+/.github/                                       @iamtheghost69mess-byte
+/docs/ENV_REFERENCE.md                          @iamtheghost69mess-byte
+/docs/PRODUCTION_CHECKLIST.md                   @iamtheghost69mess-byte
+
+# Critical security paths
+/apps/api/src/routes/auth/                      @iamtheghost69mess-byte
+/apps/api/src/routes/webhooks/                  @iamtheghost69mess-byte
+/packages/config/                               @iamtheghost69mess-byte
+/packages/db/drizzle/                           @iamtheghost69mess-byte
+/.github/workflows/                             @iamtheghost69mess-byte
+
+# Root tooling
+/package.json                                   @iamtheghost69mess-byte
+/pnpm-lock.yaml                                 @iamtheghost69mess-byte
+/pnpm-workspace.yaml                            @iamtheghost69mess-byte

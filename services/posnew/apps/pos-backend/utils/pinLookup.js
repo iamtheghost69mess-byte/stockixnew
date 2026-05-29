@@ -14,4 +14,9 @@ function computePinLookup(plainPin) {
     .digest("hex");
 }
 
-module.exports = { computePinLookup };
+/** Alias for callers that pass organizationId; lookup hash stays PIN-only. */
+function createPinLookup(plainPin, _organizationId) {
+  return computePinLookup(plainPin);
+}
+
+module.exports = { computePinLookup, createPinLookup };

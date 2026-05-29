@@ -3,6 +3,8 @@ const CODE_MESSAGES: Record<string, string> = {
   NO_ACTIVE_LICENSE: "Assign an active license to this tenant before continuing.",
   PLAN_LIMIT_REACHED: "This tenant has reached the maximum number of organizations allowed by its plan or license.",
   tenant_not_found: "That tenant no longer exists.",
+  tenant_not_active:
+    "This tenant cannot be suspended right now (still provisioning, failed, or already stopped). Refresh the page and check its status.",
   tenant_busy: "This tenant is busy (provisioning or active). Stop provisioning or suspend it first.",
   forbidden_actor: "You do not have permission to perform this action.",
   forbidden_role: "Your role does not allow this action.",

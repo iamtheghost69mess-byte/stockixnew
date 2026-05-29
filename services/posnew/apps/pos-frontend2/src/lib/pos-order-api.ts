@@ -44,6 +44,27 @@ export function describeAccountingPostingFailures(posting: PosAccountingPosting 
   return lines;
 }
 
+/**
+ * Human-readable Finance sync outcome from persisted order sale status (Bigcapital path).
+ */
+export function describeFinanceSyncStatus(posting: PosAccountingPosting | undefined): string | null {
+  if (!posting) return null;
+  const status = posting.sale.status;
+  if (status === "ok") {
+    return "Finance receipt sync completed.";
+  }
+  if (status === "failed") {
+    const detail = posting.sale.error?.trim();
+    return detail
+      ? `Finance sync failed: ${detail}`
+      : "Finance sync failed — check item mappings in Studio.";
+  }
+  if (status === "skipped") {
+    return "Finance sync queued (native GL disabled for this tenant).";
+  }
+  return null;
+}
+
 export type PosOrderLine = {
   _id?: string;
   menuItem: string | { _id: string; name: string; priceUsd?: number; priceLbp?: number };
@@ -87,6 +108,8 @@ export type PosOrderListItem = {
   orderStatus?: string;
   customer?: string | null;
   bills?: { total?: number; tax?: number; serviceChargeRate?: number; serviceChargeAmount?: number; totalWithTax?: number };
+  accountingSaleStatus?: "ok" | "failed" | "skipped" | null;
+  accountingSaleError?: string;
   createdAt?: string;
 };
 
@@ -132,6 +155,7 @@ export async function posCreateOrder(body: {
   items: Partial<PosOrderLine>[];
   orderStatus?: string;
   bills?: { total: number; tax: number; serviceChargeRate?: number; serviceChargeAmount?: number; totalWithTax: number };
+  offlineSyncKey?: string;
 }) {
   return posApiJson<PosOrder>("/api/order/", {
     method: "POST",
@@ -145,6 +169,7 @@ export async function posCreateOrder(body: {
       orderStatus: body.orderStatus ?? "pending",
       table: body.table,
       items: body.items,
+      ...(body.offlineSyncKey ? { offlineSyncKey: body.offlineSyncKey } : {}),
     }),
   });
 }

@@ -1,9 +1,10 @@
-import { getPosOrgByStockixTenantId, posProxyJson } from "../pos-proxy.js";
-import type { registerLicenseApi } from "../license-http.js";
+import type { Hono } from "hono";
 
-export function registerPosProxyRoutes(
-  app: Parameters<typeof registerLicenseApi>[0],
-): void {
+import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
+import { requireEnv } from "../lib/require-env.js";
+import { getPosOrgByStockixTenantId, posProxyJson } from "../pos-proxy.js";
+
+export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>): void {
   app.get("/pos/tenant-org", async (c) => {
     const tenantId =
       c.req.query("tenantId")?.trim()
@@ -128,10 +129,33 @@ export function registerPosProxyRoutes(
   });
 
   app.get("/pos/status", async (c) => {
-    const base = process.env.POS_PLATFORM_BASE_URL ?? "http://localhost:8010";
+    let base: string;
+    let frontendUrl: string;
+    try {
+      base = requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
+      frontendUrl = requireEnv("POS_FRONTEND_URL", "http://localhost:3001");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ configured: false, error: message }, 503);
+    }
+    let reachable = false;
+    let pingError: string | undefined;
+    try {
+      // pos-backend mounts `routes/healthRoute` at `/health` (not Nest `/api/ping`).
+      const res = await fetch(`${base.replace(/\/+$/, "")}/health`, {
+        signal: AbortSignal.timeout(4_000),
+      });
+      reachable = res.ok;
+      if (!reachable) pingError = `HTTP ${res.status}`;
+    } catch (err) {
+      pingError = err instanceof Error ? err.message : String(err);
+    }
     return c.json({
-      configured: true,
+      configured: base.length > 0,
+      reachable,
       baseUrl: base,
+      frontendUrl,
+      ...(pingError ? { pingError } : {}),
     });
   });
 }

@@ -1,4 +1,4 @@
-import { POS_ACCESS_TOKEN_STORAGE_KEY, type PosApiJson, posApiFetch } from "@/lib/pos-api-fetch";
+import { type PosApiJson, posApiFetch } from "@/lib/pos-api-fetch";
 
 export type UploadResult = {
   url: string;

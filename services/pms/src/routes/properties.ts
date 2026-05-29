@@ -3,9 +3,10 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 import { randomBytes } from "node:crypto";
+import { auditProperty } from "../lib/property-audit.js";
 
 export const propertiesRouter = new Hono<PmsEnv>();
 
@@ -40,12 +41,15 @@ const updateSchema = z.object({
 // GET /api/properties
 propertiesRouter.get("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
+  const { page, limit, offset } = parsePagination(c);
   const rows = await db
     .select()
     .from(pmsProperties)
     .where(eq(pmsProperties.tenantId, tenantId(c)))
-    .orderBy(desc(pmsProperties.createdAt));
-  return c.json({ properties: rows });
+    .orderBy(desc(pmsProperties.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ properties: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 // POST /api/properties
@@ -106,4 +110,17 @@ propertiesRouter.delete("/:id", async (c) => {
     and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))),
   );
   return c.json({ ok: true });
+});
+
+// GET /api/properties/:id/audit — end-to-end health check
+propertiesRouter.get("/:id/audit", async (c) => {
+  if (!db) return errors.dbUnavailable(c);
+  try {
+    const report = await auditProperty(db, tenantId(c), c.req.param("id"));
+    return c.json({ report });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("not found")) return errors.notFound(c, "property");
+    return c.json({ error: msg }, 500);
+  }
 });

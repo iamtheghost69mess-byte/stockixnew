@@ -21,9 +21,9 @@ export function LowStockWidget({ rows, isLoading }: LowStockWidgetProps) {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading low stock alerts...</p>
+          <p className="text-muted-foreground text-sm">Loading low stock alerts...</p>
         ) : rows.length === 0 ? (
-          <p className="flex items-center gap-2 text-sm text-emerald-600">
+          <p className="flex items-center gap-2 text-emerald-600 text-sm">
             <CheckCircle2 className="h-4 w-4" />
             All stock levels OK
           </p>

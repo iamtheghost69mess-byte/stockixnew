@@ -509,7 +509,7 @@ export default function AccountingSettingsPage() {
               disabled={!canWrite}
             />
           </div>
-          <div className="grid w-full min-w-0 gap-2 ">
+          <div className="grid w-full min-w-0 gap-2">
             <Label htmlFor="webhook">Inventory alert webhook URL</Label>
             <Input
               id="webhook"

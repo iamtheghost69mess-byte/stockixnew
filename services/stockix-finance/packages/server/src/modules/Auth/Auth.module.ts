@@ -44,6 +44,7 @@ import { GenerateApiKey } from './commands/GenerateApiKey.service';
 import { GetApiKeysService } from './queries/GetApiKeys.service';
 import { ListMyTenantsService } from './queries/ListMyTenants.service';
 import { SwitchTenantService } from './commands/SwitchTenant.service';
+import { AuthChangePasswordService } from './commands/AuthChangePassword.service';
 
 const models = [
   InjectSystemModel(PasswordReset),
@@ -100,6 +101,7 @@ const models = [
     GetApiKeysService,
     ListMyTenantsService,
     SwitchTenantService,
+    AuthChangePasswordService,
     JwtAuthGuard,
     {
       provide: APP_GUARD,

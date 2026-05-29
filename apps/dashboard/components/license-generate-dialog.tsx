@@ -41,6 +41,11 @@ import {
   generateLicenseSchema,
   type GenerateLicenseValues,
 } from "@/lib/schemas";
+import {
+  MODULE_CATALOG,
+  sortModules,
+  type StockixModuleId,
+} from "@/lib/tenant-modules";
 
 type PlanOpt = { slug: string; name: string };
 type TenantOpt = { id: string; name: string; slug: string };
@@ -52,12 +57,19 @@ type Props = {
   onSuccess: () => void;
 };
 
+function defaultExpiresAt(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 365);
+  return d.toISOString();
+}
+
 function emptyFormValues(): GenerateLicenseValues {
   return {
     product: "platform",
     planSlug: "starter",
-    term: "perpetual",
-    expiresAt: undefined,
+    modules: ["accounting"],
+    term: "fixed",
+    expiresAt: defaultExpiresAt(),
     maxActivations: 1,
     gracePeriodDays: 7,
     notes: "",
@@ -155,6 +167,7 @@ export default function LicenseGenerateDialog({
       const body = {
         product: values.product,
         planSlug: values.planSlug,
+        modules: sortModules(values.modules),
         count: values.count,
         isPerpetual,
         expiresAt:
@@ -219,6 +232,21 @@ export default function LicenseGenerateDialog({
             onSubmit={(e) => void onSubmit(e)}
             noValidate
           >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  form.setValue("product", "platform");
+                  form.setValue("modules", sortModules(["accounting", "pos"]));
+                  form.setValue("term", "fixed");
+                  form.setValue("expiresAt", defaultExpiresAt());
+                }}
+              >
+                Preset: Platform + Accounting
+              </Button>
+            </div>
             <FormField
               control={form.control}
               name="product"
@@ -266,6 +294,55 @@ export default function LicenseGenerateDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="modules"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Modules</FormLabel>
+                  <FormDescription>
+                    Select which products this license grants access to
+                  </FormDescription>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {MODULE_CATALOG.map((mod) => {
+                      const checked = field.value.includes(mod.id);
+                      return (
+                        <label
+                          key={mod.id}
+                          className="flex cursor-pointer gap-3 rounded-md border p-3 has-checked:border-primary"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            onChange={() => {
+                              const current = field.value;
+                              if (current.includes(mod.id)) {
+                                const next = current.filter((m) => m !== mod.id);
+                                field.onChange(
+                                  next.length > 0
+                                    ? sortModules(next)
+                                    : (["accounting"] as StockixModuleId[]),
+                                );
+                              } else {
+                                field.onChange(sortModules([...current, mod.id]));
+                              }
+                            }}
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium">{mod.label}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {mod.description}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -458,7 +535,7 @@ export default function LicenseGenerateDialog({
               name="gracePeriodDays"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Offline grace period (days)</FormLabel>
+                  <FormLabel>Post-expiry grace (read-only period, days)</FormLabel>
                   <FormControl>
                     <Input
                       className="mt-1"

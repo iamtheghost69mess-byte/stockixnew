@@ -1,5 +1,5 @@
 export type LicenseProduct = "platform" | "pos_desktop" | "bundle";
-export type LicenseStatus = "active" | "expired" | "revoked" | "unassigned";
+export type LicenseStatus = "active" | "expired" | "revoked" | "unassigned" | "suspended";
 export type ActivationStatus = "active" | "deactivated" | "blacklisted";
 
 export type LicenseModuleId = "accounting" | "pos" | "pms" | "chat";

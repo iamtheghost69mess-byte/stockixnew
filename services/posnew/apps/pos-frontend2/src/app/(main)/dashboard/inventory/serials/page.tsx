@@ -115,19 +115,19 @@ export default function SerialSearchPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Serialized Unit Tracker</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="font-bold text-3xl tracking-tight">Serialized Unit Tracker</h1>
+          <p className="mt-1 text-muted-foreground">
             Global search for specific inventory units. Audit the movement history of serialized items.
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[260px]">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative min-w-[260px] flex-1">
+          <Search className="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by exact serial number or scan..."
-            className="pl-8 bg-card shadow-sm h-12 text-lg"
+            className="h-12 bg-card pl-8 text-lg shadow-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -179,7 +179,7 @@ export default function SerialSearchPage() {
                 </SelectTrigger>
                 <SelectContent position="popper" className="z-[60] w-[var(--radix-select-trigger-width)]">
                   {serialTrackedIngredients.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                    <div className="px-3 py-2 text-muted-foreground text-xs">
                       No serial-tracked ingredients. Enable the flag on an ingredient first.
                     </div>
                   ) : (
@@ -233,7 +233,7 @@ export default function SerialSearchPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
@@ -261,7 +261,7 @@ export default function SerialSearchPage() {
                     <Skeleton className="h-4 w-28" />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Skeleton className="h-8 w-8 ml-auto" />
+                    <Skeleton className="ml-auto h-8 w-8" />
                   </TableCell>
                 </TableRow>
               ))
@@ -269,7 +269,7 @@ export default function SerialSearchPage() {
               <TableRow>
                 <TableCell colSpan={5} className="h-64 text-center text-muted-foreground">
                   <div className="flex flex-col items-center gap-4 py-8">
-                    <div className="p-4 rounded-full bg-muted">
+                    <div className="rounded-full bg-muted p-4">
                       <Database className="h-12 w-12 opacity-20" />
                     </div>
                     <div className="max-w-[300px] space-y-1">
@@ -283,8 +283,8 @@ export default function SerialSearchPage() {
               </TableRow>
             ) : (
               serials.map((sn) => (
-                <TableRow key={sn._id} className="hover:bg-muted/30 transition-colors h-16">
-                  <TableCell className="font-mono font-bold text-sm tracking-tight text-primary">{sn.serial}</TableCell>
+                <TableRow key={sn._id} className="h-16 transition-colors hover:bg-muted/30">
+                  <TableCell className="font-bold font-mono text-primary text-sm tracking-tight">{sn.serial}</TableCell>
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium text-sm">{sn.ingredient.name}</span>
@@ -318,14 +318,14 @@ export default function SerialSearchPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 font-medium text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
               Recent Activity Search
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <p className="text-xs text-muted-foreground italic">
+              <p className="text-muted-foreground text-xs italic">
                 Use this tool to verify the authenticity and movement chain of high-value inventory items.
               </p>
             </div>
@@ -340,19 +340,19 @@ function SerialStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "available":
       return (
-        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 py-1">
+        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 py-1 text-emerald-700">
           Available
         </Badge>
       );
     case "consumed":
       return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 py-1">
+        <Badge variant="outline" className="border-blue-200 bg-blue-50 py-1 text-blue-700">
           Consumed
         </Badge>
       );
     case "transferred":
       return (
-        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 py-1">
+        <Badge variant="outline" className="border-amber-200 bg-amber-50 py-1 text-amber-700">
           In Transit
         </Badge>
       );

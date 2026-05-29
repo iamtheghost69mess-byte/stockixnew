@@ -1,12 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type InviteInfo = { name: string; email: string };
+type InviteInfo = { name: string; email: string; inviteTokenExpiresAt?: string };
 
 function AcceptInviteContent() {
   const params = useSearchParams();
@@ -25,7 +26,11 @@ function AcceptInviteContent() {
         setError(data.error ?? "Invite not found");
         return;
       }
-      setInfo({ name: data.name, email: data.email });
+      setInfo({
+        name: data.name,
+        email: data.email,
+        inviteTokenExpiresAt: data.inviteTokenExpiresAt,
+      });
     })();
   }, [token]);
 
@@ -54,9 +59,14 @@ function AcceptInviteContent() {
     <div className="w-full max-w-sm space-y-4">
       <h1 className="text-xl font-semibold">Accept invitation</h1>
       {info ? (
-        <p className="text-sm text-muted-foreground">
-          {info.name} ({info.email})
-        </p>
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>
+            {info.name} ({info.email})
+          </p>
+          {info.inviteTokenExpiresAt ? (
+            <p>Invite expires {format(new Date(info.inviteTokenExpiresAt), "PPp")}</p>
+          ) : null}
+        </div>
       ) : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <form onSubmit={onSubmit} className="space-y-3">

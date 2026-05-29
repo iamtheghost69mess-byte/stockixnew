@@ -28,9 +28,21 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
-      - server
-      - webapp
+      server:
+        condition: service_healthy
+      webapp:
+        condition: service_healthy
+    mem_limit: 64m
+    cpus: "0.1"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   webapp:
     image: stockix-webapp:local
@@ -41,6 +53,12 @@ services:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/webapp/Dockerfile
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     read_only: true
     tmpfs:
       - /var/cache/nginx
@@ -48,6 +66,10 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   server:
     image: stockix-server:local
@@ -56,6 +78,16 @@ services:
       dockerfile: packages/server/Dockerfile
       target: app
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -124,6 +156,7 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET}
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
       - SYSTEM_DB_CLIENT=${SYSTEM_DB_CLIENT:-mysql}
       - SYSTEM_DB_HOST=${SYSTEM_DB_HOST:-mysql}
       - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
@@ -132,6 +165,13 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 1
+      start_period: 10s
     command:
       - /bin/bash
       - -lc
@@ -144,15 +184,30 @@ services:
         export SYSTEM_DB_HOST="$${SYSTEM_DB_HOST:-mysql}"
         export SYSTEM_DB_USER="$${SYSTEM_DB_USER:-$${DB_USER}}"
         export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
+        export DB_ROOT_PASSWORD="$${DB_ROOT_PASSWORD:-}"
         echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
-        /wait-for-it/wait-for-it.sh mysql:3306 -- node ./dist/cli.js system:migrate:latest
+        /wait-for-it/wait-for-it.sh mysql:3306 -- \
+          sh -ec '
+            if [ -n "$${DB_ROOT_PASSWORD}" ] && [ -n "$${SYSTEM_DB_USER}" ] && [ -n "$${SYSTEM_DB_PASSWORD}" ]; then
+              mariadb --ssl=0 -h mysql -uroot -p"$${DB_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON *.* TO '\''$${SYSTEM_DB_USER}'\''@'\''%'\'' IDENTIFIED BY '\''$${SYSTEM_DB_PASSWORD}'\'' WITH GRANT OPTION; FLUSH PRIVILEGES;" || true
+            fi
+            exec node ./dist/cli.js system:migrate:latest
+          '
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
 
   mysql:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/mariadb
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: "0.75"
+    mem_swappiness: 0
+    oom_kill_disable: false
     environment:
       - MYSQL_DATABASE=${SYSTEM_DB_NAME}
       - MYSQL_USER=${DB_USER}
@@ -180,6 +235,10 @@ services:
     # so provisioning still works if docker/mongo is missing from a shallow clone.
     image: mongo:5.0
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
     expose:
       - "27017"
     volumes:
@@ -196,6 +255,10 @@ services:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/redis
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
     expose:
       - "6379"
     volumes:

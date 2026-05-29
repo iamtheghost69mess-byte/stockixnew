@@ -12,9 +12,16 @@ const AuthMetaBootContext = createContext();
 function AuthMetaBootProvider({ ...props }) {
   const { isLoading: isAuthMetaLoading, data: authMeta } = useAuthMetadata();
 
+  const signupDisabledFromApi =
+    authMeta?.signupDisabled ?? authMeta?.meta?.signup_disabled;
+
   const state = {
     isAuthMetaLoading,
-    signupDisabled: authMeta?.meta?.signup_disabled,
+    // Driven by server SIGNUP_DISABLED env via GET /auth/meta. Default true (Stockix policy).
+    signupDisabled:
+      signupDisabledFromApi === undefined
+        ? true
+        : Boolean(signupDisabledFromApi),
   };
 
   if (isAuthMetaLoading) {
