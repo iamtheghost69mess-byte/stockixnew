@@ -326,6 +326,7 @@ jobs:
             fi
             echo "OK: $img"
           done
+          docker compose --env-file .env pull traefik socket-proxy
           docker compose --env-file .env up -d --no-build --wait \
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           sleep 10
