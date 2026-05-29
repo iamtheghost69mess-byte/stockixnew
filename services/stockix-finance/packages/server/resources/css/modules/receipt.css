@@ -544,12 +544,3 @@ html[lang^=en] body {
 .receipt__conditions p, .receipt__notes p {
   margin: 0 0 20px;
 }
-.receipt__table-total table tbody tr.total-display-currency td,
-.receipt__table-total table tbody tr.balance-due-display-currency td {
-  font-size: 11px;
-  color: #888;
-  font-style: italic;
-  border-top: 0;
-  padding-top: 2px;
-  padding-bottom: 2px;
-}
