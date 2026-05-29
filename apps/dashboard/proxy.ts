@@ -22,10 +22,13 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
       return "'self' ws: wss:";
     }
   })();
-  response.headers.set(
-    "Content-Security-Policy",
-    `${buildCspForRuntime(dashboardConfig.securityCspBase)}; connect-src ${connectSrc}`,
-  );
+  const builtCsp = buildCspForRuntime(dashboardConfig.securityCspBase);
+  const connectSrcDirective = `connect-src ${connectSrc}`;
+  const finalCsp = builtCsp.includes("connect-src")
+    ? builtCsp.replace(/connect-src[^;]*/, connectSrcDirective)
+    : `${builtCsp}; ${connectSrcDirective}`;
+
+  response.headers.set("Content-Security-Policy", finalCsp);
   response.headers.set("Strict-Transport-Security", dashboardConfig.securityHsts);
   response.headers.set("X-Frame-Options", dashboardConfig.securityXFrameOptions);
   response.headers.set("Referrer-Policy", dashboardConfig.securityReferrerPolicy);
