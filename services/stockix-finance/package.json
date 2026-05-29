@@ -27,8 +27,9 @@
     "@playwright/test": "1.32.3"
   },
   "engines": {
-    "node": "14.x"
+    "node": ">=20.0.0"
   },
+  "packageManager": "pnpm@9.15.9",
   "husky": {
     "hooks": {
       "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
