@@ -58,7 +58,6 @@ export interface ISaveLedgerEntryQueuePayload {
 
 export interface ISaveAccountsBalanceQueuePayload {
   ledger: ILedger;
-  tenantId: number;
   accountId: number;
   trx?: Knex.Transaction;
 }
