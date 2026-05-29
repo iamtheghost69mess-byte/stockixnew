@@ -1,6 +1,7 @@
 FROM node:18-alpine as build
 
 WORKDIR /app
+RUN apk add --no-cache python3 make g++
 RUN npm install -g pnpm@9
 
 # Copy lerna.json for the version injection in craco.config.js
