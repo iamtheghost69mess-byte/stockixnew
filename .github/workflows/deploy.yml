@@ -374,7 +374,7 @@ jobs:
           REMOTE
 
       - name: Create Sentry release
-        if: secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != ''
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
         run: |
           RELEASE=$(git rev-parse --short HEAD)
           npx @sentry/cli releases new "$RELEASE" \
