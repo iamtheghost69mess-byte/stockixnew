@@ -183,6 +183,11 @@ export const useExpensesTotals = () => {
   };
 };
 
+export const useExpenseTotalFormatted = () => {
+  const { formattedTotal } = useExpensesTotals();
+  return formattedTotal;
+};
+
 /**
  * Detarmines whether the expenses has foreign .
  * @returns {boolean}

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as _ from 'lodash';
-import * as addDeepdash from 'deepdash';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const addDeepdash = require('deepdash');
 
 const {
   condense,
