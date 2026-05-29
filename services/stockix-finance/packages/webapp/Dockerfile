@@ -1,7 +1,7 @@
-FROM node:14.21.3 as build
+FROM node:20-alpine as build
 
 WORKDIR /app
-RUN npm install -g pnpm@7
+RUN npm install -g pnpm@9
 
 # Copy lerna.json for the version injection in craco.config.js
 COPY lerna.json ./
