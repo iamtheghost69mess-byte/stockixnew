@@ -1095,6 +1095,7 @@ export async function executeProvisionRuntime(
         "-d",
         "--no-deps",
         "--remove-orphans",
+        "--no-build",
         "mysql",
         "mongo",
         "redis",
@@ -1112,7 +1113,7 @@ export async function executeProvisionRuntime(
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
       log("database_migration");
-      await runComposeWithCancellation(["run", "--rm", "database_migration"]);
+      await runComposeWithCancellation(["run", "--rm", "--no-build", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs(),
@@ -1137,6 +1138,7 @@ export async function executeProvisionRuntime(
         "-d",
         "--remove-orphans",
         "--force-recreate",
+        "--no-build",
         "webapp",
         "nginx",
         "server",
