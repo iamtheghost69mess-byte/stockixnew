@@ -35,7 +35,7 @@ exports.getCommonWebpackOptions = ({
       },
       plugins: [
         new TsconfigPathsPlugin({
-          configFile: './tsconfig.json',
+          configFile: path.resolve(__dirname, '../tsconfig.json'),
           extensions: ['.ts', '.tsx', '.js'],
         }),
       ],
@@ -45,7 +45,7 @@ exports.getCommonWebpackOptions = ({
       // IMPORTANT: Do NOT include mysql or mysql2 — those are the actual drivers
       // this app uses for MariaDB/MySQL.
       new NormalModuleReplacementPlugin(
-        /mssql|oracle(db)?|sqlite3|pg(-native|-query-stream|-pool)?$|tedious/,
+        /mssql|oracle(db)?|sqlite3|pg(-native|-query-stream|-pool|-escape)?$|tedious/,
         'noop2'
       ),
       new ProgressBarPlugin(),
@@ -55,6 +55,7 @@ exports.getCommonWebpackOptions = ({
         // Use package-local node_modules so knex/mysql2 stay externalized.
         // This preserves knex runtime migration file loading from filesystem.
         modulesDir: path.resolve(__dirname, '../node_modules'),
+        allowlist: [/^@\//],
       }),
       'aws-sdk',
       'prettier',

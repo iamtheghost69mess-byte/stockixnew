@@ -89,6 +89,11 @@ ENV PUPPETEER_SKIP_DOWNLOAD=1
 COPY ./package*.json ./
 COPY ./packages/server/package*.json ./packages/server/
 COPY ./packages/webapp/package*.json ./packages/webapp/
+COPY ./packages/shared/package*.json ./packages/shared/
+COPY ./shared/pdf-templates/package*.json ./shared/pdf-templates/
+COPY ./shared/sdk-ts/package*.json ./shared/sdk-ts/
+COPY ./shared/bigcapital-utils/package*.json ./shared/bigcapital-utils/
+COPY ./shared/email-components/package*.json ./shared/email-components/
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY ./.npmrc ./.npmrc
 
