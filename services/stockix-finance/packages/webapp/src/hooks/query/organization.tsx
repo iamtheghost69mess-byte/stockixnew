@@ -103,3 +103,19 @@ export function useOrgBaseCurrencyMutateAbilities(props) {
     },
   );
 }
+
+export function useCompleteOrganizationSetup(props?) {
+  const apiRequest = useApiRequest();
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (values) =>
+      apiRequest.post('/organization/setup/complete', values),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(t.ORGANIZATION);
+      },
+      ...props,
+    },
+  );
+}
