@@ -130,6 +130,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
     environment:
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
     extra_hosts:
