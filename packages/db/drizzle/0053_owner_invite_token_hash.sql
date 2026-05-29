@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+--> statement-breakpoint
 ALTER TABLE "owners" ADD COLUMN IF NOT EXISTS "invite_token_hash" text;
 --> statement-breakpoint
 UPDATE "owners"

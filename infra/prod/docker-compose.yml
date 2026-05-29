@@ -27,6 +27,8 @@ x-stockix-platform-env: &stockix-platform-env
   RELEASE_VERSION: ${RELEASE_VERSION:-}
   DB_POOL_MAX: ${DB_POOL_MAX:-20}
   DB_IDLE_TIMEOUT_SECONDS: ${DB_IDLE_TIMEOUT_SECONDS:-30}
+  DB_CONNECT_TIMEOUT_SECONDS: ${DB_CONNECT_TIMEOUT_SECONDS:-10}
+  DB_MAX_LIFETIME_SECONDS: ${DB_MAX_LIFETIME_SECONDS:-1800}
   STOCKIX_API_URL: ${STOCKIX_API_URL:-}
   PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
   WORKER_SECRET: ${WORKER_SECRET}
@@ -110,6 +112,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    tmpfs:
+      - /run
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:2375/_ping 2>/dev/null | grep -q OK || exit 1"]
       interval: 15s
