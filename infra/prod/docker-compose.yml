@@ -402,7 +402,8 @@ services:
       retries: 6
 
   db-backup:
-    image: amazon/aws-cli:2.15.0
+    # backup.sh needs docker exec (pg_dump) + aws s3 (B2). amazon/aws-cli has neither cron nor docker CLI.
+    image: alpine:3.20
     restart: unless-stopped
     mem_limit: 128m
     cpus: "0.1"
@@ -423,11 +424,13 @@ services:
       - sh
       - -c
       - |
-        printf '%s\n' \
-          '0 2 * * * /bin/bash /backup.sh >> /var/log/backup.log 2>&1' \
-          '0 14 * * * /bin/bash /backup.sh >> /var/log/backup.log 2>&1' \
-          | crontab -
-        crond -f -l 2
+        set -e
+        apk add --no-cache docker-cli aws-cli bash gzip
+        echo "[backup] scheduler started (every 12h, replaces 02:00/14:00 cron)"
+        while true; do
+          /bin/bash /backup.sh || echo "[backup] run failed: $$?"
+          sleep 43200
+        done
     depends_on:
       postgres:
         condition: service_healthy
