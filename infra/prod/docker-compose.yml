@@ -57,6 +57,7 @@ x-stockix-platform-env: &stockix-platform-env
   PROVISION_MAX_MS: ${PROVISION_MAX_MS:-2700000}
   METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
   METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+  POS_PLATFORM_API_KEY: ${POS_PLATFORM_API_KEY:-}
   # Do not load repo-root .env inside containers (use explicit env below).
   STOCKIX_LOAD_ROOT_ENV: "0"
 
