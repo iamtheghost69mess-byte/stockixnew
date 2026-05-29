@@ -1,8 +1,8 @@
-FROM node:18-alpine as build
+FROM node:14-alpine as build
 
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@7
 
 # Copy lerna.json for the version injection in craco.config.js
 COPY lerna.json ./
@@ -17,7 +17,7 @@ COPY ./packages/webapp/package*.json ./
 
 WORKDIR /app
 # Install ONLY webapp dependencies to avoid hoisting conflicts with server's Webpack 5
-RUN pnpm i --frozen-lockfile --filter @stockix/webapp...
+RUN pnpm i --no-frozen-lockfile --filter @stockix/webapp...
 
 WORKDIR /app/packages/webapp
 
