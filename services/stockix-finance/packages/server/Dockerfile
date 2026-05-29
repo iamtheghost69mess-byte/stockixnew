@@ -80,7 +80,7 @@ ENV MAIL_HOST=$MAIL_HOST \
 
 WORKDIR /app
 
-RUN npm install -g pnpm@7 && chown node:node /
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && chown node:node /
 
 # Migration / API images do not run Puppeteer in these containers; skipping Chromium
 # saves hundreds of MB and avoids install timeouts or Alpine glibc mismatches during `npm install`.
