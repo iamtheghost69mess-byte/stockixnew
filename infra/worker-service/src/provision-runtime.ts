@@ -1155,14 +1155,38 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
 
-    const internalUrl = await resolveServerInternalUrl({
-      composeFile,
-      project,
-      envPath: composeCtx.envPath,
-      composeEnv: composeCtx.composeEnv,
-      fallbackHost: apiConfig.tenantInternalHost,
-      fallbackPort: port,
-    });
+    // Connect the tenant server container to stockix_internal so the infra-worker can
+    // reach it directly (host.docker.internal NAT is blocked by iptables on Linux).
+    const serverContainerName = `${project}-server-1`;
+    const internalNetworkName = process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
+    let tenantServerInternalIp: string | undefined;
+    try {
+      await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
+      log(`[provision] connected ${serverContainerName} to ${internalNetworkName}`);
+      // Resolve the IP assigned on the internal network
+      const { stdout: inspectOut } = await execa("docker", [
+        "inspect",
+        serverContainerName,
+        "--format",
+        `{{(index .NetworkSettings.Networks "${internalNetworkName}").IPAddress}}`,
+      ]);
+      tenantServerInternalIp = inspectOut.trim();
+      log(`[provision] tenant server internal IP: ${tenantServerInternalIp}`);
+    } catch (netErr) {
+      const msg = netErr instanceof Error ? netErr.message : String(netErr);
+      log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+    }
+
+    const internalUrl = tenantServerInternalIp
+      ? `http://${tenantServerInternalIp}:3000`
+      : await resolveServerInternalUrl({
+          composeFile,
+          project,
+          envPath: composeCtx.envPath,
+          composeEnv: composeCtx.composeEnv,
+          fallbackHost: apiConfig.tenantInternalHost,
+          fallbackPort: port,
+        });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");
       await trace.event("progress", "Waiting for tenant health endpoint", {
