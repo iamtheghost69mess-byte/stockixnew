@@ -80,7 +80,7 @@ x-stockix-worker-env: &stockix-worker-env
 
 services:
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.2.0
+    image: tecnativa/docker-socket-proxy:latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -108,14 +108,10 @@ services:
     memswap_limit: 64m
     cpus: "0.1"
     mem_swappiness: 0
-    read_only: true
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    tmpfs:
-      - /run
-      - /usr/local/etc/haproxy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:2375/_ping 2>/dev/null | grep -q OK || exit 1"]
       interval: 15s
