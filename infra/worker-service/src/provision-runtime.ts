@@ -334,6 +334,33 @@ async function resolveServerInternalUrl(params: {
   fallbackHost: string;
   fallbackPort: number;
 }): Promise<string> {
+  // Connect the tenant server container to the worker's internal network so the
+  // worker can reach it directly (host-published port forwarding is blocked by
+  // Docker isolation between different bridge networks on Linux).
+  const workerNetwork = process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
+  const containerName = `${params.project}-server-1`;
+  try {
+    await execa("docker", ["network", "connect", workerNetwork, containerName], {
+      stdio: "pipe",
+      reject: false,
+    });
+    const { stdout: inspectOut } = await execa(
+      "docker",
+      [
+        "inspect",
+        "--format",
+        `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
+        containerName,
+      ],
+      { stdio: "pipe" },
+    );
+    const ip = inspectOut.trim();
+    if (ip && ip !== "<no value>" && ip !== "") {
+      return `http://${ip}:3000`;
+    }
+  } catch {
+    // Fall through to host-port approach.
+  }
   try {
     const { stdout } = await execa(
       "docker",
