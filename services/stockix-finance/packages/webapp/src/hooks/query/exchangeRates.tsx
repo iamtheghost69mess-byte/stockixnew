@@ -149,3 +149,21 @@ export function useExchangeRateByDate(currencyCode: string, date: string, props?
     },
   );
 }
+
+/** Alias used by AutoExchangeProvider: fetches latest exchange rate for a currency. */
+export function useLatestExchangeRate(
+  { fromCurrency }: { fromCurrency: string },
+  props?: Record<string, unknown>,
+) {
+  return useQueryTenant(
+    [t.EXCHANGE_RATE, 'latest', fromCurrency],
+    { method: 'get', url: `/currencies/${fromCurrency}/exchange_rate` },
+    {
+      enabled: Boolean(fromCurrency),
+      select: (res) => res.data?.exchange_rate ?? res.data,
+      retry: false,
+      staleTime: 5 * 60 * 1000,
+      ...props,
+    },
+  );
+}
