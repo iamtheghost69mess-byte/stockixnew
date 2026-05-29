@@ -127,8 +127,6 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     cpus: "0.25"
-    depends_on:
-      - socket-proxy
     ports:
       - "80:80"
       - "443:443"
@@ -139,9 +137,10 @@ services:
     volumes:
       - traefik_letsencrypt:/letsencrypt
       - traefik_dynamic:/etc/traefik/dynamic
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - --providers.docker=true
-      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=stockix_public
       - --providers.file.directory=/etc/traefik/dynamic
@@ -161,7 +160,6 @@ services:
     networks:
       - stockix_public
       - stockix_internal
-      - socket_proxy_network
     read_only: true
     security_opt:
       - no-new-privileges:true
