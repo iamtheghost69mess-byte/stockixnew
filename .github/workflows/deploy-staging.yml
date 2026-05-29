@@ -100,7 +100,8 @@ jobs:
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
           rm -rf node_modules
-          pnpm install --frozen-lockfile --ignore-scripts
+          # infra/staging/.env sets NODE_ENV=production; pnpm skips devDependencies (tsx for db:migrate).
+          NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
           cd infra/staging
