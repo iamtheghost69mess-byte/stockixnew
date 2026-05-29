@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Printer, RotateCcw, Send, Trash2 } from "lucide-react";
+import { CreditCard, Printer, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { BillBreakdown } from "@/lib/pos-bill-utils";
@@ -61,20 +61,20 @@ export function PosCartSidebar({
 }: PosCartSidebarProps) {
   const isAdmin = String(userRole || "").toLowerCase() === "admin";
   return (
-    <div className="flex h-full flex-col bg-zinc-950/40 backdrop-blur-xl border-l border-zinc-800/50 shadow-2xl overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden border-zinc-800/50 border-l bg-zinc-950/40 shadow-2xl backdrop-blur-xl">
       {/* Header — Fixed */}
       <div className="shrink-0 p-5 pb-2">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="mb-1 flex items-center gap-2">
           <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
-          <h2 className="text-lg font-black text-white uppercase tracking-tighter leading-none">Check Ledger</h2>
+          <h2 className="font-black text-lg text-white uppercase leading-none tracking-tighter">Check Ledger</h2>
         </div>
-        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] opacity-70">
+        <p className="font-black text-[9px] text-zinc-500 uppercase tracking-[0.2em] opacity-70">
           Real-time Terminal Sync
         </p>
         {availabilityMap && stockDeductTrigger && (
-          <div className="mt-3 flex items-center gap-2 py-1 px-3 rounded-lg bg-emerald-950/30 border border-emerald-500/10 w-fit">
-            <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]" />
-            <span className="text-[8px] font-black text-emerald-400/80 uppercase tracking-widest">
+          <div className="mt-3 flex w-fit items-center gap-2 rounded-lg border border-emerald-500/10 bg-emerald-950/30 px-3 py-1">
+            <div className="size-1.5 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
+            <span className="font-black text-[8px] text-emerald-400/80 uppercase tracking-widest">
               Deduction:{" "}
               {stockDeductTrigger === "kitchen_send"
                 ? "On Kitchen Send"
@@ -87,12 +87,12 @@ export function PosCartSidebar({
       </div>
 
       {/* Scrollable Items Area */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-2 scrollbar-hide">
+      <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-4 py-2">
         {cart.length === 0 ? (
-          <div className="min-h-[120px] flex flex-col items-center justify-center text-center border border-dashed border-zinc-800/30 rounded-3xl bg-zinc-900/5 p-4">
-            <Trash2 className="size-5 text-zinc-800 mb-2" />
-            <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest leading-none">Cart is empty</h3>
-            <p className="text-[8px] text-zinc-700 mt-2 font-bold uppercase tracking-tighter">Select items to begin</p>
+          <div className="flex min-h-[120px] flex-col items-center justify-center rounded-3xl border border-zinc-800/30 border-dashed bg-zinc-900/5 p-4 text-center">
+            <Trash2 className="mb-2 size-5 text-zinc-800" />
+            <h3 className="font-black text-[10px] text-zinc-500 uppercase leading-none tracking-widest">Cart is empty</h3>
+            <p className="mt-2 font-bold text-[8px] text-zinc-700 uppercase tracking-tighter">Select items to begin</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2 pb-10">
@@ -112,17 +112,17 @@ export function PosCartSidebar({
       </div>
 
       {/* Footer — Sticky Totals & Buttons */}
-      <div className="shrink-0 p-4 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/50 space-y-3">
-        <div className="space-y-2 rounded-2xl bg-zinc-900/40 p-4 border border-zinc-800/50 shadow-inner relative overflow-hidden group">
-          <div className="space-y-1.5 relative z-10">
-            <div className="flex justify-between text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em]">
+      <div className="shrink-0 space-y-3 border-zinc-800/50 border-t bg-zinc-950/95 p-4 backdrop-blur-md">
+        <div className="group relative space-y-2 overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/40 p-4 shadow-inner">
+          <div className="relative z-10 space-y-1.5">
+            <div className="flex justify-between font-black text-[9px] text-zinc-500 uppercase tracking-[0.2em]">
               <span>Subtotal</span>
               <span className="tabular-nums">{formatCurrency(bills.subtotalUsd, { currency: "USD" })}</span>
             </div>
             {bills.taxes.map((t) => (
               <div
                 key={t.code}
-                className="flex justify-between text-zinc-600 text-[8px] font-black uppercase tracking-widest opacity-80"
+                className="flex justify-between font-black text-[8px] text-zinc-600 uppercase tracking-widest opacity-80"
               >
                 <span>
                   {t.name} ({t.rate}%)
@@ -131,29 +131,29 @@ export function PosCartSidebar({
               </div>
             ))}
             {bills.serviceChargeUsd > 0 ? (
-              <div className="flex justify-between text-zinc-600 text-[8px] font-black uppercase tracking-widest opacity-80">
+              <div className="flex justify-between font-black text-[8px] text-zinc-600 uppercase tracking-widest opacity-80">
                 <span>Service Charge ({bills.serviceChargeRate}%)</span>
                 <span className="tabular-nums">{formatCurrency(bills.serviceChargeUsd, { currency: "USD" })}</span>
               </div>
             ) : null}
           </div>
 
-          <div className="flex justify-between items-end pt-2 border-t border-zinc-800/50 relative z-10">
+          <div className="relative z-10 flex items-end justify-between border-zinc-800/50 border-t pt-2">
             <div>
-              <span className="text-[8px] font-black text-emerald-500/70 uppercase tracking-[0.3em] block mb-0.5">
+              <span className="mb-0.5 block font-black text-[8px] text-emerald-500/70 uppercase tracking-[0.3em]">
                 Grand Total
               </span>
-              <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">
+              <h3 className="font-black text-2xl text-white uppercase leading-none tracking-tighter">
                 {formatCurrency(bills.totalUsd, { currency: "USD" }).split(".")[0]}
                 <span className="text-base opacity-40">.{formatCurrency(bills.totalUsd, { currency: "USD" }).split(".")[1]}</span>
               </h3>
             </div>
             {bills.totalLbp > 0 && (
               <div className="text-right">
-                <div className="text-[9px] text-zinc-500 font-black uppercase tracking-widest tabular-nums leading-none">
+                <div className="font-black text-[9px] text-zinc-500 uppercase tabular-nums leading-none tracking-widest">
                   {formatCurrency(bills.totalLbp, { currency: "LBP", noDecimals: true })}
                 </div>
-                <span className="text-[7px] text-zinc-700 font-bold uppercase tracking-tighter">LBP</span>
+                <span className="font-bold text-[7px] text-zinc-700 uppercase tracking-tighter">LBP</span>
               </div>
             )}
           </div>
@@ -164,7 +164,7 @@ export function PosCartSidebar({
             variant="outline"
             disabled={locked || cart.length === 0 || sendingToKitchen}
             onClick={onSendToKitchen}
-            className="h-11 border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800 rounded-lg uppercase text-[9px] font-black tracking-widest active:scale-95 transition-all"
+            className="h-11 rounded-lg border-zinc-800 bg-zinc-900/50 font-black text-[9px] text-zinc-300 uppercase tracking-widest transition-all hover:bg-zinc-800 active:scale-95"
           >
             {sendingToKitchen ? <Loader2 className="mr-2 h-3.5 w-3.5" /> : <Send className="mr-2 h-3.5 w-3.5 text-emerald-500" />}
             {kitchenFlowMode === "kitchen_display" ? "Send to KDS" : "Fire"}
@@ -173,7 +173,7 @@ export function PosCartSidebar({
             variant="outline"
             disabled={!canPrintReceipt}
             onClick={onPreviewReceipt}
-            className="h-11 border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800 rounded-lg uppercase text-[9px] font-black tracking-widest active:scale-95 transition-all"
+            className="h-11 rounded-lg border-zinc-800 bg-zinc-900/50 font-black text-[9px] text-zinc-300 uppercase tracking-widest transition-all hover:bg-zinc-800 active:scale-95"
           >
             <Printer className="mr-2 h-3.5 w-3.5 text-zinc-500" />
             Print
@@ -181,7 +181,7 @@ export function PosCartSidebar({
           <Button
             disabled={locked || cart.length === 0 || paying}
             onClick={onPay}
-            className="col-span-2 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl uppercase text-[11px] font-black tracking-[0.2em] shadow-lg shadow-emerald-950/20 active:scale-[0.98] transition-all"
+            className="col-span-2 h-14 rounded-xl bg-emerald-600 font-black text-[11px] text-white uppercase tracking-[0.2em] shadow-emerald-950/20 shadow-lg transition-all hover:bg-emerald-500 active:scale-[0.98]"
           >
             {paying ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -197,7 +197,7 @@ export function PosCartSidebar({
               variant="outline"
               disabled={locked || cart.length === 0 || paying || !onSplitBill}
               onClick={onSplitBill}
-              className="col-span-2 h-11 border-zinc-700 bg-zinc-900/40 text-zinc-200 hover:bg-zinc-800 rounded-xl uppercase text-[10px] font-black tracking-[0.18em]"
+              className="col-span-2 h-11 rounded-xl border-zinc-700 bg-zinc-900/40 font-black text-[10px] text-zinc-200 uppercase tracking-[0.18em] hover:bg-zinc-800"
             >
               Split Bill
             </Button>
@@ -210,7 +210,7 @@ export function PosCartSidebar({
                   variant="ghost"
                   disabled={!locked || !activeOrderId || busy}
                   onClick={onRefund}
-                  className="h-8 text-zinc-600 hover:text-white hover:bg-zinc-900/50 rounded-lg uppercase text-[8px] font-black tracking-widest transition-colors"
+                  className="h-8 rounded-lg font-black text-[8px] text-zinc-600 uppercase tracking-widest transition-colors hover:bg-zinc-900/50 hover:text-white"
                 >
                   Refund
                 </Button>
@@ -221,7 +221,7 @@ export function PosCartSidebar({
               variant="ghost"
               disabled={!activeOrderId || busy}
               onClick={onDiscount}
-              className="h-8 text-amber-500/70 hover:text-amber-400 hover:bg-amber-950/10 rounded-lg uppercase text-[8px] font-black tracking-widest transition-colors"
+              className="h-8 rounded-lg font-black text-[8px] text-amber-500/70 uppercase tracking-widest transition-colors hover:bg-amber-950/10 hover:text-amber-400"
             >
               Discount
             </Button>
@@ -230,7 +230,7 @@ export function PosCartSidebar({
               variant="ghost"
               disabled={locked || !activeOrderId || busy}
               onClick={onVoid}
-              className="h-8 text-red-900/50 hover:text-red-500 hover:bg-red-950/10 rounded-lg uppercase text-[8px] font-black tracking-widest transition-colors"
+              className="h-8 rounded-lg font-black text-[8px] text-red-900/50 uppercase tracking-widest transition-colors hover:bg-red-950/10 hover:text-red-500"
             >
               Void Order
             </Button>
@@ -289,21 +289,21 @@ function PosCartLineItem({
       <div className="flex flex-col gap-3">
         <div className="flex items-start gap-4">
           {/* Item Image with Fallback */}
-          <div className="size-12 rounded-xl bg-zinc-800 border border-zinc-700/50 overflow-hidden shrink-0">
+          <div className="size-12 shrink-0 overflow-hidden rounded-xl border border-zinc-700/50 bg-zinc-800">
             {item?.imageUrl ? (
               <img src={item.imageUrl} alt={line.name} className="size-full object-cover" />
             ) : (
-              <div className="size-full flex items-center justify-center text-zinc-600 font-bold text-[10px]">IMG</div>
+              <div className="flex size-full items-center justify-center font-bold text-[10px] text-zinc-600">IMG</div>
             )}
           </div>
 
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h4 className={cn("font-bold text-zinc-100 text-sm leading-snug truncate", isSoldOut && "text-red-400")}>
+              <h4 className={cn("truncate font-bold text-sm text-zinc-100 leading-snug", isSoldOut && "text-red-400")}>
                 {line.name}
               </h4>
               {isSoldOut ? (
-                <span className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full shrink-0 uppercase tracking-widest shadow-lg shadow-red-950/50">
+                <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 font-black text-[8px] text-white uppercase tracking-widest shadow-lg shadow-red-950/50">
                   Sold Out
                 </span>
               ) : (
@@ -312,7 +312,7 @@ function PosCartLineItem({
                 avail.estimatedPortions <= 5 && (
                   <span
                     className={cn(
-                      "text-[8px] font-black uppercase px-1.5 py-0.5 rounded-sm shrink-0",
+                      "shrink-0 rounded-sm px-1.5 py-0.5 font-black text-[8px] uppercase",
                       avail.estimatedPortions <= 2 ? "bg-red-500/10 text-red-500" : "bg-amber-500/10 text-amber-500",
                     )}
                   >
@@ -321,7 +321,7 @@ function PosCartLineItem({
                 )
               )}
             </div>
-            <div className="mt-1 text-xs text-zinc-500 font-medium tabular-nums">
+            <div className="mt-1 font-medium text-xs text-zinc-500 tabular-nums">
               {formatCurrency(line.pricePerQuantity, { currency: "USD" })}
             </div>
             {Array.isArray(line.selectedSlots) && line.selectedSlots.length > 0 ? (
@@ -340,7 +340,7 @@ function PosCartLineItem({
             onClick={() => onRemove(line.id)}
             className={cn(
               "rounded-lg p-1.5 text-zinc-600 transition-all hover:bg-red-950/40 hover:text-red-400",
-              locked && "opacity-0 pointer-events-none",
+              locked && "pointer-events-none opacity-0",
             )}
           >
             <Trash2 className="h-4 w-4" />
@@ -353,7 +353,7 @@ function PosCartLineItem({
               type="button"
               disabled={locked}
               onClick={() => onBump(line.id, line.quantity - 1)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:opacity-30 active:scale-90 transition-all"
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 transition-all hover:bg-zinc-700 active:scale-90 disabled:opacity-30"
             >
               <span className="font-bold text-lg">−</span>
             </button>
@@ -362,21 +362,21 @@ function PosCartLineItem({
               type="button"
               disabled={locked || isSoldOut}
               onClick={() => onBump(line.id, line.quantity + 1)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:opacity-30 active:scale-90 transition-all"
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 transition-all hover:bg-zinc-700 active:scale-90 disabled:opacity-30"
             >
               <span className="font-bold text-lg">+</span>
             </button>
           </div>
 
           <div className="text-right tabular-nums">
-            <span className="text-sm font-black text-white">{formatCurrency(line.price, { currency: "USD" })}</span>
+            <span className="font-black text-sm text-white">{formatCurrency(line.price, { currency: "USD" })}</span>
           </div>
         </div>
       </div>
 
       {isSoldOut && (
         <div
-          className="absolute inset-0 pointer-events-none rounded-2xl opacity-5"
+          className="pointer-events-none absolute inset-0 rounded-2xl opacity-5"
           style={{
             backgroundImage: "repeating-linear-gradient(45deg, #000, #000 10px, transparent 10px, transparent 20px)",
           }}

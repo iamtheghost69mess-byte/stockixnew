@@ -1,6 +1,23 @@
 import { tenantProvisionEvents } from "@repo/db/schema";
+import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
+
+export const PROVISION_NOTIFY_CHANNEL = "stockix_provision_event";
+
+export type ProvisionEventPayload = {
+  id: string;
+  correlationId: string;
+  slug: string | null;
+  tenantId: string | null;
+  parentTenantId: string | null;
+  deploymentId: string | null;
+  phase: string;
+  level: string;
+  message: string;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+};
 
 export type ProvisionTracer = {
   event: (
@@ -18,6 +35,27 @@ type TraceContext = () => {
   parentTenantId?: string | null;
 };
 
+const PROVISION_META_SCRUB_KEYS = new Set([
+  "oneTimeAdminPassword",
+  "posDefaultCredentials",
+  "pin",
+  "fullCredentials",
+  "plainPin",
+]);
+
+function scrubProvisionMeta(
+  meta: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!meta) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (!PROVISION_META_SCRUB_KEYS.has(key)) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 export function createProvisionTracer(
   db: PostgresJsDatabase<typeof dbSchema>,
   correlationId: string,
@@ -29,18 +67,31 @@ export function createProvisionTracer(
       const level = opts?.level ?? "info";
       // Scrub oneTimeAdminPassword from meta before persisting to the DB (CRIT-02).
       const rawMeta = opts?.meta ?? null;
-      let meta: Record<string, unknown> | null = rawMeta;
-      if (meta && "oneTimeAdminPassword" in meta) {
-        const { oneTimeAdminPassword: _scrubbed, ...rest } = meta;
-        meta = rest;
-      }
-      if (meta && "posDefaultCredentials" in meta) {
-        const { posDefaultCredentials: _scrubbedPos, ...rest } = meta;
-        meta = rest;
-      }
+      const meta = scrubProvisionMeta(rawMeta);
       const ctx = getContext();
       log(`[${phase}] ${message}`);
-      await db.insert(tenantProvisionEvents).values({
+      const [row] = await db
+        .insert(tenantProvisionEvents)
+        .values({
+          correlationId,
+          slug: ctx.slug,
+          tenantId: ctx.tenantId ?? null,
+          parentTenantId: ctx.parentTenantId ?? null,
+          deploymentId: ctx.deploymentId ?? null,
+          phase,
+          level,
+          message,
+          meta,
+        })
+        .returning({
+          id: tenantProvisionEvents.id,
+          createdAt: tenantProvisionEvents.createdAt,
+        });
+
+      if (!row) return;
+
+      const payload: ProvisionEventPayload = {
+        id: row.id,
         correlationId,
         slug: ctx.slug,
         tenantId: ctx.tenantId ?? null,
@@ -50,7 +101,12 @@ export function createProvisionTracer(
         level,
         message,
         meta,
-      });
+        createdAt: row.createdAt.toISOString(),
+      };
+
+      await db.execute(
+        sql`SELECT pg_notify(${PROVISION_NOTIFY_CHANNEL}, ${JSON.stringify(payload)})`,
+      );
     },
   };
 }

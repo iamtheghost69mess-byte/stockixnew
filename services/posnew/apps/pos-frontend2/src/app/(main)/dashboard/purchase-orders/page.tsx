@@ -31,7 +31,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchIngredients, INGREDIENTS_QUERY_KEY, invalidateInventoryHubQueries } from "@/lib/inventory-api";
@@ -148,7 +147,6 @@ function PurchaseOrdersPageContent() {
     register,
     handleSubmit,
     formState: { errors },
-    setValue,
     control,
     reset,
     watch,
@@ -365,7 +363,7 @@ function PurchaseOrdersPageContent() {
       >
         <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 space-y-1.5 px-6 pt-6 pb-4 text-left">
-            <DialogTitle className="text-xl font-semibold tracking-tight">Create Purchase Order</DialogTitle>
+            <DialogTitle className="font-semibold text-xl tracking-tight">Create Purchase Order</DialogTitle>
             <DialogDescription>
               Select a supplier, enter each line in the table, then review the subtotal and submit.
             </DialogDescription>
@@ -424,7 +422,7 @@ function PurchaseOrdersPageContent() {
                     )}
                   />
                   {errors.supplierId ? (
-                    <p className="text-destructive mt-2 text-xs">{errors.supplierId.message}</p>
+                    <p className="mt-2 text-destructive text-xs">{errors.supplierId.message}</p>
                   ) : null}
                 </CardContent>
               </Card>
@@ -453,25 +451,25 @@ function PurchaseOrdersPageContent() {
                     <Table className="min-w-176">
                       <TableHeader>
                         <TableRow className="bg-muted/40 hover:bg-muted/40">
-                          <TableHead className="w-10 px-3 text-center text-xs font-medium text-muted-foreground">
+                          <TableHead className="w-10 px-3 text-center font-medium text-muted-foreground text-xs">
                             #
                           </TableHead>
-                          <TableHead className="min-w-56 px-3 text-xs font-medium text-muted-foreground">
+                          <TableHead className="min-w-56 px-3 font-medium text-muted-foreground text-xs">
                             Ingredient
                           </TableHead>
-                          <TableHead className="w-24 px-3 text-right text-xs font-medium text-muted-foreground">
+                          <TableHead className="w-24 px-3 text-right font-medium text-muted-foreground text-xs">
                             Qty
                           </TableHead>
-                          <TableHead className="w-28 px-3 text-right text-xs font-medium text-muted-foreground">
+                          <TableHead className="w-28 px-3 text-right font-medium text-muted-foreground text-xs">
                             Unit price
                           </TableHead>
-                          <TableHead className="w-24 px-3 text-right text-xs font-medium text-muted-foreground">
+                          <TableHead className="w-24 px-3 text-right font-medium text-muted-foreground text-xs">
                             Tax
                           </TableHead>
-                          <TableHead className="w-32 px-3 text-right text-xs font-medium text-muted-foreground">
+                          <TableHead className="w-32 px-3 text-right font-medium text-muted-foreground text-xs">
                             Subtotal
                           </TableHead>
-                          <TableHead className="w-12 px-2 text-xs font-medium text-muted-foreground">
+                          <TableHead className="w-12 px-2 font-medium text-muted-foreground text-xs">
                             <span className="sr-only">Remove</span>
                           </TableHead>
                         </TableRow>
@@ -482,10 +480,10 @@ function PurchaseOrdersPageContent() {
                           const rowTotal = (Number(row?.quantity) || 0) * (Number(row?.unitPrice) || 0);
                           return (
                             <TableRow key={field.id} className="hover:bg-muted/30">
-                              <TableCell className="px-3 py-3 text-center text-xs font-medium text-muted-foreground tabular-nums">
+                              <TableCell className="px-3 py-3 text-center font-medium text-muted-foreground text-xs tabular-nums">
                                 {idx + 1}
                               </TableCell>
-                              <TableCell className="max-w-[20rem] px-3 py-3 align-top whitespace-normal">
+                              <TableCell className="max-w-[20rem] whitespace-normal px-3 py-3 align-top">
                                 <Controller
                                   control={control}
                                   name={`items.${idx}.ingredientId`}
@@ -505,7 +503,7 @@ function PurchaseOrdersPageContent() {
                                   )}
                                 />
                                 {errors.items?.[idx]?.ingredientId ? (
-                                  <p className="text-destructive mt-1.5 text-xs leading-snug">
+                                  <p className="mt-1.5 text-destructive text-xs leading-snug">
                                     {errors.items[idx]?.ingredientId?.message}
                                   </p>
                                 ) : null}
@@ -527,12 +525,12 @@ function PurchaseOrdersPageContent() {
                                 />
                               </TableCell>
                               <TableCell className="px-3 py-3 align-top">
-                                <div className="flex h-9 items-center justify-end rounded-md border bg-muted/30 px-2 text-xs text-muted-foreground tabular-nums">
+                                <div className="flex h-9 items-center justify-end rounded-md border bg-muted/30 px-2 text-muted-foreground text-xs tabular-nums">
                                   0%
                                 </div>
                               </TableCell>
                               <TableCell className="px-3 py-3 align-top">
-                                <div className="flex h-9 items-center justify-end rounded-md border bg-muted/50 px-2 text-sm font-medium tabular-nums">
+                                <div className="flex h-9 items-center justify-end rounded-md border bg-muted/50 px-2 font-medium text-sm tabular-nums">
                                   {formatCurrency(rowTotal)}
                                 </div>
                               </TableCell>
@@ -575,7 +573,7 @@ function PurchaseOrdersPageContent() {
                 <CardContent className="space-y-5 pt-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <Label htmlFor="po-isDropship" className="text-sm font-medium">
+                      <Label htmlFor="po-isDropship" className="font-medium text-sm">
                         Dropship order
                       </Label>
                       <p className="text-muted-foreground text-xs leading-relaxed">
@@ -626,7 +624,7 @@ function PurchaseOrdersPageContent() {
               </div>
             </div>
             <Separator className="shrink-0" />
-            <DialogFooter className="shrink-0 gap-2 border-t border-border/60 bg-muted/10 px-6 py-4">
+            <DialogFooter className="shrink-0 gap-2 border-border/60 border-t bg-muted/10 px-6 py-4">
               <Button type="button" variant="outline" className="h-10" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>

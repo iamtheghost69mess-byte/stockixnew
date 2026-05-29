@@ -1,4 +1,5 @@
 import { apiConfig } from "@repo/config";
+import { normalizeFinanceApiJson } from "@repo/shared/finance-api";
 import { organizations, tenantDeployments, tenants } from "@repo/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -31,11 +32,12 @@ async function fetchResolvedFinanceTenant(
   });
   if (!res.ok) return null;
 
-  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body) return null;
+  const raw = (await res.json().catch(() => null)) as unknown;
+  if (raw === null) return null;
+  const body = normalizeFinanceApiJson(raw) as Record<string, unknown>;
 
-  const tenantId = Number(body.tenantId ?? body.tenant_id);
-  const organizationId = String(body.organizationId ?? body.organization_id ?? "");
+  const tenantId = Number(body.tenantId);
+  const organizationId = String(body.organizationId ?? "");
   if (!Number.isFinite(tenantId) || tenantId <= 0 || !organizationId) return null;
 
   return { tenantId, organizationId };

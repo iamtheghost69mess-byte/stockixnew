@@ -7,8 +7,10 @@
     "paths": {
       "@repo/config": ["packages/config/src/index.ts"],
       "@repo/db": ["packages/db/src/index.ts"],
-      "@repo/db/*": ["packages/db/src/*"]
+      "@repo/db/*": ["packages/db/src/*"],
+      "@repo/shared/*": ["packages/shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "domain/**/*.ts"]
+  "include": ["src/**/*.ts", "domain/**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"]
 }

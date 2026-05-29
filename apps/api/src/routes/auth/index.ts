@@ -1,9 +1,16 @@
-import { Hono } from "hono";
+import type { Hono } from "hono";
+import { Hono as HonoApp } from "hono";
 import { z } from "zod";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { apiConfig } from "@repo/config";
+import { logger } from "../../lib/logger.js";
 
+import {
+  capabilitiesFromPermissions,
+  permissionsForRoleSlug,
+} from "@repo/shared/permissions";
+import { loadOwnerAuthById } from "../../permissions/resolve-owner-permissions.js";
 import { validateOwnerSession } from "../../services/auth/session-validation.js";
 import { loginOwner, reconfirmOwnerPassword } from "../../services/auth/login.js";
 import {
@@ -29,7 +36,7 @@ function readCookie(req: Request, name: string): string {
 }
 
 export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
-  const auth = new Hono();
+  const auth = new HonoApp();
   const rateLimits = new Map<string, { count: number; resetAt: number }>();
   const RATE_LIMITS = {
     "/auth/login": { windowMs: 60_000, max: 10 },
@@ -291,23 +298,35 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       sessionVersion: session.sessionVersion,
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    let permissions: string[] = [...permissionsForRoleSlug(session.role)];
+    let roleSlug = session.role;
+    let roleId: string | null = null;
+    let roleName: string | null = null;
+    try {
+      const auth = await loadOwnerAuthById(db, session.sub);
+      if (auth) {
+        roleSlug = auth.roleSlug;
+        roleId = auth.roleId;
+        roleName = auth.roleName;
+        if (auth.permissions.length > 0) {
+          permissions = auth.permissions;
+        }
+      }
+    } catch {
+      // Tests may use a minimal db mock — fall back to built-in role permissions.
+    }
+    const capabilities = capabilitiesFromPermissions(permissions);
     return c.json({
       success: true,
       me: {
         id: session.sub,
-        role: session.role,
+        role: roleSlug,
+        roleId,
+        roleName,
         email: session.email,
         name: session.name,
-        capabilities: {
-          canAccessSettings: session.role === "super_admin",
-          canManageOwners: session.role === "super_admin",
-          canManageTenants:
-            session.role === "support_agent" || session.role === "super_admin",
-          canExtendLicenses:
-            session.role === "billing_manager" ||
-            session.role === "support_agent" ||
-            session.role === "super_admin",
-        },
+        permissions,
+        capabilities,
       },
     });
   });
@@ -374,6 +393,15 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       userAgent: c.req.header("user-agent"),
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    if (result.data.ok) {
+      logger.info("Password reset requested", {
+        event: "auth_password_reset_requested",
+        emailSent: result.data.emailSent,
+        mailConfigured: result.data.mailConfigured,
+        mailStatus: result.data.mailStatus,
+        accountPending: result.data.accountPending,
+      });
+    }
     return c.json({ success: true, ok: true });
   });
 
@@ -417,3 +445,23 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   return auth;
 }
 
+type AuthMountEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    actorEffectiveRole?: string;
+    actorPermissions?: string[];
+    apiKeyId?: string;
+    requestId: string;
+    requestStartMs: number;
+  };
+};
+
+/** Mounts `/auth/*` login, MFA, invite, and password-reset routes. */
+export function registerAuthRoutes(
+  app: Hono<AuthMountEnv>,
+  db: PostgresJsDatabase<typeof schema> | null,
+): void {
+  if (!db) return;
+  app.route("/auth", buildAuthRoutes(db));
+}

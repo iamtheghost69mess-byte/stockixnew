@@ -32,8 +32,32 @@ docker compose --env-file .env up -d --build
 ```bash
 pnpm env:sync-prod
 cd infra/prod
-docker compose --env-file .env up -d
+docker compose --env-file .env build api dashboard infra-worker
+docker compose --env-file .env up -d --no-build
 ```
+
+Or rebuild and start in one step: `docker compose --env-file .env up -d --build`
+
+## Mail (control plane + tenants)
+
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `MAIL_HOST` | API, worker, tenant Finance stacks | `smtp.resend.com` |
+| `MAIL_USERNAME` | same | `resend` |
+| `MAIL_PASSWORD` | same | Resend API key |
+| `MAIL_FROM_ADDRESS` | same | Verified sender domain |
+| `RESEND_WEBHOOK_SECRET` | API | Optional delivery webhooks (`POST /webhooks/resend`) |
+
+Tenant `.env` files receive the same `MAIL_*` values at provision time (`tenant-env.ts`).
+
+## Mail (POS)
+
+POS uses the Resend HTTP API (not SMTP):
+
+| Variable | Service |
+|----------|---------|
+| `RESEND_API_KEY` | `pos-backend` / `platformWorker.js` |
+| `RESEND_FROM_EMAIL` | POS outbound from address |
 
 ## Local development
 
@@ -51,4 +75,4 @@ Use the **repo root** `.env` (`NODE_ENV=development`, `localhost`). Do **not** r
 - **Compose** passes env into `api` and `infra-worker` (`STOCKIX_LOAD_ROOT_ENV=0` disables accidental dotenv override).
 - **Worker** still writes per-tenant `~/.stockix/tenants/{slug}/.env` using `MAIL_*` from `@repo/config` — keep root `.env` synced on the server via `pnpm env:sync-prod`.
 
-See [docs/ENV_MAP.md](../../docs/ENV_MAP.md) for the full variable glossary.
+See [docs/ENV_REFERENCE.md](../../docs/ENV_REFERENCE.md) for the full variable glossary.

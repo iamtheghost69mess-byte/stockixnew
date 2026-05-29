@@ -39,6 +39,28 @@ import UserTenant from '../System/models/UserTenant';
 import { IgnoreTenantInitializedRoute } from '../Tenancy/EnsureTenantIsInitialized.guard';
 import { IgnoreTenantSeededRoute } from '../Tenancy/EnsureTenantIsSeeded.guards';
 
+/** Read JWT exp without adding a jsonwebtoken import (payload is base64url segment 2). */
+function impersonateCookieMaxAgeMs(token: string): number {
+  const fallback = 24 * 60 * 60 * 1000;
+  try {
+    const segment = token.split('.')[1];
+    if (!segment) return fallback;
+    const json = Buffer.from(segment, 'base64url').toString('utf8');
+    const payload = JSON.parse(json) as { exp?: number };
+    if (typeof payload.exp === 'number') {
+      const ms = payload.exp * 1000 - Date.now();
+      if (ms > 60_000) return ms;
+    }
+  } catch {
+    /* use fallback */
+  }
+  return fallback;
+}
+
+class ImpersonateBodyDto {
+  t!: string;
+}
+
 @Controller('/auth')
 @ApiTags('Auth')
 @ApiExtraModels(AuthSigninResponseDto, AuthMetaResponseDto)
@@ -107,6 +129,7 @@ export class AuthController {
       organizationId,
       tenantId,
       userId: user.id,
+      mustChangePassword: !!user.mustChangePassword,
     };
   }
 
@@ -193,10 +216,37 @@ export class AuthController {
       res.status(400).json({ error: 'Invalid token' });
       return;
     }
+    const maxAge = impersonateCookieMaxAgeMs(t);
     res.cookie('token', t, {
       httpOnly: false,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 1000,
+      maxAge,
+      path: '/',
+    });
+    res.redirect('/');
+  }
+
+  @Post('/impersonate')
+  @IgnoreTenantInitializedRoute()
+  @IgnoreTenantSeededRoute()
+  @ApiOperation({ summary: 'Set session cookie from a one-time token request body' })
+  @ApiBody({ type: ImpersonateBodyDto })
+  @ApiResponse({ status: 302, description: 'Cookie set; redirect to app root' })
+  @ApiResponse({ status: 400, description: 'Missing or invalid token' })
+  impersonateViaPost(
+    @Body() body: ImpersonateBodyDto,
+    @Res() res: Response,
+  ): void {
+    const t = typeof body?.t === 'string' ? body.t.trim() : '';
+    if (t.length < 10) {
+      res.status(400).json({ error: 'Invalid token' });
+      return;
+    }
+    const maxAge = impersonateCookieMaxAgeMs(t);
+    res.cookie('token', t, {
+      httpOnly: false,
+      sameSite: 'lax',
+      maxAge,
       path: '/',
     });
     res.redirect('/');

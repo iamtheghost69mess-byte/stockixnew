@@ -157,4 +157,44 @@ describe('CopyParentTenantSettingsService', () => {
     expect(childSettings[0]?.value).toBe(210);
     expect(childSettings[0]?.key).toBe('preferred_inventory_account');
   });
+
+  it('imports exported chart of accounts payload into child tenant', async () => {
+    const parentAccounts = [
+      { id: 10, slug: 'inventory-asset', code: '1200', name: 'Inventory' },
+      { id: 11, slug: 'sales-income', code: '4000', name: 'Sales' },
+    ];
+    const childAccounts: Array<Record<string, unknown>> = [];
+    const childSettings: Array<Record<string, unknown>> = [];
+    const parentSettings = [
+      {
+        id: 1,
+        group: 'items',
+        key: 'preferred_inventory_account',
+        value: 10,
+        type: 'number',
+        user_id: null,
+      },
+    ];
+
+    const childKnex = createKnexMock({
+      accounts: childAccounts,
+      tax_rates: [],
+      settings: childSettings,
+    });
+
+    const factory = {
+      getKnexForTenantId: async () => childKnex,
+    };
+
+    const service = new CopyParentTenantSettingsService(factory as never);
+    const result = await service.importChartOfAccounts(2, {
+      accounts: parentAccounts,
+      taxRates: [],
+      settings: parentSettings,
+    });
+
+    expect(result.accountsCopied).toBe(2);
+    expect(result.settingsCopied).toBe(1);
+    expect(childSettings[0]?.value).toBeGreaterThan(0);
+  });
 });

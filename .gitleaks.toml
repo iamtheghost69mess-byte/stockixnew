@@ -1,0 +1,53 @@
+title = "Stockix gitleaks policy"
+minVersion = "8.30.1"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Staged remediation map (47 historical findings → 4 stages + final batch)
+# Stage 1 (10): control-plane tests/CI — apps/api, apps/dashboard, deploy.yml
+# Stage 2 (10): PMS Chatlive vendored fixtures (paths 11–20)
+# Stage 3 (10): PMS Chatlive vendored fixtures (paths 21–30)
+# Stage 4 (10): PMS Chatlive swagger + POS CI workflows (paths 31–40)
+# Stage 5 (7):  finance examples, docs, historical .env (paths 41–47)
+# ---------------------------------------------------------------------------
+
+[allowlist]
+description = "Stockix allowlist: CI placeholders, examples, vendored fixtures, retired paths."
+paths = [
+  # Stage 2–4: PMS Chatlive (removed from index; historical commits only)
+  '''^services/pms/chatlive/''',
+  '''^services/chatlive/''',
+
+  # Stage 4: POS backend lockfile noise (if present in history)
+  '''^services/posnew/apps/pos-backend/package\.json$''',
+
+  # Stage 5: local env files (must never be tracked — enforced in CI hygiene)
+  '''^\.env$''',
+  '''^apps/api/\.env$''',
+  '''^infra/prod/\.env$''',
+  '''^services/stockix-finance/\.env$''',
+]
+
+regexTarget = "match"
+regexes = [
+  '''gitleaks:allow''',
+  '''__MUST_OVERRIDE__''',
+  '''ci[-_].*placeholder''',
+  '''ci_jwt_secret_must_be_32_chars''',
+  '''ci_platform_jwt_secret_32_char''',
+  '''test-session-secret-32-chars''',
+  '''test-auth-token-secret-32-chars''',
+  '''test-platform-api-secret-32-chars''',
+  '''test-internal-api-secret-32-chars''',
+  '''test-deployment-secret-key-32-chars''',
+  '''test-license-signing-secret-32-chars''',
+  '''test-worker-secret-32-chars''',
+  '''pk_live_test_key_1234567890''',
+  '''STKX-UNAS-IGNED''',
+  '''STXI-TEST-LICENSE''',
+  '''test-invite-token-placeholder''',
+  '''e2e-guest-form-share-token-fixture''',
+  '''<ed25519-private-key-hex>''',
+]

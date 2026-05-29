@@ -8,6 +8,7 @@ const stockBalanceService = require("../services/stockBalanceService");
 const accountingService = require("../services/accountingService");
 const { recordInventoryAudit } = require("../services/inventoryAuditService");
 const { emitPos } = require("../utils/socketEmit");
+const { enqueueBigcapitalStockTakeIfEnabled } = require("../services/bigcapitalSyncEnqueue");
 const Location = require("../models/locationModel");
 const { assertTenantOrganization } = require("../utils/tenantOrg");
 
@@ -106,7 +107,7 @@ const getSession = async (req, res, next) => {
       organization: orgId,
     })
       .populate("location", "name code")
-      .populate("lines.ingredient", "name unit sku")
+      .populate("lines.ingredient", "name unit sku isSerialTracked")
       .populate("lines.bin", "name code");
     if (!doc) return next(createHttpError(404, "Not found"));
 
@@ -192,7 +193,7 @@ const patchCounts = async (req, res, next) => {
     doc.status = "in_progress";
     await doc.save();
     const populated = await StockTakeSession.findById(doc._id)
-      .populate("lines.ingredient", "name unit")
+      .populate("lines.ingredient", "name unit sku isSerialTracked")
       .populate("lines.bin", "name code");
     res.status(200).json({ success: true, data: populated });
   } catch (e) {
@@ -230,7 +231,7 @@ const submitForApproval = async (req, res, next) => {
     doc.status = "awaiting_approval";
     await doc.save();
     const populated = await StockTakeSession.findById(doc._id)
-      .populate("lines.ingredient", "name unit")
+      .populate("lines.ingredient", "name unit sku isSerialTracked")
       .populate("lines.bin", "name code")
       .populate("location", "name code");
     res.status(200).json({ success: true, data: populated });
@@ -264,7 +265,7 @@ const approveSession = async (req, res, next) => {
     doc.approvedAt = new Date();
     await doc.save();
     const populated = await StockTakeSession.findById(doc._id)
-      .populate("lines.ingredient", "name unit")
+      .populate("lines.ingredient", "name unit sku isSerialTracked")
       .populate("lines.bin", "name code")
       .populate("location", "name code");
     res.status(200).json({ success: true, data: populated });
@@ -370,12 +371,14 @@ const postSession = async (req, res, next) => {
         await dbSession.abortTransaction();
         dbSession.endSession();
         dbSession = null;
-        return next(
-          createHttpError(
-            400,
-            `Stock take cannot post variance for serial-tracked ingredient "${ing.name}". Use Inventory > Adjust with serial numbers.`
-          )
+        const err = createHttpError(
+          400,
+          `Stock take cannot post variance for serial-tracked ingredient "${ing.name}". Use Inventory > Adjust with serial numbers.`
         );
+        err.code = "STOCK_TAKE_SERIAL_VARIANCE";
+        err.ingredientId = String(ing._id);
+        err.ingredientName = ing.name;
+        return next(err);
       }
 
       const result = await stockBalanceService.applyQuantityDelta(
@@ -448,8 +451,14 @@ const postSession = async (req, res, next) => {
       });
     }
 
+    enqueueBigcapitalStockTakeIfEnabled(locked, {
+      originatedBy: "stockTakeController.postSession",
+    }).catch((err) => {
+      console.error("[stockTake] Finance variance enqueue failed:", err.message);
+    });
+
     const populated = await StockTakeSession.findById(locked._id)
-      .populate("lines.ingredient", "name unit")
+      .populate("lines.ingredient", "name unit sku isSerialTracked")
       .populate("lines.bin", "name code")
       .populate("location", "name code");
     res.status(200).json({ success: true, data: populated });

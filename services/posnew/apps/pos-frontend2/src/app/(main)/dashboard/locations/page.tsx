@@ -221,7 +221,7 @@ export default function LocationsPage() {
       {!canWrite ? (
         <Alert className="border-amber-500/30 bg-amber-500/5">
           <AlertTitle className="text-amber-900 dark:text-amber-100">View only</AlertTitle>
-          <AlertDescription className="text-sm text-muted-foreground">
+          <AlertDescription className="text-muted-foreground text-sm">
             You can review branches but not add, edit, or delete them without **backoffice.location.write** (or
             **backoffice.***).
           </AlertDescription>
@@ -281,7 +281,7 @@ export default function LocationsPage() {
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <Label className="text-sm">Allow waiters to print receipts</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Cashiers and managers are unaffected by this toggle.
                 </p>
               </div>
@@ -291,7 +291,7 @@ export default function LocationsPage() {
               />
             </div>
             <div className="space-y-3 rounded-md border p-3">
-              <p className="text-sm font-medium text-foreground">Branch VAT (receipts &amp; reports)</p>
+              <p className="font-medium text-foreground text-sm">Branch VAT (receipts &amp; reports)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>VAT rate (%)</Label>
@@ -306,18 +306,18 @@ export default function LocationsPage() {
                 <div className="flex items-center justify-between gap-3 rounded-md bg-muted/30 p-3">
                   <div>
                     <Label className="text-sm">VAT-inclusive menu prices</Label>
-                    <p className="text-xs text-muted-foreground">When on, branch VAT line shows “inclusive”.</p>
+                    <p className="text-muted-foreground text-xs">When on, branch VAT line shows “inclusive”.</p>
                   </div>
                   <Switch checked={vatInclusive} onCheckedChange={setVatInclusive} />
                 </div>
               </div>
             </div>
             <div className="space-y-3 rounded-md border p-3">
-              <p className="text-sm font-medium text-foreground">POS workflow</p>
+              <p className="font-medium text-foreground text-sm">POS workflow</p>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Label className="text-sm">Kitchen workflow (station tickets)</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     When off, send-to-kitchen updates the check but does not print station chits.
                   </p>
                 </div>
@@ -326,7 +326,7 @@ export default function LocationsPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Label className="text-sm">Require discount reason</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     Applies at this branch before org-wide accounting defaults.
                   </p>
                 </div>

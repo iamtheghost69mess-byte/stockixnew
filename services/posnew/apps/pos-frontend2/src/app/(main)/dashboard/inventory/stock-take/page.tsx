@@ -356,7 +356,7 @@ export default function StockTakeListPage() {
                   </Select>
                 )}
               />
-              <p className="text-muted-foreground text-[12px]">
+              <p className="text-[12px] text-muted-foreground">
                 Cycle/spot reduce line count to ingredients that already have a stock balance row at the selected
                 location.
               </p>

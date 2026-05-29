@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { generateStxiLicenseKey } from "@repo/shared/stxi-license-key";
 import { apiConfig } from "@repo/config";
 import { licenseHistory, licenses, plans } from "@repo/db/schema";
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
@@ -27,6 +28,35 @@ export function parseLicenseModulesJson(raw: string | null | undefined): License
   } catch {
     return ["accounting"];
   }
+}
+
+/** Ensures every module on the license is enabled on the tenant. */
+export function validateLicenseModulesForTenant(
+  tenantModulesJson: string | null | undefined,
+  licenseModules: LicenseModuleId[],
+): { ok: true } | { ok: false; message: string } {
+  let tenantModules: LicenseModuleId[];
+  try {
+    const parsed = JSON.parse(tenantModulesJson ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) {
+      tenantModules = ["accounting"];
+    } else {
+      tenantModules = parsed.filter(
+        (m): m is LicenseModuleId =>
+          typeof m === "string" && (LICENSE_MODULE_IDS as readonly string[]).includes(m),
+      );
+      if (tenantModules.length === 0) tenantModules = ["accounting"];
+    }
+  } catch {
+    tenantModules = ["accounting"];
+  }
+  const tenantSet = new Set(tenantModules);
+  const missing = licenseModules.filter((m) => !tenantSet.has(m));
+  if (missing.length === 0) return { ok: true };
+  return {
+    ok: false,
+    message: `License modules [${missing.join(", ")}] are not enabled on this tenant`,
+  };
 }
 
 /**
@@ -85,6 +115,34 @@ export async function getActiveLicenseForTenant(
   return null;
 }
 
+/** True when tenant already has at least one license with status `active`. */
+export async function tenantHasActiveLicense(
+  db: PlanLimitsDb,
+  tenantId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: licenses.id })
+    .from(licenses)
+    .where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "active")))
+    .limit(1);
+  return Boolean(row);
+}
+
+/** Stockix license end date for POS org provisioning (perpetual → far-future cap). */
+export async function getLicenseExpiry(
+  db: PlanLimitsDb,
+  tenantId: string,
+): Promise<Date | null> {
+  const lic = await getActiveLicenseForTenant(db, tenantId);
+  if (!lic) return null;
+  if (lic.isPerpetual) {
+    const far = new Date();
+    far.setUTCFullYear(far.getUTCFullYear() + 100);
+    return far;
+  }
+  return lic.expiresAt ?? null;
+}
+
 /**
  * Fetches maxOrganizations and maxActivations from the plans table
  * for a given planSlug. Returns safe defaults on miss.
@@ -92,11 +150,12 @@ export async function getActiveLicenseForTenant(
 export async function getPlanLimits(
   db: PlanLimitsDb,
   planSlug: string,
-): Promise<{ maxOrganizations: number; maxActivations: number }> {
+): Promise<{ maxOrganizations: number; maxActivations: number; maxUsers: number }> {
   const row = await db
     .select({
       maxOrganizations: plans.maxOrganizations,
       maxActivations: plans.maxActivations,
+      maxUsers: plans.maxUsers,
     })
     .from(plans)
     .where(eq(plans.slug, planSlug))
@@ -104,12 +163,13 @@ export async function getPlanLimits(
 
   if (!row[0]) {
     console.warn(`[getPlanLimits] Plan slug "${planSlug}" not found. Using defaults.`);
-    return { maxOrganizations: 1, maxActivations: 1 };
+    return { maxOrganizations: 1, maxActivations: 1, maxUsers: 999 };
   }
 
   return {
     maxOrganizations: row[0].maxOrganizations,
     maxActivations: row[0].maxActivations,
+    maxUsers: row[0].maxUsers,
   };
 }
 
@@ -139,6 +199,10 @@ export type LicenseHistoryAction =
   | "limits_changed"
   | "synced_to_finance"
   | "expired_by_worker"
+  | "expiry_warning_sent"
+  | "expired_email_sent"
+  | "suspended"
+  | "reactivated"
   | "notes_updated";
 
 export interface LicenseHistoryEntry {
@@ -227,6 +291,32 @@ export function generateLicenseKey(): string {
     raw += CHARSET[b! % CHARSET.length];
   }
   return `STKX-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+export function generateLicenseKeyForTenant(opts: {
+  tenantId: string;
+  locationId?: string | null;
+  signingSecret: string;
+  modules: LicenseModuleId[];
+}): { licenseKey: string; keyFormat: "stkx" | "stxi"; scopedLocationId: string | null } {
+  const needsLocation =
+    opts.modules.includes("pos") || opts.modules.includes("pms");
+  if (opts.locationId && needsLocation) {
+    return {
+      licenseKey: generateStxiLicenseKey({
+        tenantId: opts.tenantId,
+        locationId: opts.locationId,
+        secret: opts.signingSecret,
+      }),
+      keyFormat: "stxi",
+      scopedLocationId: opts.locationId,
+    };
+  }
+  return {
+    licenseKey: generateLicenseKey(),
+    keyFormat: "stkx",
+    scopedLocationId: null,
+  };
 }
 
 export type OfflineTokenPayload = {

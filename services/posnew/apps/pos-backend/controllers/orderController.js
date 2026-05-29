@@ -54,8 +54,8 @@ const {
 
 const ACTIVE = ["pending", "in-progress", "ready"];
 
-function fireBigcapitalSync(order) {
-  enqueueBigcapitalSyncIfEnabled(order).catch((err) => {
+function fireBigcapitalSync(order, originatedBy = "order.paid") {
+  enqueueBigcapitalSyncIfEnabled(order, { originatedBy }).catch((err) => {
     console.error("[BigcapitalSync] enqueue failed:", err?.message || err);
   });
 }
@@ -505,6 +505,21 @@ const addOrder = async (req, res, next) => {
       }
     }
 
+    if (body.offlineSyncKey) {
+      const syncKey = String(body.offlineSyncKey).trim();
+      const dup = await Order.findOne({
+        organization: req.tenantOrganizationId,
+        offlineSyncKey: syncKey,
+      }).lean();
+      if (dup) {
+        const populated = await Order.findById(dup._id)
+          .populate("table", "tableNo name")
+          .populate("items.menuItem", "name priceUsd priceLbp");
+        return res.status(200).json(populated);
+      }
+      body.offlineSyncKey = syncKey;
+    }
+
     const order = new Order(body);
     await recalcOrderTotals(order);
     const initialSt = normalizeOrderStatus(order.orderStatus);
@@ -538,7 +553,7 @@ const addOrder = async (req, res, next) => {
       } finally {
         dbSession.endSession();
       }
-      fireBigcapitalSync(order);
+      fireBigcapitalSync(order, "order.create_as_paid");
     } else {
       await order.save();
     }
@@ -1476,7 +1491,7 @@ const patchOrderStatus = async (req, res, next) => {
       await logPosAudit(req, order, "bill_closed", {
         orderRef: String(order._id),
       });
-      fireBigcapitalSync(order);
+      fireBigcapitalSync(order, "order.patch_status_paid");
     }
     if (
       hadServiceCharge &&
@@ -2100,7 +2115,7 @@ const syncOfflineOrders = async (req, res, next) => {
           } finally {
             dbSession.endSession();
           }
-          fireBigcapitalSync(order);
+          fireBigcapitalSync(order, "order.offline_sync_paid");
           await logPosAudit(req, order, "payment_recorded", {
             orderRef: String(order._id),
             paymentMethod: String(order.paymentMethod || ""),
@@ -2387,7 +2402,7 @@ const updateOrder = async (req, res, next) => {
       await logPosAudit(req, order, "bill_closed", {
         orderRef: String(order._id),
       });
-      fireBigcapitalSync(order);
+      fireBigcapitalSync(order, "order.update_as_paid");
     } else {
       await order.save();
 
@@ -2423,7 +2438,7 @@ const updateOrder = async (req, res, next) => {
 
       await onOrderBecamePaid(order, prevSt, req.user._id);
       if (newSt === "paid" && prevSt !== "paid") {
-        fireBigcapitalSync(order);
+        fireBigcapitalSync(order, "order.update_status_paid");
       }
     }
 

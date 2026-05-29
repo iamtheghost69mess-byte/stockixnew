@@ -9,6 +9,12 @@ const { writeAudit, auditFromRequest } = require("../services/platformAuditServi
 const { addJob } = require("../services/jobQueue");
 const { recordEvent } = require("../services/productEventService");
 const { bootstrapOrganization } = require("../services/orgBootstrapService");
+const {
+  storeFullCredentials,
+  peekFullCredentials,
+  consumeFullCredentials,
+} = require("../services/bootstrapCredentialReveal");
+const { syncDefaultCredentialsFromUsers } = require("../services/defaultCredentialsSync");
 const { isDisposableEmail, trackSignupIp, maybeOpenFraudCase } = require(
   "../services/abuseSignals"
 );
@@ -24,6 +30,7 @@ const {
   logAccessStateTransitionIfChanged,
 } = require("../services/accessStateAuditService");
 const config = require("../config/config");
+const { assertCanCreatePlatformOrg } = require("../services/combinedOrgProvisionGuard");
 
 const DEFAULT_ORG_ENTITLEMENTS = {
   maxLocations: 5,
@@ -286,6 +293,11 @@ const createOrg = async (req, res, next) => {
           ? String(config.stockixTenantId).trim()
           : "";
 
+    await assertCanCreatePlatformOrg({
+      stockixTenantId: stockixTenantIdResolved,
+      idempotencyKey: idemKey ? String(idemKey) : "",
+    });
+
     const createPayload = {
       name: String(name).trim(),
       slug: slugNorm,
@@ -375,11 +387,16 @@ const createOrg = async (req, res, next) => {
       organizationId: String(org._id),
     });
     let bootstrapMode = "queue";
+    let fullCredentials = null;
     if (!queueResult?.queued) {
-      await bootstrapOrganization({
+      const bootstrapResult = await bootstrapOrganization({
         organizationId: String(org._id),
       });
       bootstrapMode = "sync_fallback";
+      fullCredentials = bootstrapResult?.fullCredentials ?? null;
+    }
+    if (fullCredentials?.length) {
+      await storeFullCredentials(String(org._id), fullCredentials);
     }
     await recordEvent({
       eventType: "organization.created",
@@ -426,6 +443,9 @@ const createOrg = async (req, res, next) => {
       data: orgPayload,
       bootstrapMode,
     };
+    if (bootstrapMode === "sync_fallback" && fullCredentials?.length) {
+      responseBody.fullCredentials = fullCredentials;
+    }
     if (idemKey) {
       await IdempotencyRecord.create({
         key: idemKey,
@@ -483,7 +503,9 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       return next(createHttpError(400, "Invalid organization id."));
     }
     const org = await Organization.findById(orgId)
-      .select("isBootstrapped lifecycle slug name provisioningSteps timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt")
+      .select(
+        "isBootstrapped lifecycle slug name provisioningSteps timezone licenseStartDate licenseEndDate licenseStartsAt licenseEndsAt licenseKey licenseKeyFormat stockixTenantId scopedLocationId acceptStkxUntil",
+      )
       .lean();
     if (!org) return next(createHttpError(404, "Organization not found."));
     const adminCount = await User.countDocuments({
@@ -491,29 +513,112 @@ const getOrgProvisioningStatus = async (req, res, next) => {
       role: "admin",
     });
     const accessState = getOrganizationAccessState(org);
+    const lifecycleActive = String(org.lifecycle || "active").toLowerCase() === "active";
+
+    let licenseKeyValidForDefaultLocation = true;
+    const signingSecret =
+      config.licenseSigningSecret || process.env.LICENSE_SIGNING_SECRET || "";
+    if (org.licenseKey && signingSecret) {
+      const { assertLicenseKeyForLocation } = require("../services/stxiLicenseValidate");
+      let defaultLocationId = org.scopedLocationId
+        ? String(org.scopedLocationId)
+        : null;
+      if (!defaultLocationId) {
+        const firstLoc = await Location.findOne({ organization: orgId })
+          .select("_id")
+          .sort({ createdAt: 1 })
+          .lean();
+        defaultLocationId = firstLoc?._id ? String(firstLoc._id) : null;
+      }
+      const keyCheck = assertLicenseKeyForLocation({
+        licenseKey: org.licenseKey,
+        stockixTenantId: org.stockixTenantId || config.stockixTenantId,
+        locationId: defaultLocationId,
+        signingSecret,
+        acceptStkxUntil: org.acceptStkxUntil,
+      });
+      licenseKeyValidForDefaultLocation = keyCheck.ok;
+    }
+
     const readyForPinLogin =
+      lifecycleActive &&
       accessState.status === "active" &&
+      !accessState.blocked &&
       org.isBootstrapped === true &&
-      adminCount > 0;
+      adminCount > 0 &&
+      licenseKeyValidForDefaultLocation;
+    const payload = {
+      organizationId: String(orgId),
+      slug: org.slug,
+      name: org.name,
+      lifecycle: org.lifecycle,
+      isBootstrapped: !!org.isBootstrapped,
+      adminUserCount: adminCount,
+      hasAdminUser: adminCount > 0,
+      readyForPinLogin,
+      licenseKeyValidForDefaultLocation,
+      provisioningSteps: org.provisioningSteps || [],
+    };
+    if (readyForPinLogin) {
+      const fullCredentials = await peekFullCredentials(orgId);
+      if (fullCredentials?.length) {
+        payload.fullCredentials = fullCredentials;
+      }
+    }
     res.json({
       success: true,
-      data: {
-        organizationId: String(orgId),
-        slug: org.slug,
-        name: org.name,
-        lifecycle: org.lifecycle,
-        isBootstrapped: !!org.isBootstrapped,
-        adminUserCount: adminCount,
-        hasAdminUser: adminCount > 0,
-        readyForPinLogin,
-        provisioningSteps: org.provisioningSteps || [],
-      },
+      data: payload,
     });
   } catch (e) {
     next(e);
   }
 };
- 
+
+/** Rebuild masked defaultCredentials from bootstrap users (no plaintext PIN recovery). */
+const repairOrgCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const result = await syncDefaultCredentialsFromUsers(orgId);
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.credentials_repaired",
+      organization: orgId,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { syncedCount: result.syncedCount },
+    });
+    res.json({ success: true, data: result });
+  } catch (e) {
+    if (e?.status === 404) return next(createHttpError(404, e.message));
+    next(e);
+  }
+};
+
+/** Delete one-time bootstrap PINs from the reveal store after Stockix persisted them. */
+const consumeProvisioningCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId).select("_id slug").lean();
+    if (!org) return next(createHttpError(404, "Organization not found."));
+    const consumed = await consumeFullCredentials(orgId);
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.provisioning_credentials_consumed",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { hadCredentials: Array.isArray(consumed) && consumed.length > 0 },
+    });
+    res.status(204).send();
+  } catch (e) {
+    next(e);
+  }
+};
+
 /** Manually trigger or resume a failed provisioning orchestrator for an organization. */
 const retryProvisioning = async (req, res, next) => {
   try {
@@ -882,6 +987,34 @@ const patchOrgLicense = async (req, res, next) => {
       org.licenseEndsAt = r.date;
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "licenseKey")) {
+      const rawKey = body.licenseKey;
+      org.licenseKey =
+        rawKey == null || String(rawKey).trim() === "" ? null : String(rawKey).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "licenseKeyFormat")) {
+      const rawFmt = body.licenseKeyFormat;
+      org.licenseKeyFormat =
+        rawFmt == null || String(rawFmt).trim() === "" ? null : String(rawFmt).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "stockixTenantId")) {
+      const rawTenant = body.stockixTenantId;
+      org.stockixTenantId =
+        rawTenant == null || String(rawTenant).trim() === ""
+          ? ""
+          : String(rawTenant).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "scopedLocationId")) {
+      const rawLoc = body.scopedLocationId;
+      org.scopedLocationId =
+        rawLoc == null || String(rawLoc).trim() === "" ? null : String(rawLoc).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "acceptStkxUntil")) {
+      const r = parseLicenseDateValue(body.acceptStkxUntil, "acceptStkxUntil");
+      if (r.error) return next(createHttpError(400, r.error));
+      org.acceptStkxUntil = r.date;
+    }
+
     await org.save();
     await OrgAccessCache.invalidateOrgAccessCache(org._id);
     const nextAccessState = getOrganizationAccessState(org);
@@ -910,6 +1043,9 @@ const patchOrgLicense = async (req, res, next) => {
       metadata: {
         licenseStartsAt: org.licenseStartsAt,
         licenseEndsAt: org.licenseEndsAt,
+        licenseKeyFormat: org.licenseKeyFormat ?? null,
+        scopedLocationId: org.scopedLocationId ?? null,
+        hasLicenseKey: Boolean(org.licenseKey),
       },
     });
     res.json({ success: true, data: withOrganizationAccessState(org) });
@@ -1032,6 +1168,55 @@ const deleteOrg = async (req, res, next) => {
   }
 };
 
+/** Return bootstrap staff PINs for platform operators (API key / platform JWT). */
+const getOrgCredentials = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId).select("defaultCredentials slug").lean();
+    if (!org) return next(createHttpError(404, "Organization not found."));
+
+    const creds = Array.isArray(org.defaultCredentials) ? org.defaultCredentials : [];
+    const roles = creds
+      .filter((c) => c && c.role)
+      .map((c) => ({
+        role: String(c.role).toLowerCase().trim(),
+        username:
+          c.username != null && String(c.username).trim() !== ""
+            ? String(c.username).toLowerCase().trim()
+            : c.name != null && String(c.name).trim() !== ""
+              ? String(c.name).toLowerCase().trim()
+              : String(c.role).toLowerCase().trim(),
+        pinMasked: c.pinMasked != null ? String(c.pinMasked) : "",
+        pinLastTwo: c.pinLastTwo != null ? String(c.pinLastTwo) : "",
+      }));
+
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.credentials_viewed",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { roleCount: roles.length },
+    });
+
+    res.json({ success: true, data: { roles } });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** Body: { role: "cashier" } — same behavior as PATCH .../credentials/:role/reset-pin */
+const resetOrgPin = async (req, res, next) => {
+  const role = String(req.body?.role || "").toLowerCase().trim();
+  if (!role) {
+    return next(createHttpError(400, "role is required."));
+  }
+  req.params.role = role;
+  return resetCredentialRolePin(req, res, next);
+};
+
 /** Reset PIN for the default bootstrap user where `username` or `name` and `role` match (e.g. `waiter`). Updates `defaultCredentials`. */
 const resetCredentialRolePin = async (req, res, next) => {
   try {
@@ -1065,7 +1250,11 @@ const resetCredentialRolePin = async (req, res, next) => {
     for (let i = 0; i < 100; i++) {
       const candidate = Math.floor(100000 + Math.random() * 900000).toString();
       const lookup = computePinLookup(candidate);
-      const taken = await User.exists({ pinLookup: lookup, _id: { $ne: user._id } });
+      const taken = await User.exists({
+        organization: orgId,
+        pinLookup: lookup,
+        _id: { $ne: user._id },
+      });
       if (!taken) {
         newPin = candidate;
         break;
@@ -1078,20 +1267,31 @@ const resetCredentialRolePin = async (req, res, next) => {
     const creds = Array.isArray(org.defaultCredentials)
       ? org.defaultCredentials.map((c) =>
           c && String(c.role).toLowerCase() === roleNorm
-            ? { role: roleNorm, username: roleNorm, pin: newPin }
+            ? {
+                role: roleNorm,
+                username: roleNorm,
+                pinMasked: newPin.replace(/./g, "•"),
+                pinLastTwo: newPin.slice(-2),
+              }
             : {
                 role: c.role,
                 username:
                   c.username != null && String(c.username).trim() !== ""
                     ? String(c.username).toLowerCase().trim()
                     : c.name,
-                pin: c.pin,
+                pinMasked: c.pinMasked,
+                pinLastTwo: c.pinLastTwo,
               }
         )
       : [];
     const hasRow = creds.some((c) => c && String(c.role).toLowerCase() === roleNorm);
     if (!hasRow) {
-      creds.push({ role: roleNorm, username: roleNorm, pin: newPin });
+      creds.push({
+        role: roleNorm,
+        username: roleNorm,
+        pinMasked: newPin.replace(/./g, "•"),
+        pinLastTwo: newPin.slice(-2),
+      });
     }
 
     const session = await mongoose.startSession();
@@ -1119,7 +1319,12 @@ const resetCredentialRolePin = async (req, res, next) => {
       data: {
         role: roleNorm,
         pin: newPin,
-        defaultCredentials: creds,
+        defaultCredentials: creds.map((c) => ({
+          role: c.role,
+          username: c.username,
+          pinMasked: c.pinMasked,
+          pinLastTwo: c.pinLastTwo,
+        })),
       },
     });
   } catch (e) {
@@ -1127,6 +1332,42 @@ const resetCredentialRolePin = async (req, res, next) => {
     if (msg.includes("already assigned")) {
       return next(createHttpError(409, "PIN collision—retry the request."));
     }
+    next(e);
+  }
+};
+
+const suspendOrg = async (req, res, next) => {
+  try {
+    const orgId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(String(orgId))) {
+      return next(createHttpError(400, "Invalid organization id."));
+    }
+    const org = await Organization.findById(orgId);
+    if (!org) return next(createHttpError(404, "Organization not found."));
+
+    const reason = String(req.body?.reason || "license_revoked").trim();
+    if (org.lifecycle !== "suspended") {
+      const check = validateLifecycleTransition(org.lifecycle, "suspended");
+      if (!check.ok) {
+        return next(createHttpError(400, check.message));
+      }
+      org.lifecycle = "suspended";
+      org.lifecycleReasonCode = reason.slice(0, 64);
+      org.lifecycleNote = reason;
+      await org.save();
+      await OrgAccessCache.invalidateOrgAccessCache(org._id);
+    }
+
+    await writeAudit({
+      ...auditFromRequest(req, res),
+      action: "platform.org.suspend",
+      organization: org._id,
+      actorPlatformUser: req.platformUser?._id,
+      metadata: { reason, lifecycle: org.lifecycle },
+    });
+
+    res.json({ success: true, data: withOrganizationAccessState(org) });
+  } catch (e) {
     next(e);
   }
 };
@@ -1139,11 +1380,16 @@ module.exports = {
   getOrgByStockixTenant,
   getOrgObservability,
   getOrgProvisioningStatus,
+  consumeProvisioningCredentials,
+  repairOrgCredentials,
   patchOrgLifecycle,
+  suspendOrg,
   patchOrgLicense,
   patchOrgLocationSupport,
   patchEntitlements,
   deleteOrg,
+  getOrgCredentials,
   resetCredentialRolePin,
+  resetOrgPin,
   retryProvisioning,
 };

@@ -45,7 +45,7 @@ export function DashboardHeaderUser() {
             <span className="truncate font-medium">{shell.name}</span>
             <span className="truncate text-muted-foreground text-xs">{shell.email}</span>
             {roleLine ? (
-              <span className="truncate text-muted-foreground text-[11px] capitalize">{roleLine}</span>
+              <span className="truncate text-[11px] text-muted-foreground capitalize">{roleLine}</span>
             ) : null}
           </div>
         </DropdownMenuLabel>

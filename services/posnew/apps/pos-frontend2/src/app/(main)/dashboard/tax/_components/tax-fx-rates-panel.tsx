@@ -30,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -281,7 +280,7 @@ export function TaxFxRatesPanel() {
       ) : null}
 
       <Card className="overflow-hidden shadow-sm ring-1 ring-border/60">
-        <CardHeader className="border-b bg-muted/30 space-y-4 pb-6">
+        <CardHeader className="space-y-4 border-b bg-muted/30 pb-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background text-primary shadow-xs ring-1 ring-border/60">
@@ -308,7 +307,7 @@ export function TaxFxRatesPanel() {
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="grid min-w-[min(100%,200px)] flex-1 gap-2">
-              <Label htmlFor="fx-filter-from" className="text-xs font-medium text-muted-foreground">
+              <Label htmlFor="fx-filter-from" className="font-medium text-muted-foreground text-xs">
                 From currency
               </Label>
               <Select
@@ -329,7 +328,7 @@ export function TaxFxRatesPanel() {
               </Select>
             </div>
             <div className="grid min-w-[min(100%,200px)] flex-1 gap-2">
-              <Label htmlFor="fx-filter-to" className="text-xs font-medium text-muted-foreground">
+              <Label htmlFor="fx-filter-to" className="font-medium text-muted-foreground text-xs">
                 To currency
               </Label>
               <Select
@@ -378,18 +377,18 @@ export function TaxFxRatesPanel() {
               <Table>
                 <TableHeader className="sticky top-0 z-10 border-b bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="h-10 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableHead className="h-10 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
                       Effective
                     </TableHead>
-                    <TableHead className="h-10 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pair</TableHead>
-                    <TableHead className="h-10 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableHead className="h-10 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Pair</TableHead>
+                    <TableHead className="h-10 text-right font-semibold text-muted-foreground text-xs uppercase tracking-wide">
                       Rate
                     </TableHead>
-                    <TableHead className="h-10 min-w-[180px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableHead className="h-10 min-w-[180px] font-semibold text-muted-foreground text-xs uppercase tracking-wide">
                       Quote
                     </TableHead>
-                    <TableHead className="h-10 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Note</TableHead>
-                    <TableHead className="h-10 w-[96px] text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <TableHead className="h-10 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Note</TableHead>
+                    <TableHead className="h-10 w-[96px] text-right font-semibold text-muted-foreground text-xs uppercase tracking-wide">
                       Actions
                     </TableHead>
                   </TableRow>
@@ -411,7 +410,7 @@ export function TaxFxRatesPanel() {
                           </Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm font-medium tabular-nums">
+                      <TableCell className="text-right font-medium font-mono text-sm tabular-nums">
                         {formatFxNumber(Number(row.rate))}
                       </TableCell>
                       <TableCell className="text-sm">
@@ -485,7 +484,7 @@ export function TaxFxRatesPanel() {
               <DatePicker id="tax-fx-e" value={effDate} onValueChange={setEffDate} className="w-full" />
             </div>
             <div className="rounded-xl border bg-card p-4 shadow-inner">
-              <p className="text-center text-muted-foreground text-xs font-medium uppercase tracking-wide">You are defining</p>
+              <p className="text-center font-medium text-muted-foreground text-xs uppercase tracking-wide">You are defining</p>
               <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <span className="font-semibold text-2xl tabular-nums">1</span>
@@ -515,7 +514,7 @@ export function TaxFxRatesPanel() {
                     inputMode="decimal"
                     placeholder="e.g. 1.085"
                     className={cn(
-                      "h-11 min-w-[120px] flex-1 text-center font-mono text-lg font-semibold tabular-nums sm:max-w-[200px]",
+                      "h-11 min-w-[120px] flex-1 text-center font-mono font-semibold text-lg tabular-nums sm:max-w-[200px]",
                       fxCreateFieldErrors.newRate && "border-destructive",
                     )}
                     value={newRate}
@@ -564,7 +563,7 @@ export function TaxFxRatesPanel() {
               </Button>
             </div>
             <div className="rounded-lg border border-dashed bg-muted/20 p-4">
-              <Label htmlFor="tax-fx-preview" className="text-xs text-muted-foreground">
+              <Label htmlFor="tax-fx-preview" className="text-muted-foreground text-xs">
                 Preview
               </Label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">

@@ -12,6 +12,7 @@ export class SystemUser extends BaseModel {
   public readonly verifyToken: string;
   public readonly verified: boolean;
   public readonly inviteAcceptedAt!: string;
+  public readonly mustChangePassword?: boolean;
 
   static get tableName() {
     return 'users';

@@ -3,7 +3,9 @@ const assert = require("node:assert/strict");
 const mongoose = require("mongoose");
 const {
   buildMappedEntries,
+  appendFinanceAdjustmentEntries,
   resolveDepositAccountId,
+  buildDepositPayments,
   resolveLocationMapping,
   isCardMethodKey,
   buildSaleReceiptPayload,
@@ -49,7 +51,43 @@ test("resolveDepositAccountId uses largest split method", () => {
   assert.equal(id, 10002);
 });
 
-test("buildMappedEntries skips unmapped lines", () => {
+test("buildDepositPayments maps each split to cash or card account", () => {
+  const payments = buildDepositPayments(
+    {
+      paymentSplits: [
+        { methodKey: "cash", amount: 5 },
+        { methodKey: "card", amount: 20 },
+      ],
+    },
+    baseCfg
+  );
+  assert.equal(payments.length, 2);
+  assert.equal(payments[0].amount, 5);
+  assert.equal(payments[0].depositAccountId, 10001);
+  assert.equal(payments[1].amount, 20);
+  assert.equal(payments[1].depositAccountId, 10002);
+});
+
+test("buildMappedEntries passes line discount amount", async () => {
+  const menuId = new mongoose.Types.ObjectId();
+  const itemMap = { [String(menuId)]: { id: 9 } };
+  const order = {
+    items: [
+      {
+        menuItem: menuId,
+        name: "Burger",
+        quantity: 1,
+        pricePerQuantity: 10,
+        discount: { amount: 2 },
+      },
+    ],
+  };
+  const entries = await buildMappedEntries(order, itemMap, { syncRecipeCost: false });
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].discount, 2);
+});
+
+test("buildMappedEntries skips unmapped lines", async () => {
   const order = {
     items: [
       {
@@ -67,23 +105,36 @@ test("buildMappedEntries skips unmapped lines", () => {
     ],
   };
   const itemMap = { [String(menuBurger)]: { id: 5 } };
-  const entries = buildMappedEntries(order, itemMap);
+  const entries = await buildMappedEntries(order, itemMap, { syncRecipeCost: false });
   assert.equal(entries.length, 1);
   assert.equal(entries[0].itemId, 5);
   assert.equal(entries[0].quantity, 2);
   assert.equal(entries[0].rate, 12);
 });
 
-test("buildMappedEntries returns empty when nothing mapped", () => {
+test("buildMappedEntries returns empty when nothing mapped", async () => {
   const order = {
     items: [{ menuItem: menuCustom, name: "X", quantity: 1, pricePerQuantity: 1 }],
   };
-  assert.equal(buildMappedEntries(order, {}).length, 0);
+  assert.equal((await buildMappedEntries(order, {}, { syncRecipeCost: false })).length, 0);
 });
 
 test("buildSaleReceiptPayload returns null when all items unmapped", async () => {
   const IntegrationItemMapping = require("../../models/integrationItemMappingModel");
+  const backofficePath = require.resolve("../../services/backofficeNotificationEvents");
+  const prevBackoffice = require.cache[backofficePath];
+  require.cache[backofficePath] = {
+    id: backofficePath,
+    filename: backofficePath,
+    loaded: true,
+    exports: {
+      NOTIFICATION_EVENTS: { INTEGRATION_SYNC_UNMAPPED: "integration.sync_unmapped" },
+      createBackofficeNotificationFromEvent: async () => {},
+    },
+  };
+
   const findMock = mock.method(IntegrationItemMapping, "find", () => ({
+    select: () => ({ lean: async () => [] }),
     lean: async () => [],
   }));
 
@@ -95,9 +146,14 @@ test("buildSaleReceiptPayload returns null when all items unmapped", async () =>
     ],
   };
 
-  const result = await buildSaleReceiptPayload(order, { bigcapital: baseCfg });
-  assert.equal(result, null);
-  findMock.mock.restore();
+  try {
+    const result = await buildSaleReceiptPayload(order, { bigcapital: baseCfg });
+    assert.equal(result, null);
+  } finally {
+    findMock.mock.restore();
+    if (prevBackoffice) require.cache[backofficePath] = prevBackoffice;
+    else delete require.cache[backofficePath];
+  }
 });
 
 test("resolveLocationMapping uses mapping row when order location matches", () => {
@@ -172,6 +228,53 @@ test("buildSaleReceiptPayload includes warehouseId when mapping exists", async (
   assert.ok(payload);
   assert.equal(payload.warehouseId, 55);
   assert.equal(payload.branchId, 3);
+  findMock.mock.restore();
+});
+
+test("appendFinanceAdjustmentEntries adds service charge and discount lines", () => {
+  const entries = [];
+  appendFinanceAdjustmentEntries(
+    {
+      bills: { serviceChargeAmount: 5.5 },
+      manualDiscountAmount: 2,
+    },
+    { serviceChargeItemId: 88, discountItemId: 99 },
+    entries
+  );
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].itemId, 88);
+  assert.equal(entries[0].rate, 5.5);
+  assert.equal(entries[1].itemId, 99);
+  assert.equal(entries[1].discount, 2);
+});
+
+test("buildSaleReceiptPayload includes service charge entry when configured", async () => {
+  const IntegrationItemMapping = require("../../models/integrationItemMappingModel");
+  const findMock = mock.method(IntegrationItemMapping, "find", () => ({
+    lean: async () => [
+      { posMenuItemId: menuBurger, bigcapitalItemId: 5, bigcapitalItemName: "Burger" },
+    ],
+  }));
+
+  const orderId = new mongoose.Types.ObjectId();
+  const order = {
+    _id: orderId,
+    organization: orgId,
+    paymentMethod: "cash",
+    paidAt: new Date("2026-05-23T12:00:00Z"),
+    bills: { serviceChargeAmount: 3.25 },
+    items: [
+      { menuItem: menuBurger, name: "Burger", quantity: 1, pricePerQuantity: 12 },
+    ],
+  };
+
+  const payload = await buildSaleReceiptPayload(order, {
+    bigcapital: { ...baseCfg, serviceChargeItemId: 77 },
+  });
+  assert.ok(payload);
+  assert.equal(payload.entries.length, 2);
+  assert.equal(payload.entries[1].itemId, 77);
+  assert.equal(payload.entries[1].rate, 3.25);
   findMock.mock.restore();
 });
 

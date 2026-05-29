@@ -22,6 +22,7 @@ const {
 const { logWorkerSkipDueToBlockedOrg } = require("../services/organizationAccessService");
 
 const { bootstrapOrganization } = require("../services/orgBootstrapService");
+const { storeFullCredentials } = require("../services/bootstrapCredentialReveal");
 
 async function canProcessOrganization(organizationId) {
   if (!organizationId) return { allowed: true, accessState: null };
@@ -40,25 +41,33 @@ async function canProcessOrganization(organizationId) {
   return { allowed: accessState.blocked === false, accessState };
 }
 
+async function sendResendEmail({ to, subject, html }) {
+  if (!config.resendApiKey) {
+    console.warn("[pos-mail] RESEND_API_KEY not set; skipping email job");
+    return;
+  }
+  if (!to) {
+    console.warn("[pos-mail] email job missing recipient");
+    return;
+  }
+  const { Resend } = require("resend");
+  const resend = new Resend(config.resendApiKey);
+  await resend.emails.send({
+    from: config.resendFromEmail,
+    to,
+    subject: subject || "Notification",
+    html: html || "<p></p>",
+  });
+}
+
 async function handleEmail(job) {
   if (job.name === "send_resend") {
-    if (!config.resendApiKey) {
-      console.warn("RESEND_API_KEY not set; skipping email job");
-      return;
-    }
-    const { Resend } = require("resend");
-    const resend = new Resend(config.resendApiKey);
-    await resend.emails.send({
-      from: config.resendFromEmail,
-      to: job.data.to,
-      subject: job.data.subject || "Notification",
-      html: job.data.html || "<p></p>",
-    });
+    await sendResendEmail(job.data);
     return;
   }
   if (job.name === "org_invitation") {
     if (!config.resendApiKey) {
-      console.warn("RESEND_API_KEY not set; skipping invitation email");
+      console.warn("[pos-mail] RESEND_API_KEY not set; skipping invitation email");
       return;
     }
     const invitationId = job.data?.invitationId;
@@ -96,7 +105,38 @@ async function handleEmail(job) {
     return;
   }
   if (job.name === "org_suspension_warning") {
-    console.info("suspension warning stub", job.data?.organizationId);
+    const { organization, organizationId, adminEmail, suspensionDate } = job.data || {};
+    const email =
+      adminEmail ||
+      organization?.ownerEmail ||
+      organization?.adminEmail ||
+      null;
+    if (!email) {
+      console.warn("org_suspension_warning: missing adminEmail");
+      return;
+    }
+    let orgName = organization?.name;
+    const orgId = organizationId || organization?._id || organization?.id;
+    if (!orgName && orgId) {
+      const org = await Organization.findById(String(orgId)).select("name ownerEmail").lean();
+      orgName = org?.name;
+    }
+    const brandName = process.env.BRAND_NAME || "Stockix";
+    const suspensionLabel = suspensionDate
+      ? new Date(suspensionDate).toLocaleDateString()
+      : "soon";
+    await sendResendEmail({
+      to: email,
+      subject: `Action required: Your ${brandName} POS account will be suspended`,
+      html: `
+        <h2>POS Account Suspension Warning</h2>
+        <p>Your POS account for <strong>${orgName || "your organization"}</strong>
+        will be suspended on ${suspensionLabel}.</p>
+        <p>Please contact your account manager to resolve this.</p>
+        <p>Your data will be preserved and accessible after reactivation.</p>
+      `,
+    });
+    return;
   }
 }
 
@@ -173,6 +213,9 @@ async function handleProvisioning(job) {
     adminPin: job.data?.adminPin,
   });
   if (result?.ok) {
+    if (result.fullCredentials?.length) {
+      await storeFullCredentials(organizationId, result.fullCredentials);
+    }
     console.log(`[provisioning] org_bootstrap completed organizationId=${organizationId}`);
   } else {
     console.warn(

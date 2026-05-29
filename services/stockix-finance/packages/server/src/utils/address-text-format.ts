@@ -45,19 +45,27 @@ const formatText = (message: string, replacements: Record<string, string>) => {
   return formattedMessage;
 };
 
+const escapeHtml = (value: string): string =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
 export const organizationAddressTextFormat = (
   message: string,
   args: OrganizationAddressFormatArgs
 ) => {
   const replacements: Record<string, string> = {
-    ORGANIZATION_NAME: args.organizationName || '',
-    ADDRESS_1: args.address1 || '',
-    ADDRESS_2: args.address2 || '',
-    CITY: args.city || '',
-    STATE: args.state || '',
-    POSTAL_CODE: args.postalCode || '',
-    COUNTRY: args.country || '',
-    PHONE: args.phone || '',
+    ORGANIZATION_NAME: escapeHtml(args.organizationName || ''),
+    ADDRESS_1: escapeHtml(args.address1 || ''),
+    ADDRESS_2: escapeHtml(args.address2 || ''),
+    CITY: escapeHtml(args.city || ''),
+    STATE: escapeHtml(args.state || ''),
+    POSTAL_CODE: escapeHtml(args.postalCode || ''),
+    COUNTRY: escapeHtml(args.country || ''),
+    PHONE: escapeHtml(args.phone || ''),
   };
   return formatText(message, replacements);
 };
@@ -99,15 +107,15 @@ export const contactAddressTextFormat = (
   } as ContactAddressTextFormatArgs;
 
   const replacements: Record<string, string> = {
-    CONTACT_NAME: args.displayName || '',
-    ADDRESS_1: args.address1 || '',
-    ADDRESS_2: args.address2 || '',
-    CITY: args.city || '',
-    STATE: args.state || '',
-    POSTAL_CODE: args.postalCode || '',
-    COUNTRY: args.country || '',
-    EMAIL: args?.email || '',
-    PHONE: args?.phone || '',
+    CONTACT_NAME: escapeHtml(args.displayName || ''),
+    ADDRESS_1: escapeHtml(args.address1 || ''),
+    ADDRESS_2: escapeHtml(args.address2 || ''),
+    CITY: escapeHtml(args.city || ''),
+    STATE: escapeHtml(args.state || ''),
+    POSTAL_CODE: escapeHtml(args.postalCode || ''),
+    COUNTRY: escapeHtml(args.country || ''),
+    EMAIL: escapeHtml(args?.email || ''),
+    PHONE: escapeHtml(args?.phone || ''),
   };
   return formatText(message, replacements);
 };

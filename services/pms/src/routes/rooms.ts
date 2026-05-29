@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { pmsRooms } from "@repo/db/schema";
+import { pmsRooms, pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
-import { tenantId, errors } from "./_utils.js";
+import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";
 
 export const roomsRouter = new Hono<PmsEnv>();
@@ -37,18 +37,32 @@ roomsRouter.get("/", async (c) => {
   const propertyId = c.req.query("propertyId");
   const conditions = [eq(pmsRooms.tenantId, tenantId(c))];
   if (propertyId) conditions.push(eq(pmsRooms.propertyId, propertyId));
-  const rows = await db.select().from(pmsRooms).where(and(...conditions)).orderBy(desc(pmsRooms.createdAt));
-  return c.json({ rooms: rows });
+  const { page, limit, offset } = parsePagination(c);
+  const rows = await db
+    .select()
+    .from(pmsRooms)
+    .where(and(...conditions))
+    .orderBy(desc(pmsRooms.createdAt))
+    .limit(limit)
+    .offset(offset);
+  return c.json({ rooms: rows, meta: listMeta(page, limit, rows.length) });
 });
 
 // POST /api/rooms
 roomsRouter.post("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const body = createSchema.parse(await c.req.json());
+  const tid = tenantId(c);
+  const [property] = await db
+    .select({ id: pmsProperties.id })
+    .from(pmsProperties)
+    .where(and(eq(pmsProperties.id, body.propertyId), eq(pmsProperties.tenantId, tid)))
+    .limit(1);
+  if (!property) return errors.notFound(c, "property");
   const [row] = await db
     .insert(pmsRooms)
     .values({
-      tenantId: tenantId(c),
+      tenantId: tid,
       propertyId: body.propertyId,
       name: body.name,
       type: body.type ?? "standard",

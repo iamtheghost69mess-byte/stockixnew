@@ -4,7 +4,9 @@ import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { adminAuditLog, owners } from "@repo/db/schema";
-import { apiConfig } from "@repo/config";
+import { apiConfig, isMailConfigured } from "@repo/config";
+import { sendOwnerPasswordResetEmail, sendPasswordChangedEmail } from "../../mail/send.js";
+import { mailSendSucceeded } from "../../mail/mailer.js";
 
 import type { ApiServiceResult } from "./types.js";
 
@@ -27,11 +29,22 @@ export async function requestOwnerPasswordReset(
     ipAddress?: string | null;
     userAgent?: string | null;
   },
-): Promise<ApiServiceResult<{ ok: true }>> {
+): Promise<
+  ApiServiceResult<{
+    ok: true;
+    emailSent?: boolean;
+    mailConfigured: boolean;
+    mailStatus?: string;
+    accountPending?: boolean;
+  }>
+> {
+  const mailConfigured = isMailConfigured();
   const email = input.email.trim().toLowerCase();
   const [owner] = await db
     .select({
       id: owners.id,
+      name: owners.name,
+      email: owners.email,
       passwordHash: owners.passwordHash,
       status: owners.status,
     })
@@ -39,8 +52,17 @@ export async function requestOwnerPasswordReset(
     .where(eq(owners.email, email))
     .limit(1);
 
-  if (!owner?.passwordHash || owner.status !== "active") {
-    return { success: true, data: { ok: true } };
+  if (!owner) {
+    return { success: true, data: { ok: true, mailConfigured } };
+  }
+  if (!owner.passwordHash) {
+    return {
+      success: true,
+      data: { ok: true, mailConfigured, accountPending: true },
+    };
+  }
+  if (owner.status !== "active") {
+    return { success: true, data: { ok: true, mailConfigured } };
   }
 
   const { raw, hash } = generatePasswordResetToken();
@@ -54,29 +76,60 @@ export async function requestOwnerPasswordReset(
     })
     .where(eq(owners.id, owner.id));
 
+  let resetUrl: string | null = null;
+  try {
+    const base = new URL(apiConfig.dashboardUrl);
+    base.pathname = "/reset-password";
+    base.search = "";
+    base.hash = "";
+    resetUrl = `${base.origin}/reset-password?token=${encodeURIComponent(raw)}`;
+  } catch {
+    // ignore malformed DASHBOARD_URL
+  }
+
+  let emailSent = false;
+  let mailStatus: string | undefined;
+
+  if (resetUrl) {
+    const mailResult = await sendOwnerPasswordResetEmail({
+      to: owner.email,
+      name: owner.name,
+      resetUrl,
+      ownerId: owner.id,
+    });
+    emailSent = mailSendSucceeded(mailResult);
+    mailStatus = mailResult.status;
+    if (!emailSent && apiConfig.nodeEnv === "development") {
+      console.info(
+        `[password-reset] development link (email not sent, status=${mailStatus}): ${resetUrl}`,
+      );
+    } else if (!emailSent) {
+      console.error(
+        `[password-reset] email not sent for ${owner.email}, status=${mailStatus}`,
+      );
+    }
+  } else if (apiConfig.nodeEnv === "development") {
+    console.warn("[password-reset] DASHBOARD_URL invalid; cannot build reset link");
+  }
+
   await db.insert(adminAuditLog).values({
     actorId: owner.id,
     action: "auth.password_reset_requested",
     targetOwnerId: owner.id,
     ipAddress: input.ipAddress ?? null,
     userAgent: input.userAgent ?? null,
-    metadata: { expiresAt: expiresAt.toISOString() },
+    metadata: {
+      expiresAt: expiresAt.toISOString(),
+      emailSent,
+      mailStatus,
+      mailConfigured: isMailConfigured(),
+    },
   });
 
-  try {
-    const base = new URL(apiConfig.dashboardUrl);
-    base.pathname = "/reset-password";
-    base.search = "";
-    base.hash = "";
-    const resetUrl = `${base.origin}/reset-password?token=${encodeURIComponent(raw)}`;
-    if (apiConfig.nodeEnv === "development") {
-      console.info(`[password-reset] development link (email delivery not configured): ${resetUrl}`);
-    }
-  } catch {
-    // ignore malformed DASHBOARD_URL
-  }
-
-  return { success: true, data: { ok: true } };
+  return {
+    success: true,
+    data: { ok: true, emailSent, mailConfigured, mailStatus },
+  };
 }
 
 export async function completeOwnerPasswordReset(
@@ -94,6 +147,8 @@ export async function completeOwnerPasswordReset(
   const [owner] = await db
     .select({
       id: owners.id,
+      email: owners.email,
+      name: owners.name,
       passwordResetExpiresAt: owners.passwordResetExpiresAt,
       sessionVersion: owners.sessionVersion,
     })
@@ -123,6 +178,17 @@ export async function completeOwnerPasswordReset(
       lockedUntil: null,
     })
     .where(eq(owners.id, owner.id));
+
+  void sendPasswordChangedEmail({
+    to: owner.email,
+    name: owner.name,
+    ownerId: owner.id,
+  }).catch((err) => {
+    console.error(
+      "[password-reset] password-changed email failed (non-fatal)",
+      err instanceof Error ? err.message : String(err),
+    );
+  });
 
   await db.insert(adminAuditLog).values({
     actorId: owner.id,

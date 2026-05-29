@@ -1,0 +1,14 @@
+# ═══════════════════════════════════════════════════════
+# STAGING ENVIRONMENT — NOT PRODUCTION
+# Purpose: test deployments before production
+# Data: reset regularly — no real customer data
+# Subdomains: staging-api.* / staging.*
+# ═══════════════════════════════════════════════════════
+
+name: stockix-staging
+
+include:
+  - path: ../prod/docker-compose.yml
+
+# Staging overrides: single API replica, reduced limits applied via deploy section
+# where supported. Primary differences are in infra/staging/.env (domains, B2 prefix).

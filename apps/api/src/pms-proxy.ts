@@ -1,4 +1,8 @@
-const PMS_BASE = process.env.PMS_BASE_URL ?? "http://localhost:3003";
+import { requireEnv } from "./lib/require-env.js";
+
+function getPmsBase(): string {
+  return requireEnv("PMS_BASE_URL", "http://localhost:3003");
+}
 
 export async function pmsProxy(
   path: string,
@@ -9,7 +13,7 @@ export async function pmsProxy(
     query?: Record<string, string | undefined>;
   },
 ): Promise<Response> {
-  const url = new URL(`${PMS_BASE}${path.startsWith("/") ? path : `/${path}`}`);
+  const url = new URL(`${getPmsBase()}${path.startsWith("/") ? path : `/${path}`}`);
   if (options?.query) {
     for (const [key, value] of Object.entries(options.query)) {
       if (value !== undefined) url.searchParams.set(key, value);

@@ -17,6 +17,7 @@ import { compose } from '@/utils';
  */
 function SetupRightSection({
   // #withOrganization
+  isOrganizationReady,
   isOrganizationInitialized,
   isOrganizationSeeded,
   isOrganizationSetupCompleted,

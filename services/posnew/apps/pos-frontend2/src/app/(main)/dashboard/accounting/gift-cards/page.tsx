@@ -321,7 +321,7 @@ export default function AccountingGiftCardsPage() {
                         <Badge variant={badge.variant}>{badge.label}</Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(gc.balance)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="text-right text-muted-foreground tabular-nums">
                         {formatCurrency(gc.initialAmount)}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs">

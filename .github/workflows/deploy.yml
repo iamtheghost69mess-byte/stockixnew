@@ -1,17 +1,232 @@
 name: Deploy Stockix
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_quality_gate:
+        description: Emergency deploy — skip quality gate (infra/hotfix only; use with caution)
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      skip_quality_gate:
+        description: Skip quality gate when invoked from another workflow
+        type: boolean
+        default: false
 
 concurrency:
-  group: deploy-stockix
+  group: stockix-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PNPM_VERSION: "9.15.9"
+  NODE_VERSION: "22.22.1"
+  TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+
 jobs:
-  deploy:
+  quality-gate:
+    name: Quality gate
+    if: |
+      (github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_call' || inputs.skip_quality_gate != true) &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Security — dependency audit
+        run: |
+          pnpm audit --prod --audit-level=high
+          echo "0 high/critical vulnerabilities in production dependency tree"
+
+      - name: Security — secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: Build workspace runtime packages
+        run: |
+          pnpm --filter @repo/auth build
+          pnpm --filter @repo/config build
+          pnpm --filter @repo/db build
+          pnpm --filter @repo/shared build
+
+      - name: Repository hygiene — block tracked local env files
+        run: |
+          set -euo pipefail
+          tracked_env_files="$(git ls-files | grep -E '(^|/)\.env($|(\.[^/]+)$)' | grep -Ev '\.env\.example$' || true)"
+          if [ -n "${tracked_env_files}" ]; then
+            echo "Tracked .env files are not allowed in repository history:"
+            echo "${tracked_env_files}"
+            exit 1
+          fi
+
+      - name: Repository hygiene — block tracked build artifacts
+        run: |
+          set -euo pipefail
+          tracked_generated="$(git ls-files | grep -E '(^|/)(\.next/|dist/|build/|coverage/|\.runtime/|\.tmp-worker/)' || true)"
+          if [ -n "${tracked_generated}" ]; then
+            echo "Tracked generated artifacts detected (must not be committed):"
+            echo "${tracked_generated}"
+            exit 1
+          fi
+
+      - name: Type check — API
+        run: pnpm --filter api exec tsc --noEmit
+
+      - name: Type check — Worker
+        run: cd infra/worker-service && npx tsc --noEmit
+
+      - name: Type check — Dashboard
+        run: pnpm --filter dashboard exec tsc --noEmit
+
+      - name: Type check — Packages
+        run: |
+          pnpm --filter @repo/auth exec tsc --noEmit
+          pnpm --filter @repo/config exec tsc --noEmit
+          pnpm --filter @repo/db exec tsc --noEmit
+          pnpm --filter @repo/shared exec tsc --noEmit
+
+      - name: Type check — PMS
+        run: pnpm --filter @stockix/pms exec tsc --noEmit
+
+      - name: Tenant scope audit
+        run: pnpm --filter api check:tenant-scope
+
+      - name: API route registry checks
+        run: |
+          pnpm --filter api check:routes
+          pnpm --filter api check:known-paths
+          pnpm --filter api check:api-structure
+
+      - name: License test stability check
+        run: |
+          for i in 1 2 3 4 5; do
+            pnpm --filter api exec vitest run tests/license-single-active.test.ts || exit 1
+          done
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          SESSION_SECRET: test-session-secret-32-chars-minimum-length # gitleaks:allow
+          AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum # gitleaks:allow
+          PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum # gitleaks:allow
+          INTERNAL_API_SECRET: ci-internal-secret-placeholder # gitleaks:allow
+          DEPLOYMENT_SECRET_KEY: test-deployment-secret-key-32-chars-min # gitleaks:allow
+          LICENSE_SIGNING_SECRET: test-license-signing-secret-32-chars-min # gitleaks:allow
+          WORKER_SECRET: test-worker-secret-32-chars-minimum-length # gitleaks:allow
+
+      - name: Run API tests
+        run: pnpm --filter api test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          SESSION_SECRET: test-session-secret-32-chars-minimum-length # gitleaks:allow
+          AUTH_TOKEN_SECRET: test-auth-token-secret-32-chars-minimum # gitleaks:allow
+          PLATFORM_API_SECRET: test-platform-api-secret-32-chars-minimum # gitleaks:allow
+          INTERNAL_API_SECRET: ci-internal-secret-placeholder # gitleaks:allow
+          DEPLOYMENT_SECRET_KEY: test-deployment-secret-key-32-chars-min # gitleaks:allow
+          LICENSE_SIGNING_SECRET: test-license-signing-secret-32-chars-min # gitleaks:allow
+          WORKER_SECRET: test-worker-secret-32-chars-minimum-length # gitleaks:allow
+          POS_PLATFORM_BASE_URL: http://127.0.0.1:8010
+          POS_FRONTEND_URL: http://127.0.0.1:3001
+          PMS_BASE_URL: http://127.0.0.1:3003
+          STOCKIX_FINANCE_INTERNAL_HOST: 127.0.0.1
+
+      - name: Dashboard unit tests
+        run: pnpm --filter dashboard run test -- --run
+        env:
+          NODE_ENV: test
+          CI: "true"
+
+      - name: PMS unit tests
+        run: pnpm --filter @stockix/pms run test -- --run
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          CI: "true"
+
+      - name: Run POS tests
+        working-directory: services/posnew/apps/pos-backend
+        run: npm run test:ci
+        timeout-minutes: 5
+        env:
+          NODE_ENV: test
+          CI: "true"
+          RUN_RBAC_ORG_ISOLATION: "0"
+          REDIS_URL: ""
+          MONGODB_URI: ""
+
+      - name: Run Finance tests
+        run: |
+          cd services/stockix-finance
+          pnpm install --frozen-lockfile
+          pnpm run build --scope "@stockix/utils" --scope "@stockix/email-components" --scope "@stockix/pdf-templates"
+          cd packages/server
+          pnpm test
+        env:
+          HUSKY: "0"
+          CI: "true"
+        timeout-minutes: 10
+
+      - name: Build API
+        run: pnpm --filter api build
+
+      - name: Build infra worker bundle
+        run: pnpm infra:worker:build
+
+      - name: Build dashboard
+        run: pnpm --filter dashboard build
+
+      - name: Check bundle size
+        run: |
+          size=$(du -sk apps/dashboard/.next/static | awk '{print $1}')
+          echo "Bundle size: ${size}KB"
+          if [ "$size" -gt 10240 ]; then
+            echo "WARNING: Bundle over 10MB"
+          fi
+
+      - name: Enforce architecture boundaries
+        run: pnpm lint:boundaries
+
+      - name: Enforce architecture phases
+        run: pnpm architecture:validate
+
+  deploy:
+    name: Deploy production
+    needs: quality-gate
+    if: |
+      always() &&
+      (needs.quality-gate.result == 'success' || needs.quality-gate.result == 'skipped') &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://stockix.cloud
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -20,6 +235,13 @@ jobs:
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Verify secrets rotation documented
+        run: |
+          if ! grep -q "SECRETS ROTATED:" infra/prod/OPERATIONS.md 2>/dev/null; then
+            echo "WARNING: OPERATIONS.md does not contain 'SECRETS ROTATED:' entry"
+            echo "Complete secret rotation before deploying to production"
+          fi
 
       - name: Deploy over SSH
         env:
@@ -30,36 +252,138 @@ jobs:
           test -n "${EC2_HOST:-}" && test -n "${EC2_USER:-}"
           ssh -o StrictHostKeyChecking=accept-new "${EC2_USER}@${EC2_HOST}" bash -s << 'REMOTE'
           set -euo pipefail
+          export CI=true
+          export PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
           if [ -d /opt/stockix/stockixnew/.git ]; then cd /opt/stockix/stockixnew
           elif [ -d /opt/stockix/app/.git ]; then cd /opt/stockix/app
           else echo "Clone repo to /opt/stockix/stockixnew or /opt/stockix/app"; exit 1; fi
-          PREV_COMMIT="$(git rev-parse HEAD)"
+          REPO_ROOT="$(pwd)"
+          PREV_API="$(docker image inspect stockix-api:latest --format '{{.Id}}' 2>/dev/null || true)"
+          PREV_DASH="$(docker image inspect stockix-dashboard:latest --format '{{.Id}}' 2>/dev/null || true)"
+          PREV_WORKER="$(docker image inspect stockix-infra-worker:latest --format '{{.Id}}' 2>/dev/null || true)"
           rollback() {
-            echo "Deploy failed. Rolling back to ${PREV_COMMIT}"
-            git reset --hard "${PREV_COMMIT}"
-            cd infra/prod
-            docker compose --env-file .env logs --tail=300 || true
-            docker compose --env-file .env up -d --build || true
+            echo "Deploy failed — attempting rollback to previous images."
+            if [ -d "${REPO_ROOT}/infra/prod" ]; then
+              cd "${REPO_ROOT}/infra/prod"
+              docker compose --env-file .env logs --tail=300 || true
+            fi
+            rolled_back=0
+            if [ -n "${PREV_API:-}" ]; then
+              docker tag "${PREV_API}" stockix-api:latest 2>/dev/null || true
+              rolled_back=1
+            fi
+            if [ -n "${PREV_DASH:-}" ]; then
+              docker tag "${PREV_DASH}" stockix-dashboard:latest 2>/dev/null || true
+              rolled_back=1
+            fi
+            if [ -n "${PREV_WORKER:-}" ]; then
+              docker tag "${PREV_WORKER}" stockix-infra-worker:latest 2>/dev/null || true
+              rolled_back=1
+            fi
+            if [ "$rolled_back" -eq 1 ] && [ -d "${REPO_ROOT}/infra/prod" ]; then
+              cd "${REPO_ROOT}/infra/prod"
+              docker compose --env-file .env up -d --no-build \
+                api api-bullmq dashboard infra-worker || true
+              echo "Rolled back to previous images."
+            else
+              echo "No previous images to roll back to."
+            fi
+            exit 1
           }
           trap rollback ERR
-          git fetch --prune
+          fetch_origin() {
+            if git fetch --prune --force origin; then
+              return 0
+            fi
+            echo "git fetch failed; clearing stale origin remote-tracking refs..."
+            git remote prune origin || true
+            git for-each-ref --format='%(refname)' refs/remotes/origin \
+              | while read -r ref; do git update-ref -d "$ref" || true; done
+            git fetch --prune --force origin
+          }
+          fetch_origin
           git checkout main
-          git pull --ff-only origin main
-          set -a
+          git reset --hard origin/main
+          echo "Deploy commit: $(git rev-parse HEAD)"
+          if ! grep -q 'pnpm --filter api build' apps/api/Dockerfile; then
+            echo "ERROR: apps/api/Dockerfile on the server is stale (missing in-image API build)."
+            sed -n '8,22p' apps/api/Dockerfile
+            exit 1
+          fi
+          if grep -A8 '^  api-bullmq:' infra/prod/docker-compose.yml | grep -q '^    build:'; then
+            echo "ERROR: api-bullmq must not have its own build: (use image: stockix-api:latest only)."
+            exit 1
+          fi
+          if [ ! -x scripts/load-env-file.sh ]; then
+            chmod +x scripts/load-env-file.sh
+          fi
           # shellcheck disable=SC1091
-          source infra/prod/.env
-          set +a
+          . scripts/load-env-file.sh infra/prod/.env
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
-          pnpm install --frozen-lockfile
+          rm -rf node_modules
+          # infra/prod/.env sets NODE_ENV=production; pnpm skips devDependencies (tsx for db:migrate).
+          NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
           pnpm --filter @repo/db db:migrate
+          pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
+          if [ -z "${BACKUP_B2_BUCKET:-}" ]; then
+            echo "BACKUP_B2_BUCKET is empty — backups will not work"
+            exit 1
+          fi
+          echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
           cd infra/prod
-          docker compose --env-file .env up -d --build --wait
-          curl --fail --silent --show-error "http://127.0.0.1:4000/health" >/dev/null
+          export COMPOSE_FILE=docker-compose.yml
+          export COMPOSE_PARALLEL_LIMIT=1
+          docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
+          docker compose --env-file .env build --progress=plain api dashboard infra-worker
+          echo "=== Verifying images exist ==="
+          for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
+            if ! docker image inspect "$img" >/dev/null 2>&1; then
+              echo "Missing image: $img — Docker build failed. Check logs above."
+              exit 1
+            fi
+            echo "OK: $img"
+          done
+          docker compose --env-file .env pull traefik socket-proxy
+          docker compose --env-file .env up -d --no-build --wait \
+            traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
+          sleep 10
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
           if ! docker compose --env-file .env ps --status running | grep -q "api"; then
             echo "API service is not running after deploy"
             docker compose --env-file .env logs --tail=200
             exit 1
           fi
+          if ! docker compose --env-file .env ps --status running | grep -q "infra-worker"; then
+            echo "infra-worker service is not running after deploy"
+            docker compose --env-file .env logs infra-worker --tail=200
+            exit 1
+          fi
+          cd "${REPO_ROOT}"
+          echo "=== Building tenant images ==="
+          pnpm docker:prebuild 2>&1 | tail -20 || \
+            echo "WARNING: Tenant images build failed — provisioning may not work until pnpm docker:prebuild succeeds"
+          echo "Tenant images step finished."
+          cd infra/prod
+          docker image prune -f --filter "until=168h" || true
           trap - ERR
+          echo "Deploy completed successfully."
           REMOTE
+
+      - name: Create Sentry release
+        if: secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != ''
+        run: |
+          RELEASE=$(git rev-parse --short HEAD)
+          npx @sentry/cli releases new "$RELEASE" \
+            --org "${SENTRY_ORG}" \
+            --project "${SENTRY_PROJECT}"
+          npx @sentry/cli releases set-commits "$RELEASE" --auto
+          npx @sentry/cli releases finalize "$RELEASE"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

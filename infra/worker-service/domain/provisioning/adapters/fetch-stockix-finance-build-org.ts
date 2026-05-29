@@ -1,3 +1,4 @@
+import { normalizeFinanceApiJson } from "@repo/shared/finance-api";
 import {
   type OrgBuildSettings,
   normalizeDateFormatForFinanceBuild,
@@ -103,7 +104,7 @@ async function signin(
   });
   let json: unknown;
   try {
-    json = (await res.json()) as unknown;
+    json = normalizeFinanceApiJson((await res.json()) as unknown);
   } catch {
     return null;
   }
@@ -131,12 +132,12 @@ async function currentHasBuiltAt(
   if (!res.ok) return false;
   let json: unknown;
   try {
-    json = (await res.json()) as unknown;
+    json = normalizeFinanceApiJson((await res.json()) as unknown);
   } catch {
     return false;
   }
   if (!isRecord(json)) return false;
-  const builtAt = json.builtAt ?? json.built_at;
+  const builtAt = json.builtAt;
   return builtAt !== null && builtAt !== undefined && builtAt !== "";
 }
 
@@ -185,12 +186,9 @@ export async function fetchBuildOrganization(
   });
 
   const buildText = await buildRes.text();
-  let buildJson: unknown;
-  try {
-    buildJson = buildText ? (JSON.parse(buildText) as unknown) : {};
-  } catch {
-    buildJson = { raw: buildText };
-  }
+  const buildJson: unknown = buildText
+    ? normalizeFinanceApiJson(JSON.parse(buildText) as unknown)
+    : {};
 
   if (!buildRes.ok) {
     if (isTenantAlreadyBuilt(buildText, buildJson)) {
@@ -217,7 +215,7 @@ export async function fetchBuildOrganization(
       });
       let jobJson: unknown;
       try {
-        jobJson = (await jobRes.json()) as unknown;
+        jobJson = normalizeFinanceApiJson((await jobRes.json()) as unknown);
       } catch {
         jobJson = {};
       }

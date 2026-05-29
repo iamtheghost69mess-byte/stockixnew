@@ -336,6 +336,9 @@ const createStaff = async (req, res, next) => {
             message: "This username is already used in this organization.",
           });
         }
+        if (kp.organization && kp.pinLookup) {
+          return next(createHttpError(400, "This PIN is already assigned to another user."));
+        }
         if (kp.pinLookup) {
           return next(createHttpError(400, "This PIN is already assigned to another user."));
         }
@@ -536,6 +539,9 @@ const updateStaff = async (req, res, next) => {
             code: "USERNAME_TAKEN",
             message: "This username is already used in this organization.",
           });
+        }
+        if (kp.organization && kp.pinLookup) {
+          return next(createHttpError(400, "This PIN is already assigned to another user."));
         }
         return next(createHttpError(400, "This PIN is already assigned to another user."));
       }

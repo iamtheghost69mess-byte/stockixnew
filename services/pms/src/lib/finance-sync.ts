@@ -1,7 +1,8 @@
-import { pmsBookings, pmsPayments, tenantDeployments } from "@repo/db/schema";
+import { pmsBookings, tenantDeployments } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
+import { pmsConfig, apiConfig } from "@repo/config";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -41,8 +42,7 @@ export async function syncBookingToFinance(
     return { receiptId: null, error: "finance_not_provisioned" };
   }
 
-  const financeBaseUrl =
-    process.env.FINANCE_INTERNAL_BASE_URL ?? "http://localhost:3000";
+  const financeBaseUrl = pmsConfig.financeInternalBaseUrl;
 
   const nights = Math.max(
     1,
@@ -78,7 +78,7 @@ export async function syncBookingToFinance(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-stockix-internal-secret": process.env.PLATFORM_API_SECRET ?? "",
+          "x-stockix-internal-secret": apiConfig.platformApiSecret ?? "",
           "x-stockix-tenant-id": booking.tenantId,
         },
         body: JSON.stringify(payload),
@@ -98,7 +98,7 @@ export async function syncBookingToFinance(
       await db
         .update(pmsBookings)
         .set({ financeReceiptId: receiptId, accountingSyncStatus: "synced", updatedAt: new Date() })
-        .where(eq(pmsBookings.id, booking.id));
+        .where(and(eq(pmsBookings.id, booking.id), eq(pmsBookings.tenantId, booking.tenantId)));
     }
 
     return { receiptId };
@@ -107,7 +107,7 @@ export async function syncBookingToFinance(
     await db
       .update(pmsBookings)
       .set({ accountingSyncStatus: "failed", updatedAt: new Date() })
-      .where(eq(pmsBookings.id, booking.id));
+      .where(and(eq(pmsBookings.id, booking.id), eq(pmsBookings.tenantId, booking.tenantId)));
     return { receiptId: null, error };
   }
 }

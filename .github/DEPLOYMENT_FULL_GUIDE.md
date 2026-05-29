@@ -9,7 +9,7 @@ The workflow **does not** use AWS keys, ECR, or Docker Hub. Add **only**:
 | **Name** | **Value** |
 |----------|-----------|
 | **`EC2_SSH_PRIVATE_KEY`** | Contents of the **private** key file (`.pem`) that matches the **public** key allowed on the VPS for **`EC2_USER`**. |
-| **`EC2_HOST`** | VPS IPv4 (e.g. `76.13.139.176`) or DNS hostname. |
+| **`EC2_HOST`** | VPS IPv4 (e.g. `YOUR_VPS_IP`) or DNS hostname. |
 | **`EC2_USER`** | SSH login name on the VPS (**`root`**, **`ubuntu`**, etc.). |
 
 Repository → **Settings → Secrets and variables → Actions → New repository secret** (three rows).
@@ -84,9 +84,10 @@ sleep 20
 ```
 
 ```bash
-set -a && source /opt/stockix/stockixnew/infra/prod/.env && set +a
-export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
+# IMPORTANT: Never use 'source infra/prod/.env' — semicolons in values break bash.
 cd /opt/stockix/stockixnew
+. scripts/load-env-file.sh infra/prod/.env
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
 pnpm --filter @repo/db db:migrate
 ```
 
@@ -127,7 +128,7 @@ docker compose --env-file .env logs traefik --tail 80
 
 Optional: **`CORS_ORIGINS`** (comma-separated).
 
-**Feedback:** Pasting shell commands **inside** `.env` breaks **`source`** — file must be **`KEY=value`** lines only.
+**Feedback:** Pasting shell commands **inside** `.env` breaks naive **`source`** — use **`scripts/load-env-file.sh`**; file must be **`KEY=value`** lines only.
 
 ---
 
@@ -143,7 +144,7 @@ Add under **Repository → Settings → Secrets and variables → Actions**.
 
 **Note:** Names say **EC2** but work for **any Linux SSH host** (e.g. Hostinger).
 
-**Workflow behavior:** On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`source infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose up -d --build`**.
+**Workflow behavior:** On **pull request**, GitHub runs quality checks only. On **push to `main`** or **manual “Deploy Stockix”**, GitHub SSHs to the server, **`git pull`**, **`. scripts/load-env-file.sh infra/prod/.env`**, **`pnpm install`**, **`db:migrate`**, **`docker compose build`** (self-contained images tagged `stockix-*:latest`), verifies images exist, then **`docker compose up -d --no-build`**, then **`pnpm docker:prebuild`** (tenant images, non-fatal).
 
 **Feedback:**
 
@@ -151,7 +152,7 @@ Add under **Repository → Settings → Secrets and variables → Actions**.
 |---------|----------------|
 | **SSH fails from Actions** | **SG/firewall:** GitHub IPs need **:22** (or use self-hosted runner / VPN) |
 | **`git pull` fails** | PAT/SSH on server; **`main`** not present |
-| **`source infra/prod/.env` fails** | Missing/malformed **`.env`** on server |
+| **Env load fails** | Missing/malformed **`.env`** on server; use **`load-env-file.sh`**, not **`source`** |
 | **`migrate` fails** | Postgres down; **`DATABASE_URL`** vs **`.env`** mismatch |
 | **`docker compose` fails** | Not in **`infra/prod`**; Docker daemon stopped |
 
@@ -194,9 +195,55 @@ This prints **`docker compose ps`**, ports **80/443**, **API `/health`** from in
 
 | Doc | Purpose |
 |-----|---------|
-| [workflows/deploy.yml](workflows/deploy.yml) | CI job definition |
+| [workflows/deploy.yml](workflows/deploy.yml) | CI quality gate + production deploy |
+| [workflows/secret-scan.yml](workflows/secret-scan.yml) | Gitleaks secret scanning |
+| [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) | PR checklist |
+| [dependabot.yml](dependabot.yml) | Dependency update automation |
+| [CODEOWNERS](CODEOWNERS) | Review routing |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | AWS/VPS notes, shared VPS |
 | [RUNBOOK_AFTER_CLOUDFLARE_ACTIVE.md](RUNBOOK_AFTER_CLOUDFLARE_ACTIVE.md) | Steps after Cloudflare Active |
 | `infra/prod/docker-compose.yml` | Prod stack |
 | `infra/prod/.env.example` | Template for server **`.env`** |
 | `scripts/verify-stockix-server.sh` | On-VPS checks: compose, ports, health |
+
+---
+
+## **J. Release governance (required before merge to main)**
+
+Configure branch protection using `docs/BRANCH_PROTECTION_SETUP.md` and enforce these required checks:
+
+- `Quality gate`
+- `Gitleaks Secret Scan`
+
+Release sign-off checklist (must be confirmed for every production release):
+
+1. Secrets rotation record updated in `infra/prod/OPERATIONS.md` when rotation happened.
+2. DB migration + schema verification completed on target host.
+3. Backup target (`BACKUP_B2_*`) verified non-empty and healthy.
+4. Post-deploy script passes: `scripts/verify-stockix-server.sh`.
+5. `/ready` and `/health` pass on public API endpoint.
+
+---
+
+## **K. Deployment targets (current and future)**
+
+### Current baseline (single host + Docker Compose)
+
+- Runtime: one Linux host, Docker Compose (`infra/prod/docker-compose.yml`)
+- Secrets: host-local `infra/prod/.env` (never committed)
+- Data plane: host Postgres + mounted volumes
+- Gates: GitHub Actions `Quality gate` + `Gitleaks Secret Scan`
+
+### Target baseline (managed cloud)
+
+- Runtime: managed container platform (Kubernetes/ECS/App Service equivalent)
+- Secrets: managed secret store (Vault/SM/KeyVault), no `.env` file distribution
+- Data plane: managed PostgreSQL + managed Redis
+- Observability: centralized logs/metrics/traces + alerting SLOs
+
+### Parity requirements before cloud cutover
+
+1. Same required CI gates and branch protection as current baseline.
+2. Same `/ready` and `/health` semantics and rollout health checks.
+3. Deterministic rollback path documented and tested.
+4. Secret rotation runbook validated against managed secret store.

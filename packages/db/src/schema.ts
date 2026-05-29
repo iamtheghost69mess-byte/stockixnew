@@ -12,6 +12,28 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+/** Configurable platform roles (system + custom). */
+export const platformRoles = pgTable(
+  "platform_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    isSystem: boolean("is_system").notNull().default(false),
+    permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("platform_roles_slug_unique").on(t.slug)],
+);
+
+export type PlatformRole = typeof platformRoles.$inferSelect;
+export type NewPlatformRole = typeof platformRoles.$inferInsert;
+
 /** SaaS platform operators (Stockix owners). Auth fields come in a later phase. */
 export const owners = pgTable(
   "owners",
@@ -21,6 +43,9 @@ export const owners = pgTable(
     name: text("name").notNull(),
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("super_admin"),
+    roleId: uuid("role_id").references(() => platformRoles.id, {
+      onDelete: "restrict",
+    }),
     status: text("status").notNull().default("active"),
     sessionVersion: integer("session_version").notNull().default(1),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
@@ -30,6 +55,7 @@ export const owners = pgTable(
     mfaEnabled: boolean("mfa_enabled").notNull().default(false),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     inviteToken: text("invite_token"),
+    inviteTokenHash: text("invite_token_hash"),
     inviteTokenExpiresAt: timestamp("invite_token_expires_at", {
       withTimezone: true,
     }),
@@ -89,6 +115,8 @@ export const organizations = pgTable("organizations", {
   // provisioning | active | suspended | failed
   isPrimary: boolean("is_primary").notNull().default(false),
   financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
+  /** Mongo ObjectId of the POS organization wired to this control-plane org. */
+  posOrganizationId: text("pos_organization_id"),
   provisioningError: text("provisioning_error"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -131,6 +159,8 @@ export const tenantConfig = pgTable("tenant_config", {
   appName: text("app_name"),
   logoUrl: text("logo_url"),
   primaryColor: text("primary_color"),
+  /** URL-safe public discovery token (not tenant UUID). */
+  publicDiscoverySlug: text("public_discovery_slug"),
   branding: jsonb("branding").$type<Record<string, unknown>>(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
@@ -162,6 +192,8 @@ export const tenantDeployments = pgTable(
     /** MongoDB URL scoped to the tenant stack (e.g. mongodb://mongo/stockix). */
     mongoUrl: text("mongo_url").notNull(),
     lastError: text("last_error"),
+    /** When tenant.status is partial: pos_failed | wire_failed */
+    partialFailureKind: text("partial_failure_kind"),
     registrationCompletedAt: timestamp("registration_completed_at", {
       withTimezone: true,
     }),
@@ -177,6 +209,8 @@ export const tenantDeployments = pgTable(
     posOrganizationId: text("pos_organization_id"),
     /** Public POS web app URL (Traefik: https://{slug}-pos.{domain}). */
     posUrl: text("pos_url"),
+    /** Encrypted bootstrap Finance admin password (`enc:v1:*`) until cleared by operator. */
+    financeAdminPassword: text("finance_admin_password"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -302,6 +336,7 @@ export const tenantLifecycleJobs = pgTable(
     runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     claimedBy: text("claimed_by"),
+    claimToken: uuid("claim_token"),
     lastError: text("last_error"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -323,6 +358,7 @@ export const plans = pgTable(
     description: text("description"),
     maxOrganizations: integer("max_organizations").notNull().default(1),
     maxActivations: integer("max_activations").notNull().default(1),
+    maxUsers: integer("max_users").notNull().default(999),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     /** Price in smallest currency unit (e.g. cents). Null = custom / not set. */
@@ -348,6 +384,10 @@ export const licenses = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     licenseKey: text("license_key").notNull(),
+    /** `stkx` legacy random keys; `stxi` tenant+location+checksum keys. */
+    keyFormat: text("key_format").notNull().default("stkx"),
+    /** POS location ObjectId string when key is location-scoped (STXI). */
+    scopedLocationId: text("scoped_location_id"),
     product: text("product").notNull().default("platform"),
     /** JSON array of product modules this license grants. */
     modules: text("modules").notNull().default('["accounting"]'),
@@ -362,6 +402,7 @@ export const licenses = pgTable(
     isPerpetual: boolean("is_perpetual").notNull().default(false),
     maxActivations: integer("max_activations").notNull().default(1),
     maxOrganizations: integer("max_organizations").notNull().default(1),
+    maxUsers: integer("max_users"),
     // -1 = unlimited
     activationCount: integer("activation_count").notNull().default(0),
     gracePeriodDays: integer("grace_period_days").notNull().default(7),
@@ -390,6 +431,69 @@ export const licenses = pgTable(
     index("licenses_expires_at_idx").on(t.expiresAt),
   ],
 );
+
+/** In-app alerts for SaaS owners (provision, license, job lifecycle). */
+export const ownerNotifications = pgTable(
+  "owner_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    licenseId: uuid("license_id").references(() => licenses.id, { onDelete: "set null" }),
+    correlationId: text("correlation_id"),
+    actionUrl: text("action_url"),
+    actionLabel: text("action_label"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("owner_notifications_owner_id_idx").on(t.ownerId),
+    index("owner_notifications_owner_unread_idx").on(t.ownerId, t.readAt),
+    index("owner_notifications_created_at_idx").on(t.createdAt),
+    index("owner_notifications_owner_created_idx").on(t.ownerId, t.createdAt),
+  ],
+);
+
+export type OwnerNotification = typeof ownerNotifications.$inferSelect;
+export type NewOwnerNotification = typeof ownerNotifications.$inferInsert;
+
+/** Outbound transactional email attempts (control plane SMTP). */
+export const emailLogs = pgTable(
+  "email_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateKey: text("template_key").notNull(),
+    recipientHash: text("recipient_hash").notNull(),
+    status: text("status").notNull(),
+    providerMessageId: text("provider_message_id"),
+    deliveryStatus: text("delivery_status"),
+    error: text("error"),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    ownerId: uuid("owner_id").references(() => owners.id, { onDelete: "set null" }),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("email_logs_created_at_idx").on(t.createdAt),
+    index("email_logs_template_key_idx").on(t.templateKey),
+    index("email_logs_provider_message_id_idx").on(t.providerMessageId),
+    index("email_logs_tenant_id_idx").on(t.tenantId),
+  ],
+);
+
+export type EmailLog = typeof emailLogs.$inferSelect;
+export type NewEmailLog = typeof emailLogs.$inferInsert;
 
 export const licenseHistory = pgTable(
   "license_history",
@@ -939,5 +1043,58 @@ export const pmsMessageTemplates = pgTable(
   (t) => [
     index("pms_message_templates_tenant_idx").on(t.tenantId),
     index("pms_message_templates_property_idx").on(t.propertyId),
+  ],
+);
+
+// ─── PMS: Guest pre-arrival forms ────────────────────────────────────────────
+
+export const pmsGuestFormTemplates = pgTable(
+  "pms_guest_form_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => pmsProperties.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    /** JSON array of {id,type,label,required,helpText?,options?} */
+    fields: text("fields").notNull().default("[]"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_guest_form_templates_tenant_idx").on(t.tenantId),
+    index("pms_guest_form_templates_property_idx").on(t.propertyId),
+  ],
+);
+
+/** One submission per booking — holds the share token and captured answers. */
+export const pmsGuestFormSubmissions = pgTable(
+  "pms_guest_form_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => pmsBookings.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => pmsGuestFormTemplates.id, { onDelete: "cascade" }),
+    /** Unguessable 32-char base64url — possession is the only auth. */
+    shareToken: text("share_token").notNull(),
+    /** JSON array of {fieldId,type,label,value} — null until submitted. */
+    answers: text("answers"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pms_guest_form_submissions_tenant_idx").on(t.tenantId),
+    index("pms_guest_form_submissions_booking_idx").on(t.bookingId),
+    uniqueIndex("pms_guest_form_submissions_token_unique").on(t.shareToken),
   ],
 );

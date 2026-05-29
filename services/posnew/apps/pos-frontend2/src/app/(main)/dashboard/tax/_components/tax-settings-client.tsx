@@ -272,7 +272,7 @@ export function TaxSettingsClient() {
             <Scale className="size-7" aria-hidden />
           </div>
           <div className="min-w-0 space-y-1.5">
-            <h1 className="font-semibold text-2xl tracking-tight text-foreground md:text-3xl">Tax &amp; treasury</h1>
+            <h1 className="font-semibold text-2xl text-foreground tracking-tight md:text-3xl">Tax &amp; treasury</h1>
             <p className="max-w-xl text-muted-foreground text-sm leading-relaxed md:text-[15px]">
               Configure VAT, service charge, and foreign-exchange spot rates for this organization. Accounting GL
               links are managed in settings.
@@ -327,7 +327,7 @@ export function TaxSettingsClient() {
                   <CardDescription>Standard VAT, display defaults, and optional service charge (one save).</CardDescription>
                 </div>
                 <CardAction>
-                  <span className="inline-flex items-center rounded-md border bg-background px-2 py-1 font-mono text-xs text-muted-foreground tabular-nums">
+                  <span className="inline-flex items-center rounded-md border bg-background px-2 py-1 font-mono text-muted-foreground text-xs tabular-nums">
                     VAT {Number.isFinite(ratePercent) ? ratePercent : 0}%
                   </span>
                 </CardAction>
@@ -345,9 +345,9 @@ export function TaxSettingsClient() {
                   </h2>
                 </div>
                 {locationScopeId ? (
-                  <p className="text-xs text-muted-foreground">Editing VAT for current branch scope.</p>
+                  <p className="text-muted-foreground text-xs">Editing VAT for current branch scope.</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No branch scope selected. Editing default organization VAT.</p>
+                  <p className="text-muted-foreground text-xs">No branch scope selected. Editing default organization VAT.</p>
                 )}
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -392,7 +392,7 @@ export function TaxSettingsClient() {
                     <Label htmlFor="prices-tax-switch" className="text-foreground">
                       Prices include tax
                     </Label>
-                    <p className="text-muted-foreground text-xs leading-relaxed max-w-md">
+                    <p className="max-w-md text-muted-foreground text-xs leading-relaxed">
                       When enabled, menu prices are gross of VAT (informational; full pricing rules may live in menu
                       tools).
                     </p>
@@ -433,7 +433,7 @@ export function TaxSettingsClient() {
                     className="shrink-0"
                   />
                 </div>
-                <div className="space-y-2 max-w-xs">
+                <div className="max-w-xs space-y-2">
                   <Label htmlFor="sc-rate" className={cn(!serviceChargeEnabled && "text-muted-foreground")}>
                     Charge rate (%)
                   </Label>

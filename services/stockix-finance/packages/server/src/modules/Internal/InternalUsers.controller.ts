@@ -19,6 +19,7 @@ import {
   InternalUsersService,
   CreateInternalUserDto,
   UpdateInternalUserDto,
+  InviteInternalUserDto,
 } from './commands/InternalUsers.service';
 
 @ApiTags('Internal')
@@ -28,6 +29,31 @@ import {
 @UseGuards(InternalSecretGuard)
 export class InternalUsersController {
   constructor(private readonly internalUsersService: InternalUsersService) {}
+
+  @Post(':tenantId/users/invite')
+  @HttpCode(HttpStatus.CREATED)
+  async inviteUser(
+    @Param('tenantId', ParseIntPipe) tenantId: number,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const dto: InviteInternalUserDto = {
+      email: String(body.email ?? ''),
+      roleId: Number(body.roleId ?? body.role_id),
+      firstName:
+        body.firstName !== undefined
+          ? String(body.firstName)
+          : body.first_name !== undefined
+            ? String(body.first_name)
+            : undefined,
+      lastName:
+        body.lastName !== undefined
+          ? String(body.lastName)
+          : body.last_name !== undefined
+            ? String(body.last_name)
+            : undefined,
+    };
+    return this.internalUsersService.sendInvite(tenantId, dto);
+  }
 
   @Post(':tenantId/users')
   @HttpCode(HttpStatus.CREATED)

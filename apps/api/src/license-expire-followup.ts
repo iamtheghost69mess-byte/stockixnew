@@ -1,13 +1,29 @@
-import { licenses } from "@repo/db/schema";
-import { and, eq, gte, isNotNull } from "drizzle-orm";
+import { licenses, tenantDeployments, tenants } from "@repo/db/schema";
+import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { logLine } from "./lib/logger.js";
+import { LICENSE_EXPIRY_MILESTONE_DAYS } from "./license-constants.js";
 import { insertLicenseHistory } from "./license-utils.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
+import { suspendPosOrgForLicense } from "./pos-license-sync.js";
 import {
   sendLicenseExpiredEmailForTenant,
   sendLicenseExpiringEmailForTenant,
+  sendLicenseExpiringEmailToPlatformOwner,
 } from "./mail/send.js";
+import {
+  hasLicenseExpiryMilestoneNotification,
+} from "./notification-service.js";
+import { notifyLicenseForTenant } from "./notification-helpers.js";
+import { enqueueLicenseExpiryMilestone } from "./jobs/license-expiry-queue.js";
+import {
+  runLicenseExpiryMilestoneJob,
+  type LicenseMilestoneJob,
+} from "./jobs/license-expiry-milestone.js";
+
+export type { LicenseMilestoneJob };
+export { runLicenseExpiryMilestoneJob };
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -17,6 +33,37 @@ export type ExpiredLicenseRow = {
   expiresAt: Date | null;
   gracePeriodDays: number;
 };
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/** Whole days from `now` until `expiresAt` (minimum 0). */
+export function daysUntilExpiry(expiresAt: Date, now: Date): number {
+  return Math.max(
+    0,
+    Math.ceil((expiresAt.getTime() - now.getTime()) / MS_PER_DAY),
+  );
+}
+
+/** Milestone day count when `daysLeft` matches a configured milestone, else null. */
+export function pickExpiryMilestone(daysLeft: number): number | null {
+  for (const milestone of LICENSE_EXPIRY_MILESTONE_DAYS) {
+    if (daysLeft === milestone) return milestone;
+  }
+  return null;
+}
+
+async function suspendTenantRecordsAfterGrace(
+  db: Db,
+  tenantId: string,
+  log: (message: string) => void,
+): Promise<void> {
+  await db.update(tenants).set({ status: "suspended" }).where(eq(tenants.id, tenantId));
+  await db
+    .update(tenantDeployments)
+    .set({ status: "suspended" })
+    .where(eq(tenantDeployments.tenantId, tenantId));
+  log(`[expireDueLicenses] Tenant ${tenantId} marked suspended after license grace`);
+}
 
 /**
  * After licenses are marked expired: sync finance, send expiry email, warn soon-to-expire.
@@ -29,7 +76,7 @@ export async function processLicenseExpiryFollowUp(
     log?: (message: string) => void;
   },
 ): Promise<void> {
-  const log = opts.log ?? ((message: string) => console.log(message));
+  const log = opts.log ?? logLine;
   const now = opts.now ?? new Date();
 
   for (const license of opts.justExpired) {
@@ -53,8 +100,33 @@ export async function processLicenseExpiryFollowUp(
       );
     }
 
+    if (license.expiresAt) {
+      const graceEnd = new Date(license.expiresAt);
+      graceEnd.setDate(graceEnd.getDate() + (license.gracePeriodDays ?? 7));
+      if (now > graceEnd) {
+        try {
+          await suspendPosOrgForLicense(db, license.tenantId, "license_expired", log);
+        } catch (err) {
+          console.error(
+            "[expireDueLicenses] POS suspend failed for tenant",
+            license.tenantId,
+            err,
+          );
+        }
+        try {
+          await suspendTenantRecordsAfterGrace(db, license.tenantId, log);
+        } catch (err) {
+          console.error(
+            "[expireDueLicenses] Tenant status suspend failed",
+            license.tenantId,
+            err,
+          );
+        }
+      }
+    }
+
     try {
-      await sendLicenseExpiredEmailForTenant(db, license.tenantId);
+      await sendLicenseExpiredEmailForTenant(db, license.tenantId, { licenseId: license.id });
     } catch (err) {
       console.error(
         "[expireDueLicenses] Email failed for tenant",
@@ -62,12 +134,74 @@ export async function processLicenseExpiryFollowUp(
         err,
       );
     }
+
+    notifyLicenseForTenant(db, {
+      tenantId: license.tenantId,
+      licenseId: license.id,
+      type: "license.expired",
+      body: "This tenant's license has expired. Finance access is restricted until you renew or assign a new license.",
+    });
   }
 
   await processExpiringSoonWarnings(db, now);
+  await processPostGracePosSuspensions(db, now, log);
+}
+
+/** Suspend POS orgs when grace period has fully ended (worker runs every 5 min). */
+async function processPostGracePosSuspensions(
+  db: Db,
+  now: Date,
+  log: (message: string) => void,
+): Promise<void> {
+  const candidates = await db
+    .select({
+      id: licenses.id,
+      tenantId: licenses.tenantId,
+      expiresAt: licenses.expiresAt,
+      gracePeriodDays: licenses.gracePeriodDays,
+    })
+    .from(licenses)
+    .where(
+      and(
+        eq(licenses.status, "expired"),
+        isNotNull(licenses.tenantId),
+        isNotNull(licenses.expiresAt),
+        lte(licenses.expiresAt, now),
+      ),
+    );
+
+  for (const license of candidates) {
+    if (!license.tenantId || !license.expiresAt) continue;
+    const graceEnd = new Date(license.expiresAt);
+    graceEnd.setDate(graceEnd.getDate() + (license.gracePeriodDays ?? 7));
+    if (now <= graceEnd) continue;
+
+    try {
+      await suspendPosOrgForLicense(db, license.tenantId, "license_grace_ended", log);
+    } catch (err) {
+      console.error(
+        "[expireDueLicenses] Post-grace POS suspend failed for tenant",
+        license.tenantId,
+        err,
+      );
+    }
+    try {
+      await suspendTenantRecordsAfterGrace(db, license.tenantId, log);
+    } catch (err) {
+      console.error(
+        "[expireDueLicenses] Post-grace tenant suspend failed",
+        license.tenantId,
+        err,
+      );
+    }
+  }
 }
 
 async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
+  const maxMilestone = Math.max(...LICENSE_EXPIRY_MILESTONE_DAYS);
+  const horizon = new Date(now);
+  horizon.setDate(horizon.getDate() + maxMilestone);
+
   const candidates = await db
     .select({
       id: licenses.id,
@@ -83,27 +217,34 @@ async function processExpiringSoonWarnings(db: Db, now: Date): Promise<void> {
         isNotNull(licenses.tenantId),
         isNotNull(licenses.expiresAt),
         gte(licenses.expiresAt, now),
+        lte(licenses.expiresAt, horizon),
       ),
     );
 
   for (const license of candidates) {
     if (!license.tenantId || !license.expiresAt) continue;
 
-    const windowEnd = new Date(now);
-    windowEnd.setDate(windowEnd.getDate() + (license.gracePeriodDays ?? 7));
-    if (license.expiresAt > windowEnd) continue;
+    const daysLeft = daysUntilExpiry(license.expiresAt, now);
+    const milestoneDays = pickExpiryMilestone(daysLeft);
+    if (milestoneDays == null) continue;
 
-    try {
-      await sendLicenseExpiringEmailForTenant(db, license.tenantId, {
-        expiresAt: license.expiresAt,
-        gracePeriodDays: license.gracePeriodDays ?? 7,
-      });
-    } catch (err) {
-      console.error(
-        "[expireDueLicenses] Warning email failed",
-        license.tenantId,
-        err,
-      );
+    const alreadyNotified = await hasLicenseExpiryMilestoneNotification(db, {
+      licenseId: license.id,
+      milestoneDays,
+    });
+    if (alreadyNotified) continue;
+
+    const job: LicenseMilestoneJob = {
+      licenseId: license.id,
+      tenantId: license.tenantId,
+      milestoneDays,
+      expiresAt: license.expiresAt.toISOString(),
+      gracePeriodDays: license.gracePeriodDays ?? 7,
+    };
+
+    const mode = await enqueueLicenseExpiryMilestone(job);
+    if (mode === "inline") {
+      await runLicenseExpiryMilestoneJob(db, job);
     }
   }
 }

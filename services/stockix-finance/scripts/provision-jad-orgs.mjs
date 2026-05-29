@@ -1,12 +1,17 @@
 /**
  * One-off: create parent org "jad" and sub-org "jad2" in Stockix Finance only.
- * Usage: node scripts/provision-jad-orgs.mjs
+ * Usage: FINANCE_PROVISION_SECRET=... FINANCE_PROVISION_PASSWORD=... node scripts/provision-jad-orgs.mjs
  */
+if (!process.env.FINANCE_PROVISION_SECRET || !process.env.FINANCE_PROVISION_PASSWORD) {
+  console.error('FINANCE_PROVISION_SECRET and FINANCE_PROVISION_PASSWORD must be set in environment');
+  process.exit(1);
+}
+
 // Finance API via tenant nginx (dajo stack). Override: FINANCE_API_URL=http://...
 const BASE = (process.env.FINANCE_API_URL || 'http://127.0.0.1:4102').replace(/\/+$/, '');
-const SECRET = '3e3022fbfb53ff7f43ccf30d0d5679f12c8e701cf5123b0aac3f087a66a95cda';
+const SECRET = process.env.FINANCE_PROVISION_SECRET;
 const EMAIL = 'jad@jad.stockix.local';
-const PASSWORD = 'JadFinance2026!';
+const PASSWORD = process.env.FINANCE_PROVISION_PASSWORD;
 const PARENT_NAME = 'jad';
 const SUB_NAME = 'jad2';
 

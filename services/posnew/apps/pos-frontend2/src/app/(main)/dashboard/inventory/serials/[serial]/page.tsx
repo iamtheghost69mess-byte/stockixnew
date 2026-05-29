@@ -9,19 +9,11 @@ import {
   AlertCircle,
   ArrowLeft,
   Calendar,
-  ChevronRight,
   Clock,
-  ExternalLink,
   History,
-  LayoutGrid,
   Loader2,
   MapPin,
-  Package,
   RefreshCcw,
-  RotateCcw,
-  TrendingDown,
-  TrendingUp,
-  Truck,
   User,
 } from "lucide-react";
 
@@ -58,9 +50,9 @@ export default function SerialHistoryPage() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Tracker
           </Link>
         </Button>
-        <div className="flex flex-col items-center py-20 border rounded-lg bg-card shadow-sm text-center">
-          <AlertCircle className="h-10 w-10 text-destructive mb-3" />
-          <h2 className="text-xl font-bold">Serial Not Found</h2>
+        <div className="flex flex-col items-center rounded-lg border bg-card py-20 text-center shadow-sm">
+          <AlertCircle className="mb-3 h-10 w-10 text-destructive" />
+          <h2 className="font-bold text-xl">Serial Not Found</h2>
           <p className="text-muted-foreground">The unit identifier "{serial}" does not exist in our system.</p>
         </div>
       </div>
@@ -70,7 +62,7 @@ export default function SerialHistoryPage() {
   const { serial: sn, movements } = data;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <Button asChild variant="ghost" className="-ml-4 h-8 text-muted-foreground hover:text-foreground">
@@ -79,7 +71,7 @@ export default function SerialHistoryPage() {
             </Link>
           </Button>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{sn.serial}</h1>
+            <h1 className="font-bold text-3xl tracking-tight">{sn.serial}</h1>
             <SerialStatusBadge status={sn.status} />
           </div>
           <p className="text-muted-foreground">
@@ -96,35 +88,35 @@ export default function SerialHistoryPage() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+            <CardTitle className="flex items-center gap-2 font-medium text-muted-foreground text-sm">
               <MapPin className="h-4 w-4" /> Current Location
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-lg font-bold">{(sn.location as any)?.name || "Not in Stock"}</div>
-            <p className="text-xs text-muted-foreground mt-1">Bin: {(sn.bin as any)?.name || "Unassigned"}</p>
+            <div className="font-bold text-lg">{(sn.location as any)?.name || "Not in Stock"}</div>
+            <p className="mt-1 text-muted-foreground text-xs">Bin: {(sn.bin as any)?.name || "Unassigned"}</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+            <CardTitle className="flex items-center gap-2 font-medium text-muted-foreground text-sm">
               <Calendar className="h-4 w-4" /> Created Date
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-lg font-bold">{format(new Date(sn.createdAt), "MMM d, yyyy")}</div>
-            <p className="text-xs text-muted-foreground mt-1">Initial warehouse intake</p>
+            <div className="font-bold text-lg">{format(new Date(sn.createdAt), "MMM d, yyyy")}</div>
+            <p className="mt-1 text-muted-foreground text-xs">Initial warehouse intake</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+            <CardTitle className="flex items-center gap-2 font-medium text-muted-foreground text-sm">
               <RefreshCcw className="h-4 w-4" /> Total Movements
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-lg font-bold">{movements.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Chain of custody transitions</p>
+            <div className="font-bold text-lg">{movements.length}</div>
+            <p className="mt-1 text-muted-foreground text-xs">Chain of custody transitions</p>
           </CardContent>
         </Card>
       </div>
@@ -136,28 +128,28 @@ export default function SerialHistoryPage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="relative">
-            <div className="absolute left-[39px] top-0 bottom-0 w-px bg-muted-foreground/20" />
+            <div className="absolute top-0 bottom-0 left-[39px] w-px bg-muted-foreground/20" />
             <div className="space-y-0">
               {movements.map((movement, i) => (
-                <div key={movement._id} className="relative pl-20 pr-6 py-6 group hover:bg-muted/30 transition-colors">
+                <div key={movement._id} className="group relative py-6 pr-6 pl-20 transition-colors hover:bg-muted/30">
                   {/* Timeline Dot */}
                   <div
                     className={cn(
-                      "absolute left-[32px] top-7 h-4 w-4 rounded-full border-2 border-background z-10",
+                      "absolute top-7 left-[32px] z-10 h-4 w-4 rounded-full border-2 border-background",
                       getMovementColor(movement.type),
                     )}
                   />
 
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-sm uppercase tracking-tight">
                           {movement.type.replace("_", " ")}
                         </span>
-                        <span className="text-xs text-muted-foreground">•</span>
-                        <span className="text-sm font-medium">{getMovementDescription(movement)}</span>
+                        <span className="text-muted-foreground text-xs">•</span>
+                        <span className="font-medium text-sm">{getMovementDescription(movement)}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-4 text-muted-foreground text-xs">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {format(new Date(movement.createdAt), "MMM d, yyyy HH:mm")}
@@ -168,13 +160,13 @@ export default function SerialHistoryPage() {
                         </div>
                       </div>
                     </div>
-                    <Badge variant="outline" className="mt-2 sm:mt-0 font-mono text-[10px] h-5">
+                    <Badge variant="outline" className="mt-2 h-5 font-mono text-[10px] sm:mt-0">
                       ID: {movement._id.slice(-6).toUpperCase()}
                     </Badge>
                   </div>
 
                   {movement.notes && (
-                    <div className="mt-2 text-xs text-muted-foreground italic bg-muted/20 p-2 rounded border-l-2 border-muted leading-relaxed">
+                    <div className="mt-2 rounded border-muted border-l-2 bg-muted/20 p-2 text-muted-foreground text-xs italic leading-relaxed">
                       "{movement.notes}"
                     </div>
                   )}
@@ -185,7 +177,7 @@ export default function SerialHistoryPage() {
 
               {movements.length === 0 && (
                 <div className="p-10 text-center text-muted-foreground">
-                  <History className="h-8 w-8 mx-auto opacity-20 mb-2" />
+                  <History className="mx-auto mb-2 h-8 w-8 opacity-20" />
                   <p>No logged movement records for this serial number.</p>
                 </div>
               )}
@@ -200,11 +192,11 @@ export default function SerialHistoryPage() {
 function SerialStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "available":
-      return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">Available</Badge>;
+      return <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">Available</Badge>;
     case "consumed":
-      return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Consumed</Badge>;
+      return <Badge className="border-blue-200 bg-blue-50 text-blue-700">Consumed</Badge>;
     case "transferred":
-      return <Badge className="bg-amber-50 text-amber-700 border-amber-200">In Transit</Badge>;
+      return <Badge className="border-amber-200 bg-amber-50 text-amber-700">In Transit</Badge>;
     case "expired":
       return <Badge variant="destructive">Expired</Badge>;
     default:

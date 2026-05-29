@@ -134,18 +134,18 @@ export function PosPaymentDialog({
 
         <div className="space-y-6 py-2">
           {/* Subtotal Display */}
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/40 p-6 text-center relative overflow-hidden group">
-            <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em] mb-2">Total Due</div>
+          <div className="group relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/40 p-6 text-center">
+            <div className="absolute inset-0 bg-emerald-500/5 opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="mb-2 font-black text-[10px] text-zinc-500 uppercase tracking-[0.3em]">Total Due</div>
             <div className="relative z-10 flex flex-col items-center">
               <div className="font-black text-5xl text-white tabular-nums tracking-tighter">
                 {formatCurrency(subtotals.usd, { currency: "USD" }).split(".")[0]}
                 <span className="text-xl opacity-40">.{formatCurrency(subtotals.usd, { currency: "USD" }).split(".")[1]}</span>
               </div>
               {subtotals.lbp > 0 && (
-                <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800/50 border border-zinc-700/30">
+                <div className="mt-2 flex items-center gap-2 rounded-full border border-zinc-700/30 bg-zinc-800/50 px-3 py-1">
                   <div className="size-1 rounded-full bg-zinc-500" />
-                  <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest tabular-nums leading-none">
+                  <span className="font-black text-[10px] text-zinc-400 uppercase tabular-nums leading-none tracking-widest">
                     {formatCurrency(subtotals.lbp, { currency: "LBP", noDecimals: true })}
                   </span>
                 </div>
@@ -162,7 +162,7 @@ export function PosPaymentDialog({
                 className={cn(
                   "flex h-24 flex-col items-center justify-center gap-3 rounded-3xl border transition-all duration-300 active:scale-95",
                   method === m
-                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100 shadow-lg shadow-emerald-950/20 ring-1 ring-emerald-500/20"
+                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100 shadow-emerald-950/20 shadow-lg ring-1 ring-emerald-500/20"
                     : "border-zinc-800 bg-zinc-900/20 text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300",
                 )}
                 onClick={() => setMethod(m)}
@@ -171,7 +171,7 @@ export function PosPaymentDialog({
                 {m === "cash" && <Banknote className={cn("size-6", method === m ? "animate-pulse" : "")} />}
                 {m === "card" && <CreditCard className="size-6" />}
                 {m === "manual" && <div className="font-black text-xl leading-none">M</div>}
-                <span className="text-[10px] font-black uppercase tracking-widest">{m}</span>
+                <span className="font-black text-[10px] uppercase tracking-widest">{m}</span>
               </button>
             ))}
           </div>
@@ -184,10 +184,10 @@ export function PosPaymentDialog({
                 disabled={busy}
                 onClick={() => setSplitEnabled((prev) => !prev)}
                 className={cn(
-                  "w-full rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-colors",
+                  "w-full rounded-xl px-3 py-2 font-black text-[10px] uppercase tracking-widest transition-colors",
                   splitEnabled
-                    ? "bg-emerald-900/30 text-emerald-300 border border-emerald-700/40"
-                    : "bg-zinc-900/40 text-zinc-400 border border-zinc-800"
+                    ? "border border-emerald-700/40 bg-emerald-900/30 text-emerald-300"
+                    : "border border-zinc-800 bg-zinc-900/40 text-zinc-400"
                 )}
               >
                 {splitEnabled ? "Split Bill Enabled" : "Enable Split Bill"}
@@ -246,7 +246,7 @@ export function PosPaymentDialog({
                     >
                       Add Split
                     </Button>
-                    <div className={cn("text-[10px] font-black uppercase tracking-widest", splitRemainderUsd === 0 ? "text-emerald-400" : "text-amber-400")}>
+                    <div className={cn("font-black text-[10px] uppercase tracking-widest", splitRemainderUsd === 0 ? "text-emerald-400" : "text-amber-400")}>
                       Remaining: {formatCurrency(splitRemainderUsd, { currency: "USD" })}
                     </div>
                   </div>
@@ -254,20 +254,20 @@ export function PosPaymentDialog({
               ) : null}
             </div>
             {method === "cash" && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 ease-out">
+              <div className="fade-in slide-in-from-top-4 animate-in space-y-6 duration-500 ease-out">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-1">
-                    <Label htmlFor="received-usd" className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                    <Label htmlFor="received-usd" className="font-black text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
                       Amount Received (USD)
                     </Label>
                     {Number(amountReceivedUsd) > subtotals.usd && (
-                      <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500 animate-in fade-in zoom-in">
+                      <span className="fade-in zoom-in animate-in font-black text-[9px] text-emerald-500 uppercase tracking-widest">
                         Change: {formatCurrency(changeUsd, { currency: "USD" })}
                       </span>
                     )}
                   </div>
-                  <div className="relative group">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 font-black text-lg group-focus-within:text-emerald-500 transition-colors">$</div>
+                  <div className="group relative">
+                    <div className="absolute top-1/2 left-4 -translate-y-1/2 font-black text-lg text-zinc-600 transition-colors group-focus-within:text-emerald-500">$</div>
                     <Input
                       id="received-usd"
                       type="number"
@@ -275,7 +275,7 @@ export function PosPaymentDialog({
                       inputMode="decimal"
                       value={amountReceivedUsd}
                       onChange={(e) => setAmountReceivedUsd(e.target.value)}
-                      className="h-16 bg-zinc-900/50 pl-10 text-2xl font-black text-white tabular-nums focus:ring-emerald-500/20 rounded-2xl shadow-inner border-zinc-700/50"
+                      className="h-16 rounded-2xl border-zinc-700/50 bg-zinc-900/50 pl-10 font-black text-2xl text-white tabular-nums shadow-inner focus:ring-emerald-500/20"
                       placeholder="0.00"
                       disabled={busy}
                     />
@@ -289,7 +289,7 @@ export function PosPaymentDialog({
                       key={val}
                       type="button"
                       onClick={() => setAmountReceivedUsd(val.toString())}
-                      className="h-10 rounded-xl border border-zinc-800 bg-zinc-900/30 text-[10px] font-black text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-all active:scale-95"
+                      className="h-10 rounded-xl border border-zinc-800 bg-zinc-900/30 font-black text-[10px] text-zinc-500 transition-all hover:bg-zinc-800 hover:text-zinc-200 active:scale-95"
                     >
                       ${val}
                     </button>
@@ -297,14 +297,14 @@ export function PosPaymentDialog({
                   <button
                     type="button"
                     onClick={() => setAmountReceivedUsd(subtotals.usd.toFixed(2))}
-                    className="col-span-2 h-10 rounded-xl border border-emerald-900/30 bg-emerald-950/20 text-[10px] font-black text-emerald-500 hover:bg-emerald-900/30 transition-all active:scale-95"
+                    className="col-span-2 h-10 rounded-xl border border-emerald-900/30 bg-emerald-950/20 font-black text-[10px] text-emerald-500 transition-all hover:bg-emerald-900/30 active:scale-95"
                   >
                     Exact Amount
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmountReceivedUsd("")}
-                    className="h-10 rounded-xl border border-zinc-800 bg-zinc-900/30 text-[10px] font-black text-zinc-500 hover:bg-zinc-800 transition-all"
+                    className="h-10 rounded-xl border border-zinc-800 bg-zinc-900/30 font-black text-[10px] text-zinc-500 transition-all hover:bg-zinc-800"
                   >
                     Clear
                   </button>
@@ -313,9 +313,9 @@ export function PosPaymentDialog({
             )}
 
             {method === "card" && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500 ease-out">
+              <div className="fade-in slide-in-from-top-4 animate-in space-y-4 duration-500 ease-out">
                 <div className="space-y-3">
-                  <Label htmlFor="card-ref" className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                  <Label htmlFor="card-ref" className="font-black text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
                     Card Reference / Last 4 Digits
                   </Label>
                   <Input
@@ -323,15 +323,15 @@ export function PosPaymentDialog({
                     value={reference}
                     onChange={(e) => setReference(e.target.value)}
                     placeholder="e.g. 1234 or Auth-998"
-                    className="h-16 bg-zinc-900/50 text-lg font-black text-white focus:ring-emerald-500/20 rounded-2xl shadow-inner border-zinc-700/50"
+                    className="h-16 rounded-2xl border-zinc-700/50 bg-zinc-900/50 font-black text-lg text-white shadow-inner focus:ring-emerald-500/20"
                     disabled={busy}
                   />
                 </div>
-                <div className="p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 flex items-center gap-3">
-                  <div className="size-8 rounded-full bg-zinc-800 flex items-center justify-center text-emerald-500">
+                <div className="flex items-center gap-3 rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4">
+                  <div className="flex size-8 items-center justify-center rounded-full bg-zinc-800 text-emerald-500">
                     <CreditCard className="size-4" />
                   </div>
-                  <p className="text-[10px] text-zinc-500 font-bold leading-relaxed uppercase tracking-widest">
+                  <p className="font-bold text-[10px] text-zinc-500 uppercase leading-relaxed tracking-widest">
                     Ensure the external terminal transaction is successful before confirming.
                   </p>
                 </div>
@@ -339,8 +339,8 @@ export function PosPaymentDialog({
             )}
 
             {method === "manual" && (
-              <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500 ease-out">
-                <Label htmlFor="payment-note" className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+              <div className="fade-in slide-in-from-top-4 animate-in space-y-3 duration-500 ease-out">
+                <Label htmlFor="payment-note" className="font-black text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
                   Notes / Internal Reference
                 </Label>
                 <Input
@@ -348,7 +348,7 @@ export function PosPaymentDialog({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="e.g. Split payment, Voucher #123"
-                  className="h-16 bg-zinc-900/50 text-lg font-black text-white focus:ring-emerald-500/20 rounded-2xl shadow-inner border-zinc-700/50"
+                  className="h-16 rounded-2xl border-zinc-700/50 bg-zinc-900/50 font-black text-lg text-white shadow-inner focus:ring-emerald-500/20"
                   disabled={busy}
                 />
               </div>
@@ -356,11 +356,11 @@ export function PosPaymentDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-3 sm:justify-end border-t border-zinc-800/50 pt-6 mt-2">
+        <DialogFooter className="mt-2 gap-3 border-zinc-800/50 border-t pt-6 sm:justify-end">
           <Button
             type="button"
             variant="ghost"
-            className="h-12 text-zinc-500 hover:text-white hover:bg-zinc-900 uppercase text-[10px] font-black tracking-widest rounded-xl"
+            className="h-12 rounded-xl font-black text-[10px] text-zinc-500 uppercase tracking-widest hover:bg-zinc-900 hover:text-white"
             disabled={busy}
             onClick={() => onOpenChange(false)}
           >
@@ -368,7 +368,7 @@ export function PosPaymentDialog({
           </Button>
           <Button
             type="button"
-            className="h-12 min-w-[160px] bg-emerald-600 font-black text-white uppercase text-[10px] tracking-[0.2em] rounded-xl shadow-lg shadow-emerald-950/20 hover:bg-emerald-500 active:scale-[0.98] transition-all"
+            className="h-12 min-w-[160px] rounded-xl bg-emerald-600 font-black text-[10px] text-white uppercase tracking-[0.2em] shadow-emerald-950/20 shadow-lg transition-all hover:bg-emerald-500 active:scale-[0.98]"
             disabled={
               busy ||
               (splitEnabled && splitRemainderUsd !== 0) ||

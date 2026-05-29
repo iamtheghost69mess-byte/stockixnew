@@ -11,6 +11,7 @@ export class ExecaDockerComposeRunner implements IDockerComposeRunner {
     options?: {
       cancelSignal?: AbortSignal;
       timeoutMs?: number;
+      onOutput?: (chunk: string) => void;
     },
   ): Promise<void> {
     const execaOptions: Record<string, unknown> = {

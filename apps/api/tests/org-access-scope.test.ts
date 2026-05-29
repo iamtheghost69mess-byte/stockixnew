@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertOrgInSupportScope,
   filterOrganizationsForSupportAgent,
+  ownerUsesTenantOrgScope,
 } from "../src/org-access-scope.js";
 
 describe("org-access-scope helpers", () => {
@@ -32,5 +33,11 @@ describe("org-access-scope helpers", () => {
   it("assertOrgInSupportScope enforces support scoped set", () => {
     expect(assertOrgInSupportScope("support_agent", "a", ["a", "b"])).toBe(true);
     expect(assertOrgInSupportScope("support_agent", "c", ["a", "b"])).toBe(false);
+  });
+
+  it("ownerUsesTenantOrgScope for support_agent and tenants.org_scope permission", () => {
+    expect(ownerUsesTenantOrgScope([], "support_agent")).toBe(true);
+    expect(ownerUsesTenantOrgScope(["tenants.org_scope"], "read_only")).toBe(true);
+    expect(ownerUsesTenantOrgScope(["tenants.read"], "read_only")).toBe(false);
   });
 });

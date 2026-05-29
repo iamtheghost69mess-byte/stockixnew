@@ -65,7 +65,8 @@ export default function PmsCleaningPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [taskOpen, setTaskOpen] = useState(false);
   const [cleanerOpen, setCleanerOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [cleanerSaving, setCleanerSaving] = useState(false);
   const [taskForm, setTaskForm] = useState({ roomId: "", scheduledDate: date, notes: "" });
   const [cleanerForm, setCleanerForm] = useState({ name: "", phone: "", email: "" });
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -94,18 +95,18 @@ export default function PmsCleaningPage() {
 
   async function handleCreateTask() {
     if (!tenantId || !taskForm.roomId) return;
-    setSaving(true);
+    setTaskSaving(true);
     await pmsFetch("cleaning/tasks", tenantId, { method: "POST", body: JSON.stringify({ ...taskForm, scheduledDate: date }) });
-    setSaving(false);
+    setTaskSaving(false);
     setTaskOpen(false);
     void loadTasks();
   }
 
   async function handleCreateCleaner() {
     if (!tenantId || !cleanerForm.name) return;
-    setSaving(true);
+    setCleanerSaving(true);
     await pmsFetch("cleaning/cleaners", tenantId, { method: "POST", body: JSON.stringify(cleanerForm) });
-    setSaving(false);
+    setCleanerSaving(false);
     setCleanerOpen(false);
     void loadCleaners();
   }
@@ -239,8 +240,8 @@ export default function PmsCleaningPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTaskOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateTask()} disabled={saving || !taskForm.roomId}>
-              {saving ? "Saving…" : "Add"}
+            <Button onClick={() => void handleCreateTask()} disabled={taskSaving || !taskForm.roomId}>
+              {taskSaving ? "Saving…" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -259,8 +260,8 @@ export default function PmsCleaningPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCleanerOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateCleaner()} disabled={saving || !cleanerForm.name}>
-              {saving ? "Saving…" : "Add"}
+            <Button onClick={() => void handleCreateCleaner()} disabled={cleanerSaving || !cleanerForm.name}>
+              {cleanerSaving ? "Saving…" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { TenantLicense } from '@/modules/System/models/TenantLicense';
 import { SyncLicenseDto } from '../dtos/SyncLicense.dto';
+import { clearLicenseCache } from '@/modules/License/LicenseGuard.cache';
 
 @Injectable()
 export class SyncLicenseService {
@@ -42,6 +43,8 @@ export class SyncLicenseService {
     } else {
       await this.tenantLicenseModel.query().insert(payload);
     }
+
+    clearLicenseCache(dto.tenantId);
 
     return { success: true, tenantId: dto.tenantId };
   }

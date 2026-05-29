@@ -30,6 +30,26 @@ export class InternalPosReceiptEntryDto {
   @IsOptional()
   @IsNumber()
   discount?: number;
+
+  /** Optional recipe-based unit cost for COGS (updates Finance item cost before receipt). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
+}
+
+export class InternalPosDepositPaymentDto {
+  @IsInt()
+  depositAccountId: number;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+}
+
+export class InternalPosTenantBodyDto {
+  @IsInt()
+  tenantId: number;
 }
 
 export class InternalPosReceiptPayloadDto {
@@ -66,6 +86,30 @@ export class InternalPosReceiptPayloadDto {
   @IsOptional()
   @IsInt()
   warehouseId?: number;
+
+  /** When multiple tender accounts were used on the POS order. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InternalPosDepositPaymentDto)
+  depositPayments?: InternalPosDepositPaymentDto[];
+}
+
+export class InternalPosPartialRefundDto extends InternalPosTenantBodyDto {
+  @IsNumber()
+  @Min(0.01)
+  amount: number;
+
+  @IsInt()
+  refundItemId: number;
+
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+
+  @IsOptional()
+  @IsString()
+  creditNoteDate?: string;
 }
 
 export class CreateInternalPosReceiptDto {
@@ -75,11 +119,6 @@ export class CreateInternalPosReceiptDto {
   @ValidateNested()
   @Type(() => InternalPosReceiptPayloadDto)
   payload: InternalPosReceiptPayloadDto;
-}
-
-export class InternalPosTenantBodyDto {
-  @IsInt()
-  tenantId: number;
 }
 
 export class InternalPosCheckDuplicateDto extends InternalPosTenantBodyDto {

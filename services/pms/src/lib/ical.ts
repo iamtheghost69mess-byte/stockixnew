@@ -9,6 +9,15 @@ export interface ICalEvent {
   endDate: string;
 }
 
+function stableUid(startDate: string, endDate: string, summary: string): string {
+  let h = 0x811c9dc5;
+  for (const ch of `${startDate}|${endDate}|${summary}`) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `parsed-${startDate}-${h.toString(16).padStart(8, "0")}`;
+}
+
 /** Parse an iCal (.ics) string into a list of events. */
 export function parseICal(icalText: string): ICalEvent[] {
   const events: ICalEvent[] = [];
@@ -37,7 +46,7 @@ export function parseICal(icalText: string): ICalEvent[] {
 
     if (startDate) {
       if (!endDate) endDate = startDate;
-      if (!uid) uid = `parsed-${startDate}-${i}`;
+      if (!uid) uid = stableUid(startDate, endDate, summary);
       events.push({ uid, summary, startDate, endDate });
     }
   }
@@ -90,20 +99,37 @@ export function generateICal(
     const dtstart = event.startDate.replace(/-/g, "");
     const dtend = event.endDate.replace(/-/g, "");
     const uid = event.uid.replace(/[^a-zA-Z0-9@._-]/g, "_");
-    const summary = event.summary.replace(/[^\x20-\x7E]/g, "");
+    const escapedSummary = event.summary
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\n/g, "\\n")
+      .replace(/[^\x20-\x7E]/g, "");
     lines.push(
       "BEGIN:VEVENT",
       `UID:${uid}`,
       `DTSTART;VALUE=DATE:${dtstart}`,
       `DTEND;VALUE=DATE:${dtend}`,
-      `SUMMARY:${summary}`,
+      `SUMMARY:${escapedSummary}`,
       `DTSTAMP:${formatNowUTC()}`,
       "END:VEVENT",
     );
   }
 
   lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  return lines.map(foldLine).join("\r\n");
+}
+
+/** RFC 5545 §3.1: fold lines longer than 75 octets with CRLF + single space. */
+function foldLine(line: string): string {
+  if (line.length <= 75) return line;
+  const chunks: string[] = [line.slice(0, 75)];
+  let i = 75;
+  while (i < line.length) {
+    chunks.push(line.slice(i, i + 74));
+    i += 74;
+  }
+  return chunks.join("\r\n ");
 }
 
 function formatNowUTC(): string {

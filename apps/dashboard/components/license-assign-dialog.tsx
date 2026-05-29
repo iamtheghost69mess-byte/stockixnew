@@ -33,6 +33,7 @@ import {
 import TenantStatusBadge from "@/components/tenant-status-badge";
 import { formatApiError } from "@/lib/api-errors";
 import { assignLicenseSchema, type AssignLicenseValues } from "@/lib/schemas";
+import { moduleLabel, parseLicenseModules } from "@/lib/tenant-modules";
 import type { LicenseRow } from "@/types/license";
 
 type TenantOpt = { id: string; name: string; slug: string; status: string };
@@ -145,6 +146,14 @@ export function LicenseAssignDialog({
             <div>
               <Label>License key</Label>
               <p className="mt-1 font-mono text-sm">{license.licenseKey}</p>
+            </div>
+            <div>
+              <Label>Licensed modules</Label>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {parseLicenseModules(license.modules ?? ["accounting"])
+                  .map((mod) => moduleLabel(mod))
+                  .join(", ")}
+              </p>
             </div>
             {defaultTenantId ? (
               <div>

@@ -141,7 +141,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
 
         <div className="space-y-6 py-2">
           <div className="space-y-3">
-            <Label htmlFor="refund-note" className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 px-1">
+            <Label htmlFor="refund-note" className="px-1 font-black text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
               Reason for Cancellation
             </Label>
             <Input
@@ -149,7 +149,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="e.g. Mistake, Customer change of mind"
-              className="h-14 border-zinc-800 bg-zinc-900/50 px-4 text-sm font-bold text-white focus:ring-emerald-500/20 rounded-2xl shadow-inner border-zinc-700/50"
+              className="h-14 rounded-2xl border-zinc-700/50 border-zinc-800 bg-zinc-900/50 px-4 font-bold text-sm text-white shadow-inner focus:ring-emerald-500/20"
               disabled={busy}
             />
           </div>
@@ -160,23 +160,23 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
               checked={restock}
               onCheckedChange={(v) => setRestock(v === true)}
               disabled={busy}
-              className="size-5 rounded-md border-zinc-700 bg-zinc-900 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-500"
+              className="size-5 rounded-md border-zinc-700 bg-zinc-900 data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-600"
             />
-            <Label htmlFor="refund-restock" className="cursor-pointer text-xs font-black text-zinc-400 uppercase tracking-widest">
+            <Label htmlFor="refund-restock" className="cursor-pointer font-black text-xs text-zinc-400 uppercase tracking-widest">
               Record inventory restock
             </Label>
           </div>
 
           {restock ? (
-            <div className="space-y-4 rounded-[2rem] border border-zinc-800 bg-zinc-900/30 p-5 animate-in fade-in zoom-in-95 duration-500">
+            <div className="fade-in zoom-in-95 animate-in space-y-4 rounded-[2rem] border border-zinc-800 bg-zinc-900/30 p-5 duration-500">
               <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Quick Scan Barcode</Label>
+                <Label className="font-black text-[9px] text-zinc-600 uppercase tracking-widest">Quick Scan Barcode</Label>
                 <div className="flex gap-2">
                   <Input
                     value={barcodeLookup}
                     onChange={(e) => setBarcodeLookup(e.target.value)}
                     placeholder="Scan ingredient..."
-                    className="h-11 border-zinc-800 bg-zinc-950/50 text-sm font-bold rounded-xl"
+                    className="h-11 rounded-xl border-zinc-800 bg-zinc-950/50 font-bold text-sm"
                     disabled={busy || scanBusy}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -188,7 +188,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-11 px-4 bg-zinc-800 hover:bg-zinc-700 text-[10px] font-black uppercase tracking-widest rounded-xl"
+                    className="h-11 rounded-xl bg-zinc-800 px-4 font-black text-[10px] uppercase tracking-widest hover:bg-zinc-700"
                     disabled={busy || scanBusy}
                     onClick={() => void applyBarcode()}
                   >
@@ -198,7 +198,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="refund-ing-filter" className="text-[9px] font-black uppercase tracking-widest text-zinc-600">
+                <Label htmlFor="refund-ing-filter" className="font-black text-[9px] text-zinc-600 uppercase tracking-widest">
                   Manual Search
                 </Label>
                 <Input
@@ -206,15 +206,15 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Type name or SKU..."
-                  className="h-11 border-zinc-800 bg-zinc-950/50 text-sm font-bold rounded-xl"
+                  className="h-11 rounded-xl border-zinc-800 bg-zinc-950/50 font-bold text-sm"
                   disabled={busy}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Inventory Items</Label>
+                <Label className="font-black text-[9px] text-zinc-600 uppercase tracking-widest">Inventory Items</Label>
                 {ingredientsLoading ? (
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-600 font-bold uppercase tracking-widest py-4">
+                  <div className="flex items-center gap-2 py-4 font-bold text-[10px] text-zinc-600 uppercase tracking-widest">
                     <Loader2 className="size-3 animate-spin" />
                     Loading...
                   </div>
@@ -222,7 +222,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
                   <ScrollArea className="h-44 rounded-2xl border border-zinc-800 bg-zinc-950/50">
                     <div className="space-y-1 p-2">
                       {filtered.length === 0 ? (
-                        <p className="px-2 py-8 text-center text-[10px] font-bold text-zinc-600 uppercase tracking-widest">No matching ingredients</p>
+                        <p className="px-2 py-8 text-center font-bold text-[10px] text-zinc-600 uppercase tracking-widest">No matching ingredients</p>
                       ) : (
                         filtered.slice(0, 80).map((row: IngredientRecord) => (
                           <button
@@ -233,14 +233,14 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
                             className={cn(
                               "w-full rounded-xl px-3 py-2.5 text-left transition-all duration-300",
                               String(row._id) === ingredientId
-                                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-950/20"
+                                ? "bg-emerald-600 text-white shadow-emerald-950/20 shadow-lg"
                                 : "text-zinc-400 hover:bg-zinc-900/80 hover:text-zinc-200",
                             )}
                           >
-                            <div className="flex justify-between items-center">
-                              <span className="text-[11px] font-black uppercase tracking-tight">{row.name || row._id}</span>
+                            <div className="flex items-center justify-between">
+                              <span className="font-black text-[11px] uppercase tracking-tight">{row.name || row._id}</span>
                               {row.sku && (
-                                <span className={cn("text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-950/50", String(row._id) === ingredientId ? "text-white/60" : "text-zinc-600")}>
+                                <span className={cn("rounded bg-zinc-950/50 px-1.5 py-0.5 font-bold font-mono text-[9px]", String(row._id) === ingredientId ? "text-white/60" : "text-zinc-600")}>
                                   {row.sku}
                                 </span>
                               )}
@@ -252,15 +252,15 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
                   </ScrollArea>
                 )}
                 {selected && (
-                  <div className="flex items-center gap-2 px-1 text-emerald-400 text-[10px] font-black uppercase tracking-widest animate-in slide-in-from-left-2">
-                    <div className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <div className="slide-in-from-left-2 flex animate-in items-center gap-2 px-1 font-black text-[10px] text-emerald-400 uppercase tracking-widest">
+                    <div className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
                     Selected: {selected.name}
                   </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="refund-qty" className="text-[9px] font-black uppercase tracking-widest text-zinc-600">
+                <Label htmlFor="refund-qty" className="font-black text-[9px] text-zinc-600 uppercase tracking-widest">
                   Restock Quantity
                 </Label>
                 <Input
@@ -270,7 +270,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
                   step="any"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  className="h-11 border-zinc-800 bg-zinc-950/50 text-sm font-black text-white rounded-xl"
+                  className="h-11 rounded-xl border-zinc-800 bg-zinc-950/50 font-black text-sm text-white"
                   disabled={busy}
                 />
               </div>
@@ -278,11 +278,11 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
           ) : null}
         </div>
 
-        <DialogFooter className="gap-3 sm:justify-end border-t border-zinc-800/50 pt-6 mt-2">
+        <DialogFooter className="mt-2 gap-3 border-zinc-800/50 border-t pt-6 sm:justify-end">
           <Button
             type="button"
             variant="ghost"
-            className="h-12 text-zinc-500 hover:text-white hover:bg-zinc-900 uppercase text-[10px] font-black tracking-widest rounded-xl"
+            className="h-12 rounded-xl font-black text-[10px] text-zinc-500 uppercase tracking-widest hover:bg-zinc-900 hover:text-white"
             disabled={busy}
             onClick={() => onOpenChange(false)}
           >
@@ -290,7 +290,7 @@ export function PosRefundDialog({ open, onOpenChange, orderId, busy, onConfirm }
           </Button>
           <Button
             type="button"
-            className="h-12 min-w-[160px] bg-red-600 font-black text-white uppercase text-[10px] tracking-[0.2em] rounded-xl shadow-lg shadow-red-950/20 hover:bg-red-500 active:scale-[0.98] transition-all"
+            className="h-12 min-w-[160px] rounded-xl bg-red-600 font-black text-[10px] text-white uppercase tracking-[0.2em] shadow-lg shadow-red-950/20 transition-all hover:bg-red-500 active:scale-[0.98]"
             disabled={busy}
             onClick={() => void handleSubmit()}
           >

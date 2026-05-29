@@ -12,4 +12,10 @@ export class AuthSigninResponseDto {
 
   @ApiProperty({ description: 'User ID' })
   userId: number;
+
+  @ApiProperty({
+    description: 'When true, user must set a new password before using the app',
+    required: false,
+  })
+  mustChangePassword?: boolean;
 }

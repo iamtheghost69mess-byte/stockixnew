@@ -13,6 +13,7 @@ export type StockTakeLine = {
         name: string;
         unit: string;
         sku?: string;
+        isSerialTracked?: boolean;
       }
     | string;
   /** Linked `Bin` when the source `StockBalance` row had `bin` set (warehouse bin). */

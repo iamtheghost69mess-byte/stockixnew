@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import {
   getActiveLicenseForTenant,
+  getLicenseExpiry,
   isLicenseLimitsConsistentWithPlan,
   type TenantLicenseRow,
 } from "../src/license-utils.js";
@@ -175,5 +176,25 @@ describe("isLicenseLimitsConsistentWithPlan", () => {
     const result = await isLicenseLimitsConsistentWithPlan(db, license);
 
     expect(result).toBe(false);
+  });
+});
+
+describe("getLicenseExpiry", () => {
+  it("returns expiresAt for active time-limited license", async () => {
+    const expiresAt = new Date("2030-06-01T00:00:00.000Z");
+    const license = makeLicense({ expiresAt, isPerpetual: false });
+    const db = createMockDb([], [license], []);
+
+    const result = await getLicenseExpiry(db, license.tenantId!);
+    expect(result?.toISOString()).toBe(expiresAt.toISOString());
+  });
+
+  it("returns far-future date for perpetual license", async () => {
+    const license = makeLicense({ isPerpetual: true, expiresAt: null });
+    const db = createMockDb([license], [], []);
+
+    const result = await getLicenseExpiry(db, license.tenantId!);
+    expect(result).not.toBeNull();
+    expect(result!.getUTCFullYear()).toBeGreaterThan(new Date().getUTCFullYear() + 50);
   });
 });

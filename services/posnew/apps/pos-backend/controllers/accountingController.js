@@ -18,6 +18,11 @@ const accountingService = require("../services/accountingService");
 const accountingPdfService = require("../services/accountingPdfService");
 const bankCsvImportService = require("../services/bankCsvImportService");
 const Organization = require("../models/organizationModel");
+const Order = require("../models/orderModel");
+const {
+  enqueueBigcapitalVoidIfEnabled,
+  enqueueBigcapitalPartialRefundIfEnabled,
+} = require("../services/bigcapitalSyncEnqueue");
 const { assertTenantOrganization } = require("../utils/tenantOrg");
 const {
   NOTIFICATION_EVENTS,
@@ -649,13 +654,29 @@ const reverseOrder = async (req, res, next) => {
     } catch {
       /* no COGS posted */
     }
-    const populated = await JournalEntry.findById(saleRev._id).populate(
-      "lines.account",
-      "code name type"
-    );
+    let saleReversal = null;
+    if (saleRev) {
+      saleReversal = await JournalEntry.findById(saleRev._id).populate(
+        "lines.account",
+        "code name type"
+      );
+    }
+    const order = await Order.findById(orderId);
+    if (order) {
+      enqueueBigcapitalVoidIfEnabled(order, {
+        originatedBy: "accounting.reverse_order",
+      }).catch((err) => {
+        console.error("[BigcapitalVoid] reverse-order enqueue:", err.message);
+      });
+    }
+
     res.status(201).json({
       success: true,
-      data: { saleReversal: populated, cogsReversalId: cogsRev?._id || null },
+      data: {
+        saleReversal,
+        cogsReversalId: cogsRev?._id || null,
+        nativeGlSkipped: !saleRev,
+      },
     });
   } catch (e) {
     next(e);
@@ -686,11 +707,37 @@ const postRefund = async (req, res, next) => {
       idempotencyKey: idem,
       refundToAccountId,
     });
-    const populated = await JournalEntry.findById(doc._id).populate(
-      "lines.account",
-      "code name type"
-    );
+    const nativeGlSkipped = !doc;
+    const populated = doc
+      ? await JournalEntry.findById(doc._id).populate(
+          "lines.account",
+          "code name type"
+        )
+      : null;
     const refundAmount = Number(amount);
+    const order = await Order.findById(orderId);
+    if (order && Number.isFinite(refundAmount)) {
+      const orderTotal = Number(order.total || 0);
+      if (refundAmount >= orderTotal - 0.01) {
+        enqueueBigcapitalVoidIfEnabled(order, {
+          originatedBy: "accounting.full_refund",
+        }).catch((err) => {
+          console.error("[BigcapitalVoid] full-refund enqueue:", err.message);
+        });
+      } else if (refundAmount > 0) {
+        enqueueBigcapitalPartialRefundIfEnabled(order, refundAmount, {
+          idempotencyKey: idem
+            ? `partial_refund_${orderId}_${idem}`
+            : undefined,
+          originatedBy: "accounting.partial_refund",
+        }).catch((err) => {
+          console.error(
+            "[BigcapitalPartialRefund] enqueue:",
+            err.message
+          );
+        });
+      }
+    }
     if (Number.isFinite(refundAmount) && refundAmount >= 200) {
       await createBackofficeNotificationFromEvent(
         NOTIFICATION_EVENTS.REFUND_LARGE,
@@ -711,9 +758,16 @@ const postRefund = async (req, res, next) => {
         orderId: String(orderId),
         refundJournalId: String(populated?._id || ""),
         amount: Number.isFinite(refundAmount) ? refundAmount : Number(amount) || 0,
+        nativeGlSkipped,
       },
     });
-    res.status(201).json({ success: true, data: populated });
+    res.status(201).json({
+      success: true,
+      data: {
+        refund: populated,
+        nativeGlSkipped,
+      },
+    });
   } catch (e) {
     next(e);
   }

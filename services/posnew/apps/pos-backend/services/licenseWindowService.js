@@ -12,6 +12,7 @@ function getOrganizationAccessState(organization, now = new Date()) {
     licenseStartDate: organization?.licenseStartDate ?? organization?.licenseStartsAt ?? null,
     licenseEndDate: organization?.licenseEndDate ?? organization?.licenseEndsAt ?? null,
     timezone: organization?.timezone ?? null,
+    lifecycle: organization?.lifecycle ?? null,
     now,
   });
 }

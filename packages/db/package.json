@@ -10,9 +10,11 @@
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "pnpm exec tsx scripts/migrate.ts",
+    "db:migrate:section1": "pnpm exec tsx scripts/apply-section1-migrations.ts",
     "db:repair:baseline": "pnpm exec tsx scripts/migration-repair-baseline.ts",
     "db:wait": "pnpm exec tsx scripts/wait-local-postgres.ts",
     "db:seed:local": "pnpm exec tsx scripts/seed-local-owner.ts",
+    "db:seed:pms-demo": "pnpm exec tsx scripts/seed-pms-demo.ts",
     "db:seed:plans": "pnpm exec tsx scripts/ensure-default-plans.ts",
     "db:ensure:sequences": "pnpm exec tsx scripts/ensure-tenant-port-seq.ts",
     "verify-schema": "tsx scripts/verify-schema.ts",

@@ -49,10 +49,10 @@ export const FloatingMenu = ({ category, rect, onClose, onSelect, selectedId }: 
     <div
       ref={menuRef}
       style={style}
-      className="bg-zinc-950 border border-zinc-800 shadow-2xl rounded-2xl p-2 w-64 animate-in fade-in zoom-in-95 duration-200"
+      className="fade-in zoom-in-95 w-64 animate-in rounded-2xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl duration-200"
     >
-      <div className="px-4 py-3 mb-1 border-b border-zinc-900">
-        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{category.name}</span>
+      <div className="mb-1 border-zinc-900 border-b px-4 py-3">
+        <span className="font-black text-[10px] text-zinc-500 uppercase tracking-widest">{category.name}</span>
       </div>
       <ul className="space-y-1">
         {category.children?.map((item: any) => {
@@ -65,7 +65,7 @@ export const FloatingMenu = ({ category, rect, onClose, onSelect, selectedId }: 
                   onClose();
                 }}
                 className={cn(
-                  "w-full text-start px-4 py-4 rounded-xl text-sm transition-all duration-200 font-bold",
+                  "w-full rounded-xl px-4 py-4 text-start font-bold text-sm transition-all duration-200",
                   active
                     ? "bg-emerald-600 text-white shadow-md"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",

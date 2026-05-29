@@ -62,7 +62,7 @@ export function AccessGate({
   }
 
   if (!hasAccess) {
-    return redirect ? null : <>{fallback}</>;
+    return redirect ? null : fallback;
   }
 
   return <>{children}</>;

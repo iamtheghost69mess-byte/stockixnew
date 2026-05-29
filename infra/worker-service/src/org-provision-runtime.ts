@@ -1,8 +1,14 @@
 import { apiConfig } from "@repo/config";
+import {
+  normalizeFinanceApiJson,
+  parseFinanceApiJsonText,
+} from "@repo/shared/finance-api";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 
+import { syncFinanceLicenseForStockixTenant } from "@repo/platform-worker-shared";
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
+import { provisionCombinedPosForOrganization } from "../domain/provisioning/combined-org-pos-provision.js";
 import { CryptoTenantSecretGenerator } from "../domain/provisioning/adapters/crypto-tenant-secret-generator.js";
 import { fetchBuildOrganization } from "../domain/provisioning/adapters/fetch-stockix-finance-build-org.js";
 import {
@@ -13,6 +19,8 @@ import {
 
 export interface OrgProvisionInput {
   organizationId: string;
+  organizationSlug: string;
+  isPrimary: boolean;
   adminEmail: string;
   adminFirstName: string;
   adminLastName: string;
@@ -87,19 +95,12 @@ async function registerNewFinanceOrg(
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  let json: unknown;
-  try {
-    json = text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    json = { raw: text };
-  }
   if (!res.ok) {
     throw new Error(`register_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
+  const json = parseFinanceApiJsonText(text);
   const organizationId = parseSignupOrganizationId(json);
-  const tenantId = Number(
-    isRecord(json) ? (json.tenantId ?? json.tenant_id) : NaN,
-  );
+  const tenantId = Number(json.tenantId);
   if (!organizationId || !tenantId) {
     throw new Error("register_missing_organization_or_tenant_id");
   }
@@ -123,16 +124,12 @@ async function signin(
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  let json: unknown;
-  try {
-    json = text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    json = { raw: text };
-  }
   if (!res.ok) {
     throw new Error(`signin_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
-  const session = parseAuthSession(json);
+  const session = parseAuthSession(
+    text ? normalizeFinanceApiJson(JSON.parse(text) as unknown) : {},
+  );
   if (!session) {
     throw new Error("signin_missing_token");
   }
@@ -157,25 +154,21 @@ async function switchTenant(
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  let json: unknown;
-  try {
-    json = text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    json = { raw: text };
-  }
   if (!res.ok) {
     throw new Error(`switch_tenant_failed_http_${res.status}: ${text.slice(0, 500)}`);
   }
-  const session = parseAuthSession(json);
+  const session = parseAuthSession(
+    text ? normalizeFinanceApiJson(JSON.parse(text) as unknown) : {},
+  );
   if (!session) {
     throw new Error("switch_tenant_missing_token");
   }
   return session;
 }
 
-async function saveFinanceOrganizationId(
+async function patchControlPlaneOrganization(
   controlPlaneOrgId: string,
-  financeOrganizationId: string,
+  patch: { financeOrganizationId?: string; provisioningError?: string | null },
   log: (m: string) => void,
 ): Promise<void> {
   const apiBase = `http://localhost:${apiConfig.port}`;
@@ -187,13 +180,25 @@ async function saveFinanceOrganizationId(
       "Content-Type": "application/json",
       ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
     },
-    body: JSON.stringify({ financeOrganizationId }),
+    body: JSON.stringify(patch),
     signal: AbortSignal.timeout(10_000),
   });
   if (!saveRes.ok) {
-    throw new Error(`save_finance_organization_id_http_${saveRes.status}`);
+    throw new Error(`patch_control_plane_org_http_${saveRes.status}`);
   }
-  log("[org-provision] Saved financeOrganizationId mapping");
+  log("[org-provision] Updated control-plane organization");
+}
+
+async function saveFinanceOrganizationId(
+  controlPlaneOrgId: string,
+  financeOrganizationId: string,
+  log: (m: string) => void,
+): Promise<void> {
+  await patchControlPlaneOrganization(
+    controlPlaneOrgId,
+    { financeOrganizationId, provisioningError: null },
+    log,
+  );
 }
 
 async function attachAdminToOrg(
@@ -228,7 +233,7 @@ async function attachAdminToOrg(
 }
 
 export async function executeOrgProvisionRuntime(
-  _db: PostgresJsDatabase<typeof dbSchema>,
+  db: PostgresJsDatabase<typeof dbSchema>,
   input: OrgProvisionInput,
   log: (m: string) => void,
   assertNotCancelled?: () => Promise<void>,
@@ -356,6 +361,15 @@ export async function executeOrgProvisionRuntime(
       log(
         `[org-provision] COA copy ${copyRes.ok ? "ok" : "failed"}: ${copyText.slice(0, 200)}`,
       );
+      if (!copyRes.ok) {
+        await patchControlPlaneOrganization(
+          input.organizationId,
+          {
+            provisioningError: `coa_copy_failed: ${copyText.slice(0, 500)}`,
+          },
+          log,
+        );
+      }
 
       const parentUrl = `${mainBase}/api/internal/tenants/${newFinanceTenantId}/set-parent`;
       await fetch(parentUrl, {
@@ -374,6 +388,48 @@ export async function executeOrgProvisionRuntime(
         }`,
       );
     }
+  }
+
+  await check();
+  log("[org-provision] Syncing Finance license limits for sub-organization");
+  await syncFinanceLicenseForStockixTenant(
+    db,
+    {
+      stockixTenantId: input.stockixTenantId,
+      financeTenantId: newFinanceTenantId,
+      internalBaseUrl: mainBase,
+    },
+    log,
+  );
+
+  if (!input.isPrimary) {
+    try {
+      await provisionCombinedPosForOrganization(
+        db,
+        {
+          controlPlaneOrganizationId: input.organizationId,
+          organizationSlug: input.organizationSlug,
+          orgName: input.orgName,
+          stockixTenantId: input.stockixTenantId,
+          parentTenantSlug: input.parentTenantSlug,
+          financeInternalBaseUrl: mainBase,
+          financeTenantId: newFinanceTenantId,
+          adminEmail: input.adminEmail,
+          correlationId,
+        },
+        log,
+      );
+    } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await patchControlPlaneOrganization(
+      input.organizationId,
+      { provisioningError: `pos_combined_provision_failed: ${msg.slice(0, 500)}` },
+      log,
+    );
+      throw err;
+    }
+  } else {
+    log("[org-provision] Skipping combined POS provision for primary organization");
   }
 }
 

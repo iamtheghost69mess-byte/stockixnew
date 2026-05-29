@@ -1,23 +1,20 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
-interface RouteErrorProps {
+export type RouteErrorProps = {
   error: Error & { digest?: string };
   reset: () => void;
   title?: string;
+};
+
+function errorMessage(error: Error & { digest?: string }): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "An unexpected error occurred.";
 }
 
-export function RouteError({
+/** Client error UI for Next.js `error.tsx` boundaries (no heavy UI imports). */
+function RouteError({
   error,
   reset,
   title = "Something went wrong",
@@ -28,34 +25,39 @@ export function RouteError({
 
   return (
     <div className="flex min-h-[400px] items-center justify-center p-6">
-      <Card className="w-full max-w-md border-destructive/40">
-        <CardHeader className="flex flex-row items-center gap-3">
-          <AlertCircle className="h-5 w-5 text-destructive" />
-          <CardTitle className="text-base">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {error.message || "An unexpected error occurred."}
+      <div
+        role="alert"
+        className="w-full max-w-md rounded-xl border border-destructive/40 bg-card p-6 text-card-foreground shadow-sm ring-1 ring-foreground/10"
+      >
+        <h2 className="text-base font-semibold text-destructive">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{errorMessage(error)}</p>
+        {error.digest ? (
+          <p className="mt-2 font-mono text-xs text-muted-foreground">
+            Error ID: {error.digest}
           </p>
-          {error.digest ? (
-            <p className="mt-2 font-mono text-xs text-muted-foreground">
-              Error ID: {error.digest}
-            </p>
-          ) : null}
-        </CardContent>
-        <CardFooter className="gap-2">
-          <Button onClick={reset} size="sm">
+        ) : null}
+        <div className="mt-6 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => reset()}
+            className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
             Try again
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => (window.location.href = "/")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = "/";
+            }}
+            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
           >
             Go to dashboard
-          </Button>
-        </CardFooter>
-      </Card>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+export { RouteError };
+export default RouteError;

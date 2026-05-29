@@ -274,7 +274,7 @@ function ApprovalRow({
           )}
         </div>
       </TableCell>
-      <TableCell className="align-top text-muted-foreground text-xs whitespace-nowrap">
+      <TableCell className="whitespace-nowrap align-top text-muted-foreground text-xs">
         {formatRequestedAt(row.createdAt)}
       </TableCell>
       <TableCell className="text-right align-top">

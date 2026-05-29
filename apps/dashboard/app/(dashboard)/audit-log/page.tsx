@@ -113,7 +113,7 @@ function parseEntries(body: unknown): AuditLogEntry[] {
 const SKELETON_ROWS = 6;
 
 export default function AuditLogPage() {
-  const me = useMe();
+  const { me } = useMe();
   const canView = Boolean(me?.capabilities.canAccessSettings);
 
   const [page, setPage] = useState(1);

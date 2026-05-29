@@ -1,3 +1,4 @@
+import { parseFinanceApiJsonText } from "@repo/shared/finance-api";
 import type { ProvisionTracer } from "../../provision-trace.js";
 import { STOCKIX_FINANCE_HEALTH_POLL_MS } from "../constants.js";
 import type { BuildOrgInput, BuildOrgResult } from "./fetch-stockix-finance-build-org.js";
@@ -105,16 +106,9 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
 
         if (res.ok) {
           const text = await res.text();
-          let json: Record<string, unknown> = {};
-          try {
-            json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-          } catch {
-            json = {};
-          }
-          const tenantId = Number(json.tenantId ?? json.tenant_id);
-          const organizationId = String(
-            json.organizationId ?? json.organization_id ?? "",
-          );
+          const json = parseFinanceApiJsonText(text);
+          const tenantId = Number(json.tenantId);
+          const organizationId = String(json.organizationId ?? "");
           if (!tenantId || !organizationId) {
             lastFailure = "provision_user_missing_tenant_or_organization_id";
           } else {

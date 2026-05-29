@@ -13,13 +13,18 @@ package-lock.json
 .env.local
 .env.staging
 .env.production
+.env.production.local
 .env.*.local
 apps/api/.env
 apps/dashboard/.env
+apps/**/.env
 infra/prod/.env
+**/infra/prod/.env
+infra/staging/.env
 services/**/.env
 **/.env
 !**/.env.example
+!.env.example
 
 # Per-tenant Stockix env (provisioner)
 .stockix/
@@ -29,6 +34,7 @@ services/**/.env
 
 # Testing
 coverage
+license-report.txt
 
 # Turbo
 .turbo
@@ -42,19 +48,37 @@ out/
 build
 dist
 
+# Worker runtime bundles — built by CI/deploy, never committed
+infra/worker-service/.runtime/
+infra/worker-service/.runtime/**
+apps/api/.tmp-worker/
+apps/api/.tmp-worker/**
+apps/api/apps/api/.tmp-worker/
+apps/api/apps/api/.tmp-worker/**
+**/.runtime/
+**/.tmp-worker/
+
 
 # Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+gitleaks-results.sarif
+gitleaks-results.json
+results.sarif
+results-working-tree.sarif
 
 # Misc
 .DS_Store
 *.pem
 
 # Services — build artifacts (nested repos removed; tracked by root)
+services/posnew/.nx/
 services/posnew/node_modules/
 services/posnew/apps/pos-backend/dist/
+# Legacy PMS trees removed from repo (local copies may linger until deleted)
+services/pmsfull/
+services/pms/chatlive/
 services/pmsfull/pesan-pms/.next/
 services/pmsfull/RentTools.io/.next/
 services/chatlive/node_modules/
@@ -62,3 +86,16 @@ services/stockix-finance/node_modules/
 services/stockix-finance/packages/server/dist/
 services/stockix-finance/packages/webapp/dist/
 services/pms/node_modules/
+
+# AI assistants (Claude Code, Codex, claude-flow) — local / machine-specific
+.claude/
+.claude/settings.local.json
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+.claude-flow/neural/
+.claude-flow/daemon.pid
+.claude-flow/metrics/
+.claude-flow/security/
+.codex/
+CLAUDE.local.md

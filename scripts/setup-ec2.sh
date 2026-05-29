@@ -85,5 +85,5 @@ fi
 echo "Done. Next on the server:"
 echo "  1. cd ${INSTALL_DIR}/infra/prod && cp .env.example .env && nano .env"
 echo "  2. cd ${INSTALL_DIR} && pnpm install --frozen-lockfile"
-echo "  3. source infra/prod/.env && export DATABASE_URL=postgresql://... && pnpm --filter @repo/db db:migrate"
+echo "  3. . scripts/load-env-file.sh infra/prod/.env && export DATABASE_URL=postgresql://... && pnpm --filter @repo/db db:migrate"
 echo "  4. cd ${INSTALL_DIR}/infra/prod && docker compose --env-file .env up -d --build"

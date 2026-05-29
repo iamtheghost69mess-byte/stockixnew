@@ -167,7 +167,7 @@ export default function AccountingBankPage() {
           <PiggyBank className="size-8" />
           Bank reconciliation
         </h1>
-        <p className="text-muted-foreground text-sm max-w-3xl">
+        <p className="max-w-3xl text-muted-foreground text-sm">
           Import CSV v1 statements (columns <code className="text-xs">postedAt</code>,{" "}
           <code className="text-xs">amount</code>, <code className="text-xs">description</code>,{" "}
           <code className="text-xs">externalId</code>), then match lines via{" "}

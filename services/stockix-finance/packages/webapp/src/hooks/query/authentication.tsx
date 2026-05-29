@@ -2,7 +2,7 @@
 import { useMutation } from 'react-query';
 import { batch } from 'react-redux';
 import useApiRequest, { useAuthApiRequest } from '../useRequest';
-import { setCookie } from '../../utils';
+import { removeCookie, setCookie } from '../../utils';
 import { useRequestQuery } from '../useQueryRequest';
 import t from './types';
 import {
@@ -19,6 +19,7 @@ const AuthRoute = {
   SignupVerify: 'auth/signup/verify',
   SignupVerifyResend: 'auth/signup/verify/resend',
   SendResetPassword: 'auth/send_reset_password',
+  ChangePassword: 'auth/change_password',
   ForgetPassword: 'auth/reset_password/:token',
   AuthMeta: 'auth/meta',
 };
@@ -31,6 +32,12 @@ export function setAuthLoginCookies(data) {
   setCookie('authenticated_user_id', data.user_id);
   setCookie('organization_id', data.organization_id);
   setCookie('tenant_id', data.tenant_id);
+
+  if (data.must_change_password) {
+    setCookie('must_change_password', '1', 1);
+  } else {
+    removeCookie('must_change_password');
+  }
 
   if (data?.tenant?.metadata?.language) {
     setCookie('locale', data.tenant.metadata.language);
@@ -65,6 +72,19 @@ export const useAuthLogin = (props) => {
           setLocale(res.data.tenant.metadata.language);
         }
       });
+
+      if (res.data?.must_change_password) {
+        window.location.href = '/auth/change-password?required=true';
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect');
+      if (redirect) {
+        window.location.href = decodeURIComponent(redirect);
+        return;
+      }
+
       props?.onSuccess?.(res);
     },
     ...props,
@@ -79,6 +99,19 @@ export const useAuthRegister = (props) => {
 
   return useMutation(
     (values) => apiRequest.post(AuthRoute.Signup, values),
+    props,
+  );
+};
+
+/**
+ * Change password while authenticated (bootstrap / must-change flow).
+ */
+export const useAuthChangePassword = (props) => {
+  const apiRequest = useApiRequest();
+
+  return useMutation(
+    (values: { password: string }) =>
+      apiRequest.post(AuthRoute.ChangePassword, values),
     props,
   );
 };
