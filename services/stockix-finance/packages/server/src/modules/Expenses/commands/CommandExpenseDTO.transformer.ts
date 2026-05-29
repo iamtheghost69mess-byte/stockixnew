@@ -73,7 +73,7 @@ export class ExpenseDTOTransformer {
         : {}),
     };
     const asyncDto = await composeAsync(
-      this.branchDTOTransform.transformDTO<Expense>,
+      (dto) => this.branchDTOTransform.transformDTO(dto),
     )(initialDTO);
 
     return asyncDto as Expense;

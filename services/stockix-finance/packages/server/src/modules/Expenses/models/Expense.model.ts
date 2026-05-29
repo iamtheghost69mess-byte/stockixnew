@@ -1,11 +1,11 @@
 import { Model, mixin, raw } from 'objection';
 import TenantModel from 'models/TenantModel';
 import { buildFilterQuery } from '@/lib/ViewRolesBuilder';
-import ModelSetting from './ModelSetting';
-import ExpenseSettings from './Expense.Settings';
-import CustomViewBaseModel from './CustomViewBaseModel';
+import ModelSetting from '@/models/ModelSetting';
+import ExpenseSettings from '@/models/Expense.Settings';
+import CustomViewBaseModel from '@/models/CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Expenses/constants';
-import ModelSearchable from './ModelSearchable';
+import ModelSearchable from '@/models/ModelSearchable';
 import moment from 'moment';
 
 export default class Expense extends mixin(TenantModel,

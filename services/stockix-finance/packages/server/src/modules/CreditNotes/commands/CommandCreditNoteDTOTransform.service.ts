@@ -88,8 +88,8 @@ export class CommandCreditNoteDTOTransform {
       invoicesAmount: 0,
     };
     const asyncDto = (await composeAsync(
-      this.branchDTOTransform.transformDTO<CreditNote>,
-      this.warehouseDTOTransform.transformDTO<CreditNote>,
+      (dto) => this.branchDTOTransform.transformDTO(dto),
+      (dto) => this.warehouseDTOTransform.transformDTO(dto),
 
       // Assigns the default branding template id to the invoice DTO.
       this.brandingTemplatesTransformer.assocDefaultBrandingTemplate(

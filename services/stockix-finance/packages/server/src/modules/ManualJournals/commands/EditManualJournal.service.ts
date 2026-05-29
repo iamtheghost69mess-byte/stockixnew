@@ -13,7 +13,7 @@ import TenancyService from '@/services/Tenancy/TenancyService';
 import events from '@/subscribers/events';
 import UnitOfWork from '@/services/UnitOfWork';
 import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
-import { CommandManualJournalValidators } from './CommandManualJournalValidators';
+import { CommandManualJournalValidators } from './CommandManualJournalValidators.service';
 import { TenantMetadata } from '@/system/models';
 import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
 

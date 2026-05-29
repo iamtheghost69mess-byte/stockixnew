@@ -1,6 +1,6 @@
 const { getCommonWebpackOptions } = require('./webpack.common');
 
-const inputEntry = './src/server.ts';
+const inputEntry = './src/main.ts';
 const outputDir = '../build';
 const outputFilename = 'index.js';
 

@@ -23,6 +23,7 @@
     "allowJs": true,
     "noEmit": false,
     "esModuleInterop": true,
+    "jsx": "react",
     "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"]

@@ -25,7 +25,7 @@ export class GetItemsService {
    */
   private parseItemsListFilterDTO(filterDTO: IItemsFilter) {
     return R.compose(
-      this.dynamicListService.parseStringifiedFilter<IItemsFilter>,
+      (dto) => this.dynamicListService.parseStringifiedFilter<IItemsFilter>(dto),
     )(filterDTO);
   }
 

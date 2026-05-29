@@ -12,13 +12,13 @@ import {
   IProfitLossSheetAccountNode,
 } from '@/interfaces';
 import { tableRowMapper } from 'utils';
-import { FinancialTable } from '../FinancialTable';
+import { FinancialTable } from '../../common/FinancialTable';
 import { ProfitLossSheetBase } from './ProfitLossSheetBase';
 import { ProfitLossSheetTablePercentage } from './ProfitLossSheetTablePercentage';
 import { ProfitLossSheetQuery } from './ProfitLossSheetQuery';
 import { ProfitLossTablePreviousPeriod } from './ProfitLossTablePreviousPeriod';
 import { ProfitLossTablePreviousYear } from './ProfitLossTablePreviousYear';
-import { FinancialSheetStructure } from '../FinancialSheetStructure';
+import { FinancialSheetStructure } from '../../common/FinancialSheetStructure';
 import { ProfitLossSheetTableDatePeriods } from './ProfitLossSheetTableDatePeriods';
 
 export class ProfitLossSheetTable extends R.compose(

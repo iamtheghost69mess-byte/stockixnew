@@ -86,8 +86,8 @@ export class VendorCreditDTOTransformService {
       }),
     };
     return composeAsync(
-      this.branchDTOTransform.transformDTO<VendorCredit>,
-      this.warehouseDTOTransform.transformDTO<VendorCredit>,
+      (dto) => this.branchDTOTransform.transformDTO(dto),
+      (dto) => this.warehouseDTOTransform.transformDTO(dto),
     )(initialDTO) as VendorCredit;
   };
 

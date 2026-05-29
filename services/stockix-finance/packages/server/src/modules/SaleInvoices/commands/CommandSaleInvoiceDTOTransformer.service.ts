@@ -121,8 +121,8 @@ export class CommandSaleInvoiceDTOTransformer {
     } as SaleInvoice;
 
     const initialAsyncDTO = await composeAsync(
-      this.branchDTOTransform.transformDTO<SaleInvoice>,
-      this.warehouseDTOTransform.transformDTO<SaleInvoice>,
+      (dto) => this.branchDTOTransform.transformDTO(dto),
+      (dto) => this.warehouseDTOTransform.transformDTO(dto),
 
       // Assigns the default branding template id to the invoice DTO.
       this.brandingTemplatesTransformer.assocDefaultBrandingTemplate(

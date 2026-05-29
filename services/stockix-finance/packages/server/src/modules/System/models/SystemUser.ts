@@ -1,4 +1,4 @@
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { BaseModel } from '@/models/Model';
 
 export class SystemUser extends BaseModel {

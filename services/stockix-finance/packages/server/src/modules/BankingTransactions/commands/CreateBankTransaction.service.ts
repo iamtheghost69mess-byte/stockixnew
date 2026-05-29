@@ -108,9 +108,9 @@ export class CreateBankTransactionService {
           }
         : {}),
     };
-    return composeAsync(this.branchDTOTransform.transformDTO<BankTransaction>)(
-      initialDTO,
-    ) as BankTransaction;
+    return composeAsync(
+      (dto) => this.branchDTOTransform.transformDTO(dto),
+    )(initialDTO) as BankTransaction;
   };
 
   /**

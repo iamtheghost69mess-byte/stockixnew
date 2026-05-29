@@ -6,15 +6,15 @@ import { buildFilterQuery, buildSortColumnQuery } from '@/lib/ViewRolesBuilder';
 import { flatToNestedArray } from 'utils';
 import DependencyGraph from '@/lib/DependencyGraph';
 import AccountTypesUtils from '@/lib/AccountTypes';
-import AccountSettings from './Account.Settings';
-import ModelSettings from './ModelSetting';
+import AccountSettings from '@/models/Account.Settings';
+import ModelSettings from '@/models/ModelSetting';
 import {
   ACCOUNT_TYPES,
   getAccountsSupportsMultiCurrency,
 } from '@/data/AccountTypes';
-import CustomViewBaseModel from './CustomViewBaseModel';
+import CustomViewBaseModel from '@/models/CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Accounts/constants';
-import ModelSearchable from './ModelSearchable';
+import ModelSearchable from '@/models/ModelSearchable';
 
 export default class Account extends mixin(TenantModel,
   ModelSettings as any,
