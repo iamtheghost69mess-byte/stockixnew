@@ -38,7 +38,6 @@ import {
   desc,
   eq,
   and,
-  desc,
   or,
   isNotNull,
   sql,

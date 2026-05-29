@@ -1043,7 +1043,7 @@ function TenantsPageContent() {
                 </Button>
               </DialogFooter>
             </>
-          )
+          )}
         </DialogContent>
       </Dialog>
     </div>
