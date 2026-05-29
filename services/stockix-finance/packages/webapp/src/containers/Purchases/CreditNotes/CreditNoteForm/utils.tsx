@@ -316,3 +316,15 @@ export const useVendorNoteIsForeignCustomer = () => {
   );
   return isForeignCustomer;
 };
+
+export const useVendorCrditNoteTotals = () => {
+  const total = useVendorCreditTotal();
+  const subtotal = useVendorCreditSubtotal();
+  const { values: { currency_code: currencyCode } } = useFormikContext();
+  return {
+    total,
+    subtotal,
+    formattedTotal: formattedAmount(total, currencyCode),
+    formattedSubtotal: formattedAmount(subtotal, currencyCode, { money: false }),
+  };
+};

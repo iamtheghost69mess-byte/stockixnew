@@ -305,3 +305,15 @@ export const useCreditNoteFormBrandingTemplatesOptions = () => {
     [brandingTemplates],
   );
 };
+
+export const useCreditNoteTotals = () => {
+  const total = useCreditNoteTotal();
+  const subtotal = useCreditNoteSubtotal();
+  const { values: { currency_code: currencyCode } } = useFormikContext();
+  return {
+    total,
+    subtotal,
+    formattedTotal: formattedAmount(total, currencyCode),
+    formattedSubtotal: formattedAmount(subtotal, currencyCode, { money: false }),
+  };
+};

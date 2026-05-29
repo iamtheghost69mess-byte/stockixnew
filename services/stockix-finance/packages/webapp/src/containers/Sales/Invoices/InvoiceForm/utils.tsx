@@ -551,3 +551,15 @@ export const useInvoiceFormBrandingTemplatesOptions = () => {
     [brandingTemplates],
   );
 };
+
+export const useInvoiceTotals = () => {
+  const total = useInvoiceTotal();
+  const subtotal = useInvoiceSubtotal();
+  const { values: { currency_code: currencyCode } } = useFormikContext();
+  return {
+    total,
+    subtotal,
+    formattedTotal: formattedAmount(total, currencyCode),
+    formattedSubtotal: formattedAmount(subtotal, currencyCode, { money: false }),
+  };
+};
