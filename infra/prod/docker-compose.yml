@@ -63,6 +63,7 @@ x-stockix-platform-env: &stockix-platform-env
 
 x-stockix-worker-env: &stockix-worker-env
   <<: *stockix-platform-env
+  API_HOST: api
   REPO_ROOT: /opt/stockix/stockixnew
   STOCKIX_TENANT_APP_ROOT: ${STOCKIX_TENANT_APP_ROOT:-/opt/stockix/stockixnew/services/stockix-finance}
   TENANT_ENV_ROOT: ${TENANT_ENV_ROOT:-/opt/stockix/tenants}
