@@ -24,6 +24,10 @@ const migrationsFolder = join(
 
 const sql = postgres(url, { max: 1, onnotice: () => {} });
 
+async function ensurePostgresExtensions(): Promise<void> {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+}
+
 async function appliedHashes(): Promise<Set<string>> {
   try {
     const rows = await sql<{ hash: string }[]>`
@@ -86,6 +90,8 @@ async function main(): Promise<void> {
       `[migrate] applying: ${pendingBefore.map((f) => f.folderMillis).join(", ")}`,
     );
   }
+
+  await ensurePostgresExtensions();
 
   const db = drizzle(sql);
   await migrate(db, { migrationsFolder });
