@@ -116,8 +116,9 @@ jobs:
             fi
             echo "OK: $img"
           done
-          docker compose --env-file .env up -d --no-build --wait \
-            traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
+          docker compose --env-file .env pull traefik socket-proxy
+docker compose --env-file .env up -d --no-build --wait \
+  traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           sleep 10
           curl --fail --silent --show-error --retry 5 --retry-delay 5 \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
