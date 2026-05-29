@@ -57,27 +57,17 @@ block content
 
   div.credit__table-after
     div.credit__table-total
-      table
+      table 
         tbody
           tr.total
             td #{__('credit.paper.total')}
             td #{creditNote.formattedAmount}
-          if displayTotals && displayTotals.length
-            each dc in displayTotals
-              tr.total-display-currency
-                td ≈ #{dc.currency}
-                td #{dc.formattedTotal}
           tr.payment-amount
             td #{__('credit.paper.credits_used')}
             td #{creditNote.formattedCreditsUsed}
           tr.blanace-due
             td #{__('credit.paper.credits_remaining')}
             td #{creditNote.formattedCreditsRemaining}
-          if displayTotals && displayTotals.length
-            each dc in displayTotals
-              tr.balance-due-display-currency
-                td ≈ #{dc.currency} #{__('credit.paper.credits_remaining')}
-                td #{dc.formattedDueAmount}
 
   div.credit__footer        
     if creditNote.termsConditions
