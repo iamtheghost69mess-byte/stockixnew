@@ -36,12 +36,20 @@ export default class CashFlowTable implements ICashFlowTable {
    * Constructor method.
    * @param {ICashFlowStatement} reportStatement
    */
-  constructor(reportStatement: ICashFlowStatementDOO, i18n) {
+  private secondaryCurrency?: string;
+  private exchangeRate?: number;
+
+  constructor(reportStatement: ICashFlowStatementDOO, i18n, baseCurrency?: string, secondaryCurrency?: string, exchangeRate?: number) {
     this.report = reportStatement;
     this.i18n = i18n;
     this.dateRangeSet = [];
+    this.secondaryCurrency = secondaryCurrency;
+    this.exchangeRate = exchangeRate;
     this.initDateRangeCollection();
   }
+
+  private hasSecondaryCurrency = (): boolean =>
+    Boolean(this.secondaryCurrency && this.exchangeRate && this.exchangeRate > 0);
 
   /**
    * Initialize date range set.
@@ -360,6 +368,11 @@ export default class CashFlowTable implements ICashFlowTable {
    * Retrieve the table columns.
    * @return {ITableColumn[]}
    */
+  private secondaryTotalColumn = (): ITableColumn[] => {
+    if (!this.hasSecondaryCurrency()) return [];
+    return [{ key: 'secondary_total', label: `Total (${this.secondaryCurrency})` }];
+  };
+
   public tableColumns = (): ITableColumn[] => {
     return R.compose(
       R.concat([{ key: 'name', label: this.i18n.__('Account name') }]),
@@ -367,7 +380,7 @@ export default class CashFlowTable implements ICashFlowTable {
         R.always(this.isDisplayColumnsBy(DISPLAY_COLUMNS_BY.DATE_PERIODS)),
         R.concat(this.datePeriodsColumns())
       ),
-      R.concat(this.totalColumns())
+      R.pipe(R.concat(this.totalColumns()), R.concat(this.secondaryTotalColumn()))
     )([]);
   };
 }
