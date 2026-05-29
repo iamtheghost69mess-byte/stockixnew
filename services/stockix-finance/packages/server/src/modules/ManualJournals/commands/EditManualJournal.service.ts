@@ -1,85 +1,62 @@
-import { Service, Inject } from 'typedi';
 import { Knex } from 'knex';
 import { omit, sumBy } from 'lodash';
-import moment from 'moment';
+import * as moment from 'moment';
+import { Inject, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   IManualJournalDTO,
-  ISystemUser,
-  IManualJournal,
   IManualJournalEventEditedPayload,
   IManualJournalEditingPayload,
-} from '@/interfaces';
-import TenancyService from '@/services/Tenancy/TenancyService';
-import events from '@/subscribers/events';
-import UnitOfWork from '@/services/UnitOfWork';
-import { EventPublisher } from '@/lib/EventPublisher/EventPublisher';
+} from '../types/ManualJournals.types';
+import { events } from '@/common/events/events';
+import { UnitOfWork } from '@/modules/Tenancy/TenancyDB/UnitOfWork.service';
 import { CommandManualJournalValidators } from './CommandManualJournalValidators.service';
-import { TenantMetadata } from '@/system/models';
-import { validateForeignCurrencyExchangeRate } from '@/services/Currencies/ExchangeRateValidator';
+import { validateForeignCurrencyExchangeRate } from '@/modules/Currencies/ExchangeRateValidator';
+import { ManualJournal } from '../models/ManualJournal';
+import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { EditManualJournalDto } from '../dtos/ManualJournal.dto';
 
-@Service()
+@Injectable()
 export class EditManualJournal {
-  @Inject()
-  private tenancy: TenancyService;
+  constructor(
+    private readonly tenancyContext: TenancyContext,
+    private readonly eventPublisher: EventEmitter2,
+    private readonly uow: UnitOfWork,
+    private readonly validator: CommandManualJournalValidators,
 
-  @Inject()
-  private eventPublisher: EventPublisher;
+    @Inject(ManualJournal.name)
+    private readonly manualJournalModel: TenantModelProxy<typeof ManualJournal>,
+  ) {}
 
-  @Inject()
-  private uow: UnitOfWork;
-
-  @Inject()
-  private validator: CommandManualJournalValidators;
-
-  /**
-   * Authorize the manual journal editing.
-   * @param {number} tenantId
-   * @param {number} manualJournalId
-   * @param {IManualJournalDTO} manualJournalDTO
-   */
   private authorize = async (
-    tenantId: number,
     manualJournalId: number,
-    manualJournalDTO: IManualJournalDTO,
-    baseCurrency: string
+    manualJournalDTO: EditManualJournalDto,
+    baseCurrency: string,
   ) => {
-    // Validates the total credit and debit to be equals.
     this.validator.valdiateCreditDebitTotalEquals(manualJournalDTO);
+    await this.validator.validateContactsExistance(manualJournalDTO);
+    await this.validator.validateAccountsExistance(manualJournalDTO);
 
-    // Validate the contacts existance.
-    await this.validator.validateContactsExistance(tenantId, manualJournalDTO);
-
-    // Validates entries accounts existance.
-    await this.validator.validateAccountsExistance(tenantId, manualJournalDTO);
-
-    // Validates the manual journal number uniquiness.
     if (manualJournalDTO.journalNumber) {
       await this.validator.validateManualJournalNoUnique(
-        tenantId,
         manualJournalDTO.journalNumber,
-        manualJournalId
+        manualJournalId,
       );
     }
-    // Validate accounts with contact type from the given config.
     await this.validator.dynamicValidateAccountsWithContactType(
-      tenantId,
-      manualJournalDTO.entries
+      manualJournalDTO.entries,
     );
     validateForeignCurrencyExchangeRate(
       manualJournalDTO.currencyCode,
       baseCurrency,
-      manualJournalDTO.exchangeRate
+      manualJournalDTO.exchangeRate,
     );
   };
 
-  /**
-   * Transform the edit manual journal DTO to upsert graph operation.
-   * @param {IManualJournalDTO} manualJournalDTO - Manual jorunal DTO.
-   * @param {IManualJournal} oldManualJournal
-   */
   private transformEditDTOToModel = (
-    manualJournalDTO: IManualJournalDTO,
-    oldManualJournal: IManualJournal
+    manualJournalDTO: EditManualJournalDto,
+    oldManualJournal: ManualJournal,
   ) => {
     const amount = sumBy(manualJournalDTO.entries, 'credit') || 0;
     const date = moment(manualJournalDTO.date).format('YYYY-MM-DD');
@@ -95,69 +72,44 @@ export class EditManualJournal {
     };
   };
 
-  /**
-   * Edits jouranl entries.
-   * @param {number} tenantId
-   * @param {number} manualJournalId
-   * @param {IMakeJournalDTO} manualJournalDTO
-   * @param {ISystemUser} authorizedUser
-   */
   public async editJournalEntries(
-    tenantId: number,
     manualJournalId: number,
-    manualJournalDTO: IManualJournalDTO,
-    authorizedUser: ISystemUser
-  ): Promise<{
-    manualJournal: IManualJournal;
-    oldManualJournal: IManualJournal;
-  }> {
-    const { ManualJournal } = this.tenancy.models(tenantId);
-
-    // Validates the manual journal existance on the storage.
-    const oldManualJournal = await ManualJournal.query()
+    manualJournalDTO: EditManualJournalDto,
+  ): Promise<{ manualJournal: ManualJournal; oldManualJournal: ManualJournal }> {
+    const oldManualJournal = await this.manualJournalModel()
+      .query()
       .findById(manualJournalId)
       .throwIfNotFound();
 
-    const tenantMeta = await TenantMetadata.findByTenantId(tenantId);
+    const tenantMeta = await this.tenancyContext.getTenantMetadata();
 
-    // Authorize manual journal editing.
-    await this.authorize(
-      tenantId,
-      manualJournalId,
-      manualJournalDTO,
-      tenantMeta.baseCurrency
-    );
+    await this.authorize(manualJournalId, manualJournalDTO, tenantMeta.baseCurrency);
 
-    // Transform manual journal DTO to model.
     const manualJournalObj = this.transformEditDTOToModel(
       manualJournalDTO,
-      oldManualJournal
+      oldManualJournal,
     );
-    // Edits the manual journal transactions with associated transactions
-    // under unit-of-work envirement.
-    return this.uow.withTransaction(tenantId, async (trx: Knex.Transaction) => {
-      // Triggers `onManualJournalEditing` event.
+
+    return this.uow.withTransaction(async (trx: Knex.Transaction) => {
       await this.eventPublisher.emitAsync(events.manualJournals.onEditing, {
-        tenantId,
         manualJournalDTO,
         oldManualJournal,
         trx,
       } as IManualJournalEditingPayload);
 
-      // Upserts the manual journal graph to the storage.
-      await ManualJournal.query(trx).upsertGraph({
+      await this.manualJournalModel().query(trx).upsertGraph({
         ...manualJournalObj,
       });
-      // Retrieve the given manual journal with associated entries after modifications.
-      const manualJournal = await ManualJournal.query(trx)
+
+      const manualJournal = await this.manualJournalModel()
+        .query(trx)
         .findById(manualJournalId)
         .withGraphFetched('entries');
 
-      // Triggers `onManualJournalEdited` event.
       await this.eventPublisher.emitAsync(events.manualJournals.onEdited, {
-        tenantId,
         manualJournal,
         oldManualJournal,
+        manualJournalDTO,
         trx,
       } as IManualJournalEventEditedPayload);
 
