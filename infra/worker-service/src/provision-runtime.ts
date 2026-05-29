@@ -1750,7 +1750,7 @@ export async function executeProvisionRuntime(
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
       try {
-        await edge.publish(input.slug, port, rootDomain);
+        await edge.publish(input.slug, port, rootDomain, project);
       } catch (error) {
         await trace.event("edge", "Traefik edge publish failed", {
           level: "error",
