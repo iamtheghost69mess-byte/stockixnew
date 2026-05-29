@@ -1,6 +1,13 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useRef } from 'react';
 import intl from 'react-intl-universal';
+import { Intent, ProgressBar, Text } from '@blueprintjs/core';
+import { AppToaster, Stack } from '@/components';
+import {
+  useJournalSheetXlsxExport,
+  useJournalSheetCsvExport,
+} from '@/hooks/query/FinancialReports/use-journal-sheet';
+import { FormattedMessage as T } from '@/components';
 import moment from 'moment';
 import { Button } from '@blueprintjs/core';
 
@@ -143,5 +150,37 @@ export function JournalSheetAlerts() {
         </Button>
       </div>
     </If>
+  );
+}
+
+export function JournalSheetExportMenu() {
+  const toastKey = useRef(null);
+  const commonToastConfig = { isCloseButtonShown: true, timeout: 2000 };
+  const { httpQuery } = useJournalSheetContext();
+
+  const openProgressToast = (amount) => (
+    <Stack spacing={8}>
+      <Text>The report has been exported successfully.</Text>
+      <ProgressBar intent={amount < 100 ? Intent.PRIMARY : Intent.SUCCESS} value={amount / 100} />
+    </Stack>
+  );
+
+  const onProgress = (progress) => {
+    if (!toastKey.current) {
+      toastKey.current = AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig });
+    } else {
+      AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig }, toastKey.current);
+    }
+    if (progress >= 100) toastKey.current = null;
+  };
+
+  const { mutateAsync: xlsxExport } = useJournalSheetXlsxExport(httpQuery, { onDownloadProgress: onProgress });
+  const { mutateAsync: csvExport } = useJournalSheetCsvExport(httpQuery, { onDownloadProgress: onProgress });
+
+  return (
+    <div>
+      <Button minimal text={<T id={'xlsx'} />} onClick={() => xlsxExport({})} />
+      <Button minimal text={<T id={'csv'} />} onClick={() => csvExport({})} />
+    </div>
   );
 }
