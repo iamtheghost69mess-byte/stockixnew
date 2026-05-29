@@ -179,14 +179,14 @@ jobs:
           MONGODB_URI: ""
 
       - name: Run Finance tests
+        working-directory: services/stockix-finance
         run: |
-          cd services/stockix-finance
-          npx pnpm@7 install --frozen-lockfile --ignore-scripts
-          cd packages/server
-          pnpm test
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter @stockix/server test
         env:
           HUSKY: "0"
           CI: "true"
+          NODE_ENV: test
           PUPPETEER_SKIP_DOWNLOAD: "1"
         timeout-minutes: 15
 
