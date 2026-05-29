@@ -1,16 +1,20 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useRef } from 'react';
 import intl from 'react-intl-universal';
-import { Button } from '@blueprintjs/core';
+import { Button, Intent, ProgressBar, Text } from '@blueprintjs/core';
 
 import { Align } from '@/constants';
 import { getColumnWidth, formattedAmount } from '@/utils';
 import { CellTextSpan } from '@/components/Datatable/Cells';
-import { If, Icon, FormattedMessage as T } from '@/components';
+import { If, Icon, FormattedMessage as T, AppToaster, Stack } from '@/components';
 import { useTrialBalanceSheetContext } from './TrialBalanceProvider';
 import FinancialLoadingBar from '../FinancialLoadingBar';
 import { useCurrentOrganization, useSecondaryCurrency } from '@/hooks/state';
 import { useExchangeRateByDate } from '@/hooks/query/exchangeRates';
+import {
+  useTrialBalanceSheetXlsxExport,
+  useTrialBalanceSheetCsvExport,
+} from '@/hooks/query/FinancialReports/use-trial-balance-sheet';
 
 
 /**
@@ -171,5 +175,37 @@ export function TrialBalanceSheetAlerts() {
         </Button>
       </div>
     </If>
+  );
+}
+
+export function TrialBalanceSheetExportMenu() {
+  const toastKey = useRef(null);
+  const commonToastConfig = { isCloseButtonShown: true, timeout: 2000 };
+  const { httpQuery } = useTrialBalanceSheetContext();
+
+  const openProgressToast = (amount) => (
+    <Stack spacing={8}>
+      <Text>The report has been exported successfully.</Text>
+      <ProgressBar intent={amount < 100 ? Intent.PRIMARY : Intent.SUCCESS} value={amount / 100} />
+    </Stack>
+  );
+
+  const onProgress = (progress) => {
+    if (!toastKey.current) {
+      toastKey.current = AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig });
+    } else {
+      AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig }, toastKey.current);
+    }
+    if (progress >= 100) toastKey.current = null;
+  };
+
+  const { mutateAsync: xlsxExport } = useTrialBalanceSheetXlsxExport(httpQuery, { onDownloadProgress: onProgress });
+  const { mutateAsync: csvExport } = useTrialBalanceSheetCsvExport(httpQuery, { onDownloadProgress: onProgress });
+
+  return (
+    <div>
+      <Button minimal text={<T id={'xlsx'} />} onClick={() => xlsxExport({})} />
+      <Button minimal text={<T id={'csv'} />} onClick={() => csvExport({})} />
+    </div>
   );
 }
