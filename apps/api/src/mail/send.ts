@@ -27,11 +27,14 @@ import {
   sendMail,
   type MailSendResult,
 } from "./mailer.js";
-import { renderTenantWelcome } from "./templates/tenant-welcome.js";
-import { renderOwnerInvite } from "./templates/owner-invite.js";
-import { renderLicenseExpiring } from "./templates/license-expiring.js";
-import { renderLicenseExpired } from "./templates/license-expired.js";
-import { renderPasswordReset } from "./templates/password-reset.js";
+import { renderTenantWelcome, renderTenantWelcomeText } from "./templates/tenant-welcome.js";
+import { renderOwnerInvite, renderOwnerInviteText } from "./templates/owner-invite.js";
+import { renderLicenseExpiring, renderLicenseExpiringText } from "./templates/license-expiring.js";
+import { renderLicenseExpired, renderLicenseExpiredText } from "./templates/license-expired.js";
+import { renderPasswordReset, renderPasswordResetText } from "./templates/password-reset.js";
+import { renderPasswordChanged, renderPasswordChangedText } from "./templates/password-changed.js";
+import { renderFinanceWelcome, renderFinanceWelcomeText } from "./templates/finance-welcome.js";
+import { renderPosWelcome, renderPosWelcomeText } from "./templates/pos-welcome.js";
 
 type MailDb = PostgresJsDatabase<typeof schema>;
 
@@ -46,6 +49,11 @@ export async function sendOwnerInviteEmail(opts: {
     to: opts.to,
     subject: "You're invited to Stockix",
     html: renderOwnerInvite({
+      name: opts.name,
+      role: opts.role,
+      inviteUrl: opts.inviteUrl,
+    }),
+    text: renderOwnerInviteText({
       name: opts.name,
       role: opts.role,
       inviteUrl: opts.inviteUrl,
@@ -69,6 +77,10 @@ export async function sendOwnerPasswordResetEmail(opts: {
       name: opts.name,
       resetUrl: opts.resetUrl,
     }),
+    text: renderPasswordResetText({
+      name: opts.name,
+      resetUrl: opts.resetUrl,
+    }),
     idempotencyKey: `password-reset/${opts.to}/${opts.resetUrl.slice(-16)}`,
     templateKey: "password-reset",
     ownerId: opts.ownerId,
@@ -83,15 +95,8 @@ export async function sendPasswordChangedEmail(opts: {
   return sendMail({
     to: opts.to,
     subject: "Your Stockix password was changed",
-    html: `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-  <h1>Password updated</h1>
-  <p>${opts.name ? `Hi ${escapeHtml(opts.name)},` : "Hi,"}</p>
-  <p>The password for your Stockix owner account was changed successfully.</p>
-  <p style="color: #666; font-size: 14px;">If you did not make this change, contact your platform administrator immediately.</p>
-</body>
-</html>`,
+    html: renderPasswordChanged({ name: opts.name }),
+    text: renderPasswordChangedText({ name: opts.name }),
     idempotencyKey: `password-changed-${opts.ownerId ?? opts.to}-${Math.floor(Date.now() / 86400000)}`,
     templateKey: "password-changed",
     ownerId: opts.ownerId,
@@ -109,26 +114,11 @@ export async function sendTenantWelcomeEmail(opts: {
     to: opts.to,
     subject: `Welcome to Stockix — ${opts.tenantName}`,
     html: renderTenantWelcome(opts),
+    text: renderTenantWelcomeText(opts),
     idempotencyKey: `tenant-welcome/${opts.organizationNumber}`,
     templateKey: "tenant-welcome",
     tenantId: opts.tenantId,
   });
-}
-
-function formatModuleLabel(moduleId: string): string {
-  if (moduleId === "accounting") return "Accounting";
-  if (moduleId === "pos") return "Point of Sale";
-  if (moduleId === "pms") return "Property Management";
-  if (moduleId === "chat") return "Chat";
-  return moduleId;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 export async function sendFinanceWelcomeEmail(opts: {
@@ -142,41 +132,24 @@ export async function sendFinanceWelcomeEmail(opts: {
 }): Promise<MailSendResult> {
   const brandName = apiConfig.brandName;
   const loginUrl = opts.financeUrl.replace(/\/+$/, "");
-  const moduleNames = opts.modules.map(formatModuleLabel).join(", ");
-  const safeTenant = escapeHtml(opts.tenantName);
-  const safeEmail = escapeHtml(opts.adminEmail);
-  const safePassword = escapeHtml(opts.oneTimePassword);
-  const safeLoginUrl = escapeHtml(loginUrl);
 
   return sendMail({
     to: opts.to,
     subject: `Your ${brandName} account is ready`,
-    html: `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
-  <h1 style="font-size: 22px;">Your account is ready</h1>
-  <p>Hello,</p>
-  <p>Your <strong>${safeTenant}</strong> account has been set up successfully.</p>
-  <div style="background: #f4f4f5; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <h2 style="font-size: 16px; margin: 0 0 12px;">Finance login details</h2>
-    <p style="margin: 8px 0;"><strong>Login URL</strong><br />
-      <a href="${safeLoginUrl}/auth/login">${safeLoginUrl}/auth/login</a></p>
-    <p style="margin: 8px 0;"><strong>Email</strong><br />${safeEmail}</p>
-    <p style="margin: 8px 0;"><strong>Temporary password</strong><br />
-      <code style="font-size: 15px;">${safePassword}</code></p>
-  </div>
-  <p style="color: #b45309;"><strong>Important:</strong> You will be asked to create a new password on first login.
-  The temporary password above will no longer work after you set a new one.</p>
-  <p>Modules included: ${escapeHtml(moduleNames || "Accounting")}</p>
-  <p style="margin: 24px 0;">
-    <a href="${safeLoginUrl}/auth/login"
-       style="display: inline-block; background: #111; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none;">
-      Log in to your account
-    </a>
-  </p>
-  <p style="color: #666; font-size: 14px;">If you have questions, contact your account manager.</p>
-</body>
-</html>`,
+    html: renderFinanceWelcome({
+      tenantName: opts.tenantName,
+      financeUrl: opts.financeUrl,
+      adminEmail: opts.adminEmail,
+      oneTimePassword: opts.oneTimePassword,
+      modules: opts.modules,
+    }),
+    text: renderFinanceWelcomeText({
+      tenantName: opts.tenantName,
+      financeUrl: opts.financeUrl,
+      adminEmail: opts.adminEmail,
+      oneTimePassword: opts.oneTimePassword,
+      modules: opts.modules,
+    }),
     idempotencyKey: `finance-welcome/${opts.adminEmail}/${loginUrl}`,
     templateKey: "finance-welcome",
     tenantId: opts.tenantId,
@@ -200,45 +173,20 @@ export async function sendPosWelcomeEmail(opts: {
   tenantId?: string;
 }): Promise<MailSendResult> {
   const brandName = apiConfig.brandName;
-  const safeTenant = escapeHtml(opts.tenantName);
-  const safePosUrl = escapeHtml(opts.posUrl);
-  const credentialRows = opts.credentials
-    .map(
-      (c) =>
-        `<tr>
-        <td>${escapeHtml(c.role)}</td>
-        <td>${escapeHtml(c.username)}</td>
-        <td><strong>${escapeHtml(c.pin)}</strong></td>
-      </tr>`,
-    )
-    .join("");
 
   return sendMail({
     to: opts.to,
     subject: `Your ${brandName} POS staff credentials`,
-    html: `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 600px;">
-  <h1 style="font-size: 22px;">POS staff login credentials</h1>
-  <p>Hello,</p>
-  <p>Your <strong>${safeTenant}</strong> Point of Sale system is ready.</p>
-  <p><strong>POS URL:</strong> <a href="${safePosUrl}">${safePosUrl}</a></p>
-  <p>Staff log in using their role PIN code:</p>
-  <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%; margin: 16px 0;">
-    <thead>
-      <tr style="background: #f4f4f5;">
-        <th align="left">Role</th>
-        <th align="left">Username</th>
-        <th align="left">PIN</th>
-      </tr>
-    </thead>
-    <tbody>${credentialRows}</tbody>
-  </table>
-  <p style="color: #b45309;"><strong>Security:</strong> Share each PIN only with the relevant staff member.
-  PINs can be changed from the admin panel. Do not forward this email to staff directly.</p>
-  <p style="color: #666; font-size: 14px;">To reset a PIN, log in as admin and go to Settings → Staff Management.</p>
-</body>
-</html>`,
+    html: renderPosWelcome({
+      tenantName: opts.tenantName,
+      posUrl: opts.posUrl,
+      credentials: opts.credentials,
+    }),
+    text: renderPosWelcomeText({
+      tenantName: opts.tenantName,
+      posUrl: opts.posUrl,
+      credentials: opts.credentials,
+    }),
     idempotencyKey: `pos-welcome/${opts.to}/${opts.posUrl}`,
     templateKey: "pos-welcome",
     tenantId: opts.tenantId,
@@ -278,6 +226,11 @@ export async function sendLicenseExpiringEmail(opts: {
       expiresAt: opts.expiresAt,
       daysRemaining,
     }),
+    text: renderLicenseExpiringText({
+      tenantName: opts.tenantName,
+      expiresAt: opts.expiresAt,
+      daysRemaining,
+    }),
     idempotencyKey,
     templateKey: "license-expiring",
     tenantId: opts.tenantId,
@@ -307,6 +260,12 @@ export async function sendLicenseExpiredEmail(opts: {
     to: opts.to,
     subject: "Your Stockix license has expired",
     html: renderLicenseExpired({
+      tenantName: opts.tenantName,
+      expiredAt: opts.expiredAt,
+      gracePeriodDays: opts.gracePeriodDays,
+      graceEndsAt: opts.graceEndsAt,
+    }),
+    text: renderLicenseExpiredText({
       tenantName: opts.tenantName,
       expiredAt: opts.expiredAt,
       gracePeriodDays: opts.gracePeriodDays,
