@@ -4,8 +4,7 @@ import {
   tenants,
 } from "@repo/db/schema";
 import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as schema from "@repo/db/schema";
+import type { createDb } from "@repo/db";
 import { infraConfig } from "@repo/config";
 
 import { logger } from "../lib/logger.js";
@@ -16,7 +15,7 @@ import {
   type TerminalProvisionJob,
 } from "./provision-failure.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = ReturnType<typeof createDb>;
 
 const STUCK_MS = 10 * 60 * 1000;
 

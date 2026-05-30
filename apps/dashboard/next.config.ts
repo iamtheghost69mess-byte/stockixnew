@@ -47,14 +47,11 @@ const nextConfig: NextConfig = {
     if (dev) {
       config.watchOptions = {
         ...config.watchOptions,
-        ignored: [
-          "**/node_modules/**",
-          "**/.git/**",
-          "**/.next/**",
-          "**/infra/**",
-          "**/services/**",
-        ],
-        aggregateTimeout: 300,
+        ignored: (path: string) => {
+          // Ignore monorepo cache/build artifacts and unrelated services to prevent rebuilds.
+          return /[\\/](node_modules|\.git|\.next|\.turbo|dist|\.swc|infra|services|\.claude)[\\/]/.test(path);
+        },
+        aggregateTimeout: 500,
         poll: false,
       };
     }

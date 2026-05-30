@@ -166,7 +166,7 @@ app.post("/internal/jobs/claim", async (c) => {
       if (staleJob.type === "tenant.provision" && staleJob.tenantId) {
         if (exhausted) {
           await handleTerminalProvisionJobFailure(
-            tx,
+            tx as unknown as Db,
             {
               type: staleJob.type,
               tenantId: staleJob.tenantId,
@@ -184,7 +184,7 @@ app.post("/internal/jobs/claim", async (c) => {
         });
       } else if (staleJob.type === "add_module" && staleJob.tenantId && exhausted) {
         await handleTerminalProvisionJobFailure(
-          tx,
+          tx as unknown as Db,
           {
             type: staleJob.type,
             tenantId: staleJob.tenantId,
