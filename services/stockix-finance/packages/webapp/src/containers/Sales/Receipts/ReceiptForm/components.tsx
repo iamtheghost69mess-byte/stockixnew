@@ -1,6 +1,7 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect } from 'react';
 import intl from 'react-intl-universal';
+import { useAutoExRateContext } from '@/containers/Entries/AutoExchangeProvider';
 import { Button, Callout } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
 import * as R from 'ramda';
@@ -88,3 +89,14 @@ export const ReceiptSyncIncrementSettingsToForm = R.compose(
 
   return null;
 });
+
+export function ReceiptSyncAutoExRateToForm() {
+  const { values } = useFormikContext();
+  const { setAutoExRateCurrency } = useAutoExRateContext();
+
+  useEffect(() => {
+    setAutoExRateCurrency(values.currency_code || '');
+  }, [values.currency_code, setAutoExRateCurrency]);
+
+  return null;
+}

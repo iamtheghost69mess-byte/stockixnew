@@ -1,7 +1,4 @@
-import { access } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
 import { execa } from "execa";
-import { apiConfig } from "@repo/config";
 import { parseTenantModules } from "../services/auth/stockix-product-token.js";
 import type { createDb } from "@repo/db";
 import {
@@ -42,22 +39,26 @@ export function invalidateTenantReadinessCache(correlationId?: string): void {
 }
 
 async function resolveServerPingUrl(composeProjectName: string): Promise<string | null> {
+  // The API container is in stockix_internal. Use the tenant server container's
+  // IP in that network for direct reachability (host-published ports are blocked
+  // by Docker isolation between bridge networks on Linux).
+  const workerNetwork = process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
+  const containerName = `${composeProjectName}-server-1`;
   try {
     const { stdout } = await execa("docker", [
-      "compose",
-      "-p",
-      composeProjectName,
-      "port",
-      "server",
-      "3000",
+      "inspect",
+      "--format",
+      `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
+      containerName,
     ]);
-    const trimmed = stdout.trim();
-    const match = trimmed.match(/:(\d+)\s*$/);
-    if (!match?.[1]) return null;
-    return `http://127.0.0.1:${match[1]}/api/ping/`;
+    const ip = stdout.trim();
+    if (ip && ip !== "<no value>" && ip !== "") {
+      return `http://${ip}:3000/api/ping`;
+    }
   } catch {
-    return null;
+    // fall through
   }
+  return null;
 }
 
 function hasBootstrapAdminEvent(
@@ -74,15 +75,18 @@ function hasBootstrapAdminEvent(
   return false;
 }
 
-async function isRouteActive(slug: string | null): Promise<boolean> {
+function isRouteActiveFromEvents(
+  slug: string | null,
+  events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
+): boolean {
   if (!slug) return false;
-  const file = `${apiConfig.traefikDynamicDir}/tenant-${slug}.yml`;
-  try {
-    await access(file, fsConstants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
+  return events.some(
+    (e) =>
+      e.phase === "journal" &&
+      e.meta != null &&
+      e.meta.operationKey === "edge.publish" &&
+      e.meta.slug === slug,
+  );
 }
 
 export async function getTenantReadiness(
@@ -149,7 +153,7 @@ export async function getTenantReadiness(
         tenant.internalPort > 0 &&
         tenant.deploymentStatus !== "failed",
     );
-    const routeActive = await isRouteActive(tenant?.slug ?? slugFromPayload);
+    const routeActive = isRouteActiveFromEvents(tenant?.slug ?? slugFromPayload, events);
     const authReady = hasBootstrapAdminEvent(events);
 
     let tenantResponding = false;
@@ -174,11 +178,10 @@ export async function getTenantReadiness(
 
     const financeLicenseSynced =
       !needsFinanceLink
-      || events.some(
-        (e) =>
-          e.message.includes("[finance-license] Synced")
-          || e.message.includes("finance license synced"),
-      );
+      || events.some((e) => {
+        const m = e.message.toLowerCase();
+        return m.includes("[finance-license] synced") || m.includes("finance license synced");
+      });
 
     const checks = {
       jobCompleted,

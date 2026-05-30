@@ -12,3 +12,4 @@ export const mapDispatchToProps = (dispatch) => ({
 });
 
 export const withAlertActions = connect(null, mapDispatchToProps);
+export default withAlertActions;

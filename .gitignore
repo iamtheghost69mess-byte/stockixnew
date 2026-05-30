@@ -67,6 +67,8 @@ gitleaks-results.sarif
 gitleaks-results.json
 results.sarif
 results-working-tree.sarif
+quality-gate-local.log
+test_antigravity.txt
 
 # Misc
 .DS_Store

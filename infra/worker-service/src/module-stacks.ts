@@ -376,7 +376,7 @@ export async function provisionPosStack(
   try {
     const composeRun = await execa(
       "docker",
-      ["compose", "-f", composeFile, "-p", project, "up", "-d", ...upServices],
+      ["compose", "-f", composeFile, "-p", project, "up", "-d", "--no-build", ...upServices],
       { env: composeEnv, stdio: "pipe", reject: false },
     );
     if (composeRun.stdout) {

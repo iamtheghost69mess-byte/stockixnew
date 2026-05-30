@@ -26,7 +26,7 @@ export interface ITenantSecretGenerator {
 }
 
 export interface ITenantEdgePublisher {
-  publish(slug: string, port: number, rootDomain: string): Promise<void>;
+  publish(slug: string, port: number, rootDomain: string, composeProjectName?: string): Promise<void>;
   unpublish(slug: string): Promise<void>;
 }
 

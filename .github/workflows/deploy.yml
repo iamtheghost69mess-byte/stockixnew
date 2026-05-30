@@ -373,8 +373,21 @@ jobs:
           echo "Deploy completed successfully."
           REMOTE
 
+      - name: Check Sentry secrets
+        id: check-sentry
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then
+            echo "has_sentry=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_sentry=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
       - name: Create Sentry release
-        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
+        if: steps.check-sentry.outputs.has_sentry == 'true'
         run: |
           RELEASE=$(git rev-parse --short HEAD)
           npx @sentry/cli releases new "$RELEASE" \

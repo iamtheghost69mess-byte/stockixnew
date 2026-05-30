@@ -29,3 +29,4 @@ function withDialogActions<P>(
 }
 
 export { withDialogActions };
+export default withDialogActions;
