@@ -252,6 +252,11 @@ export const useJournalTotals = () => {
   };
 };
 
+export const useManualJournalTotalFormatted = () => {
+  const { formattedTotal } = useJournalTotals();
+  return formattedTotal;
+};
+
 /**
  * Detarmines whether the expenses has foreign .
  * @returns {boolean}

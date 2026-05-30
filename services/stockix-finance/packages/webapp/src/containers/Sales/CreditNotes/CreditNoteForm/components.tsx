@@ -1,6 +1,10 @@
 // @ts-nocheck
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import intl from 'react-intl-universal';
+import * as R from 'ramda';
+import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { useSyncExRateToForm } from '@/containers/Entries/withExRateItemEntriesPriceRecalc';
+import { useCreditNoteTotal } from './utils';
 import { Callout } from '@blueprintjs/core';
 import { useFormikContext } from 'formik';
 import * as R from 'ramda';
@@ -75,3 +79,19 @@ export const CreditNoteSyncIncrementSettingsToForm = R.compose(
 
   return null;
 });
+
+export const CreditNoteExchangeRateSync = R.compose(withDialogActions)(
+  () => {
+    const total = useCreditNoteTotal();
+    const timeout = useRef();
+
+    useSyncExRateToForm({
+      onSynced: () => {
+        if (total > 0) {
+          clearTimeout(timeout.current);
+        }
+      },
+    });
+    return null;
+  },
+);

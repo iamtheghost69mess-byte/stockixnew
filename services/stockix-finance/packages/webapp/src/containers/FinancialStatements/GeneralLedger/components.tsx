@@ -1,13 +1,18 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useRef } from 'react';
 import intl from 'react-intl-universal';
-import { Button } from '@blueprintjs/core';
-import { FormattedMessage as T, Icon, If } from '@/components';
+import { Button, Classes, Intent, ProgressBar, Text } from '@blueprintjs/core';
+import { FormattedMessage as T, Icon, If, Stack } from '@/components';
+import { AppToaster } from '@/components';
 
 import { getColumnWidth } from '@/utils';
 import { useGeneralLedgerContext } from './GeneralLedgerProvider';
 import FinancialLoadingBar from '../FinancialLoadingBar';
 import { useCurrentOrganization } from '@/hooks/state';
+import {
+  useGeneralLedgerSheetXlsxExport,
+  useGeneralLedgerSheetCsvExport,
+} from '@/hooks/query/FinancialReports/use-general-ledger';
 
 import { Align } from '@/constants';
 
@@ -137,6 +142,52 @@ export function GeneralLedgerSheetAlerts() {
 /**
  * General ledger sheet loading bar.
  */
+export function GeneralLedgerSheetExportMenu() {
+  const toastKey = useRef(null);
+  const commonToastConfig = { isCloseButtonShown: true, timeout: 2000 };
+  const { httpQuery } = useGeneralLedgerContext();
+
+  const openProgressToast = (amount: number) => (
+    <Stack spacing={8}>
+      <Text>The report has been exported successfully.</Text>
+      <ProgressBar
+        className={amount >= 100 ? '' : ''}
+        intent={amount < 100 ? Intent.PRIMARY : Intent.SUCCESS}
+        value={amount / 100}
+      />
+    </Stack>
+  );
+
+  const { mutateAsync: xlsxExport } = useGeneralLedgerSheetXlsxExport(httpQuery, {
+    onDownloadProgress: (progress: number) => {
+      if (!toastKey.current) {
+        toastKey.current = AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig });
+      } else {
+        AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig }, toastKey.current);
+      }
+      if (progress >= 100) toastKey.current = null;
+    },
+  });
+
+  const { mutateAsync: csvExport } = useGeneralLedgerSheetCsvExport(httpQuery, {
+    onDownloadProgress: (progress: number) => {
+      if (!toastKey.current) {
+        toastKey.current = AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig });
+      } else {
+        AppToaster.show({ message: openProgressToast(progress), ...commonToastConfig }, toastKey.current);
+      }
+      if (progress >= 100) toastKey.current = null;
+    },
+  });
+
+  return (
+    <div>
+      <Button minimal text={<T id={'xlsx'} />} onClick={() => xlsxExport({})} />
+      <Button minimal text={<T id={'csv'} />} onClick={() => csvExport({})} />
+    </div>
+  );
+}
+
 export function GeneralLedgerSheetLoadingBar() {
   const { isFetching } = useGeneralLedgerContext();
 

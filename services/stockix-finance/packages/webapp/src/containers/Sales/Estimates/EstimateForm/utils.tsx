@@ -305,6 +305,18 @@ export const useEstimateTotal = () => {
   )(subtotal);
 };
 
+export const useEstimateTotals = () => {
+  const total = useEstimateTotal();
+  const subtotal = useEstimateSubtotal();
+  const { values: { currency_code: currencyCode } } = useFormikContext();
+  return {
+    total,
+    subtotal,
+    formattedTotal: formattedAmount(total, currencyCode),
+    formattedSubtotal: formattedAmount(subtotal, currencyCode, { money: false }),
+  };
+};
+
 /**
  * Retrieves the estimate total formatted.
  * @returns {string}

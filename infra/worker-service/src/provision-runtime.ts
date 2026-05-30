@@ -334,6 +334,33 @@ async function resolveServerInternalUrl(params: {
   fallbackHost: string;
   fallbackPort: number;
 }): Promise<string> {
+  // Connect the tenant server container to the worker's internal network so the
+  // worker can reach it directly (host-published port forwarding is blocked by
+  // Docker isolation between different bridge networks on Linux).
+  const workerNetwork = process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
+  const containerName = `${params.project}-server-1`;
+  try {
+    await execa("docker", ["network", "connect", workerNetwork, containerName], {
+      stdio: "pipe",
+      reject: false,
+    });
+    const { stdout: inspectOut } = await execa(
+      "docker",
+      [
+        "inspect",
+        "--format",
+        `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
+        containerName,
+      ],
+      { stdio: "pipe" },
+    );
+    const ip = inspectOut.trim();
+    if (ip && ip !== "<no value>" && ip !== "") {
+      return `http://${ip}:3000`;
+    }
+  } catch {
+    // Fall through to host-port approach.
+  }
   try {
     const { stdout } = await execa(
       "docker",
@@ -1095,6 +1122,7 @@ export async function executeProvisionRuntime(
         "-d",
         "--no-deps",
         "--remove-orphans",
+        "--no-build",
         "mysql",
         "mongo",
         "redis",
@@ -1137,6 +1165,7 @@ export async function executeProvisionRuntime(
         "-d",
         "--remove-orphans",
         "--force-recreate",
+        "--no-build",
         "webapp",
         "nginx",
         "server",
@@ -1153,14 +1182,38 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
 
-    const internalUrl = await resolveServerInternalUrl({
-      composeFile,
-      project,
-      envPath: composeCtx.envPath,
-      composeEnv: composeCtx.composeEnv,
-      fallbackHost: apiConfig.tenantInternalHost,
-      fallbackPort: port,
-    });
+    // Connect the tenant server container to stockix_internal so the infra-worker can
+    // reach it directly (host.docker.internal NAT is blocked by iptables on Linux).
+    const serverContainerName = `${project}-server-1`;
+    const internalNetworkName = process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
+    let tenantServerInternalIp: string | undefined;
+    try {
+      await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
+      log(`[provision] connected ${serverContainerName} to ${internalNetworkName}`);
+      // Resolve the IP assigned on the internal network
+      const { stdout: inspectOut } = await execa("docker", [
+        "inspect",
+        serverContainerName,
+        "--format",
+        `{{(index .NetworkSettings.Networks "${internalNetworkName}").IPAddress}}`,
+      ]);
+      tenantServerInternalIp = inspectOut.trim();
+      log(`[provision] tenant server internal IP: ${tenantServerInternalIp}`);
+    } catch (netErr) {
+      const msg = netErr instanceof Error ? netErr.message : String(netErr);
+      log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+    }
+
+    const internalUrl = tenantServerInternalIp
+      ? `http://${tenantServerInternalIp}:3000`
+      : await resolveServerInternalUrl({
+          composeFile,
+          project,
+          envPath: composeCtx.envPath,
+          composeEnv: composeCtx.composeEnv,
+          fallbackHost: apiConfig.tenantInternalHost,
+          fallbackPort: port,
+        });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");
       await trace.event("progress", "Waiting for tenant health endpoint", {
@@ -1697,7 +1750,7 @@ export async function executeProvisionRuntime(
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
       try {
-        await edge.publish(input.slug, port, rootDomain);
+        await edge.publish(input.slug, port, rootDomain, project);
       } catch (error) {
         await trace.event("edge", "Traefik edge publish failed", {
           level: "error",

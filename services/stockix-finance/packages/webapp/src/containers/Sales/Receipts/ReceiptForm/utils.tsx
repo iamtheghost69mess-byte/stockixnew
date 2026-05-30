@@ -376,3 +376,15 @@ export const useReceiptFormBrandingTemplatesOptions = () => {
     [brandingTemplates],
   );
 };
+
+export const useReceiptTotals = () => {
+  const total = useReceiptTotal();
+  const subtotal = useReceiptSubtotal();
+  const { values: { currency_code: currencyCode } } = useFormikContext();
+  return {
+    total,
+    subtotal,
+    formattedTotal: formattedAmount(total, currencyCode),
+    formattedSubtotal: formattedAmount(subtotal, currencyCode, { money: false }),
+  };
+};

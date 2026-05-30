@@ -79,7 +79,7 @@ services:
       target: app
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/ping || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -141,8 +141,8 @@ services:
       - THROTTLE_AUTH_TTL=${THROTTLE_AUTH_TTL:-60000}
       - THROTTLE_AUTH_LIMIT=${THROTTLE_AUTH_LIMIT:-200}
     ports:
-      # Expose API on a random localhost-only port for worker health/bootstrap checks.
-      - "127.0.0.1::3000"
+      # Bind on all interfaces so the infra-worker container can reach this via host.docker.internal.
+      - "0.0.0.0::3000"
 
   database_migration:
     image: stockix-database-migration:local
