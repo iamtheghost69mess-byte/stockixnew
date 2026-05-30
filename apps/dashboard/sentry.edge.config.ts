@@ -1,8 +1,11 @@
 import * as Sentry from "@sentry/nextjs";
 
-if (process.env.SENTRY_DSN) {
+export function init() {
+  const sentryDsn = process.env.SENTRY_DSN?.trim();
+  if (!sentryDsn) return;
+
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
+    dsn: sentryDsn,
     tracesSampleRate: 0.05,
   });
 }

@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: repoRoot,
   reactStrictMode: true,
+  // Dashboard dev binds 0.0.0.0; allow HMR when opened via localhost or 127.0.0.1.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   transpilePackages: [
     "@base-ui/react",
     "react-hook-form",
@@ -68,6 +70,10 @@ export default withSentryConfig(nextConfig, {
   sourcemaps: {
     disable: true,
   },
-  disableLogger: true,
-  automaticVercelMonitors: false,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+    automaticVercelMonitors: false,
+  },
 });

@@ -64,7 +64,7 @@ $ns: bp4;
   // Primary alert.
   --color-alert-primary-background: #fff;
   --color-alert-primary-border: #98a8ee;
-  --color-alert-primary-title-text: #1a3bd4;
+  --color-alert-primary-title-text: #2D72D2;
   --color-alert-primary-description-text: #455883;
 
   // Input
@@ -97,7 +97,7 @@ $ns: bp4;
   // Dashboard error boundary.
   --color-dashboard-error-boundary-title-text: #2c3a5d;
   --color-dashboard-error-boundary-description-text: #1f3255;
-  --color-dashboard-error-boundary-logo: #a1afca;
+  --color-dashboard-error-boundary-logo: #8F99A8;
 
   // Dashboard - Navbar.
   --color-dashboard-navbar-background: transparent;
@@ -115,7 +115,7 @@ $ns: bp4;
 
   // Datatable
   --color-datatable-head-background: #f2f3fb;
-  --color-datatable-head-text: #415060;
+  --color-datatable-head-text: #5F6B7C;
   --color-datatable-head-border: #d2dce2;
   --color-datatable-cell-hover-background: #f5f6f7;
   --color-datatable-cell-border: #d8d8d8;
@@ -136,7 +136,7 @@ $ns: bp4;
 
   // Sidebar
   --color-sidebar-toggle: #6b8193;
-  --color-sidebar-background: #01115e;
+  --color-sidebar-background: #2F343C;
   --color-sidebar-text: #fff;
   --color-sidebar-scrollbars-background: rgba(255, 255, 255, 0.25);
   
@@ -180,7 +180,7 @@ $ns: bp4;
   --color-bank-account-card-background: #fff;
   --color-bank-account-card-text: rgb(23, 43, 77);
   --color-bank-account-card-border: #c8cad0;
-  --color-bank-account-card-hover-border: #0153cc;
+  --color-bank-account-card-hover-border: #2D72D2;
 
   --color-bank-account-card-tag-background: rgb(223, 225, 230);
 
@@ -188,7 +188,7 @@ $ns: bp4;
 
   // Bank transactions - details bar.
   --color-bank-transactions-details-bar-background: #fff;
-  --color-bank-transactions-details-bar-text: #333;
+  --color-bank-transactions-details-bar-text: #1C2127;
   --color-bank-transactions-details-bar-divider: #e1e2e8;
 
   // Bank transactions - content background
@@ -209,10 +209,10 @@ $ns: bp4;
 
   // Preferences - Sidebar. 
   --color-sidebar-preferences-item-background: transparent;
-  --color-sidebar-preferences-item-text: #333;
+  --color-sidebar-preferences-item-text: #1C2127;
 
   --color-sidebar-preferences-item-hover-background: rgba(255, 255, 255, 0.6);
-  --color-sidebar-preferences-item-hover-text: #333;
+  --color-sidebar-preferences-item-hover-text: #1C2127;
 
   --color-preferences-sidebar-head-border: #bbcbd0;
   --color-preferences-sidebar-head-text: #3b3b4c;
@@ -230,7 +230,7 @@ $ns: bp4;
   --color-financial-sheet-type-text: rgb(31, 50, 85);
   --color-financial-sheet-date-text: rgb(31, 50, 85);
   --color-financial-sheet-footer-text: var(--color-muted-text);
-  --color-financial-sheet-minimal-title-text: #333;
+  --color-financial-sheet-minimal-title-text: #1C2127;
 
   // Transaction locking.
   --color-transaction-locking-item-background: #fff;
@@ -246,10 +246,10 @@ $ns: bp4;
   --color-report-item-text: rgb(31, 50, 85);
 
   // Financial report drawer.
-  --color-financial-report-drawer-tab-text: #333;
+  --color-financial-report-drawer-tab-text: #1C2127;
 
   --color-element-customize-header-background: #fff;
-  --color-element-customize-header-title-text: #333;
+  --color-element-customize-header-title-text: #1C2127;
 
   --color-element-customize-background: #fff;
   --color-element-customize-preview-background: #f5f5f5;
@@ -270,10 +270,10 @@ $ns: bp4;
   // Content tabs
   --color-content-tab-background: #fff;
   --color-content-tab-border: #e1e2e8;
-  --color-content-tab-hover-border: #1552c8;
-  --color-content-tab-active-border: #1552c8;
+  --color-content-tab-hover-border: #2D72D2;
+  --color-content-tab-active-border: #2D72D2;
   --color-content-tab-text: #2f343c;
-  --color-content-tab-active-text: #1552c8;
+  --color-content-tab-active-text: #2D72D2;
 
   // Aside
   --color-aside-background: #fff;
@@ -417,7 +417,7 @@ body.bp4-dark  {
   --color-dashboard-error-boundary-description-text: #1f3255;
   --color-dashboard-error-boundary-title-text: rgba(255, 255, 255, 0.75);
   --color-dashboard-error-boundary-description-text: rgba(255, 255, 255, 0.6);
-  --color-dashboard-error-boundary-logo: #a1afca;
+  --color-dashboard-error-boundary-logo: #8F99A8;
   --color-dashboard-error-boundary-logo: rgba(255, 255, 255, 0.45);
 
   // Dashboard - Navbar.
@@ -503,7 +503,7 @@ body.bp4-dark  {
   --color-bank-account-card-text: var(--color-light-gray5);
   --color-bank-account-card-border: #c8cad0;
   --color-bank-account-card-border: rgba(255, 255, 255, 0.2);
-  --color-bank-account-card-hover-border: #0153cc;
+  --color-bank-account-card-hover-border: #2D72D2;
 
   --color-bank-account-card-tag-background: rgb(223, 225, 230);
   --color-bank-account-card-tag-background: rgba(255, 255, 255, 0.2);
@@ -602,7 +602,7 @@ body.bp4-dark  {
   --color-content-tab-active-border: var(--color-primary);
   --color-content-tab-text: #2f343c;
   --color-content-tab-text: var(--color-light-gray1);
-  --color-content-tab-active-text: #1552c8;
+  --color-content-tab-active-text: #2D72D2;
   --color-content-tab-active-text: var(--color-light-gray1);
 
   // Aside
@@ -653,12 +653,12 @@ $pt-popover-box-shadow:
   0 2px 4px rgba(16, 22, 26, 0.1),
   0 8px 24px rgba(16, 22, 26, 0.1);
 
-$blue1: #0069ff;
-$blue2: #0052ff;
-$blue3: rgb(0, 82, 204);
+$blue1: #184A90;
+$blue2: #215DB0;
+$blue3: #2D72D2;
 
 $pt-link-color: $blue3;
-$pt-intent-primary: $blue1;
+$pt-intent-primary: $blue3;
 $menu-item-color-hover: $light-gray4;
 $menu-item-color-active: $light-gray3;
 
@@ -703,7 +703,7 @@ $sidebar-logo-opacity: 0.5;
 $sidebar-submenu-item-bg-color: rgba(255, 255, 255, 0.2);
 
 $form-check-input-checked-color: #fff;
-$form-check-input-checked-bg-color: $blue1;
+$form-check-input-checked-bg-color: $blue3;
 $form-check-input-checked-bg-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' viewBox='0 0 16 16' enable-background='new 0 0 16 16' xml:space='preserve'><g id='small_tick_1_'><g><path fill='#{$form-check-input-checked-color}' fill-rule='evenodd' clip-rule='evenodd' d='M12,5c-0.28,0-0.53,0.11-0.71,0.29L7,9.59L4.71,7.29C4.53,7.11,4.28,7,4,7C3.45,7,3,7.45,3,8c0,0.28,0.11,0.53,0.29,0.71l3,3C6.47,11.89,6.72,12,7,12s0.53-0.11,0.71-0.29l5-5C12.89,6.53,13,6.28,13,6C13,5.45,12.55,5,12,5z'/></g></g></svg>") !default;
 $form-check-input-indeterminate-bg-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' viewBox='0 0 16 16' enable-background='new 0 0 16 16' xml:space='preserve'><g id='small_tick_1_'><g><path fill='#{$form-check-input-checked-color}' fill-rule='evenodd' clip-rule='evenodd' d='M11,7H5C4.45,7,4,7.45,4,8c0,0.55,0.45,1,1,1h6c0.55,0,1-0.45,1-1C12,7.45,11.55,7,11,7z'/></g></g></svg>") !default;
 
@@ -712,10 +712,10 @@ $zindex-dashboard-splash-screen: 39;
 $zindex-toast: 40;
 
 // Controls
-$control-checked-background-color: #0069ff !default;
-$control-checked-background-color-hover: #0069ff !default;
-$control-checked-background-color-active: #0069ff !default;
-$control-box-shadow: inset 0 0 0 1px #666 !default;
+$control-checked-background-color: #2D72D2 !default;
+$control-checked-background-color-hover: #2D72D2 !default;
+$control-checked-background-color-active: #2D72D2 !default;
+$control-box-shadow: inset 0 0 0 1px #5F6B7C !default;
 
 // Drawer
 $drawer-background-color: $white !default;

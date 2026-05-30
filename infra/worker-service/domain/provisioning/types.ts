@@ -31,6 +31,10 @@ export type ProvisionInput = {
   controlPlaneOrgId?: string;
   /** When set to `["pos"]` or `["wire"]`, only re-run that repair step for an existing tenant. */
   retryModules?: string[];
+  /** Skip tenant/deployment row creation — provision stacks for an existing tenant (add-module). */
+  skipTenantCreation?: boolean;
+  /** Required when skipTenantCreation is true. */
+  existingTenantId?: string;
 };
 
 export type ProvisionResult =

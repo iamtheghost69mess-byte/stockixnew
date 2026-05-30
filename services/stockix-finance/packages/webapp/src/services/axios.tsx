@@ -59,15 +59,15 @@ function setRequestHeader(request, key, value) {
 
 http.interceptors.request.use((request) => {
   const state = store.getState();
-  const { token, organization } = state.authentication;
+  const { token, organizationId } = state.authentication;
   const locale = 'en';
 
   if (token) {
     setRequestHeader(request, 'x-access-token', token);
     setRequestHeader(request, 'Authorization', `Bearer ${token}`);
   }
-  if (organization) {
-    setRequestHeader(request, 'organization-id', organization);
+  if (organizationId) {
+    setRequestHeader(request, 'organization-id', organizationId);
   }
   if (locale) {
     setRequestHeader(request, 'Accept-Language', locale);

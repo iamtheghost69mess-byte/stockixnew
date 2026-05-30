@@ -31,6 +31,11 @@ vi.mock("../src/finance-tenant-resolve.js", () => ({
   resolveAndPersistFinanceTenantId: (...args: unknown[]) => resolveAndPersistMock(...args),
 }));
 
+vi.mock("../src/lib/tenant-module-access.js", () => ({
+  assertTenantModuleLicensed: vi.fn(async () => ({ ok: true as const })),
+  respondModuleAccessDenied: vi.fn(),
+}));
+
 const TENANT_UUID = "11111111-1111-4111-8111-111111111111";
 
 function mockDbRow(overrides?: { financeTenantId?: number | null; internalPort?: number | null }) {

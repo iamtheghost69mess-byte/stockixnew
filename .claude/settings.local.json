@@ -1,6 +1,28 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"services/stockix-finance/packages/webapp/src/style\" -Recurse -Include \"*.scss\",\"*.css\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Resolve-Path -Relative)",
+      "Bash(grep -v \"//\")",
+      "Bash(grep *)",
+      "Bash(xargs sed -i 's/#999999/#8F99A8/g; s/#666666/#5F6B7C/g; s/#c06361/#CD4246/g; s/#c23030/#AC2F33/g; s/#a0a0a0/#ABB3BF/g; s/#222222/#1C2127/g')",
+      "Bash(xargs sed -i 's/#1c4587/#1C2127/g; s/#123163/#1C2127/g; s/#0d244a/#1C2127/g; s/#1155cc/#2D72D2/g; s/#116cd0/#2D72D2/g; s/#cecbcb/#DCE0E5/g; s/#b7b7b7/#ABB3BF/g; s/#e66d6d/#E76A6E/g')",
+      "Bash(xargs sed -i 's/#a1afca/#8F99A8/g; s/#333/#1C2127/g; s/#727983/#738091/g; s/#415060/#5F6B7C/g')",
+      "Bash(pnpm run *)",
+      "Bash(npx lerna *)",
+      "Bash(pnpm install *)",
+      "Bash(npx craco *)",
+      "Bash(npm ls *)",
+      "Bash(Select-Object -First 20)",
+      "Bash(pnpm bootstrap:env -- --force)",
+      "Bash(pnpm db:up)",
+      "Bash(docker compose *)",
+      "Bash(pnpm db:wait)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "claude-flow"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

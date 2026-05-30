@@ -45,6 +45,19 @@ export async function isPortFree(port) {
  * @param {number} [maxAttempts=50]
  * @returns {Promise<number>}
  */
+/**
+ * @param {number} port
+ * @param {number} [timeoutMs=15000]
+ */
+export async function waitForPortFree(port, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isPortFree(port)) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`Port ${port} still in use after ${timeoutMs}ms — run pnpm dev:kill`);
+}
+
 export async function findFreePort(preferred, maxAttempts = 50) {
   const start = Number(preferred);
   if (!Number.isFinite(start) || start < 1 || start > 65535) {

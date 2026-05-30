@@ -115,8 +115,10 @@ const jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
 const heartbeatIntervalMs = 30_000;
 const apiReadyMaxWaitMs = 180_000;
 const apiUnreachableLogIntervalMs = 30_000;
+const startupGraceMs = parseInt(process.env.WORKER_STARTUP_GRACE_MS ?? "5000", 10);
 let shuttingDown = false;
 let lastApiUnreachableLogMs = 0;
+let apiUnreachableCount = 0;
 function runtimeBundleMtime(): string | null {
   try {
     const bundlePath = join(dirname(fileURLToPath(import.meta.url)), "worker.js");
@@ -176,11 +178,21 @@ async function waitForApiReady(): Promise<void> {
 }
 
 function logApiUnreachable(): void {
+  apiUnreachableCount++;
+
+  if (apiUnreachableCount === 1) {
+    logger.debug("[worker] API not ready yet — retrying...");
+    return;
+  }
+
+  if (apiUnreachableCount < 3) return;
+
   const now = Date.now();
   if (now - lastApiUnreachableLogMs < apiUnreachableLogIntervalMs) return;
   lastApiUnreachableLogMs = now;
   logger.warn(
     `[worker] API unreachable at ${apiBaseUrl} (is \`api\` dev running?). Will retry job claims.`,
+    { attempts: apiUnreachableCount, url: apiBaseUrl },
   );
 }
 
@@ -762,6 +774,21 @@ async function loop() {
     );
     process.exit(1);
   });
+  logger.info(
+    JSON.stringify({
+      level: "info",
+      type: "worker_startup_grace",
+      graceMs: startupGraceMs,
+    }),
+  );
+  await new Promise((r) => setTimeout(r, startupGraceMs));
+  logger.info(
+    JSON.stringify({
+      level: "info",
+      type: "worker_claiming_jobs",
+      apiBaseUrl,
+    }),
+  );
   await checkRequiredTenantImages().catch((error) => {
     logger.warn(
       `[worker] image pre-check failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -777,6 +804,9 @@ async function loop() {
       logger.error(`[worker] claim error: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     });
+    if (job) {
+      apiUnreachableCount = 0;
+    }
     lastSuccessfulPollAt = Date.now();
     if (!job) {
       const nowMs = Date.now();
@@ -910,6 +940,14 @@ async function loop() {
               .update(tenants)
               .set({ status: "active" })
               .where(eq(tenants.id, job.tenantId));
+            await tx
+              .update(tenantDeployments)
+              .set({
+                status: "active",
+                lastError: `worker_fallback_failure_persist:${message}`,
+                updatedAt: new Date(),
+              })
+              .where(eq(tenantDeployments.tenantId, job.tenantId));
           }
         }).catch((fallbackError) => {
           logger.error(

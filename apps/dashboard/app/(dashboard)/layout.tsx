@@ -17,6 +17,7 @@ export default async function DashboardLayout({
       ...(cookie ? { Cookie: cookie } : {}),
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
   if (!meRes?.ok) {
     redirect("/login");

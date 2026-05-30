@@ -2,11 +2,7 @@
 import {
   useMutation,
   useQueryClient,
-  UseQueryOptions,
-  UseQueryResult,
   useQuery,
-  UseMutationOptions,
-  UseMutationResult,
 } from 'react-query';
 import useApiRequest from '../useRequest';
 import { useRequestQuery } from '../useQueryRequest';
@@ -158,20 +154,13 @@ export function useBulkDeletePaymentReceives(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    ({
-      ids,
-      skipUndeletable = false,
-    }: {
-      ids: number[];
-      skipUndeletable?: boolean;
-    }) =>
+    ({ ids, skipUndeletable = false }) =>
       apiRequest.post('payments-received/bulk-delete', {
         ids,
         skip_undeletable: skipUndeletable,
       }),
     {
       onSuccess: () => {
-        // Common invalidate queries.
         commonInvalidateQueries(queryClient);
       },
       ...props,
@@ -183,7 +172,7 @@ export function useValidateBulkDeletePaymentReceives(props) {
   const apiRequest = useApiRequest();
 
   return useMutation(
-    (ids: number[]) =>
+    (ids) =>
       apiRequest
         .post('payments-received/validate-bulk-delete', { ids })
         .then((res) => transformToCamelCase(res.data)),
@@ -280,50 +269,15 @@ export function usePdfPaymentReceive(paymentReceiveId) {
   return useRequestPdf({ url: `payments-received/${paymentReceiveId}` });
 }
 
-interface SendPaymentReceiveMailValues {
-  to: string[] | string;
-  cc?: string[] | string,
-  bcc?: string[] | string,
-  subject: string;
-  message: string;
-  from?: string[] | string;
-  attachPdf?: boolean;
-}
-
-interface SendPaymentReceiveMailResponse {
-  success: boolean;
-  message?: string;
-}
-
-type SendPaymentReceiveMailMutation = UseMutationResult<
-  SendPaymentReceiveMailResponse,
-  Error,
-  [number, SendPaymentReceiveMailValues],
-  unknown
->;
-
-export function useSendPaymentReceiveMail(
-  props?: Partial<
-    UseMutationOptions<
-      SendPaymentReceiveMailResponse,
-      Error,
-      [number, SendPaymentReceiveMailValues]
-    >
-  >,
-): SendPaymentReceiveMailMutation {
+export function useSendPaymentReceiveMail(props) {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation<
-    SendPaymentReceiveMailResponse,
-    Error,
-    [number, SendPaymentReceiveMailValues]
-  >(
+  return useMutation(
     ([id, values]) =>
       apiRequest.post(`payments-received/${id}/mail`, values),
     {
-      onSuccess: (res, [id, values]) => {
-        // Common invalidate queries.
+      onSuccess: () => {
         commonInvalidateQueries(queryClient);
       },
       ...props,
@@ -331,65 +285,23 @@ export function useSendPaymentReceiveMail(
   );
 }
 
-export interface GetPaymentReceivedMailStateResponse {
-  companyName: string;
-  companyLogoUri?: string;
-
-  primaryColor?: string;
-  customerName: string;
-
-  entries: Array<{ invoiceNumber: string; paidAmount: string }>;
-
-  from: Array<string>;
-  fromOptions: Array<{ mail: string; label: string; primary: boolean }>;
-
-  paymentDate: string;
-  paymentDateFormatted: string;
-
-  to: Array<string>;
-  toOptions: Array<{ mail: string; label: string; primary: boolean }>;
-
-  total: number;
-  totalFormatted: string;
-
-  subtotal: number;
-  subtotalFormatted: string;
-
-  paymentNumber: string;
-  formatArgs: Record<string, any>;
-}
-
-export function usePaymentReceivedMailState(
-  paymentReceiveId: number,
-  props?: UseQueryOptions<GetPaymentReceivedMailStateResponse, Error>,
-): UseQueryResult<GetPaymentReceivedMailStateResponse, Error> {
+export function usePaymentReceivedMailState(paymentReceiveId, props) {
   const apiRequest = useApiRequest();
 
-  return useQuery<GetPaymentReceivedMailStateResponse, Error>(
+  return useQuery(
     [t.PAYMENT_RECEIVE_MAIL_OPTIONS, paymentReceiveId],
     () =>
       apiRequest
         .get(`payments-received/${paymentReceiveId}/mail`)
         .then((res) => transformToCamelCase(res.data)),
+    props,
   );
 }
 
-export interface PaymentReceivedStateResponse {
-  defaultTemplateId: number;
-}
-
-/**
- * Retrieves the payment receive state.
- * @param {Record<string, any>} query - Query parameters for the request.
- * @param {UseQueryOptions<PaymentReceivedStateResponse, Error>} options - Optional query options.
- * @returns {UseQueryResult<PaymentReceivedStateResponse, Error>} The query result.
- */
-export function usePaymentReceivedState(
-  options?: UseQueryOptions<PaymentReceivedStateResponse, Error>,
-): UseQueryResult<PaymentReceivedStateResponse, Error> {
+export function usePaymentReceivedState(options) {
   const apiRequest = useApiRequest();
 
-  return useQuery<PaymentReceivedStateResponse, Error>(
+  return useQuery(
     ['PAYMENT_RECEIVED_STATE'],
     () =>
       apiRequest
@@ -401,23 +313,10 @@ export function usePaymentReceivedState(
   );
 }
 
-interface PaymentReceivedHtmlResponse {
-  htmlContent: string;
-}
-
-/**
- * Retrieves the html content of the given payment receive.
- * @param {number} paymentReceivedId
- * @param {UseQueryOptions<PaymentReceivedHtmlResponse, Error>} options
- * @returns {UseQueryResult<PaymentReceivedHtmlResponse, Error>}
- */
-export function useGetPaymentReceiveHtml(
-  paymentReceivedId: number,
-  options?: UseQueryOptions<PaymentReceivedHtmlResponse, Error>,
-): UseQueryResult<PaymentReceivedHtmlResponse, Error> {
+export function useGetPaymentReceiveHtml(paymentReceivedId, options) {
   const apiRequest = useApiRequest();
 
-  return useQuery<PaymentReceivedHtmlResponse, Error>(
+  return useQuery(
     ['PAYMENT_RECEIVED_HTML', paymentReceivedId],
     () =>
       apiRequest

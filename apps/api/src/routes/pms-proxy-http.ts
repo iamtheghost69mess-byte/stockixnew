@@ -1,9 +1,16 @@
 import { apiConfig } from "@repo/config";
 import type { Hono } from "hono";
+import type { createDb } from "@repo/db";
 
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { requireEnv } from "../lib/require-env.js";
 import { pmsProxyJson } from "../pms-proxy.js";
+import {
+  assertTenantModuleLicensed,
+  respondModuleAccessDenied,
+} from "../lib/tenant-module-access.js";
+
+type Db = ReturnType<typeof createDb>;
 
 function proxyHeaders(c: {
   req: { header: (name: string) => string | undefined; query: (k: string) => string | undefined };
@@ -20,7 +27,19 @@ function proxyHeaders(c: {
   return headers;
 }
 
-export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>): void {
+async function enforcePmsModuleAccess(
+  db: Db | null | undefined,
+  c: { req: { query: (k: string) => string | undefined }; json: (body: unknown, status?: number) => Response },
+): Promise<Response | null> {
+  if (!db) return null;
+  const tenantId = c.req.query("tenantId")?.trim();
+  if (!tenantId) return null;
+  const access = await assertTenantModuleLicensed(db, tenantId, "pms");
+  if (!access.ok) return respondModuleAccessDenied(c, access);
+  return null;
+}
+
+export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db | null): void {
   app.get("/pms/status", async (c) => {
     try {
       return c.json({
@@ -39,6 +58,9 @@ export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>): void {
   });
 
   app.all("/pms/api/*", async (c) => {
+    const denied = await enforcePmsModuleAccess(db, c);
+    if (denied) return denied;
+
     const subPath = c.req.path.replace(/^\/pms/, "");
     const method = c.req.method;
     const body =

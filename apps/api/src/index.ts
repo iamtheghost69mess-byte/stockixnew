@@ -15,6 +15,10 @@ import {
 
 const { app, db, databaseUrl, port } = createControlPlaneApp();
 
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 2000;
+let retryCount = 0;
+
 process.on("unhandledRejection", (reason, promise) => {
   if (apiConfig.sentryDsn?.trim()) {
     Sentry.captureException(reason);
@@ -30,17 +34,61 @@ process.on("uncaughtException", (error) => {
     Sentry.captureException(error);
   }
   logger.error("uncaught_exception", error, { type: "uncaught_exception" });
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EADDRINUSE") {
+    console.error(
+      `✖ Could not bind port ${port} after ${MAX_RETRIES} retries.\n   Run pnpm dev:kill and try again.`,
+    );
+  } else {
+    console.error("✖ API failed to start:", error instanceof Error ? error.message : String(error));
+  }
   process.exit(1);
 });
 
 startReadinessReconciler(db);
 if (db) startStuckProvisioningReconciler(db);
 
+let server: ReturnType<typeof serve>;
+
+async function startWithRetry(): Promise<void> {
+  while (retryCount <= MAX_RETRIES) {
+    try {
+      server = serve({ fetch: app.fetch, port }, (info) => {
+        logger.info("api listening", { url: `http://localhost:${info.port}` });
+      });
+      return;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === "EADDRINUSE" && retryCount < MAX_RETRIES) {
+        retryCount++;
+        console.warn(
+          `⚠ Port ${port} in use. Retry ${retryCount}/${MAX_RETRIES} in ${RETRY_DELAY_MS}ms...`,
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      if (err.code === "EADDRINUSE") {
+        console.error(
+          `✖ Could not bind port ${port} after ${MAX_RETRIES} retries.\n   Run pnpm dev:kill and try again.`,
+        );
+      } else {
+        console.error("✖ API failed to start:", err.message);
+      }
+      process.exit(1);
+    }
+  }
+}
+
+await startWithRetry();
+
 function shutdown(signal: string) {
-  logger.info(`${signal} received — shutting down reconcilers`);
+  logger.info(`${signal} received — shutting down`);
   stopReadinessReconciler();
   stopStuckProvisioningReconciler();
-  process.exit(0);
+  server.close(() => {
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 3_000).unref();
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -76,7 +124,3 @@ void import("./jobs/owner-invite-mail-queue.js").then(
     }
   },
 );
-
-serve({ fetch: app.fetch, port }, (info) => {
-  logger.info("api listening", { url: `http://localhost:${info.port}` });
-});
