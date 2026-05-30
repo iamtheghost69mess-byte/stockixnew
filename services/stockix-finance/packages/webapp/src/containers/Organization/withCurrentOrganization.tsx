@@ -8,7 +8,7 @@ export const withCurrentOrganization = (mapState) => {
   const mapStateToProps = (state, props) => {
     const mapped = {
       organizationTenantId: state.authentication.organizationId,
-      organizationId: state.authentication.organization,
+      organizationId: state.authentication.organizationId,
       organization: getCurrentOrganization(state, props),
     };
     return mapState ? mapState(mapped, state, props) : mapped;

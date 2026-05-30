@@ -4,7 +4,7 @@ USER root
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json .npmrc ./
 COPY packages/webapp/package.json ./packages/webapp/
 COPY shared/bigcapital-utils/package.json ./shared/bigcapital-utils/
 COPY shared/email-components/package.json ./shared/email-components/
@@ -13,16 +13,14 @@ COPY shared/sdk-ts/package.json ./shared/sdk-ts/
 
 # Pin pnpm to satisfy root package.json "pnpm": "^9.0.5" (Corepack activates this exact minor).
 RUN corepack enable \
-  && corepack prepare pnpm@9.0.5 --activate \
+  && corepack prepare pnpm@9.15.9 --activate \
   && pnpm --version \
-  && pnpm install --frozen-lockfile --filter @stockix/webapp...
+  && pnpm install --no-frozen-lockfile --filter @stockix/webapp...
 
 COPY ./lerna.json /app/lerna.json
 COPY ./packages/webapp /app/packages/webapp
 COPY ./shared /app/shared
 RUN pnpm --filter @stockix/utils run build \
-  && pnpm --filter @stockix/pdf-templates run build \
-  && pnpm --filter @stockix/email-components run build \
   && pnpm --filter @stockix/webapp run build
 
 FROM nginx:1.27-alpine

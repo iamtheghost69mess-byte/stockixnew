@@ -1401,6 +1401,17 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
   const readiness = await getTenantReadiness(db, correlationId);
   const ready = readiness.status === "READY";
 
+  if (readiness.status === "FAILED") {
+    return c.json({
+      status: "failed",
+      ready: false,
+      readiness,
+      correlationId,
+      error: readiness.reason ?? "provision_failed",
+      events: await loadProvisionEventsJson(db, correlationId),
+    });
+  }
+
   if (!lastJob) {
     if (events.length === 0) {
       return c.json(

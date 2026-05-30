@@ -52,20 +52,12 @@ const corsOriginsFromEnv = process.env.CORS_ORIGINS
   : [];
 const corsOrigins = [...new Set([...defaultCorsOrigins, ...corsOriginsFromEnv])];
 
+const {
+  matchesWildcardPosOrigin,
+} = require("../middlewares/posHostPatterns");
+
 function isWildcardPosOrigin(origin) {
-  try {
-    const url = new URL(String(origin));
-    const host = String(url.hostname || "").toLowerCase();
-    if (host.endsWith(".localhost")) {
-      const slug = host.slice(0, host.length - ".localhost".length);
-      return Boolean(slug && !slug.includes("."));
-    }
-    if (!host.endsWith(".pos.zerowix.cloud")) return false;
-    const slug = host.slice(0, host.length - ".pos.zerowix.cloud".length);
-    return Boolean(slug);
-  } catch {
-    return false;
-  }
+  return matchesWildcardPosOrigin(origin);
 }
 
 const config = Object.freeze({

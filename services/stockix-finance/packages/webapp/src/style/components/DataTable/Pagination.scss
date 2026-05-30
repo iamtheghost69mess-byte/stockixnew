@@ -14,7 +14,7 @@
     min-height: 24px;
 
     &:not([class*="bp4-intent-"]){
-      color: #666666; 
+      color: #5F6B7C; 
       border-radius: 5px;
 
       &:hover{
@@ -24,7 +24,7 @@
 
     .bp4-icon{
       margin-right: 4px;
-      color: #666666;
+      color: #5F6B7C;
     }
 
     .pagination .pagination__buttons-group .bp4-button-group &{
@@ -71,7 +71,7 @@
   }
 
   &__info{
-    color: #888;
+    color: #8F99A8;
     margin-left: 12px;
     display: flex;
     align-items: center;
@@ -90,10 +90,10 @@
         width: auto;
         padding: 0;
         padding-right: 0px;
-        border: 1px solid #e8e8e8;
+        border: 1px solid #EDEFF2;
         font-size: 13px;
         border-radius: 3px;
-        color: #666;
+        color: #5F6B7C;
         padding-right: 14px;
         padding-left: 8px;
       }
@@ -113,6 +113,6 @@
 
   &__pagesize-control{
     margin-left: 12px;
-    color: #888;
+    color: #8F99A8;
   }
 }

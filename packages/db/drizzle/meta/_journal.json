@@ -372,6 +372,13 @@
       "when": 1781150000000,
       "tag": "0053_owner_invite_token_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781160000000,
+      "tag": "0054_tenant_status_failed",
+      "breakpoints": true
     }
   ]
 }

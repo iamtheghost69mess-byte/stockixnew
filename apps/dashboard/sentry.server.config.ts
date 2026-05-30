@@ -1,11 +1,12 @@
 import * as Sentry from "@sentry/nextjs";
 
-const sentryDsn = process.env.SENTRY_DSN;
+export function init() {
+  const sentryDsn = process.env.SENTRY_DSN?.trim();
+  if (!sentryDsn) return;
 
-if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
-    environment: process.env.APP_ENV ?? "production",
+    environment: process.env.APP_ENV ?? process.env.NODE_ENV ?? "production",
     tracesSampleRate: 0.05,
   });
 }

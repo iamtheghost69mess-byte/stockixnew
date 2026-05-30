@@ -26,6 +26,7 @@ import {
 import {
   notifyJobLifecycle,
   notifyModuleAdded,
+  notifyAddModuleFailed,
   notifyProvisionOutcome,
 } from "../notification-helpers.js";
 import { safeCreateNotification } from "../notification-service.js";
@@ -57,6 +58,7 @@ import {
   type StockixModule,
 } from "../services/auth/stockix-product-token.js";
 import { ensureDefaultTenantConfig } from "./tenant-config.js";
+import { handleTerminalProvisionJobFailure } from "../provisioning/provision-failure.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -89,6 +91,7 @@ app.post("/internal/jobs/claim", async (c) => {
     tenantId: string;
     exhausted: boolean;
     correlationId: string | null;
+    jobType: string;
   }> = [];
   const claimed = await db.transaction(async (tx) => {
     const staleRunning = await tx
@@ -161,24 +164,40 @@ app.post("/internal/jobs/claim", async (c) => {
         )
         .where(eq(tenantLifecycleJobs.id, staleJob.id));
       if (staleJob.type === "tenant.provision" && staleJob.tenantId) {
-        await tx
-          .update(tenants)
-          .set({
-            status: "failed",
-          })
-          .where(eq(tenants.id, staleJob.tenantId));
-        await tx
-          .update(tenantDeployments)
-          .set({
-            status: "failed",
-            lastError: "worker_stale_lease_reclaimed",
-            updatedAt: new Date(),
-          })
-          .where(eq(tenantDeployments.tenantId, staleJob.tenantId));
+        if (exhausted) {
+          await handleTerminalProvisionJobFailure(
+            tx,
+            {
+              type: staleJob.type,
+              tenantId: staleJob.tenantId,
+              correlationId: staleJob.correlationId ?? null,
+              payload: null,
+            },
+            "worker_stale_lease_reclaimed",
+          );
+        }
         staleProvisionAlerts.push({
           tenantId: staleJob.tenantId,
           exhausted,
           correlationId: staleJob.correlationId ?? null,
+          jobType: staleJob.type,
+        });
+      } else if (staleJob.type === "add_module" && staleJob.tenantId && exhausted) {
+        await handleTerminalProvisionJobFailure(
+          tx,
+          {
+            type: staleJob.type,
+            tenantId: staleJob.tenantId,
+            correlationId: staleJob.correlationId ?? null,
+            payload: null,
+          },
+          "worker_stale_lease_reclaimed",
+        );
+        staleProvisionAlerts.push({
+          tenantId: staleJob.tenantId,
+          exhausted: true,
+          correlationId: staleJob.correlationId ?? null,
+          jobType: staleJob.type,
         });
       }
     }
@@ -220,12 +239,20 @@ app.post("/internal/jobs/claim", async (c) => {
       .limit(1);
     if (!tenantRow) continue;
     if (alert.exhausted) {
-      notifyProvisionOutcome(db, {
-        tenantId: alert.tenantId,
-        finalStatus: "failed",
-        correlationId: alert.correlationId,
-        lastError: "worker_stale_lease_reclaimed",
-      });
+      if (alert.jobType === "add_module") {
+        notifyAddModuleFailed(db, {
+          tenantId: alert.tenantId,
+          lastError: "worker_stale_lease_reclaimed",
+          correlationId: alert.correlationId,
+        });
+      } else {
+        notifyProvisionOutcome(db, {
+          tenantId: alert.tenantId,
+          finalStatus: "failed",
+          correlationId: alert.correlationId,
+          lastError: "worker_stale_lease_reclaimed",
+        });
+      }
     } else {
       notifyJobLifecycle(db, {
         ownerId: tenantRow.ownerId,
@@ -1132,6 +1159,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
         claimedAt: null,
         claimedBy: null,
         claimToken: null,
+        completedAt: exhausted ? new Date() : null,
         updatedAt: new Date(),
       })
       .where(
@@ -1165,47 +1193,31 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       workerId: workerId || null,
     });
 
-    if (
-      updated.status === "dead"
-      && updated.type === "add_module"
-      && updated.tenantId
-    ) {
-      await db
-        .update(tenants)
-        .set({ status: "active" })
-        .where(eq(tenants.id, updated.tenantId));
-    }
+    if (exhausted) {
+      const outcome = await handleTerminalProvisionJobFailure(db, updated, errorMessage);
 
-    if (
-      updated.status === "dead"
-      && (updated.type === "tenant.provision" || updated.type === "organization.provision")
-      && updated.payload
-      && typeof updated.payload === "object"
-    ) {
-      const p = updated.payload as Record<string, unknown>;
-      const organizationIdForFail =
-        typeof p.organizationId === "string" && z.string().uuid().safeParse(p.organizationId).success
-          ? p.organizationId
-          : null;
-      if (organizationIdForFail) {
-        await db
-          .update(organizations)
-          .set({
-            status: "failed",
-            provisioningError: errorMessage,
-            updatedAt: new Date(),
-          })
-          .where(eq(organizations.id, organizationIdForFail));
+      if (outcome === "tenant_failed" && updated.tenantId) {
+        notifyProvisionOutcome(db, {
+          tenantId: updated.tenantId,
+          finalStatus: "failed",
+          correlationId: updated.correlationId,
+          lastError: errorMessage,
+        });
+      } else if (outcome === "add_module_reverted" && updated.tenantId) {
+        const moduleFromPayload =
+          updated.payload
+          && typeof updated.payload === "object"
+          && "module" in updated.payload
+          && typeof (updated.payload as { module?: unknown }).module === "string"
+            ? String((updated.payload as { module: string }).module)
+            : null;
+        notifyAddModuleFailed(db, {
+          tenantId: updated.tenantId,
+          module: moduleFromPayload,
+          lastError: errorMessage,
+          correlationId: updated.correlationId,
+        });
       }
-    }
-
-    if (updated.status === "dead" && updated.type === "tenant.provision" && updated.tenantId) {
-      notifyProvisionOutcome(db, {
-        tenantId: updated.tenantId,
-        finalStatus: "failed",
-        correlationId: updated.correlationId,
-        lastError: errorMessage,
-      });
     }
   }
   return c.json({ ok: true, job: updated ?? null });
