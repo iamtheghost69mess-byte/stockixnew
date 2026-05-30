@@ -4,6 +4,9 @@ import { isApiConnectionError } from "@/lib/api-connection";
 
 const apiBase = dashboardConfig.nextPublicApiUrl;
 
+const MAX_ATTEMPTS = process.env.NODE_ENV === "production" ? 3 : 1;
+const TIMEOUT_MS = process.env.NODE_ENV === "production" ? 10_000 : 3_000;
+
 function createRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -12,7 +15,7 @@ export async function apiFetch(
   input: string,
   init: RequestInit = {},
   request?: Request,
-  retries = 2,
+  retries = MAX_ATTEMPTS - 1,
 ): Promise<Response> {
   const secret = dashboardConfig.platformApiSecret;
   if (!secret) throw new Error("PLATFORM_API_SECRET is not configured");
@@ -43,7 +46,7 @@ export async function apiFetch(
         ...init,
         headers,
         cache: "no-store",
-        signal: init.signal ?? AbortSignal.timeout(10_000),
+        signal: init.signal ?? AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (error) {
       lastError = error;
