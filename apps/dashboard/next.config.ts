@@ -1,42 +1,95 @@
 import "@repo/config";
-import { realpathSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
-const dashboardDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.join(dashboardDir, "..", "..");
-const reactRoot = realpathSync(path.join(repoRoot, "node_modules", "react"));
-const reactDomRoot = realpathSync(path.join(repoRoot, "node_modules", "react-dom"));
+// ---------------------------------------------------------------------------
+// Paths
+// ---------------------------------------------------------------------------
 
-/** Dedupe React only — do not alias jsx-runtime paths (breaks react-server exports in RSC). */
+const repoRoot = path.resolve(__dirname, "../..");
+
+/**
+ * Deduplicate React across packages in the monorepo.
+ *
+ * Use raw `path.join` rather than `realpathSync` — resolving symlinks at
+ * config-evaluation time causes Next.js to detect a false file-system change
+ * and restart the dev server in an infinite loop on Windows/WSL2.
+ *
+ * Server bundle is intentionally excluded: aliasing React server-side breaks
+ * the `react-server` export condition and causes null-dispatcher errors in
+ * layout-router / RSC.
+ */
 const reactAliases = {
-  react: reactRoot,
-  "react-dom": reactDomRoot,
+  react: path.join(repoRoot, "node_modules/react"),
+  "react-dom": path.join(repoRoot, "node_modules/react-dom"),
 } as const;
 
+// ---------------------------------------------------------------------------
+// Webpack dev-watch ignore patterns
+// ---------------------------------------------------------------------------
+
+const DEV_WATCH_IGNORED = [
+  "**/node_modules/**",
+  "**/.git/**",
+  "**/.next/**",
+  "**/.turbo/**",
+  "**/dist/**",
+  "**/.swc/**",
+  "**/infra/**",
+  "**/services/**",
+  "**/.claude/**",
+  "**/packages/**/dist/**",
+  "**/.next/cache/**",
+  "**/logs/**",
+  "**/sessions/**",
+  "**/*.log",
+  "**/tmp/**",
+  "**/.turbo/**",
+] as const;
+
+// ---------------------------------------------------------------------------
+// Next.js config
+// ---------------------------------------------------------------------------
+
 const nextConfig: NextConfig = {
+  // ── Output ────────────────────────────────────────────────────────────────
   output: "standalone",
   outputFileTracingRoot: repoRoot,
+
+  // ── React ─────────────────────────────────────────────────────────────────
   reactStrictMode: true,
-  // Dashboard dev binds 0.0.0.0; allow HMR when opened via localhost or 127.0.0.1.
+
+  // ── Dev origins ───────────────────────────────────────────────────────────
+  // Dashboard binds 0.0.0.0; permit HMR connections from both aliases.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+
+  // ── Transpilation ─────────────────────────────────────────────────────────
   transpilePackages: [
     "@base-ui/react",
     "react-hook-form",
     "@hookform/resolvers",
   ],
+
+  // ── Experimental ──────────────────────────────────────────────────────────
   experimental: {
-    optimizePackageImports: ["@base-ui/react", "lucide-react", "react-hook-form"],
+    optimizePackageImports: [
+      "@base-ui/react",
+      "lucide-react",
+      "react-hook-form",
+    ],
+    // Worker threads have high IPC overhead on Windows — only enable in production.
+    webpackBuildWorker: process.env.NODE_ENV === "production",
   },
-  // Turbopack: same client-only dedupe (opt-in via STOCKIX_NEXT_TURBOPACK=1).
+
+  // ── Turbopack (opt-in via STOCKIX_NEXT_TURBOPACK=1) ───────────────────────
   turbopack: {
     resolveAlias: reactAliases,
   },
-  webpack: (config, { dev, isServer }) => {
-    // Client bundle only — aliasing react on the server breaks react-server exports
-    // and causes "Invalid hook call" / null dispatcher in layout-router.
+
+  // ── Webpack ───────────────────────────────────────────────────────────────
+  webpack(config, { dev, isServer }) {
+    // React deduplication — client bundle only (see note above).
     if (!isServer) {
       config.resolve ??= {};
       config.resolve.alias = {
@@ -44,29 +97,28 @@ const nextConfig: NextConfig = {
         ...reactAliases,
       };
     }
+
+    // Dev-mode watch optimisation.
+    // A higher aggregateTimeout (2 s) prevents rapid config-change false
+    // positives from cascading into repeated server restarts.
     if (dev) {
       config.watchOptions = {
         ...config.watchOptions,
-        ignored: [
-          "**/node_modules/**",
-          "**/.git/**",
-          "**/.next/**",
-          "**/.turbo/**",
-          "**/dist/**",
-          "**/.swc/**",
-          "**/infra/**",
-          "**/services/**",
-          "**/.claude/**",
-        ],
-        aggregateTimeout: 500,
+        ignored: DEV_WATCH_IGNORED,
+        aggregateTimeout: 2_000,
         poll: false,
       };
     }
+
     return config;
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// ---------------------------------------------------------------------------
+// Sentry wrapper
+// ---------------------------------------------------------------------------
+
+const sentryOptions = {
   silent: true,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
@@ -80,4 +132,8 @@ export default withSentryConfig(nextConfig, {
     },
     automaticVercelMonitors: false,
   },
-});
+};
+
+export default process.env.NODE_ENV === "production"
+  ? withSentryConfig(nextConfig, sentryOptions)
+  : nextConfig;
