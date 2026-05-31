@@ -46,7 +46,9 @@
       "@tiptap/extension-horizontal-rule": "2.1.13",
       "@tiptap/extension-color": "2.1.13",
       "@tiptap/extension-list-item": "2.1.13",
-      "@tiptap/extension-text-style": "2.1.13"
+      "@tiptap/extension-text-style": "2.1.13",
+      "react": "^18.2.0",
+      "react-dom": "^18.2.0"
     }
   }
 }

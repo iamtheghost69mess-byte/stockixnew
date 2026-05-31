@@ -1,5 +1,5 @@
 import knex from 'knex';
-import * as LRUCache from 'lru-cache';
+import LRUCache from 'lru-cache';
 import { Global, Module } from '@nestjs/common';
 import { knexSnakeCaseMappers } from 'objection';
 import { ClsModule, ClsService } from 'nestjs-cls';

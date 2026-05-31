@@ -8,7 +8,7 @@ import CustomViewBaseModel from '@/models/CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Purchases/constants';
 import ModelSearchable from '@/models/ModelSearchable';
 
-export default class Bill extends mixin(TenantModel,
+export class Bill extends mixin(TenantModel,
   ModelSetting as any,
   CustomViewBaseModel as any,
   ModelSearchable as any

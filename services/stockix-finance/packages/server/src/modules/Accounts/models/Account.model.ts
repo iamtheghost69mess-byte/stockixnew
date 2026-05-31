@@ -16,7 +16,7 @@ import CustomViewBaseModel from '@/models/CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Accounts/constants';
 import ModelSearchable from '@/models/ModelSearchable';
 
-export default class Account extends mixin(TenantModel,
+export class Account extends mixin(TenantModel,
   ModelSettings as any,
   CustomViewBaseModel as any,
   ModelSearchable as any,
