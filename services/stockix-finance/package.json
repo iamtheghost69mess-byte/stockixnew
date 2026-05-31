@@ -37,8 +37,6 @@
   },
   "pnpm": {
     "overrides": {
-      "react": "^18.2.0",
-      "react-dom": "^18.2.0",
       "bson": "1.1.6",
       "mongodb": "3.6.11",
       "@tiptap/core": "2.1.13",
