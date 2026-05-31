@@ -123,6 +123,7 @@ CMD ["/bin/bash", "-c", "until (node ./build/commands.js system:migrate:unlock 2
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
+COPY --chown=node:node ./shared ./shared
 RUN pnpm run build:server --skip-nx-cache
 
 FROM build-app AS app
