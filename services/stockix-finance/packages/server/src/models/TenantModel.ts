@@ -1,5 +1,5 @@
 import { Container } from 'typedi';
-import BaseModel from 'models/Model';
+import { BaseModel } from '@/models/Model';
 
 export default class TenantModel extends BaseModel {
   /**
@@ -7,12 +7,12 @@ export default class TenantModel extends BaseModel {
    * @param  {...any} args 
    */
   static query(...args) {
-    const Logger = Container.get('logger');
+    const Logger = Container.get('logger') as any;
 
     return super.query(...args).onBuildKnex((knexQueryBuilder) => {
-      const { userParams: { tenantId } } = knexQueryBuilder.client.config;
+      const { userParams: { tenantId } } = (knexQueryBuilder.client.config as any);
 
-      knexQueryBuilder.on('query', queryData => {
+      knexQueryBuilder.on('query', (queryData: any) => {
         Logger.info(`[query][tenant] ${queryData.sql}`, {
           bindings: queryData.bindings, tenantId
         });

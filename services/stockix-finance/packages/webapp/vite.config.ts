@@ -43,6 +43,7 @@ export default defineConfig(({ mode }) => {
         '@public': path.resolve(rootDir, 'public'),
         path: 'path-browserify',
       },
+      dedupe: ['react', 'react-dom'],
     },
     define: {
       // Fix: ReferenceError: global is not defined at runtime.

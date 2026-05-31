@@ -8,7 +8,7 @@ import { DEFAULT_VIEWS } from '@/services/Expenses/constants';
 import ModelSearchable from '@/models/ModelSearchable';
 import moment from 'moment';
 
-export default class Expense extends mixin(TenantModel,
+export class Expense extends mixin(TenantModel,
   ModelSetting as any,
   CustomViewBaseModel as any,
   ModelSearchable as any
