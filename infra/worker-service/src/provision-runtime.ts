@@ -152,8 +152,7 @@ async function runPosProvisionStep(params: {
         params.log(`[provision][pos] credentials email sent to ${params.adminEmail}`);
       } catch (emailErr) {
         params.log(
-          `[provision][pos] credentials email failed (non-fatal): ${
-            emailErr instanceof Error ? emailErr.message : String(emailErr)
+          `[provision][pos] credentials email failed (non-fatal): ${emailErr instanceof Error ? emailErr.message : String(emailErr)
           }`,
         );
       }
@@ -364,8 +363,7 @@ export async function rollbackProvision(
     .where(eq(tenants.id, tenantId))
     .catch((error) => {
       log(
-        `[rollback] tenant status update failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[rollback] tenant status update failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -376,8 +374,7 @@ export async function rollbackProvision(
     .where(eq(tenantDeployments.tenantId, tenantId))
     .catch((error) => {
       log(
-        `[rollback] deployment status update failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[rollback] deployment status update failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -393,8 +390,7 @@ export async function rollbackProvision(
     .where(eq(tenantLifecycleJobs.correlationId, correlationId))
     .catch((error) => {
       log(
-        `[rollback] lifecycle job update failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[rollback] lifecycle job update failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -455,8 +451,7 @@ export async function rollbackProvision(
       log(`[rollback] compose cleanup completed project=${composeCtx.project}`);
     } catch (cleanupErr) {
       log(
-        `[rollback] compose cleanup failed: ${
-          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
+        `[rollback] compose cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
         }`,
       );
     }
@@ -473,8 +468,7 @@ export async function rollbackProvision(
     })
     .catch((error) => {
       log(
-        `[rollback] provision event insert failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[rollback] provision event insert failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -497,8 +491,7 @@ export async function revertAddModuleFailure(
     .where(eq(tenants.id, tenantId))
     .catch((error) => {
       log(
-        `[add-module-revert] tenant status update failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[add-module-revert] tenant status update failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -508,8 +501,7 @@ export async function revertAddModuleFailure(
     .where(eq(tenantDeployments.tenantId, tenantId))
     .catch((error) => {
       log(
-        `[add-module-revert] deployment update failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[add-module-revert] deployment update failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -524,8 +516,7 @@ export async function revertAddModuleFailure(
     .where(eq(tenantLifecycleJobs.correlationId, correlationId))
     .catch((error) => {
       log(
-        `[add-module-revert] lifecycle job update failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[add-module-revert] lifecycle job update failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -540,8 +531,7 @@ export async function revertAddModuleFailure(
     })
     .catch((error) => {
       log(
-        `[add-module-revert] provision event insert failed: ${
-          error instanceof Error ? error.message : String(error)
+        `[add-module-revert] provision event insert failed: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     });
@@ -685,66 +675,64 @@ export async function executeProvisionRuntime(
     args: string[],
   ): Promise<void> => {
     const executeCompose = async () => {
-    log(`[compose] starting: docker compose ${args.join(" ")}`);
-    const controller = new AbortController();
-    const intervalId = setInterval(() => {
-      checkNotCancelled().catch((error) => {
-        if (!controller.signal.aborted) {
-          log(
-            `[compose] cancellation requested during ${args.join(" ")}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-          controller.abort(error);
-        }
-      });
-    }, 1000);
-    try {
-      const timeoutMs = resolveComposeStepTimeoutMs(args);
-      let lastComposeTraceAt = 0;
-      await deps.docker.run(
-        composeCtx!.composeFile,
-        composeCtx!.project,
-        composeCtx!.envPath,
-        composeCtx!.composeEnv,
-        args,
-        {
-          cancelSignal: controller.signal,
-          timeoutMs,
-          onOutput: (chunk) => {
-            const now = Date.now();
-            if (now - lastComposeTraceAt < 4_000) return;
-            const line = chunk
-              .split(/\r?\n/)
-              .map((s) => s.trim())
-              .filter((s) => s.length > 0)
-              .pop();
-            if (!line) return;
-            if (!/pull|download|build|creating|starting|started|healthy/i.test(line)) return;
-            lastComposeTraceAt = now;
-            void trace.event("compose", line.slice(0, 240), { level: "info" });
+      log(`[compose] starting: docker compose ${args.join(" ")}`);
+      const controller = new AbortController();
+      const intervalId = setInterval(() => {
+        checkNotCancelled().catch((error) => {
+          if (!controller.signal.aborted) {
+            log(
+              `[compose] cancellation requested during ${args.join(" ")}: ${error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            controller.abort(error);
+          }
+        });
+      }, 1000);
+      try {
+        const timeoutMs = resolveComposeStepTimeoutMs(args);
+        let lastComposeTraceAt = 0;
+        await deps.docker.run(
+          composeCtx!.composeFile,
+          composeCtx!.project,
+          composeCtx!.envPath,
+          composeCtx!.composeEnv,
+          args,
+          {
+            cancelSignal: controller.signal,
+            timeoutMs,
+            onOutput: (chunk) => {
+              const now = Date.now();
+              if (now - lastComposeTraceAt < 4_000) return;
+              const line = chunk
+                .split(/\r?\n/)
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+                .pop();
+              if (!line) return;
+              if (!/pull|download|build|creating|starting|started|healthy/i.test(line)) return;
+              lastComposeTraceAt = now;
+              void trace.event("compose", line.slice(0, 240), { level: "info" });
+            },
           },
-        },
-      );
-      log(`[compose] completed: docker compose ${args.join(" ")}`);
-      await checkNotCancelled();
-    } catch (error) {
-      log(
-        `[compose] failed: docker compose ${args.join(" ")} :: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      if (controller.signal.aborted) {
-        const reason = controller.signal.reason;
-        if (reason instanceof Error) {
-          throw reason;
+        );
+        log(`[compose] completed: docker compose ${args.join(" ")}`);
+        await checkNotCancelled();
+      } catch (error) {
+        log(
+          `[compose] failed: docker compose ${args.join(" ")} :: ${error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        if (controller.signal.aborted) {
+          const reason = controller.signal.reason;
+          if (reason instanceof Error) {
+            throw reason;
+          }
+          throw new Error(typeof reason === "string" ? reason : "cancelled_by_user");
         }
-        throw new Error(typeof reason === "string" ? reason : "cancelled_by_user");
+        throw error;
+      } finally {
+        clearInterval(intervalId);
       }
-      throw error;
-    } finally {
-      clearInterval(intervalId);
-    }
     };
     if (tenantId) {
       await withTenantProvisionAdvisoryLock(db, tenantId, executeCompose);
@@ -1329,7 +1317,7 @@ export async function executeProvisionRuntime(
       s3ForcePathStyle,
       stockixTenantId: input.stockixTenantId,
       stockixDiscoverySlug,
-      stockixApiUrl: input.stockixApiUrl,
+      stockixApiUrl: `${baseUrl}/api`,
       internalApiSecret: apiConfig.internalApiSecret,
       stockixAppName,
       stockixLogoUrl,
@@ -1478,13 +1466,13 @@ export async function executeProvisionRuntime(
     const internalUrl = tenantServerInternalIp
       ? `http://${tenantServerInternalIp}:3000`
       : await resolveServerInternalUrl({
-          composeFile,
-          project,
-          envPath: composeCtx.envPath,
-          composeEnv: composeCtx.composeEnv,
-          fallbackHost: apiConfig.tenantInternalHost,
-          fallbackPort: port,
-        });
+        composeFile,
+        project,
+        envPath: composeCtx.envPath,
+        composeEnv: composeCtx.composeEnv,
+        fallbackHost: apiConfig.tenantInternalHost,
+        fallbackPort: port,
+      });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");
       await trace.event("progress", "Waiting for tenant health endpoint", {
@@ -1601,8 +1589,7 @@ export async function executeProvisionRuntime(
           }
         } catch (err) {
           log(
-            `[provision] Settings fetch failed, using defaults: ${
-              err instanceof Error ? err.message : String(err)
+            `[provision] Settings fetch failed, using defaults: ${err instanceof Error ? err.message : String(err)
             }`,
           );
           if (!hasOp("tenant.fetch_org_settings")) {
@@ -1660,9 +1647,9 @@ export async function executeProvisionRuntime(
           const resolvedTenantId =
             resolveJson && typeof resolveJson === "object"
               ? Number(
-                  (resolveJson as Record<string, unknown>).tenantId ??
-                    (resolveJson as Record<string, unknown>).tenant_id,
-                )
+                (resolveJson as Record<string, unknown>).tenantId ??
+                (resolveJson as Record<string, unknown>).tenant_id,
+              )
               : NaN;
           if (!resolvedTenantId || !Number.isFinite(resolvedTenantId) || resolvedTenantId <= 0) {
             throw new Error(`finance_resolve_tenant_invalid_response: ${JSON.stringify(resolveJson)}`);
@@ -1742,8 +1729,7 @@ export async function executeProvisionRuntime(
             }
           } catch (err) {
             log(
-              `[provision] Warning: failed to save financeOrganizationId: ${
-                err instanceof Error ? err.message : String(err)
+              `[provision] Warning: failed to save financeOrganizationId: ${err instanceof Error ? err.message : String(err)
               }`,
             );
           }
@@ -1772,8 +1758,7 @@ export async function executeProvisionRuntime(
               }
             } catch (err) {
               log(
-                `[provision] Warning: attach-user error: ${
-                  err instanceof Error ? err.message : String(err)
+                `[provision] Warning: attach-user error: ${err instanceof Error ? err.message : String(err)
                 }`,
               );
             }
@@ -1821,7 +1806,7 @@ export async function executeProvisionRuntime(
         const detail =
           err && typeof err === "object" && "detail" in err
             ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (err as any).detail
+            (err as any).detail
             : undefined;
         const richError = detail ? `${msg} :: ${detail}` : msg;
         await trace.event(
@@ -2397,8 +2382,7 @@ export async function runAddModuleStep(
           await markOp("add_module.finance_welcome_email", "Finance welcome email sent");
         } catch (emailErr) {
           log(
-            `[add_module][accounting] welcome email failed (non-fatal): ${
-              emailErr instanceof Error ? emailErr.message : String(emailErr)
+            `[add_module][accounting] welcome email failed (non-fatal): ${emailErr instanceof Error ? emailErr.message : String(emailErr)
             }`,
           );
         }

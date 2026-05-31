@@ -613,6 +613,7 @@ async function runOrgProvisionJob(
       mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
       parentTenantSlug: payload.parentTenantSlug,
       stockixTenantId: payload.stockixTenantId,
+      stockixApiUrl: payload.stockixApiUrl,
       correlationId: job.correlationId ?? randomUUID(),
     },
     (m) => logger.info(`[worker][${job.id}] ${m}`),
