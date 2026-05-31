@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request, { params }: Params) {
   const { correlationId } = await params;
-  const res = await apiFetch(`/tenants/provision-stream/${correlationId}`, {}, req);
+  const res = await apiFetch(`/tenants/provision-stream/${correlationId}`, { signal: req.signal }, req);
   return new Response(res.body, {
     status: res.status,
     headers: {

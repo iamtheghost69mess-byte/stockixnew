@@ -96,10 +96,7 @@ export async function enqueueOrgProvisioning(
       mainTenantInternalBaseUrl,
       stockixTenantId: tenantId,
       tenantModules: tenant.modules,
-      stockixApiUrl:
-        apiConfig.stockixApiUrl?.trim()
-        ?? apiConfig.nextPublicStockixApiUrl?.trim()
-        ?? "",
+  stockixApiUrl: `${apiConfig.publicBaseUrlScheme ?? "https"}://${tenant.slug}.${apiConfig.rootDomain ?? "stockix.cloud"}/api`,
     },
   });
 }

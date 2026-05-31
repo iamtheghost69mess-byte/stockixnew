@@ -72,7 +72,7 @@ http.interceptors.request.use((request) => {
   if (locale) {
     setRequestHeader(request, 'Accept-Language', locale);
   }
-  request.headers.common['Accept-Language'] = 'ar';
+  //this was causeing errors and bugs bel add pass request.headers.common['Accept-Language'] = 'ar';
 
   return request;
 }, (error) => {
