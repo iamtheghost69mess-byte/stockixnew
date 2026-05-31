@@ -776,8 +776,10 @@ export async function executeProvisionRuntime(
       input.parentTenantSlug?.trim() || input.slug.trim();
     oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
     let jwtSecret = secrets.persistSecret(secrets.randomHex(32));
-    let dbPassword = secrets.persistSecret(secrets.randomHex(16));
-    let dbRootPassword = secrets.persistSecret(secrets.randomHex(16));
+    let dbPasswordPlain = secrets.randomHex(16);
+    let dbPassword = secrets.persistSecret(dbPasswordPlain);
+    let dbRootPasswordPlain = secrets.randomHex(16);
+    let dbRootPassword = secrets.persistSecret(dbRootPasswordPlain);
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
@@ -1146,8 +1148,10 @@ export async function executeProvisionRuntime(
           .set({ organizationNumber })
           .where(eq(tenants.id, tenantId));
       }
-      dbPassword = decryptDeploymentSecretLocal(existing.mysqlPassword);
-      dbRootPassword = decryptDeploymentSecretLocal(existing.mysqlRootPassword);
+      dbPasswordPlain = decryptDeploymentSecretLocal(existing.mysqlPassword);
+      dbPassword = existing.mysqlPassword;
+      dbRootPasswordPlain = decryptDeploymentSecretLocal(existing.mysqlRootPassword);
+      dbRootPassword = existing.mysqlRootPassword;
       jwtSecret = decryptDeploymentSecretLocal(existing.jwtSecret);
       await db
         .update(tenants)
@@ -1303,8 +1307,8 @@ export async function executeProvisionRuntime(
       baseUrl,
       socketAllowedOrigins: baseUrl,
       jwtSecret,
-      dbPassword,
-      dbRootPassword,
+      dbPassword: dbPasswordPlain,
+      dbRootPassword: dbRootPasswordPlain,
       publicProxyPort: port,
       adminEmail: input.adminEmail,
       agendashUser,
