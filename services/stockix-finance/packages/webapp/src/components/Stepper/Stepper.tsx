@@ -28,6 +28,7 @@ export function Stepper({
   onStepClick,
   children,
   classNames,
+  allowNextStepsSelect,
 }: StepperProps) {
   const convertedChildren = toArray(children) as React.ReactElement[];
   const _children = convertedChildren.filter(

@@ -1,8 +1,8 @@
 import react from '@vitejs/plugin-react';
 import legacy from '@vitejs/plugin-legacy';
-import path from 'node:path';
 import { defineConfig, loadEnv, type PluginOption } from 'vite';
 import fixReactVirtualized from 'esbuild-plugin-react-virtualized';
+import path from 'path';
 
 /** @vitejs/plugin-legacy can crash Rollup 4.x during transformChunk (undefined code). */
 const enableLegacyPlugin = process.env.VITE_LEGACY_PLUGIN === '1';
@@ -45,6 +45,9 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
+      // Fix: ReferenceError: global is not defined at runtime.
+      // Some CommonJS deps reference `global` directly.
+      'global': 'globalThis',
       'process.env': {
         NODE_ENV: mode,
         PUBLIC_URL: clientEnv.PUBLIC_URL ?? '/',
