@@ -47,7 +47,9 @@
       "Bash(tee /tmp/dev-full.log)",
       "Bash(git add *)",
       "Bash(git commit -m 'fix\\(dashboard\\): restore webpack watch array format to fix webpack validation error *)",
-      "WebFetch(domain:stockix.cloud)"
+      "WebFetch(domain:stockix.cloud)",
+      "Bash(netstat -tuln)",
+      "Bash(curl -s http://localhost:3000/)"
     ]
   },
   "enableAllProjectMcpServers": true,
