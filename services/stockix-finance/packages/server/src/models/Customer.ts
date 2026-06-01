@@ -1,5 +1,5 @@
 import { Model, mixin } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import PaginationQueryBuilder from './Pagination';
 import ModelSetting from './ModelSetting';
 import CustomerSettings from './Customer.Settings';

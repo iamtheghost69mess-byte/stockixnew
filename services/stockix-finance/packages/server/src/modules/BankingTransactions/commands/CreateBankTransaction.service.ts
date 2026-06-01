@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { pick } from 'lodash';
 import { Knex } from 'knex';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import { CASHFLOW_TRANSACTION_TYPE } from '../constants';
 import { transformCashflowTransactionType } from '../utils';
 import { CommandBankTransactionValidator } from './CommandCasflowValidator.service';

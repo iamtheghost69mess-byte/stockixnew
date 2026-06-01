@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import * as moment from 'moment';
+import moment from 'moment';
 import { FinancialSheet } from '../../common/FinancialSheet';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { SaleInvoice } from '@/modules/SaleInvoices/models/SaleInvoice';

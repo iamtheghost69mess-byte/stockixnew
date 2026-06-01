@@ -1,5 +1,5 @@
 import * as Yup from 'yup';
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
 import { Knex } from 'knex';
 import * as fs from 'fs/promises';
@@ -18,7 +18,7 @@ import {
   split,
   last,
 } from 'lodash';
-import * as pluralize from 'pluralize';
+import pluralize from 'pluralize';
 import { ResourceMetaFieldsMap } from './interfaces';
 import { multiNumberParse } from '@/utils/multi-number-parse';
 import { ServiceError } from '../Items/ServiceError';

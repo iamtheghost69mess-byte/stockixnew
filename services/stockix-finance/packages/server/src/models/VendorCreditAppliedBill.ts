@@ -1,5 +1,5 @@
 import { mixin, Model } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import ModelSetting from './ModelSetting';
 import CustomViewBaseModel from './CustomViewBaseModel';
 import ModelSearchable from './ModelSearchable';

@@ -1,5 +1,5 @@
 import { Model, mixin } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import { buildFilterQuery } from '@/lib/ViewRolesBuilder';
 import ItemSettings from './Item.Settings';
 import ModelSetting from './ModelSetting';

@@ -1,6 +1,6 @@
 import { ModelObject, raw } from 'objection';
 import { isEmpty } from 'lodash';
-import * as moment from 'moment';
+import moment from 'moment';
 import { IInventoryDetailsQuery } from './InventoryItemDetails.types';
 import { Item } from '@/modules/Items/models/Item';
 import { InventoryTransaction } from '@/modules/InventoryCost/models/InventoryTransaction';

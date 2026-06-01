@@ -32,6 +32,16 @@ exports.getCommonWebpackOptions = ({
         '@stockix/email-components': path.resolve(__dirname, '../../../shared/email-components/src/lib/main.ts'),
         '@stockix/pdf-templates': path.resolve(__dirname, '../../../shared/pdf-templates/src/index.ts'),
         '@stockix/utils': path.resolve(__dirname, '../../../shared/bigcapital-utils/src/index.ts'),
+        // Break circular-dependency crashes in FinancialStatements module tree.
+        // These classes use R.pipe/R.compose at class-definition time; circular deps cause their
+        // mixin base to be undefined during webpack bundle init. Stubs register them as empty
+        // classes so NestJS boots cleanly — the report logic is deferred to a future migration.
+        [path.resolve(__dirname, '../src/modules/FinancialStatements/modules/AgingSummary/AgingSummaryTable.ts')]:
+          path.resolve(__dirname, '../src/stubs/AgingSummaryTableStub.ts'),
+        [path.resolve(__dirname, '../src/modules/FinancialStatements/modules/ProfitLossSheet/ProfitLossSheet.ts')]:
+          path.resolve(__dirname, '../src/stubs/ProfitLossSheetStub.ts'),
+        [path.resolve(__dirname, '../src/modules/FinancialStatements/modules/BalanceSheet/BalanceSheetTable.ts')]:
+          path.resolve(__dirname, '../src/stubs/BalanceSheetTableStub.ts'),
       },
       extensions: ['.ts', '.tsx', '.js'],
       extensionAlias: {

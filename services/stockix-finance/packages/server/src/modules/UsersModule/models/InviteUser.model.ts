@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { BaseModel } from '@/models/Model';
 
 export class UserInvite extends BaseModel {

@@ -1,7 +1,7 @@
 import { hashPassword } from '@/modules/Auth/Auth.utils';
 import { HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import * as uniqid from 'uniqid';
+import uniqid from 'uniqid';
 import { events } from '@/common/events/events';
 import { ServiceError } from '@/modules/Items/ServiceError';
 import { SystemUser } from '@/modules/System/models/SystemUser';

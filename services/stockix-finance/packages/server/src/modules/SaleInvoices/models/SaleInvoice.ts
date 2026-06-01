@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
 import { Model, raw } from 'objection';
 import { castArray } from 'lodash';

@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { Model } from 'objection';
 
 type Constructor<T = {}> = new (...args: any[]) => T;

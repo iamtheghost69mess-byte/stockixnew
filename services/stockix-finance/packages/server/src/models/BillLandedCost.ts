@@ -1,6 +1,6 @@
 import { Model } from 'objection';
 import { lowerCase } from 'lodash';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 
 export default class BillLandedCost extends TenantModel {
   /**

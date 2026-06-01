@@ -5,6 +5,8 @@
   "entryFile": "main",
   "compilerOptions": {
     "deleteOutDir": true,
+    "tsConfigPath": "tsconfig.build.json",
+    "noCheck": true,
     "assets": [
       { "include": "i18n/**/*", "watchAssets": true },
       { "include": "database/**/*", "exclude": "**/*.ts", "watchAssets": true }

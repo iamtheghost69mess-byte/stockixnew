@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { IBalanceSheetQuery } from "./BalanceSheet.types";
 
 export const MAP_CONFIG = { childrenPath: 'children', pathFormat: 'array' };
