@@ -1,6 +1,6 @@
 import { Model } from 'objection';
 import { lowerCase } from 'lodash';
-// import TenantModel from 'models/TenantModel';
+// import TenantModel from '@/models/TenantModel';
 import { BaseModel } from '@/models/Model';
 import { Bill } from '@/modules/Bills/models/Bill';
 import { BillLandedCostEntry } from './BillLandedCostEntry';

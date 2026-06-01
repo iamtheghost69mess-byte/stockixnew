@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Inject, Injectable } from '@nestjs/common';
-import * as moment from 'moment';
+import moment from 'moment';
 import { Knex } from 'knex';
 import { isEmpty } from 'lodash';
 import { ModelObject } from 'objection';

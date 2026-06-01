@@ -4,13 +4,13 @@
     margin-bottom: 0;
   }
   .table {
-    border: 1px solid #d2dce2;
+    border: 1px solid #DCE0E5;
     border-left: transparent;
     background-color: #FFF;
 
     .th,
     .td {
-      border-left: 1px solid #e2e2e2;
+      border-left: 1px solid #DCE0E5;
 
       &.index {
         text-align: center;
@@ -21,7 +21,7 @@
         }
       }
       &:first-child {
-        border-left: 1px solid #d2dce2;
+        border-left: 1px solid #DCE0E5;
       }
     }
 
@@ -30,8 +30,8 @@
         padding: 10px 10px;
         background-color: #f0f2f8;
         font-size: 14px;
-        color: #415060;
-        border-bottom: 1px solid #d2dce2;
+        color: #5F6B7C;
+        border-bottom: 1px solid #DCE0E5;
 
         &.index > div {
           width: 100%;
@@ -43,12 +43,12 @@
       .tr .td {
         padding: 4px;
         border-bottom: 0;
-        border-top: 1px solid #d8d8d8;
+        border-top: 1px solid #DCE0E5;
         min-height: 40px;
 
         &.index {
           background-color: #f0f2f8;
-          color: #718294;
+          color: #738091;
 
           > span {
             margin-top: auto;
@@ -65,7 +65,7 @@
           .bp4-control-indicator{
             height: 18px;
             width: 18px;
-            border-color: #dbdbdb;
+            border-color: #DCE0E5;
           }
         }
       }
@@ -73,7 +73,7 @@
         .bp4-form-group:not(.bp4-intent-danger) .bp4-input,
         .form-group--select-list .bp4-button {
           border-color: #ffffff;
-          color: #222;
+          color: #1C2127;
           border-radius: 3px;
         }
         .bp4-form-group:not(.bp4-intent-danger) .bp4-input {
@@ -82,7 +82,7 @@
           padding-right: 4px;
 
           &:focus {
-            box-shadow: 0 0 0 2px #116cd0;
+            box-shadow: 0 0 0 2px #2D72D2;
           }
         }
         .form-group--select-list .bp4-button {
@@ -98,7 +98,7 @@
           &.bp4-intent-danger {
             .bp4-button:not(.bp4-minimal),
             .bp4-input {
-              border-color: #f7b6b6;
+              border-color: #FA999C;
             }
           }
         }
@@ -112,10 +112,10 @@
         .td.actions {
           .bp4-button {
             background-color: transparent;
-            color: #e66d6d;
+            color: #E76A6E;
 
             &:hover {
-              color: #c23030;
+              color: #AC2F33;
             }
 
             svg {
@@ -149,13 +149,13 @@
       }
     }
     .th {
-      color: #444;
+      color: #1C2127;
       font-weight: 600;
-      border-bottom: 1px dotted #666;
+      border-bottom: 1px dotted #5F6B7C;
     }
 
     .td {
-      border-bottom: 1px dotted #999;
+      border-bottom: 1px dotted #ABB3BF;
     }
 
     .actions.td {
@@ -188,7 +188,7 @@
     .tbody {
       .tr .td.actions .bp4-button {
         background-color: transparent;
-        color: #e66d6d;
+        color: #E76A6E;
 
         svg {
           color: inherit;
@@ -221,7 +221,7 @@
     .credit.td {
       > span {
         font-weight: 600;
-        color: #444;
+        color: #1C2127;
       }
     }
     .td {

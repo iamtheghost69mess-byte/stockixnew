@@ -5,7 +5,7 @@ import { castArray } from 'lodash';
 import * as R from 'ramda';
 import { Knex } from 'knex';
 import { isEmpty } from 'lodash';
-import * as moment from 'moment';
+import moment from 'moment';
 import { transformToMapBy } from '@/utils/transform-to-map-by';
 import { ProfitLossSheetQuery } from './ProfitLossSheetQuery';
 import { Ledger } from '@/modules/Ledger/Ledger';

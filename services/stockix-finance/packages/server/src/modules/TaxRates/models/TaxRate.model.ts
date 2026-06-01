@@ -1,5 +1,5 @@
 import { mixin, Model, raw } from 'objection';
-// import TenantModel from 'models/TenantModel';
+// import TenantModel from '@/models/TenantModel';
 // import ModelSearchable from './ModelSearchable';
 // import SoftDeleteQueryBuilder from '@/collection/SoftDeleteQueryBuilder';
 // import TaxRateMeta from './TaxRate.settings';

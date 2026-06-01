@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import * as uniqid from 'uniqid';
+import uniqid from 'uniqid';
 import {
   IAuthSendedResetPassword,
   IAuthSendingResetPassword,

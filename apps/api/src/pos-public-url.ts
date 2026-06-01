@@ -47,6 +47,31 @@ export async function resolvePosFrontendHostPort(slug: string): Promise<number |
   }
 }
 
+export async function resolvePosBackendHostPort(slug: string): Promise<number | null> {
+  const project = `stockix-pos-${slug}`;
+  try {
+    const { stdout } = await execa("docker", [
+      "compose",
+      "-p",
+      project,
+      "port",
+      "pos-backend",
+      "8010",
+    ]);
+    const match = stdout.trim().match(/:(\d+)\s*$/);
+    return match?.[1] ? Number(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolvePosBackendHealthUrl(slug: string): Promise<string | null> {
+  const port = await resolvePosBackendHostPort(slug);
+  if (port == null || !Number.isFinite(port) || port <= 0) return null;
+  const host = localTenantHost();
+  return `${publicScheme()}://${host}:${port}/health`;
+}
+
 /** Resolves a reachable POS URL in local dev (direct host port instead of Traefik subdomain). */
 export async function effectivePosUrl(
   slug: string,

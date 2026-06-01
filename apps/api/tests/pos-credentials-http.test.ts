@@ -12,6 +12,11 @@ vi.mock("../src/audit.js", () => ({
   logAudit: vi.fn(async () => undefined),
 }));
 
+vi.mock("../src/lib/tenant-module-access.js", () => ({
+  assertTenantModuleLicensed: vi.fn(async () => ({ ok: true as const })),
+  respondModuleAccessDenied: vi.fn(),
+}));
+
 describe("pos-credentials routes", () => {
   const tenantId = "11111111-1111-1111-1111-111111111111";
   const posOrgId = "aaaaaaaaaaaaaaaaaaaaaaaa";

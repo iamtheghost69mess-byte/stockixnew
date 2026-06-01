@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
 import { includes, isFunction, isObject, isUndefined, omit } from 'lodash';
 // import { EXPORT_DTE_FORMAT } from '@/services/Export/constants';

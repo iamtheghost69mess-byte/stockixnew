@@ -1,5 +1,5 @@
 import { Model, mixin } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import { formatNumber } from 'utils';
 import ModelSetting from './ModelSetting';
 import ManualJournalSettings from './ManualJournal.Settings';

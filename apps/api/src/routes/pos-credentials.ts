@@ -8,6 +8,10 @@ import * as schema from "@repo/db/schema";
 import { posProxyJson } from "../pos-proxy.js";
 import { logAudit } from "../audit.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
+import {
+  assertTenantModuleLicensed,
+  respondModuleAccessDenied,
+} from "../lib/tenant-module-access.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -101,6 +105,9 @@ export function registerPosCredentialsRoutes(
       return c.json({ error: "tenantId must be a UUID" }, 400);
     }
 
+    const moduleAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "pos");
+    if (!moduleAccess.ok) return respondModuleAccessDenied(c, moduleAccess);
+
     const loaded = await loadTenantPosOrgId(db, tenantParsed.data);
     if (!loaded) {
       return c.json(
@@ -153,6 +160,9 @@ export function registerPosCredentialsRoutes(
     if (!bodyParsed.success) {
       return c.json({ error: "invalid_body", details: bodyParsed.error.flatten() }, 400);
     }
+
+    const moduleAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "pos");
+    if (!moduleAccess.ok) return respondModuleAccessDenied(c, moduleAccess);
 
     const loaded = await loadTenantPosOrgId(db, tenantParsed.data);
     if (!loaded) {

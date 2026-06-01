@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { omit } from 'lodash';
-import * as moment from 'moment';
-import * as composeAsync from 'async/compose';
+import moment from 'moment';
+import composeAsync from 'async/compose';
 import * as R from 'ramda';
 import { ERRORS } from '../constants';
 import { ServiceError } from '@/modules/Items/ServiceError';

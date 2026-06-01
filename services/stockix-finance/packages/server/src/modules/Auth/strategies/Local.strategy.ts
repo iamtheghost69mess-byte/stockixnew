@@ -9,7 +9,7 @@ import { SystemUser } from '../../System/models/SystemUser';
 export class LocalStrategy extends PassportStrategy(Strategy, 'local') {
   constructor(private readonly authSigninService: AuthSigninService) {
     super({
-      usernameField: 'email',
+      usernameField: 'credential',
       passReqToCallback: false,
       session: false,
     });

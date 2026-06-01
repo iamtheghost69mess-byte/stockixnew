@@ -1,26 +1,48 @@
+import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
+
 export function renderPasswordReset(opts: {
   name?: string;
   resetUrl: string;
 }): string {
-  const greeting = opts.name
-    ? `Hi ${escapeHtml(opts.name)},`
-    : "Hi,";
-  return `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #111;">
-  <h1>Reset your Stockix password</h1>
-  <p>${greeting}</p>
-  <p>We received a request to reset the password for your Stockix owner account.</p>
-  <p><a href="${escapeHtml(opts.resetUrl)}">Choose a new password</a></p>
-  <p style="color: #666; font-size: 14px;">This link expires in one hour. If you did not request a reset, you can ignore this email.</p>
-</body>
-</html>`;
+  const { h1, bodyText, btn, mutedNote } = emailParts;
+
+  const content =
+    h1("Reset your password") +
+    bodyText(
+      opts.name
+        ? `Hi ${escapeHtml(opts.name)}, we received a request to reset the password for your account. Click the button below to set a new one.`
+        : "We received a request to reset the password for your account. Click the button below to set a new one.",
+    ) +
+    btn("Reset Password", opts.resetUrl) +
+    mutedNote(
+      "This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email — your password will not be changed.",
+    );
+
+  return renderLayout({
+    title: "Reset your password",
+    previewText: "Reset your account password",
+    content,
+  });
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+export function renderPasswordResetText(opts: {
+  name?: string;
+  resetUrl: string;
+}): string {
+  const { h1, line, btn, blank, note } = textParts;
+  const content = [
+    h1("Reset your password"),
+    opts.name
+      ? line(
+          `Hi ${opts.name}, we received a request to reset the password for your account.`,
+        )
+      : line("We received a request to reset the password for your account."),
+    blank(),
+    btn("Reset Password", opts.resetUrl),
+    blank(),
+    note(
+      "This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email - your password will not be changed.",
+    ),
+  ].join("\n");
+  return renderTextLayout({ content });
 }

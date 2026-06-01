@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { ClsService } from 'nestjs-cls';
 import { Inject, Injectable } from '@nestjs/common';
 import { TenantModelProxy } from '../System/models/TenantBaseModel';

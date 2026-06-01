@@ -1,7 +1,7 @@
 import { mixin, Model, raw } from 'objection';
 import { castArray } from 'lodash';
 import moment from 'moment';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import ModelSetting from './ModelSetting';
 import SaleInvoiceMeta from './SaleInvoice.Settings';
 import CustomViewBaseModel from './CustomViewBaseModel';

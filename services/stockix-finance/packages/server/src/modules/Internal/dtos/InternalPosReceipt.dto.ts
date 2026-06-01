@@ -93,6 +93,12 @@ export class InternalPosReceiptPayloadDto {
   @ValidateNested({ each: true })
   @Type(() => InternalPosDepositPaymentDto)
   depositPayments?: InternalPosDepositPaymentDto[];
+
+  /** FX rate from POS document currency to company/base currency at time of sale. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  exchangeRate?: number;
 }
 
 export class InternalPosPartialRefundDto extends InternalPosTenantBodyDto {

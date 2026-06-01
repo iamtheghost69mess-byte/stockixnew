@@ -1,5 +1,5 @@
 import { pick } from 'lodash';
-import * as moment from 'moment';
+import moment from 'moment';
 import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';

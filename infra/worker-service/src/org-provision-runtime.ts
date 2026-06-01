@@ -28,6 +28,7 @@ export interface OrgProvisionInput {
   mainTenantInternalBaseUrl: string;
   parentTenantSlug: string;
   stockixTenantId: string;
+  stockixApiUrl?: string;
   correlationId: string;
 }
 
@@ -295,8 +296,7 @@ export async function executeOrgProvisionRuntime(
     }
   } catch (err) {
     log(
-      `[org-provision] Settings fetch failed, using defaults: ${
-        err instanceof Error ? err.message : String(err)
+      `[org-provision] Settings fetch failed, using defaults: ${err instanceof Error ? err.message : String(err)
       }`,
     );
   }
@@ -383,8 +383,7 @@ export async function executeOrgProvisionRuntime(
       });
     } catch (err) {
       log(
-        `[org-provision] COA copy error: ${
-          err instanceof Error ? err.message : String(err)
+        `[org-provision] COA copy error: ${err instanceof Error ? err.message : String(err)
         }`,
       );
     }
@@ -420,12 +419,12 @@ export async function executeOrgProvisionRuntime(
         log,
       );
     } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await patchControlPlaneOrganization(
-      input.organizationId,
-      { provisioningError: `pos_combined_provision_failed: ${msg.slice(0, 500)}` },
-      log,
-    );
+      const msg = err instanceof Error ? err.message : String(err);
+      await patchControlPlaneOrganization(
+        input.organizationId,
+        { provisioningError: `pos_combined_provision_failed: ${msg.slice(0, 500)}` },
+        log,
+      );
       throw err;
     }
   } else {

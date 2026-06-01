@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { throwIfTenantNotExists } from '../Organization/_utils';
 import { Inject, Injectable } from '@nestjs/common';

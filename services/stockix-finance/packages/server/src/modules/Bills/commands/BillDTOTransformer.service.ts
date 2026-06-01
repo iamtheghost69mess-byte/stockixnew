@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { omit, sumBy } from 'lodash';
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import { formatDateFields } from '@/utils/format-date-fields';
 import { BranchTransactionDTOTransformer } from '@/modules/Branches/integrations/BranchTransactionDTOTransform';
 import { WarehouseTransactionDTOTransform } from '@/modules/Warehouses/Integrations/WarehouseTransactionDTOTransform';
@@ -110,7 +110,7 @@ export class BillDTOTransformer {
       // Avoid rewrite the open date in edit mode when already opened.
       ...(billDTO.open &&
         !oldBill?.openedAt && {
-          openedAt: moment().toMySqlDateTime(),
+          openedAt: (moment() as any).toMySqlDateTime(),
         }),
       userId: authorizedUser.id,
     };

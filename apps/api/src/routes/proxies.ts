@@ -14,8 +14,8 @@ type Db = ReturnType<typeof createDb>;
  * Registers all outbound proxy routes (POS platform, PMS, Finance users, POS credentials, integration bridge).
  */
 export function registerProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db: Db | null): void {
-  registerPosProxyRoutes(app);
-  registerPmsProxyRoutes(app);
+  registerPosProxyRoutes(app, db);
+  registerPmsProxyRoutes(app, db);
   if (!db) return;
   registerTenantFinanceUsersApi(app, db);
   registerPosCredentialsRoutes(app, db);

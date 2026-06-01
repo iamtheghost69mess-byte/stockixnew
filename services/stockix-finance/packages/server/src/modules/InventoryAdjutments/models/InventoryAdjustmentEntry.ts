@@ -1,7 +1,7 @@
 import { Model } from 'objection';
 import { BaseModel } from '@/models/Model';
 import { Item } from '@/modules/Items/models/Item';
-// import TenantModel from 'models/TenantModel';
+// import TenantModel from '@/models/TenantModel';
 
 export class InventoryAdjustmentEntry extends BaseModel {
   adjustmentId!: number;

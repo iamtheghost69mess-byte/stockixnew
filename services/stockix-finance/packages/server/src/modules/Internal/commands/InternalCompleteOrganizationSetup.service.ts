@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { Inject, Injectable } from '@nestjs/common';
 import { TenantMetadata } from '@/modules/System/models/TenantMetadataModel';
 

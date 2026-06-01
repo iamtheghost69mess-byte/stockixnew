@@ -7,7 +7,7 @@ import {
   Optional,
   Type,
 } from '@nestjs/common';
-import * as multer from 'multer';
+import multer from 'multer';
 import { Observable } from 'rxjs';
 import { MULTER_MODULE_OPTIONS } from '../constants/files.constants';
 import { transformException } from '../constants/multer.utils';

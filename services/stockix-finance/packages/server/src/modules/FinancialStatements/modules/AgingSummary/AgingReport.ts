@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { IAgingPeriod } from './AgingSummary.types';
 import { FinancialSheet } from '../../common/FinancialSheet';
 
@@ -49,3 +49,5 @@ export class AgingReport extends FinancialSheet {
     return agingPeriods;
   }
 }
+
+export default AgingReport;

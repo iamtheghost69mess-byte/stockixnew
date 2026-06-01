@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import * as R from 'ramda';
 import { sumBy, omit } from 'lodash';
-import * as composeAsync from 'async/compose';
-import * as moment from 'moment';
+import composeAsync from 'async/compose';
+import moment from 'moment';
 import { SaleReceiptIncrement } from './SaleReceiptIncrement.service';
 import { ItemsEntriesService } from '@/modules/Items/ItemsEntries.service';
 import { BranchTransactionDTOTransformer } from '@/modules/Branches/integrations/BranchTransactionDTOTransform';
@@ -95,7 +95,7 @@ export class SaleReceiptDTOTransformer {
       // Avoid rewrite the deliver date in edit mode when already published.
       ...(saleReceiptDTO.closed &&
         !oldSaleReceipt?.closedAt && {
-          closedAt: moment().toMySqlDateTime(),
+          closedAt: (moment() as any).toMySqlDateTime(),
         }),
       entries,
     };

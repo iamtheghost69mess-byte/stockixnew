@@ -1,5 +1,5 @@
 import { Model, raw } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 
 export default class InventoryTransactionMeta extends TenantModel {
   /**

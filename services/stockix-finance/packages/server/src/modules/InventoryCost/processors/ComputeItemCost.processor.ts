@@ -3,7 +3,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Scope } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { ClsService, UseCls } from 'nestjs-cls';
-import * as moment from 'moment';
+import moment from 'moment';
 import { TenantJobPayload } from '@/interfaces/Tenant';
 import { InventoryComputeCostService } from '../commands/InventoryComputeCost.service';
 import { events } from '@/common/events/events';

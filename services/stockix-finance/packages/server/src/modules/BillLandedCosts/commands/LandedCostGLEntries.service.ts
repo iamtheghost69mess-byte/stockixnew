@@ -1,6 +1,6 @@
 import { Knex } from 'knex';
 import { Inject, Injectable } from '@nestjs/common';
-import * as moment from 'moment';
+import moment from 'moment';
 import { BaseLandedCostService } from '../BaseLandedCost.service';
 import { BillLandedCost } from '../models/BillLandedCost';
 import { Bill } from '@/modules/Bills/models/Bill';

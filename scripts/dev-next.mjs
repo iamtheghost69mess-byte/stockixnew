@@ -43,7 +43,7 @@ if (port !== preferred) {
     `[dashboard] Port ${preferred} is in use — using http://localhost:${port} instead`,
   );
 } else {
-  console.log(`[dashboard] http://localhost:${port}`);
+  console.log(`[dashboard] http://127.0.0.1:${port}  (http://localhost:${port})`);
 }
 
 // Turbopack on Windows + pnpm often hits "module factory is not available" for react-hook-form etc.
@@ -61,6 +61,7 @@ if (!existsSync(nextBin)) {
 
 const nextDevArgs = [
   "dev",
+  // Bind all interfaces so both http://localhost and http://127.0.0.1 work on Windows.
   "--hostname",
   "127.0.0.1",
   "--port",
@@ -68,10 +69,19 @@ const nextDevArgs = [
   ...(useWebpack ? ["--webpack"] : ["--turbopack"]),
 ];
 
+// Root `.env` injects NEXT_PUBLIC_SENTRY_DSN into process.env before Next starts;
+// Next.js will not override inherited env vars with apps/dashboard/.env.local.
+const enableSentry = process.env.STOCKIX_ENABLE_SENTRY === "1";
+const nextEnv = {
+  ...process.env,
+  DASHBOARD_PORT: String(port),
+  ...(enableSentry ? {} : { NEXT_PUBLIC_SENTRY_DSN: "", SENTRY_DSN: "" }),
+};
+
 // Invoke Next directly — avoids Windows ENOENT when pnpm is only available as pnpm.ps1.
 const child = spawn(process.execPath, [nextBin, ...nextDevArgs], {
   cwd: dashboardDir,
-  env: { ...process.env, DASHBOARD_PORT: String(port) },
+  env: nextEnv,
   stdio: "inherit",
   shell: false,
 });

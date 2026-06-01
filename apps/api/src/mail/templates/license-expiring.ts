@@ -1,52 +1,58 @@
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
+import { apiConfig } from "@repo/config";
+import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 export function renderLicenseExpiring(props: {
   tenantName: string;
   expiresAt: Date;
   daysRemaining: number;
 }): string {
-  const expiresDate = formatDate(props.expiresAt);
-  const dayLabel = props.daysRemaining === 1 ? "day" : "days";
-  const tenantName = escapeHtml(props.tenantName);
+  const { h1, bodyText, kv, warningBox, btn, formatDateEnGb } = emailParts;
+  const dayLabel = props.daysRemaining === 1 ? "" : "s";
+  const dashboardUrl = apiConfig.dashboardUrl;
 
-  return `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
-  <h1 style="font-size: 1.25rem; margin-bottom: 1rem;">Your Stockix license expires soon</h1>
-  <p>Hi ${tenantName},</p>
-  <p>
-    Your Stockix license will expire in
-    <strong>${props.daysRemaining} ${dayLabel}</strong>
-    on <strong>${escapeHtml(expiresDate)}</strong>.
-  </p>
-  <p>
-    To avoid any interruption to your service, please renew your
-    license before the expiry date.
-  </p>
-  <p>
-    After expiry you will have a grace period during which your
-    account will be read-only. After the grace period ends your
-    account will be fully locked.
-  </p>
-  <p>Please contact your administrator to renew.</p>
-  <p style="color: #666; font-size: 0.875rem; margin-top: 2rem;">
-    This is an automated message from Stockix.
-    Please do not reply to this email.
-  </p>
-</body>
-</html>`;
+  const content =
+    h1(
+      `Your license expires in ${props.daysRemaining} day${dayLabel}`,
+    ) +
+    warningBox(
+      kv("Organization", escapeHtml(props.tenantName)) +
+        kv("Expires on", formatDateEnGb(props.expiresAt)) +
+        kv("Days remaining", String(props.daysRemaining)),
+    ) +
+    bodyText(
+      "Please renew your license before the expiry date to avoid any interruption to your service.",
+    ) +
+    (dashboardUrl ? btn("Renew License", dashboardUrl) : "");
+
+  return renderLayout({
+    title: `License expiring in ${props.daysRemaining} days`,
+    previewText: `Action required — your license expires in ${props.daysRemaining} day${dayLabel}`,
+    content,
+  });
+}
+
+export function renderLicenseExpiringText(props: {
+  tenantName: string;
+  expiresAt: Date;
+  daysRemaining: number;
+}): string {
+  const { h1, line, section, kv, btn, blank } = textParts;
+  const { formatDateEnGb } = emailParts;
+  const dayLabel = props.daysRemaining === 1 ? "" : "s";
+  const dashboardUrl = apiConfig.dashboardUrl;
+  const content = [
+    h1(`License expiring in ${props.daysRemaining} day${dayLabel}`),
+    section("Action required"),
+    kv("Organization", props.tenantName),
+    kv("Expires on", formatDateEnGb(props.expiresAt)),
+    kv("Days remaining", String(props.daysRemaining)),
+    blank(),
+    line(
+      "Please renew your license before the expiry date to avoid any interruption to your service.",
+    ),
+    dashboardUrl ? btn("Renew License", dashboardUrl) : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return renderTextLayout({ content });
 }

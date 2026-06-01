@@ -1,7 +1,7 @@
 import { Knex } from 'knex';
 import { Inject, Injectable } from '@nestjs/common';
-import * as moment from 'moment';
-import * as composeAsync from 'async/compose';
+import moment from 'moment';
+import composeAsync from 'async/compose';
 import { omit } from 'lodash';
 import { events } from '@/common/events/events';
 import { InventoryAdjustment } from '../models/InventoryAdjustment';

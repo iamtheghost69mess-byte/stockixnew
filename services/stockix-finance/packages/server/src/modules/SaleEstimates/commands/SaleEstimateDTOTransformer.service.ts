@@ -1,10 +1,10 @@
 import * as R from 'ramda';
 import { Inject, Injectable } from '@nestjs/common';
 import { omit, sumBy } from 'lodash';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import { SaleEstimateValidators } from './SaleEstimateValidators.service';
 import { formatDateFields } from '@/utils/format-date-fields';
-import * as moment from 'moment';
+import moment from 'moment';
 import { SaleEstimateIncrement } from './SaleEstimateIncrement.service';
 import { BranchTransactionDTOTransformer } from '@/modules/Branches/integrations/BranchTransactionDTOTransform';
 import { WarehouseTransactionDTOTransform } from '@/modules/Warehouses/Integrations/WarehouseTransactionDTOTransform';

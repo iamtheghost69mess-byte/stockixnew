@@ -1,18 +1,5 @@
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
+import { mailConfig } from "@repo/config";
+import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 export function renderLicenseExpired(props: {
   tenantName: string;
@@ -20,32 +7,50 @@ export function renderLicenseExpired(props: {
   gracePeriodDays: number;
   graceEndsAt: Date;
 }): string {
-  const expiredDate = formatDate(props.expiredAt);
-  const graceEndsDate = formatDate(props.graceEndsAt);
-  const tenantName = escapeHtml(props.tenantName);
+  const brandName = mailConfig.fromName;
+  const { h1, bodyText, kv, dangerBox, formatDateEnGb } = emailParts;
 
-  return `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
-  <h1 style="font-size: 1.25rem; margin-bottom: 1rem;">Your Stockix license has expired</h1>
-  <p>Hi ${tenantName},</p>
-  <p>Your Stockix license expired on <strong>${escapeHtml(expiredDate)}</strong>.</p>
-  <p>
-    You are currently in <strong>read-only mode</strong> — you can view
-    your existing data but cannot create or edit records.
-  </p>
-  <p>
-    Your grace period ends on <strong>${escapeHtml(graceEndsDate)}</strong>.
-    After this date your account will be fully locked.
-  </p>
-  <p>
-    Please contact your administrator to renew your license and
-    restore full access.
-  </p>
-  <p style="color: #666; font-size: 0.875rem; margin-top: 2rem;">
-    This is an automated message from Stockix.
-    Please do not reply to this email.
-  </p>
-</body>
-</html>`;
+  const content =
+    h1("Your license has expired") +
+    dangerBox(
+      kv("Organization", escapeHtml(props.tenantName)) +
+        kv("Expired on", formatDateEnGb(props.expiredAt)) +
+        (props.gracePeriodDays > 0
+          ? kv("Grace period ends", formatDateEnGb(props.graceEndsAt))
+          : ""),
+    ) +
+    bodyText(
+      "Your access has been suspended and your account is in read-only mode. Please renew your license or contact your administrator to restore service.",
+    );
+
+  return renderLayout({
+    title: "Your license has expired",
+    previewText: `Your ${brandName} license has expired — action required`,
+    content,
+  });
+}
+
+export function renderLicenseExpiredText(props: {
+  tenantName: string;
+  expiredAt: Date;
+  gracePeriodDays: number;
+  graceEndsAt: Date;
+}): string {
+  const { h1, line, kv, blank } = textParts;
+  const { formatDateEnGb } = emailParts;
+  const content = [
+    h1("Your license has expired"),
+    kv("Organization", props.tenantName),
+    kv("Expired on", formatDateEnGb(props.expiredAt)),
+    props.gracePeriodDays > 0
+      ? kv("Grace period ends", formatDateEnGb(props.graceEndsAt))
+      : "",
+    blank(),
+    line(
+      "Your access has been suspended. Please renew your license or contact your administrator to restore service.",
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return renderTextLayout({ content });
 }

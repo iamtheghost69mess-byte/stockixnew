@@ -6,3 +6,5 @@ export default class FinancialReportService {
     };
   }
 }
+
+export { FinancialReportService };

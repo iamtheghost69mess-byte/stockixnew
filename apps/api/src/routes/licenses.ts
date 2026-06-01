@@ -44,6 +44,7 @@ import {
 } from "../license-utils.js";
 import { buildFinanceLicenseLimitFields } from "../finance-license.client.js";
 import { triggerFinanceLicenseSync } from "../license-finance-sync.js";
+import { sendLicenseActivatedEmailForTenant } from "../mail/send.js";
 import {
   posSyncResultToStatus,
   reactivatePosOrgForLicense,
@@ -1596,6 +1597,15 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         err instanceof Error ? err.message : String(err),
       );
     });
+
+    void sendLicenseActivatedEmailForTenant(db, body.tenantId, { licenseId: upd.id }).catch(
+      (err) => {
+        console.error(
+          "[license] activated email failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
+      },
+    );
 
     return c.json({
       license: upd

@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import {
   IFormatNumberSettings,
   INumberFormatQuery,
@@ -182,3 +182,5 @@ export class FinancialSheet {
     return { amount, formattedAmount };
   };
 }
+
+export default FinancialSheet;

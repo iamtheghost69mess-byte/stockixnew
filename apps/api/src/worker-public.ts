@@ -11,6 +11,6 @@ export { processLicenseExpiryFollowUp } from "./license-expire-followup.js";
 
 export { syncFinanceLicenseForStockixTenant } from "./finance-license.client.js";
 
-export { sendPosWelcomeEmail } from "./mail/send.js";
+export { sendFinanceWelcomeEmail, sendPosWelcomeEmail } from "./mail/send.js";
 
 export { initEmailLogging } from "./mail/email-log.js";

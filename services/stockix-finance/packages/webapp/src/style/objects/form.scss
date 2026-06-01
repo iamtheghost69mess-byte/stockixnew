@@ -33,7 +33,7 @@ label.bp4-label {
   border-radius: 2px;
   height: 32px;
   line-height: 32px;
-  color: #333;
+  color: #1C2127;
 
   &,
   .bp4-dark & {
@@ -41,8 +41,8 @@ label.bp4-label {
   }
   &:focus,
   &.bp4-active {
-    box-shadow: 0 0 0 1px #116cd0;
-    border-color: #116cd0;
+    box-shadow: 0 0 0 1px #2D72D2;
+    border-color: #2D72D2;
   }
 
   &.bp4-disabled,
@@ -217,8 +217,8 @@ label.bp4-label {
       }
 
       &:focus {
-        box-shadow: 0 0 0 1px #116cd0;
-        border-color: #116cd0;
+        box-shadow: 0 0 0 1px #2D72D2;
+        border-color: #2D72D2;
       }
     }
   }
@@ -252,7 +252,7 @@ label.bp4-label {
 
     .bp4-button {
       padding-left: 10px;
-      color: #333;
+      color: #1C2127;
     }
   }
 

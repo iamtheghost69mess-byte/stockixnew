@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 
 export enum ROW_TYPE {
   ITEM = 'ITEM',

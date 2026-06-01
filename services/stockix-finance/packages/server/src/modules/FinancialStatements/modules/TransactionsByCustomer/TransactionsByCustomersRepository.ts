@@ -1,5 +1,5 @@
 import { ModelObject } from 'objection';
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
 import { ACCOUNT_TYPE } from '@/constants/accounts';
 import { Account } from '@/modules/Accounts/models/Account.model';

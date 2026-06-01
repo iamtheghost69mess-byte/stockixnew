@@ -34,6 +34,9 @@ export interface IDynamicListService {
   handlerErrorsToResponse(error, req, res, next): void;
 }
 
+export const ISortOrder = { ASC: 'ASC', DESC: 'DESC' } as const;
+export type ISortOrder = typeof ISortOrder[keyof typeof ISortOrder];
+
 // Search role.
 export interface ISearchRole {
   fieldKey: string;
