@@ -580,7 +580,37 @@ export async function sendLicenseExpiringEmailForTenant(
   }
 }
 
-/** Notify the tenant's assigned platform owner (SaaS operator). */
+/** Notify the assigned platform owner that a tenant has been provisioned successfully. */
+export async function sendProvisionCompleteOwnerEmail(opts: {
+  to: string;
+  tenantName: string;
+  tenantId: string;
+  tenantSlug?: string;
+  ownerId?: string;
+}): Promise<MailSendResult> {
+  const brandName = apiConfig.brandName;
+  const safeTenant = escapeHtml(opts.tenantName);
+
+  return sendMail({
+    to: opts.to,
+    subject: `Tenant provisioning complete — ${opts.tenantName}`,
+    html: `<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
+  <h1 style="font-size: 22px;">Provisioning complete</h1>
+  <p>Hello,</p>
+  <p>The tenant <strong>${safeTenant}</strong> has been provisioned successfully on ${escapeHtml(brandName)}.</p>
+  ${opts.tenantSlug ? `<p style="margin: 8px 0;"><strong>Slug:</strong> ${escapeHtml(opts.tenantSlug)}</p>` : ""}
+  <p style="color: #666; font-size: 14px;">This is an automated notification. No action is required.</p>
+</body>
+</html>`,
+    idempotencyKey: `provision-complete-owner/${opts.tenantId}`,
+    templateKey: "provision-complete-owner",
+    ownerId: opts.ownerId,
+    tenantId: opts.tenantId,
+  });
+}
+
 export async function sendLicenseExpiringEmailToPlatformOwner(
   db: MailDb,
   tenantId: string,
