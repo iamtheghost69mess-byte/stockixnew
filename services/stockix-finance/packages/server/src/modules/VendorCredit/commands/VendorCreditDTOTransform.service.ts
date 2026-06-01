@@ -82,7 +82,7 @@ export class VendorCreditDTOTransformService {
       entries,
       ...(vendorCreditDTO.open &&
         !oldVendorCredit?.openedAt && {
-        openedAt: moment().toMySqlDateTime(),
+        openedAt: (moment() as any).toMySqlDateTime(),
       }),
     };
     return composeAsync(

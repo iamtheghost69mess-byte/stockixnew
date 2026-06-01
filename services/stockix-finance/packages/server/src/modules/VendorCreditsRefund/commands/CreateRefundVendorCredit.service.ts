@@ -74,7 +74,7 @@ export class CreateRefundVendorCredit {
       refundVendorCreditDTO.amount,
     );
     // Validate refund deposit account type.
-    this.validateRefundDepositAccountType(depositAccount);
+    this.validateRefundDepositAccountType(depositAccount as unknown as Account);
 
     // Triggers `onVendorCreditRefundCreate` event.
     await this.eventPublisher.emitAsync(events.vendorCredit.onRefundCreate, {
