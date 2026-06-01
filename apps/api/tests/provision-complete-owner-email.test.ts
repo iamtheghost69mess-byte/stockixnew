@@ -1,71 +1,63 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const sendMailMock = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ status: "sent", messageId: "test-id" }),
 );
 
+vi.mock("../src/mail/mailer.js", () => ({
+  sendMail: sendMailMock,
+  mailSendSucceeded: (r: { status: string }) => r.status === "sent",
+}));
+
 vi.mock("@repo/config", () => ({
   apiConfig: {
     brandName: "Stockix",
-    dashboardUrl: "https://dashboard.stockix.test",
-    publicBaseUrlScheme: "https",
   },
-  mailConfig: {
-    host: "smtp.resend.com",
-    port: 465,
-    secure: true,
-    username: "resend",
-    password: undefined,
-    fromName: "Stockix",
-    fromAddress: undefined,
-    transport: "api",
-  },
-  isMailConfigured: () => false,
-}));
-
-vi.mock("../src/mail/mailer.js", () => ({
-  sendMail: sendMailMock,
 }));
 
 import { sendProvisionCompleteOwnerEmail } from "../src/mail/send.js";
 
-const tenantId = "tenant-22222222-2222-2222-2222-222222222222";
-const ownerId = "owner-33333333-3333-3333-3333-333333333333";
-
-describe("Provision complete owner email", () => {
+describe("sendProvisionCompleteOwnerEmail", () => {
   beforeEach(() => {
     sendMailMock.mockClear();
   });
 
-  it("sends owner notification with tenant details and dashboard link", async () => {
+  it("sends a provisioning complete notification to the owner", async () => {
     await sendProvisionCompleteOwnerEmail({
-      to: "owner@stockix.test",
-      ownerId,
-      tenantId,
-      tenantName: "Demo Restaurant",
-      tenantSlug: "demo-restaurant",
-      adminEmail: "admin@demo.test",
-      planSlug: "professional",
-      modules: ["accounting", "pos"],
+      to: "owner@platform.test",
+      tenantName: "Acme Corp",
+      tenantId: "tenant-abc-123",
+      tenantSlug: "acme-corp",
+      ownerId: "owner-xyz",
     });
 
     expect(sendMailMock).toHaveBeenCalledOnce();
     expect(sendMailMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        to: "owner@stockix.test",
-        subject: "Tenant provisioned: Demo Restaurant",
-        idempotencyKey: `provision-complete-owner/${tenantId}`,
+        to: "owner@platform.test",
+        subject: "Tenant provisioning complete — Acme Corp",
+        idempotencyKey: "provision-complete-owner/tenant-abc-123",
         templateKey: "provision-complete-owner",
-        tenantId,
-        ownerId,
+        ownerId: "owner-xyz",
+        tenantId: "tenant-abc-123",
       }),
     );
     const html = sendMailMock.mock.calls[0]![0]!.html as string;
-    expect(html).toContain("Demo Restaurant");
-    expect(html).toContain("demo-restaurant");
-    expect(html).toContain("admin@demo.test");
-    expect(html).toContain("Professional");
-    expect(html).toContain("Accounting, Point of Sale");
-    expect(html).toContain(`https://dashboard.stockix.test/tenants/${tenantId}`);
+    expect(html).toContain("Acme Corp");
+    expect(html).toContain("acme-corp");
+    expect(html).toContain("Stockix");
+  });
+
+  it("works without optional tenantSlug and ownerId", async () => {
+    await sendProvisionCompleteOwnerEmail({
+      to: "owner@platform.test",
+      tenantName: "Beta Ltd",
+      tenantId: "tenant-beta-456",
+    });
+
+    expect(sendMailMock).toHaveBeenCalledOnce();
+    const html = sendMailMock.mock.calls[0]![0]!.html as string;
+    expect(html).toContain("Beta Ltd");
+    expect(html).not.toContain("<strong>Slug:</strong>");
   });
 });
