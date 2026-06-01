@@ -214,6 +214,7 @@ export const env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  WORKER_INTERNAL_NETWORK: readString("WORKER_INTERNAL_NETWORK", "stockix_internal"),
   RUN_BULLMQ_CONSUMERS: readOptionalString("RUN_BULLMQ_CONSUMERS"),
   /** Shared with stockix-finance for POST /api/internal/* (provisioning attach-user). */
   INTERNAL_API_SECRET: readOptionalString("INTERNAL_API_SECRET"),
@@ -332,6 +333,9 @@ export const apiConfig = {
   },
   get workerSecret() {
     return env.WORKER_SECRET;
+  },
+  get workerInternalNetwork() {
+    return env.WORKER_INTERNAL_NETWORK;
   },
   /** Secret for finance internal routes; dev/test fall back to WORKER_SECRET when unset. */
   get internalApiSecret(): string | undefined {
