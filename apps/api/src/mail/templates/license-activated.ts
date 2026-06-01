@@ -1,3 +1,4 @@
+import { mailConfig } from "@repo/config";
 import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 function formatModuleLabel(moduleId: string): string {
@@ -22,7 +23,7 @@ export function renderLicenseActivated(opts: {
   isPerpetual: boolean;
   loginUrl: string;
 }): string {
-  const brandName = process.env.MAIL_FROM_NAME ?? "Stockix";
+  const brandName = mailConfig.fromName;
   const { h1, bodyText, heading, kv, infoBox, btn } = emailParts;
   const { formatDateEnGb } = emailParts;
   const expiryKv = opts.isPerpetual

@@ -23,6 +23,7 @@ const TOOLING_ENV_ALLOWLIST = new Set([
   "packages/shared/src/structured-logger.ts", // logger reads NODE_ENV; importing @repo/config would create a circular dep
   "services/pms/frontend/lib/pms-client.ts", // Next.js NEXT_PUBLIC_ vars are bundled at build time — not a runtime config concern
   "services/pms/src/index.ts", // PMS server entrypoint reads CORS_ALLOWED_ORIGINS at startup
+  "apps/dashboard/instrumentation.ts", // NEXT_RUNTIME is a Next.js framework variable, not a runtime config concern
 ]);
 
 const violations = [];

@@ -4,8 +4,8 @@ import { isApiConnectionError } from "@/lib/api-connection";
 
 const apiBase = dashboardConfig.nextPublicApiUrl;
 
-const MAX_ATTEMPTS = process.env.NODE_ENV === "production" ? 3 : 1;
-const TIMEOUT_MS = process.env.NODE_ENV === "production" ? 10_000 : 3_000;
+const MAX_ATTEMPTS = dashboardConfig.nodeEnv === "production" ? 3 : 1;
+const TIMEOUT_MS = dashboardConfig.nodeEnv === "production" ? 10_000 : 3_000;
 
 function createRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
