@@ -1,3 +1,5 @@
+import { apiConfig, mailConfig } from "@repo/config";
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -140,10 +142,8 @@ export interface RenderLayoutOptions {
 }
 
 export function renderLayout(options: RenderLayoutOptions): string {
-  const brandName =
-    options.brandName ?? process.env.MAIL_FROM_NAME ?? "Stockix";
-  const dashboardUrl =
-    options.dashboardUrl ?? process.env.DASHBOARD_URL ?? "";
+  const brandName = options.brandName ?? mailConfig.fromName;
+  const dashboardUrl = options.dashboardUrl ?? apiConfig.dashboardUrl;
   const logoUrl =
     options.logoUrl ??
     (dashboardUrl
@@ -220,9 +220,9 @@ export interface RenderTextLayoutOptions {
 
 export function renderTextLayout(options: RenderTextLayoutOptions): string {
   const brandName =
-    options.brandName ?? process.env.MAIL_FROM_NAME ?? "Stockix";
+    options.brandName ?? mailConfig.fromName;
   const dashboardUrl =
-    options.dashboardUrl ?? process.env.DASHBOARD_URL ?? "";
+    options.dashboardUrl ?? apiConfig.dashboardUrl;
   const year = new Date().getFullYear();
 
   return [

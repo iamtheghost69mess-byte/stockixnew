@@ -1,3 +1,4 @@
+import { apiConfig } from "@repo/config";
 import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 export function renderLicenseExpiring(props: {
@@ -7,7 +8,7 @@ export function renderLicenseExpiring(props: {
 }): string {
   const { h1, bodyText, kv, warningBox, btn, formatDateEnGb } = emailParts;
   const dayLabel = props.daysRemaining === 1 ? "" : "s";
-  const dashboardUrl = process.env.DASHBOARD_URL ?? "";
+  const dashboardUrl = apiConfig.dashboardUrl;
 
   const content =
     h1(
@@ -38,7 +39,7 @@ export function renderLicenseExpiringText(props: {
   const { h1, line, section, kv, btn, blank } = textParts;
   const { formatDateEnGb } = emailParts;
   const dayLabel = props.daysRemaining === 1 ? "" : "s";
-  const dashboardUrl = process.env.DASHBOARD_URL ?? "";
+  const dashboardUrl = apiConfig.dashboardUrl;
   const content = [
     h1(`License expiring in ${props.daysRemaining} day${dayLabel}`),
     section("Action required"),

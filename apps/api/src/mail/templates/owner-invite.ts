@@ -1,3 +1,4 @@
+import { mailConfig } from "@repo/config";
 import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 export function renderOwnerInvite(opts: {
@@ -5,7 +6,7 @@ export function renderOwnerInvite(opts: {
   inviteUrl: string;
   role: string;
 }): string {
-  const brandName = process.env.MAIL_FROM_NAME ?? "Stockix";
+  const brandName = mailConfig.fromName;
   const { h1, bodyText, btn, mutedNote } = emailParts;
 
   const content =
@@ -30,7 +31,7 @@ export function renderOwnerInviteText(opts: {
   inviteUrl: string;
   role: string;
 }): string {
-  const brandName = process.env.MAIL_FROM_NAME ?? "Stockix";
+  const brandName = mailConfig.fromName;
   const { h1, line, btn, blank, note } = textParts;
   const content = [
     h1(`You've been invited to ${brandName}`),

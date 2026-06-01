@@ -1,3 +1,4 @@
+import { mailConfig } from "@repo/config";
 import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 export function renderTenantWelcome(opts: {
@@ -5,7 +6,7 @@ export function renderTenantWelcome(opts: {
   organizationNumber: string;
   loginUrl: string;
 }): string {
-  const brandName = process.env.MAIL_FROM_NAME ?? "Stockix";
+  const brandName = mailConfig.fromName;
   const { h1, bodyText, heading, kv, infoBox, btn } = emailParts;
 
   const content =
@@ -30,7 +31,7 @@ export function renderTenantWelcomeText(opts: {
   organizationNumber: string;
   loginUrl: string;
 }): string {
-  const brandName = process.env.MAIL_FROM_NAME ?? "Stockix";
+  const brandName = mailConfig.fromName;
   const { h1, line, section, kv, btn, blank } = textParts;
   const content = [
     h1(`Welcome to ${brandName}`),

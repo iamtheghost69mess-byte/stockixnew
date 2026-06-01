@@ -1,3 +1,4 @@
+import { mailConfig } from "@repo/config";
 import { renderLayout, escapeHtml, emailParts, renderTextLayout, textParts } from "./layout.js";
 
 export function renderLicenseExpired(props: {
@@ -6,7 +7,7 @@ export function renderLicenseExpired(props: {
   gracePeriodDays: number;
   graceEndsAt: Date;
 }): string {
-  const brandName = process.env.MAIL_FROM_NAME ?? "Stockix";
+  const brandName = mailConfig.fromName;
   const { h1, bodyText, kv, dangerBox, formatDateEnGb } = emailParts;
 
   const content =

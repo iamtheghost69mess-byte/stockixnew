@@ -1,3 +1,4 @@
+import { apiConfig } from "@repo/config";
 import { execa } from "execa";
 import { parseTenantModules, type StockixModule } from "../services/auth/stockix-product-token.js";
 import { resolvePosBackendHealthUrl } from "../pos-public-url.js";
@@ -44,7 +45,7 @@ async function resolveServerPingUrl(composeProjectName: string): Promise<string 
   // The API container is in stockix_internal. Use the tenant server container's
   // IP in that network for direct reachability (host-published ports are blocked
   // by Docker isolation between bridge networks on Linux).
-  const workerNetwork = process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
+  const workerNetwork = apiConfig.workerInternalNetwork;
   const containerName = `${composeProjectName}-server-1`;
   try {
     const { stdout } = await execa("docker", [
