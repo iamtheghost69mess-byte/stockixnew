@@ -110,7 +110,7 @@ export class BillDTOTransformer {
       // Avoid rewrite the open date in edit mode when already opened.
       ...(billDTO.open &&
         !oldBill?.openedAt && {
-          openedAt: moment().toMySqlDateTime(),
+          openedAt: (moment() as any).toMySqlDateTime(),
         }),
       userId: authorizedUser.id,
     };

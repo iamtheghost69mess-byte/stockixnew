@@ -95,7 +95,7 @@ export class SaleReceiptDTOTransformer {
       // Avoid rewrite the deliver date in edit mode when already published.
       ...(saleReceiptDTO.closed &&
         !oldSaleReceipt?.closedAt && {
-          closedAt: moment().toMySqlDateTime(),
+          closedAt: (moment() as any).toMySqlDateTime(),
         }),
       entries,
     };

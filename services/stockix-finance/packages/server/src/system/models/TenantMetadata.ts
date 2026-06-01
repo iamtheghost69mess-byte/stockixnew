@@ -16,7 +16,7 @@ export default class TenantMetadata extends BaseModel {
   }
 
   static findByTenantId(tenantId: number): Promise<TenantMetadata | undefined> {
-    return TenantMetadata.query().findOne({ tenantId }) as Promise<TenantMetadata | undefined>;
+    return TenantMetadata.query().findOne({ tenantId }) as unknown as Promise<TenantMetadata | undefined>;
   }
 
   $parseDatabaseJson(json) {
