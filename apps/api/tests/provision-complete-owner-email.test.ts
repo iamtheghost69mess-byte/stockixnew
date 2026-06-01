@@ -10,6 +10,17 @@ vi.mock("@repo/config", () => ({
     dashboardUrl: "https://dashboard.stockix.test",
     publicBaseUrlScheme: "https",
   },
+  mailConfig: {
+    host: "smtp.resend.com",
+    port: 465,
+    secure: true,
+    username: "resend",
+    password: undefined,
+    fromName: "Stockix",
+    fromAddress: undefined,
+    transport: "api",
+  },
+  isMailConfigured: () => false,
 }));
 
 vi.mock("../src/mail/mailer.js", () => ({
