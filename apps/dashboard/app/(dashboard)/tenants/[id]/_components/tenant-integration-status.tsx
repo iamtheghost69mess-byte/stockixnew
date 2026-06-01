@@ -57,6 +57,20 @@ export function TenantIntegrationStatus({
   const hasAccountingAndPos =
     tenantModules.includes("accounting") && tenantModules.includes("pos");
 
+  // Check sessionStorage to avoid showing duplicate toast on component remount
+  const isAutoRepairAlreadyAttempted = () => {
+    if (autoRepairAttempted.current) return true;
+    const key = `finance-link-repair-${tenant.id}`;
+    const attempted = sessionStorage.getItem(key);
+    return attempted === "true";
+  };
+
+  const markAutoRepairAttempted = () => {
+    autoRepairAttempted.current = true;
+    const key = `finance-link-repair-${tenant.id}`;
+    sessionStorage.setItem(key, "true");
+  };
+
   const copyProvisionId = async (label: string, value: number | null | undefined) => {
     if (value == null) return;
     try {
@@ -112,12 +126,12 @@ export function TenantIntegrationStatus({
   }, [loadBridgeSummary]);
 
   useEffect(() => {
-    if (autoRepairAttempted.current) return;
+    if (isAutoRepairAlreadyAttempted()) return;
     if (!hasAccountingAndPos) return;
     const dep = tenant.deployment;
     if (!dep || dep.status !== "active") return;
     if (dep.financeTenantId != null && dep.financeTenantId > 0) return;
-    autoRepairAttempted.current = true;
+    markAutoRepairAttempted();
     void repairFinanceLink();
   }, [
     hasAccountingAndPos,
