@@ -38,13 +38,13 @@ import { ThrottlerModule } from '@nestjs/throttler';
           throttlers: [
             {
               name: 'default',
-              ttl: globalTtl,
-              limit: globalLimit,
+              ttl: globalTtl ?? 60000,
+              limit: globalLimit ?? 2000,
             },
             {
               name: 'auth',
-              ttl: authTtl,
-              limit: authLimit,
+              ttl: authTtl ?? 60000,
+              limit: authLimit ?? 200,
             },
           ],
           // @nest-lab/throttler-storage-redis@1.x is incompatible with @nestjs/throttler@4.x
