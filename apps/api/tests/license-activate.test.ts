@@ -1,4 +1,13 @@
 import { Hono } from "hono";
+
+type ApiEnv = {
+  Variables: {
+    actorId: string;
+    actorRole: string;
+    requestId: string;
+    requestStartMs: number;
+  };
+};
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
@@ -11,6 +20,17 @@ vi.mock("@repo/config", () => ({
     defaultTermDays: 365,
     syncStrict: false,
   },
+  mailConfig: {
+    host: "smtp.resend.com",
+    port: 465,
+    secure: true,
+    username: "resend",
+    password: undefined,
+    fromName: "Test",
+    fromAddress: undefined,
+    transport: "api",
+  },
+  isMailConfigured: () => false,
 }));
 
 vi.mock("../src/audit.js", () => ({
@@ -129,7 +149,7 @@ describe("POST /licenses/activate", () => {
   it("returns 403 when license status is unassigned", async () => {
     vi.resetModules();
     const { registerLicenseApi } = await import("../src/license-http.js");
-    const testApp = new Hono();
+    const testApp = new Hono<ApiEnv>();
     registerLicenseApi(
       testApp,
       createMockDb(
@@ -154,7 +174,7 @@ describe("POST /licenses/activate", () => {
 
   it("returns 403 when license status is revoked", async () => {
     const { registerLicenseApi } = await import("../src/license-http.js");
-    const testApp = new Hono();
+    const testApp = new Hono<ApiEnv>();
     registerLicenseApi(
       testApp,
       createMockDb(makeLicense({ status: "revoked" })),
@@ -177,7 +197,7 @@ describe("POST /licenses/activate", () => {
 
   it("returns 403 when license status is expired", async () => {
     const { registerLicenseApi } = await import("../src/license-http.js");
-    const testApp = new Hono();
+    const testApp = new Hono<ApiEnv>();
     registerLicenseApi(
       testApp,
       createMockDb(
@@ -206,7 +226,7 @@ describe("POST /licenses/activate", () => {
 
   it("returns 403 when license is active but has no tenantId", async () => {
     const { registerLicenseApi } = await import("../src/license-http.js");
-    const testApp = new Hono();
+    const testApp = new Hono<ApiEnv>();
     registerLicenseApi(
       testApp,
       createMockDb(makeLicense({ status: "active", tenantId: null })),
@@ -229,7 +249,7 @@ describe("POST /licenses/activate", () => {
 
   it("allows activation when license is active and assigned", async () => {
     const { registerLicenseApi } = await import("../src/license-http.js");
-    const testApp = new Hono();
+    const testApp = new Hono<ApiEnv>();
     registerLicenseApi(testApp, createMockDb(makeLicense({ status: "active" })));
 
     const res = await testApp.request("http://local/licenses/activate", {
