@@ -7,7 +7,7 @@ import { Tenant } from '@/system/models';
 import { buildPdfDisplayTotals } from '@/services/PDF/PdfDisplayTotals';
 
 @Service()
-export default class BillPdf {
+export class BillPdf {
   @Inject()
   pdfService: PdfService;
 

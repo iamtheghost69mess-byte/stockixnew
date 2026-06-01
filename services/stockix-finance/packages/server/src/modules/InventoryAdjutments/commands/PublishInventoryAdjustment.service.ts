@@ -1,7 +1,7 @@
 import { Knex } from 'knex';
 import { Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import * as moment from 'moment';
+import moment from 'moment';
 import { UnitOfWork } from '@/modules/Tenancy/TenancyDB/UnitOfWork.service';
 import { InventoryAdjustment } from '../models/InventoryAdjustment';
 import {

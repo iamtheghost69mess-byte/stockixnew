@@ -35,6 +35,9 @@
       "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
     }
   },
+  "_moduleAliases": {
+    "@": "packages/server/build"
+  },
   "pnpm": {
     "overrides": {
       "bson": "1.1.6",

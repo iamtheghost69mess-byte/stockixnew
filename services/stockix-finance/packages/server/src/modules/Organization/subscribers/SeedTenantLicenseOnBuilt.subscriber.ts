@@ -5,7 +5,7 @@ import { IOrganizationBuiltEventPayload } from '../Organization.types';
 import { TenantLicense } from '@/modules/System/models/TenantLicense';
 import { PlanSubscription } from '@/modules/Subscription/models/PlanSubscription';
 import { TenantModel } from '@/modules/System/models/TenantModel';
-import * as moment from 'moment';
+import moment from 'moment';
 
 @Injectable()
 export class SeedTenantLicenseOnBuiltSubscriber {

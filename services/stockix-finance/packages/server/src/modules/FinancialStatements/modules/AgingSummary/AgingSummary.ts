@@ -231,3 +231,5 @@ export default abstract class AgingSummaryReport extends AgingReport {
     return sumBy(contactsSummaries, (summary) => summary.total.amount);
   }
 }
+
+export { AgingSummaryReport };

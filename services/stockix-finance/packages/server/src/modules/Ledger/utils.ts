@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { AccountTransaction } from "../Accounts/models/AccountTransaction.model";
 import { ILedgerEntry } from "./types/Ledger.types";
 

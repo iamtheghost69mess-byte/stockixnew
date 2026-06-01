@@ -1,5 +1,5 @@
 import { BaseModel } from '@/models/Model';
-// import TenantModel from 'models/TenantModel';
+// import TenantModel from '@/models/TenantModel';
 // import Auth from './Auth';
 
 export class Setting extends BaseModel {

@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { ICashFlowStatementQuery } from "./Cashflow.types";
 
 export const DISPLAY_COLUMNS_BY = {

@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { TenantLicense } from '@/modules/System/models/TenantLicense';
 import { TenantModel } from '@/modules/System/models/TenantModel';

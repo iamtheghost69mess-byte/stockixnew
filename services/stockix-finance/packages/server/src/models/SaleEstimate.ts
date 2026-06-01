@@ -1,6 +1,6 @@
 import moment from 'moment';
 import { Model, mixin } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import { defaultToTransform } from 'utils';
 import SaleEstimateSettings from './SaleEstimate.Settings';
 import ModelSetting from './ModelSetting';

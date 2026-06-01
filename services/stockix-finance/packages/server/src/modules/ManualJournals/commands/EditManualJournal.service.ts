@@ -1,6 +1,6 @@
 import { Knex } from 'knex';
 import { omit, sumBy } from 'lodash';
-import * as moment from 'moment';
+import moment from 'moment';
 import { Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {

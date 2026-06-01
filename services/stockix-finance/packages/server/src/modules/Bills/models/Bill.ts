@@ -1,7 +1,7 @@
 import { Model, raw, mixin } from 'objection';
 import { castArray, difference } from 'lodash';
 import moment from 'moment';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import BillSettings from '@/models/Bill.Settings';
 import ModelSetting from '@/models/ModelSetting';
 import CustomViewBaseModel from '@/models/CustomViewBaseModel';

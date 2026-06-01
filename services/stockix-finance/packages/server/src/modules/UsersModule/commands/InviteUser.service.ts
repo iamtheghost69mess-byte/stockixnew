@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import * as uniqid from 'uniqid';
-import * as moment from 'moment';
+import uniqid from 'uniqid';
+import moment from 'moment';
 import {
   IUserSendInviteDTO,
   IUserInvitedEventPayload,

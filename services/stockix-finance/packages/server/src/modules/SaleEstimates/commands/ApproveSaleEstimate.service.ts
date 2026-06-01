@@ -5,7 +5,7 @@ import {
 } from '../types/SaleEstimates.types';
 import { ERRORS } from '../constants';
 import { Knex } from 'knex';
-import * as moment from 'moment';
+import moment from 'moment';
 import { UnitOfWork } from '@/modules/Tenancy/TenancyDB/UnitOfWork.service';
 import { SaleEstimate } from '../models/SaleEstimate';
 import { EventEmitter2 } from '@nestjs/event-emitter';

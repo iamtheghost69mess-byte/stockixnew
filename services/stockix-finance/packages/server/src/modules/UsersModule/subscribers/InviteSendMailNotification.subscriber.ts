@@ -15,7 +15,7 @@ import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { MAIL_QUEUE_JOB_OPTIONS } from '@/modules/Mail/mail-queue.constants';
 
 @Injectable()
-export default class InviteSendMainNotificationSubscribe {
+export class InviteSendMainNotificationSubscribe {
   constructor(
     @InjectQueue(SendInviteUserMailQueue)
     private readonly sendInviteMailQueue: Queue,

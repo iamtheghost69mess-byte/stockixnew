@@ -1,9 +1,9 @@
 import { sumBy, omit } from 'lodash';
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
 import { Knex } from 'knex';
 import { Inject, Injectable } from '@nestjs/common';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   IManualJournalDTO,

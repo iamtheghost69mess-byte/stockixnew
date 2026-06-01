@@ -1,4 +1,4 @@
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import definedOptions from '@/data/options';
 
 

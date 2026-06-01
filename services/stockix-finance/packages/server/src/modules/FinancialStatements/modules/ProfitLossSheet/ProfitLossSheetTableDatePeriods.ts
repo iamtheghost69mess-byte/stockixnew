@@ -1,6 +1,6 @@
 // @ts-nocheck
 import * as R from 'ramda';
-import * as moment from 'moment';
+import moment from 'moment';
 import { ITableColumn, ITableColumnAccessor } from '../../types/Table.types';
 import { ProfitLossSheetTablePercentage } from './ProfitLossSheetTablePercentage';
 import { ProfitLossTablePreviousPeriod } from './ProfitLossTablePreviousPeriod';

@@ -1,5 +1,5 @@
 import { mixin } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import ModelSetting from './ModelSetting';
 
 export default class ExchangeRate extends mixin(TenantModel, [ModelSetting]) {

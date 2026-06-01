@@ -1,7 +1,7 @@
 /* eslint-disable global-require */
 import { mixin, Model } from 'objection';
 import { castArray } from 'lodash';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import AccountTypesUtils from '@/lib/AccountTypes';
 import CashflowAccountSettings from './CashflowAccount.Settings';
 import ModelSettings from './ModelSetting';

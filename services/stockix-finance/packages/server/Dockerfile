@@ -94,7 +94,9 @@ CMD ["/bin/bash", "-c", "until (node ./build/commands.js system:migrate:unlock 2
 # -----------------------------------------------------------------------------
 FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
-RUN pnpm run build:server --skip-nx-cache
+RUN pnpm run build:server --skip-nx-cache \
+  && mkdir -p packages/i18n \
+  && cp -r packages/server/src/i18n/. packages/i18n/
 
 FROM build-app AS app
 CMD [ "node", "./packages/server/build/index.js" ]

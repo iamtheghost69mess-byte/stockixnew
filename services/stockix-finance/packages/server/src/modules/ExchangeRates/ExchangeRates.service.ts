@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import * as moment from 'moment';
+import moment from 'moment';
 import { ExchangeRate } from './lib/ExchangeRate';
 import { ExchangeRateServiceType } from './lib/types';
 import { TenantMetadata } from '@/modules/System/models/TenantMetadataModel';

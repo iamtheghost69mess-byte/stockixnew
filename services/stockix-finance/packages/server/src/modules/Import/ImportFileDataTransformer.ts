@@ -1,4 +1,4 @@
-import * as bluebird from 'bluebird';
+import bluebird from 'bluebird';
 import { isUndefined, pickBy, set } from 'lodash';
 import { Knex } from 'knex';
 import { Injectable } from '@nestjs/common';
