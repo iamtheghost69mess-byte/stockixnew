@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import * as moment from 'moment';
+import moment from 'moment';
 import { hashPassword } from '@/modules/Auth/Auth.utils';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

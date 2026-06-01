@@ -1,5 +1,5 @@
 import { Model, mixin, raw } from 'objection';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 import { viewRolesBuilder } from '@/lib/ViewRolesBuilder';
 import ModelSetting from './ModelSetting';
 import ExpenseSettings from './Expense.Settings';

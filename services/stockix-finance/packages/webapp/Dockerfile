@@ -1,34 +1,29 @@
-FROM node:14-alpine as build
+FROM node:20-bookworm-slim AS build
+
+USER root
 
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
-RUN npm install -g pnpm@7
 
-# Copy lerna.json for the version injection in craco.config.js
-COPY lerna.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json .npmrc ./
+COPY packages/webapp/package.json ./packages/webapp/
+COPY shared/bigcapital-utils/package.json ./shared/bigcapital-utils/
+COPY shared/email-components/package.json ./shared/email-components/
+COPY shared/pdf-templates/package.json ./shared/pdf-templates/
+COPY shared/sdk-ts/package.json ./shared/sdk-ts/
 
-# Copy workspace configuration
-COPY pnpm-workspace.yaml pnpm-lock.yaml .npmrc package.json ./
+# Pin pnpm to satisfy root package.json "pnpm": "^9.0.5" (Corepack activates this exact minor).
+RUN corepack enable \
+  && corepack prepare pnpm@9.15.9 --activate \
+  && pnpm --version \
+  && pnpm install --no-frozen-lockfile --filter @stockix/webapp...
 
-WORKDIR /app/packages/webapp
+COPY ./lerna.json /app/lerna.json
+COPY ./packages/webapp /app/packages/webapp
+COPY ./shared /app/shared
+RUN pnpm --filter @stockix/utils run build \
+  && pnpm --filter @stockix/webapp run build
 
-# Copy ONLY webapp package.json
-COPY ./packages/webapp/package*.json ./
-
-WORKDIR /app
-# Install ONLY webapp dependencies to avoid hoisting conflicts with server's Webpack 5
-RUN pnpm i --no-frozen-lockfile --filter @stockix/webapp...
-
-WORKDIR /app/packages/webapp
-
-# Copy webapp source
-COPY ./packages/webapp ./
-
-# Build the webapp isolated from the monorepo
-ENV SKIP_PREFLIGHT_CHECK=true
-RUN pnpm run build
-
-FROM nginx
+FROM nginx:1.27-alpine
 
 COPY ./packages/webapp/nginx/sites/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/packages/webapp/build /usr/share/nginx/html
+COPY --from=build /app/packages/webapp/dist /usr/share/nginx/html

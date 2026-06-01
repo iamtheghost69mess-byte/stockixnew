@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 export const getPurchasesByItemsDefaultQuery = () => ({
   fromDate: moment().startOf('month').format('YYYY-MM-DD'),
   toDate: moment().format('YYYY-MM-DD'),

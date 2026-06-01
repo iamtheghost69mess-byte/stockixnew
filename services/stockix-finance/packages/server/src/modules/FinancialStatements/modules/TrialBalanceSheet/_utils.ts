@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 
 export const getTrialBalanceSheetDefaultQuery = () => ({
   fromDate: moment().startOf('year').format('YYYY-MM-DD'),

@@ -159,7 +159,9 @@ function validateFile(file, content) {
       // packages that legitimately read env (db pool tuning, logger level, shared helpers)
       ["packages/db/src/index.ts","packages/shared/src/deployment-secrets.ts","packages/shared/src/structured-logger.ts"].includes(file) ||
       // PMS service: entrypoint + NEXT_PUBLIC_ frontend build-time reads
-      ["services/pms/src/index.ts","services/pms/frontend/lib/pms-client.ts"].includes(file);
+      ["services/pms/src/index.ts","services/pms/frontend/lib/pms-client.ts"].includes(file) ||
+      // Next.js framework injects NEXT_RUNTIME at runtime — cannot be abstracted through config
+      file === "apps/dashboard/instrumentation.ts";
     if (!allowed) add("Phase 4", file, "forbidden process.env usage");
   }
   if (file.startsWith("packages/config/src/")) {

@@ -1,7 +1,7 @@
 import { Model, raw } from 'objection';
 import moment from 'moment';
 import { isEmpty, castArray } from 'lodash';
-import TenantModel from 'models/TenantModel';
+import TenantModel from '@/models/TenantModel';
 
 export default class AccountTransaction extends TenantModel {
   /**

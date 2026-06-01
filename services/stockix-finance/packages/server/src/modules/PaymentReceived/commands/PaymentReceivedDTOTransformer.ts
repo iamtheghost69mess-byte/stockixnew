@@ -1,7 +1,7 @@
 import * as R from 'ramda';
 import { Inject, Injectable } from '@nestjs/common';
 import { omit, sumBy } from 'lodash';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import {
   IPaymentReceivedCreateDTO,
   IPaymentReceivedEditDTO,

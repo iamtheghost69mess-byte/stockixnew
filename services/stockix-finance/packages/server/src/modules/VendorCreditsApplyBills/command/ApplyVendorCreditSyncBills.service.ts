@@ -1,4 +1,4 @@
-import * as Bluebird from 'bluebird';
+import Bluebird from 'bluebird';
 import { Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { IVendorCreditAppliedBill } from '../types/VendorCreditApplyBills.types';

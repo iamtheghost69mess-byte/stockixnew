@@ -4,6 +4,7 @@ import type { createDb } from "@repo/db";
 import {
   licenses,
   organizations,
+  owners,
   tenantDeployments,
   tenantLifecycleJobs,
   tenants,
@@ -25,6 +26,7 @@ import {
 import {
   notifyJobLifecycle,
   notifyModuleAdded,
+  notifyAddModuleFailed,
   notifyProvisionOutcome,
 } from "../notification-helpers.js";
 import { safeCreateNotification } from "../notification-service.js";
@@ -34,7 +36,7 @@ import {
 } from "../finance-tenant-resolve.js";
 import { syncFinanceLicenseForStockixTenant } from "../finance-license.client.js";
 import { mailSendSucceeded } from "../mail/mailer.js";
-import { sendTenantWelcomeEmail } from "../mail/send.js";
+import { sendTenantWelcomeEmail, sendLicenseActivatedEmailForTenant, sendProvisionCompleteOwnerEmail } from "../mail/send.js";
 import { rootDomainForOrganizationSubdomain } from "../lib/organization-domain.js";
 import { emitInternalJobAudit, emitMetric } from "../lib/metrics.js";
 import {
@@ -56,6 +58,7 @@ import {
   type StockixModule,
 } from "../services/auth/stockix-product-token.js";
 import { ensureDefaultTenantConfig } from "./tenant-config.js";
+import { handleTerminalProvisionJobFailure } from "../provisioning/provision-failure.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -88,6 +91,7 @@ app.post("/internal/jobs/claim", async (c) => {
     tenantId: string;
     exhausted: boolean;
     correlationId: string | null;
+    jobType: string;
   }> = [];
   const claimed = await db.transaction(async (tx) => {
     const staleRunning = await tx
@@ -160,24 +164,40 @@ app.post("/internal/jobs/claim", async (c) => {
         )
         .where(eq(tenantLifecycleJobs.id, staleJob.id));
       if (staleJob.type === "tenant.provision" && staleJob.tenantId) {
-        await tx
-          .update(tenants)
-          .set({
-            status: "failed",
-          })
-          .where(eq(tenants.id, staleJob.tenantId));
-        await tx
-          .update(tenantDeployments)
-          .set({
-            status: "failed",
-            lastError: "worker_stale_lease_reclaimed",
-            updatedAt: new Date(),
-          })
-          .where(eq(tenantDeployments.tenantId, staleJob.tenantId));
+        if (exhausted) {
+          await handleTerminalProvisionJobFailure(
+            tx as unknown as Db,
+            {
+              type: staleJob.type,
+              tenantId: staleJob.tenantId,
+              correlationId: staleJob.correlationId ?? null,
+              payload: null,
+            },
+            "worker_stale_lease_reclaimed",
+          );
+        }
         staleProvisionAlerts.push({
           tenantId: staleJob.tenantId,
           exhausted,
           correlationId: staleJob.correlationId ?? null,
+          jobType: staleJob.type,
+        });
+      } else if (staleJob.type === "add_module" && staleJob.tenantId && exhausted) {
+        await handleTerminalProvisionJobFailure(
+          tx as unknown as Db,
+          {
+            type: staleJob.type,
+            tenantId: staleJob.tenantId,
+            correlationId: staleJob.correlationId ?? null,
+            payload: null,
+          },
+          "worker_stale_lease_reclaimed",
+        );
+        staleProvisionAlerts.push({
+          tenantId: staleJob.tenantId,
+          exhausted: true,
+          correlationId: staleJob.correlationId ?? null,
+          jobType: staleJob.type,
         });
       }
     }
@@ -219,12 +239,20 @@ app.post("/internal/jobs/claim", async (c) => {
       .limit(1);
     if (!tenantRow) continue;
     if (alert.exhausted) {
-      notifyProvisionOutcome(db, {
-        tenantId: alert.tenantId,
-        finalStatus: "failed",
-        correlationId: alert.correlationId,
-        lastError: "worker_stale_lease_reclaimed",
-      });
+      if (alert.jobType === "add_module") {
+        notifyAddModuleFailed(db, {
+          tenantId: alert.tenantId,
+          lastError: "worker_stale_lease_reclaimed",
+          correlationId: alert.correlationId,
+        });
+      } else {
+        notifyProvisionOutcome(db, {
+          tenantId: alert.tenantId,
+          finalStatus: "failed",
+          correlationId: alert.correlationId,
+          lastError: "worker_stale_lease_reclaimed",
+        });
+      }
     } else {
       notifyJobLifecycle(db, {
         ownerId: tenantRow.ownerId,
@@ -828,73 +856,103 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
               organizationNumber: tenants.organizationNumber,
               slug: tenants.slug,
               modules: tenants.modules,
+              ownerId: tenants.ownerId,
+              planSlug: tenants.planSlug,
             })
             .from(tenants)
             .where(eq(tenants.id, targetTenantId))
             .limit(1);
-          if (!tenant?.adminEmail) return;
+          if (!tenant) return;
 
-          const baseUrlFromResult =
-            completeResult && typeof completeResult.baseUrl === "string"
-              ? completeResult.baseUrl
-              : null;
-          const root = rootDomainForOrganizationSubdomain();
-          const financeUrl =
-            baseUrlFromResult ??
-            (root && tenant.slug
-              ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
-              : apiConfig.dashboardUrl);
-          const provisionModules = parseTenantModules(tenant.modules);
-
-          let mailResult;
-          if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
-            const { sendFinanceWelcomeEmail } = await import("../mail/send.js");
-            mailResult = await sendFinanceWelcomeEmail({
-              to: tenant.adminEmail,
-              tenantName: tenant.name,
-              financeUrl,
-              adminEmail: tenant.adminEmail,
-              oneTimePassword: oneTimeAdminPassword,
-              modules: provisionModules,
-              tenantId: targetTenantId,
-            });
-          } else {
-            mailResult = await sendTenantWelcomeEmail({
-              to: tenant.adminEmail,
-              tenantName: tenant.name,
-              organizationNumber:
-                tenant.organizationNumber ??
-                financeOrganizationIdFromResult ??
-                "—",
-              loginUrl: financeUrl,
-              tenantId: targetTenantId,
+          const activeLicense = await getActiveLicenseForTenant(db, targetTenantId);
+          if (activeLicense?.id) {
+            void sendLicenseActivatedEmailForTenant(db, targetTenantId, {
+              licenseId: activeLicense.id,
+            }).catch((licenseMailErr) => {
+              logger.error("provision license activated email failed (non-fatal)", licenseMailErr);
             });
           }
 
-          if (!mailSendSucceeded(mailResult)) {
-            const mailDetail =
-              mailResult.status === "failed"
-                ? mailResult.error
-                : mailResult.status;
-            logger.error("provision welcome email not sent", undefined, {
-              tenantId: targetTenantId,
-              mailDetail,
-            });
-            const [tenantRow] = await db
-              .select({ ownerId: tenants.ownerId })
-              .from(tenants)
-              .where(eq(tenants.id, targetTenantId))
-              .limit(1);
-            if (tenantRow?.ownerId) {
-              safeCreateNotification(db, {
-                ownerId: tenantRow.ownerId,
-                type: "provision.partial",
-                severity: "warning",
-                title: "Welcome email not sent",
-                body: `Tenant ${tenant.name} is ready but the welcome email could not be delivered (${mailDetail}). Check MAIL_* configuration.`,
+          if (tenant.adminEmail) {
+            const baseUrlFromResult =
+              completeResult && typeof completeResult.baseUrl === "string"
+                ? completeResult.baseUrl
+                : null;
+            const root = rootDomainForOrganizationSubdomain();
+            const financeUrl =
+              baseUrlFromResult ??
+              (root && tenant.slug
+                ? `${apiConfig.publicBaseUrlScheme}://${tenant.slug}.${root}`
+                : apiConfig.dashboardUrl);
+            const provisionModules = parseTenantModules(tenant.modules);
+
+            let mailResult;
+            if (oneTimeAdminPassword && provisionModules.includes("accounting")) {
+              const { sendFinanceWelcomeEmail } = await import("../mail/send.js");
+              mailResult = await sendFinanceWelcomeEmail({
+                to: tenant.adminEmail,
+                tenantName: tenant.name,
+                financeUrl,
+                adminEmail: tenant.adminEmail,
+                oneTimePassword: oneTimeAdminPassword,
+                modules: provisionModules,
                 tenantId: targetTenantId,
-                actionUrl: `/tenants/${targetTenantId}`,
-                actionLabel: "View tenant",
+              });
+            } else {
+              mailResult = await sendTenantWelcomeEmail({
+                to: tenant.adminEmail,
+                tenantName: tenant.name,
+                organizationNumber:
+                  tenant.organizationNumber ??
+                  financeOrganizationIdFromResult ??
+                  "—",
+                loginUrl: financeUrl,
+                tenantId: targetTenantId,
+              });
+            }
+
+            if (!mailSendSucceeded(mailResult)) {
+              const mailDetail =
+                mailResult.status === "failed"
+                  ? mailResult.error
+                  : mailResult.status;
+              logger.error("provision welcome email not sent", undefined, {
+                tenantId: targetTenantId,
+                mailDetail,
+              });
+              if (tenant.ownerId) {
+                safeCreateNotification(db, {
+                  ownerId: tenant.ownerId,
+                  type: "provision.partial",
+                  severity: "warning",
+                  title: "Welcome email not sent",
+                  body: `Tenant ${tenant.name} is ready but the welcome email could not be delivered (${mailDetail}). Check MAIL_* configuration.`,
+                  tenantId: targetTenantId,
+                  actionUrl: `/tenants/${targetTenantId}`,
+                  actionLabel: "View tenant",
+                });
+              }
+            }
+          }
+
+          if (tenant.ownerId) {
+            const [owner] = await db
+              .select({ id: owners.id, email: owners.email })
+              .from(owners)
+              .where(eq(owners.id, tenant.ownerId))
+              .limit(1);
+            if (owner?.email) {
+              void sendProvisionCompleteOwnerEmail({
+                to: owner.email,
+                ownerId: owner.id,
+                tenantId: targetTenantId,
+                tenantName: tenant.name,
+                tenantSlug: tenant.slug,
+                adminEmail: tenant.adminEmail ?? "—",
+                planSlug: tenant.planSlug ?? "starter",
+                modules: parseTenantModules(tenant.modules),
+              }).catch((ownerMailErr) => {
+                logger.error("provision owner notify email failed (non-fatal)", ownerMailErr);
               });
             }
           }
@@ -1101,6 +1159,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
         claimedAt: null,
         claimedBy: null,
         claimToken: null,
+        completedAt: exhausted ? new Date() : null,
         updatedAt: new Date(),
       })
       .where(
@@ -1134,47 +1193,31 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       workerId: workerId || null,
     });
 
-    if (
-      updated.status === "dead"
-      && updated.type === "add_module"
-      && updated.tenantId
-    ) {
-      await db
-        .update(tenants)
-        .set({ status: "active" })
-        .where(eq(tenants.id, updated.tenantId));
-    }
+    if (exhausted) {
+      const outcome = await handleTerminalProvisionJobFailure(db, updated, errorMessage);
 
-    if (
-      updated.status === "dead"
-      && (updated.type === "tenant.provision" || updated.type === "organization.provision")
-      && updated.payload
-      && typeof updated.payload === "object"
-    ) {
-      const p = updated.payload as Record<string, unknown>;
-      const organizationIdForFail =
-        typeof p.organizationId === "string" && z.string().uuid().safeParse(p.organizationId).success
-          ? p.organizationId
-          : null;
-      if (organizationIdForFail) {
-        await db
-          .update(organizations)
-          .set({
-            status: "failed",
-            provisioningError: errorMessage,
-            updatedAt: new Date(),
-          })
-          .where(eq(organizations.id, organizationIdForFail));
+      if (outcome === "tenant_failed" && updated.tenantId) {
+        notifyProvisionOutcome(db, {
+          tenantId: updated.tenantId,
+          finalStatus: "failed",
+          correlationId: updated.correlationId,
+          lastError: errorMessage,
+        });
+      } else if (outcome === "add_module_reverted" && updated.tenantId) {
+        const moduleFromPayload =
+          updated.payload
+          && typeof updated.payload === "object"
+          && "module" in updated.payload
+          && typeof (updated.payload as { module?: unknown }).module === "string"
+            ? String((updated.payload as { module: string }).module)
+            : null;
+        notifyAddModuleFailed(db, {
+          tenantId: updated.tenantId,
+          module: moduleFromPayload,
+          lastError: errorMessage,
+          correlationId: updated.correlationId,
+        });
       }
-    }
-
-    if (updated.status === "dead" && updated.type === "tenant.provision" && updated.tenantId) {
-      notifyProvisionOutcome(db, {
-        tenantId: updated.tenantId,
-        finalStatus: "failed",
-        correlationId: updated.correlationId,
-        lastError: errorMessage,
-      });
     }
   }
   return c.json({ ok: true, job: updated ?? null });

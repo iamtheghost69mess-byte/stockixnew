@@ -1,7 +1,7 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { omit } from 'lodash';
 import * as R from 'ramda';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import { ERRORS } from '../constants';
 import { ItemsEntriesService } from '@/modules/Items/ItemsEntries.service';
 import { BranchTransactionDTOTransformer } from '@/modules/Branches/integrations/BranchTransactionDTOTransform';
@@ -82,7 +82,7 @@ export class VendorCreditDTOTransformService {
       entries,
       ...(vendorCreditDTO.open &&
         !oldVendorCredit?.openedAt && {
-        openedAt: moment().toMySqlDateTime(),
+        openedAt: (moment() as any).toMySqlDateTime(),
       }),
     };
     return composeAsync(

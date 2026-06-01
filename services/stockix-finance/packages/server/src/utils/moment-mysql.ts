@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 
 // Extends moment prototype to add a new method to format date to MySQL datetime format.
 moment.prototype.toMySqlDateTime = function () {

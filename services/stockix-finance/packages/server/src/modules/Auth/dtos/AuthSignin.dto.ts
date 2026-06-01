@@ -13,5 +13,5 @@ export class AuthSigninDto {
   })
   @IsNotEmpty()
   @IsString()
-  email: string;
+  credential: string;
 }

@@ -2,7 +2,7 @@
 import * as R from 'ramda';
 import { defaultTo, set, sumBy, isEmpty, mapValues, get } from 'lodash';
 import * as mathjs from 'mathjs';
-import * as moment from 'moment';
+import moment from 'moment';
 import { I18nService } from 'nestjs-i18n';
 import {
   ICashFlowSchemaSection,

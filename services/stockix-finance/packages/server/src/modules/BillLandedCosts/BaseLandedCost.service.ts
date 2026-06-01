@@ -19,7 +19,7 @@ import {
 } from './dtos/AllocateBillLandedCost.dto';
 
 export class BaseLandedCostService {
-  @Inject()
+  @Inject(TransactionLandedCost)
   protected readonly transactionLandedCost: TransactionLandedCost;
 
   @Inject(BillLandedCost.name)

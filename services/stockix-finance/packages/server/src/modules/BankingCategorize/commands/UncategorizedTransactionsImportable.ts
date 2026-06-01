@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import * as yup from 'yup';
-import * as uniqid from 'uniqid';
+import uniqid from 'uniqid';
 import { Importable } from '../../Import/Importable';
 import { CreateUncategorizedTransactionService } from './CreateUncategorizedTransaction.service';
 import { ImportableContext } from '../../Import/interfaces';

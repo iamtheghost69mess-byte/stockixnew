@@ -409,3 +409,5 @@ export default class CashFlowTable implements ICashFlowTable {
     )([]);
   };
 }
+
+export { CashFlowTable };

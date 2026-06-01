@@ -6,7 +6,7 @@ import { IManualJournalDTO } from '@/modules/ManualJournals/types/ManualJournals
 @Injectable()
 export class ManualJournalBranchesDTOTransformer {
   constructor(
-    @Inject()
+    @Inject(BranchesSettingsService)
     private readonly branchesSettings: BranchesSettingsService,
   ) {}
 

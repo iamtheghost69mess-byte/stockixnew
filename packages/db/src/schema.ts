@@ -85,6 +85,7 @@ export const tenants = pgTable(
     adminEmail: text("admin_email").notNull(),
     adminFirstName: text("admin_first_name").notNull(),
     adminLastName: text("admin_last_name").notNull(),
+    /** provisioning | active | partial | failed | suspended | stopped */
     status: text("status").notNull().default("active"),
     planSlug: text("plan_slug").notNull().default("starter"),
     /** JSON array of licensed product modules, e.g. ["accounting","pos"]. */

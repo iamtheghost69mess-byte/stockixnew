@@ -11,7 +11,7 @@ import { Inject, Injectable } from '@nestjs/common';
 @Injectable()
 export class WriteBillTaxTransactionsSubscriber {
   constructor(
-    @Inject()
+    @Inject(WriteTaxTransactionsItemEntries)
     private readonly writeTaxTransactions: WriteTaxTransactionsItemEntries,
   ) {}
 

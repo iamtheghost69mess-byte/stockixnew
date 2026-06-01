@@ -9,7 +9,7 @@ import I18nService from '@/services/I18n/I18nService';
 import { TenantMetadata } from '@/system/models';
 
 @Service()
-export default class BillAllocatedLandedCostTransactions {
+export class BillAllocatedLandedCostTransactions {
   @Inject()
   private tenancy: HasTenancyService;
 

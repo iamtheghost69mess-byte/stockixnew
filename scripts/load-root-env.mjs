@@ -10,8 +10,8 @@ import { config as loadEnv } from "dotenv";
 export function loadEnvFilesAtRoot(repoRoot) {
   const base = path.join(repoRoot, ".env");
   const local = path.join(repoRoot, ".env.local");
-  if (existsSync(base)) loadEnv({ path: base, override: false });
-  if (existsSync(local)) loadEnv({ path: local, override: true });
+  if (existsSync(base)) loadEnv({ path: base, override: true });
+if (existsSync(local)) loadEnv({ path: local, override: true });
 }
 
 /** For files under repo `scripts/` only — resolves root as parent of that directory. */

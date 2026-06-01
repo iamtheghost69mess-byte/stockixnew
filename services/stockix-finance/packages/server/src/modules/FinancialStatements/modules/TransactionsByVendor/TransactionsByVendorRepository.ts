@@ -1,5 +1,5 @@
 import * as R from 'ramda';
-import * as moment from 'moment';
+import moment from 'moment';
 import { isEmpty, map } from 'lodash';
 import { Inject, Injectable } from '@nestjs/common';
 import { AccountTransaction } from '@/modules/Accounts/models/AccountTransaction.model';

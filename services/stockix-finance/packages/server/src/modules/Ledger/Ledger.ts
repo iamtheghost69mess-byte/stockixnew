@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { defaultTo, sumBy, uniqBy } from 'lodash';
 import { ILedger } from './types/Ledger.types';
 import { ILedgerEntry } from './types/Ledger.types';

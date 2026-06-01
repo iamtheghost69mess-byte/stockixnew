@@ -6,6 +6,10 @@ import { z } from "zod";
 import * as schema from "@repo/db/schema";
 import { posProxyJson } from "../pos-proxy.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
+import {
+  assertTenantModuleLicensed,
+  respondModuleAccessDenied,
+} from "../lib/tenant-module-access.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -22,6 +26,11 @@ export function registerIntegrationBridgeRoutes(
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
     }
+
+    const posAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "pos");
+    if (!posAccess.ok) return respondModuleAccessDenied(c, posAccess);
+    const accountingAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "accounting");
+    if (!accountingAccess.ok) return respondModuleAccessDenied(c, accountingAccess);
 
     const [row] = await db
       .select({

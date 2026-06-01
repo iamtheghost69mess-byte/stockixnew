@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import * as R from 'ramda';
 import { isEmpty, round, sumBy } from 'lodash';
 import { ERRORS, MatchedTransactionPOJO } from './types';

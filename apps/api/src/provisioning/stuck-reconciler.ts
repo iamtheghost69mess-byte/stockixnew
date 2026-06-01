@@ -4,15 +4,18 @@ import {
   tenants,
 } from "@repo/db/schema";
 import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as schema from "@repo/db/schema";
+import type { createDb } from "@repo/db";
 import { infraConfig } from "@repo/config";
 
 import { logger } from "../lib/logger.js";
 import { resolveAndPersistFinanceTenantId } from "../finance-tenant-resolve.js";
 import { parseTenantModules } from "../services/auth/stockix-product-token.js";
+import {
+  handleTerminalProvisionJobFailure,
+  type TerminalProvisionJob,
+} from "./provision-failure.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = ReturnType<typeof createDb>;
 
 const STUCK_MS = 10 * 60 * 1000;
 
@@ -72,7 +75,9 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
     {
       id: string;
       status: string;
+      type: string;
       correlationId: string | null;
+      payload: unknown;
     }
   >();
 
@@ -82,6 +87,8 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
         id: tenantLifecycleJobs.id,
         tenantId: tenantLifecycleJobs.tenantId,
         status: tenantLifecycleJobs.status,
+        type: tenantLifecycleJobs.type,
+        payload: tenantLifecycleJobs.payload,
         correlationId: tenantLifecycleJobs.correlationId,
         createdAt: tenantLifecycleJobs.createdAt,
       })
@@ -89,7 +96,7 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
       .where(
         and(
           inArray(tenantLifecycleJobs.tenantId, stuckTenantIds),
-          eq(tenantLifecycleJobs.type, "tenant.provision"),
+          inArray(tenantLifecycleJobs.type, ["tenant.provision", "add_module"]),
         ),
       )
       .orderBy(desc(tenantLifecycleJobs.createdAt));
@@ -99,7 +106,9 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
       latestJobByTenantId.set(job.tenantId, {
         id: job.id,
         status: job.status,
+        type: job.type,
         correlationId: job.correlationId,
+        payload: job.payload,
       });
     }
   }
@@ -108,6 +117,36 @@ export async function reconcileStuckProvisioning(db: Db): Promise<void> {
     if (!row.tenantId) continue;
 
     const latestJob = latestJobByTenantId.get(row.tenantId);
+
+    if (
+      latestJob?.status === "failed"
+      || latestJob?.status === "dead"
+    ) {
+      const needsReconcile =
+        row.tenantStatus === "provisioning"
+        || row.deploymentStatus === "provisioning"
+        || row.deploymentStatus === "pending"
+        || (latestJob.type === "add_module" && row.tenantStatus === "provisioning");
+
+      if (needsReconcile && latestJob.type && row.tenantId) {
+        const lastError = `provision_job_${latestJob.status}`;
+        const job: TerminalProvisionJob = {
+          type: latestJob.type,
+          tenantId: row.tenantId,
+          correlationId: latestJob.correlationId,
+          payload: latestJob.payload,
+        };
+        const outcome = await handleTerminalProvisionJobFailure(db, job, lastError);
+        logger.info("[reconciler] aligned tenant after terminal job", {
+          tenantId: row.tenantId,
+          slug: row.slug,
+          jobStatus: latestJob.status,
+          jobType: latestJob.type,
+          outcome,
+        });
+        continue;
+      }
+    }
 
     if (
       latestJob?.status === "completed"

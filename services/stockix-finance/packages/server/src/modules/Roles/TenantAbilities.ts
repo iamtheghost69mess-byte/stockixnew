@@ -1,5 +1,5 @@
 import { Ability } from '@casl/ability';
-import * as LruCache from 'lru-cache';
+import LruCache from 'lru-cache';
 import { Role } from './models/Role.model';
 import { RolePermission } from './models/RolePermission.model';
 

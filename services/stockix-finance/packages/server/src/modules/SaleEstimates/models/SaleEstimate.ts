@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { Model } from 'objection';
 import { defaultTo } from 'lodash';
 import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';

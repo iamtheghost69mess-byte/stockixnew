@@ -1,5 +1,5 @@
 import { ModuleRef } from '@nestjs/core';
-import * as bluebird from 'bluebird';
+import bluebird from 'bluebird';
 import { Knex } from 'knex';
 import {
   validateLinkModelEntryExists,

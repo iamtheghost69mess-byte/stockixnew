@@ -1,5 +1,5 @@
 
-import * as moment from 'moment';
+import moment from 'moment';
 
 export const getTransactionsByVendorDefaultQuery = () => {
   return {

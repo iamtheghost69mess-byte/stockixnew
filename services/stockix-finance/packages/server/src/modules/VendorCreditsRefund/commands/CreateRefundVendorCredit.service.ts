@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import * as R from 'ramda';
-import * as composeAsync from 'async/compose';
+import composeAsync from 'async/compose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   IRefundVendorCreditCreatedPayload,
@@ -74,7 +74,7 @@ export class CreateRefundVendorCredit {
       refundVendorCreditDTO.amount,
     );
     // Validate refund deposit account type.
-    this.validateRefundDepositAccountType(depositAccount);
+    this.validateRefundDepositAccountType(depositAccount as unknown as Account);
 
     // Triggers `onVendorCreditRefundCreate` event.
     await this.eventPublisher.emitAsync(events.vendorCredit.onRefundCreate, {

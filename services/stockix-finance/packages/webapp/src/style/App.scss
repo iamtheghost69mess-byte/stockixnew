@@ -99,9 +99,6 @@ body.hide-scrollbar .Pane2 {
   }
 }
 
-.bp3-progress-bar.bp3-intent-primary .bp3-progress-meter {
-  background-color: #0066ff;
-}
 
 .ReactVirtualized__Table__headerRow {
   font-weight: 700;
@@ -166,7 +163,7 @@ body.hide-scrollbar .Pane2 {
 
 .bp3-drawer {
   box-shadow: 0 0 0;
-  background-color: #fbfbfb;
+  background-color: #F6F7F9;
 
   .dashboard__loading-indicator {
     margin: auto;
@@ -238,7 +235,7 @@ html[lang^='ar'] {
 }
 
 .bp3-drawer {
-  border-left: 1px solid #00115e;
+  border-left: 1px solid #2F343C;
 }
 
 .drawer-portal {
@@ -249,7 +246,7 @@ html[lang^='ar'] {
 
 .big-number {
   font-size: 28px;
-  color: #c06361;
+  color: #CD4246;
   margin: 6px 0;
   font-weight: 600;
   margin-bottom: 0;

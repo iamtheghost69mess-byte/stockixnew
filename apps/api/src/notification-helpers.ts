@@ -188,6 +188,35 @@ export function notifyModuleAdded(
   })().catch(() => undefined);
 }
 
+export function notifyAddModuleFailed(
+  db: Db,
+  opts: {
+    tenantId: string;
+    module?: string | null;
+    lastError?: string | null;
+    correlationId?: string | null;
+  },
+): void {
+  void (async () => {
+    const tenant = await loadTenantContext(db, opts.tenantId);
+    if (!tenant) return;
+    const moduleLabel = opts.module?.trim() || "module";
+    const detail = opts.lastError?.trim() || "Check the provision log and retry from the tenant page.";
+    safeCreateNotification(db, {
+      ownerId: tenant.ownerId,
+      type: "provision.failed",
+      severity: "warning",
+      title: `${tenant.name} — ${moduleLabel} add failed`,
+      body: `The tenant remains active. ${detail}`,
+      tenantId: tenant.id,
+      correlationId: opts.correlationId ?? undefined,
+      actionUrl: tenantDetailPath(tenant.id),
+      actionLabel: "View tenant",
+      meta: { module: opts.module ?? null, lastError: detail, addModuleFailure: true },
+    });
+  })().catch(() => undefined);
+}
+
 export function notifyLicenseForTenant(
   db: Db,
   opts: {

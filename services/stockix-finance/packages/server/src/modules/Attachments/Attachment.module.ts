@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import * as multerS3 from 'multer-s3';
+import multerS3 from 'multer-s3';
 import { S3_CLIENT, S3Module } from "../S3/S3.module";
 import { DeleteAttachment } from "./DeleteAttachment";
 import { GetAttachment } from "./GetAttachment";

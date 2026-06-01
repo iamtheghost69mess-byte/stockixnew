@@ -1,4 +1,4 @@
-import * as moment from 'moment';
+import moment from 'moment';
 import { ITrialBalanceSheetMeta, ITrialBalanceSheetQuery } from './TrialBalanceSheet.types';
 import { Injectable } from '@nestjs/common';
 import { FinancialSheetMeta } from '../../common/FinancialSheetMeta';

@@ -13,6 +13,10 @@ import {
 } from "../finance-users.client.js";
 import { resolveAndPersistFinanceTenantId } from "../finance-tenant-resolve.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
+import {
+  assertTenantModuleLicensed,
+  respondModuleAccessDenied,
+} from "../lib/tenant-module-access.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -134,6 +138,11 @@ async function withFinanceUsersContext(
   stockixTenantId: string,
   handler: (ctx: TenantFinanceUsersContext) => Promise<Response>,
 ): Promise<Response> {
+  const moduleAccess = await assertTenantModuleLicensed(db, stockixTenantId, "accounting");
+  if (!moduleAccess.ok) {
+    return respondModuleAccessDenied(c, moduleAccess);
+  }
+
   const resolved = await resolveTenantFinanceUsersContext(db, stockixTenantId);
   if ("error" in resolved) {
     return c.json(
@@ -162,6 +171,9 @@ export function registerTenantFinanceUsersApi(
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
     }
+
+    const moduleAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "accounting");
+    if (!moduleAccess.ok) return respondModuleAccessDenied(c, moduleAccess);
 
     const result = await resolveAndPersistFinanceTenantId(db, tenantParsed.data);
     if (!result.ok) {

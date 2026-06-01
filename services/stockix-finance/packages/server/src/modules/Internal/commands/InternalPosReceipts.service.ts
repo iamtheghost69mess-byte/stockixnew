@@ -84,6 +84,9 @@ export class InternalPosReceiptsService {
     dto.statement = payload.statement;
     if (payload.branchId != null) dto.branchId = payload.branchId;
     if (payload.warehouseId != null) dto.warehouseId = payload.warehouseId;
+    if (payload.exchangeRate != null && Number(payload.exchangeRate) > 0) {
+      dto.exchangeRate = Number(payload.exchangeRate);
+    }
     dto.entries = payload.entries.map((entry, idx) => ({
       index: idx + 1,
       itemId: entry.itemId,

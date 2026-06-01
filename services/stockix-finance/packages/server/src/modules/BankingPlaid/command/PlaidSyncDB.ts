@@ -1,6 +1,6 @@
 import * as R from 'ramda';
-import * as bluebird from 'bluebird';
-import * as uniqid from 'uniqid';
+import bluebird from 'bluebird';
+import uniqid from 'uniqid';
 import { entries, groupBy } from 'lodash';
 import {
   AccountBase as PlaidAccountBase,
