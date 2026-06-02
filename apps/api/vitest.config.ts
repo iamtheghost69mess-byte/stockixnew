@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    typecheck: { tsconfig: "./tsconfig.test.json" },
     globals: true,
     clearMocks: true,
     restoreMocks: true,
