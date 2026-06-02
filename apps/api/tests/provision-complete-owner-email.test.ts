@@ -12,6 +12,10 @@ vi.mock("../src/mail/mailer.js", () => ({
 vi.mock("@repo/config", () => ({
   apiConfig: {
     brandName: "Stockix",
+    dashboardUrl: "http://localhost:3000",
+  },
+  mailConfig: {
+    fromName: "Stockix",
   },
 }));
 
@@ -29,13 +33,16 @@ describe("sendProvisionCompleteOwnerEmail", () => {
       tenantId: "tenant-abc-123",
       tenantSlug: "acme-corp",
       ownerId: "owner-xyz",
+      adminEmail: "admin@acme.test",
+      planSlug: "pro",
+      modules: ["accounting", "pos"],
     });
 
     expect(sendMailMock).toHaveBeenCalledOnce();
     expect(sendMailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "owner@platform.test",
-        subject: "Tenant provisioning complete — Acme Corp",
+        subject: "Tenant provisioned: Acme Corp",
         idempotencyKey: "provision-complete-owner/tenant-abc-123",
         templateKey: "provision-complete-owner",
         ownerId: "owner-xyz",
@@ -45,7 +52,7 @@ describe("sendProvisionCompleteOwnerEmail", () => {
     const html = sendMailMock.mock.calls[0]![0]!.html as string;
     expect(html).toContain("Acme Corp");
     expect(html).toContain("acme-corp");
-    expect(html).toContain("Stockix");
+    expect(html).toContain("admin@acme.test");
   });
 
   it("works without optional tenantSlug and ownerId", async () => {
@@ -56,8 +63,18 @@ describe("sendProvisionCompleteOwnerEmail", () => {
     });
 
     expect(sendMailMock).toHaveBeenCalledOnce();
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "owner@platform.test",
+        subject: "Tenant provisioned: Beta Ltd",
+        idempotencyKey: "provision-complete-owner/tenant-beta-456",
+        templateKey: "provision-complete-owner",
+        tenantId: "tenant-beta-456",
+      }),
+    );
     const html = sendMailMock.mock.calls[0]![0]!.html as string;
     expect(html).toContain("Beta Ltd");
-    expect(html).not.toContain("<strong>Slug:</strong>");
+    // Fallback values in render layout
+    expect(html).toContain("—");
   });
 });
