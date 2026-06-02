@@ -7,7 +7,8 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile --filter api...
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter api...
 # @repo/auth ships dist/; other @repo/* are bundled from TypeScript source via tsup.
 RUN pnpm --filter @repo/auth build
 RUN pnpm --filter api build

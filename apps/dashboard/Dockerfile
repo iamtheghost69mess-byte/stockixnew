@@ -6,7 +6,8 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile --filter dashboard...
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter dashboard...
 
 ARG NEXT_PUBLIC_STOCKIX_API_URL=https://api.stockix.cloud
 ENV NEXT_PUBLIC_STOCKIX_API_URL=${NEXT_PUBLIC_STOCKIX_API_URL}
