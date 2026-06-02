@@ -222,7 +222,6 @@ export const env = {
   WORKER_JOB_EXECUTION_TIMEOUT_MS: readNumber("WORKER_JOB_EXECUTION_TIMEOUT_MS", 45 * 60 * 1000),
   WORKER_HEARTBEAT_STALE_MS: readNumber("WORKER_HEARTBEAT_STALE_MS", 600_000),
   WORKER_STALE_LEASE_THRESHOLD_MS: readNumber("WORKER_STALE_LEASE_THRESHOLD_MS", 3_000_000),
-  WORKER_INTERNAL_NETWORK: readString("WORKER_INTERNAL_NETWORK", "stockix_internal"),
   /** Max time (ms) for docker compose up/build/pull (first image pull can exceed 5m). */
   DOCKER_COMPOSE_UP_TIMEOUT_MS: readNumber("DOCKER_COMPOSE_UP_TIMEOUT_MS", 30 * 60 * 1000),
   /** Max time (ms) for docker compose run (migrations). */
@@ -497,9 +496,6 @@ export const apiConfig = {
   },
   get workerStaleLeaseThresholdMs() {
     return env.WORKER_STALE_LEASE_THRESHOLD_MS;
-  },
-  get workerInternalNetwork() {
-    return env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
   },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);

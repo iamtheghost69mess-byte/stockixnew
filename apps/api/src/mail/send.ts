@@ -330,19 +330,19 @@ export async function sendProvisionCompleteOwnerEmail(opts: {
   ownerId?: string;
   tenantId: string;
   tenantName: string;
-  tenantSlug: string;
-  adminEmail: string;
-  planSlug: string;
-  modules: string[];
+  tenantSlug?: string | null;
+  adminEmail?: string | null;
+  planSlug?: string | null;
+  modules?: string[] | null;
 }): Promise<MailSendResult> {
   const dashboardBase = apiConfig.dashboardUrl.replace(/\/+$/, "");
   const tenantDashboardUrl = `${dashboardBase}/tenants/${opts.tenantId}`;
   const mailOpts = {
     tenantName: opts.tenantName,
-    tenantSlug: opts.tenantSlug,
-    adminEmail: opts.adminEmail,
-    planSlug: opts.planSlug,
-    modules: opts.modules,
+    tenantSlug: opts.tenantSlug ?? "—",
+    adminEmail: opts.adminEmail ?? "—",
+    planSlug: opts.planSlug ?? "starter",
+    modules: opts.modules ?? [],
     tenantDashboardUrl,
   };
 
@@ -580,36 +580,6 @@ export async function sendLicenseExpiringEmailForTenant(
   }
 }
 
-/** Notify the assigned platform owner that a tenant has been provisioned successfully. */
-export async function sendProvisionCompleteOwnerEmail(opts: {
-  to: string;
-  tenantName: string;
-  tenantId: string;
-  tenantSlug?: string;
-  ownerId?: string;
-}): Promise<MailSendResult> {
-  const brandName = apiConfig.brandName;
-  const safeTenant = escapeHtml(opts.tenantName);
-
-  return sendMail({
-    to: opts.to,
-    subject: `Tenant provisioning complete — ${opts.tenantName}`,
-    html: `<!DOCTYPE html>
-<html>
-<body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px;">
-  <h1 style="font-size: 22px;">Provisioning complete</h1>
-  <p>Hello,</p>
-  <p>The tenant <strong>${safeTenant}</strong> has been provisioned successfully on ${escapeHtml(brandName)}.</p>
-  ${opts.tenantSlug ? `<p style="margin: 8px 0;"><strong>Slug:</strong> ${escapeHtml(opts.tenantSlug)}</p>` : ""}
-  <p style="color: #666; font-size: 14px;">This is an automated notification. No action is required.</p>
-</body>
-</html>`,
-    idempotencyKey: `provision-complete-owner/${opts.tenantId}`,
-    templateKey: "provision-complete-owner",
-    ownerId: opts.ownerId,
-    tenantId: opts.tenantId,
-  });
-}
 
 export async function sendLicenseExpiringEmailToPlatformOwner(
   db: MailDb,
