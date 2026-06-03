@@ -457,6 +457,7 @@ services:
         condition: service_healthy
     networks:
       - stockix_internal
+      - stockix_public
 
 networks:
   stockix_public:
