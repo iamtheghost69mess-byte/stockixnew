@@ -11,5 +11,33 @@ infra/worker-service/.tmp-dist/
 .env
 .env.*
 !.env.example
-services/stockix-finance/node_modules
-services/stockix-finance/**/.next
+# Finance service has its own pnpm workspace — never needed in control-plane builds.
+# Infra-worker accesses it via host volume mount at runtime.
+services/stockix-finance/
+
+# Chatwoot (Ruby/Rails) — not in pnpm workspace, never part of any Docker build.
+services/chatlive/
+
+# PMS + POS source code not needed inside control-plane images.
+# pnpm only needs package.json for workspace resolution; source is irrelevant at build time.
+services/pms/src/
+services/pms/frontend/src/
+services/pms/tests/
+services/pms/e2e/
+services/posnew/apps/pos-backend/src/
+services/posnew/apps/pos-backend/tests/
+services/posnew/apps/pos-frontend2/src/
+services/posnew/apps/pos-frontend2/pages/
+services/posnew/apps/pos-frontend2/components/
+services/posnew/apps/pos-frontend2/public/
+services/posnew/packages/ui/src/
+services/posnew/packages/domain-access/src/
+services/posnew/packages/platform-api/src/
+
+# E2E tests never needed inside Docker images
+e2e/
+**/e2e/
+
+# Large data/fixture files
+**/*.sql
+**/data/*.json
