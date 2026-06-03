@@ -190,6 +190,7 @@ export const env = {
     "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   ),
   STOCKIX_API_URL: readString("STOCKIX_API_URL", "http://localhost:4000"),
+  STOCKIX_SERVER_API_URL: readOptionalString("STOCKIX_SERVER_API_URL"),
   PROVISION_POLL_MS: readNumber("PROVISION_POLL_MS", 2000),
   PROVISION_MAX_MS: readNumber("PROVISION_MAX_MS", 45 * 60 * 1000),
   OWNER_ID: readOptionalString("OWNER_ID"),
@@ -527,6 +528,10 @@ export const dashboardConfig = {
   },
   get nextPublicApiUrl() {
     return env.NEXT_PUBLIC_STOCKIX_API_URL;
+  },
+  /** Internal Docker URL for server-side Route Handlers (avoids hairpin NAT through Cloudflare). */
+  get serverApiUrl() {
+    return env.STOCKIX_SERVER_API_URL ?? env.NEXT_PUBLIC_STOCKIX_API_URL;
   },
   get nextPublicScheme() {
     return env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME;
