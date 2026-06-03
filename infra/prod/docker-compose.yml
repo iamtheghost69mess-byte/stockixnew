@@ -182,6 +182,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
   postgres:
     image: postgres:16-alpine
@@ -265,6 +266,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+      start_period: 20s
     labels:
       - traefik.enable=true
       - traefik.docker.network=stockix_public
@@ -303,6 +305,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 6
+      start_period: 20s
 
   infra-worker:
     image: stockix-infra-worker:latest
@@ -363,7 +366,7 @@ services:
         NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
         NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
-    mem_limit: 256m
+    mem_limit: 512m
     cpus: "0.25"
     restart: unless-stopped
     depends_on:
@@ -417,6 +420,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+      start_period: 45s
 
   db-backup:
     # backup.sh needs docker exec (pg_dump) + aws s3 (B2). amazon/aws-cli has neither cron nor docker CLI.

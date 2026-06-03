@@ -41,3 +41,14 @@ e2e/
 # Large data/fixture files
 **/*.sql
 **/data/*.json
+
+# Local workspace / tooling — never needed inside any Docker image
+.pnpm-store/
+scratch/
+.claude/
+.claude-flow/
+.mcp.json
+*.log
+*.sarif
+docs/
+services/chatlive/config/llm_models.json

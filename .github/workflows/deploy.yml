@@ -223,7 +223,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     environment:
       name: production
       url: https://stockix.cloud
@@ -345,12 +345,12 @@ jobs:
             echo "OK: $img"
           done
           docker compose --env-file .env pull traefik socket-proxy
-          docker compose --env-file .env up -d --no-build --wait \
+          docker compose --env-file .env up -d --no-build --wait --wait-timeout 300 \
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           sleep 10
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+          curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+          curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
           if ! docker compose --env-file .env ps --status running | grep -q "api"; then
             echo "API service is not running after deploy"
