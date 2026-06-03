@@ -7,12 +7,12 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 
 COPY . .
 
-RUN --mount=type=cache,id=pnpm-store-api,target=/root/.local/share/pnpm/store \
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter api...
 # @repo/auth ships dist/; other @repo/* are bundled from TypeScript source via tsup.
 RUN pnpm --filter @repo/auth build
 RUN pnpm --filter api build
-RUN --mount=type=cache,id=pnpm-store-api,target=/root/.local/share/pnpm/store \
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm deploy --filter api --prod /deploy
 
 FROM node:20-alpine AS runner
