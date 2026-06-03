@@ -2,11 +2,10 @@ import { dashboardConfig } from "@repo/config";
 
 import { isApiConnectionError } from "@/lib/api-connection";
 
-// Server-side Route Handlers must use the internal Docker URL to avoid hairpin NAT
-// through Cloudflare (POST requests time out when looping through the public IP).
-// STOCKIX_SERVER_API_URL is set to http://api:4000 in the compose environment.
+// Server-side Route Handlers use dashboardConfig.serverApiUrl (internal Docker URL)
+// to avoid hairpin NAT through Cloudflare — POST requests time out going via the public IP.
 // Client-side bundle still uses NEXT_PUBLIC_STOCKIX_API_URL baked in at build time.
-const apiBase = process.env.STOCKIX_SERVER_API_URL ?? dashboardConfig.nextPublicApiUrl;
+const apiBase = dashboardConfig.serverApiUrl;
 
 const MAX_ATTEMPTS = dashboardConfig.nodeEnv === "production" ? 3 : 1;
 const TIMEOUT_MS = dashboardConfig.nodeEnv === "production" ? 10_000 : 3_000;
