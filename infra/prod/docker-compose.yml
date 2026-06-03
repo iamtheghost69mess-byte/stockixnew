@@ -383,6 +383,8 @@ services:
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
       PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
       STOCKIX_API_URL: ${STOCKIX_API_URL:-http://api:4000}
+      # Server-side API URL avoids hairpin NAT through Cloudflare (POST requests time out)
+      STOCKIX_SERVER_API_URL: http://api:4000
       POS_PLATFORM_BASE_URL: ${POS_PLATFORM_BASE_URL:-http://host.docker.internal:8010}
       PMS_BASE_URL: ${PMS_BASE_URL:-http://host.docker.internal:3003}
       NEXT_PUBLIC_PMS_API_URL: ${NEXT_PUBLIC_PMS_API_URL:-}
