@@ -213,8 +213,8 @@ jobs:
       - name: Enforce architecture phases
         run: pnpm architecture:validate
 
-  deploy:
-    name: Deploy production
+  build-images:
+    name: Build images
     needs: quality-gate
     if: |
       always() &&
@@ -223,7 +223,79 @@ jobs:
       (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-api:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-api:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-api:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-api:cache,mode=max
+
+      - name: Build & push Dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/dashboard/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-dashboard:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-dashboard:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-dashboard:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-dashboard:cache,mode=max
+          build-args: |
+            NEXT_PUBLIC_STOCKIX_API_URL=${{ secrets.NEXT_PUBLIC_STOCKIX_API_URL || 'https://api.stockix.cloud' }}
+            NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN=${{ secrets.ROOT_DOMAIN || 'stockix.cloud' }}
+            NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME=${{ secrets.PUBLIC_BASE_URL_SCHEME || 'https' }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN || '' }}
+
+      - name: Build & push Infra Worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/worker-service/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-infra-worker:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-infra-worker:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache,mode=max
+
+  deploy:
+    name: Deploy production
+    needs: [quality-gate, build-images]
+    if: |
+      always() &&
+      (needs.quality-gate.result == 'success' || needs.quality-gate.result == 'skipped') &&
+      needs.build-images.result == 'success' &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     environment:
       name: production
       url: https://stockix.cloud
@@ -250,8 +322,19 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${EC2_HOST:-}" && test -n "${EC2_USER:-}"
-          ssh -o StrictHostKeyChecking=accept-new "${EC2_USER}@${EC2_HOST}" bash -s << 'REMOTE'
+          RELEASE_SHA="${{ github.sha }}"
+          GHCR_REPO="${{ github.repository }}"
+          GHCR_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          # Pass SHA, GHCR repo, and token as positional args to remote bash.
+          # Single-quoted 'REMOTE' heredoc prevents local shell from expanding remote variables.
+          ssh -o StrictHostKeyChecking=accept-new "${EC2_USER}@${EC2_HOST}" \
+            bash -s "$RELEASE_SHA" "$GHCR_REPO" "$GHCR_TOKEN" << 'REMOTE'
           set -euo pipefail
+          RELEASE_SHA="$1"
+          GHCR_REPO="$2"
+          GHCR_TOKEN="$3"
+          GHCR_OWNER="${GHCR_REPO%%/*}"
+          GHCR_PREFIX="ghcr.io/${GHCR_REPO}"
           export CI=true
           export PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
           if [ -d /opt/stockix/stockixnew/.git ]; then cd /opt/stockix/stockixnew
@@ -305,15 +388,6 @@ jobs:
           git checkout main
           git reset --hard origin/main
           echo "Deploy commit: $(git rev-parse HEAD)"
-          if ! grep -q 'pnpm --filter api build' apps/api/Dockerfile; then
-            echo "ERROR: apps/api/Dockerfile on the server is stale (missing in-image API build)."
-            sed -n '8,22p' apps/api/Dockerfile
-            exit 1
-          fi
-          if grep -A8 '^  api-bullmq:' infra/prod/docker-compose.yml | grep -q '^    build:'; then
-            echo "ERROR: api-bullmq must not have its own build: (use image: stockix-api:latest only)."
-            exit 1
-          fi
           if [ ! -x scripts/load-env-file.sh ]; then
             chmod +x scripts/load-env-file.sh
           fi
@@ -322,7 +396,6 @@ jobs:
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
           rm -rf node_modules
-          # infra/prod/.env sets NODE_ENV=production; pnpm skips devDependencies (tsx for db:migrate).
           NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
@@ -331,19 +404,22 @@ jobs:
             exit 1
           fi
           echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
+          echo "=== Pulling pre-built images from GHCR ==="
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_OWNER}" --password-stdin
+          docker pull "${GHCR_PREFIX}/stockix-api:${RELEASE_SHA}"
+          docker pull "${GHCR_PREFIX}/stockix-dashboard:${RELEASE_SHA}"
+          docker pull "${GHCR_PREFIX}/stockix-infra-worker:${RELEASE_SHA}"
+          docker tag "${GHCR_PREFIX}/stockix-api:${RELEASE_SHA}" stockix-api:latest
+          docker tag "${GHCR_PREFIX}/stockix-dashboard:${RELEASE_SHA}" stockix-dashboard:latest
+          docker tag "${GHCR_PREFIX}/stockix-infra-worker:${RELEASE_SHA}" stockix-infra-worker:latest
+          docker logout ghcr.io
+          echo "=== Verifying images ==="
+          for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
+            docker image inspect "$img" >/dev/null 2>&1 && echo "OK: $img" || { echo "Missing: $img"; exit 1; }
+          done
           cd infra/prod
           export COMPOSE_FILE=docker-compose.yml
-          export COMPOSE_PARALLEL_LIMIT=1
           docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
-          docker compose --env-file .env build --progress=plain api dashboard infra-worker
-          echo "=== Verifying images exist ==="
-          for img in stockix-api:latest stockix-dashboard:latest stockix-infra-worker:latest; do
-            if ! docker image inspect "$img" >/dev/null 2>&1; then
-              echo "Missing image: $img — Docker build failed. Check logs above."
-              exit 1
-            fi
-            echo "OK: $img"
-          done
           docker compose --env-file .env pull traefik socket-proxy
           docker compose --env-file .env up -d --no-build --wait --wait-timeout 300 \
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
