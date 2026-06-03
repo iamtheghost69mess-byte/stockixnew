@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { dashboardConfig } from "@repo/config";
 
 export async function GET() {
-  const base = dashboardConfig.nextPublicApiUrl?.replace(/\/+$/, "");
+  const base = (process.env.STOCKIX_SERVER_API_URL ?? dashboardConfig.nextPublicApiUrl)?.replace(/\/+$/, "");
   if (!base) {
     return NextResponse.json(
       { mail: { configured: false, fromAddressSet: false } },
