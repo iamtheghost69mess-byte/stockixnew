@@ -169,7 +169,7 @@ services:
     networks:
       - stockix_public
       - stockix_internal
-    read_only: true
+    
     security_opt:
       - no-new-privileges:true
     tmpfs:
