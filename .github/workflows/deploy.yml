@@ -327,7 +327,10 @@ jobs:
           GHCR_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           # Pass SHA, GHCR repo, and token as positional args to remote bash.
           # Single-quoted 'REMOTE' heredoc prevents local shell from expanding remote variables.
-          ssh -o StrictHostKeyChecking=accept-new "${EC2_USER}@${EC2_HOST}" \
+          ssh -o StrictHostKeyChecking=accept-new \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              "${EC2_USER}@${EC2_HOST}" \
             bash -s "$RELEASE_SHA" "$GHCR_REPO" "$GHCR_TOKEN" << 'REMOTE'
           set -euo pipefail
           RELEASE_SHA="$1"
