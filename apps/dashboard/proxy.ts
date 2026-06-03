@@ -15,12 +15,16 @@ function buildCspForRuntime(baseCsp: string): string {
 
 function withSecurityHeaders(response: NextResponse): NextResponse {
   const connectSrc = (() => {
+    const parts = ["'self'"];
     try {
-      const apiOrigin = new URL(dashboardConfig.nextPublicApiUrl).origin;
-      return `'self' ${apiOrigin} ws: wss:`;
-    } catch {
-      return "'self' ws: wss:";
-    }
+      parts.push(new URL(dashboardConfig.nextPublicApiUrl).origin);
+    } catch {}
+    try {
+      const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
+      if (dsn) parts.push(new URL(dsn).origin);
+    } catch {}
+    parts.push("ws:", "wss:");
+    return parts.join(" ");
   })();
   const builtCsp = buildCspForRuntime(dashboardConfig.securityCspBase);
   const connectSrcDirective = `connect-src ${connectSrc}`;
