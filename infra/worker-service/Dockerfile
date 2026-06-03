@@ -7,7 +7,7 @@ WORKDIR /app
 
 COPY . .
 ENV NODE_OPTIONS=--max-old-space-size=3072
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+RUN --mount=type=cache,id=pnpm-store-worker,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter api...
 RUN pnpm --filter @repo/auth build \
   && pnpm infra:worker:build
