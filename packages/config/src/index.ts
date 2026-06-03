@@ -181,6 +181,7 @@ export const env = {
   NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: readString("NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME", "http"),
   NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: readString("NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN", "localhost"),
   NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST: readString("NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST", "127.0.0.1"),
+  NEXT_PUBLIC_SENTRY_DSN: readOptionalString("NEXT_PUBLIC_SENTRY_DSN"),
   SECURITY_HSTS: readString("SECURITY_HSTS", "max-age=31536000; includeSubDomains"),
   SECURITY_X_FRAME_OPTIONS: readString("SECURITY_X_FRAME_OPTIONS", "DENY"),
   SECURITY_REFERRER_POLICY: readString("SECURITY_REFERRER_POLICY", "strict-origin-when-cross-origin"),
@@ -556,6 +557,9 @@ export const dashboardConfig = {
   },
   get securityCspBase() {
     return env.SECURITY_CSP_BASE;
+  },
+  get nextPublicSentryDsn() {
+    return env.NEXT_PUBLIC_SENTRY_DSN;
   },
 } as const;
 

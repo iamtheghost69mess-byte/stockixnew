@@ -20,7 +20,7 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
       parts.push(new URL(dashboardConfig.nextPublicApiUrl).origin);
     } catch {}
     try {
-      const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
+      const dsn = dashboardConfig.nextPublicSentryDsn?.trim();
       if (dsn) parts.push(new URL(dsn).origin);
     } catch {}
     parts.push("ws:", "wss:");
