@@ -10,6 +10,7 @@ import { execa } from "execa";
 
 import { defaultTenantEnvRoot } from "./env-paths.js";
 import { getTenantStackPaths } from "./provision-paths.js";
+import { getRepoRoot } from "./repo-root.js";
 import { composeProjectName } from "./provisioning/compose-project-name.js";
 import { TenantProvisionService } from "./provisioning/tenant-provision-service.js";
 import type { DeprovisionOptions, DeprovisionResult, ProvisionInput, ProvisionResult } from "./provisioning/types.js";
@@ -44,11 +45,75 @@ function sharedMongoHost(): string {
   return process.env.SHARED_MONGO_HOST ?? "shared-mongo";
 }
 
+async function getComposeContainerName(
+  project: string,
+  composeFile: string,
+  service: string,
+): Promise<string | null> {
+  try {
+    const { stdout } = await execa(
+      "docker",
+      ["compose", "-f", composeFile, "-p", project, "ps", "-q", service],
+      { stdio: "pipe" },
+    );
+    const id = stdout.trim().split("\n").find((line) => line.trim())?.trim();
+    if (!id) return null;
+    const { stdout: nameOut } = await execa(
+      "docker",
+      ["inspect", "-f", "{{.Name}}", id],
+      { stdio: "pipe" },
+    );
+    const name = nameOut.trim().replace(/^\//, "");
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
+async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Promise<void> {
+  const repoRoot = getRepoRoot();
+  const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+  const redisContainer = await getComposeContainerName(
+    "stockix-shared",
+    sharedComposeFile,
+    "stockix-redis",
+  );
+  if (!redisContainer) {
+    log(`[db-deprovision] shared redis container not found — skipping Redis flush for "${slug}"`);
+    return;
+  }
+
+  const pattern = `tenant:${slug}:*`;
+  try {
+    const { stdout } = await execa(
+      "docker",
+      [
+        "exec",
+        redisContainer,
+        "redis-cli",
+        "EVAL",
+        "local c='0'; local n=0; repeat local r=redis.call('SCAN',c,'MATCH',ARGV[1],'COUNT',100); c=r[1]; for _,k in ipairs(r[2]) do redis.call('DEL',k); n=n+1 end until c=='0'; return n",
+        "0",
+        pattern,
+      ],
+      { stdio: "pipe" },
+    );
+    const count = Number.parseInt(stdout.trim(), 10);
+    log(
+      `[db-deprovision] flushed ${Number.isFinite(count) ? count : 0} Redis keys matching ${pattern}`,
+    );
+  } catch (err) {
+    log(
+      `[db-deprovision] Redis flush warning: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 /**
  * Sanitize a tenant slug for use as a MySQL identifier and username.
  * MySQL usernames max 32 chars.
  */
-function slugToMysqlSafe(slug: string): string {
+export function slugToMysqlSafe(slug: string): string {
   return slug.replace(/[^a-z0-9]/gi, "_").toLowerCase().slice(0, 28);
 }
 
@@ -91,6 +156,10 @@ export async function provisionTenantDatabases(
   });
 
   try {
+    // NOTE: stockix_{safe}_finance is provisioned for legacy compatibility.
+    // Finance TenantDBManager uses stockix_{safe}_{organizationId} at runtime.
+    // Do not drop _finance on deprovision — it may be referenced by some modules.
+    // Track in Architecture2.md P1 — orphan DB audit pending.
     await conn.execute(
       `CREATE DATABASE IF NOT EXISTS \`${financeDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
@@ -154,9 +223,21 @@ export async function deprovisionTenantDatabases(
       try {
         await conn.execute(`DROP DATABASE IF EXISTS \`${financeDb}\``);
         await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
+
+        const [orgRows] = await conn.query<Array<{ schemaName: string }>>(
+          `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ?`,
+          [`stockix_${safe}_%`],
+        );
+        for (const row of orgRows) {
+          const dbName = row.schemaName;
+          if (!dbName) continue;
+          await conn.execute(`DROP DATABASE IF EXISTS \`${dbName}\``);
+          log(`[db-deprovision] Dropped DB: ${dbName}`);
+        }
+
         await conn.execute(`DROP USER IF EXISTS '${tenantUser}'@'%'`);
         await conn.execute("FLUSH PRIVILEGES");
-        log(`[db-deprovision] MySQL cleaned: ${financeDb}, ${systemDb}, user: ${tenantUser}`);
+        log(`[db-deprovision] MySQL cleaned for tenant "${slug}" (user: ${tenantUser})`);
       } finally {
         await conn.end();
       }
@@ -166,26 +247,36 @@ export async function deprovisionTenantDatabases(
   }
 
   // ── MongoDB cleanup via mongosh CLI (no mongodb npm package needed) ────────
-  // mongosh is available inside the shared-mongo container.
-  // We exec into it via docker exec using the execa runner already in the worker.
   log(`[db-deprovision] dropping MongoDB database "${slug}_pos"`);
   try {
-    const mongoHost = sharedMongoHost();
-    await execa("docker", [
-      "exec",
-      // Container name follows the shared compose project naming convention
-      "stockix-shared-shared-mongo-1",
-      "mongosh",
-      "--host", `${mongoHost}:27017`,
-      "--quiet",
-      "--eval",
-      `db.getSiblingDB('${slug}_pos').dropDatabase()`,
-    ], { stdio: "pipe" });
-    log(`[db-deprovision] MongoDB database "${slug}_pos" dropped`);
+    const repoRoot = getRepoRoot();
+    const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+    const mongoContainer = await getComposeContainerName(
+      "stockix-shared",
+      sharedComposeFile,
+      "stockix-mongo",
+    );
+    if (!mongoContainer) {
+      log(`[db-deprovision] shared mongo container not found — skipping Mongo cleanup for "${slug}"`);
+    } else {
+      const mongoHost = sharedMongoHost();
+      await execa("docker", [
+        "exec",
+        mongoContainer,
+        "mongosh",
+        "--host", `${mongoHost}:27017`,
+        "--quiet",
+        "--eval",
+        `db.getSiblingDB('${slug}_pos').dropDatabase()`,
+      ], { stdio: "pipe" });
+      log(`[db-deprovision] MongoDB database "${slug}_pos" dropped`);
+    }
   } catch (err) {
     // Non-fatal — if the DB never got written to it may not exist
     log(`[db-deprovision] MongoDB cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  await flushTenantRedisKeys(slug, log);
 }
 
 /** TCP-level reachability check — no driver dependencies. */
@@ -247,6 +338,49 @@ export async function deprovisionTenant(
     if (options.removeImages) downArgs.push("--rmi", "local");
     await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, { timeoutMs: 2 * 60 * 1000 });
     dockerStatus = "stopped";
+
+    const repoRoot = getRepoRoot();
+    const moduleComposeEnv = {
+      ...composeEnv,
+      STOCKIX_REPO_ROOT: repoRoot,
+      COMPOSE_PROJECT_NAME: project,
+    };
+
+    const posProject = `stockix-pos-${row.slug}`;
+    const posComposeFile = join(repoRoot, "infra", "pos-tenant-stack", "docker-compose.yml");
+    try {
+      await dockerRunner.run(
+        posComposeFile,
+        posProject,
+        envPath,
+        { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: posProject },
+        ["down", "--remove-orphans", "--timeout", "30"],
+        { timeoutMs: 2 * 60 * 1000 },
+      );
+      log(`[deprovision] POS stack ${posProject} removed`);
+    } catch (err) {
+      log(
+        `[deprovision] POS stack teardown failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const pmsProject = `stockix-pms-${row.slug}`;
+    const pmsComposeFile = join(repoRoot, "infra", "pms-tenant-stack", "docker-compose.yml");
+    try {
+      await dockerRunner.run(
+        pmsComposeFile,
+        pmsProject,
+        envPath,
+        { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: pmsProject },
+        ["down", "--remove-orphans", "--timeout", "30"],
+        { timeoutMs: 2 * 60 * 1000 },
+      );
+      log(`[deprovision] PMS stack ${pmsProject} removed`);
+    } catch (err) {
+      log(
+        `[deprovision] PMS stack teardown failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   } catch {
     dockerStatus = "skipped";
   }
