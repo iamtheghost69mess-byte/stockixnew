@@ -324,7 +324,7 @@ jobs:
             echo "Deploy failed — attempting rollback to previous images."
             if [ -d "${REPO_ROOT}/infra/prod" ]; then
               cd "${REPO_ROOT}/infra/prod"
-              docker compose --env-file .env logs --tail=300 || true
+              docker compose --env-file .env logs --no-log-prefix --no-follow --tail=100 2>/dev/null || true
             fi
             rolled_back=0
             if [ -n "${PREV_API:-}" ]; then docker tag "${PREV_API}" stockix-api:latest 2>/dev/null || true; rolled_back=1; fi
@@ -395,11 +395,15 @@ jobs:
             "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/health" >/dev/null
           curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
-          if ! docker compose --env-file .env ps --status running | grep -q "api"; then
-            echo "API not running"; docker compose --env-file .env logs --tail=200; exit 1
+          if ! docker ps --format "{{.Names}}\t{{.Status}}" | grep "stockix-api-1" | grep -q "Up"; then
+            echo "API not running"
+            docker logs stockix-api-1 --tail=50 --no-follow 2>/dev/null || true
+            exit 1
           fi
-          if ! docker compose --env-file .env ps --status running | grep -q "infra-worker"; then
-            echo "infra-worker not running"; docker compose --env-file .env logs infra-worker --tail=200; exit 1
+          if ! docker ps --format "{{.Names}}\t{{.Status}}" | grep "stockix-infra-worker-1" | grep -q "Up"; then
+            echo "infra-worker not running"
+            docker logs stockix-infra-worker-1 --tail=50 --no-follow 2>/dev/null || true
+            exit 1
           fi
           cd "${REPO_ROOT}"
           echo "=== Building tenant images (background) ==="
