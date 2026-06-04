@@ -76,7 +76,7 @@ Verification after P0 repair wave (2026-06-04):
 
 
 
-**Still open:** backup **restore tested on staging** (ops), host cron for healthcheck, dedicated M1–M5 runbook files.
+**Still open:** backup **restore tested on staging** (ops), host cron for healthcheck.
 
 
 
@@ -92,7 +92,7 @@ Verification after P0 repair wave (2026-06-04):
 
 |----------|--------|
 
-| Dedicated M1–M5 runbook files | Final audit M1–M5 still FAIL; general ops doc exists at [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) but not split per checklist |
+| Dedicated M1–M5 runbook files | **Closed** — consolidated sections M1–M5 in `infra/prod/OPERATIONS.md:275-683` |
 
 | Finance static copy to `stockix_webapp_static` | Deferred per PARTIAL-8 TODO in [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) |
 
@@ -126,7 +126,7 @@ Verification after P0 repair wave (2026-06-04):
 
 1. Run Phase 4 staging steps in [`finalaudit.md`](finalaudit.md) — backup restore + `healthcheck.sh` on host.
 
-2. Add or link M1–M5 runbooks (stuck provision, failed deprovision, Mongo RS, MySQL outage, partial tenant).
+2. ~~Add or link M1–M5 runbooks~~ — **Done**: `infra/prod/OPERATIONS.md` § M1–M5
 
 3. Implement or defer Finance static copy (K6 / PARTIAL-8).
 

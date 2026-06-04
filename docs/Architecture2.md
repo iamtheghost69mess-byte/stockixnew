@@ -286,7 +286,7 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 ### 5.4 Shared Nginx gateway
 
-**Status: NOT IMPLEMENTED**
+**Status: STATIC-ONLY** — `infra/shared/nginx/nginx.conf` serves `/var/www/{slug}/public` static files. `/api/` returns 404 by design; Finance API is served directly by tenant `server` via Traefik. Static copy step (`docker.static_copy_step`) still deferred — see K6, `provision-runtime.ts:1551-1553`.
 
 - Referenced in `infra/tenant-stack/docker-compose.yml` comments (`infra/shared/nginx/`)
 - Legacy per-tenant template: `services/stockix-finance/docker/nginx/sites/server.template`
@@ -356,7 +356,7 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 - Module gating (`PROVISION_MODULE_GATING`)
 - Required images (`stockix-server:local`, etc.)
 - Advisory lock `withTenantProvisionAdvisoryLock` during compose (when `tenantId` present)
-- **`assertNoConcurrentProvisionJob` imported but never called** — incomplete concurrent-job guard
+- `assertNoConcurrentTenantLifecycleJob` called at provision entry (`provision-runtime.ts:667,902,1031,1284`) and deprovision entry (`worker.ts:524,701-704`)
 
 ### 7.2 Journal / resume
 
@@ -437,7 +437,7 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 | Risk | Detail |
 |------|--------|
-| MySQL skip | If `SHARED_MYSQL_ROOT_PASSWORD` unset → MySQL cleanup **skipped**, PG rows still deleted (P2 — still open) |
+| MySQL skip | If `SHARED_MYSQL_ROOT_PASSWORD` unset → deprovision **throws** before PG delete (`provisioner.ts:229-235`); provision throws at data step (`provisioner.ts:143-144`) — **closed** |
 | Mongo container name | **RESOLVED** — dynamic lookup via `getComposeContainerName` |
 | Org-level MySQL DBs | **RESOLVED** — wildcard drop `stockix_{safe}_%` on deprovision |
 | POS/PMS compose | **RESOLVED** — `deprovisionTenant` tears down `stockix-pos-{slug}` and `stockix-pms-{slug}` |
@@ -621,7 +621,7 @@ Stuck job reconcilers on API process (Postgres, not BullMQ)
 | Journal written | Resume skips completed steps |
 | After `docker.data_step`, before `docker.app_step` | MySQL DBs exist; compose may be partial |
 | Rollback invoked | `compose down -v`; **shared DBs remain** |
-| No concurrent guard | `assertNoConcurrentProvisionJob` unused |
+| Concurrent guard | `assertNoConcurrentTenantLifecycleJob` wired in worker + provision-runtime |
 
 ### 14.2 DB partially created
 
@@ -750,9 +750,9 @@ Docker socket → socket-proxy (filtered API)
 - [x] Deprovision: drop org-level MySQL databases `stockix_{slug}_%`
 - [x] Replace hard-coded Mongo container name with `docker compose ps -q` lookup
 - [x] Redis keys flushed on deprovision (`tenant:{slug}:*`)
-- [ ] Wire `assertNoConcurrentProvisionJob` or equivalent
+- [x] Wire `assertNoConcurrentProvisionJob` or equivalent — `worker.ts:524,701-704`, `provision-runtime.ts:667,902,1031,1284`
 - [x] Update `tenant_deployments.mongoUrl` to per-tenant URL
-- [ ] Rollback: optional `deprovisionTenantDatabases` flag for hard rollback
+- [x] Rollback: `deprovisionTenantDatabases` called when `docker.data_step` journaled — `provision-runtime.ts:502-506`
 
 ### P2 — Operational excellence
 
@@ -764,7 +764,7 @@ Docker socket → socket-proxy (filtered API)
 - [x] POS backend Alpine image (`node:20-alpine`, REPAIR E)
 - [x] Worker `.dockerignore` (`infra/worker-service/.dockerignore`, REPAIR F)
 - [ ] `_finance` orphan DB audit / align with TenantDBManager
-- [ ] Backup strategy for `stockix_shared_mysql`, `stockix_shared_mongo`, `stockix_shared_tenant_redis` volumes
+- [x] Backup strategy for shared volumes — `infra/prod/backup/backup-shared.sh` (mysqldump + mongodump → B2)
 - [ ] Load test: N tenants × connection count on MySQL 500 max
 - [ ] Document partial provision remediation in `infra/prod/OPERATIONS.md`
 - [ ] Sync `docs/ARCHITECTURE.md` with shared-infra model (still describes per-tenant mongo/redis)

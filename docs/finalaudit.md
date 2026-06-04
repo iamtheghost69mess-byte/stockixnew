@@ -2,20 +2,20 @@
 
 **Date:** 2026-06-04  
 **Auditor:** Final validation pass; **P0 repair wave** applied 2026-06-04 (lifecycle, backup, monitoring)  
-**Status:** **NO-GO** — code-level P0 blockers closed; **GO still requires** staging Phase 4 (backup restore test, shared health cron on host) and dedicated runbooks (M1–M5)  
+**Status:** **CONDITIONAL GO** — code P0 complete; runbooks in `infra/prod/OPERATIONS.md` § M1–M5; GO requires staging Phase 4 evidence (backup restore drill, host cron for healthcheck.sh)  
 **Action backlog:** [`docs/todo2.md`](todo2.md) — integrated checklist for all remaining FAIL/PARTIAL/ops items
 
 ---
 
 ## Executive Decision
 
-Production deployment is **not recommended** until **backup restore is tested on staging** and **OPERATIONS runbooks** exist for stuck provision/deprovision and shared-infra outages (M1–M5).
+Production deployment is **not recommended** until **backup restore is tested on staging** and **healthcheck.sh** is scheduled on the production host. Runbooks for stuck provision/deprovision and shared-infra outages (M1–M5) are confirmed in [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) § M1–M5.
 
 **P0 repairs applied (2026-06-04):** shared MySQL/Mongo backup scripts ([`backup-shared.sh`](infra/prod/backup/backup-shared.sh)), monitoring ([`healthcheck.sh`](infra/prod/monitoring/healthcheck.sh)), deprovision advisory lock + lifecycle job guard on both paths, POS provision failure Traefik cleanup, production worker dotenv guard, `.gitignore` for `.tmp-dist`.
 
 The shared-infrastructure migration remains **largely coherent** in provision/deprovision paths. See [`docs/missing2arch.md`](missing2arch.md) for remaining doc/ops gaps.
 
-**Conditional path to GO:** (1) execute Phase 4 staging — prove `backup.sh` + `backup-shared.sh` restore on staging, (2) schedule `healthcheck.sh` on the host, (3) add or link runbooks for M1–M5 (partial coverage exists in [`infra/prod/OPERATIONS.md`](infra/prod/OPERATIONS.md) but not as dedicated M1–M5 checklist items).
+**Conditional path to GO:** (1) execute Phase 4 staging — prove `backup.sh` + `backup-shared.sh` restore on staging, (2) schedule `healthcheck.sh` on the host, (3) M1–M5 runbooks confirmed in [`infra/prod/OPERATIONS.md`](infra/prod/OPERATIONS.md) § M1–M5 (lines 275–683).
 
 ---
 
@@ -25,20 +25,20 @@ The shared-infrastructure migration remains **largely coherent** in provision/de
 |---------|--------|------|------|---------|-------|
 | A MongoDB isolation | 10 | 10 | 0 | 0 | 10/10 |
 | B MySQL isolation | 10 | 10 | 0 | 0 | 10/10 |
-| C Redis isolation | 10 | 8 | 0 | 2 | 8/10 |
+| C Redis isolation | 10 | 10 | 0 | 0 | 10/10 |
 | D Docker networking | 12 | 12 | 0 | 0 | 12/12 |
 | E Traefik routing | 10 | 10 | 0 | 0 | 10/10 |
-| F Provisioning lifecycle | 15 | 14 | 0 | 1 | 14/15 |
+| F Provisioning lifecycle | 15 | 15 | 0 | 0 | 15/15 |
 | G Deprovisioning lifecycle | 15 | 14 | 0 | 1 | 14/15 |
 | H Security boundaries | 12 | 12 | 0 | 0 | 12/12 |
 | I Container images | 10 | 10 | 0 | 0 | 10/10 |
-| J Background jobs | 10 | 8 | 0 | 2 | 8/10 |
-| K Shared infrastructure | 12 | 8 | 0 | 4 | 8/12 |
-| L Consistency & integrity | 10 | 9 | 0 | 1 | 9/10 |
-| M Operational readiness | 12 | 5 | 5 | 2 | 5/12 |
+| J Background jobs | 10 | 9 | 0 | 1 | 9/10 |
+| K Shared infrastructure | 12 | 9 | 0 | 3 | 9/12 |
+| L Consistency & integrity | 10 | 10 | 0 | 0 | 10/10 |
+| M Operational readiness | 12 | 10 | 0 | 2 | 10/12 |
 | N Provision flow trace | 8 | 8 | 0 | 0 | 8/8 |
 | O Deprovision flow trace | 8 | 8 | 0 | 0 | 8/8 |
-| **TOTAL** | **164** | **136** | **5** | **14** | **136/164** |
+| **TOTAL** | **164** | **148** | **0** | **11** | **148/164** |
 
 *(Pass = confirmed in code; Partial = incomplete vs spec; Fail = missing or contradicted.)*
 
@@ -49,7 +49,7 @@ The shared-infrastructure migration remains **largely coherent** in provision/de
 | ID | Status | Note |
 |----|--------|------|
 | K9–K12, F2, F4, G12, E10, J10, A7, O2 | **FIXED in repo** (2026-06-04) | See P0 repair wave below |
-| M1–M5 | **OPEN** | Dedicated runbook files for stuck provision, failed deprovision, Mongo RS, MySQL outage, partial tenant |
+| M1–M5 | **CLOSED** | Runbooks in `infra/prod/OPERATIONS.md` § M1–M5 (lines 275–683) |
 | Staging Phase 4 | **OPEN** | Prove backup restore + host cron for `healthcheck.sh` before GO |
 
 ### P0 repair wave (2026-06-04) — verified in code
@@ -71,14 +71,9 @@ The shared-infrastructure migration remains **largely coherent** in provision/de
 | ID | File:line | Problem | Fix | Effort |
 |----|-----------|---------|-----|--------|
 | K6 | [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) ~L1509–1511 | Static copy **deferred** (TODO only); shared nginx serves empty `/var/www/{slug}/public/` | Implement `docker.static_copy_step` or serve static from Finance until nginx path ready | M |
-| C10 | [`infra/shared/docker-compose.yml`](infra/shared/docker-compose.yml) L147–148 | `appendonly no` — RDB snapshots only, not AOF | Enable AOF or document acceptable RDB-only risk for tenant Redis | S |
-| C6 | [`services/posnew/.../services/redisKeys.js`](services/posnew/apps/pos-backend/services/redisKeys.js) L10 | Rate-limit keys `org:{id}:*` may be unprefixed by `REDIS_KEY_PREFIX` | Prefix org-scoped keys or document accepted collision risk | M |
-| F13 | [`module-stacks.ts`](infra/worker-service/src/module-stacks.ts) L413+ | POS org bootstrap has no journal key `pos.bootstrap_organization` | Add `markOp` for idempotent POS bootstrap retry | M |
 | G14 | [`provisioner.ts`](infra/worker-service/domain/provisioner.ts) L456–460 | `deprovisionTenantDatabases` Mongo/Redis failures log warnings; gate blocks PG delete (good) but partial cleanup leaves orphans | Fail-fast or retry policy documented in runbook | S |
 | J8 | [`internal.ts`](apps/api/src/routes/internal.ts) L219–229 | Uses `claimToken` not `claim_version` column — TOCTOU mitigated but not version column | Accept or add explicit version column | S |
-| J9 | [`internal.ts`](apps/api/src/routes/internal.ts) L85–88 | `effectiveStaleMs = min(heartbeat, lease)` not documented 2× multiplier | Document or align with Architecture2 | S |
 | L9 | [`tenants.ts`](apps/api/src/routes/tenants.ts) L960–962 | Slug regex `^[a-z0-9]+(?:-[a-z0-9]+)*$` — differs from audit spec end-anchor pattern | Align docs or tighten regex | S |
-| M1–M5 | `docs/` | No dedicated OPERATIONS runbooks (only gaps in `missingarchitecture.md`) | Add OPERATIONS.md with stuck provision, deprovision, RS, MySQL outage, partial tenant | M |
 
 ---
 
@@ -227,11 +222,11 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | C3 | ✅ PASS | [`jobQueue.js`](services/posnew/apps/pos-backend/services/jobQueue.js) L49, L58–61 |
 | C4 | ✅ PASS | [`agenda.ts`](services/stockix-finance/packages/server/src/loaders/agenda.ts) L11–21 per-tenant collection |
 | C5 | ✅ PASS | Comments App.module L144–147, jobQueue L51–56 |
-| C6 | ⚠️ PARTIAL | [`redisKeys.js`](services/posnew/apps/pos-backend/services/redisKeys.js) L10 `org:{id}:` may lack tenant prefix |
+| C6 | ✅ PASS | [`redisKeys.js`](services/posnew/apps/pos-backend/services/redisKeys.js) L10-11 `REDIS_KEY_PREFIX` + `org:{id}:` |
 | C7 | ✅ PASS | [`provisioner.ts`](infra/worker-service/domain/provisioner.ts) L86–104 flush `tenant:{slug}:*` |
 | C8 | ✅ PASS | [`infra/prod/docker-compose.yml`](infra/prod/docker-compose.yml) control-plane-redis vs shared `stockix-redis` |
 | C9 | ✅ PASS | JWT-only [`Local.strategy.ts`](services/stockix-finance/packages/server/src/modules/Auth/strategies/Local.strategy.ts) L14; docs FAIL-5 |
-| C10 | ⚠️ PARTIAL | [`infra/shared/docker-compose.yml`](infra/shared/docker-compose.yml) L147–148 `appendonly no`, RDB saves L143–146 |
+| C10 | ✅ PASS | [`infra/shared/docker-compose.yml`](infra/shared/docker-compose.yml) L147-148 `appendonly yes`, RDB saves L143-146 |
 
 ### Section D — Docker networking
 
@@ -281,7 +276,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | F10 | ✅ PASS | `tenant.health_check` L1548 before `tenant.bootstrap_admin` L1568 |
 | F11 | ✅ PASS | `tenant.bootstrap_admin` journaled L1595 |
 | F12 | ✅ PASS | `tenant.build_organization` L1682–1857 |
-| F13 | ⚠️ PARTIAL | POS bootstrap in module-stacks L413 — no `pos.bootstrap_organization` journal key |
+| F13 | ✅ PASS | `pos.bootstrap_organization` journal `module-stacks.ts:426-459` |
 | F14 | ✅ PASS | `edge.publish` L2078 after health L1548 and bootstrap |
 | F15 | ✅ PASS | `assertProvisionModuleEnv` L838–839 |
 
@@ -349,7 +344,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | J6 | ✅ PASS | App.module Bull prefix L155 |
 | J7 | ✅ PASS | [`index.ts`](apps/api/src/index.ts) L49 `startStuckProvisioningReconciler` |
 | J8 | ⚠️ PARTIAL | `claimToken` L219–229 — not named `claim_version` |
-| J9 | ⚠️ PARTIAL | [`internal.ts`](apps/api/src/routes/internal.ts) L87 `min()` not 2× multiplier |
+| J9 | ✅ PASS | [`internal.ts`](apps/api/src/routes/internal.ts) L85-96 `min(heartbeat, lease)` documented |
 | J10 | ✅ PASS | [`load-env-if-dev.js`](services/posnew/apps/pos-backend/lib/load-env-if-dev.js) skips dotenv when `NODE_ENV=production` |
 
 ### Section K — Shared infrastructure
@@ -358,7 +353,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 |----|--------|------|
 | K1 | ✅ PASS | mysql L60–61 512m, slow query L44–45 |
 | K2 | ✅ PASS | mongo RS L76–87, rs-init L100–120 |
-| K3 | ⚠️ PARTIAL | redis L143–148 RDB yes, AOF no |
+| K3 | ✅ PASS | redis L143-148 RDB + AOF (`appendonly yes`) |
 | K4 | ✅ PASS | stockix-nginx L173–189 |
 | K5 | ⚠️ PARTIAL | [`nginx.conf`](infra/shared/nginx/nginx.conf) L18–25 — no upstream to Finance API |
 | K6 | ⚠️ PARTIAL | TODO provision-runtime; no static copy step |
@@ -380,7 +375,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | L5 | ✅ PASS | Agenda collection per slug |
 | L6 | ✅ PASS | [`TenantDBManager.ts`](services/stockix-finance/packages/server/src/services/Tenancy/TenantDBManager.ts) L11 cache |
 | L7 | ✅ PASS | deprovision covers MySQL/Mongo/Redis/Traefik/env |
-| L8 | ⚠️ PARTIAL | Journal covers most steps; network connect not journaled |
+| L8 | ✅ PASS | `docker.network_connect` journaled `provision-runtime.ts:1563-1579` |
 | L9 | ⚠️ PARTIAL | [`tenants.ts`](apps/api/src/routes/tenants.ts) L960–962 regex differs from spec |
 | L10 | ✅ PASS | `tenant_port_seq` + `assertTenantPortAvailable` |
 
@@ -388,11 +383,11 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 
 | ID | Result | Note |
 |----|--------|------|
-| M1 | ❌ FAIL | No stuck-provision runbook file |
-| M2 | ❌ FAIL | No failed-deprovision runbook file |
-| M3 | ❌ FAIL | No Mongo RS failure runbook |
-| M4 | ❌ FAIL | No shared MySQL outage runbook |
-| M5 | ❌ FAIL | Partial tenant doc in missingarchitecture only |
+| M1 | ✅ PASS | [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) § M1 — stuck provision |
+| M2 | ✅ PASS | [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) § M2 — failed deprovision |
+| M3 | ✅ PASS | [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) § M3 — Mongo RS failure |
+| M4 | ✅ PASS | [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) § M4 — shared MySQL outage |
+| M5 | ✅ PASS | [`infra/prod/OPERATIONS.md`](../infra/prod/OPERATIONS.md) § M5 — partial tenant recovery |
 | M6 | ✅ PASS | [`audit-orphan-dbs.ts`](infra/worker-service/scripts/audit-orphan-dbs.ts) report-only |
 | M7 | ✅ PASS | [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) L1–3 banner |
 | M8 | ✅ PASS | [`Architecture2.md`](docs/Architecture2.md) repair log through PARTIAL-13 |
@@ -546,9 +541,9 @@ npx tsx infra/worker-service/scripts/audit-orphan-dbs.ts
 bash infra/prod/backup/backup.sh
 ```
 
-**Expected:** **Today:** only `stockix_platform_*.dump.gz` uploaded — **not** MySQL/Mongo.
+**Expected:** Three artifacts uploaded: `stockix_platform_*.dump.gz` (Postgres), `shared_mysql_*.sql.gz` (MySQL), `shared_mongo_*.archive.gz` (MongoDB). See `backup-shared.sh`.
 
-**Failure means:** Platform metadata not backed up; also confirms K9/K10 gap.
+**Failure means:** Platform metadata or shared tenant data not backed up.
 
 ### STEP 12 — Monitoring healthcheck
 
