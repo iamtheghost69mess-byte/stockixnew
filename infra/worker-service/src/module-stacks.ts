@@ -30,6 +30,7 @@ import {
 } from "../domain/provisioning/adapters/bootstrap-pos-org.js";
 
 import { buildFinanceInternalUrlForPos } from "../domain/provisioning/build-finance-internal-url.js";
+import { readTenantEnvFile } from "../domain/provisioning/tenant-env.js";
 
 import {
 
@@ -323,8 +324,11 @@ export async function provisionPosStack(
   const resendFromEmail =
     process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
 
+  const tenantEnv = await readTenantEnvFile(opts.slug);
+
   const composeEnv = {
     ...process.env,
+    ...tenantEnv,
     COMPOSE_PROJECT_NAME: project,
     STOCKIX_REPO_ROOT: stockixRepoRoot,
     POS_APP_ROOT: posAppRoot,
@@ -351,9 +355,6 @@ export async function provisionPosStack(
   }
 
   const upServices = [
-    "pos-mongo",
-    "pos-mongo-init",
-    "pos-redis",
     "pos-backend",
     "pos-platform-worker",
     "pos-bigcapital-worker",

@@ -153,7 +153,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - traefik_letsencrypt:/letsencrypt
-      - traefik_dynamic:/etc/traefik/dynamic
+      - ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}:/etc/traefik/dynamic
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - --api=true
@@ -374,8 +374,6 @@ volumes:
     name: stockix_control_plane_redis
   traefik_letsencrypt:
     name: stockix_traefik_letsencrypt
-  traefik_dynamic:
-    name: stockix_traefik_dynamic
 
 networks:
   stockix_public:

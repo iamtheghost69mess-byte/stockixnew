@@ -47,7 +47,10 @@ services:
       - shared_mysql_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
-      - stockix-shared
+      stockix-shared:
+        aliases:
+          - shared-mysql
+          - stockix-mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "--password=${SHARED_MYSQL_ROOT_PASSWORD}"]
       interval: 10s
@@ -74,7 +77,10 @@ services:
     volumes:
       - shared_mongo_data:/data/db
     networks:
-      - stockix-shared
+      stockix-shared:
+        aliases:
+          - shared-mongo
+          - stockix-mongo
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
@@ -141,7 +147,10 @@ services:
     volumes:
       - shared_tenant_redis_data:/data
     networks:
-      - stockix-shared
+      stockix-shared:
+        aliases:
+          - tenant-redis
+          - stockix-redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
