@@ -325,12 +325,24 @@ jobs:
           RELEASE_SHA="${{ github.sha }}"
           GHCR_REPO="${{ github.repository }}"
           GHCR_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          # Wait up to 5 min for server to accept SSH (CPU throttling can delay handshake)
+          echo "Waiting for server to be reachable..."
+          for i in $(seq 1 10); do
+            if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 \
+                   -o BatchMode=yes "${EC2_USER}@${EC2_HOST}" true 2>/dev/null; then
+              echo "Server reachable (attempt $i)"
+              break
+            fi
+            [ "$i" -eq 10 ] && { echo "Server unreachable after 5 min"; exit 1; }
+            echo "Not reachable yet (attempt $i/10), waiting 30s..."
+            sleep 30
+          done
           # Pass SHA, GHCR repo, and token as positional args to remote bash.
           # Single-quoted 'REMOTE' heredoc prevents local shell from expanding remote variables.
           ssh -o StrictHostKeyChecking=accept-new \
               -o ServerAliveInterval=30 \
               -o ServerAliveCountMax=20 \
-              -o ConnectTimeout=30 \
+              -o ConnectTimeout=60 \
               "${EC2_USER}@${EC2_HOST}" \
             bash -s "$RELEASE_SHA" "$GHCR_REPO" "$GHCR_TOKEN" << 'REMOTE'
           set -euo pipefail
