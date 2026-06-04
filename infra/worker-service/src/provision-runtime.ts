@@ -1302,6 +1302,7 @@ export async function executeProvisionRuntime(
     }
 
     const tenantEnvMap = buildTenantEnvMap({
+      slug: input.slug,
       mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,

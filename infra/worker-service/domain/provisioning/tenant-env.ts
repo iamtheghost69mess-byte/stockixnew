@@ -7,6 +7,7 @@ import {
 } from "@repo/shared/deployment-secrets";
 
 export type TenantEnvFileParams = {
+  slug: string;
   mysqlVolumeName: string;
   stockixFinanceRoot: string;
   baseUrl: string;
@@ -58,40 +59,131 @@ function maybeEncryptEnvValue(value: string): string {
   return encryptDeploymentSecret(trimmed, apiConfig.deploymentSecretKey);
 }
 
+/**
+ * Shared infrastructure hostnames — sourced from env set in prod docker-compose.yml.
+ * All tenant containers join the `stockix-shared` Docker network and resolve
+ * these hostnames via Docker DNS.
+ */
+function sharedMysqlHost(): string {
+  return process.env.SHARED_MYSQL_HOST ?? "shared-mysql";
+}
+
+function sharedMongoHost(): string {
+  return process.env.SHARED_MONGO_HOST ?? "shared-mongo";
+}
+
+function tenantRedisHost(): string {
+  return process.env.TENANT_REDIS_HOST ?? "tenant-redis";
+}
+
+/**
+ * Build the per-tenant MongoDB connection URL.
+ * Each tenant gets its own MongoDB database: {slug}_pos
+ * The replica set name (rs0) matches the shared-mongo container init.
+ *
+ * FIX: Previously all tenants shared the same "stockix" database because
+ * MONGODB_DATABASE_URL was passed through from the platform env unchanged.
+ * Now each tenant gets an isolated database scoped to its slug.
+ */
+function buildTenantMongoUrl(slug: string): string {
+  const host = sharedMongoHost();
+  return `mongodb://${host}:27017/${slug}_pos?replicaSet=rs0&directConnection=true`;
+}
+
+/**
+ * Build the per-tenant Redis URL.
+ * All tenants share tenant-redis but use a key prefix for isolation:
+ *   tenant:{slug}:queue:*    BullMQ (POS bigcapital-sync worker)
+ *   tenant:{slug}:agenda:*   Finance Agenda scheduler
+ *   tenant:{slug}:session:*  Finance sessions
+ */
+function buildTenantRedisUrl(slug: string): string {
+  const host = tenantRedisHost();
+  return `redis://${host}:6379/0`;
+}
+
+function buildTenantRedisKeyPrefix(slug: string): string {
+  return `tenant:${slug}:`;
+}
+
+/**
+ * Per-tenant MySQL user name — scoped to this tenant's databases only.
+ * The provisioner creates this user with GRANT on stockix_{slug}_finance.* only.
+ */
+function buildTenantMysqlUser(slug: string): string {
+  return `tenant_${slug.replace(/[^a-z0-9]/gi, "_").toLowerCase()}`;
+}
+
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
 export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, string> {
+  const { slug } = params;
   const signup = buildTenantSignupEnv();
   const mailPassword = env.MAIL_PASSWORD ?? "";
   const s3AccessKeyId = params.s3AccessKeyId;
   const s3SecretAccessKey = params.s3SecretAccessKey;
+
+  const mysqlHost = sharedMysqlHost();
+  const tenantDbUser = buildTenantMysqlUser(slug);
+  const mongoUrl = buildTenantMongoUrl(slug);
+  const redisUrl = buildTenantRedisUrl(slug);
+  const redisKeyPrefix = buildTenantRedisKeyPrefix(slug);
+
   return {
+    // Legacy: kept for compose volume name compatibility (unused with shared infra)
     MYSQL_VOLUME_NAME: params.mysqlVolumeName,
     STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
     BASE_URL: params.baseUrl,
+
+    // ── MySQL (shared-mysql) ───────────────────────────────────────────
     DB_CLIENT: "mysql",
-    DB_HOST: "mysql",
-    DB_USER: "stockix_tenant",
+    DB_HOST: mysqlHost,
+    DB_USER: tenantDbUser,
     DB_PASSWORD: params.dbPassword,
     DB_ROOT_PASSWORD: params.dbRootPassword,
-    DB_CHARSET: "utf8",
+    DB_CHARSET: "utf8mb4",
+
     SYSTEM_DB_CLIENT: "mysql",
-    SYSTEM_DB_HOST: "mysql",
-    SYSTEM_DB_USER: "stockix_tenant",
+    SYSTEM_DB_HOST: mysqlHost,
+    SYSTEM_DB_USER: tenantDbUser,
     SYSTEM_DB_PASSWORD: params.dbPassword,
-    SYSTEM_DB_NAME: "stockix_system",
-    SYSTEM_DB_CHARSET: "utf8",
+    SYSTEM_DB_NAME: `stockix_${slug}_system`,
+    SYSTEM_DB_CHARSET: "utf8mb4",
+
     TENANT_DB_CLIENT: "mysql",
-    TENANT_DB_HOST: "mysql",
-    TENANT_DB_USER: "stockix_tenant",
+    TENANT_DB_HOST: mysqlHost,
+    TENANT_DB_USER: tenantDbUser,
     TENANT_DB_PASSWORD: params.dbPassword,
-    TENANT_DB_NAME_PREFIX: "stockix_tenant_",
-    TENANT_DB_NAME_PERFIX: "stockix_tenant_",
-    TENANT_DB_CHARSET: "utf8",
+    TENANT_DB_NAME_PREFIX: `stockix_${slug}_`,
+    TENANT_DB_NAME_PERFIX: `stockix_${slug}_`,
+    TENANT_DB_CHARSET: "utf8mb4",
+
+    // ── MongoDB (shared-mongo) — per-tenant database ───────────────────
+    // FIX: was env.MONGODB_DATABASE_URL (shared "stockix" DB for all tenants).
+    // Now: each tenant gets its own {slug}_pos database.
+    MONGODB_DATABASE_URL: mongoUrl,
+    MONGODB_URI: mongoUrl,
+
+    // ── Redis (tenant-redis) — shared with key prefix isolation ────────
+    REDIS_HOST: tenantRedisHost(),
+    REDIS_PORT: "6379",
+    REDIS_PASSWORD: "",
+    REDIS_DB: "0",
+    REDIS_URL: redisUrl,
+    REDIS_KEY_PREFIX: redisKeyPrefix,
+    QUEUE_HOST: tenantRedisHost(),
+    QUEUE_PORT: "6379",
+
+    // ── Auth ───────────────────────────────────────────────────────────
     JWT_SECRET: params.jwtSecret,
-    MONGODB_DATABASE_URL: env.MONGODB_DATABASE_URL ?? "mongodb://mongo/stockix",
+
+    // ── Proxy port (kept for Traefik config — server still binds a random host port) ──
     PUBLIC_PROXY_PORT: String(params.publicProxyPort),
     PUBLIC_PROXY_SSL_PORT: "443",
+
+    // ── Signup policy ──────────────────────────────────────────────────
     ...signup,
+
+    // ── Mail ───────────────────────────────────────────────────────────
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
     MAIL_PASSWORD: mailPassword ? maybeEncryptEnvValue(mailPassword) : "",
@@ -99,31 +191,33 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     MAIL_SECURE: mailSecureEnvValue(),
     MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
     MAIL_FROM_ADDRESS: env.MAIL_FROM_ADDRESS ?? "",
-    REDIS_HOST: "redis",
-    REDIS_PORT: "6379",
-    REDIS_PASSWORD: "",
-    REDIS_DB: "0",
-    QUEUE_HOST: "redis",
-    QUEUE_PORT: "6379",
+
+    // ── S3 / Backblaze ────────────────────────────────────────────────
     S3_REGION: params.s3Region,
     S3_ACCESS_KEY_ID: s3AccessKeyId ? maybeEncryptEnvValue(s3AccessKeyId) : "",
     S3_SECRET_ACCESS_KEY: s3SecretAccessKey ? maybeEncryptEnvValue(s3SecretAccessKey) : "",
     S3_ENDPOINT: params.s3Endpoint,
     S3_BUCKET: params.s3Bucket,
     S3_FORCE_PATH_STYLE: params.s3ForcePathStyle,
+
+    // ── Misc ──────────────────────────────────────────────────────────
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
     DEPLOYMENT_SECRET_KEY: apiConfig.deploymentSecretKey,
     BILLING_ENABLED: "false",
+
+    // ── Finance webapp branding ────────────────────────────────────────
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
     REACT_APP_STOCKIX_DISCOVERY_SLUG: params.stockixDiscoverySlug ?? "",
     REACT_APP_STOCKIX_APP_NAME: params.stockixAppName ?? "",
     REACT_APP_STOCKIX_LOGO_URL: params.stockixLogoUrl ?? "",
     REACT_APP_STOCKIX_PRIMARY_COLOR: params.stockixPrimaryColor ?? "",
+
     PUBLIC_BASE_URL: params.baseUrl,
     SOCKET_ALLOWED_ORIGINS: params.socketAllowedOrigins ?? params.baseUrl,
+
     THROTTLE_GLOBAL_TTL: String(env.THROTTLE_GLOBAL_TTL),
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),

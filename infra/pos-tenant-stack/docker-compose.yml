@@ -1,5 +1,14 @@
 # Per-tenant POS stack (provisioned when tenant modules includes "pos").
 # Build: pnpm pos:images:build  (from repo root; sets STOCKIX_REPO_ROOT + POS_APP_ROOT)
+#
+# BEFORE (old): pos-backend + pos-frontend + pos-platform-worker + pos-bigcapital-worker
+#               + pos-mongo + pos-redis + pos-mongo-init = 7 containers per POS tenant.
+# AFTER  (new): pos-backend + pos-frontend + pos-platform-worker + pos-bigcapital-worker
+#               = 4 containers per POS tenant.
+#
+# MongoDB → shared-mongo:27017  DB: {slug}_pos   (key: MONGODB_URI in tenant .env)
+# Redis   → tenant-redis:6379   key prefix: tenant:{slug}:queue:*
+
 services:
   pos-backend:
     image: stockix-pos-backend:local
@@ -18,8 +27,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${POS_PORT:-8010}
-      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}?replicaSet=rs0
-      - REDIS_URL=redis://pos-redis:6379
+      # Points to shared-mongo, tenant-scoped DB name
+      - MONGODB_URI=${MONGODB_URI}
+      # Points to tenant-redis with key prefix
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX}
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
       - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
       - TENANT_ID=${TENANT_ID}
@@ -31,13 +43,11 @@ services:
       - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-}
-    depends_on:
-      pos-mongo:
-        condition: service_healthy
-      pos-redis:
-        condition: service_started
     ports:
       - "127.0.0.1:${POS_HOST_PORT:-8010}:8010"
+    networks:
+      - stockix-shared
+      - stockix_public
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
@@ -45,17 +55,15 @@ services:
 
   pos-platform-worker:
     image: stockix-pos-backend:local
-    build:
-      context: ${STOCKIX_REPO_ROOT}
-      dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
     command: node workers/platformWorker.js
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}?replicaSet=rs0
-      - REDIS_URL=redis://pos-redis:6379
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX}
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
       - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
       - TENANT_ID=${TENANT_ID}
@@ -65,9 +73,10 @@ services:
       - PUBLIC_APP_URL=${POS_FRONTEND_URL}
       - TENANT_APP_ORIGIN=${POS_FRONTEND_URL}
     depends_on:
-      - pos-mongo
-      - pos-redis
-      - pos-backend
+      pos-backend:
+        condition: service_healthy
+    networks:
+      - stockix-shared
     mem_limit: 256m
     cpus: "0.25"
     mem_swappiness: 0
@@ -81,25 +90,24 @@ services:
 
   pos-bigcapital-worker:
     image: stockix-pos-backend:local
-    build:
-      context: ${STOCKIX_REPO_ROOT}
-      dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
     command: node workers/bigcapitalSyncWorker.js
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://pos-mongo:27017/${POS_DB_NAME:-pos}?replicaSet=rs0
-      - REDIS_URL=redis://pos-redis:6379
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX}
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
       - POS_PLATFORM_API_KEY=${POS_PLATFORM_API_KEY}
       - TENANT_ID=${TENANT_ID}
       - FINANCE_INTERNAL_BASE_URL=${FINANCE_INTERNAL_BASE_URL:-}
     depends_on:
-      - pos-mongo
-      - pos-redis
-      - pos-backend
+      pos-backend:
+        condition: service_healthy
+    networks:
+      - stockix-shared
     mem_limit: 256m
     cpus: "0.25"
     mem_swappiness: 0
@@ -127,72 +135,20 @@ services:
       - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}
     ports:
       - "127.0.0.1:${POS_FRONTEND_HOST_PORT:-3001}:3000"
+    networks:
+      - stockix_public
     mem_limit: 256m
     cpus: "0.25"
     mem_swappiness: 0
     oom_kill_disable: false
 
-  pos-mongo:
-    image: mongo:7.0
-    restart: unless-stopped
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    volumes:
-      - pos_mongo:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 3s
-      timeout: 5s
-      retries: 30
-      start_period: 5s
-    mem_limit: 512m
-    cpus: "0.5"
-    mem_swappiness: 0
-    oom_kill_disable: false
+# No local volumes — all data lives in shared-mongo and tenant-redis.
+volumes: {}
 
-  pos-mongo-init:
-    image: mongo:7.0
-    depends_on:
-      pos-mongo:
-        condition: service_healthy
-    restart: "no"
-    entrypoint:
-      - bash
-      - -ec
-      - |
-        mongosh --host pos-mongo:27017 --eval "
-        try { rs.status(); } catch (e) {
-          rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'pos-mongo:27017' }] });
-        }
-        "
-    mem_limit: 128m
-    cpus: "0.1"
-    mem_swappiness: 0
-    oom_kill_disable: false
-    healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --host pos-mongo:27017 --eval \"try { rs.status().ok } catch (e) { quit(1) }\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  pos-redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - pos_redis:/data
-    mem_limit: 128m
-    cpus: "0.25"
-    mem_swappiness: 0
-    oom_kill_disable: false
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-
-volumes:
-  pos_mongo:
-    name: ${COMPOSE_PROJECT_NAME}_pos_mongo
-  pos_redis:
-    name: ${COMPOSE_PROJECT_NAME}_pos_redis
+networks:
+  stockix-shared:
+    name: stockix-shared
+    external: true
+  stockix_public:
+    name: stockix_public
+    external: true

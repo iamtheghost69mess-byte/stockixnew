@@ -1,34 +1,46 @@
-# Build context: Stockix repo root (STOCKIX_REPO_ROOT).
-# Requires: pnpm --filter @repo/auth build && packages/auth/dist present.
-FROM node:20
+# POS backend Dockerfile
+#
+# Fix: was FROM node:20 (Debian bookworm-slim, ~900MB).
+# Now: FROM node:20-alpine (~150MB). Saves ~750MB per image.
+# Build context: repo root (STOCKIX_REPO_ROOT).
+
+FROM node:20-alpine AS build
+
+RUN apk add --no-cache python3 make g++ \
+    && apk upgrade --no-cache
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl dumb-init \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY packages/auth /packages/auth
-# @repo/auth is loaded from /packages/auth; install runtime deps there (not under /app/node_modules).
-RUN node -e "const fs=require('fs');const p='/packages/auth/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));delete j.devDependencies;fs.writeFileSync(p,JSON.stringify(j));" \
-    && cd /packages/auth && npm install --omit=dev --legacy-peer-deps --no-audit
-COPY services/posnew/packages/domain-access /packages/domain-access
-COPY services/posnew/.npmrc ./.npmrc
+# Copy package files first for layer caching
 COPY services/posnew/apps/pos-backend/package.json ./package.json
+COPY services/posnew/apps/pos-backend/package-lock.json* ./
 
-RUN npm pkg set \
-    dependencies.@repo/auth=file:/packages/auth \
-    dependencies.@restaurant-pos/domain-access=file:/packages/domain-access \
-    && npm install --legacy-peer-deps --no-audit
+RUN npm install --omit=dev --no-audit --no-fund
 
-COPY services/posnew/apps/pos-backend ./
+# Copy source
+COPY services/posnew/apps/pos-backend/ ./
 
-RUN mkdir -p uploads && chown -R node:node /app
+# ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
 
-USER node
+RUN apk add --no-cache dumb-init \
+    && apk upgrade --no-cache \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production
-ENV PORT=8010
+WORKDIR /app
+
+# Non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+USER nodejs
+
+COPY --from=build --chown=nodejs:nodejs /app ./
+
 EXPOSE 8010
+
+HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8010/api/ping || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "app.js"]
