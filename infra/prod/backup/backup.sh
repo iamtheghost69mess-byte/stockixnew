@@ -51,8 +51,9 @@ echo "[backup] Uploaded: s3://${B2_BUCKET}/${B2_PREFIX}/${BACKUP_FILE}"
 rm -f "/tmp/${BACKUP_FILE}"
 
 echo "[backup] Pruning backups older than ${RETENTION_DAYS} days..."
-CUTOFF_DATE=$(date -d "-${RETENTION_DAYS} days" +%Y%m%d 2>/dev/null \
-  || date -v "-${RETENTION_DAYS}d" +%Y%m%d)
+CUTOFF_EPOCH=$(( $(date +%s) - RETENTION_DAYS * 86400 ))
+CUTOFF_DATE=$(date -u -d "@${CUTOFF_EPOCH}" +%Y%m%d 2>/dev/null \
+  || date -u -r "${CUTOFF_EPOCH}" +%Y%m%d)
 
 aws --endpoint-url "${B2_ENDPOINT}" s3 ls "s3://${B2_BUCKET}/${B2_PREFIX}/" \
   | awk '{print $4}' \
