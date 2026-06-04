@@ -11,15 +11,15 @@ RUN apk add --no-cache python3 make g++ \
 
 WORKDIR /app
 
-# Copy package files first for layer caching
-COPY services/posnew/apps/pos-backend/package.json ./package.json
-COPY services/posnew/apps/pos-backend/package-lock.json* ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY services/posnew/apps/pos-backend/package.json ./services/posnew/apps/pos-backend/package.json
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# package-lock.json is superseded by pnpm-lock.yaml at monorepo root
+# Do not commit package-lock.json
+RUN pnpm install --frozen-lockfile --filter pos-backend --prod --ignore-scripts
 
-# TODO: Migrate to pnpm (tracked Architecture2.md §18)
-RUN npm install --omit=dev --no-audit --no-fund
-
-# Copy source
-COPY services/posnew/apps/pos-backend/ ./
+COPY services/posnew/apps/pos-backend ./services/posnew/apps/pos-backend
+WORKDIR /app/services/posnew/apps/pos-backend
 
 # ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -36,7 +36,7 @@ WORKDIR /app
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 USER nodejs
 
-COPY --from=build --chown=nodejs:nodejs /app ./
+COPY --from=build --chown=nodejs:nodejs /app/services/posnew/apps/pos-backend ./
 
 EXPOSE 8010
 

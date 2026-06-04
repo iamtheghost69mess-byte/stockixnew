@@ -25,7 +25,16 @@ export class TenantProvisionService {
     log: (m: string) => void,
     correlationId: string,
     assertNotCancelled?: () => Promise<void>,
+    lifecycleJobId?: string,
   ): Promise<ProvisionResult> {
-    return executeProvisionRuntime(this.deps, db, input, log, correlationId, assertNotCancelled);
+    return executeProvisionRuntime(
+      this.deps,
+      db,
+      input,
+      log,
+      correlationId,
+      assertNotCancelled,
+      lifecycleJobId,
+    );
   }
 }

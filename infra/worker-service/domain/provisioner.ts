@@ -208,7 +208,14 @@ export async function deprovisionTenantDatabases(
 
   // ── MySQL cleanup ──────────────────────────────────────────────────────────
   if (!rootPassword) {
-    log(`[db-deprovision] SHARED_MYSQL_ROOT_PASSWORD not set — skipping MySQL cleanup for "${slug}"`);
+    const safe = slugToMysqlSafe(slug);
+    throw new Error(
+      "[deprovision] SHARED_MYSQL_ROOT_PASSWORD is not set. " +
+        "Cannot safely remove tenant MySQL databases. " +
+        "Deprovision aborted — Postgres rows NOT deleted. " +
+        "Set the password and retry, or manually drop: " +
+        `stockix_${safe}_% and revoke tenant_${safe}`,
+    );
   } else {
     log(`[db-deprovision] dropping MySQL databases for tenant "${slug}"`);
     try {
@@ -306,8 +313,16 @@ export async function provisionTenant(
   log: (m: string) => void,
   correlationId: string,
   assertNotCancelled?: () => Promise<void>,
+  lifecycleJobId?: string,
 ): Promise<ProvisionResult> {
-  return tenantProvisionService.provision(db, input, log, correlationId, assertNotCancelled);
+  return tenantProvisionService.provision(
+    db,
+    input,
+    log,
+    correlationId,
+    assertNotCancelled,
+    lifecycleJobId,
+  );
 }
 
 export async function deprovisionTenant(
@@ -324,6 +339,20 @@ export async function deprovisionTenant(
     .limit(1);
   const row = found[0];
   if (!row) return { ok: false, message: "Tenant not found" };
+
+  const safe = slugToMysqlSafe(row.slug);
+  const rootPassword = sharedMysqlRootPassword();
+  // CRITICAL: Never delete Postgres tenant rows until data plane
+  // cleanup succeeds. Orphaned shared DB data is a security risk.
+  if (!rootPassword) {
+    throw new Error(
+      "[deprovision] SHARED_MYSQL_ROOT_PASSWORD is not set. " +
+        "Cannot safely remove tenant MySQL databases. " +
+        "Deprovision aborted — Postgres rows NOT deleted. " +
+        "Set the password and retry, or manually drop: " +
+        `stockix_${safe}_% and revoke tenant_${safe}`,
+    );
+  }
 
   const project = row.composeProject ?? composeProjectName(row.slug);
   const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
@@ -386,9 +415,7 @@ export async function deprovisionTenant(
   }
 
   // Clean up shared infrastructure AFTER containers are down
-  await deprovisionTenantDatabases(row.slug, log).catch((err) => {
-    log(`[deprovision] database cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
-  });
+  await deprovisionTenantDatabases(row.slug, log);
 
   await edgePublisher.unpublish(row.slug).catch((error) => {
     log(`edge unpublish failed for ${row.slug}: ${error instanceof Error ? error.message : String(error)}`);

@@ -41,6 +41,7 @@ import {
 } from "@repo/platform-worker-shared";
 import { z } from "zod";
 import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
+import { assertNoConcurrentProvisionJob } from "../domain/provisioning/provision-lock.js";
 import {
   deprovisionTenant,
   provisionTenant,
@@ -487,6 +488,7 @@ const removeModulePayloadSchema = z.object({
 
 async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   id: string;
+  tenantId?: string | null;
   correlationId: string | null;
   payload: Record<string, unknown>;
 }): Promise<{
@@ -513,6 +515,11 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   };
   await guard();
   const payload = provisionPayloadSchema.parse(job.payload);
+  if (job.tenantId) {
+    // Concurrent provision guard — prevents duplicate compose/DB ops
+    // for same tenant. See provision-lock.ts for implementation.
+    await assertNoConcurrentProvisionJob(db, job.tenantId, job.id);
+  }
   const result = await provisionTenant(
     db,
     {
@@ -534,6 +541,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     (m) => logger.info(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
     guard,
+    job.id,
   );
   if (!result.ok) {
     throw new Error(result.message);

@@ -13,7 +13,7 @@ import * as dbSchema from "@repo/db/schema";
 
 import { CryptoTenantSecretGenerator } from "../domain/provisioning/adapters/crypto-tenant-secret-generator.js";
 import { defaultTenantEnvRoot } from "../domain/env-paths.js";
-import { provisionTenant } from "../domain/provisioner.js";
+import { deprovisionTenantDatabases, provisionTenant } from "../domain/provisioner.js";
 import { getTenantStackPaths } from "../domain/provision-paths.js";
 import { createProvisionTracer } from "../domain/provision-trace.js";
 import { composeProjectName, tenantMysqlVolumeName } from "../domain/provisioning/compose-project-name.js";
@@ -397,6 +397,7 @@ export async function rollbackProvision(
     });
 
   let composeCtx = options.composeCtx ?? null;
+  let rollbackSlug: string | undefined;
   if (!composeCtx) {
     const [depRow] = await db
       .select({
@@ -408,6 +409,7 @@ export async function rollbackProvision(
       .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
       .where(eq(tenants.id, tenantId))
       .limit(1);
+    rollbackSlug = depRow?.slug;
     if (depRow?.slug && depRow.composeProjectName) {
       const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
       const tenantEnvRoot = defaultTenantEnvRoot();
@@ -422,6 +424,13 @@ export async function rollbackProvision(
         },
       };
     }
+  } else {
+    const [slugRow] = await db
+      .select({ slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    rollbackSlug = slugRow?.slug;
   }
 
   if (composeCtx && options.deps) {
@@ -454,6 +463,20 @@ export async function rollbackProvision(
       log(
         `[rollback] compose cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
         }`,
+      );
+    }
+  }
+
+  const journalState = await loadProvisionJournalState(db, correlationId);
+  if (rollbackSlug && journalState.completedOps.has("docker.data_step")) {
+    // Hard rollback: tear down shared DB resources if data step completed
+    // Non-fatal — orphaned resources logged for operator cleanup
+    try {
+      await deprovisionTenantDatabases(rollbackSlug, log);
+      log(`[rollback] shared DB teardown completed for slug=${rollbackSlug}`);
+    } catch (err) {
+      log(
+        `[rollback] shared DB teardown warning: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -602,6 +625,17 @@ async function resolveServerInternalUrl(params: {
   return `http://${params.fallbackHost}:${params.fallbackPort}`;
 }
 
+async function guardNoConcurrentProvision(
+  db: PostgresJsDatabase<typeof dbSchema>,
+  tenantId: string | undefined,
+  lifecycleJobId: string | undefined,
+): Promise<void> {
+  if (!tenantId || !lifecycleJobId) return;
+  // Concurrent provision guard — prevents duplicate compose/DB ops
+  // for same tenant. See provision-lock.ts for implementation.
+  await assertNoConcurrentProvisionJob(db, tenantId, lifecycleJobId);
+}
+
 export async function executeProvisionRuntime(
   deps: TenantProvisionServiceDeps,
   db: PostgresJsDatabase<typeof dbSchema>,
@@ -609,6 +643,7 @@ export async function executeProvisionRuntime(
   log: (m: string) => void,
   correlationId: string,
   assertNotCancelled?: () => Promise<void>,
+  lifecycleJobId?: string,
 ): Promise<ProvisionResult> {
   const runtimeStartedAt = Date.now();
   let tenantId: string | undefined;
@@ -833,6 +868,7 @@ export async function executeProvisionRuntime(
       tenantId = existing.tenantId;
       deploymentId = existing.deploymentId;
       port = existing.internalPort;
+      await guardNoConcurrentProvision(db, tenantId, lifecycleJobId);
       const retryLicensedModules = resolveTenantModules(
         parseTenantModulesJson(existing.tenantModules),
       );
@@ -959,6 +995,7 @@ export async function executeProvisionRuntime(
       tenantId = existing.tenantId;
       deploymentId = existing.deploymentId;
       port = existing.internalPort;
+      await guardNoConcurrentProvision(db, tenantId, lifecycleJobId);
       const retryLicensedModules = resolveTenantModules(
         parseTenantModulesJson(existing.tenantModules),
       );
@@ -1207,6 +1244,7 @@ export async function executeProvisionRuntime(
     if (port === undefined) {
       throw new Error("provision_internal: expected allocated port after transaction");
     }
+    await guardNoConcurrentProvision(db, tenantId, lifecycleJobId);
     await checkNotCancelled();
 
     const licensedModules = resolveTenantModules(input.modules);

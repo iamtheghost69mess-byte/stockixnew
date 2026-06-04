@@ -95,9 +95,10 @@ export function buildTenantMongoUrl(slug: string): string {
 /**
  * Build the per-tenant Redis URL.
  * All tenants share tenant-redis but use a key prefix for isolation:
- *   tenant:{slug}:queue:*    BullMQ (POS bigcapital-sync worker)
- *   tenant:{slug}:agenda:*   Finance Agenda scheduler
- *   tenant:{slug}:session:*  Finance sessions
+ *   tenant:{slug}:queue:*    BullMQ (POS + Finance NestJS via REDIS_KEY_PREFIX)
+ *   tenant:{slug}:agenda:*   Finance Agenda scheduler (Mongo collection name)
+ * Finance auth is stateless JWT (no Redis session store). If session middleware
+ * is added later, use REDIS_KEY_PREFIX + "session:" as the store key prefix.
  */
 function buildTenantRedisUrl(slug: string): string {
   const host = tenantRedisHost();
