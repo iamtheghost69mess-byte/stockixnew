@@ -203,7 +203,10 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-54330}:5432"
     networks:
-      - stockix_public
+      stockix_public:
+      stockix_internal:
+        aliases:
+          - postgres
     security_opt:
       - no-new-privileges:true
 

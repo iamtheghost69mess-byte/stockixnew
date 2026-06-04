@@ -1,0 +1,7 @@
+=== Dashboard env (API URL) ===
+
+=== Traefik routing config ===
+dynamic
+
+=== Traefik dynamic config / routers ===
+bash: -c: line 15: unexpected EOF while looking for matching `"'

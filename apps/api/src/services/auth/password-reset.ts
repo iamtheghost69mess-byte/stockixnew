@@ -163,7 +163,7 @@ export async function completeOwnerPasswordReset(
     return { success: false, error: "Reset link invalid or expired", status: 400 };
   }
 
-  const passwordHash = await bcrypt.hash(input.password, 12);
+  const passwordHash = await bcrypt.hash(input.password, 10);
   const nextVersion = (owner.sessionVersion ?? 1) + 1;
 
   await db

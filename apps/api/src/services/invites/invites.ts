@@ -68,7 +68,7 @@ export async function acceptInvite(
     .limit(1);
   if (!owner) return { success: false, error: "Invite token invalid or expired", status: 404 };
 
-  const passwordHash = await bcrypt.hash(input.password, 12);
+  const passwordHash = await bcrypt.hash(input.password, 10);
   await db
     .update(owners)
     .set({
