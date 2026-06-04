@@ -242,7 +242,7 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     mem_limit: 512m
-    cpus: "0.5"
+    cpus: "1.5"
     # Single api container (deploy.replicas requires Docker Swarm; not used here).
     depends_on:
       postgres:
