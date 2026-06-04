@@ -55,6 +55,8 @@
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "quality-gate:local": "node scripts/quality-gate-local.mjs",
     "architecture:validate": "node scripts/architecture-validation.mjs",
+    "audit:e2e": "node --env-file=.env scripts/e2e-audit.mjs",
+    "audit:e2e:prod": "node --env-file=infra/prod/.env scripts/e2e-audit.mjs",
     "test:phase2": "pnpm --filter api test && pnpm --filter dashboard test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
