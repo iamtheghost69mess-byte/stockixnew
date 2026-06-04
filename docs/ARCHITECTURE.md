@@ -1,6 +1,10 @@
+> ⚠️ PARTIALLY STALE — Last updated pre-shared-infra migration.
+> Tenant data store sections (MySQL, MongoDB, Redis) described the legacy per-tenant model below.
+> The current architecture uses shared infrastructure. See [Architecture2.md](Architecture2.md) for the authoritative source of truth.
+
 # Stockix Repository — Full Architecture Audit
 
-**Last updated:** 2026-05-25  
+**Last updated:** 2026-05-25 (tenant runtime sections refreshed 2026-06-04)  
 **Method:** Evidence from repository layout, manifests, compose files, entry points, and import boundaries. Internal docs (`docs/PLATFORM_REFERENCE.md`, `README.md`) cited only where they match code.
 
 ---
@@ -53,8 +57,8 @@
 
 | Product | Path | Stack | Data store | Compose |
 |---------|------|-------|------------|---------|
-| **Finance (Stockix)** | `services/stockix-finance` | NestJS 10 (`packages/server/src/main.ts`), React/Vite webapp | **MySQL per tenant** (+ mongo/redis in tenant stack per compose) | `infra/tenant-stack/docker-compose.yml` |
-| **POS** | `services/posnew` | Express (`apps/pos-backend/app.js`), Next.js frontend | **MongoDB** per tenant | `infra/pos-tenant-stack/docker-compose.yml` |
+| **Finance (Stockix)** | `services/stockix-finance` | NestJS 10 (`packages/server/src/main.ts`), React/Vite webapp | Shared **stockix-mysql** (logical DBs `stockix_{slug}_finance`, `stockix_{slug}_{orgId}`); shared **stockix-mongo** (`{slug}_pos`); shared **stockix-redis** (`tenant:{slug}:*` prefix) | `infra/tenant-stack/docker-compose.yml` — `server` + one-shot `database_migration` |
+| **POS** | `services/posnew` | Express (`apps/pos-backend/app.js`), Next.js frontend | Shared **stockix-mongo** DB `{slug}_pos`; shared **stockix-redis** with `tenant:{slug}:` prefix | `infra/pos-tenant-stack/docker-compose.yml` — `pos-backend`, `pos-platform-worker`, `pos-bigcapital-worker`, `pos-frontend` |
 | **PMS** | `services/pms` + `services/pms/frontend` | Hono API; Next tenant UI | **Same platform Postgres** (`@repo/db` in `services/pms/package.json`) | `infra/pms-tenant-stack/docker-compose.yml` |
 | **Chat** | `services/chatlive` (Chatwoot fork) | Rails (image build in prod compose) | Dedicated Postgres/Redis in prod stack | `infra/prod/docker-compose.yml` (`chatwoot` service) — **shared**, not per-tenant compose |
 
@@ -164,7 +168,7 @@ worker.ts: runProvisionJob
 1. Secrets & DB records — `tenants` + `tenantDeployments` with allocated port
 2. Module gating — skip Finance if no `accounting` module
 3. Write tenant `.env` atomically
-4. Docker Compose Finance: mysql/mongo/redis → migration → webapp/nginx/server
+4. Docker Compose Finance: shared-mysql → `database_migration` → `server` (Traefik to host port)
 5. Finance health `GET /api/ping`, bootstrap admin, org build, warehouses, POS defaults seed
 6. Traefik publish `{slug}.{domain}`
 7. License sync `POST /api/internal/license/sync`
@@ -298,7 +302,7 @@ When integration is enabled, POS native GL is skipped; Finance is system of reco
 
 ┌────────────────────────────────────────────────────────────────┐
 │         ISOLATED: services/stockix-finance (Lerna)              │
-│  webapp ──HTTP──► server (NestJS) ──MySQL (per tenant)        │
+│  Traefik ──► server (NestJS) ──shared-mysql / tenant-redis    │
 │  Built into images: stockix-server, stockix-webapp, stockix-nginx│
 └────────────────────────────────────────────────────────────────┘
 
@@ -338,7 +342,7 @@ From `scripts/lint-boundaries.mjs` and `scripts/architecture-validation.mjs`:
 |---------|---------------|-----|-----|---------|
 | Auth | Jose session + product JWT | POS JWT + platform API key | Stockix JWT | Nest JWT + internal secret |
 | UI | shadcn + Tailwind 4 | shadcn | shadcn | Blueprint 4 |
-| DB | PostgreSQL | MongoDB | PostgreSQL (shared control plane) | MySQL per tenant |
+| DB | PostgreSQL | MongoDB (`{slug}_pos` on shared mongo) | PostgreSQL (shared control plane) | MySQL (logical DBs on shared stockix-mysql) |
 
 ---
 

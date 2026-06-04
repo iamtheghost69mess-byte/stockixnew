@@ -4,7 +4,7 @@
 **Audience:** Staff engineers, SRE, security review  
 **Scope:** Multi-tenant Docker provisioning, shared infrastructure migration, control plane, edge routing  
 **Evidence base:** Repository audit (`infra/`, `apps/api`, `infra/worker-service`, tenant compose stacks) — June 2026  
-**Status:** P0 resolved. P1 resolved. P2 resolved. Staging verification pending.
+**Status:** P0/P1/P2 resolved. Hard Fails resolved. Partials + deep scan findings pending (Prompt 5).
 
 ## Repair Log
 
@@ -25,6 +25,14 @@
 | REPAIR E — POS backend Alpine image | DONE | 2026-06-04 |
 | REPAIR F — Worker .dockerignore | DONE | 2026-06-04 |
 | REPAIR G — tenant_deployments.mongoUrl | DONE | 2026-06-04 |
+| FAIL-1 Concurrent provision guard wired | DONE | 2026-06-04 |
+| FAIL-2 Rollback DB teardown | DONE | 2026-06-04 |
+| FAIL-3 Finance BullMQ prefix | DONE | 2026-06-04 |
+| FAIL-4 Deprovision MySQL guard | DONE | 2026-06-04 |
+| FAIL-5 Session namespace | DONE | 2026-06-04 |
+| FAIL-6 Traefik nginx discovery removed | DONE | 2026-06-04 |
+| FAIL-7 ARCHITECTURE.md synced | DONE | 2026-06-04 |
+| FAIL-8 POS pnpm | DONE | 2026-06-04 |
 
 ---
 
@@ -539,9 +547,9 @@ Per-router `certResolver: cloudflare` — certificates issued per hostname, not 
 |--------|----------------|----------------|
 | Control plane | `control-plane-redis` | `license-expiry-milestones`, `owner-invite-mail` |
 | Tenant runtime | `stockix-redis` | POS: `bigcapital_sync`, `provisioning`, `email`, … |
-| Finance | Same tenant Redis | NestJS BullMQ (mail/inventory) — prefix not in compose |
+| Finance | Same tenant Redis | NestJS BullMQ (mail/inventory) — `REDIS_KEY_PREFIX` via `BullModule.forRootAsync` |
 
-**Session storage:** Documented as `tenant:{slug}:session:*` — verify Finance session store implementation uses prefix before production.
+**Session storage:** Finance authentication is stateless JWT (`session: false` in Local strategy). No Redis session store is used. If session middleware is added in future it MUST use `REDIS_KEY_PREFIX + 'session:'` as the store key prefix.
 
 ---
 
