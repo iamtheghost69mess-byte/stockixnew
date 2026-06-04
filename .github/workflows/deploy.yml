@@ -422,9 +422,14 @@ jobs:
             echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
           fi
           echo "=== Post-deploy cleanup ==="
-          # Remove ALL unused images (old deploy SHAs not referenced by any container).
-          # Active images (latest tags) are protected — only orphaned layers are removed.
-          docker image prune -af || true
+          # Remove old GHCR images from previous deploys (not the current SHA or :local tenant images).
+          CURRENT_SHA=$(docker inspect stockix-api-1 --format "{{.Config.Image}}" 2>/dev/null | grep -oE '[a-f0-9]{40}' || true)
+          docker images --format "{{.Repository}}:{{.Tag}}" \
+            | grep "ghcr.io" \
+            | grep -v ":local\|${CURRENT_SHA}" \
+            | xargs -r docker rmi 2>/dev/null || true
+          # Remove only dangling (untagged) layers — preserves :local tenant images.
+          docker image prune -f || true
           # Remove dangling volumes (anonymous, not attached to any container).
           # Named volumes (postgres_data, traefik_letsencrypt, tenant data) are protected.
           docker volume prune -f || true
