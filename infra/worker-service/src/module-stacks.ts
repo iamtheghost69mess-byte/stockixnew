@@ -188,6 +188,18 @@ export type ProvisionPosStackInput = {
 
   maxOrdersPerMonth?: number | null;
 
+  trace?: ProvisionTracer;
+
+  hasOp?: (key: string) => boolean;
+
+  markOp?: (key: string, msg: string, meta?: Record<string, unknown>) => Promise<void>;
+
+  posOrganizationId?: string;
+
+  posUrl?: string;
+
+  posApiUrl?: string;
+
 };
 
 
@@ -410,31 +422,44 @@ export async function provisionPosStack(
 
 
 
-  const bootstrap = await bootstrapPosOrganization({
+  let bootstrap: Awaited<ReturnType<typeof bootstrapPosOrganization>>;
+  if (opts.trace && opts.hasOp?.("pos.bootstrap_organization")) {
+    opts.log?.("[provision][pos] Skipping POS org bootstrap (already journaled)");
+    bootstrap = {
+      posOrganizationId: opts.posOrganizationId ?? "",
+      posUrl: opts.posUrl ?? "",
+      posApiUrl: opts.posApiUrl ?? "",
+    } as Awaited<ReturnType<typeof bootstrapPosOrganization>>;
+  } else {
+    bootstrap = await bootstrapPosOrganization({
 
-    slug: opts.slug,
+      slug: opts.slug,
 
-    tenantName: opts.tenantName,
+      tenantName: opts.tenantName,
 
-    tenantId: opts.tenantId,
+      tenantId: opts.tenantId,
 
-    adminEmail: opts.adminEmail,
+      adminEmail: opts.adminEmail,
 
-    log: opts.log,
+      log: opts.log,
 
-    licenseExpiresAt: opts.licenseExpiresAt,
+      licenseExpiresAt: opts.licenseExpiresAt,
 
-    tenantModules: opts.tenantModules,
+      tenantModules: opts.tenantModules,
 
-    maxUsers: opts.maxUsers,
+      maxUsers: opts.maxUsers,
 
-    maxLocations: opts.maxLocations,
+      maxLocations: opts.maxLocations,
 
-    maxOrdersPerMonth: opts.maxOrdersPerMonth,
+      maxOrdersPerMonth: opts.maxOrdersPerMonth,
 
-    posHostPort: backendPort,
+      posHostPort: backendPort,
 
-  });
+    });
+    await opts.markOp?.("pos.bootstrap_organization", "POS organization bootstrapped", {
+      posOrganizationId: bootstrap.posOrganizationId,
+    });
+  }
 
 
 
@@ -521,7 +546,10 @@ export async function provisionPosStackTracked(
 
   try {
 
-    const result = await provisionPosStack(opts);
+    const result = await provisionPosStack({
+      ...opts,
+      trace: opts.trace ?? trace,
+    });
 
     await trace?.event("pos.stack.completed", "POS stack provisioned successfully", {
 
@@ -628,42 +656,4 @@ export async function provisionPmsStack(opts: {
 
   const project = `stockix-pms-${opts.slug}`;
 
-  const pmsAppRoot = process.env.PMS_APP_ROOT ?? join(repoRoot(), "services", "pms");
-
-  opts.log(`[provision][pms] compose up project=${project}`);
-
-  await execa(
-
-    "docker",
-
-    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
-
-    {
-
-      env: {
-
-        ...process.env,
-
-        COMPOSE_PROJECT_NAME: project,
-
-        PMS_APP_ROOT: pmsAppRoot,
-
-        TENANT_ID: opts.tenantId,
-
-        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
-
-        PLATFORM_API_SECRET: apiConfig.platformApiSecret ?? "",
-
-        DATABASE_URL: process.env.DATABASE_URL ?? "",
-
-      },
-
-      stdio: "inherit",
-
-    },
-
-  );
-
-}
-
-
+  c
