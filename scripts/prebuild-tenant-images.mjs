@@ -124,7 +124,7 @@ console.log("\n[prebuild] Phase 2: Build Finance images");
 syncRepoSharedIntoFinanceTree();
 run(
   "pnpm install (stockix-finance lockfile)",
-  "pnpm install --ignore-scripts",
+  "pnpm install --ignore-scripts --config.engine-strict=false",
   FINANCE_ROOT,
 );
 
