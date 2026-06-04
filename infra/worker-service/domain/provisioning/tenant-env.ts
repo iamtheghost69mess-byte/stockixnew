@@ -1,5 +1,6 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { defaultTenantEnvRoot } from "../env-paths.js";
 import { apiConfig, env } from "@repo/config";
 import {
   encryptDeploymentSecret,
@@ -69,7 +70,7 @@ function sharedMysqlHost(): string {
 }
 
 function sharedMongoHost(): string {
-  return process.env.SHARED_MONGO_HOST ?? "shared-mongo";
+  return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
 }
 
 function tenantRedisHost(): string {
@@ -158,8 +159,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     TENANT_DB_CHARSET: "utf8mb4",
 
     // ── MongoDB (shared-mongo) — per-tenant database ───────────────────
-    // FIX: was env.MONGODB_DATABASE_URL (shared "stockix" DB for all tenants).
-    // Now: each tenant gets its own {slug}_pos database.
+    // Per-tenant Mongo DB isolation — slug_pos pattern
     MONGODB_DATABASE_URL: mongoUrl,
     MONGODB_URI: mongoUrl,
 
@@ -233,6 +233,37 @@ export function serializeTenantEnvMap(map: Record<string, string>): string {
 
 export function buildTenantEnvFileContent(params: TenantEnvFileParams): string {
   return serializeTenantEnvMap(buildTenantEnvMap(params));
+}
+
+/** Parse tenant `.env` at `{TENANT_ENV_ROOT}/{slug}/.env` for docker compose env injection. */
+export async function readTenantEnvFile(slug: string): Promise<Record<string, string>> {
+  const path = join(defaultTenantEnvRoot(), slug, ".env");
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") {
+      return {};
+    }
+    throw err;
+  }
+  const out: Record<string, string> = {};
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[key] = value;
+  }
+  return out;
 }
 
 export async function writeTenantEnvFileAtomic(
