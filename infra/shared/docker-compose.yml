@@ -145,7 +145,11 @@ services:
       - --save
       - "300 10"
       - --appendonly
-      - "no"
+      - "yes"
+      - --auto-aof-rewrite-percentage
+      - "100"
+      - --auto-aof-rewrite-min-size
+      - "64mb"
     volumes:
       - shared_tenant_redis_data:/data
     networks:

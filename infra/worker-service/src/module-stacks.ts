@@ -429,7 +429,7 @@ export async function provisionPosStack(
       posOrganizationId: opts.posOrganizationId ?? "",
       posUrl: opts.posUrl ?? "",
       posApiUrl: opts.posApiUrl ?? "",
-    } as Awaited<ReturnType<typeof bootstrapPosOrganization>>;
+    } as unknown as Awaited<ReturnType<typeof bootstrapPosOrganization>>;
   } else {
     bootstrap = await bootstrapPosOrganization({
 
@@ -656,4 +656,42 @@ export async function provisionPmsStack(opts: {
 
   const project = `stockix-pms-${opts.slug}`;
 
-  c
+  const pmsAppRoot = process.env.PMS_APP_ROOT ?? join(repoRoot(), "services", "pms");
+
+  opts.log(`[provision][pms] compose up project=${project}`);
+
+  await execa(
+
+    "docker",
+
+    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+
+    {
+
+      env: {
+
+        ...process.env,
+
+        COMPOSE_PROJECT_NAME: project,
+
+        PMS_APP_ROOT: pmsAppRoot,
+
+        TENANT_ID: opts.tenantId,
+
+        AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+
+        PLATFORM_API_SECRET: apiConfig.platformApiSecret ?? "",
+
+        DATABASE_URL: process.env.DATABASE_URL ?? "",
+
+      },
+
+      stdio: "inherit",
+
+    },
+
+  );
+
+}
+
+

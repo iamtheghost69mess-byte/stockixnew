@@ -110,11 +110,36 @@ async function runPosProvisionStep(params: {
   db: PostgresJsDatabase<typeof dbSchema>;
   log: (m: string) => void;
   trace: ReturnType<typeof createProvisionTracer>;
+  hasOp?: (key: string) => boolean;
+  markOp?: (key: string, msg: string, meta?: Record<string, unknown>) => Promise<void>;
+  posOrganizationId?: string;
+  posUrl?: string;
+  posApiUrl?: string;
 }): Promise<PosProvisionOutcome> {
   if (!params.licensedModules.includes("pos") || !params.tenantId) {
     return { posStatus: "skipped" };
   }
   try {
+    let posOrganizationId = params.posOrganizationId;
+    let posUrl = params.posUrl;
+    let posApiUrl = params.posApiUrl;
+    if (
+      params.hasOp?.("pos.bootstrap_organization")
+      && params.db
+      && params.tenantId
+      && !posOrganizationId?.trim()
+    ) {
+      const [dep] = await params.db
+        .select({
+          posOrganizationId: tenantDeployments.posOrganizationId,
+          posUrl: tenantDeployments.posUrl,
+        })
+        .from(tenantDeployments)
+        .where(eq(tenantDeployments.tenantId, params.tenantId))
+        .limit(1);
+      posOrganizationId = dep?.posOrganizationId ?? undefined;
+      posUrl = dep?.posUrl ?? undefined;
+    }
     let licenseExpiresAt: Date | null = null;
     try {
       licenseExpiresAt = await getLicenseExpiry(params.db, params.tenantId);
@@ -138,6 +163,12 @@ async function runPosProvisionStep(params: {
         tenantModules: params.licensedModules,
         planSlug,
         maxUsers: planLimits.maxUsers,
+        trace: params.trace,
+        hasOp: params.hasOp,
+        markOp: params.markOp,
+        posOrganizationId,
+        posUrl,
+        posApiUrl,
       },
       params.trace,
     );
@@ -984,6 +1015,8 @@ export async function executeProvisionRuntime(
           financeWalkInCustomerId: tenantDeployments.financeWalkInCustomerId,
           financeCashAccountId: tenantDeployments.financeCashAccountId,
           financeCardAccountId: tenantDeployments.financeCardAccountId,
+          posOrganizationId: tenantDeployments.posOrganizationId,
+          posUrl: tenantDeployments.posUrl,
         })
         .from(tenants)
         .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -1011,6 +1044,10 @@ export async function executeProvisionRuntime(
         db,
         log,
         trace,
+        hasOp,
+        markOp,
+        posOrganizationId: existing.posOrganizationId ?? undefined,
+        posUrl: existing.posUrl ?? undefined,
       });
       if (posOutcome.posStatus === "ok") {
         let tenantStatus: "active" | "partial" = "active";
@@ -1291,6 +1328,11 @@ export async function executeProvisionRuntime(
         db,
         log,
         trace,
+        hasOp,
+        markOp,
+        posOrganizationId,
+        posUrl,
+        posApiUrl,
       });
       if (posOutcome.posStatus === "failed") {
         const posError = posOutcome.posError ?? "POS provisioning failed";
@@ -1518,21 +1560,32 @@ export async function executeProvisionRuntime(
     const serverContainerName = `${project}-server-1`;
     const internalNetworkName = process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
     let tenantServerInternalIp: string | undefined;
-    try {
-      await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
-      log(`[provision] connected ${serverContainerName} to ${internalNetworkName}`);
-      // Resolve the IP assigned on the internal network
-      const { stdout: inspectOut } = await execa("docker", [
-        "inspect",
-        serverContainerName,
-        "--format",
-        `{{(index .NetworkSettings.Networks "${internalNetworkName}").IPAddress}}`,
-      ]);
-      tenantServerInternalIp = inspectOut.trim();
-      log(`[provision] tenant server internal IP: ${tenantServerInternalIp}`);
-    } catch (netErr) {
-      const msg = netErr instanceof Error ? netErr.message : String(netErr);
-      log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+    if (!hasOp("docker.network_connect")) {
+      try {
+        await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
+        log(`[provision] connected ${serverContainerName} to ${internalNetworkName}`);
+        const { stdout: inspectOut } = await execa("docker", [
+          "inspect",
+          serverContainerName,
+          "--format",
+          `{{(index .NetworkSettings.Networks "${internalNetworkName}").IPAddress}}`,
+        ]);
+        tenantServerInternalIp = inspectOut.trim();
+        log(`[provision] tenant server internal IP: ${tenantServerInternalIp}`);
+        await markOp("docker.network_connect", "Tenant server connected to internal network", {
+          containerName: serverContainerName,
+          network: internalNetworkName,
+          ip: tenantServerInternalIp,
+        });
+      } catch (netErr) {
+        const msg = netErr instanceof Error ? netErr.message : String(netErr);
+        log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+      }
+    } else {
+      log(`[provision] network connect already journaled — skipping`);
+      await trace.event("resume", "Skipping network connect (already journaled)", {
+        meta: { operationKey: "docker.network_connect" },
+      });
     }
 
     const internalUrl = tenantServerInternalIp
@@ -2134,6 +2187,11 @@ export async function executeProvisionRuntime(
       db,
       log,
       trace,
+      hasOp,
+      markOp,
+      posOrganizationId,
+      posUrl,
+      posApiUrl,
     });
     let integrationWired = false;
     if (posOutcome.posStatus === "ok") {
@@ -2538,6 +2596,9 @@ export async function runAddModuleStep(
         db,
         log,
         trace,
+        hasOp,
+        markOp,
+        posOrganizationId: row.posOrganizationId ?? undefined,
       });
 
       if (posOutcome.posStatus !== "ok") {
