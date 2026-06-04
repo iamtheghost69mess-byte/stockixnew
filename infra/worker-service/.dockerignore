@@ -1,0 +1,27 @@
+# Service source (not needed in worker image)
+services/stockix-finance
+services/posnew
+services/pms
+services/chatlive
+
+# Frontend build artifacts
+**/dist
+**/.next
+**/build
+**/.turbo
+
+# Dev dependencies and caches
+**/node_modules/.cache
+**/.env.local
+**/.env.development
+
+# Test files
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+**/coverage
+
+# Docs
+docs/
+*.md
+!infra/worker-service/README.md

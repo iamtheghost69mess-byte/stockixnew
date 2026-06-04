@@ -12,6 +12,11 @@
 # The Finance webapp (React/Webpack static build) is served by the shared Nginx gateway
 # defined in infra/shared/nginx/ — no per-tenant webapp or nginx container needed.
 #
+# webapp container is deprecated.
+# Static files will be served by shared stockix-nginx (infra/shared).
+# Remove per-tenant webapp once static file copy step is added to provision-runtime.
+# Tracked: Architecture2.md §18.1 item 6
+#
 # Traefik terminates TLS. Tenant subdomain: {slug}.stockix.cloud
 
 services:

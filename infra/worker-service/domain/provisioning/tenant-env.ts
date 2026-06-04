@@ -87,7 +87,7 @@ function tenantRedisHost(): string {
  * MONGODB_DATABASE_URL was passed through from the platform env unchanged.
  * Now each tenant gets an isolated database scoped to its slug.
  */
-function buildTenantMongoUrl(slug: string): string {
+export function buildTenantMongoUrl(slug: string): string {
   const host = sharedMongoHost();
   return `mongodb://${host}:27017/${slug}_pos?replicaSet=rs0&directConnection=true`;
 }

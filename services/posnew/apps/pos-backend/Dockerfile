@@ -15,6 +15,7 @@ WORKDIR /app
 COPY services/posnew/apps/pos-backend/package.json ./package.json
 COPY services/posnew/apps/pos-backend/package-lock.json* ./
 
+# TODO: Migrate to pnpm (tracked Architecture2.md §18)
 RUN npm install --omit=dev --no-audit --no-fund
 
 # Copy source

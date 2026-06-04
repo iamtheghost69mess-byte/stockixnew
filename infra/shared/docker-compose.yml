@@ -82,11 +82,13 @@ services:
           - shared-mongo
           - stockix-mongo
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 20s
+      test:
+        - CMD-SHELL
+        - mongosh --quiet --eval "try { var s = rs.status(); if (s.ok !== 1) quit(1); } catch(e) { quit(1); }"
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
@@ -164,6 +166,28 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # ─────────────────────────────────────────────────────────────
+  # Shared Nginx — serves Finance webapp static assets for all tenants
+  # Static root: /var/www/{slug}/public/ (populated by provision-runtime, future)
+  # ─────────────────────────────────────────────────────────────
+  stockix-nginx:
+    image: nginx:alpine
+    container_name: stockix-shared-nginx-1
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - stockix_webapp_static:/var/www:ro
+    networks:
+      stockix-shared:
+        aliases:
+          - shared-nginx
+          - stockix-nginx
+    mem_limit: 64m
+    cpus: "0.1"
+    mem_swappiness: 0
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   shared_mysql_data:
     name: stockix_shared_mysql
@@ -171,6 +195,8 @@ volumes:
     name: stockix_shared_mongo
   shared_tenant_redis_data:
     name: stockix_shared_tenant_redis
+  stockix_webapp_static:
+    name: stockix_webapp_static
 
 networks:
   stockix-shared:
