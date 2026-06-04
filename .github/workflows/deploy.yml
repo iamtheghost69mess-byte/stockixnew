@@ -407,11 +407,20 @@ jobs:
           fi
           cd "${REPO_ROOT}"
           echo "=== Building tenant images (background) ==="
-          pkill -f "prebuild-tenant-images" 2>/dev/null || true
-          pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
-          sleep 2
-          nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
-          echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
+          IMAGES_NEEDED=("stockix-webapp:local" "stockix-server:local" "stockix-database-migration:local" "stockix-nginx:local")
+          ALL_BUILT=true
+          for img in "${IMAGES_NEEDED[@]}"; do
+            docker image inspect "$img" >/dev/null 2>&1 || { ALL_BUILT=false; break; }
+          done
+          if [ "$ALL_BUILT" = "true" ]; then
+            echo "All tenant images already built — skipping prebuild."
+          else
+            pkill -f "prebuild-tenant-images" 2>/dev/null || true
+            pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
+            sleep 2
+            nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
+            echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
+          fi
           echo "=== Post-deploy cleanup ==="
           # Remove ALL unused images (old deploy SHAs not referenced by any container).
           # Active images (latest tags) are protected — only orphaned layers are removed.
