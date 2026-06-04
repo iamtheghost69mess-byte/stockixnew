@@ -66,5 +66,10 @@ aws --endpoint-url "${B2_ENDPOINT}" s3 ls "s3://${B2_BUCKET}/${B2_PREFIX}/" \
       fi
     done
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/backup-shared.sh" ]; then
+  bash "${SCRIPT_DIR}/backup-shared.sh"
+fi
+
 echo "[backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) Backup complete."
 echo "[backup] Retention: ${RETENTION_DAYS} days | Bucket: ${B2_BUCKET}/${B2_PREFIX}"

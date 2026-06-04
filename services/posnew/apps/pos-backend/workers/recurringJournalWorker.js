@@ -109,7 +109,8 @@ function startWorker() {
 }
 
 if (require.main === module) {
-  require("dotenv").config();
+  const { loadEnvIfDev } = require("../lib/load-env-if-dev");
+  loadEnvIfDev();
   const connectDB = require("../config/database");
   (async () => {
     await connectDB();

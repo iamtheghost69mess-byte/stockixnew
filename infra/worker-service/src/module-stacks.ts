@@ -543,6 +543,8 @@ export async function provisionPosStackTracked(
 
     const msg = error instanceof Error ? error.message : String(error);
 
+    await unpublishPosTraefik(opts.slug).catch(() => undefined);
+
     await trace?.event("pos.stack.failed", `POS stack failed: ${msg}`, {
 
       level: "error",

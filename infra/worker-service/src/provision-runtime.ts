@@ -54,8 +54,8 @@ import {
 } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { assertRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import {
-  assertNoConcurrentProvisionJob,
-  withTenantProvisionAdvisoryLock,
+  assertNoConcurrentTenantLifecycleJob,
+  withTenantLifecycleAdvisoryLock,
 } from "../domain/provisioning/provision-lock.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
@@ -633,7 +633,7 @@ async function guardNoConcurrentProvision(
   if (!tenantId || !lifecycleJobId) return;
   // Concurrent provision guard — prevents duplicate compose/DB ops
   // for same tenant. See provision-lock.ts for implementation.
-  await assertNoConcurrentProvisionJob(db, tenantId, lifecycleJobId);
+  await assertNoConcurrentTenantLifecycleJob(db, tenantId, lifecycleJobId);
 }
 
 export async function executeProvisionRuntime(
@@ -771,7 +771,7 @@ export async function executeProvisionRuntime(
       }
     };
     if (tenantId) {
-      await withTenantProvisionAdvisoryLock(db, tenantId, executeCompose);
+      await withTenantLifecycleAdvisoryLock(db, tenantId, executeCompose);
     } else {
       await executeCompose();
     }
