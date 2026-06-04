@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-04  
 **Auditor:** Final validation pass; **P0 repair wave** applied 2026-06-04 (lifecycle, backup, monitoring)  
-**Status:** **NO-GO** — code-level P0 blockers closed; **GO still requires** staging Phase 4 (backup restore test, shared health cron on host) and dedicated runbooks (M1–M5)
+**Status:** **NO-GO** — code-level P0 blockers closed; **GO still requires** staging Phase 4 (backup restore test, shared health cron on host) and dedicated runbooks (M1–M5)  
+**Action backlog:** [`docs/todo2.md`](todo2.md) — integrated checklist for all remaining FAIL/PARTIAL/ops items
 
 ---
 
