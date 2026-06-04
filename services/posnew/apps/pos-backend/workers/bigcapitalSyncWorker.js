@@ -1,7 +1,8 @@
 /**
  * BullMQ worker — run: `npm run worker:bigcapital`
  */
-require("dotenv").config();
+const { loadEnvIfDev } = require("../lib/load-env-if-dev");
+loadEnvIfDev();
 const connectDB = require("../config/database");
 const { createWorker } = require("../services/jobQueue");
 const {

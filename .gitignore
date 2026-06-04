@@ -101,3 +101,6 @@ services/pms/node_modules/
 .claude-flow/security/
 .codex/
 CLAUDE.local.md
+
+# Worker local compile artifacts (stale URLs; excluded from Docker image via .dockerignore)
+infra/worker-service/.tmp-dist/

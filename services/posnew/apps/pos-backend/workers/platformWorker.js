@@ -3,7 +3,8 @@
  * Requires REDIS_URL and optional RESEND_API_KEY for email jobs.
  */
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+const { loadEnvIfDev } = require("../lib/load-env-if-dev");
+loadEnvIfDev({ path: path.resolve(__dirname, "..", ".env") });
 const mongoose = require("mongoose");
 const connectDB = require("../config/database");
 const config = require("../config/config");

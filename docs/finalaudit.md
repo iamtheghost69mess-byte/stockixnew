@@ -1,20 +1,20 @@
 # Stockix — Final Pre-Production Architecture Audit
 
 **Date:** 2026-06-04  
-**Auditor:** Final validation pass — read-only; all repair rounds (P0–P2, FAIL 1–8, PARTIAL 1–13) claimed applied  
-**Status:** **NO-GO** — blocking gaps in shared-data backup, monitoring, and several lifecycle hardening items claimed in deep scan but not present in code
+**Auditor:** Final validation pass; **P0 repair wave** applied 2026-06-04 (lifecycle, backup, monitoring)  
+**Status:** **NO-GO** — code-level P0 blockers closed; **GO still requires** staging Phase 4 (backup restore test, shared health cron on host) and dedicated runbooks (M1–M5)
 
 ---
 
 ## Executive Decision
 
-Production deployment is **not recommended** until shared MySQL and MongoDB backup/restore is implemented (or contractually accepted with written risk acceptance), operational monitoring for shared infra exists in the repo and on hosts, and high-severity lifecycle gaps are closed (deprovision concurrency guard, POS provision failure Traefik cleanup, production `platformWorker` dotenv behavior).
+Production deployment is **not recommended** until **backup restore is tested on staging** and **OPERATIONS runbooks** exist for stuck provision/deprovision and shared-infra outages (M1–M5).
 
-The shared-infrastructure migration (per-tenant DB containers → `stockix-shared`) is **largely coherent** in provision/deprovision code paths reviewed: Mongo `{slug}_pos`, MySQL `slugToMysqlSafe`, Redis `tenant:{slug}:`, concurrent provision guard, deprovision data-plane gating, and Traefik dynamic config alignment are implemented as documented in [`docs/Architecture2.md`](Architecture2.md) and [`docs/missingarchitecture.md`](missingarchitecture.md).
+**P0 repairs applied (2026-06-04):** shared MySQL/Mongo backup scripts ([`backup-shared.sh`](infra/prod/backup/backup-shared.sh)), monitoring ([`healthcheck.sh`](infra/prod/monitoring/healthcheck.sh)), deprovision advisory lock + lifecycle job guard on both paths, POS provision failure Traefik cleanup, production worker dotenv guard, `.gitignore` for `.tmp-dist`.
 
-However, **documentation claiming "Deep Scan (7)" complete overstates the codebase** — see [`docs/missing2arch.md`](missing2arch.md). The control plane Postgres backup (`infra/prod/backup/backup.sh`) does **not** protect tenant data on shared MySQL/Mongo volumes.
+The shared-infrastructure migration remains **largely coherent** in provision/deprovision paths. See [`docs/missing2arch.md`](missing2arch.md) for remaining doc/ops gaps.
 
-**Conditional path to GO:** (1) shared MySQL + Mongo backup with tested restore, (2) `infra/prod/monitoring` health script + alert webhook in `.env.example`, (3) fix blocking lifecycle items F2, F4, G12, E10, J10, (4) execute Phase 4 staging plan end-to-end.
+**Conditional path to GO:** (1) execute Phase 4 staging — prove `backup.sh` + `backup-shared.sh` restore on staging, (2) schedule `healthcheck.sh` on the host, (3) add or link runbooks for M1–M5 (partial coverage exists in [`infra/prod/OPERATIONS.md`](infra/prod/OPERATIONS.md) but not as dedicated M1–M5 checklist items).
 
 ---
 
@@ -22,22 +22,22 @@ However, **documentation claiming "Deep Scan (7)" complete overstates the codeba
 
 | Section | Checks | Pass | Fail | Partial | Score |
 |---------|--------|------|------|---------|-------|
-| A MongoDB isolation | 10 | 9 | 1 | 0 | 9/10 |
+| A MongoDB isolation | 10 | 10 | 0 | 0 | 10/10 |
 | B MySQL isolation | 10 | 10 | 0 | 0 | 10/10 |
 | C Redis isolation | 10 | 8 | 0 | 2 | 8/10 |
 | D Docker networking | 12 | 12 | 0 | 0 | 12/12 |
-| E Traefik routing | 10 | 9 | 1 | 0 | 9/10 |
-| F Provisioning lifecycle | 15 | 12 | 2 | 1 | 12/15 |
-| G Deprovisioning lifecycle | 15 | 13 | 1 | 1 | 13/15 |
+| E Traefik routing | 10 | 10 | 0 | 0 | 10/10 |
+| F Provisioning lifecycle | 15 | 14 | 0 | 1 | 14/15 |
+| G Deprovisioning lifecycle | 15 | 14 | 0 | 1 | 14/15 |
 | H Security boundaries | 12 | 12 | 0 | 0 | 12/12 |
 | I Container images | 10 | 10 | 0 | 0 | 10/10 |
-| J Background jobs | 10 | 7 | 1 | 2 | 7/10 |
-| K Shared infrastructure | 12 | 4 | 4 | 4 | 4/12 |
+| J Background jobs | 10 | 8 | 0 | 2 | 8/10 |
+| K Shared infrastructure | 12 | 8 | 0 | 4 | 8/12 |
 | L Consistency & integrity | 10 | 9 | 0 | 1 | 9/10 |
-| M Operational readiness | 12 | 4 | 5 | 3 | 4/12 |
+| M Operational readiness | 12 | 5 | 5 | 2 | 5/12 |
 | N Provision flow trace | 8 | 8 | 0 | 0 | 8/8 |
-| O Deprovision flow trace | 8 | 7 | 1 | 0 | 7/8 |
-| **TOTAL** | **164** | **124** | **16** | **14** | **124/164** |
+| O Deprovision flow trace | 8 | 8 | 0 | 0 | 8/8 |
+| **TOTAL** | **164** | **136** | **5** | **14** | **136/164** |
 
 *(Pass = confirmed in code; Partial = incomplete vs spec; Fail = missing or contradicted.)*
 
@@ -45,17 +45,23 @@ However, **documentation claiming "Deep Scan (7)" complete overstates the codeba
 
 ## Blocking Issues (must fix before production)
 
-| ID | File:line | Problem | Fix required | Effort |
-|----|-----------|---------|--------------|--------|
-| K9 | [`infra/prod/backup/backup.sh`](infra/prod/backup/backup.sh) L26–33 | Backup is **Postgres only** (`pg_dump`); no `mysqldump` for `stockix-mysql` | Add scheduled MySQL dump of all `stockix_*` schemas (or volume snapshot) to B2/S3 | L |
-| K10 | same L26–33 | No `mongodump` for `stockix-mongo` / per-tenant `{slug}_pos` | Add Mongo backup job (RS-aware) or managed-DB snapshot policy | L |
-| K11 | `infra/prod/monitoring/` | **Directory missing** — no `healthcheck.sh` for MySQL/Mongo RS/Redis | Add monitoring script + cron service in prod compose | M |
-| K12 | [`infra/prod/.env.example`](infra/prod/.env.example) | No `ALERT_WEBHOOK_URL` (grep 2026-06-04) | Document alert webhook + wire healthcheck failures | S |
-| F2 | [`infra/worker-service/src/worker.ts`](infra/worker-service/src/worker.ts) L513–545 | No pre-dispatch check for concurrent **deprovision** on same tenant | Block claim/provision if `tenant.deprovision` running (mirror provision guard) | S |
-| F4 / G12 | [`provision-lock.ts`](infra/worker-service/domain/provisioning/provision-lock.ts) L13–24; [`provisioner.ts`](infra/worker-service/domain/provisioner.ts) L348 | No `withTenantDeprovisionLock` — deprovision not serialized per tenant | Add advisory lock wrapper around `deprovisionTenant` | S |
-| E10 | [`module-stacks.ts`](infra/worker-service/src/module-stacks.ts) L542–556 | On POS stack failure, **no** `removePosTraefikConfig` (only on `stopModuleStack` L600) | Call `unpublishPosTraefik(slug)` in catch before rethrow | S |
-| J10 | [`platformWorker.js`](services/posnew/apps/pos-backend/workers/platformWorker.js) L6–7 | `dotenv.config` runs unconditionally in production workers | Guard: skip dotenv when `NODE_ENV=production` | S |
-| A7 | [`infra/worker-service/.tmp-dist/`](infra/worker-service/.tmp-dist/) | Stale `mongodb://mongo/stockix` in build artifacts (not runtime if image correct) | Keep `.tmp-dist` in `.dockerignore` L2; CI clean; never deploy `.tmp-dist` | S |
+| ID | Status | Note |
+|----|--------|------|
+| K9–K12, F2, F4, G12, E10, J10, A7, O2 | **FIXED in repo** (2026-06-04) | See P0 repair wave below |
+| M1–M5 | **OPEN** | Dedicated runbook files for stuck provision, failed deprovision, Mongo RS, MySQL outage, partial tenant |
+| Staging Phase 4 | **OPEN** | Prove backup restore + host cron for `healthcheck.sh` before GO |
+
+### P0 repair wave (2026-06-04) — verified in code
+
+| ID | Evidence |
+|----|----------|
+| F2 / F4 | [`provision-lock.ts`](infra/worker-service/domain/provisioning/provision-lock.ts) `assertNoConcurrentTenantLifecycleJob`; [`worker.ts`](infra/worker-service/src/worker.ts) L524 + L701–704 |
+| G12 / O2 | `withTenantLifecycleAdvisoryLock` wraps `deprovisionTenant` in `runDeprovisionJob` |
+| E10 | [`module-stacks.ts`](infra/worker-service/src/module-stacks.ts) L546 `unpublishPosTraefik` in `provisionPosStackTracked` catch |
+| J10 | [`load-env-if-dev.js`](services/posnew/apps/pos-backend/lib/load-env-if-dev.js); all four POS workers |
+| A7 | [`.dockerignore`](infra/worker-service/.dockerignore) L2 + root [`.gitignore`](.gitignore) `infra/worker-service/.tmp-dist/` |
+| K9–K10 | [`backup-shared.sh`](infra/prod/backup/backup-shared.sh) `mysqldump` + `mongodump`; invoked from [`backup.sh`](infra/prod/backup/backup.sh) |
+| K11–K12 / M12 | [`monitoring/healthcheck.sh`](infra/prod/monitoring/healthcheck.sh); `ALERT_WEBHOOK_URL` in [`.env.example`](infra/prod/.env.example) L80 |
 
 ---
 
@@ -103,9 +109,9 @@ However, **documentation claiming "Deep Scan (7)" complete overstates the codeba
 | `infra/prod/docker-compose.yml` | Read (sections) |
 | `infra/prod/.env.example` | Read (sections) |
 | `infra/prod/backup/backup.sh` | Read |
-| `infra/prod/backup/README.md` | **MISSING** |
-| `infra/prod/monitoring/healthcheck.sh` | **MISSING** |
-| `infra/prod/monitoring/README.md` | **MISSING** |
+| `infra/prod/backup/README.md` | Read (added 2026-06-04) |
+| `infra/prod/monitoring/healthcheck.sh` | Read (added 2026-06-04) |
+| `infra/prod/monitoring/README.md` | Read (added 2026-06-04) |
 | `infra/tenant-stack/docker-compose.yml` | Read |
 | `infra/pos-tenant-stack/docker-compose.yml` | Read |
 | Finance Dockerfile, loaders, App.module, TenantDBManager, Local.strategy | Read |
@@ -191,7 +197,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | A4 | ✅ PASS | [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) L819, L1239 `mongoUrl` |
 | A5 | ✅ PASS | [`pos-tenant-stack/docker-compose.yml`](infra/pos-tenant-stack/docker-compose.yml) L35–37 |
 | A6 | ✅ PASS | [`config.js`](services/posnew/apps/pos-backend/config/config.js) L66–72 throw in production |
-| A7 | ❌ FAIL | `.tmp-dist` still has `mongodb://mongo/stockix` — not production image path if ignore holds |
+| A7 | ✅ PASS | `.dockerignore` L2 + `.gitignore` `infra/worker-service/.tmp-dist/` — not shipped in image |
 | A8 | ✅ PASS | [`infra/prod/.env.example`](infra/prod/.env.example) per-tenant URL + comment |
 | A9 | ✅ PASS | [`package.json`](services/posnew/apps/pos-backend/package.json) L86 `mongoose@^8.9.5`; docs updated |
 | A10 | ✅ PASS | [`infra/shared/docker-compose.yml`](infra/shared/docker-compose.yml) L84–87 `rs.status()` |
@@ -256,16 +262,16 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | E7 | ✅ PASS | [`traefik-config.ts`](infra/worker-service/domain/traefik-config.ts) L32, L73 `certResolver: cloudflare` |
 | E8 | ✅ PASS | `resolveNginxDirectUrl` grep zero in `infra/` |
 | E9 | ✅ PASS | [`packages/db/src/assert-tenant-port-available.ts`](packages/db/src/assert-tenant-port-available.ts); calls in provision-runtime L2081+, module-stacks L446+ |
-| E10 | ❌ FAIL | POS provision catch L542–556 does not call `unpublishPosTraefik` |
+| E10 | ✅ PASS | `provisionPosStackTracked` catch L546 calls `unpublishPosTraefik` (best-effort) |
 
 ### Section F — Provisioning lifecycle
 
 | ID | Result | Note |
 |----|--------|------|
 | F1 | ✅ PASS | [`worker.ts`](infra/worker-service/src/worker.ts) L521; [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) L636 |
-| F2 | ❌ FAIL | No deprovision-running guard at worker entry |
-| F3 | ✅ PASS | [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) L774 advisory lock |
-| F4 | ❌ FAIL | No `withTenantDeprovisionLock` in codebase |
+| F2 | ✅ PASS | `assertNoConcurrentTenantLifecycleJob` on provision L524 and deprovision L701 (any running job for tenant) |
+| F3 | ✅ PASS | [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) L774 `withTenantLifecycleAdvisoryLock` |
+| F4 | ✅ PASS | Deprovision uses same lifecycle advisory lock as provision ([`worker.ts`](infra/worker-service/src/worker.ts) L704) |
 | F5 | ✅ PASS | `hasOp` / `markOp` pattern throughout provision-runtime |
 | F6 | ✅ PASS | POS-only path writes env before `provisionPosStack` (grep writeTenantEnvFileAtomic) |
 | F7 | ✅ PASS | [`module-stacks.ts`](infra/worker-service/src/module-stacks.ts) L328–335 |
@@ -293,7 +299,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | G9 | ✅ PASS | L500+ `rm` tenant env dir |
 | G10 | ✅ PASS | L478–488 gate; deletes L490+ |
 | G11 | ✅ PASS | `getComposeContainerName` L266–270 |
-| G12 | ❌ FAIL | No distributed deprovision lock |
+| G12 | ✅ PASS | `withTenantLifecycleAdvisoryLock` in `runDeprovisionJob` |
 | G13 | ✅ PASS | [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) L471–475 rollback |
 | G14 | ✅ PASS | `cleanupResults` L384–488 |
 | G15 | ✅ PASS | L352–359 throw if no root password |
@@ -343,7 +349,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | J7 | ✅ PASS | [`index.ts`](apps/api/src/index.ts) L49 `startStuckProvisioningReconciler` |
 | J8 | ⚠️ PARTIAL | `claimToken` L219–229 — not named `claim_version` |
 | J9 | ⚠️ PARTIAL | [`internal.ts`](apps/api/src/routes/internal.ts) L87 `min()` not 2× multiplier |
-| J10 | ❌ FAIL | [`platformWorker.js`](services/posnew/apps/pos-backend/workers/platformWorker.js) L6–7 always loads dotenv |
+| J10 | ✅ PASS | [`load-env-if-dev.js`](services/posnew/apps/pos-backend/lib/load-env-if-dev.js) skips dotenv when `NODE_ENV=production` |
 
 ### Section K — Shared infrastructure
 
@@ -357,10 +363,10 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | K6 | ⚠️ PARTIAL | TODO provision-runtime; no static copy step |
 | K7 | ✅ PASS | [`mysql/init/README.md`](infra/shared/mysql/init/README.md) |
 | K8 | ✅ PASS | mysql L41 `max_connections=500` |
-| K9 | ❌ FAIL | backup.sh Postgres only |
-| K10 | ❌ FAIL | No mongodump in backup.sh |
-| K11 | ❌ FAIL | monitoring scripts missing |
-| K12 | ❌ FAIL | No ALERT_WEBHOOK in .env.example |
+| K9 | ✅ PASS | [`backup-shared.sh`](infra/prod/backup/backup-shared.sh) `mysqldump --all-databases` |
+| K10 | ✅ PASS | `backup-shared.sh` `mongodump --oplog` |
+| K11 | ✅ PASS | [`monitoring/healthcheck.sh`](infra/prod/monitoring/healthcheck.sh) MySQL/Mongo RS/Redis |
+| K12 | ✅ PASS | `ALERT_WEBHOOK_URL` in `.env.example` L80 |
 
 ### Section L — Consistency & integrity
 
@@ -392,7 +398,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | M9 | ✅ PASS | [`missingarchitecture.md`](missingarchitecture.md) Round 4–5 tables |
 | M10 | ⚠️ PARTIAL | `.env.example` broad; some vars undocumented |
 | M11 | ✅ PASS | `.env.example` L107 `TRAEFIK_DYNAMIC_DIR` |
-| M12 | ❌ FAIL | No `ALERT_WEBHOOK_URL` in .env.example |
+| M12 | ✅ PASS | `ALERT_WEBHOOK_URL` in `.env.example` L80 |
 
 ### Section N — Provision flow trace (acme)
 
@@ -412,7 +418,7 @@ Path corrections: see [`docs/missing2arch.md`](missing2arch.md).
 | ID | Result | Note |
 |----|--------|------|
 | O1 | ✅ PASS | Job type `tenant.deprovision` in tenant-jobs |
-| O2 | ❌ FAIL | No `withTenantDeprovisionLock` |
+| O2 | ✅ PASS | `withTenantLifecycleAdvisoryLock` in `runDeprovisionJob` |
 | O3 | ✅ PASS | [`provisioner.ts`](infra/worker-service/domain/provisioner.ts) compose down |
 | O4 | ✅ PASS | POS project `stockix-pos-{slug}` L402 |
 | O5 | ✅ PASS | MySQL drops L246–252 |
@@ -547,9 +553,9 @@ bash infra/prod/backup/backup.sh
 
 **Command:** Run `infra/prod/monitoring/healthcheck.sh` if present.
 
-**Expected:** **Currently MISSING** — step fails until script added.
+**Expected:** Exit 0 when shared stack healthy; non-zero + webhook if `ALERT_WEBHOOK_URL` set.
 
-**Failure means:** K11 blocking.
+**Failure means:** Shared infra down — block new provisions until restored.
 
 ### STEP 13–15 — Failure injection and two-tenant smoke
 
@@ -561,11 +567,9 @@ Document in OPERATIONS.md after runbooks exist. Two-tenant: provision `acme` and
 
 | Priority | Item | File(s) | Effort |
 |----------|------|---------|--------|
-| P0 | Shared MySQL + Mongo backup/restore tested | `infra/prod/backup/` | L |
-| P0 | Monitoring script + alerts | `infra/prod/monitoring/`, `.env.example` | M |
-| P0 | Deprovision advisory lock + pre-dispatch guard | `provision-lock.ts`, `worker.ts` | S |
-| P0 | POS provision failure Traefik cleanup | `module-stacks.ts` | S |
-| P0 | platformWorker production dotenv guard | `platformWorker.js`, `bigcapitalSyncWorker.js` | S |
+| P0 | Shared backup **restore test** on staging | `infra/prod/backup/` | M (ops) |
+| P0 | Schedule `healthcheck.sh` on production host | `infra/prod/monitoring/` | S (ops) |
+| P0 | ~~Lifecycle locks, POS Traefik cleanup, worker dotenv~~ | — | **Done** |
 | P1 | Finance static → nginx volume OR defer nginx from critical path | `provision-runtime.ts` | M |
 | P1 | OPERATIONS.md runbooks | `docs/OPERATIONS.md` | M |
 | P1 | Staging E2E script (Phase 4 steps 1–10) | `scripts/staging-e2e.sh` | M |
@@ -584,8 +588,9 @@ Document in OPERATIONS.md after runbooks exist. Two-tenant: provision `acme` and
 | P2 | POS timing, nginx scaffold, RS healthcheck, Docker hygiene | REPAIR A–G |
 | FAIL 1–8 | Concurrent guard, rollback DB, BullMQ prefix, deprovision guard, Traefik, ARCHITECTURE.md, pnpm | missingarchitecture Round 4 |
 | PARTIAL 1–13 | Fail-fast Mongo, docs, grants, port check, deprovision ordering, audit script | missingarchitecture Round 5 |
-| Deep scan (claimed) | **Not fully verified in code** | [`missing2arch.md`](missing2arch.md) |
+| Deep scan (claimed) | **Partially closed** — see P0 wave | [`missing2arch.md`](missing2arch.md) |
+| P0 final audit | Lifecycle, backup, monitoring, worker dotenv | This file (2026-06-04) |
 
 ---
 
-*This audit is read-only. No source files were modified. Companion gap list: [`docs/missing2arch.md`](missing2arch.md).*
+*Companion gap list: [`docs/missing2arch.md`](missing2arch.md). P0 code repairs applied 2026-06-04.*

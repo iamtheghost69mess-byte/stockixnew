@@ -353,18 +353,34 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      S3_ENDPOINT: ${S3_ENDPOINT:-}
-      S3_BUCKET: ${S3_BUCKET:-}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      BACKUP_B2_BUCKET: ${BACKUP_B2_BUCKET:-}
+      BACKUP_B2_KEY_ID: ${BACKUP_B2_KEY_ID:-}
+      BACKUP_B2_APP_KEY: ${BACKUP_B2_APP_KEY:-}
+      BACKUP_B2_ENDPOINT: ${BACKUP_B2_ENDPOINT:-}
+      BACKUP_B2_PREFIX: ${BACKUP_B2_PREFIX:-stockix-platform-backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_POSTGRES_CONTAINER: ${BACKUP_POSTGRES_CONTAINER:-stockix-postgres-1}
+      BACKUP_MYSQL_CONTAINER: ${BACKUP_MYSQL_CONTAINER:-stockix-shared-stockix-mysql-1}
+      BACKUP_MONGO_CONTAINER: ${BACKUP_MONGO_CONTAINER:-stockix-shared-stockix-mongo-1}
+      SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD:-}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
     volumes:
-      - ./backup/backup.sh:/backup.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./backup:/backup:ro
     networks:
       - stockix_internal
-    command: crond -f -l 8
-    mem_limit: 64m
-    cpus: "0.1"
+      - stockix-shared
+    command:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache docker-cli aws-cli bash gzip mysql-client mongodb-tools >/dev/null
+        chmod +x /backup/*.sh
+        echo '0 2,14 * * * /backup/backup.sh >> /var/log/backup-cron.log 2>&1' | crontab -
+        crond -f -l 8
+    mem_limit: 128m
+    cpus: "0.2"
     mem_swappiness: 0
 
 volumes:

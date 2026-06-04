@@ -1,4 +1,5 @@
-require("dotenv").config();
+const { loadEnvIfDev } = require("../lib/load-env-if-dev");
+loadEnvIfDev();
 const mongoose = require("mongoose");
 const { Worker } = require("bullmq");
 const IORedis = require("ioredis");

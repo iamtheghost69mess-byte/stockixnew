@@ -41,7 +41,10 @@ import {
 } from "@repo/platform-worker-shared";
 import { z } from "zod";
 import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
-import { assertNoConcurrentProvisionJob } from "../domain/provisioning/provision-lock.js";
+import {
+  assertNoConcurrentTenantLifecycleJob,
+  withTenantLifecycleAdvisoryLock,
+} from "../domain/provisioning/provision-lock.js";
 import {
   deprovisionTenant,
   provisionTenant,
@@ -518,7 +521,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   if (job.tenantId) {
     // Concurrent provision guard — prevents duplicate compose/DB ops
     // for same tenant. See provision-lock.ts for implementation.
-    await assertNoConcurrentProvisionJob(db, job.tenantId, job.id);
+    await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
   }
   const result = await provisionTenant(
     db,
@@ -695,13 +698,16 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   payload: Record<string, unknown>;
 }) {
   if (!job.tenantId) throw new Error("tenantId is required");
+  await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
   const removeVolumes = job.payload.removeVolumes === true;
   const removeImages = job.payload.removeImages === true;
-  const result = await deprovisionTenant(db, job.tenantId, {
-    removeVolumes,
-    removeImages,
-    log: (m) => logger.info(`[worker][${job.id}] ${m}`),
-  });
+  const result = await withTenantLifecycleAdvisoryLock(db, job.tenantId, () =>
+    deprovisionTenant(db, job.tenantId!, {
+      removeVolumes,
+      removeImages,
+      log: (m) => logger.info(`[worker][${job.id}] ${m}`),
+    }),
+  );
   if (!result.ok) throw new Error(result.message);
 }
 

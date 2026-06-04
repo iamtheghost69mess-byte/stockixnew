@@ -9,8 +9,8 @@ export function tenantProvisionLockId(tenantId: string): number {
   return hash.readInt32BE(0);
 }
 
-/** Session-level advisory lock for tenant provision (released in finally). */
-export async function withTenantProvisionAdvisoryLock<T>(
+/** Session-level advisory lock for tenant lifecycle (provision/deprovision). */
+export async function withTenantLifecycleAdvisoryLock<T>(
   db: PostgresJsDatabase<typeof dbSchema>,
   tenantId: string,
   fn: () => Promise<T>,
@@ -24,7 +24,10 @@ export async function withTenantProvisionAdvisoryLock<T>(
   }
 }
 
-export async function assertNoConcurrentProvisionJob(
+/** @deprecated Use withTenantLifecycleAdvisoryLock */
+export const withTenantProvisionAdvisoryLock = withTenantLifecycleAdvisoryLock;
+
+export async function assertNoConcurrentTenantLifecycleJob(
   db: PostgresJsDatabase<typeof dbSchema>,
   tenantId: string,
   currentJobId: string,
@@ -42,7 +45,10 @@ export async function assertNoConcurrentProvisionJob(
     .limit(1);
   if (active) {
     throw new Error(
-      `Concurrent provision detected for tenant ${tenantId} (job ${active.id}) — aborting`,
+      `Concurrent lifecycle job for tenant ${tenantId} (job ${active.id}) — aborting`,
     );
   }
 }
+
+/** @deprecated Use assertNoConcurrentTenantLifecycleJob */
+export const assertNoConcurrentProvisionJob = assertNoConcurrentTenantLifecycleJob;
