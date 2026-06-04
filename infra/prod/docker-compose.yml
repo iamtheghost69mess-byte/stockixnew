@@ -8,6 +8,9 @@
 #   2. On the server, sync env for worker dotenv fallback:
 #        pnpm env:sync-prod   (copies infra/prod/.env → repo root .env)
 #   3. Clone repo at STOCKIX_REPO (default /opt/stockix/stockixnew).
+#   4. Start shared infra first:
+#        docker compose -f infra/shared/docker-compose.yml --env-file infra/prod/.env \
+#          -p stockix-shared up -d
 #
 # Env injection: platform variables are passed explicitly into api + infra-worker
 # (Compose wins over mounted .env; see STOCKIX_LOAD_ROOT_ENV).
@@ -52,7 +55,12 @@ x-stockix-platform-env: &stockix-platform-env
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Stockix}
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
   RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
-  MONGODB_DATABASE_URL: ${MONGODB_DATABASE_URL:-mongodb://mongo/stockix}
+  # Shared infra — used by worker to provision tenant databases.
+  SHARED_MYSQL_HOST: shared-mysql
+  SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
+  SHARED_MONGO_HOST: shared-mongo
+  TENANT_REDIS_HOST: tenant-redis
+  TENANT_REDIS_PORT: "6379"
   MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
   WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
   PROVISION_POLL_MS: ${PROVISION_POLL_MS:-2000}
@@ -161,86 +169,76 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --entrypoints.websecure.address=:443
-      - --ping=true
-      - --ping.entrypoint=traefik
-      - --entrypoints.traefik.address=:8080
-      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
-      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
-      - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
+      - --log.level=INFO
     networks:
       - stockix_public
       - stockix_internal
-    
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ping > /dev/null 2>&1 || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ping 2>/dev/null | grep -q OK || exit 1"]
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 3
+      start_period: 10s
 
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    mem_limit: 1g
-    cpus: "0.5"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
+      POSTGRES_DB: stockix_platform
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-54330}:5432"
     networks:
-      - stockix_public
+      - stockix_internal
+    ports:
+      - "127.0.0.1:54330:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stockix_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 256m
+    cpus: "0.5"
+    mem_swappiness: 0
     security_opt:
       - no-new-privileges:true
 
-  # Dedicated Redis for control-plane BullMQ (license expiry milestones). Not shared with Chatwoot.
   control-plane-redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: >
-      redis-server
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --save ""
-      --appendonly no
-    mem_limit: 320m
-    memswap_limit: 320m
-    cpus: "0.25"
-    mem_swappiness: 0
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
+    command:
+      - redis-server
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+    volumes:
+      - control_plane_redis_data:/data
     networks:
       - stockix_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    mem_limit: 96m
+    cpus: "0.1"
+    mem_swappiness: 0
     security_opt:
       - no-new-privileges:true
 
   api:
-    image: stockix-api:latest
-    build:
-      context: ../..
-      dockerfile: apps/api/Dockerfile
+    image: ${API_IMAGE:-stockix-api:latest}
     restart: unless-stopped
-    mem_limit: 512m
-    cpus: "0.5"
-    # Single api container (deploy.replicas requires Docker Swarm; not used here).
     depends_on:
       postgres:
         condition: service_healthy
@@ -248,229 +246,151 @@ services:
         condition: service_healthy
     environment:
       <<: *stockix-platform-env
-      RUN_BULLMQ_CONSUMERS: "false"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
+      DATABASE_URL: ${DATABASE_URL}
       PORT: "4000"
+      RUN_BULLMQ_CONSUMERS: "false"
+    networks:
+      - stockix_internal
+      - stockix_public
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health 2>/dev/null | grep -q ok || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${ROOT_DOMAIN}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=cloudflare"
+      - "traefik.http.services.api.loadbalancer.server.port=4000"
+
+  api-bullmq:
+    image: ${API_IMAGE:-stockix-api:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      control-plane-redis:
+        condition: service_healthy
+    environment:
+      <<: *stockix-platform-env
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "4001"
+      RUN_BULLMQ_CONSUMERS: "true"
+    networks:
+      - stockix_internal
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+
+  dashboard:
+    image: ${DASHBOARD_IMAGE:-stockix-dashboard:latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *stockix-platform-env
+      NEXT_PUBLIC_API_URL: ${STOCKIX_API_URL}
     networks:
       - stockix_public
       - stockix_internal
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health > /dev/null 2>&1 || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ 2>/dev/null | grep -q html || exit 1"]
+      interval: 20s
       timeout: 5s
-      retries: 10
-      start_period: 60s
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=stockix_public
-      - "traefik.http.routers.stockix-api.rule=Host(`api.${ROOT_DOMAIN}`)"
-      - traefik.http.routers.stockix-api.entrypoints=websecure
-      - traefik.http.routers.stockix-api.tls.certresolver=cloudflare
-      - traefik.http.services.stockix-api.loadbalancer.server.port=4000
-
-  # Single BullMQ consumer — not exposed via Traefik. HTTP replicas use RUN_BULLMQ_CONSUMERS=false.
-  api-bullmq:
-    image: stockix-api:latest
-    restart: unless-stopped
+      retries: 3
+      start_period: 30s
     mem_limit: 256m
     cpus: "0.25"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      control-plane-redis:
-        condition: service_healthy
-    environment:
-      <<: *stockix-platform-env
-      RUN_BULLMQ_CONSUMERS: "true"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
-      PORT: "4000"
-    networks:
-      - stockix_internal
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health > /dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 8
-      start_period: 60s
+    mem_swappiness: 0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`app.${ROOT_DOMAIN}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=cloudflare"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
 
   infra-worker:
-    image: stockix-infra-worker:latest
-    build:
-      context: ../..
-      dockerfile: infra/worker-service/Dockerfile
+    image: ${WORKER_IMAGE:-stockix-infra-worker:latest}
     restart: unless-stopped
-    mem_limit: 1g
-    cpus: "1.0"
-    expose:
-      - "9090"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
     depends_on:
-      postgres:
-        condition: service_healthy
-      control-plane-redis:
-        condition: service_healthy
       api:
-        condition: service_healthy
-      api-bullmq:
         condition: service_healthy
       socket-proxy:
         condition: service_healthy
     environment:
       <<: *stockix-worker-env
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
     volumes:
-      - ${STOCKIX_REPO:-../..}:/opt/stockix/stockixnew
-      - traefik_dynamic:/opt/stockix/traefik-dynamic
-      - stockix_tenants:/opt/stockix/tenants
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - ${TENANT_ENV_ROOT:-/opt/stockix/tenants}:/opt/stockix/tenants
+      - ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}:/opt/stockix/traefik-dynamic
+      - /opt/stockix/stockixnew:/opt/stockix/stockixnew:ro
     networks:
-      - stockix_public
       - stockix_internal
       - socket_proxy_network
-    security_opt:
-      - no-new-privileges:true
-
-  dashboard:
-    image: stockix-dashboard:latest
-    build:
-      context: ../..
-      dockerfile: apps/dashboard/Dockerfile
-      args:
-        NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
-        NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: ${ROOT_DOMAIN}
-        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: ${PUBLIC_BASE_URL_SCHEME:-https}
-        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
-    mem_limit: 512m
-    cpus: "0.25"
-    restart: unless-stopped
-    depends_on:
-      traefik:
-        condition: service_healthy
-      api:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_STOCKIX_API_URL: ${NEXT_PUBLIC_STOCKIX_API_URL}
-      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ORG: ${SENTRY_ORG:-}
-      SENTRY_PROJECT: ${SENTRY_PROJECT:-}
-      SESSION_SECRET: ${SESSION_SECRET}
-      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
-      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
-      PLATFORM_API_SECRET: ${PLATFORM_API_SECRET}
-      STOCKIX_API_URL: ${STOCKIX_API_URL:-http://api:4000}
-      # Server-side API URL avoids hairpin NAT through Cloudflare (POST requests time out)
-      STOCKIX_SERVER_API_URL: http://api:4000
-      POS_PLATFORM_BASE_URL: ${POS_PLATFORM_BASE_URL:-http://host.docker.internal:8010}
-      PMS_BASE_URL: ${PMS_BASE_URL:-http://host.docker.internal:3003}
-      NEXT_PUBLIC_PMS_API_URL: ${NEXT_PUBLIC_PMS_API_URL:-}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stockix_platform}
-      SECURITY_HSTS: ${SECURITY_HSTS}
-      SECURITY_X_FRAME_OPTIONS: ${SECURITY_X_FRAME_OPTIONS}
-      SECURITY_REFERRER_POLICY: ${SECURITY_REFERRER_POLICY}
-      SECURITY_X_CONTENT_TYPE_OPTIONS: ${SECURITY_X_CONTENT_TYPE_OPTIONS}
-      SECURITY_CSP_BASE: ${SECURITY_CSP_BASE}
-    networks:
-      - stockix_public
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=stockix_public
-      - "traefik.http.routers.stockix-dash.rule=Host(`${ROOT_DOMAIN}`) || Host(`www.${ROOT_DOMAIN}`)"
-      - traefik.http.routers.stockix-dash.entrypoints=websecure
-      - traefik.http.routers.stockix-dash.tls.certresolver=cloudflare
-      - traefik.http.routers.stockix-dash.tls.domains[0].main=${ROOT_DOMAIN}
-      - traefik.http.routers.stockix-dash.tls.domains[0].sans=*.${ROOT_DOMAIN}
-      - traefik.http.services.stockix-dash.loadbalancer.server.port=3000
+      # Worker needs to reach shared infra to provision tenant databases
+      - stockix-shared
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 > /dev/null 2>&1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 8
-      start_period: 60s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
 
   db-backup:
-    # backup.sh needs docker exec (pg_dump) + aws s3 (B2). amazon/aws-cli has neither cron nor docker CLI.
     image: alpine:3.20
     restart: unless-stopped
-    mem_limit: 128m
-    cpus: "0.1"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./backup/backup.sh:/backup.sh:ro
-    environment:
-      BACKUP_B2_BUCKET: ${BACKUP_B2_BUCKET:-}
-      BACKUP_B2_KEY_ID: ${BACKUP_B2_KEY_ID:-}
-      BACKUP_B2_APP_KEY: ${BACKUP_B2_APP_KEY:-}
-      BACKUP_B2_ENDPOINT: ${BACKUP_B2_ENDPOINT:-}
-      BACKUP_B2_PREFIX: ${BACKUP_B2_PREFIX:-stockix-platform-backups}
-      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
-      BACKUP_POSTGRES_CONTAINER: ${BACKUP_POSTGRES_CONTAINER:-stockix-postgres-1}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-stockix_platform}
-    entrypoint:
-      - sh
-      - -c
-      - |
-        set -e
-        apk add --no-cache docker-cli aws-cli bash gzip
-        echo "[backup] scheduler started (every 12h, replaces 02:00/14:00 cron)"
-        while true; do
-          /bin/bash /backup.sh || echo "[backup] run failed: $$?"
-          sleep 43200
-        done
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ./backup/backup.sh:/backup.sh:ro
     networks:
       - stockix_internal
-      - stockix_public
+    command: crond -f -l 8
+    mem_limit: 64m
+    cpus: "0.1"
+    mem_swappiness: 0
+
+volumes:
+  postgres_data:
+    name: stockix_postgres_data
+  control_plane_redis_data:
+    name: stockix_control_plane_redis
+  traefik_letsencrypt:
+    name: stockix_traefik_letsencrypt
+  traefik_dynamic:
+    name: stockix_traefik_dynamic
 
 networks:
   stockix_public:
     name: stockix_public
+    driver: bridge
   stockix_internal:
     name: stockix_internal
+    driver: bridge
     internal: true
   socket_proxy_network:
-    internal: true
+    name: stockix_socket_proxy_network
     driver: bridge
-
-volumes:
-  postgres_data:
-  traefik_letsencrypt:
-  traefik_dynamic:
-  stockix_tenants:
+    internal: true
+  # External: managed by infra/shared/docker-compose.yml
+  # Worker joins this to reach shared-mysql, shared-mongo, tenant-redis
+  stockix-shared:
+    name: stockix-shared
+    external: true

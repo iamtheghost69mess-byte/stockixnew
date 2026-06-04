@@ -18,6 +18,9 @@ services:
     depends_on:
       pms-api:
         condition: service_healthy
+    networks:
+      - stockix_public
+      - pms_internal
     mem_limit: 256m
     cpus: "0.25"
     mem_swappiness: 0
@@ -43,9 +46,20 @@ services:
       - TENANT_ID=${TENANT_ID}
     ports:
       - "127.0.0.1:${PMS_HOST_PORT:-3003}:3003"
+    networks:
+      - pms_internal
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
     oom_kill_disable: false
 
 volumes: {}
+
+networks:
+  # Traefik public network — external, managed by infra/prod/docker-compose.yml
+  stockix_public:
+    name: stockix_public
+    external: true
+  # Internal network scoped to this PMS tenant stack only
+  pms_internal:
+    driver: bridge

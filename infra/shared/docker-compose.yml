@@ -1,0 +1,166 @@
+# Stockix shared infrastructure — started once, used by ALL tenant stacks.
+# Run from repo root:
+#   docker compose -f infra/shared/docker-compose.yml --env-file infra/prod/.env \
+#     -p stockix-shared up -d
+#
+# All tenant app containers join the `stockix-shared` external network declared at the
+# bottom of this file. Tenant containers reference databases by hostname:
+#   MySQL   → shared-mysql:3306   database: stockix_{slug}_finance  user: tenant_{slug}
+#   MongoDB → shared-mongo:27017  database: {slug}_pos
+#   Redis   → tenant-redis:6379   key prefix: tenant:{slug}:
+#
+# Provisioner responsibility:
+#   On CREATE: CREATE DATABASE + CREATE USER + GRANT on MySQL; Mongo DB auto-created on first write.
+#   On DELETE: DROP DATABASE + DROP USER on MySQL; dropDatabase() on Mongo.
+
+name: stockix-shared
+
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # MySQL 8 — one database per tenant (stockix_{slug}_finance)
+  # ─────────────────────────────────────────────────────────────
+  shared-mysql:
+    image: mysql:8.0-bookworm
+    restart: unless-stopped
+    hostname: shared-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=500
+      - --innodb-buffer-pool-size=256M
+      - --innodb-log-file-size=64M
+      - --slow-query-log=ON
+      - --long-query-time=2
+    volumes:
+      - shared_mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - stockix-shared
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "--password=${SHARED_MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+
+  # ─────────────────────────────────────────────────────────────
+  # MongoDB 6 — one database per tenant ({slug}_pos)
+  # Single node replica set (rs0) — required by POS connection string
+  # (?replicaSet=rs0). On upgrade to multi-server, add members to rs.
+  # ─────────────────────────────────────────────────────────────
+  shared-mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    hostname: shared-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+    volumes:
+      - shared_mongo_data:/data/db
+    networks:
+      - stockix-shared
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+
+  # One-shot: initiates the replica set on first boot, idempotent on restarts.
+  shared-mongo-rs-init:
+    image: mongo:6.0
+    restart: "no"
+    depends_on:
+      shared-mongo:
+        condition: service_healthy
+    networks:
+      - stockix-shared
+    entrypoint:
+      - bash
+      - -ec
+      - |
+        mongosh --host shared-mongo:27017 --quiet --eval "
+          try {
+            rs.status();
+            print('replica set already initiated');
+          } catch (e) {
+            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'shared-mongo:27017' }] });
+            print('replica set initiated');
+          }
+        "
+    mem_limit: 128m
+    cpus: "0.1"
+    mem_swappiness: 0
+
+  # ─────────────────────────────────────────────────────────────
+  # Tenant Redis — BullMQ + Finance Agenda jobs for ALL tenants.
+  # Kept separate from control-plane-redis (stockix_internal network).
+  # Key convention enforced by tenant-env.ts:
+  #   tenant:{slug}:queue:*    BullMQ (POS bigcapital-sync)
+  #   tenant:{slug}:agenda:*   Finance Agenda scheduler
+  #   tenant:{slug}:session:*  Finance sessions
+  # ─────────────────────────────────────────────────────────────
+  tenant-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    hostname: tenant-redis
+    command:
+      - redis-server
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - "900 1"
+      - --save
+      - "300 10"
+      - --appendonly
+      - "no"
+    volumes:
+      - shared_tenant_redis_data:/data
+    networks:
+      - stockix-shared
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    mem_limit: 192m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  shared_mysql_data:
+    name: stockix_shared_mysql
+  shared_mongo_data:
+    name: stockix_shared_mongo
+  shared_tenant_redis_data:
+    name: stockix_shared_tenant_redis
+
+networks:
+  stockix-shared:
+    name: stockix-shared
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
