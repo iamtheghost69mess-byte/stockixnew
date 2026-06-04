@@ -7,7 +7,8 @@ function orgScopedKey(orgId, suffix) {
   if (orgId == null || orgId === "") {
     return suffix;
   }
-  return `org:${String(orgId)}:${suffix}`;
+  const prefix = process.env.REDIS_KEY_PREFIX ?? "";
+  return `${prefix}org:${String(orgId)}:${suffix}`;
 }
 
 module.exports = { orgScopedKey };
