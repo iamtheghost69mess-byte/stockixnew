@@ -5,7 +5,7 @@ import { execa } from "execa";
 import { apiConfig, env, moduleGatingConfig, posConfig } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
 
-import { allocateTenantPort } from "@repo/db";
+import { allocateTenantPort, assertTenantPortAvailable } from "@repo/db";
 
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
@@ -443,6 +443,16 @@ export async function provisionPosStack(
       `[provision][pos] localhost dev: skipping Traefik (open POS at ${posUrl})`,
     );
   } else {
+    if (opts.db) {
+      await assertTenantPortAvailable(opts.db, backendPort, {
+        excludeTenantId: opts.tenantId,
+        slug: opts.slug,
+      });
+      await assertTenantPortAvailable(opts.db, frontendPort, {
+        excludeTenantId: opts.tenantId,
+        slug: opts.slug,
+      });
+    }
     opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
     await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
   }

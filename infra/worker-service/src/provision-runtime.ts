@@ -5,7 +5,7 @@ import { execa } from "execa";
 
 import { apiConfig, posConfig } from "@repo/config";
 import { decryptDeploymentSecret, encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
-import { allocateOrganizationNumber, allocateTenantPort } from "@repo/db";
+import { allocateOrganizationNumber, allocateTenantPort, assertTenantPortAvailable } from "@repo/db";
 import { tenantConfig, tenantDeployments, tenantLifecycleJobs, tenantProvisionEvents, tenants } from "@repo/db/schema";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { asc, eq } from "drizzle-orm";
@@ -1506,6 +1506,13 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
 
+    // TODO: Finance webapp static files not yet accessible from server container.
+    // Static copy to SHARED_STATIC_ROOT pending webapp consolidation into server image.
+    // Tracked: Architecture2.md §18.1 item 6 — docker.static_copy_step deferred.
+
+    // SECURITY NOTE: tenant server joins stockix_internal for bootstrap only.
+    // Accepted risk — documented in Architecture2.md §16.
+    // Future: use dedicated bootstrap network + disconnect after completion.
     // Connect the tenant server container to stockix_internal so the infra-worker can
     // reach it directly (host.docker.internal NAT is blocked by iptables on Linux).
     const serverContainerName = `${project}-server-1`;
@@ -2070,6 +2077,10 @@ export async function executeProvisionRuntime(
     await checkNotCancelled();
     if (!hasOp("edge.publish")) {
       log("[provision] step start: edge.publish");
+      await assertTenantPortAvailable(db, port, {
+        excludeTenantId: tenantId ?? undefined,
+        slug: input.slug,
+      });
       try {
         await edge.publish(input.slug, port, rootDomain, project);
       } catch (error) {

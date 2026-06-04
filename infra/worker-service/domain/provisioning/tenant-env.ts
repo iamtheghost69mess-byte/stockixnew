@@ -111,7 +111,7 @@ function buildTenantRedisKeyPrefix(slug: string): string {
 
 /**
  * Per-tenant MySQL user name — scoped to this tenant's databases only.
- * The provisioner creates this user with GRANT on stockix_{slug}_finance.* only.
+ * The provisioner creates this user with GRANT on stockix_{safe}_% (finance, system, org DBs).
  */
 function buildTenantMysqlUser(slug: string): string {
   return `tenant_${slugToMysqlSafe(slug)}`;

@@ -142,8 +142,9 @@ import { AppThrottleModule } from './AppThrottle.module';
     PassportModule,
     AppThrottleModule,
     // REDIS_KEY_PREFIX isolates this tenant's queues on shared stockix-redis
-    // Pattern: tenant:{slug}:QueueName
-    // Must match POS isolation convention in services/posnew jobQueue.js
+    // Redis key pattern: bull:{REDIS_KEY_PREFIX}{QueueName}:*
+    // e.g. bull:tenant:acme:SendInviteUserMailQueue:*
+    // Must match POS isolation convention in services/posnew/apps/pos-backend/services/jobQueue.js
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

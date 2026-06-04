@@ -4,6 +4,7 @@ import postgres from "postgres";
 import * as schema from "./schema.js";
 
 export { allocateTenantPort, TenantPortExhaustedError } from "./allocate-tenant-port.js";
+export { assertTenantPortAvailable } from "./assert-tenant-port-available.js";
 export { allocateOrganizationNumber } from "./organization-number.js";
 export { schema };
 export type { PostgresJsDatabase } from "drizzle-orm/postgres-js";

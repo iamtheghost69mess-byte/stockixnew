@@ -49,10 +49,12 @@ function getConnection() {
 const PREFIX = process.env.REDIS_KEY_PREFIX ?? "";
 
 // Redis namespacing convention (Stockix shared Redis):
-// Finance Agenda jobs:  agenda:{tenant_slug}:*  (Mongo collection — see stockix-finance agenda loader)
-// POS BullMQ queues:    {REDIS_KEY_PREFIX}{queue_name}
-//                       e.g. tenant:acme:bigcapital_sync
-// Sessions:             tenant:{slug}:session:*
+// Finance BullMQ (forRoot prefix): bull:{REDIS_KEY_PREFIX}{QueueName}:*
+//   e.g. bull:tenant:acme:SendInviteUserMailQueue:*
+// POS BullMQ (queue name = PREFIX + base): bull:{REDIS_KEY_PREFIX}{queue_name}:*
+//   e.g. bull:tenant:acme:bigcapital_sync:*
+// Finance Agenda jobs: agenda:{tenant_slug}:* (Mongo collection — see stockix-finance agenda loader)
+// Sessions: tenant:{slug}:session:* (JWT-only today; no Redis session store)
 // Do NOT use unprefixed keys on stockix-redis
 
 function queueName(base) {

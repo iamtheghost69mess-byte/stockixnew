@@ -77,8 +77,9 @@ services:
       # Authentication
       - JWT_SECRET=${JWT_SECRET}
 
-      # MongoDB 
-      - MONGODB_DATABASE_URL=mongodb://mongo/stockix
+      # MONGODB_DATABASE_URL is injected per-tenant via infra/worker-service
+      # buildTenantMongoUrl(slug) — do not hardcode shared DB here
+      - MONGODB_DATABASE_URL=${MONGODB_DATABASE_URL}
 
       # Application
       - BASE_URL=${BASE_URL}

@@ -4,7 +4,7 @@
 **Audience:** Staff engineers, SRE, security review  
 **Scope:** Multi-tenant Docker provisioning, shared infrastructure migration, control plane, edge routing  
 **Evidence base:** Repository audit (`infra/`, `apps/api`, `infra/worker-service`, tenant compose stacks) — June 2026  
-**Status:** P0/P1/P2 resolved. Hard Fails resolved. Partials + deep scan findings pending (Prompt 5).
+**Status:** P0/P1/P2 resolved. Hard Fails and Partials resolved. Deep scan findings pending (Prompt 6).
 
 ## Repair Log
 
@@ -33,6 +33,19 @@
 | FAIL-6 Traefik nginx discovery removed | DONE | 2026-06-04 |
 | FAIL-7 ARCHITECTURE.md synced | DONE | 2026-06-04 |
 | FAIL-8 POS pnpm | DONE | 2026-06-04 |
+| PARTIAL-1 POS MongoDB production fail-fast | DONE | 2026-06-04 |
+| PARTIAL-2 Mongoose version docs | DONE | 2026-06-04 |
+| PARTIAL-3 Stale mongo URL cleanup | DONE | 2026-06-04 |
+| PARTIAL-4 BullMQ Redis key patterns | DONE | 2026-06-04 |
+| PARTIAL-5 stockix_internal accepted risk | DONE | 2026-06-04 |
+| PARTIAL-6 MySQL wildcard grant | DONE | 2026-06-04 |
+| PARTIAL-7 MySQL init README | DONE | 2026-06-04 |
+| PARTIAL-8 Static copy deferred + env | DONE | 2026-06-04 |
+| PARTIAL-9 Mongo slug naming docs | DONE | 2026-06-04 |
+| PARTIAL-10 Port collision guard | DONE | 2026-06-04 |
+| PARTIAL-11 Deprovision ordering | DONE | 2026-06-04 |
+| PARTIAL-12 Bootstrap network tracked | DONE | 2026-06-04 |
+| PARTIAL-13 Orphan DB audit script | DONE | 2026-06-04 |
 
 ---
 
@@ -688,7 +701,7 @@ Stuck job reconcilers on API process (Postgres, not BullMQ)
 | MySQL | **Strong** if credentials correct — user limited to slug DBs |
 | Mongo | **Strong** if URI correct — separate DB per slug |
 | Redis | **Weak** — prefix documented, not enforced in POS BullMQ |
-| Network | **Weak** — shared L2 network; defense in depth = DB auth |
+| Network | **Weak** — shared L2 network; defense in depth = DB auth. Finance `server` joins `stockix_internal` during and after provision for bootstrap HTTP (`provision-runtime.ts` network connect). **Accepted tradeoff:** tenant image has no listeners on control-plane ports; host firewall limits lateral movement. **Future:** dedicated `stockix_bootstrap` network, disconnect after bootstrap completes. |
 | Filesystem | Per-tenant `.env` mode 600 in slug dir |
 
 ### 16.2 Network segmentation
@@ -775,13 +788,14 @@ Docker socket → socket-proxy (filtered API)
 4. **Enforce Redis isolation** — Prefix all BullMQ queue names: `${REDIS_KEY_PREFIX}bigcapital_sync`.
 5. **Deprovision completeness** — Module stacks + org MySQL DBs + Redis prefix cleanup.
 6. **Shared Nginx** — Implement `infra/shared/nginx/` with `map $host $tenant_upstream` for static Finance UI, or serve static from NestJS.
+7. **Bootstrap network isolation** — Replace `stockix_internal` tenant connect with a dedicated `stockix_bootstrap` network. After bootstrap HTTP calls complete, disconnect tenant server from `stockix_bootstrap`. Prevents tenant runtime access to control-plane Postgres and Redis. Files: `provision-runtime.ts` (network connect/disconnect), `infra/prod/docker-compose.yml` (new network definition). Complexity: M. Security priority: HIGH.
 
 ### 18.2 Missing components
 
 | Component | Status |
 |-----------|--------|
 | Shared Nginx gateway | Implemented in `infra/shared/nginx/` — webapp container deprecation in progress; static copy to volume pending |
-| `infra/shared/mysql/init` | Volume mount exists, directory empty |
+| `infra/shared/mysql/init` | Documented in README — dynamic provisioning via worker; no init SQL |
 | Per-tenant backup/restore | Platform postgres only (`db-backup` service) |
 | Mongo RS monitoring | No dedicated exporter |
 
