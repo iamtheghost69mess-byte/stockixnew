@@ -291,65 +291,24 @@ jobs:
       github.event_name != 'pull_request' &&
       (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Self-hosted runner on the VPS — connects outbound to GitHub (port 443),
+    # eliminates all inbound SSH from GitHub Actions which Hostinger blocks.
+    runs-on: [self-hosted, stockix]
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: read
     environment:
       name: production
       url: https://stockix.cloud
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-
-      - name: Verify secrets rotation documented
-        run: |
-          if ! grep -q "SECRETS ROTATED:" infra/prod/OPERATIONS.md 2>/dev/null; then
-            echo "WARNING: OPERATIONS.md does not contain 'SECRETS ROTATED:' entry"
-            echo "Complete secret rotation before deploying to production"
-          fi
-
-      - name: Deploy over SSH
+      - name: Deploy
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
+          RELEASE_SHA: ${{ github.sha }}
+          GHCR_REPO: ${{ github.repository }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          test -n "${EC2_HOST:-}" && test -n "${EC2_USER:-}"
-          RELEASE_SHA="${{ github.sha }}"
-          GHCR_REPO="${{ github.repository }}"
-          GHCR_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          # Wait up to 15 min for server to accept SSH (CPU throttling / background prebuild
-          # can saturate the VPS and delay TCP handshakes for extended periods)
-          echo "Waiting for server to be reachable..."
-          for i in $(seq 1 30); do
-            if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 \
-                   -o BatchMode=yes "${EC2_USER}@${EC2_HOST}" true 2>/dev/null; then
-              echo "Server reachable (attempt $i)"
-              break
-            fi
-            [ "$i" -eq 30 ] && { echo "Server unreachable after 15 min — giving up"; exit 1; }
-            echo "Not reachable yet (attempt $i/30), waiting 30s..."
-            sleep 30
-          done
-          # Pass SHA, GHCR repo, and token as positional args to remote bash.
-          # Single-quoted 'REMOTE' heredoc prevents local shell from expanding remote variables.
-          ssh -o StrictHostKeyChecking=accept-new \
-              -o ServerAliveInterval=30 \
-              -o ServerAliveCountMax=20 \
-              -o ConnectTimeout=60 \
-              "${EC2_USER}@${EC2_HOST}" \
-            bash -s "$RELEASE_SHA" "$GHCR_REPO" "$GHCR_TOKEN" << 'REMOTE'
-          set -euo pipefail
-          RELEASE_SHA="$1"
-          GHCR_REPO="$2"
-          GHCR_TOKEN="$3"
           GHCR_OWNER="${GHCR_REPO%%/*}"
           GHCR_PREFIX="ghcr.io/${GHCR_REPO}"
           export CI=true
@@ -368,22 +327,12 @@ jobs:
               docker compose --env-file .env logs --tail=300 || true
             fi
             rolled_back=0
-            if [ -n "${PREV_API:-}" ]; then
-              docker tag "${PREV_API}" stockix-api:latest 2>/dev/null || true
-              rolled_back=1
-            fi
-            if [ -n "${PREV_DASH:-}" ]; then
-              docker tag "${PREV_DASH}" stockix-dashboard:latest 2>/dev/null || true
-              rolled_back=1
-            fi
-            if [ -n "${PREV_WORKER:-}" ]; then
-              docker tag "${PREV_WORKER}" stockix-infra-worker:latest 2>/dev/null || true
-              rolled_back=1
-            fi
+            if [ -n "${PREV_API:-}" ]; then docker tag "${PREV_API}" stockix-api:latest 2>/dev/null || true; rolled_back=1; fi
+            if [ -n "${PREV_DASH:-}" ]; then docker tag "${PREV_DASH}" stockix-dashboard:latest 2>/dev/null || true; rolled_back=1; fi
+            if [ -n "${PREV_WORKER:-}" ]; then docker tag "${PREV_WORKER}" stockix-infra-worker:latest 2>/dev/null || true; rolled_back=1; fi
             if [ "$rolled_back" -eq 1 ] && [ -d "${REPO_ROOT}/infra/prod" ]; then
               cd "${REPO_ROOT}/infra/prod"
-              docker compose --env-file .env up -d --no-build \
-                api api-bullmq dashboard infra-worker || true
+              docker compose --env-file .env up -d --no-build api api-bullmq dashboard infra-worker || true
               echo "Rolled back to previous images."
             else
               echo "No previous images to roll back to."
@@ -392,10 +341,7 @@ jobs:
           }
           trap rollback ERR
           fetch_origin() {
-            if git fetch --prune --force origin; then
-              return 0
-            fi
-            echo "git fetch failed; clearing stale origin remote-tracking refs..."
+            if git fetch --prune --force origin; then return 0; fi
             git remote prune origin || true
             git for-each-ref --format='%(refname)' refs/remotes/origin \
               | while read -r ref; do git update-ref -d "$ref" || true; done
@@ -405,9 +351,7 @@ jobs:
           git checkout main
           git reset --hard origin/main
           echo "Deploy commit: $(git rev-parse HEAD)"
-          if [ ! -x scripts/load-env-file.sh ]; then
-            chmod +x scripts/load-env-file.sh
-          fi
+          if [ ! -x scripts/load-env-file.sh ]; then chmod +x scripts/load-env-file.sh; fi
           # shellcheck disable=SC1091
           . scripts/load-env-file.sh infra/prod/.env
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
@@ -416,8 +360,7 @@ jobs:
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
           if [ -z "${BACKUP_B2_BUCKET:-}" ]; then
-            echo "BACKUP_B2_BUCKET is empty — backups will not work"
-            exit 1
+            echo "BACKUP_B2_BUCKET is empty — backups will not work"; exit 1
           fi
           echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
           echo "=== Pulling pre-built images from GHCR ==="
@@ -453,14 +396,10 @@ jobs:
           curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
           if ! docker compose --env-file .env ps --status running | grep -q "api"; then
-            echo "API service is not running after deploy"
-            docker compose --env-file .env logs --tail=200
-            exit 1
+            echo "API not running"; docker compose --env-file .env logs --tail=200; exit 1
           fi
           if ! docker compose --env-file .env ps --status running | grep -q "infra-worker"; then
-            echo "infra-worker service is not running after deploy"
-            docker compose --env-file .env logs infra-worker --tail=200
-            exit 1
+            echo "infra-worker not running"; docker compose --env-file .env logs infra-worker --tail=200; exit 1
           fi
           cd "${REPO_ROOT}"
           echo "=== Building tenant images (background) ==="
@@ -474,7 +413,6 @@ jobs:
           docker image prune -f --filter "until=168h" || true
           trap - ERR
           echo "Deploy completed successfully."
-          REMOTE
 
       - name: Check Sentry secrets
         id: check-sentry
