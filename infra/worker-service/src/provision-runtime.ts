@@ -1548,9 +1548,10 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
 
-    // TODO: Finance webapp static files not yet accessible from server container.
-    // Static copy to SHARED_STATIC_ROOT pending webapp consolidation into server image.
-    // Tracked: Architecture2.md §18.1 item 6 — docker.static_copy_step deferred.
+    // Finance webapp static assets are served by the Finance NestJS server itself
+    // via ServeStaticModule (/public route) — no static copy to shared nginx volume needed.
+    // Architecture2.md §5.4 — shared nginx is static-only CDN; Finance UI served by server.
+    // K6 closed: ServeStaticModule confirmed in App.module.ts:115-117.
 
     // SECURITY NOTE: tenant server joins stockix_internal for bootstrap only.
     // Accepted risk — documented in Architecture2.md §16.

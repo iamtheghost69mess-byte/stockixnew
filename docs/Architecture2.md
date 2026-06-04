@@ -286,11 +286,12 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 ### 5.4 Shared Nginx gateway
 
-**Status: STATIC-ONLY** — `infra/shared/nginx/nginx.conf` serves `/var/www/{slug}/public` static files. `/api/` returns 404 by design; Finance API is served directly by tenant `server` via Traefik. Static copy step (`docker.static_copy_step`) still deferred — see K6, `provision-runtime.ts:1551-1553`.
+**Status: STATIC-ONLY (Finance UI served by NestJS, not nginx)** — `infra/shared/nginx/nginx.conf` serves `/var/www/{slug}/public` static files. `/api/` returns 404 by design; Finance API is served directly by tenant `server` via Traefik.
+
+Finance server uses `ServeStaticModule` at `/public` (`App.module.ts:115-117`). Nginx serves other static build artifacts only. No static copy step needed.
 
 - Referenced in `infra/tenant-stack/docker-compose.yml` comments (`infra/shared/nginx/`)
 - Legacy per-tenant template: `services/stockix-finance/docker/nginx/sites/server.template`
-- Traefik still contains nginx container discovery logic (`traefik-config.ts` → `resolveNginxDirectUrl`)
 
 ---
 
@@ -757,7 +758,7 @@ Docker socket → socket-proxy (filtered API)
 ### P2 — Operational excellence
 
 - [x] Shared Nginx gateway scaffold (`infra/shared/nginx/`, `stockix-nginx` service)
-- [ ] Remove stale nginx discovery from `traefik-config.ts` or wire Traefik to shared Nginx
+- [x] Shared nginx is static-only CDN; Finance UI served by NestJS `ServeStaticModule` (`App.module.ts:115-117`). K6 closed.
 - [x] Mongo RS healthcheck includes `rs.status().ok`
 - [x] POS-only env timing — `.env` written before POS compose (REPAIR A)
 - [x] Finance Dockerfile — no secrets baked at build time (REPAIR D)

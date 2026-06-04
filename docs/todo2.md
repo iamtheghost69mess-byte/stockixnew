@@ -215,15 +215,10 @@ Cross-ref: `missing2arch.md` Deep Scan TOCTOU row.
 
 **Pass:** K5 → PASS.
 
-### K6 — Finance static copy to nginx volume (PARTIAL)
+### K6 — Finance static assets (CLOSED)
 
-Cross-ref: `missing2arch.md` Finance static; PARTIAL-8; `provision-runtime.ts` L1509–1511.
-
-- [ ] Implement `docker.static_copy_step` (or copy in provision-runtime) to `SHARED_STATIC_ROOT` / `/var/www/{slug}/public/`.
-- [ ] Verify nginx serves assets for a test tenant.
-- [ ] **Or** explicit deferral: Traefik-only static path; update Architecture2 §18.1 item 6; K6 stays PARTIAL with waiver.
-
-**Pass:** K6 → PASS or documented waiver linked from both audit docs.
+Finance NestJS serves static via `ServeStaticModule` (`App.module.ts:115-117`).
+No nginx static copy step needed. K6 promoted to PASS.
 
 ### L8 — Journal network connect (PARTIAL)
 
@@ -322,7 +317,7 @@ Final:            §7 doc matrix → GO review
 | Status | IDs |
 |--------|-----|
 | **FAIL (0)** | ~~M1, M2, M3, M4, M5~~ — closed in `infra/prod/OPERATIONS.md` |
-| **PARTIAL (5)** | J8, K5, K6, L9, M10 (C6 C10 F13 K3 L8 J9 promoted to PASS) |
+| **PARTIAL (2)** | M10 (env.example docs — fixed this commit), G14 (warning only) |
 | **OPEN (ops)** | Phase 4 staging, backup restore, health cron |
 | **missing2arch open** | M1–M5 files, static copy K6, restore proof, claim_version |
 

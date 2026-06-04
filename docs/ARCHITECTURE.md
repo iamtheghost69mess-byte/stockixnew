@@ -535,6 +535,17 @@ Skipped on `localhost` dev for POS Traefik (per module-stacks logic).
 
 ---
 
+## Chatwoot / chatlive
+
+The `services/chatlive/` directory contains a Chatwoot integration.
+**Production deployment:** No top-level `docker-compose.yml` exists for chatlive.
+Chatwoot is provisioned as a **shared hosted instance** — the control-plane API
+calls `CHATWOOT_BASE_URL` via `provisionChatwootAccount()` when a tenant enables
+the `chat` module. No per-host Chatwoot container is required.
+Dev reference only: `services/chatlive/.devcontainer/docker-compose.yml`.
+
+---
+
 ## Related documentation
 
 | File | Purpose |

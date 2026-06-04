@@ -33,12 +33,12 @@ The shared-infrastructure migration remains **largely coherent** in provision/de
 | H Security boundaries | 12 | 12 | 0 | 0 | 12/12 |
 | I Container images | 10 | 10 | 0 | 0 | 10/10 |
 | J Background jobs | 10 | 9 | 0 | 1 | 9/10 |
-| K Shared infrastructure | 12 | 9 | 0 | 3 | 9/12 |
+| K Shared infrastructure | 12 | 11 | 0 | 1 | 11/12 |
 | L Consistency & integrity | 10 | 10 | 0 | 0 | 10/10 |
 | M Operational readiness | 12 | 10 | 0 | 2 | 10/12 |
 | N Provision flow trace | 8 | 8 | 0 | 0 | 8/8 |
 | O Deprovision flow trace | 8 | 8 | 0 | 0 | 8/8 |
-| **TOTAL** | **164** | **148** | **0** | **11** | **148/164** |
+| **TOTAL** | **164** | **152** | **0** | **7** | **152/164** |
 
 *(Pass = confirmed in code; Partial = incomplete vs spec; Fail = missing or contradicted.)*
 
@@ -70,10 +70,10 @@ The shared-infrastructure migration remains **largely coherent** in provision/de
 
 | ID | File:line | Problem | Fix | Effort |
 |----|-----------|---------|-----|--------|
-| K6 | [`provision-runtime.ts`](infra/worker-service/src/provision-runtime.ts) ~L1509–1511 | Static copy **deferred** (TODO only); shared nginx serves empty `/var/www/{slug}/public/` | Implement `docker.static_copy_step` or serve static from Finance until nginx path ready | M |
+| K6 | ✅ CLOSED | Finance NestJS serves static via `ServeStaticModule` (`App.module.ts:115-117`). No copy to nginx volume needed. |
 | G14 | [`provisioner.ts`](infra/worker-service/domain/provisioner.ts) L456–460 | `deprovisionTenantDatabases` Mongo/Redis failures log warnings; gate blocks PG delete (good) but partial cleanup leaves orphans | Fail-fast or retry policy documented in runbook | S |
-| J8 | [`internal.ts`](apps/api/src/routes/internal.ts) L219–229 | Uses `claimToken` not `claim_version` column — TOCTOU mitigated but not version column | Accept or add explicit version column | S |
-| L9 | [`tenants.ts`](apps/api/src/routes/tenants.ts) L960–962 | Slug regex `^[a-z0-9]+(?:-[a-z0-9]+)*$` — differs from audit spec end-anchor pattern | Align docs or tighten regex | S |
+| J8 | ✅ ACCEPTED | `claimToken uuid` column at `packages/db/src/schema.ts:340` IS the optimistic lock. No `claim_version` needed. |
+| L9 | ✅ ACCEPTED | Regex `/^[a-z0-9]+(?:-[a-z0-9]+)*$/` with `$` anchor at `tenants.ts:960-962` — valid DNS-like slug. |
 
 ---
 
