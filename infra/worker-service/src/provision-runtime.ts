@@ -1381,17 +1381,9 @@ export async function executeProvisionRuntime(
     await checkNotCancelled();
     if (!hasOp("docker.data_step")) {
       log("[provision] step start: docker.data_step");
-      await runComposeWithCancellation([
-        "up",
-        "-d",
-        "--no-deps",
-        "--remove-orphans",
-        "--no-build",
-        "mysql",
-        "mongo",
-        "redis",
-      ]);
-      await markOp("docker.data_step", "Data services compose step completed", {
+      const { provisionTenantDatabases } = await import("../domain/provisioner.js");
+      await provisionTenantDatabases(input.slug, dbPasswordPlain, log);
+      await markOp("docker.data_step", "Tenant databases provisioned on shared infra", {
         composeProjectName: project,
       });
       log("[provision] step done: docker.data_step");
@@ -1400,6 +1392,8 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "docker.data_step", composeProjectName: project },
       });
     }
+
+
     await checkNotCancelled();
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
@@ -1430,8 +1424,6 @@ export async function executeProvisionRuntime(
         "--remove-orphans",
         "--force-recreate",
         "--no-build",
-        "webapp",
-        "nginx",
         "server",
       ]);
       await markOp("docker.app_step", "Application compose step completed", {
