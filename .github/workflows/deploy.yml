@@ -406,7 +406,6 @@ jobs:
           pkill -f "prebuild-tenant-images" 2>/dev/null || true
           pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
           sleep 2
-          rm -rf node_modules
           nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
           echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
           cd infra/prod
