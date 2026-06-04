@@ -70,7 +70,7 @@ async function getComposeContainerName(
   }
 }
 
-async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Promise<void> {
+async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Promise<boolean> {
   const repoRoot = getRepoRoot();
   const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
   const redisContainer = await getComposeContainerName(
@@ -80,7 +80,7 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
   );
   if (!redisContainer) {
     log(`[db-deprovision] shared redis container not found — skipping Redis flush for "${slug}"`);
-    return;
+    return false;
   }
 
   const pattern = `tenant:${slug}:*`;
@@ -102,10 +102,12 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
     log(
       `[db-deprovision] flushed ${Number.isFinite(count) ? count : 0} Redis keys matching ${pattern}`,
     );
+    return true;
   } catch (err) {
     log(
       `[db-deprovision] Redis flush warning: ${err instanceof Error ? err.message : String(err)}`,
     );
+    return false;
   }
 }
 
@@ -176,6 +178,11 @@ export async function provisionTenantDatabases(
     await conn.execute(
       `GRANT ALL PRIVILEGES ON \`${systemDb}\`.* TO '${tenantUser}'@'%'`,
     );
+    // Wildcard grant covers org-level DBs created at runtime by Finance
+    // TenantDBManager: stockix_{safe}_{organizationId} (uses tenant SYSTEM_DB_USER via knex-db-manager)
+    await conn.execute(
+      `GRANT ALL PRIVILEGES ON \`stockix_${safe}_%\`.* TO '${tenantUser}'@'%'`,
+    );
     await conn.execute("FLUSH PRIVILEGES");
     log(`[db-provision] MySQL ready: ${financeDb}, ${systemDb}, user: ${tenantUser}`);
   } finally {
@@ -196,19 +203,29 @@ export async function provisionTenantDatabases(
  * MySQL   → DROP DATABASE + DROP USER (via mysql2).
  * MongoDB → DROP DATABASE via mongosh CLI (execa — already bundled in worker).
  */
+export type DeprovisionDataPlaneResult = {
+  mysqlDbs: boolean;
+  mongoDb: boolean;
+  redisKeys: boolean;
+};
+
 export async function deprovisionTenantDatabases(
   slug: string,
   log: (m: string) => void,
-): Promise<void> {
+): Promise<DeprovisionDataPlaneResult> {
   const safe = slugToMysqlSafe(slug);
   const financeDb  = `stockix_${safe}_finance`;
   const systemDb   = `stockix_${safe}_system`;
   const tenantUser = `tenant_${safe}`;
   const rootPassword = sharedMysqlRootPassword();
+  const result: DeprovisionDataPlaneResult = {
+    mysqlDbs: false,
+    mongoDb: false,
+    redisKeys: false,
+  };
 
   // ── MySQL cleanup ──────────────────────────────────────────────────────────
   if (!rootPassword) {
-    const safe = slugToMysqlSafe(slug);
     throw new Error(
       "[deprovision] SHARED_MYSQL_ROOT_PASSWORD is not set. " +
         "Cannot safely remove tenant MySQL databases. " +
@@ -216,41 +233,42 @@ export async function deprovisionTenantDatabases(
         "Set the password and retry, or manually drop: " +
         `stockix_${safe}_% and revoke tenant_${safe}`,
     );
-  } else {
-    log(`[db-deprovision] dropping MySQL databases for tenant "${slug}"`);
+  }
+
+  log(`[db-deprovision] dropping MySQL databases for tenant "${slug}"`);
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await mysql2.createConnection({
+      host: sharedMysqlHost(),
+      port: 3306,
+      user: "root",
+      password: rootPassword,
+      connectTimeout: 15_000,
+    });
     try {
-      const mysql2 = await import("mysql2/promise");
-      const conn = await mysql2.createConnection({
-        host: sharedMysqlHost(),
-        port: 3306,
-        user: "root",
-        password: rootPassword,
-        connectTimeout: 15_000,
-      });
-      try {
-        await conn.execute(`DROP DATABASE IF EXISTS \`${financeDb}\``);
-        await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
+      await conn.execute(`DROP DATABASE IF EXISTS \`${financeDb}\``);
+      await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
 
-        const [orgRows] = await conn.query<Array<{ schemaName: string }>>(
-          `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ?`,
-          [`stockix_${safe}_%`],
-        );
-        for (const row of orgRows) {
-          const dbName = row.schemaName;
-          if (!dbName) continue;
-          await conn.execute(`DROP DATABASE IF EXISTS \`${dbName}\``);
-          log(`[db-deprovision] Dropped DB: ${dbName}`);
-        }
-
-        await conn.execute(`DROP USER IF EXISTS '${tenantUser}'@'%'`);
-        await conn.execute("FLUSH PRIVILEGES");
-        log(`[db-deprovision] MySQL cleaned for tenant "${slug}" (user: ${tenantUser})`);
-      } finally {
-        await conn.end();
+      const [orgRows] = await conn.query<Array<{ schemaName: string }>>(
+        `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ?`,
+        [`stockix_${safe}_%`],
+      );
+      for (const row of orgRows) {
+        const dbName = row.schemaName;
+        if (!dbName) continue;
+        await conn.execute(`DROP DATABASE IF EXISTS \`${dbName}\``);
+        log(`[db-deprovision] Dropped DB: ${dbName}`);
       }
-    } catch (err) {
-      log(`[db-deprovision] MySQL cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
+
+      await conn.execute(`DROP USER IF EXISTS '${tenantUser}'@'%'`);
+      await conn.execute("FLUSH PRIVILEGES");
+      log(`[db-deprovision] MySQL cleaned for tenant "${slug}" (user: ${tenantUser})`);
+      result.mysqlDbs = true;
+    } finally {
+      await conn.end();
     }
+  } catch (err) {
+    log(`[db-deprovision] MySQL cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // ── MongoDB cleanup via mongosh CLI (no mongodb npm package needed) ────────
@@ -267,6 +285,9 @@ export async function deprovisionTenantDatabases(
       log(`[db-deprovision] shared mongo container not found — skipping Mongo cleanup for "${slug}"`);
     } else {
       const mongoHost = sharedMongoHost();
+      // Mongo DB name uses raw slug (not slugToMysqlSafe) intentionally.
+      // MongoDB supports the full slug character set. Must match buildTenantMongoUrl() in tenant-env.ts.
+      // Allowed slug characters: [a-z0-9-] enforced at tenant creation (apps/api provisionBody).
       await execa("docker", [
         "exec",
         mongoContainer,
@@ -277,13 +298,14 @@ export async function deprovisionTenantDatabases(
         `db.getSiblingDB('${slug}_pos').dropDatabase()`,
       ], { stdio: "pipe" });
       log(`[db-deprovision] MongoDB database "${slug}_pos" dropped`);
+      result.mongoDb = true;
     }
   } catch (err) {
-    // Non-fatal — if the DB never got written to it may not exist
     log(`[db-deprovision] MongoDB cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  await flushTenantRedisKeys(slug, log);
+  result.redisKeys = await flushTenantRedisKeys(slug, log);
+  return result;
 }
 
 /** TCP-level reachability check — no driver dependencies. */
@@ -360,6 +382,20 @@ export async function deprovisionTenant(
   const composeEnv = { STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot, COMPOSE_PROJECT_NAME: project };
   let dockerStatus: "stopped" | "skipped" | "failed" = "skipped";
 
+  // Deprovision ordering: data plane first, control plane last.
+  // Never delete Postgres rows until all shared resources confirmed clean.
+  const cleanupResults = {
+    financeCompose: false,
+    posCompose: false,
+    pmsCompose: false,
+    mysqlDbs: false,
+    mongoDb: false,
+    redisKeys: false,
+    traefikYaml: false,
+    envDir: false,
+    postgresRows: false,
+  };
+
   try {
     await stat(envPath);
     const downArgs = ["down", "--remove-orphans", "--timeout", "30"];
@@ -367,6 +403,7 @@ export async function deprovisionTenant(
     if (options.removeImages) downArgs.push("--rmi", "local");
     await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, { timeoutMs: 2 * 60 * 1000 });
     dockerStatus = "stopped";
+    cleanupResults.financeCompose = true;
 
     const repoRoot = getRepoRoot();
     const moduleComposeEnv = {
@@ -387,6 +424,7 @@ export async function deprovisionTenant(
         { timeoutMs: 2 * 60 * 1000 },
       );
       log(`[deprovision] POS stack ${posProject} removed`);
+      cleanupResults.posCompose = true;
     } catch (err) {
       log(
         `[deprovision] POS stack teardown failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
@@ -405,6 +443,7 @@ export async function deprovisionTenant(
         { timeoutMs: 2 * 60 * 1000 },
       );
       log(`[deprovision] PMS stack ${pmsProject} removed`);
+      cleanupResults.pmsCompose = true;
     } catch (err) {
       log(
         `[deprovision] PMS stack teardown failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
@@ -415,20 +454,51 @@ export async function deprovisionTenant(
   }
 
   // Clean up shared infrastructure AFTER containers are down
-  await deprovisionTenantDatabases(row.slug, log);
+  const dataPlane = await deprovisionTenantDatabases(row.slug, log);
+  cleanupResults.mysqlDbs = dataPlane.mysqlDbs;
+  cleanupResults.mongoDb = dataPlane.mongoDb;
+  cleanupResults.redisKeys = dataPlane.redisKeys;
 
-  await edgePublisher.unpublish(row.slug).catch((error) => {
+  let financeTraefikRemoved = false;
+  let posTraefikRemoved = false;
+  try {
+    await edgePublisher.unpublish(row.slug);
+    financeTraefikRemoved = true;
+  } catch (error) {
     log(`edge unpublish failed for ${row.slug}: ${error instanceof Error ? error.message : String(error)}`);
-  });
-  await removePosTraefikConfig(row.slug).catch((error) => {
+  }
+  try {
+    await removePosTraefikConfig(row.slug);
+    posTraefikRemoved = true;
+  } catch (error) {
     log(`pos edge unpublish failed for ${row.slug}: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  }
+  cleanupResults.traefikYaml = financeTraefikRemoved && posTraefikRemoved;
+
+  const dataPlaneClean =
+    cleanupResults.mysqlDbs && cleanupResults.mongoDb && cleanupResults.redisKeys;
+  if (!dataPlaneClean) {
+    const failed = Object.entries(cleanupResults)
+      .filter(([key, ok]) => !ok && ["mysqlDbs", "mongoDb", "redisKeys"].includes(key))
+      .map(([key]) => key);
+    throw new Error(
+      `[deprovision] Data plane cleanup incomplete: ${failed.join(", ")}. ` +
+        "Postgres rows NOT deleted. Fix issues and retry deprovision.",
+    );
+  }
 
   await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
   await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
   await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, tenantId));
   await db.delete(tenants).where(eq(tenants.id, tenantId));
-  await rm(join(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true }).catch(() => undefined);
+  cleanupResults.postgresRows = true;
+
+  try {
+    await rm(join(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true });
+    cleanupResults.envDir = true;
+  } catch {
+    log(`[deprovision] could not remove tenant env dir for ${row.slug}`);
+  }
 
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };

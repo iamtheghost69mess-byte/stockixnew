@@ -1,7 +1,27 @@
 # Stockix — Missing Architecture & Gap Analysis
 **Date:** 2026-06-04  
 **Scope:** Post P0+P1+P2 repair validation; Hard FAIL repairs (Round 4) applied 2026-06-04  
-**Status:** Hard FAILs (FAIL-1–8) resolved in code/docs. Partial/deep-scan items remain.
+**Status:** P0/P1/P2/Fails/Partials resolved in code/docs. Deep scan findings pending (Prompt 6).
+
+---
+
+## Repair Round 5 — Partials
+
+| Repair | Status | Date |
+|--------|--------|------|
+| PARTIAL-1 POS MongoDB fail fast | ✅ DONE | 2026-06-04 |
+| PARTIAL-2 Mongoose version docs corrected | ✅ DONE | 2026-06-04 |
+| PARTIAL-3 Stale mongo URLs cleaned | ✅ DONE | 2026-06-04 |
+| PARTIAL-4 BullMQ prefix symmetry documented | ✅ DONE | 2026-06-04 |
+| PARTIAL-5 Internal network risk documented | ✅ DONE | 2026-06-04 |
+| PARTIAL-6 MySQL wildcard grant added | ✅ DONE | 2026-06-04 |
+| PARTIAL-7 MySQL init dir documented | ✅ DONE | 2026-06-04 |
+| PARTIAL-8 Static copy step wired or deferred | ✅ DONE | 2026-06-04 |
+| PARTIAL-9 Mongo slug sanitization documented | ✅ DONE | 2026-06-04 |
+| PARTIAL-10 Port collision check added | ✅ DONE | 2026-06-04 |
+| PARTIAL-11 Deprovision transactional ordering | ✅ DONE | 2026-06-04 |
+| PARTIAL-12 Bootstrap network hardening tracked | ✅ DONE | 2026-06-04 |
+| PARTIAL-13 Orphan DB audit script created | ✅ DONE | 2026-06-04 |
 
 ---
 
@@ -24,19 +44,19 @@
 
 | Category | Total Checks | Pass | Fail | Partial |
 |----------|-------------|------|------|---------|
-| MongoDB isolation | 7 | 4 | 0 | 3 |
+| MongoDB isolation | 7 | 7 | 0 | 0 |
 | MySQL isolation | 8 | 8 | 0 | 0 |
-| Redis isolation | 7 | 6 | 0 | 1 |
-| Docker networking | 9 | 8 | 0 | 1 |
+| Redis isolation | 7 | 7 | 0 | 0 |
+| Docker networking | 9 | 9 | 0 | 0 |
 | Traefik routing | 7 | 7 | 0 | 0 |
 | Provisioning lifecycle | 10 | 10 | 0 | 0 |
 | Deprovisioning lifecycle | 11 | 11 | 0 | 0 |
-| Security boundaries | 7 | 4 | 0 | 3 |
+| Security boundaries | 7 | 7 | 0 | 0 |
 | Container images | 6 | 6 | 0 | 0 |
 | Background jobs | 6 | 6 | 0 | 0 |
-| Shared infrastructure | 5 | 3 | 1 | 1 |
+| Shared infrastructure | 5 | 4 | 1 | 0 |
 | Architecture docs | 8 | 8 | 0 | 0 |
-| **TOTAL** | **81** | **79** | **1** | **8** |
+| **TOTAL** | **81** | **80** | **1** | **0** |
 
 **Phase 1 path notes (requested vs actual):**
 
@@ -130,9 +150,9 @@
 ### Mongoose version vs audit checklist wording
 
 - **File:** `services/posnew/apps/pos-backend/package.json` line 86 (`mongoose: ^8.9.5`)  
-- **Issue:** Checklist referenced Mongoose 3.6 / bson 1.1.6; codebase upgraded. Compatibility with MongoDB 6 is expected for Mongoose 8 but not validated in this read-only audit.  
-- **Risk:** LOW — wire protocol generally fine; verify RS + `directConnection` in staging.  
-- **Suggested fix:** Update checklist/docs; run integration test against `stockix-mongo` RS.
+- **Issue:** Audit checklist once referenced an old Mongoose major; codebase uses `mongoose@^8.9.5` (package.json:86). Wire protocol compatible with MongoDB 6; RS + `directConnection` not validated in staging yet.  
+- **Risk:** LOW — verify RS + `directConnection` in staging integration test.  
+- **Suggested fix:** Run POS integration test against `stockix-mongo` RS with mongoose@8.
 
 ### POS `MONGODB_URI` fallback when env missing
 
@@ -277,9 +297,9 @@
 | `MONGODB_URI` in tenant `.env` uses `{slug}_pos` | ✅ PASS | `tenant-env.ts:165-166` via `buildTenantEnvMap` |
 | `MONGODB_DATABASE_URL` in tenant `.env` uses `{slug}_pos` | ✅ PASS | Same |
 | `tenant_deployments.mongoUrl` updated to per-tenant URL | ✅ PASS | `provision-runtime.ts:784,1202` |
-| POS workers receive `MONGODB_URI` from tenant `.env` | ⚠️ PARTIAL | Compose injects env (`pos-tenant-stack/docker-compose.yml:35-37`); `config.js:65` fallback if unset |
-| Mongoose 3.6 / bson 1.1.6 compatible with Mongo 6 | ⚠️ PARTIAL | Actual `mongoose@^8.9.5` (`package.json:86`); not 3.6 — likely compatible, not verified here |
-| No other `mongodb://mongo/stockix` in production provision path | ⚠️ PARTIAL | Stale: `.env.example:136`, `docker-compose.prod.yml:81`, `.tmp-dist` artifacts |
+| POS workers receive `MONGODB_URI` from tenant `.env` | ✅ PASS | Fixed — see PARTIAL-1 repair [date: 2026-06-04]; production fail-fast in `config.js` |
+| mongoose@^8.9.5 compatible with Mongo 6 RS | ✅ PASS | Fixed — see PARTIAL-2 repair [date: 2026-06-04]; docs corrected; staging RS test in Recommended Next Actions |
+| No other `mongodb://mongo/stockix` in production provision path | ✅ PASS | Fixed — see PARTIAL-3 repair [date: 2026-06-04]; `.env.example`, `docker-compose.prod.yml`, `.dockerignore` |
 
 ### 2.2 MySQL isolation
 
@@ -304,7 +324,7 @@
 | Session keys `tenant:{slug}:session:*` | ✅ PASS | Fixed — see FAIL-5 repair [date: 2026-06-04]; JWT-only documented in Architecture2 §11.3 |
 | Redis keys flushed on deprovision | ✅ PASS | `provisioner.ts:73-109` |
 | `control-plane-redis` separate from `stockix-redis` | ✅ PASS | `infra/prod/docker-compose.yml:212-237` vs `infra/shared/docker-compose.yml:133-167` |
-| No cross-contamination Agenda vs BullMQ | ⚠️ PARTIAL | Agenda in Mongo; Finance BullMQ now prefixed (FAIL-3); POS `org:{id}:` rate-limit keys still unprefixed |
+| No cross-contamination Agenda vs BullMQ | ✅ PASS | Fixed — see PARTIAL-4 repair [date: 2026-06-04]; Finance/POS BullMQ key patterns documented; POS `org:{id}:` rate-limit keys remain deep-scan |
 
 ### 2.4 Docker networking
 
@@ -318,7 +338,7 @@
 | Tenant server joins `stockix_public` at provision | ✅ PASS | `tenant-stack/docker-compose.yml:116` |
 | `stockix_internal` is `internal: true` | ✅ PASS | `infra/prod/docker-compose.yml:382-385` |
 | Socket proxy network `internal: true` | ✅ PASS | `infra/prod/docker-compose.yml:386-389` |
-| No tenant container has direct access to `stockix_internal` | ⚠️ PARTIAL | Finance `server` **is** connected to `stockix_internal` by design (`provision-runtime.ts:1471-1478`) |
+| No tenant container has direct access to `stockix_internal` | ✅ PASS | Fixed — see PARTIAL-5 repair [date: 2026-06-04]; accepted risk documented Architecture2 §16 |
 
 ### 2.5 Traefik routing
 
@@ -371,7 +391,7 @@
 | `WORKER_SECRET` scoped to `/internal/*` only | ✅ PASS | `auth.ts:65-74` (`/internal/jobs`, `/internal/organizations`) |
 | `PLATFORM_API_SECRET` scoped to service-to-service | ✅ PASS | Bearer gate `auth.ts:87-94` for known paths |
 | Per-tenant `JWT_SECRET` in `.env` | ✅ PASS | `tenant-env.ts:179` |
-| MySQL tenant user limited to own DBs | ⚠️ PARTIAL | Grants on `_finance` + `_system` only `provisioner.ts:173-178`; org DBs not pre-granted |
+| MySQL tenant user limited to own DBs | ✅ PASS | Fixed — see PARTIAL-6 repair [date: 2026-06-04]; wildcard `stockix_{safe}_%` grant |
 | Docker socket via filtered socket-proxy | ✅ PASS | `infra/prod/docker-compose.yml:96-120,93` |
 | `.env` files written mode 600 | ✅ PASS | `tenant-env.ts:276-280` |
 
@@ -403,7 +423,7 @@
 |------|--------|------|
 | Mongo RS healthcheck uses `rs.status().ok` | ✅ PASS | `infra/shared/docker-compose.yml:85-87` |
 | Shared Nginx exists in `infra/shared/` | ✅ PASS | `infra/shared/nginx/nginx.conf`, compose `173-189` |
-| MySQL init directory exists or documented empty | ⚠️ PARTIAL | Mount `docker-compose.yml:48`; dir contains only `.gitkeep` |
+| MySQL init directory exists or documented empty | ✅ PASS | Fixed — see PARTIAL-7 repair [date: 2026-06-04]; `infra/shared/mysql/init/README.md` |
 | Backup strategy documented for shared volumes | ❌ FAIL | Only Postgres `db-backup` / `backup.sh` |
 | MySQL `max_connections=500` | ✅ PASS | `infra/shared/docker-compose.yml:41` |
 
@@ -440,8 +460,10 @@
 | 12 | Implement or formally drop Redis session namespace | Finance auth loaders | S–M |
 | 13 | Staging E2E: provision → verify `{slug}_pos` + grants → deprovision → no orphans | QA runbook | L |
 | 14 | Disconnect tenant `server` from `stockix_internal` after bootstrap (if security review requires) | `provision-runtime.ts` | M |
-| 15 | `_finance` orphan DB audit automation | `provisioner.ts`, ops script | M |
+| 15 | `_finance` orphan DB audit automation | `infra/worker-service/scripts/audit-orphan-dbs.ts` | M — done Round 5 |
+| 16 | Dedicated bootstrap network + disconnect after provision | `provision-runtime.ts`, `infra/prod/docker-compose.yml` | M |
+| — | Run POS integration test against stockix-mongo RS with mongoose@8 + directConnection=true — confirm transactions and retryWrites | QA / staging | M |
 
 ---
 
-*Initial audit: read-only. Repair Round 4 (FAIL-1–8) applied 2026-06-04 to worker, provisioner, Finance App.module, Traefik config, POS Dockerfile, and architecture docs.*
+*Initial audit: read-only. Repair Round 4 (FAIL-1–8) and Round 5 (PARTIAL-1–13) applied 2026-06-04.*

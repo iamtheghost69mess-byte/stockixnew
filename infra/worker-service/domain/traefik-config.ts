@@ -56,6 +56,9 @@ export async function writePosTraefikConfig(
   frontendPort: number,
   domain: string,
 ): Promise<void> {
+  // POS upstream: host.docker.internal:{posPort}
+  // Port uniqueness enforced by assertTenantPortAvailable before this write (provision-runtime / module-stacks)
+  // Port range: tenant_port_seq through MAX_TENANT_PORT (apiConfig.maxTenantPort)
   const dir = traefikDir();
   await mkdir(dir, { recursive: true });
   const host = tenantUpstreamHost();

@@ -60,9 +60,21 @@ function isWildcardPosOrigin(origin) {
   return matchesWildcardPosOrigin(origin);
 }
 
+// Production requires explicit MONGODB_URI (per-tenant {slug}_pos DB)
+// Localhost fallback only permitted in local development
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "[pos-backend] MONGODB_URI is required in production. " +
+      "Cannot start without explicit per-tenant MongoDB URI. " +
+      "Check tenant .env file injection in pos-tenant-stack.",
+  );
+}
+const databaseURI = mongoUri ?? "mongodb://localhost:27017/pos-db";
+
 const config = Object.freeze({
   port: process.env.PORT || 3000,
-  databaseURI: process.env.MONGODB_URI || "mongodb://localhost:27017/pos-db",
+  databaseURI,
   nodeEnv: process.env.NODE_ENV || "development",
   /**
    * Local dev only: `SameSite=None; Secure` not used (http). Chrome often allows this for localhost

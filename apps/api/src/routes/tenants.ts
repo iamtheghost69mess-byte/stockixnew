@@ -956,6 +956,7 @@ app.delete("/tenants/:tenantId", async (c) => {
 });
 
 const provisionBody = z.object({
+  // Slug is used raw for Mongo DB ({slug}_pos); MySQL uses slugToMysqlSafe() at provision time.
   slug: z
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be lowercase DNS-like"),
