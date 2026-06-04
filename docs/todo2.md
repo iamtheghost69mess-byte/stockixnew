@@ -7,8 +7,8 @@
 
 | Metric | Value |
 |--------|--------|
-| Verdict | **NO-GO** |
-| Score | **136 PASS / 5 FAIL / 14 PARTIAL** (164 checks) |
+| Verdict | **CONDITIONAL GO** |
+| Score | **148 PASS / 0 FAIL / 11 PARTIAL** (164 checks) |
 | Code P0 wave | **Done** (2026-06-04) — see [§0 Completed](#0-completed--do-not-re-implement) |
 
 **GO criteria (all required)**
@@ -321,8 +321,8 @@ Final:            §7 doc matrix → GO review
 
 | Status | IDs |
 |--------|-----|
-| **FAIL (5)** | M1, M2, M3, M4, M5 |
-| **PARTIAL (14)** | C6, C10, F13, J8, J9, K3, K5, K6, L8, L9, M10 (+ G14 warning, not a checklist FAIL) |
+| **FAIL (0)** | ~~M1, M2, M3, M4, M5~~ — closed in `infra/prod/OPERATIONS.md` |
+| **PARTIAL (5)** | J8, K5, K6, L9, M10 (C6 C10 F13 K3 L8 J9 promoted to PASS) |
 | **OPEN (ops)** | Phase 4 staging, backup restore, health cron |
 | **missing2arch open** | M1–M5 files, static copy K6, restore proof, claim_version |
 

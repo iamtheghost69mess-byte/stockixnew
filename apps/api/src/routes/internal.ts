@@ -84,6 +84,15 @@ app.post("/internal/jobs/claim", async (c) => {
   }
   const heartbeatStaleMs = apiConfig.workerHeartbeatStaleMs;
   const staleLeaseMs = apiConfig.workerStaleLeaseThresholdMs;
+  // effectiveStaleMs = min(heartbeat, lease) — intentional conservative bound.
+  // A job is considered stale when EITHER its heartbeat has not been updated
+  // for workerHeartbeatStaleMs OR its total lease exceeds workerStaleLeaseThresholdMs.
+  // Using min() ensures the tighter constraint wins, preventing both zombie jobs
+  // (heartbeat-only check) and indefinitely locked jobs (lease-only check).
+  // Both thresholds are configured in infra/prod/.env:
+  //   WORKER_HEARTBEAT_STALE_MS  (default 600000 = 10min)
+  //   WORKER_STALE_LEASE_THRESHOLD_MS (default 3000000 = 50min)
+  // Architecture2.md §12.3 job lifecycle.
   const effectiveStaleMs = Math.min(heartbeatStaleMs, staleLeaseMs);
   const staleBefore = new Date(Date.now() - effectiveStaleMs);
   const staleBeforeIso = staleBefore.toISOString();
