@@ -330,6 +330,7 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new \
               -o ServerAliveInterval=30 \
               -o ServerAliveCountMax=20 \
+              -o ConnectTimeout=30 \
               "${EC2_USER}@${EC2_HOST}" \
             bash -s "$RELEASE_SHA" "$GHCR_REPO" "$GHCR_TOKEN" << 'REMOTE'
           set -euo pipefail
@@ -449,11 +450,13 @@ jobs:
             exit 1
           fi
           cd "${REPO_ROOT}"
-          echo "=== Building tenant images ==="
-          node scripts/prebuild-tenant-images.mjs 2>&1 | tail -20 || \
-            echo "WARNING: Tenant images build failed — provisioning may not work until node scripts/prebuild-tenant-images.mjs succeeds"
-          echo "Tenant images step finished."
+          echo "=== Building tenant images (background) ==="
+          pkill -f "prebuild-tenant-images" 2>/dev/null || true
+          pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
+          sleep 2
           rm -rf node_modules
+          nohup node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
+          echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
           cd infra/prod
           docker image prune -f --filter "until=168h" || true
           trap - ERR
