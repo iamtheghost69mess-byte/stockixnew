@@ -408,8 +408,19 @@ jobs:
           sleep 2
           nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
           echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
-          cd infra/prod
-          docker image prune -f --filter "until=168h" || true
+          echo "=== Post-deploy cleanup ==="
+          # Remove ALL unused images (old deploy SHAs not referenced by any container).
+          # Active images (latest tags) are protected — only orphaned layers are removed.
+          docker image prune -af || true
+          # Remove dangling volumes (anonymous, not attached to any container).
+          # Named volumes (postgres_data, traefik_letsencrypt, tenant data) are protected.
+          docker volume prune -f || true
+          # Trim runner workspace leftovers from previous runs.
+          find /opt/actions-runner/_work -maxdepth 2 -name "*.log" -mtime +1 -delete 2>/dev/null || true
+          echo "=== Disk & container health after deploy ==="
+          df -h / | tail -1
+          docker ps --format "{{.Names}} {{.Status}}" | grep -v "healthy\|Up" | head -5 || echo "All containers healthy"
+          docker system df --format "Images: {{.Images}}\nVolumes: {{.Volumes}}\nBuild cache: {{.BuildCache}}" 2>/dev/null || true
           trap - ERR
           echo "Deploy completed successfully."
 
