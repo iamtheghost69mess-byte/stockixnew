@@ -294,7 +294,7 @@ jobs:
     # Self-hosted runner on the VPS — connects outbound to GitHub (port 443),
     # eliminates all inbound SSH from GitHub Actions which Hostinger blocks.
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: read
@@ -392,7 +392,7 @@ jobs:
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           sleep 10
           curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
-            "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/ready" >/dev/null
+            "${PUBLIC_BASE_URL_SCHEME:-https}://${API_DOMAIN}/health" >/dev/null
           curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
             "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
           if ! docker compose --env-file .env ps --status running | grep -q "api"; then

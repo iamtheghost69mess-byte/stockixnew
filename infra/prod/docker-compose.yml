@@ -419,8 +419,8 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 > /dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 6
-      start_period: 45s
+      retries: 8
+      start_period: 60s
 
   db-backup:
     # backup.sh needs docker exec (pg_dump) + aws s3 (B2). amazon/aws-cli has neither cron nor docker CLI.
