@@ -26,6 +26,7 @@ import { MENA_DEFAULTS, type OrgBuildSettings } from "../domain/provisioning/ada
 import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-provision-service.js";
 import {
   buildTenantEnvMap,
+  buildTenantMongoUrl,
   writeTenantEnvFileAtomic,
 } from "../domain/provisioning/tenant-env.js";
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
@@ -780,7 +781,7 @@ export async function executeProvisionRuntime(
     let dbPassword = secrets.persistSecret(dbPasswordPlain);
     let dbRootPasswordPlain = secrets.randomHex(16);
     let dbRootPassword = secrets.persistSecret(dbRootPasswordPlain);
-    const mongoUrlPersisted = "mongodb://mongo/stockix";
+    const mongoUrlPersisted = buildTenantMongoUrl(input.slug);
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
     // S3 (Backblaze B2 / MinIO) is optional — empty values skip object storage; attachments need B2 in tenant .env.
@@ -1212,6 +1213,35 @@ export async function executeProvisionRuntime(
     const moduleGating = isModuleGatingEnabled();
     if (moduleGating && !shouldProvisionFinanceStack(licensedModules)) {
       log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
+      const posOnlyTenantEnvMap = buildTenantEnvMap({
+        slug: input.slug,
+        mysqlVolumeName,
+        stockixFinanceRoot,
+        baseUrl,
+        socketAllowedOrigins: baseUrl,
+        jwtSecret,
+        dbPassword: dbPasswordPlain,
+        dbRootPassword: dbRootPasswordPlain,
+        publicProxyPort: port,
+        adminEmail: input.adminEmail,
+        agendashUser,
+        agendashPassword,
+        s3Region,
+        s3AccessKeyId,
+        s3SecretAccessKey,
+        s3Endpoint,
+        s3Bucket,
+        s3ForcePathStyle,
+        stockixTenantId: tenantId ?? input.stockixTenantId,
+        stockixDiscoverySlug: input.slug,
+        stockixApiUrl: `${baseUrl}/api`,
+        internalApiSecret: apiConfig.internalApiSecret,
+        stockixAppName: input.name,
+        stockixLogoUrl: "",
+        stockixPrimaryColor: "#ca8a04",
+      });
+      await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), posOnlyTenantEnvMap);
+      log(`[provision] POS-only path: tenant .env written before POS stack`);
       const posOutcome = await runPosProvisionStep({
         licensedModules,
         slug: input.slug,

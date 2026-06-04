@@ -325,6 +325,14 @@ export async function provisionPosStack(
     process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
 
   const tenantEnv = await readTenantEnvFile(opts.slug);
+  const requiredVars = ["MONGODB_URI", "REDIS_URL", "REDIS_KEY_PREFIX"];
+  const missing = requiredVars.filter((k) => !tenantEnv[k]?.trim());
+  if (missing.length > 0) {
+    throw new Error(
+      `[provision][pos] Cannot start POS stack — missing env vars: ${missing.join(", ")}. ` +
+        "Ensure writeTenantEnvFileAtomic() runs before provisionPosStack().",
+    );
+  }
 
   const composeEnv = {
     ...process.env,

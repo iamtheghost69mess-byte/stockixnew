@@ -4,7 +4,7 @@
 **Audience:** Staff engineers, SRE, security review  
 **Scope:** Multi-tenant Docker provisioning, shared infrastructure migration, control plane, edge routing  
 **Evidence base:** Repository audit (`infra/`, `apps/api`, `infra/worker-service`, tenant compose stacks) — June 2026  
-**Status:** P0 + P1 infrastructure repairs applied (2026-06-04) — see Repair Log; remaining: staging verification (§17 P0), `mongoUrl` metadata (§17 P1)
+**Status:** P0 resolved. P1 resolved. P2 resolved. Staging verification pending.
 
 ## Repair Log
 
@@ -18,6 +18,13 @@
 | REPAIR 6 — Agenda + BullMQ namespacing | DONE | 2026-06-04 |
 | REPAIR 7 — MySQL slug sanitization unified | DONE | 2026-06-04 |
 | REPAIR 8 — Deprovision completeness | DONE | 2026-06-04 |
+| REPAIR A — POS-only timing gap fixed | DONE | 2026-06-04 |
+| REPAIR B — Shared Nginx gateway | DONE | 2026-06-04 |
+| REPAIR C — Mongo RS healthcheck | DONE | 2026-06-04 |
+| REPAIR D — Finance Dockerfile secrets | DONE | 2026-06-04 |
+| REPAIR E — POS backend Alpine image | DONE | 2026-06-04 |
+| REPAIR F — Worker .dockerignore | DONE | 2026-06-04 |
+| REPAIR G — tenant_deployments.mongoUrl | DONE | 2026-06-04 |
 
 ---
 
@@ -294,7 +301,7 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 **Validation finding — deprovision Mongo uses raw slug; MySQL uses `safe` slug** — special characters can diverge for `{slug}_pos` vs `stockix_{safe}_*`.
 
-**Stale control-plane metadata (P1):** `tenant_deployments.mongoUrl` still written as `mongodb://mongo/stockix` in provision-runtime (~783, ~1201) — not updated to per-tenant URL.
+**Control-plane metadata:** `tenant_deployments.mongoUrl` now written via `buildTenantMongoUrl(slug)` in `provision-runtime.ts` (REPAIR G, 2026-06-04).
 
 ### 6.3 Redis isolation
 
@@ -383,8 +390,7 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 - `upServices`: `pos-backend`, `pos-platform-worker`, `pos-bigcapital-worker`, plus conditional `pos-frontend` (compose service name; app built from `pos-frontend2`). Removed `pos-mongo`, `pos-mongo-init`, `pos-redis`.
 - `composeEnv` merges `readTenantEnvFile(slug)` from `{TENANT_ENV_ROOT}/{slug}/.env` with `process.env` and POS overrides.
-
-**Note:** POS-only provision path may run before tenant `.env` is written — accounting+POS path is fully covered.
+- **POS-only path (REPAIR A):** `writeTenantEnvFileAtomic()` runs before `provisionPosStack()`; guard in `module-stacks.ts` requires `MONGODB_URI`, `REDIS_URL`, `REDIS_KEY_PREFIX`.
 
 ### 7.6 Networking join
 
@@ -650,6 +656,8 @@ Stuck job reconcilers on API process (Postgres, not BullMQ)
 | Mongo | WiredTiger cache | Sharded cluster (major migration) |
 | Redis | Memory limit 128mb | Redis Cluster or per-tenant instance at scale |
 
+**Redis scaling note:** Shared `stockix-redis` uses 128mb with `allkeys-lru`. Monitor memory usage as tenant count grows. Migration path: Redis Cluster or per-tenant DB index.
+
 **Practical limit:** Single-host compose — tenant count bounded by RAM (~512m per Finance server + POS stacks).
 
 ### 15.3 Worker scaling
@@ -722,14 +730,18 @@ Docker socket → socket-proxy (filtered API)
 - [x] Replace hard-coded Mongo container name with `docker compose ps -q` lookup
 - [x] Redis keys flushed on deprovision (`tenant:{slug}:*`)
 - [ ] Wire `assertNoConcurrentProvisionJob` or equivalent
-- [ ] Update `tenant_deployments.mongoUrl` to per-tenant URL
+- [x] Update `tenant_deployments.mongoUrl` to per-tenant URL
 - [ ] Rollback: optional `deprovisionTenantDatabases` flag for hard rollback
 
 ### P2 — Operational excellence
 
-- [ ] Shared Nginx gateway for Finance static assets (or embed static in server image)
-- [ ] Remove stale nginx discovery from `traefik-config.ts` or implement gateway
-- [ ] Mongo RS healthcheck includes `rs.status().ok`
+- [x] Shared Nginx gateway scaffold (`infra/shared/nginx/`, `stockix-nginx` service)
+- [ ] Remove stale nginx discovery from `traefik-config.ts` or wire Traefik to shared Nginx
+- [x] Mongo RS healthcheck includes `rs.status().ok`
+- [x] POS-only env timing — `.env` written before POS compose (REPAIR A)
+- [x] Finance Dockerfile — no secrets baked at build time (REPAIR D)
+- [x] POS backend Alpine image (`node:20-alpine`, REPAIR E)
+- [x] Worker `.dockerignore` (`infra/worker-service/.dockerignore`, REPAIR F)
 - [ ] `_finance` orphan DB audit / align with TenantDBManager
 - [ ] Backup strategy for `stockix_shared_mysql`, `stockix_shared_mongo`, `stockix_shared_tenant_redis` volumes
 - [ ] Load test: N tenants × connection count on MySQL 500 max
@@ -760,7 +772,7 @@ Docker socket → socket-proxy (filtered API)
 
 | Component | Status |
 |-----------|--------|
-| Shared Nginx gateway | Referenced, not in repo |
+| Shared Nginx gateway | Implemented in `infra/shared/nginx/` — webapp container deprecation in progress; static copy to volume pending |
 | `infra/shared/mysql/init` | Volume mount exists, directory empty |
 | Per-tenant backup/restore | Platform postgres only (`db-backup` service) |
 | Mongo RS monitoring | No dedicated exporter |
