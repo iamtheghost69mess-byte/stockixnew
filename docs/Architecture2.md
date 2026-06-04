@@ -4,7 +4,7 @@
 **Audience:** Staff engineers, SRE, security review  
 **Scope:** Multi-tenant Docker provisioning, shared infrastructure migration, control plane, edge routing  
 **Evidence base:** Repository audit (`infra/`, `apps/api`, `infra/worker-service`, tenant compose stacks) — June 2026  
-**Status:** P0 infrastructure repairs applied (2026-06-04) — see Repair Log; remaining blockers in §17 (MySQL naming, staging verification)
+**Status:** P0 + P1 infrastructure repairs applied (2026-06-04) — see Repair Log; remaining: staging verification (§17 P0), `mongoUrl` metadata (§17 P1)
 
 ## Repair Log
 
@@ -14,6 +14,10 @@
 | REPAIR 1 — Hostname aliases | DONE | 2026-06-04 |
 | REPAIR 2 — Traefik volume alignment | DONE | 2026-06-04 |
 | REPAIR 3 — POS provision fix | DONE | 2026-06-04 |
+| REPAIR 5 — Redis key prefix enforced | DONE | 2026-06-04 |
+| REPAIR 6 — Agenda + BullMQ namespacing | DONE | 2026-06-04 |
+| REPAIR 7 — MySQL slug sanitization unified | DONE | 2026-06-04 |
+| REPAIR 8 — Deprovision completeness | DONE | 2026-06-04 |
 
 ---
 
@@ -270,13 +274,13 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 |-------|-----------|------------|
 | Provisioner | Dedicated DBs + user grants | `stockix_{safe}_finance`, `stockix_{safe}_system`, `tenant_{safe}` |
 | Finance runtime | Per-organization DB name | `{TENANT_DB_NAME_PREFIX}{organizationId}` e.g. `stockix_acme_1` |
-| System metadata | Single system DB per slug | `SYSTEM_DB_NAME` = `stockix_{slug}_system` |
+| System metadata | Single system DB per slug | `SYSTEM_DB_NAME` = `stockix_{safe}_system` |
 
-**Validation finding — naming mismatch (HIGH):**
+**RESOLVED (2026-06-04):** `slugToMysqlSafe()` exported from `provisioner.ts` and used consistently in `buildTenantEnvMap` for `SYSTEM_DB_NAME`, `TENANT_DB_NAME_PREFIX`, and `tenant_{safe}` user.
 
-1. **Provisioner** uses `slugToMysqlSafe` (28-char cap); **`buildTenantEnvMap`** uses raw `slug` for `SYSTEM_DB_NAME`, `TENANT_DB_NAME_PREFIX`, and `tenant_*` user (no 28-char cap, different sanitization rules).
-2. **`stockix_{slug}_finance`** is created at provision time; Finance **`TenantDBManager`** uses `stockix_{slug}_{organizationId}` — the `_finance` database may be **orphaned** unless explicitly used elsewhere.
-3. **Compose hardcodes** `DB_HOST=shared-mysql` while shared service hostname is `stockix-mysql` — see §9.
+**Note (P2):** `stockix_{safe}_finance` is provisioned for legacy compatibility; Finance `TenantDBManager` uses `stockix_{safe}_{organizationId}` at runtime — orphan `_finance` DB audit pending.
+
+**Compose hostnames:** DNS aliases in §9.2 resolve `shared-mysql` / `stockix-mysql` naming.
 
 ### 6.2 MongoDB isolation
 
@@ -288,20 +292,21 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 **Fix implemented:** Per-tenant `{slug}_pos` database enforced in `buildTenantEnvMap` / `buildTenantMongoUrl` (`tenant-env.ts`). Prior cross-tenant leakage from platform `MONGODB_DATABASE_URL` → shared `"stockix"` DB is closed.
 
-**Validation finding — deprovision uses raw slug; provision MySQL uses `safe` slug** — special characters can diverge.
+**Validation finding — deprovision Mongo uses raw slug; MySQL uses `safe` slug** — special characters can diverge for `{slug}_pos` vs `stockix_{safe}_*`.
 
 **Stale control-plane metadata (P1):** `tenant_deployments.mongoUrl` still written as `mongodb://mongo/stockix` in provision-runtime (~783, ~1201) — not updated to per-tenant URL.
 
 ### 6.3 Redis isolation
 
-| Mechanism | Intended | Actual (audit) |
-|-----------|----------|----------------|
-| Key prefix `tenant:{slug}:` | Documented in `tenant-env.ts` | Written to tenant `.env` as `REDIS_KEY_PREFIX` |
-| Finance compose | Pass prefix to server | **Not passed** — `tenant-stack` sets `REDIS_HOST` only |
-| POS BullMQ | Prefix queue names | **`jobQueue.js` uses unprefixed names** (`bigcapital_sync`, etc.) — no `REDIS_KEY_PREFIX` in code |
-| POS rate limits | `org:{id}:` keys | Different namespace than tenant slug |
+| Mechanism | Status |
+|-----------|--------|
+| Key prefix `tenant:{slug}:` | Written to tenant `.env` as `REDIS_KEY_PREFIX` |
+| Finance compose | `REDIS_KEY_PREFIX` passed to `server` container |
+| POS BullMQ | All queue names prefixed via `queueName()` in `jobQueue.js` |
+| Finance Agenda | Mongo collection `agenda:{slug}:jobs` derived from `REDIS_KEY_PREFIX` |
+| POS rate limits | `org:{id}:` keys — different namespace than tenant slug (unchanged) |
 
-**Conclusion:** Redis isolation is **documented but not fully enforced** in application code. Shared Redis DB `0` with unprefixed BullMQ queues is a **cross-tenant job collision risk** unless workers are strictly per-tenant process (they are per compose project, but queue names are global on the instance).
+**RESOLVED (2026-06-04):** `REDIS_KEY_PREFIX` passed to Finance compose and applied to all POS BullMQ queue names. Agenda namespaced as `agenda:{slug}:*` (Mongo collection). Deprovision flushes `tenant:{slug}:*` Redis keys.
 
 ### 6.4 Network isolation
 
@@ -405,11 +410,11 @@ GRANT ALL ON stockix_{safe}_finance.*, stockix_{safe}_system.*;
 
 | Risk | Detail |
 |------|--------|
-| MySQL skip | If `SHARED_MYSQL_ROOT_PASSWORD` unset → MySQL cleanup **skipped**, PG rows still deleted |
-| Mongo container name | Hard-coded `stockix-shared-shared-mongo-1` — breaks if project name differs |
-| Org-level MySQL DBs | Finance creates `stockix_{slug}_{orgId}` — deprovision drops `_finance`/`_system` only; **org DBs may remain** |
-| POS/PMS compose | Deprovision only runs Finance compose down — **POS/PMS stacks may be orphaned** |
-| Redis keys | No flush of `tenant:{slug}:*` on deprovision |
+| MySQL skip | If `SHARED_MYSQL_ROOT_PASSWORD` unset → MySQL cleanup **skipped**, PG rows still deleted (P2 — still open) |
+| Mongo container name | **RESOLVED** — dynamic lookup via `getComposeContainerName` |
+| Org-level MySQL DBs | **RESOLVED** — wildcard drop `stockix_{safe}_%` on deprovision |
+| POS/PMS compose | **RESOLVED** — `deprovisionTenant` tears down `stockix-pos-{slug}` and `stockix-pms-{slug}` |
+| Redis keys | **RESOLVED** — SCAN+DEL flush of `tenant:{slug}:*` on deprovision |
 | Rollback vs deprovision | `rollbackProvision` does **not** call `deprovisionTenantDatabases` |
 
 ---
@@ -570,8 +575,8 @@ Stuck job reconcilers on API process (Postgres, not BullMQ)
 | Risk | Severity | Description |
 |------|----------|-------------|
 | Cross-tenant Mongo | **Critical (fixed in env builder)** | Old platform `MONGODB_DATABASE_URL`; ensure POS receives per-tenant URI |
-| Cross-tenant Redis BullMQ | **High** | Unprefixed queue names on shared Redis |
-| MySQL slug sanitization | **High** | `safe` vs raw `slug` between provisioner and env |
+| Cross-tenant Redis BullMQ | **RESOLVED** | `REDIS_KEY_PREFIX` + `queueName()` in `jobQueue.js` |
+| MySQL slug sanitization | **RESOLVED** | `slugToMysqlSafe()` shared between provisioner and `tenant-env.ts` |
 | Replication lag | Low (single-node Mongo) | N/A until multi-member RS |
 | Partial provision status | Medium | `tenantStatus: "partial"` with `ok: true` — operator may assume healthy |
 | Eventual consistency POS→Finance | Medium | Outbox drain `ACCOUNTING_OUTBOX_DRAIN_MS`; retries in BullMQ |
@@ -705,16 +710,17 @@ Docker socket → socket-proxy (filtered API)
 - [x] **Traefik dynamic volume:** Traefik and worker bind-mount `TRAEFIK_DYNAMIC_DIR`
 - [x] **POS provision worker:** Stale `pos-mongo` / `pos-redis` services removed; tenant `.env` merged into `composeEnv`
 - [x] **MongoDB per-tenant isolation:** Enforced in `buildTenantEnvMap` (`{slug}_pos`)
-- [ ] **MySQL naming:** Unify `slugToMysqlSafe` between `provisioner.ts` and `tenant-env.ts`; align `_finance` DB with Finance `TenantDBManager` or stop creating unused DB
+- [x] **MySQL naming:** `slugToMysqlSafe()` unified in provisioner + `tenant-env.ts` (`_finance` orphan audit → P2)
 - [ ] **Verify end-to-end provision** on staging: Finance health, POS ping, Mongo DB name, MySQL grants
 
 ### P1 — High priority
 
-- [ ] Implement Redis key prefix in POS `jobQueue.js` (or separate Redis DB index per tenant)
-- [ ] Pass `REDIS_KEY_PREFIX` into Finance `tenant-stack` server environment
-- [ ] Deprovision: tear down `stockix-pos-{slug}` and `stockix-pms-{slug}` projects
-- [ ] Deprovision: drop org-level MySQL databases `stockix_{slug}_%`
-- [ ] Replace hard-coded Mongo container name with `docker compose ps -q` lookup
+- [x] Implement Redis key prefix in POS `jobQueue.js` (or separate Redis DB index per tenant)
+- [x] Pass `REDIS_KEY_PREFIX` into Finance `tenant-stack` server environment
+- [x] Deprovision: tear down `stockix-pos-{slug}` and `stockix-pms-{slug}` projects
+- [x] Deprovision: drop org-level MySQL databases `stockix_{slug}_%`
+- [x] Replace hard-coded Mongo container name with `docker compose ps -q` lookup
+- [x] Redis keys flushed on deprovision (`tenant:{slug}:*`)
 - [ ] Wire `assertNoConcurrentProvisionJob` or equivalent
 - [ ] Update `tenant_deployments.mongoUrl` to per-tenant URL
 - [ ] Rollback: optional `deprovisionTenantDatabases` flag for hard rollback
@@ -724,7 +730,7 @@ Docker socket → socket-proxy (filtered API)
 - [ ] Shared Nginx gateway for Finance static assets (or embed static in server image)
 - [ ] Remove stale nginx discovery from `traefik-config.ts` or implement gateway
 - [ ] Mongo RS healthcheck includes `rs.status().ok`
-- [ ] Redis FLUSH by prefix on deprovision
+- [ ] `_finance` orphan DB audit / align with TenantDBManager
 - [ ] Backup strategy for `stockix_shared_mysql`, `stockix_shared_mongo`, `stockix_shared_tenant_redis` volumes
 - [ ] Load test: N tenants × connection count on MySQL 500 max
 - [ ] Document partial provision remediation in `infra/prod/OPERATIONS.md`

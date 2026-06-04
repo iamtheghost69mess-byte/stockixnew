@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultTenantEnvRoot } from "../env-paths.js";
+import { slugToMysqlSafe } from "../provisioner.js";
 import { apiConfig, env } from "@repo/config";
 import {
   encryptDeploymentSecret,
@@ -112,7 +113,7 @@ function buildTenantRedisKeyPrefix(slug: string): string {
  * The provisioner creates this user with GRANT on stockix_{slug}_finance.* only.
  */
 function buildTenantMysqlUser(slug: string): string {
-  return `tenant_${slug.replace(/[^a-z0-9]/gi, "_").toLowerCase()}`;
+  return `tenant_${slugToMysqlSafe(slug)}`;
 }
 
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
@@ -124,6 +125,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
   const s3SecretAccessKey = params.s3SecretAccessKey;
 
   const mysqlHost = sharedMysqlHost();
+  const mysqlSafe = slugToMysqlSafe(slug);
   const tenantDbUser = buildTenantMysqlUser(slug);
   const mongoUrl = buildTenantMongoUrl(slug);
   const redisUrl = buildTenantRedisUrl(slug);
@@ -147,15 +149,15 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     SYSTEM_DB_HOST: mysqlHost,
     SYSTEM_DB_USER: tenantDbUser,
     SYSTEM_DB_PASSWORD: params.dbPassword,
-    SYSTEM_DB_NAME: `stockix_${slug}_system`,
+    SYSTEM_DB_NAME: `stockix_${mysqlSafe}_system`,
     SYSTEM_DB_CHARSET: "utf8mb4",
 
     TENANT_DB_CLIENT: "mysql",
     TENANT_DB_HOST: mysqlHost,
     TENANT_DB_USER: tenantDbUser,
     TENANT_DB_PASSWORD: params.dbPassword,
-    TENANT_DB_NAME_PREFIX: `stockix_${slug}_`,
-    TENANT_DB_NAME_PERFIX: `stockix_${slug}_`,
+    TENANT_DB_NAME_PREFIX: `stockix_${mysqlSafe}_`,
+    TENANT_DB_NAME_PERFIX: `stockix_${mysqlSafe}_`,
     TENANT_DB_CHARSET: "utf8mb4",
 
     // ── MongoDB (shared-mongo) — per-tenant database ───────────────────

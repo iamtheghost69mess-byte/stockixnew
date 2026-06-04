@@ -46,7 +46,22 @@ function getConnection() {
   return connection;
 }
 
-const QUEUE_NAMES = [
+const PREFIX = process.env.REDIS_KEY_PREFIX ?? "";
+
+// Redis namespacing convention (Stockix shared Redis):
+// Finance Agenda jobs:  agenda:{tenant_slug}:*  (Mongo collection — see stockix-finance agenda loader)
+// POS BullMQ queues:    {REDIS_KEY_PREFIX}{queue_name}
+//                       e.g. tenant:acme:bigcapital_sync
+// Sessions:             tenant:{slug}:session:*
+// Do NOT use unprefixed keys on stockix-redis
+
+function queueName(base) {
+  if (!base) return PREFIX;
+  if (PREFIX && base.startsWith(PREFIX)) return base;
+  return `${PREFIX}${base}`;
+}
+
+const QUEUE_BASE_NAMES = [
   "provisioning",
   "webhooks_out",
   "email",
@@ -58,11 +73,14 @@ const QUEUE_NAMES = [
   "bigcapital_sync",
 ];
 
+const QUEUE_NAMES = QUEUE_BASE_NAMES.map(queueName);
+
 function getQueue(name) {
   const conn = getConnection();
   if (!conn) return null;
-  if (!queues[name]) {
-    queues[name] = new Queue(name, {
+  const resolved = queueName(name);
+  if (!queues[resolved]) {
+    queues[resolved] = new Queue(resolved, {
       connection: conn,
       defaultJobOptions: {
         attempts: 5,
@@ -72,16 +90,16 @@ function getQueue(name) {
       },
     });
   }
-  return queues[name];
+  return queues[resolved];
 }
 
-async function addJob(queueName, jobName, data, opts = {}) {
-  const q = getQueue(queueName);
+async function addJob(rawQueueName, jobName, data, opts = {}) {
+  const q = getQueue(rawQueueName);
   if (!q) {
     return { queued: false, jobId: null, reason: "no_redis" };
   }
   const job = await q.add(jobName, data, opts);
-  return { queued: true, jobId: job.id, queue: queueName };
+  return { queued: true, jobId: job.id, queue: queueName(rawQueueName) };
 }
 
 async function getJobStatus(queueName, jobId) {
@@ -114,10 +132,10 @@ async function retryFailedJob(queueName, jobId) {
   return { ok: true };
 }
 
-function createWorker(queueName, processor) {
+function createWorker(rawQueueName, processor) {
   const conn = getConnection();
   if (!conn || !Worker) return null;
-  return new Worker(queueName, processor, { connection: conn });
+  return new Worker(queueName(rawQueueName), processor, { connection: conn });
 }
 
 async function listAllJobs(filters = {}) {
@@ -126,7 +144,7 @@ async function listAllJobs(filters = {}) {
   const queue = filters.queue;
   const status = filters.status ? filters.status.toLowerCase() : 'all';
 
-  const queuesToScan = queue && QUEUE_NAMES.includes(queue) ? [queue] : QUEUE_NAMES;
+  const queuesToScan = queue && QUEUE_BASE_NAMES.includes(queue) ? [queue] : QUEUE_BASE_NAMES;
   
   const statusesToFetch = status && status !== 'all' 
     ? [status] 
@@ -134,7 +152,7 @@ async function listAllJobs(filters = {}) {
 
   let allJobs = [];
 
-  if (queue && QUEUE_NAMES.includes(queue)) {
+  if (queue && QUEUE_BASE_NAMES.includes(queue)) {
     const q = getQueue(queue);
     if (q) {
       const jobs = await q.getJobs(statusesToFetch, offset, offset + limit - 1);
@@ -206,6 +224,8 @@ async function listAllJobs(filters = {}) {
 
 module.exports = {
   QUEUE_NAMES,
+  QUEUE_BASE_NAMES,
+  queueName,
   getQueue,
   getConnection,
   addJob,
