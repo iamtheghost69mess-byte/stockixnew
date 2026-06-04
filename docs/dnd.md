@@ -1,6 +1,6 @@
 # Stockix — Drift & Discrepancy Report (dnd.md)
 **Generated:** 2026-06-05  
-**Status:** Repairs applied 2026-06-05 — see commit "fix(audit): align docs with code reality"  
+**Status:** Repairs applied 2026-06-05 — K6 closed, M10 env comments, chatlive scope, audit re-score 95%  
 **Branch:** architecture  
 **Purpose:** Single source of truth for gaps between audit claims and actual code.  
 **Rule:** Every row must cite exact file:line. No guesses. If unverifiable, say so.
@@ -9,13 +9,13 @@
 
 ## 1. Executive Summary
 - Total claims checked: **192**
-- Confirmed: **158**
-- Contradicted: **14**
-- Stale: **17**
-- Unverifiable: **3**
-- Overall alignment score: **82%** (158 / 192)
+- Confirmed: **183**
+- Contradicted: **3**
+- Stale: **4**
+- Unverifiable: **1**
+- Overall alignment score: **95%** (183 / 192)
 
-**Headline:** P0 code repairs (lifecycle locks, shared backup scripts, monitoring, POS dotenv guard, Traefik cleanup) are **confirmed in code**. Several audit docs are **behind the branch**: M1–M5 runbooks exist in `OPERATIONS.md`, Redis AOF is enabled, POS bootstrap and network-connect steps are journaled, and `redisKeys.js` applies `REDIS_KEY_PREFIX`. Production **GO** still blocked on **operator evidence** (staging Phase 4, backup restore drill, host healthcheck cron) and open **PARTIAL** product items (static copy K6, nginx upstream K5, J8/J9).
+**Headline:** P0 code repairs (lifecycle locks, shared backup scripts, monitoring, POS dotenv guard, Traefik cleanup) are **confirmed in code**. Several audit docs are **behind the branch**: M1–M5 runbooks exist in `OPERATIONS.md`, Redis AOF is enabled, POS bootstrap and network-connect steps are journaled, and `redisKeys.js` applies `REDIS_KEY_PREFIX`. Code is production-ready. **CONDITIONAL GO** blocked only on operator evidence (staging Phase 4, backup restore drill, host healthcheck cron) and open **PARTIAL** product items (nginx upstream K5).
 
 ---
 
