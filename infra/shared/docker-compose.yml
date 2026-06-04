@@ -3,15 +3,20 @@
 #   docker compose -f infra/shared/docker-compose.yml --env-file infra/prod/.env \
 #     -p stockix-shared up -d
 #
-# All tenant app containers join the `stockix-shared` external network declared at the
-# bottom of this file. Tenant containers reference databases by hostname:
-#   MySQL   → shared-mysql:3306   database: stockix_{slug}_finance  user: tenant_{slug}
-#   MongoDB → shared-mongo:27017  database: {slug}_pos
-#   Redis   → tenant-redis:6379   key prefix: tenant:{slug}:
+# All tenant app containers join the `stockix-shared` external network.
+# Tenant containers reference databases by hostname:
+#   MySQL   → stockix-mysql:3306   database: stockix_{slug}_finance  user: tenant_{slug}
+#   MongoDB → stockix-mongo:27017  database: {slug}_pos
+#   Redis   → stockix-redis:6379   key prefix: tenant:{slug}:
+#
+# Env vars that drive hostnames (set in infra/prod/.env):
+#   SHARED_MYSQL_HOST=stockix-mysql
+#   SHARED_MONGO_HOST=stockix-mongo
+#   TENANT_REDIS_HOST=stockix-redis
 #
 # Provisioner responsibility:
 #   On CREATE: CREATE DATABASE + CREATE USER + GRANT on MySQL; Mongo DB auto-created on first write.
-#   On DELETE: DROP DATABASE + DROP USER on MySQL; dropDatabase() on Mongo.
+#   On DELETE: DROP DATABASE + DROP USER on MySQL; dropDatabase() via mongosh exec.
 
 name: stockix-shared
 
@@ -19,11 +24,12 @@ services:
 
   # ─────────────────────────────────────────────────────────────
   # MySQL 8 — one database per tenant (stockix_{slug}_finance)
+  # Service name = DNS hostname inside stockix-shared network
   # ─────────────────────────────────────────────────────────────
-  shared-mysql:
+  stockix-mysql:
     image: mysql:8.0-bookworm
     restart: unless-stopped
-    hostname: shared-mysql
+    hostname: stockix-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
@@ -60,10 +66,10 @@ services:
   # Single node replica set (rs0) — required by POS connection string
   # (?replicaSet=rs0). On upgrade to multi-server, add members to rs.
   # ─────────────────────────────────────────────────────────────
-  shared-mongo:
+  stockix-mongo:
     image: mongo:6.0
     restart: unless-stopped
-    hostname: shared-mongo
+    hostname: stockix-mongo
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
     volumes:
       - shared_mongo_data:/data/db
@@ -83,11 +89,11 @@ services:
       - no-new-privileges:true
 
   # One-shot: initiates the replica set on first boot, idempotent on restarts.
-  shared-mongo-rs-init:
+  stockix-mongo-rs-init:
     image: mongo:6.0
     restart: "no"
     depends_on:
-      shared-mongo:
+      stockix-mongo:
         condition: service_healthy
     networks:
       - stockix-shared
@@ -95,12 +101,12 @@ services:
       - bash
       - -ec
       - |
-        mongosh --host shared-mongo:27017 --quiet --eval "
+        mongosh --host stockix-mongo:27017 --quiet --eval "
           try {
             rs.status();
             print('replica set already initiated');
           } catch (e) {
-            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'shared-mongo:27017' }] });
+            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'stockix-mongo:27017' }] });
             print('replica set initiated');
           }
         "
@@ -116,10 +122,10 @@ services:
   #   tenant:{slug}:agenda:*   Finance Agenda scheduler
   #   tenant:{slug}:session:*  Finance sessions
   # ─────────────────────────────────────────────────────────────
-  tenant-redis:
+  stockix-redis:
     image: redis:7-alpine
     restart: unless-stopped
-    hostname: tenant-redis
+    hostname: stockix-redis
     command:
       - redis-server
       - --maxmemory
