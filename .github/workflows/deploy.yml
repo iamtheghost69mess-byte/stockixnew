@@ -398,8 +398,7 @@ jobs:
           . scripts/load-env-file.sh infra/prod/.env
           export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT:-54330}/${POSTGRES_DB:-stockix_platform}"
           corepack enable && corepack prepare pnpm@9.15.9 --activate
-          rm -rf node_modules
-          NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
+          NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts --filter @repo/db...
           pnpm --filter @repo/db db:migrate
           pnpm --filter @repo/db exec tsx scripts/verify-schema.ts
           if [ -z "${BACKUP_B2_BUCKET:-}" ]; then
@@ -409,9 +408,17 @@ jobs:
           echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
           echo "=== Pulling pre-built images from GHCR ==="
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_OWNER}" --password-stdin
-          docker pull "${GHCR_PREFIX}/stockix-api:${RELEASE_SHA}"
-          docker pull "${GHCR_PREFIX}/stockix-dashboard:${RELEASE_SHA}"
-          docker pull "${GHCR_PREFIX}/stockix-infra-worker:${RELEASE_SHA}"
+          pull_with_retry() {
+            local img="$1" n=0
+            until docker pull "$img"; do
+              n=$((n+1))
+              [ "$n" -ge 3 ] && { echo "Failed to pull $img after 3 attempts"; return 1; }
+              echo "Pull failed, retry $n/3 — waiting 15s..."; sleep 15
+            done
+          }
+          pull_with_retry "${GHCR_PREFIX}/stockix-api:${RELEASE_SHA}"
+          pull_with_retry "${GHCR_PREFIX}/stockix-dashboard:${RELEASE_SHA}"
+          pull_with_retry "${GHCR_PREFIX}/stockix-infra-worker:${RELEASE_SHA}"
           docker tag "${GHCR_PREFIX}/stockix-api:${RELEASE_SHA}" stockix-api:latest
           docker tag "${GHCR_PREFIX}/stockix-dashboard:${RELEASE_SHA}" stockix-dashboard:latest
           docker tag "${GHCR_PREFIX}/stockix-infra-worker:${RELEASE_SHA}" stockix-infra-worker:latest
@@ -443,9 +450,10 @@ jobs:
           fi
           cd "${REPO_ROOT}"
           echo "=== Building tenant images ==="
-          pnpm docker:prebuild 2>&1 | tail -20 || \
-            echo "WARNING: Tenant images build failed — provisioning may not work until pnpm docker:prebuild succeeds"
+          node scripts/prebuild-tenant-images.mjs 2>&1 | tail -20 || \
+            echo "WARNING: Tenant images build failed — provisioning may not work until node scripts/prebuild-tenant-images.mjs succeeds"
           echo "Tenant images step finished."
+          rm -rf node_modules
           cd infra/prod
           docker image prune -f --filter "until=168h" || true
           trap - ERR
