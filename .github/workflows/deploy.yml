@@ -325,16 +325,17 @@ jobs:
           RELEASE_SHA="${{ github.sha }}"
           GHCR_REPO="${{ github.repository }}"
           GHCR_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          # Wait up to 5 min for server to accept SSH (CPU throttling can delay handshake)
+          # Wait up to 15 min for server to accept SSH (CPU throttling / background prebuild
+          # can saturate the VPS and delay TCP handshakes for extended periods)
           echo "Waiting for server to be reachable..."
-          for i in $(seq 1 10); do
+          for i in $(seq 1 30); do
             if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 \
                    -o BatchMode=yes "${EC2_USER}@${EC2_HOST}" true 2>/dev/null; then
               echo "Server reachable (attempt $i)"
               break
             fi
-            [ "$i" -eq 10 ] && { echo "Server unreachable after 5 min"; exit 1; }
-            echo "Not reachable yet (attempt $i/10), waiting 30s..."
+            [ "$i" -eq 30 ] && { echo "Server unreachable after 15 min — giving up"; exit 1; }
+            echo "Not reachable yet (attempt $i/30), waiting 30s..."
             sleep 30
           done
           # Pass SHA, GHCR repo, and token as positional args to remote bash.
@@ -467,7 +468,7 @@ jobs:
           pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
           sleep 2
           rm -rf node_modules
-          nohup node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
+          nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
           echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
           cd infra/prod
           docker image prune -f --filter "until=168h" || true
