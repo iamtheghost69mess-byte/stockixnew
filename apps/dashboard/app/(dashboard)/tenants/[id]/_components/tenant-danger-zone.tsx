@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { TenantSlugConfirmField } from "../../_components/tenant-slug-confirm-field";
 import { formatApiError } from "@/lib/api-errors";
 import type { TenantDetail } from "@/types/tenant";
 
@@ -201,9 +202,15 @@ export function TenantDangerZone({
             <DialogTitle>Are you absolutely sure?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This will permanently delete {tenant.name} and all its data. Type the tenant slug to confirm.
+            This will permanently delete {tenant.name} and all its data. Copy the tenant slug below and paste it into
+            the confirmation field to continue.
           </p>
-          <Input value={confirmSlug} onChange={(e) => setConfirmSlug(e.target.value)} />
+          <TenantSlugConfirmField
+            slug={tenant.slug}
+            value={confirmSlug}
+            onChange={setConfirmSlug}
+            inputId="danger-zone-delete-slug-confirm"
+          />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
               Cancel

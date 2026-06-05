@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { TenantSlugConfirmField } from "./tenant-slug-confirm-field";
 
 type TenantDeleteDialogsProps = {
   deleteConfirmOpen: boolean;
@@ -61,18 +61,16 @@ export function TenantDeleteDialogs({
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             This runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be
-            undone. Type the tenant slug{" "}
-            {deleteTarget ? (
-              <span className="font-mono font-medium text-foreground">{deleteTarget.slug}</span>
-            ) : null}{" "}
-            to continue.
+            undone. Copy the tenant slug below and paste it into the confirmation field to continue.
           </p>
-          <Input
-            placeholder="Tenant slug"
-            value={deleteSlugInput}
-            onChange={(e) => setDeleteSlugInput(e.target.value)}
-            autoComplete="off"
-          />
+          {deleteTarget ? (
+            <TenantSlugConfirmField
+              slug={deleteTarget.slug}
+              value={deleteSlugInput}
+              onChange={setDeleteSlugInput}
+              inputId="delete-tenant-slug-confirm"
+            />
+          ) : null}
           <DialogFooter>
             <Button
               variant="ghost"
