@@ -11,6 +11,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -109,6 +110,14 @@ async function publicApi(method, path) {
 async function api(method, path, body, token) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const routePath = (path.startsWith("http") ? new URL(path).pathname : path).split("?")[0];
+  const upperMethod = method.toUpperCase();
+  if (
+    ["POST", "PATCH", "DELETE"].includes(upperMethod) &&
+    (routePath.startsWith("/tenants") || routePath.startsWith("/owners"))
+  ) {
+    headers["Idempotency-Key"] = randomUUID();
+  }
   const auth = token ?? ctx.cookie;
   if (auth) {
     if (auth.startsWith("stockix-session=")) headers.Cookie = auth;

@@ -1,0 +1,14 @@
+# Local dev only — publish shared DB ports to the host for the infra worker (runs on host, not on stockix-shared).
+# Used by pnpm dev via: docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml
+# Tenant containers still use stockix-mysql / stockix-mongo / stockix-redis on the stockix-shared network.
+
+services:
+  stockix-mysql:
+    ports:
+      - "127.0.0.1:3306:3306"
+  stockix-mongo:
+    ports:
+      - "127.0.0.1:27017:27017"
+  stockix-redis:
+    ports:
+      - "127.0.0.1:6380:6379"
