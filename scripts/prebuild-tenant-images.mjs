@@ -13,11 +13,9 @@
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { loadRootEnv } from "./load-root-env.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = loadRootEnv(import.meta.url);
 const FORCE = process.argv.includes("--force");
 const VERIFY_ONLY = process.argv.includes("--verify");
@@ -45,6 +43,10 @@ const REQUIRED_FINANCE_IMAGES = [
   "stockix-server:local",
   "stockix-database-migration:local",
   "stockix-nginx:local",
+  // Data-service images: locally built, not on Docker Hub. compose runs with --no-build,
+  // so these must exist before provisioning or Docker will attempt a registry pull and fail.
+  "stockix-prebuild-mysql:latest",
+  "stockix-prebuild-redis:latest",
 ];
 
 function run(label, cmd, cwd = ROOT, extraEnv = {}) {
