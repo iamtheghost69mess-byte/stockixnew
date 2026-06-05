@@ -20,7 +20,7 @@ export function createDb(connectionString: string) {
   // Pool tuning: set DB_POOL_MAX to (postgres max_connections - reserved) / number_of_api_replicas
   // Default 20 is safe for single-replica on shared EC2 with Postgres default max_connections=100
   const client = postgres(connectionString, {
-    max: readPoolInt("DB_POOL_MAX", 10),
+    max: readPoolInt("DB_POOL_MAX", 20),
     idle_timeout: readPoolInt("DB_IDLE_TIMEOUT_SECONDS", 20),
     connect_timeout: readPoolInt("DB_CONNECT_TIMEOUT_SECONDS", 10),
     max_lifetime: readPoolInt("DB_MAX_LIFETIME_SECONDS", 1800),
