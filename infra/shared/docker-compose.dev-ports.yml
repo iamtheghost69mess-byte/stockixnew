@@ -1,3 +1,4 @@
+# REPAIRED: worker host DB access — MySQL 3306 + Mongo 27017 published for WORKER_SHARED_* 2026-06-05
 # Local dev only — publish shared DB ports to the host for the infra worker (runs on host, not on stockix-shared).
 # Used by pnpm dev via: docker compose -f docker-compose.yml -f docker-compose.dev-ports.yml
 # Tenant containers still use stockix-mysql / stockix-mongo / stockix-redis on the stockix-shared network.

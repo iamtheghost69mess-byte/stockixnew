@@ -762,7 +762,8 @@ function isPermanentProvisionError(message: string): boolean {
   return (
     message.startsWith("tenant_slug_exists:") ||
     lowered.includes("tenants_slug_unique") ||
-    lowered.includes("duplicate key value violates unique constraint")
+    lowered.includes("duplicate key value violates unique constraint") ||
+    message.includes("POS_FRONTEND_STUB_IMAGE")
   );
 }
 

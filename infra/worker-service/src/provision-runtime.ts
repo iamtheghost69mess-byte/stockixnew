@@ -53,6 +53,7 @@ import {
   syncFinanceLicense,
 } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { assertRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
+import { ensureTenantExternalNetworks } from "../domain/provisioning/ensure-tenant-networks.js";
 import {
   assertNoConcurrentTenantLifecycleJob,
   withTenantLifecycleAdvisoryLock,
@@ -1453,6 +1454,7 @@ export async function executeProvisionRuntime(
     composeCtx = { composeFile, project, envPath, composeEnv };
     const { docker, finance, edge } = deps;
     await assertRequiredTenantImages();
+    await ensureTenantExternalNetworks(log);
     await checkNotCancelled();
     const staleContainersRaw = await execa(
       "docker",
@@ -1558,6 +1560,7 @@ export async function executeProvisionRuntime(
     const serverContainerName = `${project}-server-1`;
     const internalNetworkName = process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
     let tenantServerInternalIp: string | undefined;
+    let localDevFallback = false;
     if (!hasOp("docker.network_connect")) {
       try {
         await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
@@ -1577,7 +1580,14 @@ export async function executeProvisionRuntime(
         });
       } catch (netErr) {
         const msg = netErr instanceof Error ? netErr.message : String(netErr);
-        log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+        if (process.env.NODE_ENV !== "production") {
+          localDevFallback = true;
+          log(
+            `[provision] stockix_internal unavailable in local dev — using host.docker.internal:${port} for bootstrap calls`,
+          );
+        } else {
+          log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+        }
       }
     } else {
       log(`[provision] network connect already journaled — skipping`);
@@ -1586,16 +1596,19 @@ export async function executeProvisionRuntime(
       });
     }
 
+    // REPAIRED: local dev Finance URL when stockix_internal missing 2026-06-05
     const internalUrl = tenantServerInternalIp
       ? `http://${tenantServerInternalIp}:3000`
-      : await resolveServerInternalUrl({
-        composeFile,
-        project,
-        envPath: composeCtx.envPath,
-        composeEnv: composeCtx.composeEnv,
-        fallbackHost: apiConfig.tenantInternalHost,
-        fallbackPort: port,
-      });
+      : localDevFallback
+        ? `http://host.docker.internal:${port}`
+        : await resolveServerInternalUrl({
+          composeFile,
+          project,
+          envPath: composeCtx.envPath,
+          composeEnv: composeCtx.composeEnv,
+          fallbackHost: apiConfig.tenantInternalHost,
+          fallbackPort: port,
+        });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");
       await trace.event("progress", "Waiting for tenant health endpoint", {

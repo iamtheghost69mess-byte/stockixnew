@@ -47,6 +47,7 @@
     "pos:images:build:stub": "node scripts/build-pos-tenant-images.mjs -- --stub-frontend",
     "docker:prebuild:force": "node scripts/prebuild-tenant-images.mjs --force",
     "docker:check": "node scripts/prebuild-tenant-images.mjs --verify",
+    "docker:cleanup": "node scripts/cleanup-stale-images.mjs",
     "provision:diagnose": "pnpm --filter api exec node scripts/provision-diagnose.mjs --",
     "provision:smoke": "pnpm --filter api exec node scripts/provision-smoke.mjs --full",
     "provision:test": "node scripts/provision-test-local.mjs",

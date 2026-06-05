@@ -183,6 +183,7 @@ services:
         aliases:
           - shared-nginx
           - stockix-nginx
+      stockix_public: {}
     mem_limit: 64m
     cpus: "0.1"
     mem_swappiness: 0
@@ -206,3 +207,8 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+  # Traefik attaches here in prod (infra/prod). External so dev-stockix / ensure-tenant-networks
+  # can pre-create the bridge before compose up (avoids compose label conflict on reuse).
+  stockix_public:
+    name: stockix_public
+    external: true
