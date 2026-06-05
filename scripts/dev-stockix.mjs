@@ -34,6 +34,7 @@ const concurrentlyBin = path.join(
   "concurrently.js",
 );
 const SHARED_COMPOSE = path.join(repoRoot, "infra", "shared", "docker-compose.yml");
+const SHARED_COMPOSE_DEV_PORTS = path.join(repoRoot, "infra", "shared", "docker-compose.dev-ports.yml");
 const WORKER_BUNDLE = path.join(repoRoot, "infra", "worker-service", ".runtime", "worker.js");
 const AUTH_DIST = path.join(repoRoot, "packages", "auth", "dist", "index.cjs");
 
@@ -56,9 +57,13 @@ function loadSharedInfraEnv(root) {
     console.error("      Add it to .env or infra/prod/.env (see infra/prod/.env.example).");
     process.exit(1);
   }
+  // Tenant containers resolve these on the stockix-shared Docker network.
   process.env.SHARED_MYSQL_HOST ??= "stockix-mysql";
   process.env.SHARED_MONGO_HOST ??= "stockix-mongo";
   process.env.TENANT_REDIS_HOST ??= "stockix-redis";
+  // Host-run worker uses published ports (docker-compose.dev-ports.yml).
+  process.env.WORKER_SHARED_MYSQL_HOST ??= "127.0.0.1";
+  process.env.WORKER_SHARED_MONGO_HOST ??= "127.0.0.1";
 }
 
 /** @param {string} cmd @param {string[]} args @param {import('node:child_process').SpawnOptions} [opts] */
@@ -105,6 +110,9 @@ function sharedComposeEnvFiles() {
 /** @param {string[]} envFiles */
 function sharedComposeArgs(envFiles) {
   const args = ["compose", "-f", SHARED_COMPOSE];
+  if (existsSync(SHARED_COMPOSE_DEV_PORTS)) {
+    args.push("-f", SHARED_COMPOSE_DEV_PORTS);
+  }
   for (const file of envFiles) args.push("--env-file", file);
   return args;
 }

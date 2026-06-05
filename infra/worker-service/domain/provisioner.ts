@@ -37,12 +37,22 @@ function sharedMysqlHost(): string {
   return process.env.SHARED_MYSQL_HOST ?? "stockix-mysql";
 }
 
+/** Host-run worker reaches shared MySQL via published localhost ports in dev. */
+function workerSharedMysqlHost(): string {
+  return process.env.WORKER_SHARED_MYSQL_HOST?.trim() || sharedMysqlHost();
+}
+
 function sharedMysqlRootPassword(): string {
   return process.env.SHARED_MYSQL_ROOT_PASSWORD ?? "";
 }
 
 function sharedMongoHost(): string {
   return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
+}
+
+/** Host-run worker reaches shared Mongo via published localhost ports in dev. */
+function workerSharedMongoHost(): string {
+  return process.env.WORKER_SHARED_MONGO_HOST?.trim() || sharedMongoHost();
 }
 
 async function getComposeContainerName(
@@ -136,7 +146,7 @@ export async function provisionTenantDatabases(
   const financeDb = `stockix_${safe}_finance`;
   const systemDb  = `stockix_${safe}_system`;
   const tenantUser = `tenant_${safe}`;
-  const mysqlHost  = sharedMysqlHost();
+  const mysqlHost  = workerSharedMysqlHost();
   const rootPassword = sharedMysqlRootPassword();
 
   if (!rootPassword) {
@@ -149,6 +159,7 @@ export async function provisionTenantDatabases(
 
   // mysql2 is in apps/api/package.json — available via tsup bundling
   const mysql2 = await import("mysql2/promise");
+  const { escape: mysqlEscape } = await import("mysql2");
   const conn = await mysql2.createConnection({
     host: mysqlHost,
     port: 3306,
@@ -168,9 +179,9 @@ export async function provisionTenantDatabases(
     await conn.execute(
       `CREATE DATABASE IF NOT EXISTS \`${systemDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
+    // IDENTIFIED BY does not accept prepared-statement placeholders on MySQL 8.
     await conn.execute(
-      `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ?`,
-      [dbPassword],
+      `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
     );
     await conn.execute(
       `GRANT ALL PRIVILEGES ON \`${financeDb}\`.* TO '${tenantUser}'@'%'`,
@@ -192,7 +203,7 @@ export async function provisionTenantDatabases(
   // Verify MongoDB reachable via TCP — no mongodb driver needed.
   // The Finance server auto-creates the {slug}_pos database on first write.
   log(`[db-provision] verifying stockix-mongo reachability for tenant "${slug}"`);
-  await verifyTcpReachable(sharedMongoHost(), 27017, "stockix-mongo");
+  await verifyTcpReachable(workerSharedMongoHost(), 27017, "stockix-mongo");
   log(`[db-provision] stockix-mongo reachable — ${slug}_pos will be auto-created on first write`);
 }
 
@@ -239,7 +250,7 @@ export async function deprovisionTenantDatabases(
   try {
     const mysql2 = await import("mysql2/promise");
     const conn = await mysql2.createConnection({
-      host: sharedMysqlHost(),
+      host: workerSharedMysqlHost(),
       port: 3306,
       user: "root",
       password: rootPassword,
