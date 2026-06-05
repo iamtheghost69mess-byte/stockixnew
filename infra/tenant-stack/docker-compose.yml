@@ -41,6 +41,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      - NODE_OPTIONS=--max-old-space-size=384
       - NEW_RELIC_ENABLED=false
       - NEW_RELIC_APP_NAME=stockix-tenant
       # Mail — copied from platform env at provision time

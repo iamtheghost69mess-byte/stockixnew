@@ -1,5 +1,20 @@
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { registerAs } from '@nestjs/config';
+
+/** Webpack build lands under build/common/config; dev uses src/common/config. */
+function resolveTenantDatabaseSubdir(subdir: string): string {
+  const candidates = [
+    path.join(__dirname, '../../database/tenant', subdir),
+    path.join(__dirname, '../../../src/database/tenant', subdir),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return candidates[0]!;
+}
 
 export default registerAs('tenantDatabase', () => ({
   client: 'mysql',
@@ -8,6 +23,6 @@ export default registerAs('tenantDatabase', () => ({
   user: process.env.TENANT_DB_USER || process.env.DB_USER,
   password: process.env.TENANT_DB_PASSWORD || process.env.DB_PASSWORD,
   dbNamePrefix: process.env.TENANT_DB_NAME_PERFIX || 'stockix_tenant_',
-  migrationsDir: path.join(__dirname, '../../database/tenant/migrations'),
-  seedsDir: path.join(__dirname, '../../database/tenant/seeds/core'),
+  migrationsDir: resolveTenantDatabaseSubdir('migrations'),
+  seedsDir: resolveTenantDatabaseSubdir('seeds/core'),
 }));

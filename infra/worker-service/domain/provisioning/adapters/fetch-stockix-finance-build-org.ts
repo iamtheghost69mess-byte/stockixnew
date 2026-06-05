@@ -225,7 +225,23 @@ export async function fetchBuildOrganization(
       }
       const done = jobFinished(jobJson);
       if (done === "failed") {
-        return { ok: false, error: "organization_build_job_failed" };
+        const failedReason =
+          isRecord(jobJson) && typeof jobJson.failedReason === "string"
+            ? jobJson.failedReason
+            : isRecord(jobJson) && typeof jobJson.failed_reason === "string"
+              ? jobJson.failed_reason
+              : "";
+        log(
+          failedReason
+            ? `[build] organization build job failed: ${failedReason}`
+            : "[build] organization build job failed (no failedReason from Finance)",
+        );
+        return {
+          ok: false,
+          error: failedReason
+            ? `organization_build_job_failed: ${failedReason}`
+            : "organization_build_job_failed",
+        };
       }
       if (done === "completed") {
         break;
