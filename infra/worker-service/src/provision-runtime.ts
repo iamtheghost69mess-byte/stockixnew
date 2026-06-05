@@ -594,6 +594,37 @@ export async function revertAddModuleFailure(
   log(`[add-module-revert] tenant=${tenantId} correlationId=${correlationId} reason=${trimmedReason}`);
 }
 
+async function resolvePublishedServerHostPort(containerName: string): Promise<number | null> {
+  // Prefer `docker port` — reliable on Windows; complex inspect templates often fail under PowerShell.
+  try {
+    const { stdout } = await execa("docker", ["port", containerName, "3000"], { stdio: "pipe" });
+    const match = stdout.trim().match(/:(\d+)\s*$/);
+    if (match?.[1]) {
+      const port = Number(match[1]);
+      if (Number.isFinite(port) && port > 0) return port;
+    }
+  } catch {
+    // Fall through to inspect.
+  }
+  try {
+    const { stdout } = await execa(
+      "docker",
+      [
+        "inspect",
+        "--format",
+        "{{(index (index .NetworkSettings.Ports \"3000/tcp\") 0).HostPort}}",
+        containerName,
+      ],
+      { stdio: "pipe" },
+    );
+    const port = Number(stdout.trim());
+    if (Number.isFinite(port) && port > 0) return port;
+  } catch {
+    // Fall through to compose port lookup.
+  }
+  return null;
+}
+
 async function resolveServerInternalUrl(params: {
   composeFile: string;
   project: string;
@@ -601,6 +632,7 @@ async function resolveServerInternalUrl(params: {
   composeEnv: Record<string, string>;
   fallbackHost: string;
   fallbackPort: number;
+  log?: (message: string) => void;
 }): Promise<string> {
   // Connect the tenant server container to the worker's internal network so the
   // worker can reach it directly (host-published port forwarding is blocked by
@@ -629,6 +661,15 @@ async function resolveServerInternalUrl(params: {
   } catch {
     // Fall through to host-port approach.
   }
+
+  const publishedPort = await resolvePublishedServerHostPort(containerName);
+  if (publishedPort) {
+    params.log?.(
+      `[provision] resolved Finance server published port ${publishedPort} for ${containerName}`,
+    );
+    return `http://${params.fallbackHost}:${publishedPort}`;
+  }
+
   try {
     const { stdout } = await execa(
       "docker",
@@ -649,11 +690,20 @@ async function resolveServerInternalUrl(params: {
     const trimmed = stdout.trim();
     const match = trimmed.match(/:(\d+)\s*$/);
     if (match?.[1]) {
-      return `http://${params.fallbackHost}:${match[1]}`;
+      const composePort = Number(match[1]);
+      params.log?.(
+        `[provision] resolved Finance server compose port ${composePort} for ${params.project}`,
+      );
+      return `http://${params.fallbackHost}:${composePort}`;
     }
   } catch {
-    // Fallback keeps backward compatibility if port lookup is unavailable.
+    // Fall through to last-resort fallback.
   }
+
+  params.log?.(
+    `[provision][warn] could not resolve published server port for ${containerName}; ` +
+      `falling back to ${params.fallbackHost}:${params.fallbackPort} (PUBLIC_PROXY_PORT — likely wrong for health check)`,
+  );
   return `http://${params.fallbackHost}:${params.fallbackPort}`;
 }
 
@@ -1506,6 +1556,11 @@ export async function executeProvisionRuntime(
     await checkNotCancelled();
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
+      const { resetSystemDatabaseForMigration } = await import("../domain/provisioner.js");
+      await resetSystemDatabaseForMigration(input.slug, dbPasswordPlain, log);
+      await trace.event("progress", "Running Finance system database migrations", {
+        meta: { operationKey: "docker.migration_step", composeProjectName: project },
+      });
       log("database_migration");
       await runComposeWithCancellation(["run", "--rm", "database_migration"]);
       await markOp("docker.migration_step", "Migration compose step completed", {
@@ -1583,7 +1638,7 @@ export async function executeProvisionRuntime(
         if (process.env.NODE_ENV !== "production") {
           localDevFallback = true;
           log(
-            `[provision] stockix_internal unavailable in local dev — using host.docker.internal:${port} for bootstrap calls`,
+            "[provision] stockix_internal unavailable in local dev — resolving published server port for host.docker.internal",
           );
         } else {
           log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
@@ -1597,17 +1652,19 @@ export async function executeProvisionRuntime(
     }
 
     // REPAIRED: local dev Finance URL when stockix_internal missing 2026-06-05
+    // Use docker compose port lookup — PUBLIC_PROXY_PORT (internal_port) is nginx routing,
+    // not the dynamic host port published by tenant-stack server (0.0.0.0::3000).
     const internalUrl = tenantServerInternalIp
       ? `http://${tenantServerInternalIp}:3000`
-      : localDevFallback
-        ? `http://host.docker.internal:${port}`
-        : await resolveServerInternalUrl({
+      : await resolveServerInternalUrl({
           composeFile,
           project,
           envPath: composeCtx.envPath,
           composeEnv: composeCtx.composeEnv,
+          // Host-run worker (pnpm dev) reaches published ports via TENANT_INTERNAL_HOST (127.0.0.1).
           fallbackHost: apiConfig.tenantInternalHost,
           fallbackPort: port,
+          log,
         });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");

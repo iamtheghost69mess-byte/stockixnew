@@ -216,6 +216,56 @@ export async function provisionTenantDatabases(
 }
 
 /**
+ * Drop and recreate the tenant system DB before migrations.
+ * Ensures a clean knex state when a prior migration attempt left partial tables.
+ */
+export async function resetSystemDatabaseForMigration(
+  slug: string,
+  dbPassword: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const safe = slugToMysqlSafe(slug);
+  const systemDb = `stockix_${safe}_system`;
+  const tenantUser = `tenant_${safe}`;
+  const mysqlHost = workerSharedMysqlHost();
+  const rootPassword = sharedMysqlRootPassword();
+
+  if (!rootPassword) {
+    throw new Error(
+      "[db-provision] SHARED_MYSQL_ROOT_PASSWORD is not set — cannot reset system database",
+    );
+  }
+
+  const mysql2 = await import("mysql2/promise");
+  const { escape: mysqlEscape } = await import("mysql2");
+  const conn = await mysql2.createConnection({
+    host: mysqlHost,
+    port: 3306,
+    user: "root",
+    password: rootPassword,
+    connectTimeout: 15_000,
+  });
+
+  try {
+    log(`[db-provision] resetting system database ${systemDb} for migration`);
+    await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
+    await conn.execute(
+      `CREATE DATABASE \`${systemDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    );
+    await conn.execute(
+      `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
+    );
+    await conn.execute(
+      `GRANT ALL PRIVILEGES ON \`${systemDb}\`.* TO '${tenantUser}'@'%'`,
+    );
+    await conn.execute("FLUSH PRIVILEGES");
+    log(`[db-provision] system database ${systemDb} ready for migration`);
+  } finally {
+    await conn.end();
+  }
+}
+
+/**
  * Drop tenant databases from shared infrastructure.
  * Called AFTER docker compose down during deprovision.
  *

@@ -32,8 +32,9 @@ ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.s
 RUN chmod +x /wait-for-it.sh
 
 WORKDIR /app/packages/server
-# Alpine has /bin/sh (ash), not bash — node entrypoint prepends `node` when the CMD binary is missing.
-CMD ["/bin/sh", "-c", "until (node ./build/commands.js system:migrate:unlock 2>/dev/null; node ./build/commands.js system:migrate:latest); do echo 'Waiting for database to be ready...'; sleep 5; done"]
+# Native Knex runner — webpack commands.js cannot require migration files from disk at runtime.
+# Single run (no retry loop) — worker resets system DB before each migration attempt.
+CMD ["node", "./scripts/run-system-migrate.mjs"]
 
 # -----------------------------------------------------------------------------
 # Full API server image: resources + app + CLI bundles.
