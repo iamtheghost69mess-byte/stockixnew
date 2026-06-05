@@ -191,11 +191,7 @@ services:
         export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
         export DB_ROOT_PASSWORD="$${DB_ROOT_PASSWORD:-}"
         echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
-        # MySQL is guaranteed healthy by depends_on condition:service_healthy — no wait-for-it needed.
-        if [ -n "$${DB_ROOT_PASSWORD}" ] && [ -n "$${SYSTEM_DB_USER}" ] && [ -n "$${SYSTEM_DB_PASSWORD}" ]; then
-          mariadb --ssl=0 -h mysql -uroot -p"$${DB_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON *.* TO '$${SYSTEM_DB_USER}'@'%' IDENTIFIED BY '$${SYSTEM_DB_PASSWORD}' WITH GRANT OPTION; FLUSH PRIVILEGES;" || true
-        fi
-        exec node ./dist/cli.js system:migrate:latest
+        exec node ./dist/commands.js system:migrate:latest
     security_opt:
       - no-new-privileges:true
     mem_limit: 256m
