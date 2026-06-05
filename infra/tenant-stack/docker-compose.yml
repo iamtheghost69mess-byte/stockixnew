@@ -147,6 +147,11 @@ services:
 
   database_migration:
     image: stockix-database-migration:local
+    # Override the image entrypoint (docker-entrypoint.sh wraps unknown commands with `node`).
+    # The Alpine-based image has no /bin/bash, so the entrypoint would prepend `node` to the
+    # bash command and fail with "Cannot find module '/bin/bash'". Running sh directly bypasses
+    # this and lets the migration script exec node ./dist/cli.js correctly.
+    entrypoint: ["/bin/sh"]
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
@@ -174,8 +179,7 @@ services:
       retries: 1
       start_period: 10s
     command:
-      - /bin/bash
-      - -lc
+      - -c
       - |
         export DB_CLIENT="$${DB_CLIENT:-mysql}"
         export DB_HOST="$${DB_HOST:-mysql}"
