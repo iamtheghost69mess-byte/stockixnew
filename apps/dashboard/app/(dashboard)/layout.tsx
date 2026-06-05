@@ -11,7 +11,7 @@ export default async function DashboardLayout({
 }) {
   const headerStore = await headers();
   const cookie = headerStore.get("cookie") ?? "";
-  const meRes = await fetch(`${dashboardConfig.nextPublicApiUrl}/auth/me`, {
+  const meRes = await fetch(`${dashboardConfig.serverApiUrl}/auth/me`, {
     headers: cookie ? { Cookie: cookie } : {},
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),

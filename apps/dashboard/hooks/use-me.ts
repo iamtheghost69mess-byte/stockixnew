@@ -78,6 +78,15 @@ export function useMe(): { me: Me | null; loading: boolean } {
   const [loading, setLoading] = useState(seeded == null);
 
   useEffect(() => {
+    // Server layout already validated this session and provided initialMe —
+    // populate the module cache so subsequent client navigations benefit,
+    // then skip the redundant round-trip.
+    if (initialFromServer !== undefined) {
+      if (initialFromServer) cachedMe = normalizeMe(initialFromServer);
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
     void fetchMe().then((data) => {
       if (!mounted) return;
