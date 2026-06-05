@@ -3053,7 +3053,7 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
     headers: { "Content-Type": "application/json" },
     signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
-      email: row.adminEmail,
+      credential: row.adminEmail,
       password: adminPassword,
     }),
   });
