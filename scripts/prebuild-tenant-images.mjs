@@ -111,8 +111,8 @@ if (!existsSync(FINANCE_ROOT)) {
 // ── 1. Pull base images ─────────────────────────────────────────────────────
 console.log("\n[prebuild] Phase 1: Pull base images");
 
-run("Pull node:20-bookworm-slim", "docker pull node:20-bookworm-slim");
-run("Pull node:20-alpine", "docker pull node:20-alpine");
+run("Pull node:22-bookworm-slim", "docker pull node:22-bookworm-slim");
+run("Pull node:22-alpine", "docker pull node:22-alpine");
 run("Pull nginx:1.27-alpine", "docker pull nginx:1.27-alpine");
 run("Pull mongo:5.0", "docker pull mongo:5.0");
 run("Pull mariadb:10.6", "docker pull mariadb:10.6 || docker pull mariadb:10");
