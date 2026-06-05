@@ -32,6 +32,10 @@ export class GetBuildOrganizationBuildJob {
       isRunning: state === 'active',
       isWaiting: state === 'waiting' || state === 'waiting-children',
       isFailed: state === 'failed',
+      failedReason:
+        state === 'failed' && typeof job.failedReason === 'string'
+          ? job.failedReason
+          : undefined,
     };
   }
 }

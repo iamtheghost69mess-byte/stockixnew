@@ -43,7 +43,12 @@ FROM deps AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
 RUN pnpm run build:server --skip-nx-cache \
   && mkdir -p packages/i18n \
-  && cp -r packages/server/src/i18n/. packages/i18n/
+  && cp -r packages/server/src/i18n/. packages/i18n/ \
+  && cd packages/server && node ./scripts/compile-tenant-migrations.mjs
 
 FROM build-app AS app
-CMD [ "node", "./packages/server/build/index.js" ]
+ENV TS_NODE_PROJECT=/app/packages/server/tsconfig.json
+# ts-node at boot needs more heap than Node's default (~256MB) inside 512m cgroup.
+ENV NODE_OPTIONS=--max-old-space-size=384
+# ts-node: tenant seed files stay .ts and use @/ path aliases at org-build time.
+CMD [ "node", "-r", "ts-node/register/transpile-only", "./packages/server/build/index.js" ]
