@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { OwnerAuthOtpInput } from "@/components/shadcn-studio/input-otp/input-otp-01";
@@ -27,7 +27,6 @@ export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +42,7 @@ export function LoginForm({
     setError("");
   }, [email, password]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -71,8 +70,13 @@ export function LoginForm({
         return;
       }
       resetMeCache();
-      router.push(params.get("from") ?? "/");
-      router.refresh();
+      // Hard navigation so the browser sends the new session cookie on a fresh
+      // request and the server re-renders the dashboard from scratch. Using
+      // router.push + router.refresh instead would re-render the login page
+      // (still mounted during the async push), causing Next.js to eagerly
+      // prefetch every visible link — including /forgot-password — producing a
+      // storm of redundant RSC requests.
+      window.location.replace(params.get("from") ?? "/");
     } catch {
       setError("Network error — please try again");
     } finally {
