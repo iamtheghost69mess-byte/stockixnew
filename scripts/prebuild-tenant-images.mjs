@@ -122,9 +122,13 @@ run("Pull redis:alpine", "docker pull redis:alpine");
 console.log("\n[prebuild] Phase 2: Build Finance images");
 
 syncRepoSharedIntoFinanceTree();
+// Finance has legacy deps (e.g. objection-filter@4.0.1) with stale
+// engines.node declarations (<=12.x.x) that run fine on Node 22.
+// services/stockix-finance/.npmrc sets engine-strict=false for this step.
+// Docker builds inside the container are unaffected.
 run(
   "pnpm install (stockix-finance lockfile)",
-  "pnpm install --ignore-scripts",
+  "pnpm install --ignore-scripts --config.engine-strict=false",
   FINANCE_ROOT,
 );
 
