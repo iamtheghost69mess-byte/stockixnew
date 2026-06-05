@@ -125,10 +125,20 @@ async function ensureMongoReplicaSet(env, envFiles) {
   await run("docker", args, { env });
 }
 
+function ensureDockerNetwork(name) {
+  try {
+    execSync(`docker network inspect ${name}`, { stdio: "pipe", shell: true });
+  } catch {
+    console.log(`[dev] Creating Docker network ${name} (required by tenant compose)…`);
+    execSync(`docker network create ${name}`, { stdio: "inherit", shell: true });
+  }
+}
+
 async function upSharedInfra(env) {
   if (!existsSync(SHARED_COMPOSE)) {
     throw new Error(`Missing ${SHARED_COMPOSE}`);
   }
+  ensureDockerNetwork("stockix_public");
   const envFiles = sharedComposeEnvFiles();
   const args = sharedComposeArgs(envFiles);
   args.push("up", "-d", "--wait");

@@ -37,6 +37,7 @@ function sharedMysqlHost(): string {
   return process.env.SHARED_MYSQL_HOST ?? "stockix-mysql";
 }
 
+// REPAIRED: worker host override for host-run worker 2026-06-05
 /** Host-run worker reaches shared MySQL via published localhost ports in dev. */
 function workerSharedMysqlHost(): string {
   return process.env.WORKER_SHARED_MYSQL_HOST?.trim() || sharedMysqlHost();
@@ -50,6 +51,7 @@ function sharedMongoHost(): string {
   return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
 }
 
+// REPAIRED: worker host override for host-run worker 2026-06-05
 /** Host-run worker reaches shared Mongo via published localhost ports in dev. */
 function workerSharedMongoHost(): string {
   return process.env.WORKER_SHARED_MONGO_HOST?.trim() || sharedMongoHost();
@@ -152,6 +154,12 @@ export async function provisionTenantDatabases(
   if (!rootPassword) {
     throw new Error(
       "[db-provision] SHARED_MYSQL_ROOT_PASSWORD is not set — cannot provision tenant databases",
+    );
+  }
+
+  if (process.env.NODE_ENV !== "production" && !process.env.WORKER_SHARED_MYSQL_HOST?.trim()) {
+    log(
+      "[db-provision][warn] WORKER_SHARED_MYSQL_HOST unset — using SHARED_MYSQL_HOST (set 127.0.0.1 when worker runs on host)",
     );
   }
 

@@ -1,3 +1,4 @@
+# Mongoose upgraded to v6 — rebuild required (pnpm docker:prebuild:force) 2026-06-05
 # SECURITY: No secrets in this Dockerfile.
 # All credentials injected at runtime via --env-file.
 # See infra/worker-service/domain/provisioning/tenant-env.ts
@@ -31,7 +32,8 @@ ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.s
 RUN chmod +x /wait-for-it.sh
 
 WORKDIR /app/packages/server
-CMD ["/bin/bash", "-c", "until (node ./build/commands.js system:migrate:unlock 2>/dev/null; node ./build/commands.js system:migrate:latest); do echo 'Waiting for database to be ready...'; sleep 5; done"]
+# Alpine has /bin/sh (ash), not bash — node entrypoint prepends `node` when the CMD binary is missing.
+CMD ["/bin/sh", "-c", "until (node ./build/commands.js system:migrate:unlock 2>/dev/null; node ./build/commands.js system:migrate:latest); do echo 'Waiting for database to be ready...'; sleep 5; done"]
 
 # -----------------------------------------------------------------------------
 # Full API server image: resources + app + CLI bundles.
