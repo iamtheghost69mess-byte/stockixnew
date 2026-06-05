@@ -1,14 +1,25 @@
 /**
- * Stockix local development orchestrator.
+ * Stockix local development orchestrator (full provision-ready stack).
  *
- * Starts: Postgres (docker) → migrations → API (wait for /health) → dashboard, worker, POS, PMS.
- * Ports auto-increment when defaults are busy (unless STOCKIX_DEV_STRICT_PORT=1).
+ * One command: pnpm dev
+ *
+ * Brings up:
+ *   - Control-plane Postgres + Redis (infra/dev)
+ *   - Shared tenant infra MySQL + Mongo + Redis (infra/shared / stockix-shared network)
+ *   - Migrations + platform admin seed (idempotent)
+ *   - API → dashboard, worker, POS, PMS
+ *
+ * Does NOT rebuild Docker tenant images or packages unless artifacts are missing
+ * (set STOCKIX_DEV_FORCE_BUILD=1 to force @repo/auth + worker bundle rebuild).
  *
  * Usage: pnpm dev
+ *        STOCKIX_DEV_SKIP_POS=1 pnpm dev   — skip POS if low on RAM
  */
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
 import { findFreePort, waitForPortFree } from "./find-free-port.mjs";
 import { waitForHttp } from "./wait-for-http.mjs";
@@ -22,7 +33,35 @@ const concurrentlyBin = path.join(
   "bin",
   "concurrently.js",
 );
+const SHARED_COMPOSE = path.join(repoRoot, "infra", "shared", "docker-compose.yml");
+const WORKER_BUNDLE = path.join(repoRoot, "infra", "worker-service", ".runtime", "worker.js");
+const AUTH_DIST = path.join(repoRoot, "packages", "auth", "dist", "index.cjs");
+
+const TENANT_IMAGE_TAGS = [
+  "stockix-webapp:local",
+  "stockix-server:local",
+  "stockix-database-migration:local",
+  "stockix-nginx:local",
+];
+
 loadEnvFilesAtRoot(repoRoot);
+loadSharedInfraEnv(repoRoot);
+
+/** Merge infra/prod/.env for SHARED_* keys required by tenant provisioning. */
+function loadSharedInfraEnv(root) {
+  const prodEnv = path.join(root, "infra", "prod", ".env");
+  if (existsSync(prodEnv)) {
+    loadEnv({ path: prodEnv, override: false });
+  }
+  if (!process.env.SHARED_MYSQL_ROOT_PASSWORD?.trim()) {
+    console.error("[dev] SHARED_MYSQL_ROOT_PASSWORD is required for tenant provisioning.");
+    console.error("      Add it to .env or infra/prod/.env (see infra/prod/.env.example).");
+    process.exit(1);
+  }
+  process.env.SHARED_MYSQL_HOST ??= "stockix-mysql";
+  process.env.SHARED_MONGO_HOST ??= "stockix-mongo";
+  process.env.TENANT_REDIS_HOST ??= "stockix-redis";
+}
 
 /** @param {string} cmd @param {string[]} args @param {import('node:child_process').SpawnOptions} [opts] */
 function run(cmd, args, opts = {}) {
@@ -39,6 +78,75 @@ function run(cmd, args, opts = {}) {
     });
     child.on("error", reject);
   });
+}
+
+function dockerImageExists(tag) {
+  try {
+    execSync(`docker image inspect ${tag}`, { stdio: "pipe", shell: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function warnMissingTenantImages() {
+  const missing = TENANT_IMAGE_TAGS.filter((tag) => !dockerImageExists(tag));
+  if (missing.length === 0) return;
+  console.warn("[dev] ⚠ Tenant Docker images not built yet (provision will fail until you run once):");
+  for (const tag of missing) console.warn(`[dev]     - ${tag}`);
+  console.warn("[dev]   Run once: pnpm docker:prebuild\n");
+}
+
+function sharedComposeEnvFiles() {
+  const envFiles = [path.join(repoRoot, ".env")];
+  const prodEnv = path.join(repoRoot, "infra", "prod", ".env");
+  if (existsSync(prodEnv)) envFiles.push(prodEnv);
+  return envFiles;
+}
+
+/** @param {string[]} envFiles */
+function sharedComposeArgs(envFiles) {
+  const args = ["compose", "-f", SHARED_COMPOSE];
+  for (const file of envFiles) args.push("--env-file", file);
+  return args;
+}
+
+/** Block until rs0 is initiated and PRIMARY (idempotent). */
+async function ensureMongoReplicaSet(env, envFiles) {
+  console.log("[dev] MongoDB replica set rs0 bootstrap…");
+  const args = sharedComposeArgs(envFiles);
+  args.push("run", "--rm", "stockix-mongo-rs-init");
+  await run("docker", args, { env });
+}
+
+async function upSharedInfra(env) {
+  if (!existsSync(SHARED_COMPOSE)) {
+    throw new Error(`Missing ${SHARED_COMPOSE}`);
+  }
+  const envFiles = sharedComposeEnvFiles();
+  const args = sharedComposeArgs(envFiles);
+  args.push("up", "-d", "--wait");
+
+  console.log("[dev] Shared tenant infra (stockix-shared: MySQL, Mongo, Redis, nginx)…");
+  await run("docker", args, { env });
+  await ensureMongoReplicaSet(env, envFiles);
+  console.log("[dev] ✓ stockix-shared is up (Mongo rs0 ready)\n");
+}
+
+async function ensureBuildArtifacts(env) {
+  const force = process.env.STOCKIX_DEV_FORCE_BUILD === "1";
+  if (force || !existsSync(AUTH_DIST)) {
+    console.log("[dev] Building @repo/auth…");
+    await run("pnpm", ["--filter", "@repo/auth", "build"], { env });
+  } else {
+    console.log("[dev] @repo/auth dist present — skip build (STOCKIX_DEV_FORCE_BUILD=1 to rebuild)");
+  }
+  if (force || !existsSync(WORKER_BUNDLE)) {
+    console.log("[dev] Building worker bundle…");
+    await run("pnpm", ["infra:worker:build"], { env });
+  } else {
+    console.log("[dev] Worker bundle present — skip build (STOCKIX_DEV_FORCE_BUILD=1 to rebuild)");
+  }
 }
 
 const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
@@ -83,6 +191,7 @@ const reuseExistingApi = existingApiPort != null && apiPort === existingApiPort;
 
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const pmsOrigin = `http://127.0.0.1:${pmsPort}`;
+const adminEmail = process.env.PLATFORM_ADMIN_EMAIL || "admin@localhost";
 
 /** @type {NodeJS.ProcessEnv} */
 const sharedEnv = {
@@ -109,21 +218,34 @@ if (reuseExistingApi) {
   console.warn("[dev] Tip: run `pnpm dev:kill` to free stale processes on port 4000.\n");
 }
 
-console.log("\n[dev] Stockix local stack");
+console.log("\n[dev] Stockix full local stack (provision-ready)");
 console.log(`  Dashboard   http://127.0.0.1:${dashPort}  (http://localhost:${dashPort})`);
 console.log(`  API         ${apiOrigin}`);
 console.log(`  PMS API     ${pmsOrigin}`);
 console.log(`  PMS (platform admin)  http://127.0.0.1:${dashPort}/pms`);
 console.log(`  PMS (tenant app)      http://localhost:${pmsUiPort}`);
-console.log("  Login (platform): admin@localhost / admin (from .env)");
-console.log("  Tips: pnpm db:seed:pms-demo  |  STOCKIX_DEV_SKIP_POS=1 pnpm dev\n");
+console.log(`  Shared infra  stockix-shared (MySQL, Mongo, tenant Redis)`);
+console.log(`  Login (platform): ${adminEmail} (PLATFORM_ADMIN_PASSWORD from .env)`);
+console.log("  E2E audit:     pnpm audit:e2e");
+console.log("  Tips: STOCKIX_DEV_SKIP_POS=1 pnpm dev  |  pnpm db:seed:pms-demo\n");
 
-console.log("[dev] Postgres + migrations…");
+console.log("[dev] Control-plane Postgres + Redis…");
 await run("pnpm", ["db:up"], { env: sharedEnv });
+await upSharedInfra(sharedEnv);
+warnMissingTenantImages();
+
+console.log("[dev] Migrations + platform admin…");
 await run("pnpm", ["db:wait"], { env: sharedEnv });
 await run("pnpm", ["db:migrate"], { env: sharedEnv });
-await run("pnpm", ["--filter", "@repo/auth", "build"], { env: sharedEnv });
-await run("pnpm", ["infra:worker:build"], { env: sharedEnv });
+try {
+  await run("pnpm", ["db:seed:local"], { env: sharedEnv });
+} catch (err) {
+  console.warn(
+    `[dev] db:seed:local failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+  );
+}
+
+await ensureBuildArtifacts(sharedEnv);
 
 const posCmd =
   process.env.STOCKIX_DEV_SKIP_POS === "1"
@@ -173,8 +295,6 @@ if (!reuseExistingApi) {
   }
 }
 
-// API is healthy — start remaining services. Do not launch a second API under concurrently
-// (Windows + pnpm exec + tsx watch + parallel Next dev servers caused startup hangs).
 const concurrentlyArgs = [
   "-n",
   "dash,worker,pos,pms,pms-ui",

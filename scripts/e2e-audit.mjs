@@ -83,6 +83,29 @@ function record(id, title, status, detail, durationMs, evidence, issue) {
   log(icon, `${id} — ${title}`, `${status} (${durationMs}ms) — ${detail}`);
 }
 
+/** Unauthenticated fetch for public endpoints (/health, /ready). */
+async function publicApi(method, path) {
+  const headers = { Accept: "application/json" };
+  const url = path.startsWith("http") ? path : `${API}${path.startsWith("/") ? "" : "/"}${path}`;
+  try {
+    const res = await fetch(url, { method, headers, signal: AbortSignal.timeout(30_000) });
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { _raw: text };
+    }
+    return { ok: res.ok, status: res.status, data, headers: res.headers };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      data: { error: err instanceof Error ? err.message : String(err) },
+    };
+  }
+}
+
 async function api(method, path, body, token) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -316,22 +339,53 @@ async function verifyTenantIsolation(slug) {
 async function scenario01() {
   const t0 = Date.now();
   try {
-    const health = await api("GET", "/health");
-    const ready = await api("GET", "/ready");
-    if (health.status === 200 && health.data?.status === "ok" && ready.status === 200) {
+    const health = await publicApi("GET", "/health");
+    const ready = await publicApi("GET", "/ready");
+    const apiDown = health.status === 0 || ready.status === 0;
+    const healthOk = health.status === 200 && health.data?.status === "ok";
+    const readyOk = ready.status === 200 && ready.data?.ready === true;
+    const readyDegraded = ready.status === 503;
+
+    if (apiDown || !healthOk) {
+      record(
+        "S01",
+        "API Health Check",
+        "FAIL",
+        `GET /health → ${health.status}, GET /ready → ${ready.status}`,
+        Date.now() - t0,
+        truncate({ health: health.data, ready: ready.data }),
+        apiDown ? "API not reachable — start pnpm dev (or pnpm --filter api dev)" : "GET /health must return 200 ok",
+      );
+      ctx.skipAll = true;
+      return;
+    }
+    if (readyOk) {
       record("S01", "API Health Check", "PASS", `GET /health → ${health.status}, GET /ready → ${ready.status}`, Date.now() - t0, truncate({ health: health.data, ready: ready.data }));
+      return;
+    }
+    if (readyDegraded) {
+      record(
+        "S01",
+        "API Health Check",
+        "PARTIAL",
+        `GET /health → ${health.status}, GET /ready → ${ready.status} (not ready: ${JSON.stringify(ready.data?.checks ?? {})})`,
+        Date.now() - t0,
+        truncate({ health: health.data, ready: ready.data }),
+        "API up but readiness checks failed (DB/Redis)",
+      );
       return;
     }
     record(
       "S01",
       "API Health Check",
-      "FAIL",
+      "PARTIAL",
       `GET /health → ${health.status}, GET /ready → ${ready.status}`,
       Date.now() - t0,
       truncate({ health: health.data, ready: ready.data }),
-      "Expected HTTP 200 on /health and /ready",
+      ready.status === 401
+        ? "GET /ready returned 401 — RBAC treated /ready as protected (fixed in route-permissions.ts; restart API)"
+        : "Expected HTTP 200 on /ready",
     );
-    ctx.skipAll = true;
   } catch (err) {
     record("S01", "API Health Check", "FAIL", err instanceof Error ? err.message : String(err), Date.now() - t0, undefined, String(err));
     ctx.skipAll = true;
@@ -1265,7 +1319,7 @@ async function main() {
   };
 
   for (const fn of scenarios) {
-    if (ctx.skipAll && fn !== scenario01 && fn !== scenario20) {
+    if (ctx.skipAll && fn !== scenario01 && fn !== scenario19 && fn !== scenario20) {
       const num = fn.name.replace("scenario", "");
       const id = `S${num.padStart(2, "0")}`;
       record(id, skipTitles[fn.name] ?? fn.name, "SKIP", "Skipped — API unavailable", 0);

@@ -2,7 +2,7 @@
 # All credentials injected at runtime via --env-file.
 # See infra/worker-service/domain/provisioning/tenant-env.ts
 
-FROM node:20-alpine as deps
+FROM node:22-alpine as deps
 
 USER root
 

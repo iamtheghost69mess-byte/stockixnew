@@ -9,7 +9,7 @@ export function requiredPermissionsForRoute(
   method: string,
 ): readonly Permission[] | null {
   const m = method.toUpperCase();
-  if (pathname === "/health") return null;
+  if (pathname === "/health" || pathname === "/ready") return null;
   if (pathname.startsWith("/auth")) return null;
   if (pathname.startsWith("/webhooks/")) return null;
   if (pathname.startsWith("/internal/jobs")) return null;
