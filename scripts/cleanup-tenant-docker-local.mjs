@@ -1,6 +1,6 @@
 /**
  * Tear down local tenant Docker stacks and Stockix *:local images built from the clone.
- * Does NOT run `docker system prune` or remove base images (node:20-alpine, mongo:5.0, etc.).
+ * Does NOT run `docker system prune` or remove base images (node:22-alpine, mongo:5.0, etc.).
  *
  * Usage (repo root):
  *   node scripts/cleanup-tenant-docker-local.mjs

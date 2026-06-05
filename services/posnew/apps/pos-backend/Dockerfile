@@ -1,10 +1,10 @@
 # POS backend Dockerfile
 #
-# Fix: was FROM node:20 (Debian bookworm-slim, ~900MB).
-# Now: FROM node:20-alpine (~150MB). Saves ~750MB per image.
+# Fix: was FROM node:22 (Debian bookworm-slim, ~900MB).
+# Now: FROM node:22-alpine (~150MB). Saves ~750MB per image.
 # Build context: repo root (STOCKIX_REPO_ROOT).
 
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 RUN apk add --no-cache python3 make g++ \
     && apk upgrade --no-cache
@@ -22,7 +22,7 @@ COPY services/posnew/apps/pos-backend ./services/posnew/apps/pos-backend
 WORKDIR /app/services/posnew/apps/pos-backend
 
 # ─────────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 RUN apk add --no-cache dumb-init \
     && apk upgrade --no-cache \
