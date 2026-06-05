@@ -38,10 +38,8 @@ const WORKER_BUNDLE = path.join(repoRoot, "infra", "worker-service", ".runtime",
 const AUTH_DIST = path.join(repoRoot, "packages", "auth", "dist", "index.cjs");
 
 const TENANT_IMAGE_TAGS = [
-  "stockix-webapp:local",
   "stockix-server:local",
   "stockix-database-migration:local",
-  "stockix-nginx:local",
 ];
 
 loadEnvFilesAtRoot(repoRoot);

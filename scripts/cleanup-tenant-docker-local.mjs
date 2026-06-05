@@ -23,8 +23,6 @@ const composeFile = path.join(repoRoot, "infra", "tenant-stack", "docker-compose
 
 /** Locally built tags from infra/tenant-stack/docker-compose.yml */
 const LOCAL_TAGS = [
-  "stockix-nginx:local",
-  "stockix-webapp:local",
   "stockix-server:local",
   "stockix-database-migration:local",
 ];

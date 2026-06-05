@@ -34,7 +34,7 @@ const tenantProvisionService = new TenantProvisionService({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function sharedMysqlHost(): string {
-  return process.env.SHARED_MYSQL_HOST ?? "shared-mysql";
+  return process.env.SHARED_MYSQL_HOST ?? "stockix-mysql";
 }
 
 function sharedMysqlRootPassword(): string {
@@ -42,7 +42,7 @@ function sharedMysqlRootPassword(): string {
 }
 
 function sharedMongoHost(): string {
-  return process.env.SHARED_MONGO_HOST ?? "shared-mongo";
+  return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
 }
 
 async function getComposeContainerName(
@@ -125,7 +125,7 @@ export function slugToMysqlSafe(slug: string): string {
  *
  * MySQL  → CREATE DATABASE + CREATE USER + GRANT (via mysql2, already in api deps).
  * MongoDB → database auto-created by Finance on first write.
- *           We verify shared-mongo is reachable via TCP ping only.
+ *           We verify stockix-mongo is reachable via TCP ping only.
  */
 export async function provisionTenantDatabases(
   slug: string,
@@ -191,9 +191,9 @@ export async function provisionTenantDatabases(
 
   // Verify MongoDB reachable via TCP — no mongodb driver needed.
   // The Finance server auto-creates the {slug}_pos database on first write.
-  log(`[db-provision] verifying shared-mongo reachability for tenant "${slug}"`);
-  await verifyTcpReachable(sharedMongoHost(), 27017, "shared-mongo");
-  log(`[db-provision] shared-mongo reachable — ${slug}_pos will be auto-created on first write`);
+  log(`[db-provision] verifying stockix-mongo reachability for tenant "${slug}"`);
+  await verifyTcpReachable(sharedMongoHost(), 27017, "stockix-mongo");
+  log(`[db-provision] stockix-mongo reachable — ${slug}_pos will be auto-created on first write`);
 }
 
 /**

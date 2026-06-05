@@ -7,59 +7,6 @@ type ComposeCtx = {
   composeEnv: Record<string, string>;
 };
 
-type ComposeRunOptions = {
-  cancelSignal?: AbortSignal;
-};
-
-export async function executeDataStep(
-  runner: IDockerComposeRunner,
-  ctx: ComposeCtx,
-  options?: ComposeRunOptions,
-): Promise<void> {
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
-    "up",
-    "-d",
-    "--no-deps",
-    "--remove-orphans",
-    "--no-build",
-    "mysql",
-    "mongo",
-    "redis",
-  ], options);
-}
-
-export async function executeMigrationStep(
-  runner: IDockerComposeRunner,
-  ctx: ComposeCtx,
-  log: (m: string) => void,
-  options?: ComposeRunOptions,
-): Promise<void> {
-  log("database_migration");
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
-    "run",
-    "--rm",
-    "database_migration",
-  ], options);
-}
-
-export async function executeAppStep(
-  runner: IDockerComposeRunner,
-  ctx: ComposeCtx,
-  options?: ComposeRunOptions,
-): Promise<void> {
-  // Use pre-built stockix-*:local images (pnpm docker:prebuild). No compose --build here.
-  await runner.run(ctx.composeFile, ctx.project, ctx.envPath, ctx.composeEnv, [
-    "up",
-    "-d",
-    "--remove-orphans",
-    "--force-recreate",
-    "--no-build",
-    "webapp",
-    "nginx",
-    "server",
-  ], options);
-}
-
 export async function composeDownBestEffort(
   runner: IDockerComposeRunner,
   ctx: ComposeCtx,

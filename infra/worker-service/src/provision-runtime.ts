@@ -16,7 +16,7 @@ import { defaultTenantEnvRoot } from "../domain/env-paths.js";
 import { deprovisionTenantDatabases, provisionTenant } from "../domain/provisioner.js";
 import { getTenantStackPaths } from "../domain/provision-paths.js";
 import { createProvisionTracer } from "../domain/provision-trace.js";
-import { composeProjectName, tenantMysqlVolumeName } from "../domain/provisioning/compose-project-name.js";
+import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
 import {
   COMPOSE_DOWN_TIMEOUT_MS,
   resolveComposeStepTimeoutMs,
@@ -696,7 +696,6 @@ export async function executeProvisionRuntime(
   const maxPort = apiConfig.maxTenantPort;
   const tenantEnvRoot = defaultTenantEnvRoot();
   const project = composeProjectName(input.slug);
-  const mysqlVolumeName = tenantMysqlVolumeName(input.slug);
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
   const requestId = correlationId;
   let port: number | undefined;
@@ -1290,7 +1289,6 @@ export async function executeProvisionRuntime(
       log(`[provision] module gating: skipping Finance stack (modules=${licensedModules.join(",")})`);
       const posOnlyTenantEnvMap = buildTenantEnvMap({
         slug: input.slug,
-        mysqlVolumeName,
         stockixFinanceRoot,
         baseUrl,
         socketAllowedOrigins: baseUrl,
@@ -1413,7 +1411,6 @@ export async function executeProvisionRuntime(
 
     const tenantEnvMap = buildTenantEnvMap({
       slug: input.slug,
-      mysqlVolumeName,
       stockixFinanceRoot,
       baseUrl,
       socketAllowedOrigins: baseUrl,

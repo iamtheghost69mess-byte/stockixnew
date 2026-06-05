@@ -190,7 +190,7 @@ export const tenantDeployments = pgTable(
     mysqlRootPassword: text("mysql_root_password").notNull(),
     /** Encrypted ciphertext at rest (`enc:v1:*`) */
     jwtSecret: text("jwt_secret").notNull(),
-    /** MongoDB URL scoped to the tenant stack (e.g. mongodb://mongo/stockix). */
+    /** MongoDB URL scoped to the tenant (e.g. mongodb://stockix-mongo:27017/{slug}_pos?replicaSet=rs0). */
     mongoUrl: text("mongo_url").notNull(),
     lastError: text("last_error"),
     /** When tenant.status is partial: pos_failed | wire_failed */

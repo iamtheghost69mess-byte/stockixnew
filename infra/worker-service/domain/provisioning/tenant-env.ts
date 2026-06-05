@@ -10,7 +10,6 @@ import {
 
 export type TenantEnvFileParams = {
   slug: string;
-  mysqlVolumeName: string;
   stockixFinanceRoot: string;
   baseUrl: string;
   jwtSecret: string;
@@ -67,7 +66,7 @@ function maybeEncryptEnvValue(value: string): string {
  * these hostnames via Docker DNS.
  */
 function sharedMysqlHost(): string {
-  return process.env.SHARED_MYSQL_HOST ?? "shared-mysql";
+  return process.env.SHARED_MYSQL_HOST ?? "stockix-mysql";
 }
 
 function sharedMongoHost(): string {
@@ -75,13 +74,13 @@ function sharedMongoHost(): string {
 }
 
 function tenantRedisHost(): string {
-  return process.env.TENANT_REDIS_HOST ?? "tenant-redis";
+  return process.env.TENANT_REDIS_HOST ?? "stockix-redis";
 }
 
 /**
  * Build the per-tenant MongoDB connection URL.
  * Each tenant gets its own MongoDB database: {slug}_pos
- * The replica set name (rs0) matches the shared-mongo container init.
+ * The replica set name (rs0) matches the stockix-mongo container init.
  *
  * FIX: Previously all tenants shared the same "stockix" database because
  * MONGODB_DATABASE_URL was passed through from the platform env unchanged.
@@ -94,7 +93,7 @@ export function buildTenantMongoUrl(slug: string): string {
 
 /**
  * Build the per-tenant Redis URL.
- * All tenants share tenant-redis but use a key prefix for isolation:
+ * All tenants share stockix-redis but use a key prefix for isolation:
  *   tenant:{slug}:queue:*    BullMQ (POS + Finance NestJS via REDIS_KEY_PREFIX)
  *   tenant:{slug}:agenda:*   Finance Agenda scheduler (Mongo collection name)
  * Finance auth is stateless JWT (no Redis session store). If session middleware
@@ -133,12 +132,10 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
   const redisKeyPrefix = buildTenantRedisKeyPrefix(slug);
 
   return {
-    // Legacy: kept for compose volume name compatibility (unused with shared infra)
-    MYSQL_VOLUME_NAME: params.mysqlVolumeName,
     STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
     BASE_URL: params.baseUrl,
 
-    // ── MySQL (shared-mysql) ───────────────────────────────────────────
+    // ── MySQL (stockix-mysql) ───────────────────────────────────────────
     DB_CLIENT: "mysql",
     DB_HOST: mysqlHost,
     DB_USER: tenantDbUser,
@@ -161,12 +158,12 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     TENANT_DB_NAME_PERFIX: `stockix_${mysqlSafe}_`,
     TENANT_DB_CHARSET: "utf8mb4",
 
-    // ── MongoDB (shared-mongo) — per-tenant database ───────────────────
+    // ── MongoDB (stockix-mongo) — per-tenant database ───────────────────
     // Per-tenant Mongo DB isolation — slug_pos pattern
     MONGODB_DATABASE_URL: mongoUrl,
     MONGODB_URI: mongoUrl,
 
-    // ── Redis (tenant-redis) — shared with key prefix isolation ────────
+    // ── Redis (stockix-redis) — shared with key prefix isolation ────────
     REDIS_HOST: tenantRedisHost(),
     REDIS_PORT: "6379",
     REDIS_PASSWORD: "",
