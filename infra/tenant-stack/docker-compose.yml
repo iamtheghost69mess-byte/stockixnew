@@ -5,17 +5,12 @@
 # AFTER  (new): server only = 1 container per tenant.
 #
 # All database connections point to the shared infrastructure network (stockix-shared):
-#   MySQL  → shared-mysql:3306   DB: stockix_{slug}_finance  user: tenant_{slug}
-#   MongoDB → shared-mongo:27017  DB: {slug}_pos
-#   Redis  → tenant-redis:6379   key prefix: tenant:{slug}:
+#   MySQL  → stockix-mysql:3306   DB: stockix_{slug}_finance  user: tenant_{slug}
+#   MongoDB → stockix-mongo:27017  DB: {slug}_pos
+#   Redis  → stockix-redis:6379   key prefix: tenant:{slug}:
 #
-# The Finance webapp (React/Webpack static build) is served by the shared Nginx gateway
-# defined in infra/shared/nginx/ — no per-tenant webapp or nginx container needed.
-#
-# webapp container is deprecated.
-# Static files will be served by shared stockix-nginx (infra/shared).
-# Remove per-tenant webapp once static file copy step is added to provision-runtime.
-# Tracked: Architecture2.md §18.1 item 6
+# Finance UI is served by the NestJS server via ServeStaticModule (/public).
+# Shared stockix-nginx (infra/shared) is a static CDN gateway for future use.
 #
 # Traefik terminates TLS. Tenant subdomain: {slug}.stockix.cloud
 
@@ -56,33 +51,33 @@ services:
       - MAIL_SECURE=${MAIL_SECURE:-}
       - MAIL_FROM_NAME=${MAIL_FROM_NAME:-}
       - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-}
-      # ── Database (shared-mysql) ──────────────────────────────
+      # ── Database (stockix-mysql) ──────────────────────────────
       - DB_CLIENT=mysql
-      - DB_HOST=shared-mysql
+      - DB_HOST=stockix-mysql
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET:-utf8mb4}
       - SYSTEM_DB_CLIENT=mysql
-      - SYSTEM_DB_HOST=shared-mysql
+      - SYSTEM_DB_HOST=stockix-mysql
       - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
       - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
       - TENANT_DB_CLIENT=mysql
-      - TENANT_DB_HOST=shared-mysql
+      - TENANT_DB_HOST=stockix-mysql
       - TENANT_DB_USER=${TENANT_DB_USER:-${DB_USER}}
       - TENANT_DB_PASSWORD=${TENANT_DB_PASSWORD:-${DB_PASSWORD}}
       - TENANT_DB_NAME_PREFIX=${TENANT_DB_NAME_PREFIX:-stockix_tenant_}
       - TENANT_DB_NAME_PERFIX=${TENANT_DB_NAME_PREFIX:-stockix_tenant_}
       - TENANT_DB_CHARSET=${TENANT_DB_CHARSET:-utf8mb4}
-      # ── MongoDB (shared-mongo) ───────────────────────────────
+      # ── MongoDB (stockix-mongo) ───────────────────────────────
       - MONGODB_DATABASE_URL=${MONGODB_DATABASE_URL}
-      # ── Redis (tenant-redis) ─────────────────────────────────
-      - REDIS_HOST=tenant-redis
+      # ── Redis (stockix-redis) ─────────────────────────────────
+      - REDIS_HOST=stockix-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=0
       - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX}
-      - QUEUE_HOST=tenant-redis
+      - QUEUE_HOST=stockix-redis
       - QUEUE_PORT=6379
       # ── Auth + identity ──────────────────────────────────────
       - JWT_SECRET=${JWT_SECRET}
@@ -123,13 +118,13 @@ services:
       target: migration
     environment:
       - DB_CLIENT=mysql
-      - DB_HOST=shared-mysql
+      - DB_HOST=stockix-mysql
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET:-utf8mb4}
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
       - SYSTEM_DB_CLIENT=mysql
-      - SYSTEM_DB_HOST=shared-mysql
+      - SYSTEM_DB_HOST=stockix-mysql
       - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
       - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
@@ -149,7 +144,7 @@ services:
     cpus: "0.25"
     mem_swappiness: 0
 
-# No local volumes — all data lives in shared-mysql and shared-mongo.
+# No local volumes — all data lives in stockix-mysql and stockix-mongo.
 volumes: {}
 
 networks:

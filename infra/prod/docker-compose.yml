@@ -56,10 +56,10 @@ x-stockix-platform-env: &stockix-platform-env
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
   RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
   # Shared infra — used by worker to provision tenant databases.
-  SHARED_MYSQL_HOST: shared-mysql
+  SHARED_MYSQL_HOST: stockix-mysql
   SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
-  SHARED_MONGO_HOST: shared-mongo
-  TENANT_REDIS_HOST: tenant-redis
+  SHARED_MONGO_HOST: stockix-mongo
+  TENANT_REDIS_HOST: stockix-redis
   TENANT_REDIS_PORT: "6379"
   MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
   WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
@@ -404,7 +404,7 @@ networks:
     driver: bridge
     internal: true
   # External: managed by infra/shared/docker-compose.yml
-  # Worker joins this to reach shared-mysql, shared-mongo, tenant-redis
+  # Worker joins this to reach stockix-mysql, stockix-mongo, stockix-redis
   stockix-shared:
     name: stockix-shared
     external: true

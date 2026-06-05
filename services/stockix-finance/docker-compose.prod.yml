@@ -1,3 +1,7 @@
+# DEPRECATED — pre-shared-infra standalone layout (per-tenant mysql/mongo/redis/nginx/webapp).
+# Not used by the Stockix tenant provisioner (infra/tenant-stack + infra/shared).
+# Kept for reference only; use infra/tenant-stack/docker-compose.yml for multi-tenant deploys.
+#
 # This is a production version of the Stockix docker-compose.yml file.
 
 version: '3.3'

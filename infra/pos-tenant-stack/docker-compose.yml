@@ -6,8 +6,8 @@
 # AFTER  (new): pos-backend + pos-frontend + pos-platform-worker + pos-bigcapital-worker
 #               = 4 containers per POS tenant.
 #
-# MongoDB → shared-mongo:27017  DB: {slug}_pos   (key: MONGODB_URI in tenant .env)
-# Redis   → tenant-redis:6379   key prefix: tenant:{slug}:queue:*
+# MongoDB → stockix-mongo:27017  DB: {slug}_pos   (key: MONGODB_URI in tenant .env)
+# Redis   → stockix-redis:6379   key prefix: tenant:{slug}:queue:*
 #
 # Shared Mongo (stockix-mongo) lives in infra/shared compose — cross-project
 # depends_on is not supported here. Readiness is enforced by shared RS healthcheck
@@ -31,9 +31,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${POS_PORT:-8010}
-      # Points to shared-mongo, tenant-scoped DB name
+      # Points to stockix-mongo, tenant-scoped DB name
       - MONGODB_URI=${MONGODB_URI}
-      # Points to tenant-redis with key prefix
+      # Points to stockix-redis with key prefix
       - REDIS_URL=${REDIS_URL}
       - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX}
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
@@ -146,7 +146,7 @@ services:
     mem_swappiness: 0
     oom_kill_disable: false
 
-# No local volumes — all data lives in shared-mongo and tenant-redis.
+# No local volumes — all data lives in stockix-mongo and stockix-redis.
 volumes: {}
 
 networks:

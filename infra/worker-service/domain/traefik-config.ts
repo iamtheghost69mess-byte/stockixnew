@@ -18,8 +18,8 @@ export async function writeTenantTraefikConfig(
 ): Promise<void> {
   const dir = traefikDir();
   await mkdir(dir, { recursive: true });
-  // Direct to Finance server — per-tenant nginx removed
-  // Future: route via shared stockix-nginx when static gateway ready
+  // Direct to Finance server — per-tenant nginx removed.
+  // Shared stockix-nginx (infra/shared) is available for static CDN routing when needed.
   const upstreamUrl = `http://${tenantUpstreamHost()}:${port}`;
   const config =
     `http:\n` +

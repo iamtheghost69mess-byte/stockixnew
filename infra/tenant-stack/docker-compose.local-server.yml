@@ -1,5 +1,4 @@
 # Optional override: build API server from your fork (mail templates, TypeScript, etc.).
-# Combine with docker-compose.local-webapp.yml if you need both.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.local-server.yml build server
 #   docker compose -f docker-compose.yml -f docker-compose.local-server.yml up -d
