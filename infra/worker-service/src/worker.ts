@@ -455,6 +455,9 @@ const provisionPayloadSchema = z.object({
   retryModules: z
     .array(z.enum(["accounting", "pos", "pms", "chat", "wire"]))
     .optional(),
+  // Full retry: reuse the existing tenant/deployment rows instead of creating new ones.
+  skipTenantCreation: z.boolean().optional(),
+  existingTenantId: z.string().uuid().optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({
@@ -530,6 +533,8 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
       mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
       controlPlaneOrgId: payload.organizationId ?? undefined,
       retryModules: payload.retryModules,
+      skipTenantCreation: payload.skipTenantCreation,
+      existingTenantId: payload.existingTenantId,
     },
     (m) => logger.info(`[worker][${job.id}] ${m}`),
     job.correlationId ?? randomUUID(),
