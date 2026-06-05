@@ -68,6 +68,10 @@ services:
   # MongoDB 6 — one database per tenant ({slug}_pos)
   # Single node replica set (rs0) — required by POS connection string
   # (?replicaSet=rs0). On upgrade to multi-server, add members to rs.
+  #
+  # Bootstrap is two-phase (do not require rs.status in mongo healthcheck):
+  #   1. stockix-mongo healthcheck = mongod ping (process listening)
+  #   2. stockix-mongo-rs-init runs rs.initiate() then waits for PRIMARY
   # ─────────────────────────────────────────────────────────────
   stockix-mongo:
     image: mongo:6.0
@@ -84,11 +88,11 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - mongosh --quiet --eval "try { var s = rs.status(); if (s.ok !== 1) quit(1); } catch(e) { quit(1); }"
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+        - 'mongosh --quiet --eval "quit(db.adminCommand({ping:1}).ok === 1 ? 0 : 1)"'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
@@ -96,7 +100,8 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  # One-shot: initiates the replica set on first boot, idempotent on restarts.
+  # One-shot: initiates rs0 after mongod is up; idempotent on restarts.
+  # Invoked automatically on `compose up` and synchronously via `compose run` from pnpm dev.
   stockix-mongo-rs-init:
     image: mongo:6.0
     restart: "no"
@@ -107,17 +112,9 @@ services:
       - stockix-shared
     entrypoint:
       - bash
-      - -ec
-      - |
-        mongosh --host stockix-mongo:27017 --quiet --eval "
-          try {
-            rs.status();
-            print('replica set already initiated');
-          } catch (e) {
-            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'stockix-mongo:27017' }] });
-            print('replica set initiated');
-          }
-        "
+      - /scripts/rs-init.sh
+    volumes:
+      - ./mongo/rs-init.sh:/scripts/rs-init.sh:ro
     mem_limit: 128m
     cpus: "0.1"
     mem_swappiness: 0
