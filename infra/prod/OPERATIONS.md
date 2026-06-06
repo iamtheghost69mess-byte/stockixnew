@@ -152,16 +152,14 @@ Prod compose runs **`api`** (1 replica, `RUN_BULLMQ_CONSUMERS=false`) and **`api
 The socket-proxy restricts Docker API access for the worker.
 
 Current permissions:
-- `CONTAINERS=1`
-- `NETWORKS=1`
-- `IMAGES=1`
-- `POST=1`
-- `BUILD=0` — tenant images are pre-built (`pnpm docker:prebuild`)
+- `CONTAINERS=1`, `NETWORKS=1`, `SERVICES=1`, `TASKS=1`, `INFO=1`, `VERSION=1`, `IMAGES=1`, `VOLUMES=1`
+- `POST=1` — worker compose up/down/run, network connect, exec
+- `EVENTS=1` — Traefik Docker provider watches container changes via the same proxy
+- `BUILD=0` — tenant images are pre-built (`pnpm docker:prebuild`); worker uses `--no-build`
 
-If you need `docker build` during provision:
-1. Set `BUILD=1` in `socket-proxy` environment
-2. Document the reason in this file
-3. Re-run security review before rollout
+Traefik uses `tcp://socket-proxy:2375` for the Docker provider (no direct `/var/run/docker.sock` mount on Traefik). Tenant subdomain routes still come from the **file** provider (`TRAEFIK_DYNAMIC_DIR`).
+
+If Traefik stops discovering `api` / dashboard routers after a proxy change, confirm `EVENTS=1` and that Traefik is on `socket_proxy_network`. Rollback (temporary): restore Traefik `docker.sock` volume and `unix:///var/run/docker.sock` endpoint — document reason here before doing so in production.
 
 Security note: socket-proxy compromise = host root access. Never expose port `2375` outside internal Docker networks.
 

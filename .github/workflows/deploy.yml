@@ -406,20 +406,16 @@ jobs:
             exit 1
           fi
           cd "${REPO_ROOT}"
-          echo "=== Building tenant images (background) ==="
+          echo "=== Post-deploy cleanup (before tenant image build) ==="
+          docker image prune -af || true
+          docker volume prune -f || true
+          echo "=== Building tenant images ==="
           pkill -f "prebuild-tenant-images" 2>/dev/null || true
           pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
           sleep 2
-          nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
-          echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
-          echo "=== Post-deploy cleanup ==="
-          # Remove ALL unused images (old deploy SHAs not referenced by any container).
-          # Active images (latest tags) are protected — only orphaned layers are removed.
-          docker image prune -af || true
-          # Remove dangling volumes (anonymous, not attached to any container).
-          # Named volumes (postgres_data, traefik_letsencrypt, tenant data) are protected.
-          docker volume prune -f || true
-          # Trim runner workspace leftovers from previous runs.
+          pnpm docker:prebuild || exit 1
+          node scripts/prebuild-tenant-images.mjs --verify || exit 1
+          echo "Tenant images verified."
           find /opt/actions-runner/_work -maxdepth 2 -name "*.log" -mtime +1 -delete 2>/dev/null || true
           echo "=== Disk & container health after deploy ==="
           df -h / | tail -1

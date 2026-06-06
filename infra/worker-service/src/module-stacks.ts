@@ -1,4 +1,5 @@
 import { isAbsolute, join } from "node:path";
+import { stat } from "node:fs/promises";
 
 import { execa } from "execa";
 
@@ -15,7 +16,9 @@ import * as dbSchema from "@repo/db/schema";
 
 import { tenantDeployments } from "@repo/db/schema";
 
+import { defaultTenantEnvRoot } from "../domain/env-paths.js";
 import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
+import { ExecaDockerComposeRunner } from "../domain/provisioning/adapters/execa-docker-compose-runner.js";
 
 import type { ProvisionTracer } from "../domain/provision-trace.js";
 import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
@@ -41,7 +44,25 @@ import {
 
 } from "../domain/traefik-config.js";
 
+const posDockerRunner = new ExecaDockerComposeRunner();
 
+/** Tenant `.env` path used for POS compose `--env-file` (mirrors Finance provisioning). */
+export function resolvePosTenantEnvPath(slug: string): string {
+  return join(defaultTenantEnvRoot(), slug, ".env");
+}
+
+async function assertPosTenantEnvFile(slug: string): Promise<string> {
+  const envPath = resolvePosTenantEnvPath(slug);
+  try {
+    await stat(envPath);
+  } catch {
+    throw new Error(
+      `[provision][pos] tenant env file missing: ${envPath}. ` +
+        "Ensure writeTenantEnvFileAtomic() runs before POS compose.",
+    );
+  }
+  return envPath;
+}
 
 function repoRoot(): string {
 
@@ -338,6 +359,7 @@ export async function provisionPosStack(
     process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
 
   const tenantEnv = await readTenantEnvFile(opts.slug);
+  const envPath = await assertPosTenantEnvFile(opts.slug);
   const requiredVars = ["MONGODB_URI", "REDIS_URL", "REDIS_KEY_PREFIX"];
   const missing = requiredVars.filter((k) => !tenantEnv[k]?.trim());
   if (missing.length > 0) {
@@ -398,27 +420,22 @@ export async function provisionPosStack(
 
   // Use pre-built images only — do not pass --build (would rebuild pos-frontend from the full Next Dockerfile).
   try {
-    const composeRun = await execa(
-      "docker",
-      ["compose", "-f", composeFile, "-p", project, "up", "-d", "--no-build", ...upServices],
-      { env: composeEnv, stdio: "pipe", reject: false },
+    await posDockerRunner.run(
+      composeFile,
+      project,
+      envPath,
+      composeEnv,
+      ["up", "-d", "--no-build", ...upServices],
+      {
+        onOutput: (chunk) => {
+          for (const line of chunk.split("\n")) {
+            const trimmed = line.trim();
+            if (trimmed) opts.log(`[provision][pos][compose] ${trimmed}`);
+          }
+        },
+      },
     );
-    if (composeRun.stdout) {
-      for (const line of composeRun.stdout.split("\n").slice(-20)) {
-        if (line.trim()) opts.log(`[provision][pos][compose] ${line}`);
-      }
-    }
-    if (composeRun.exitCode !== 0) {
-      const stderrTail = (composeRun.stderr ?? "").slice(-2048);
-      opts.log(`[provision][pos][compose] stderr (tail):\n${stderrTail}`);
-      throw new Error(
-        `docker compose exit ${composeRun.exitCode}: ${stderrTail.slice(0, 400) || "see worker logs"}`,
-      );
-    }
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("docker compose exit")) {
-      throw error;
-    }
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(`POS compose failed: ${msg}`);
   }
@@ -624,12 +641,29 @@ export async function stopModuleStack(
   if (module === "pos") {
     const composeFile = join(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
     const project = `stockix-pos-${slug}`;
+    const envPath = resolvePosTenantEnvPath(slug);
+    let composeEnv: Record<string, string> = {
+      ...process.env,
+      COMPOSE_PROJECT_NAME: project,
+    } as Record<string, string>;
+    try {
+      composeEnv = { ...composeEnv, ...(await readTenantEnvFile(slug)) };
+    } catch {
+      // Best-effort teardown when env file is missing.
+    }
     log(`[module-stop][pos] compose down project=${project}`);
-    await execa(
-      "docker",
-      ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
-      { stdio: "pipe", reject: false },
-    );
+    await posDockerRunner.run(
+      composeFile,
+      project,
+      envPath,
+      composeEnv,
+      ["down", "--remove-orphans"],
+      { timeoutMs: 2 * 60 * 1000 },
+    ).catch((error) => {
+      log(
+        `[module-stop][pos] compose down warning: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
     await unpublishPosTraefik(slug);
     return;
   }

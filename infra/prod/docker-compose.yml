@@ -114,7 +114,8 @@ services:
       CONFIGS: 0
       PLUGINS: 0
       POST: 1
-      BUILD: 1
+      BUILD: 0
+      EVENTS: 1
       LOG_LEVEL: warning
     networks:
       - socket_proxy_network
@@ -141,8 +142,6 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     cpus: "0.25"
-    group_add:
-      - "988"
     ports:
       - "80:80"
       - "443:443"
@@ -154,13 +153,12 @@ services:
     volumes:
       - traefik_letsencrypt:/letsencrypt
       - ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}:/etc/traefik/dynamic
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - --api=true
       - --api.dashboard=true
       - --providers.docker=true
       - --api.insecure=true
-      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=stockix_public
       - --providers.file.directory=/etc/traefik/dynamic
@@ -177,6 +175,7 @@ services:
     networks:
       - stockix_public
       - stockix_internal
+      - socket_proxy_network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ping 2>/dev/null | grep -q OK || exit 1"]
       interval: 15s
