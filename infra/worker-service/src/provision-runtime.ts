@@ -1373,6 +1373,9 @@ export async function executeProvisionRuntime(
         { timeoutMs: COMPOSE_DOWN_TIMEOUT_MS },
       )
       .catch(() => undefined);
+    // Explicitly delete the MySQL named volume — compose down -v may not remove
+    // explicitly named volumes (name: ${MYSQL_VOLUME_NAME}) in all Compose versions.
+    await execa("docker", ["volume", "rm", mysqlVolumeName], { stdio: "pipe", reject: false });
     await trace.event("preflight.cleanup", "completed", {
       meta: { composeProjectName: project },
     });
