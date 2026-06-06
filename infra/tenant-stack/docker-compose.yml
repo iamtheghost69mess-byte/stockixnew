@@ -191,7 +191,10 @@ services:
         export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
         export DB_ROOT_PASSWORD="$${DB_ROOT_PASSWORD:-}"
         echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
-        exec node ./build/commands.js system:migrate:latest
+        until node ./build/commands.js system:migrate:latest; do
+          echo 'DB not ready, retrying in 5s...'
+          sleep 5
+        done
     security_opt:
       - no-new-privileges:true
     mem_limit: 256m
