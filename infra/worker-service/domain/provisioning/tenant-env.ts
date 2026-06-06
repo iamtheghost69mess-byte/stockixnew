@@ -88,7 +88,7 @@ function tenantRedisHost(): string {
  */
 export function buildTenantMongoUrl(slug: string): string {
   const host = sharedMongoHost();
-  return `mongodb://${host}:27017/${slug}_pos?replicaSet=rs0&directConnection=true`;
+  return `mongodb://${host}:27017/${slug}_pos?replicaSet=rs0`;
 }
 
 /**

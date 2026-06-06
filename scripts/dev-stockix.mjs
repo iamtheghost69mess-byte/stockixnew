@@ -143,7 +143,7 @@ async function upSharedInfra(env) {
   const args = sharedComposeArgs(envFiles);
   args.push("up", "-d", "--wait");
 
-  console.log("[dev] Shared tenant infra (stockix-shared: MySQL, Mongo, Redis, nginx)…");
+  console.log("[dev] Shared tenant infra (stockix-shared: MySQL, Mongo, Redis)…");
   await run("docker", args, { env });
   await ensureMongoReplicaSet(env, envFiles);
   console.log("[dev] ✓ stockix-shared is up (Mongo rs0 ready)\n");
