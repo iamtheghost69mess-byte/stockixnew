@@ -793,48 +793,7 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Tenant already deleted.",
     }, 200);
   }
-  const isFailedTenant =
-    target.tenantStatus === "failed" || target.deploymentStatus === "failed";
-  const jobRows = await db
-    .select({ correlationId: tenantLifecycleJobs.correlationId })
-    .from(tenantLifecycleJobs)
-    .where(eq(tenantLifecycleJobs.tenantId, parsed.data));
-  const tenantCorrelationIds = jobRows
-    .map((row) => row.correlationId)
-    .filter((value): value is string => typeof value === "string" && value.length > 0);
-  if (isFailedTenant) {
-    await scrubTenantRuntimeArtifacts(target.slug);
-    await db.transaction(async (tx) => {
-      await tx.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, parsed.data));
-      await tx.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, parsed.data));
-      await tx.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, parsed.data));
-      await tx.delete(tenants).where(eq(tenants.id, parsed.data));
-      await tx
-        .delete(tenantLifecycleJobs)
-        .where(eq(tenantLifecycleJobs.tenantId, parsed.data));
-    });
-    purgeProvisionCaches(tenantCorrelationIds);
-    await logAudit(db, {
-      actorId: (c.get("actorId") as string | undefined) ?? "",
-      action: "tenant.delete",
-      ipAddress: c.req.header("x-forwarded-for") ?? null,
-      userAgent: c.req.header("user-agent") ?? null,
-      metadata: {
-        deletedTenantId: parsed.data,
-        slug: target.slug,
-        mode: "hard_delete_failed_tenant",
-        previousTenantStatus: target.tenantStatus,
-        previousDeploymentStatus: target.deploymentStatus,
-      },
-    });
-    return c.json({
-      accepted: true,
-      deleted: true,
-      slug: target.slug,
-      hardDeleted: true,
-      message: "Failed tenant fully deleted from database.",
-    }, 200);
-  }
+  // Never run Docker or compose in the API process — always queue tenant.deprovision for the worker.
   // Deprovision child org stacks (separate tenants rows, slug = org.slug) before parent.
   // Jobs are async; we only enqueue here — parent deprovision is still queued immediately after.
   const childOrgs = await db

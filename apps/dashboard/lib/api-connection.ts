@@ -1,7 +1,13 @@
 /** True when fetch failed because the control-plane API is down or unreachable. */
 export function isApiConnectionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  if (error.message === "fetch failed" || error.message.includes("ECONNREFUSED")) {
+  if (
+    error.name === "TimeoutError"
+    || error.name === "AbortError"
+    || error.message === "fetch failed"
+    || error.message.includes("ECONNREFUSED")
+    || error.message.includes("timed out")
+  ) {
     return true;
   }
   const cause = error.cause;

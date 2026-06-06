@@ -10,6 +10,9 @@ const apiBase = dashboardConfig.serverApiUrl;
 const MAX_ATTEMPTS = dashboardConfig.nodeEnv === "production" ? 3 : 1;
 const TIMEOUT_MS = dashboardConfig.nodeEnv === "production" ? 10_000 : 3_000;
 
+/** Long-running control-plane mutations (tenant delete, provision, etc.). */
+export const LIFECYCLE_TIMEOUT_MS = 30_000;
+
 function createRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -19,6 +22,7 @@ export async function apiFetch(
   init: RequestInit = {},
   request?: Request,
   retries = MAX_ATTEMPTS - 1,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<Response> {
   const secret = dashboardConfig.platformApiSecret;
   if (!secret) throw new Error("PLATFORM_API_SECRET is not configured");
@@ -49,7 +53,7 @@ export async function apiFetch(
         ...init,
         headers,
         cache: "no-store",
-        signal: init.signal ?? AbortSignal.timeout(TIMEOUT_MS),
+        signal: init.signal ?? AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
       lastError = error;

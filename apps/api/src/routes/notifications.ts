@@ -161,16 +161,23 @@ export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void
           },
         );
 
+        let cleanedUp = false;
+        const cleanup = () => {
+          if (cleanedUp) return;
+          cleanedUp = true;
+          unsubscribe();
+        };
+
         c.req.raw.signal.addEventListener("abort", () => {
           closed = true;
-          unsubscribe();
+          cleanup();
         });
 
         while (!closed) {
           await maybePing();
           await new Promise((resolve) => setTimeout(resolve, NOTIFICATION_STREAM_PING_MS));
         }
-        unsubscribe();
+        cleanup();
         return;
       }
 

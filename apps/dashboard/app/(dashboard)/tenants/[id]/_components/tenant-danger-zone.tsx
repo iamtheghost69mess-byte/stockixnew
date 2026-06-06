@@ -46,6 +46,35 @@ export function TenantDangerZone({
   const [reactivatingTenant, setReactivatingTenant] = useState(false);
   const [stopProvisionSlugInput, setStopProvisionSlugInput] = useState("");
   const [stoppingProvision, setStoppingProvision] = useState(false);
+  const [deletingTenant, setDeletingTenant] = useState(false);
+
+  const runTenantDelete = async (wipeVolumes: boolean) => {
+    setDeletingTenant(true);
+    onError("");
+    try {
+      const query = wipeVolumes ? "?volumes=true" : "";
+      const res = await fetch(`/api/tenants/${tenant.id}${query}`, { method: "DELETE" });
+      const body = await readJson(res);
+      const data = body as { error?: string; message?: string; hardDeleted?: boolean; accepted?: boolean };
+      if (!res.ok && res.status !== 404) {
+        onError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
+        return;
+      }
+      toast.success(
+        data.hardDeleted
+          ? `Tenant "${tenant.slug}" deleted.`
+          : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
+      );
+      setVolumesOpen(false);
+      setConfirmOpen(false);
+      setConfirmSlug("");
+      router.push("/tenants");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeletingTenant(false);
+    }
+  };
 
   const openStopProvision = () => {
     setStopProvisionSlugInput("");
@@ -229,53 +258,43 @@ export function TenantDangerZone({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={volumesOpen} onOpenChange={setVolumesOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Also delete Docker volumes?</DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                const res = await fetch(`/api/tenants/${tenant.id}`, { method: "DELETE" });
-                const body = await readJson(res);
-                const data = body as { error?: string; message?: string; hardDeleted?: boolean };
-                if (!res.ok && res.status !== 404) {
-                  onError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
-                  return;
-                }
-                toast.success(
-                  data.hardDeleted
-                    ? `Tenant "${tenant.slug}" deleted.`
-                    : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
-                );
-                router.push("/tenants");
-              }}
-            >
-              Keep volumes
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                const res = await fetch(`/api/tenants/${tenant.id}?volumes=true`, { method: "DELETE" });
-                const body = await readJson(res);
-                const data = body as { error?: string; message?: string; hardDeleted?: boolean };
-                if (!res.ok && res.status !== 404) {
-                  onError(formatApiError(body, data.message ?? data.error ?? `Delete failed (${res.status})`));
-                  return;
-                }
-                toast.success(
-                  data.hardDeleted
-                    ? `Tenant "${tenant.slug}" deleted.`
-                    : `Tenant "${tenant.slug}" removal started. Docker cleanup may take up to a minute.`,
-                );
-                router.push("/tenants");
-              }}
-            >
-              Delete volumes
-            </Button>
-          </DialogFooter>
+      <Dialog
+        open={volumesOpen}
+        onOpenChange={(open) => {
+          if (!open && deletingTenant) return;
+          setVolumesOpen(open);
+          if (!open) setConfirmSlug("");
+        }}
+      >
+        <DialogContent showCloseButton={!deletingTenant}>
+          {deletingTenant ? (
+            <div className="flex flex-col items-center gap-4 py-6 text-center">
+              <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
+              <DialogHeader className="space-y-2 text-center sm:text-center">
+                <DialogTitle>Deleting tenant</DialogTitle>
+              </DialogHeader>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Queuing removal for <span className="font-mono">{tenant.slug}</span>…
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Docker cleanup continues in the background after the request is accepted.
+              </p>
+            </div>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Also delete Docker volumes?</DialogTitle>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => void runTenantDelete(false)}>
+                  Keep volumes
+                </Button>
+                <Button variant="destructive" onClick={() => void runTenantDelete(true)}>
+                  Delete volumes
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
