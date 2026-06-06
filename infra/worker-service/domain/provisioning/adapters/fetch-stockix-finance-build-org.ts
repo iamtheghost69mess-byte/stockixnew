@@ -99,7 +99,7 @@ async function signin(
       "x-request-id": correlationId,
       "x-correlation-id": correlationId,
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ credential: email, password }),
     signal: AbortSignal.timeout(10_000),
   });
   let json: unknown;

@@ -111,7 +111,7 @@ export async function fetchOrgSettingsFromMainInstance(params: {
       method: "POST",
       headers: headersBase,
       body: JSON.stringify({
-        email: params.adminEmail,
+        credential: params.adminEmail,
         password: params.adminPassword,
       }),
       signal: AbortSignal.timeout(10_000),
