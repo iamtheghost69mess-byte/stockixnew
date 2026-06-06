@@ -66,7 +66,7 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
   }): Promise<{ tenantId: number; organizationId: string }> {
     const url = `${financeApiBase(params.internalBaseUrl)}/api/internal/provision-user`;
     const maxAttempts = 3;
-    const requestTimeoutMs = 10_000;
+    const requestTimeoutMs = 60_000;
     let lastFailure = "unknown";
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
