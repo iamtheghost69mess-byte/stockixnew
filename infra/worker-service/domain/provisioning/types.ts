@@ -35,6 +35,8 @@ export type ProvisionInput = {
   skipTenantCreation?: boolean;
   /** Required when skipTenantCreation is true. */
   existingTenantId?: string;
+  /** When true, preflight compose down removes project volumes (`-v`). Default false. */
+  cleanSlate?: boolean;
 };
 
 export type ProvisionResult =
