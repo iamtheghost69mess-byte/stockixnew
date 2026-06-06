@@ -60,8 +60,26 @@ export function subscribeOwnerNotifications(
     });
 
   return () => {
-    void subscriber.unsubscribe(channel).finally(() => {
-      void subscriber.quit();
-    });
+    void releaseOwnerNotificationSubscriber(subscriber, channel);
   };
+}
+
+/** Idempotent teardown — never throws; avoids unhandled rejections when Redis is already closed. */
+async function releaseOwnerNotificationSubscriber(subscriber: Redis, channel: string): Promise<void> {
+  const status = subscriber.status;
+  if (status === "end" || status === "close") {
+    return;
+  }
+  try {
+    await subscriber.unsubscribe(channel);
+  } catch {
+    // Connection may drop during SSE abort or API shutdown.
+  }
+  try {
+    if (subscriber.status !== "end" && subscriber.status !== "close") {
+      subscriber.disconnect();
+    }
+  } catch {
+    // ignore
+  }
 }
