@@ -897,7 +897,7 @@ export async function executeProvisionRuntime(
     // bootstrap key so operators can sign in everywhere. Sub-org jobs set parentTenantSlug.
     const bootstrapPasswordKey =
       input.parentTenantSlug?.trim() || input.slug.trim();
-    oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
+    oneTimeAdminPassword = resolveOneTimeAdminPassword(secrets, bootstrapPasswordKey);
     let jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     let dbPasswordPlain = secrets.randomHex(16);
     let dbPassword = secrets.persistSecret(dbPasswordPlain);
@@ -2785,6 +2785,13 @@ export async function runAddModuleStep(
 
 /** @deprecated Use runAddModuleStep */
 export const executeAddModuleRuntime = runAddModuleStep;
+
+function resolveOneTimeAdminPassword(
+  secrets: TenantProvisionServiceDeps["secrets"],
+  tenantKey: string,
+): string {
+  return secrets.bootstrapAdminPassword(tenantKey);
+}
 
 function oneTimeAdminPasswordFromSlug(slug: string): string {
   return new CryptoTenantSecretGenerator().bootstrapAdminPassword(slug.trim());

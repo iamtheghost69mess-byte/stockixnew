@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 import { execa } from "execa";
+import type { RowDataPacket } from "mysql2";
 
 import { defaultTenantEnvRoot } from "./env-paths.js";
 import { getTenantStackPaths } from "./provision-paths.js";
@@ -314,12 +315,12 @@ export async function deprovisionTenantDatabases(
       await conn.execute(`DROP DATABASE IF EXISTS \`${financeDb}\``);
       await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
 
-      const [orgRows] = await conn.query<Array<{ schemaName: string }>>(
+      const [orgRows] = await conn.query<RowDataPacket[]>(
         `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ?`,
         [`stockix_${safe}_%`],
       );
       for (const row of orgRows) {
-        const dbName = row.schemaName;
+        const dbName = row.schemaName as string;
         if (!dbName) continue;
         await conn.execute(`DROP DATABASE IF EXISTS \`${dbName}\``);
         log(`[db-deprovision] Dropped DB: ${dbName}`);

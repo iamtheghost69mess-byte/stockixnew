@@ -27,6 +27,7 @@
     "infra:worker:build": "pnpm --filter api exec tsup --config tsup.worker.config.ts",
     "infra:worker:run": "node infra/worker-service/.runtime/worker.js",
     "infra:worker:dev": "pnpm infra:worker:build && pnpm infra:worker:run",
+    "infra:worker:test": "pnpm -C infra/worker-service test",
     "get-password": "node scripts/get-bootstrap-password.mjs",
     "bootstrap:env": "node scripts/bootstrap-local-env.mjs",
     "env:sync-prod": "node scripts/sync-prod-env-to-root.mjs --confirm-server",

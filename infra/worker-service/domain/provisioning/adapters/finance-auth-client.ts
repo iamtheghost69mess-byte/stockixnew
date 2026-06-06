@@ -152,7 +152,7 @@ export async function signinWithRetry(
       }
     } else {
       lastError = result;
-      options.log?.(
+      options?.log?.(
         `[signin] attempt ${attempt}/${maxAttempts} failed: ${formatSigninError(result)}`,
       );
     }
