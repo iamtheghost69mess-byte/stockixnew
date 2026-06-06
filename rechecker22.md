@@ -358,31 +358,33 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ## 12. Cross-cutting issues
 
-### ❌ Shared Redis isolation by prefix only
+> **Section 12 repairs (2026-06-07):** Prefix contract tests, compose log redaction, safer preflight down, readiness/edge.publish verification. Worker tests: 40+ passed.
 
-- **What is broken:** All tenants share `stockix-redis`; isolation is `REDIS_KEY_PREFIX` only.
+### ✅ Shared Redis isolation by prefix only — **repaired (2026-06-07, contract tests)**
+
+- **What was broken:** All tenants share `stockix-redis`; isolation is `REDIS_KEY_PREFIX` only.
 - **Impact:** Misconfigured prefix → cross-tenant queue leakage risk.
-- **Fix:** Tests asserting prefix on every BullMQ queue.
+- **Repair:** [`redis-key-prefix.test.ts`](infra/worker-service/domain/provisioning/redis-key-prefix.test.ts) asserts tenant env prefix, POS `queueName()` for all `QUEUE_BASE_NAMES`, and Finance `BullModule.forRoot` + registerQueue inventory.
 
-### ❌ Plaintext secrets in compose process env
+### ✅ Plaintext secrets in compose process env — **repaired (2026-06-07, log redaction)**
 
-- **File:** `tenant-env.ts` + `composeEnv` spread in `provision-runtime.ts`
-- **What is broken:** `.env` file uses encryption for some values; compose exec also passes plaintext in process env.
+- **File:** `redact-compose-log.ts` + compose `onOutput` in `provision-runtime.ts` / `module-stacks.ts`
+- **What was broken:** Compose stdout could echo secrets; debug logs exposed env values.
 - **Impact:** Debug logs may expose secrets.
-- **Fix:** Redact compose logging; keep `TENANT_ENV_ROOT` permissions strict (partially `0o700`).
+- **Repair:** `redactComposeLogLine()` / `redactEnvForLogging()`; tenant `.env` still `0o700`/`0o600` via `writeTenantEnvFileAtomic()`.
 
-### ❌ Preflight `compose down -v`
+### ✅ Preflight `compose down -v` — **repaired (2026-06-07)**
 
-- **File:** `provision-runtime.ts` preflight cleanup
-- **What is broken:** Removes project volumes on retry preflight.
+- **File:** `build-preflight-down-args.ts` + `provision-runtime.ts` preflight cleanup
+- **What was broken:** Preflight always passed `-v`, removing project volumes on every retry.
 - **Impact:** Risky if local volumes reintroduced to tenant stack.
-- **Fix:** Drop `-v` unless explicit clean-slate.
+- **Repair:** Default preflight omits `-v`; `ProvisionInput.cleanSlate === true` adds `-v`. Rollback path in `tenant-docker-workflow.ts` still uses `-v` by design (stale MySQL cred cleanup).
 
-### ❌ Readiness vs Traefik publish timing
+### ✅ Readiness vs Traefik publish timing — **repaired (Wave 6 + 2026-06-07 tests)**
 
-- **File:** `apps/api/src/provisioning/readiness-engine.ts`
-- **What is broken:** May report route pending while job still running; edge publish is late in pipeline.
-- **Fix:** Gate accounting readiness on `edge.publish` journal op.
+- **File:** `readiness-engine.ts` → `isFinanceTraefikRouteActiveFromEvents`
+- **Was broken:** Traefik publish ran late; readiness could disagree with public route state.
+- **Repair:** Wave 6 moved `edge.publish` after health check; readiness `routeActive` requires journaled `edge.publish` for accounting; unit tests added in `readiness-module-gating.test.ts`.
 
 ---
 
@@ -395,7 +397,7 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 | **MEDIUM** | 6 | 3 | 0 |
 | **LOW** | 4 | 0 | 0 |
 
-**Totals:** ~23 fixed in code (Waves 1–6), ~14 open (Wave 7–8 + ops), ~3 smoke-pending.
+**Totals:** ~27 fixed in code (Waves 1–6 + §12), ~10 open (Wave 7–8 remainder + ops), ~3 smoke-pending. **54 unit tests passed.**
 
 ---
 
@@ -403,11 +405,11 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ### 1. Combined smoke not run (HIGH)
 
-Waves 1–6 code fixes are unit-tested (36 passed) but **`provision-diagnose` has not succeeded** locally — API at `localhost:4000` was down. Signin/port/Traefik timing fixes need end-to-end validation.
+Waves 1–6 + §12 code fixes are unit-tested (**54 passed**) but **`provision-diagnose` has not succeeded** locally — API at `localhost:4000` was down. Signin/port fixes need end-to-end validation.
 
-### 2. Wave 7–8 data + safety items (MEDIUM)
+### 2. Wave 7–8 data + docs items (MEDIUM)
 
-System DB drop on migration retry, orphan `_finance` DB, compose `-v` preflight, secret log redaction, Postgres/pgcrypto doc drift — still open.
+System DB drop on migration retry, orphan `_finance` DB, Postgres/pgcrypto doc drift — still open. §12 preflight `-v`, log redaction, Redis prefix tests, and readiness/edge.publish are **done**.
 
 ### 3. Finance signin membership edge case (MEDIUM)
 
@@ -418,8 +420,8 @@ Worker now surfaces structured codes; Finance `Auth.controller` may still reject
 ## Recommended fix order (remaining)
 
 1. **Run combined smoke** — `pnpm --filter api provision-diagnose` with full stack.
-2. **Wave 7** — migration reset gate, orphan DB cleanup, preflight `-v` removal.
-3. **Wave 8** — ops docs (MySQL not Postgres), Redis prefix tests, readiness gates.
+2. **Wave 7** — migration reset gate, orphan DB cleanup.
+3. **Wave 8** — ops docs (MySQL not Postgres).
 4. **Optional** — route `db-backup` through socket-proxy.
 
 ---
@@ -434,7 +436,8 @@ Worker now surfaces structured codes; Finance `Auth.controller` may still reject
 | 4 | POS frontend, compose split, secrets, NODE_ENV | ✅ | ✅ 36 | ⏳ pending | — |
 | 5 | Branding, PERFIX, MySQL, Resend | ✅ | ✅ 36 | ⏳ pending | — |
 | 6 | Early publish, networks, stuck, API URL | ✅ | ✅ 36 | ⏳ pending | — |
-| 7–8 | DB reset, docs, preflight hardening | ❌ open | — | — | — |
+| §12 | Redis prefix tests, log redaction, preflight down, readiness | ✅ | ✅ 54 | ⏳ pending | — |
+| 7–8 | DB reset, docs (remainder) | ❌ partial | — | — | — |
 
 ---
 

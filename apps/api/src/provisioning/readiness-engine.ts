@@ -92,6 +92,14 @@ function isRouteActiveFromEvents(
   );
 }
 
+/** Exported for unit tests — accounting routeActive requires journaled edge.publish. */
+export function isFinanceTraefikRouteActiveFromEvents(
+  slug: string | null,
+  events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
+): boolean {
+  return isRouteActiveFromEvents(slug, events);
+}
+
 export function hasPosStackCompletedEvent(
   events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
 ): boolean {

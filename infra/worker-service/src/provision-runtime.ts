@@ -54,6 +54,8 @@ import {
 } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { assertRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import { ensureTenantExternalNetworks } from "../domain/provisioning/ensure-tenant-networks.js";
+import { buildPreflightDownArgs } from "../domain/provisioning/build-preflight-down-args.js";
+import { redactComposeLogLine } from "../domain/provisioning/redact-compose-log.js";
 import {
   assertNoConcurrentTenantLifecycleJob,
   withTenantLifecycleAdvisoryLock,
@@ -830,7 +832,9 @@ export async function executeProvisionRuntime(
               if (!line) return;
               if (!/pull|download|build|creating|starting|started|healthy/i.test(line)) return;
               lastComposeTraceAt = now;
-              void trace.event("compose", line.slice(0, 240), { level: "info" });
+              void trace.event("compose", redactComposeLogLine(line).slice(0, 240), {
+                level: "info",
+              });
             },
           },
         );
@@ -1520,7 +1524,7 @@ export async function executeProvisionRuntime(
         composeCtx.project,
         composeCtx.envPath,
         composeCtx.composeEnv,
-        ["down", "--remove-orphans", "-v", "--timeout", "10"],
+        buildPreflightDownArgs(input.cleanSlate === true),
         { timeoutMs: COMPOSE_DOWN_TIMEOUT_MS },
       )
       .catch(() => undefined);

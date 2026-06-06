@@ -22,6 +22,7 @@ import { ExecaDockerComposeRunner } from "../domain/provisioning/adapters/execa-
 
 import type { ProvisionTracer } from "../domain/provision-trace.js";
 import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
+import { redactComposeLogLine } from "../domain/provisioning/redact-compose-log.js";
 import { isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
 import { ProvisionError } from "../domain/provisioning/provision-error.js";
 
@@ -468,7 +469,7 @@ export async function provisionPosStack(
         onOutput: (chunk) => {
           for (const line of chunk.split("\n")) {
             const trimmed = line.trim();
-            if (trimmed) opts.log(`[provision][pos][compose] ${trimmed}`);
+            if (trimmed) opts.log(`[provision][pos][compose] ${redactComposeLogLine(trimmed)}`);
           }
         },
       },
