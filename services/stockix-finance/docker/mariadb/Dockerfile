@@ -6,6 +6,7 @@ FROM mariadb:10.2
 
 COPY ./init.sh /docker-entrypoint-initdb.d/init.sh
 RUN chmod +x /docker-entrypoint-initdb.d/init.sh
+COPY ./my.cnf /etc/mysql/conf.d/stockix.cnf
 
 CMD ["mysqld"]
 EXPOSE 3306
