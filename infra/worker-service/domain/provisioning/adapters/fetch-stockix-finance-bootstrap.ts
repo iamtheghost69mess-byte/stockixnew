@@ -92,8 +92,8 @@ export class FetchStockixFinanceBootstrap implements IStockixFinanceBootstrap {
               : {}),
           },
           body: JSON.stringify({
-            first_name: params.firstName,
-            last_name: params.lastName,
+            firstName: params.firstName,
+            lastName: params.lastName,
             email: params.email,
             password: params.password,
             role: "admin",

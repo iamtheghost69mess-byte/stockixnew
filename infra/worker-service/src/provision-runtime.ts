@@ -59,6 +59,7 @@ import {
   withTenantLifecycleAdvisoryLock,
 } from "../domain/provisioning/provision-lock.js";
 import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
+import { TENANT_SERVER_UP_COMPOSE_ARGS } from "../domain/provisioning/tenant-server-compose-args.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 import { provisionChatwootAccount } from "./chatwoot-provision.js";
 import {
@@ -752,6 +753,7 @@ export async function executeProvisionRuntime(
   let port: number | undefined;
   let oneTimeAdminPassword: string | undefined;
   let financeOrganizationId: string | undefined;
+  let bootstrapFinanceOrganizationId: string | undefined;
   let financeTenantId: number | undefined;
   let financeDefaultWarehouseId: number | undefined;
   let walkInCustomerId: number | undefined;
@@ -1221,19 +1223,8 @@ export async function executeProvisionRuntime(
         lastError: posError,
       });
       return {
-        ok: true,
-        tenantId,
-        deploymentId,
-        composeProjectName: existing.composeProjectName,
-        internalPort: port,
-        baseUrl: `${publicScheme}://${input.slug}.${rootDomain}`,
-        oneTimeAdminPassword: oneTimeAdminPassword!,
-        posStatus: "failed",
-        posError,
-        tenantStatus: "partial",
-        posOrganizationId: posOutcome.posOrganizationId,
-        posUrl: posOutcome.posUrl,
-        posApiUrl: posOutcome.posApiUrl,
+        ok: false,
+        message: posError,
       };
     }
 
@@ -1582,14 +1573,9 @@ export async function executeProvisionRuntime(
       await trace.event("progress", "Starting app compose step", {
         meta: { operationKey: "docker.app_step", elapsedMs: elapsedMs() },
       });
-      await runComposeWithCancellation([
-        "up",
-        "-d",
-        "--remove-orphans",
-        "--force-recreate",
-        "--no-build",
-        "server",
-      ]);
+      // Worker journals migration separately; --no-deps avoids double-run on resume.
+      // compose depends_on protects manual `docker compose up server`.
+      await runComposeWithCancellation([...TENANT_SERVER_UP_COMPOSE_ARGS]);
       await markOp("docker.app_step", "Application compose step completed", {
         composeProjectName: project,
         elapsedMs: elapsedMs(),
@@ -1710,6 +1696,7 @@ export async function executeProvisionRuntime(
         trace,
       });
       financeTenantId = bootstrapResult.tenantId;
+      bootstrapFinanceOrganizationId = bootstrapResult.organizationId;
       await persistFinanceDeploymentIds(db, deploymentId, {
         financeTenantId: bootstrapResult.tenantId,
       });
@@ -1888,6 +1875,8 @@ export async function executeProvisionRuntime(
             adminPassword: secrets.bootstrapAdminPassword(bootstrapPasswordKey),
             settings: inheritedSettings,
             correlationId,
+            preferRetryAfterBootstrap: true,
+            expectedOrganizationId: bootstrapFinanceOrganizationId,
           },
           log,
         );

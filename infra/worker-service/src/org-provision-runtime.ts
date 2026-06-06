@@ -10,6 +10,10 @@ import { syncFinanceLicenseForStockixTenant } from "@repo/platform-worker-shared
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
 import { provisionCombinedPosForOrganization } from "../domain/provisioning/combined-org-pos-provision.js";
 import { CryptoTenantSecretGenerator } from "../domain/provisioning/adapters/crypto-tenant-secret-generator.js";
+import {
+  parseAuthSession,
+  signinToFinanceSessionOrThrow,
+} from "../domain/provisioning/adapters/finance-auth-client.js";
 import { fetchBuildOrganization } from "../domain/provisioning/adapters/fetch-stockix-finance-build-org.js";
 import {
   MENA_DEFAULTS,
@@ -44,24 +48,6 @@ function readString(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-function parseAuthSession(
-  body: unknown,
-): { accessToken: string; organizationId: string; tenantId: number | null } | null {
-  if (!isRecord(body)) return null;
-  const accessToken =
-    readString(body.accessToken) ?? readString(body.access_token) ?? readString(body.token);
-  const organizationId =
-    readString(body.organizationId) ?? readString(body.organization_id);
-  const tenantIdRaw = isRecord(body) ? (body.tenantId ?? body.tenant_id) : null;
-  const tenantId = Number(tenantIdRaw);
-  if (!accessToken || !organizationId) return null;
-  return {
-    accessToken,
-    organizationId,
-    tenantId: Number.isFinite(tenantId) && tenantId > 0 ? tenantId : null,
-  };
-}
-
 function parseSignupOrganizationId(body: unknown): string | null {
   if (!isRecord(body)) return null;
   return readString(body.organizationId) ?? readString(body.organization_id) ?? null;
@@ -87,8 +73,8 @@ async function registerNewFinanceOrg(
       "x-correlation-id": params.correlationId,
     },
     body: JSON.stringify({
-      first_name: params.firstName,
-      last_name: params.lastName,
+      firstName: params.firstName,
+      lastName: params.lastName,
       email: params.email,
       password: params.password,
       role: "admin",
@@ -106,35 +92,6 @@ async function registerNewFinanceOrg(
     throw new Error("register_missing_organization_or_tenant_id");
   }
   return { organizationId, tenantId };
-}
-
-async function signin(
-  base: string,
-  email: string,
-  password: string,
-  correlationId: string,
-): Promise<{ accessToken: string; organizationId: string; tenantId: number | null }> {
-  const res = await fetch(`${base}/api/auth/signin`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-request-id": correlationId,
-      "x-correlation-id": correlationId,
-    },
-    body: JSON.stringify({ credential: email, password }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`signin_failed_http_${res.status}: ${text.slice(0, 500)}`);
-  }
-  const session = parseAuthSession(
-    text ? normalizeFinanceApiJson(JSON.parse(text) as unknown) : {},
-  );
-  if (!session) {
-    throw new Error("signin_missing_token");
-  }
-  return session;
 }
 
 async function switchTenant(
@@ -271,7 +228,12 @@ export async function executeOrgProvisionRuntime(
   const newFinanceOrganizationId = registered.organizationId;
   const newFinanceTenantId = registered.tenantId;
 
-  const signinSession = await signin(mainBase, input.adminEmail, adminPassword, correlationId);
+  const signinSession = await signinToFinanceSessionOrThrow(
+    mainBase,
+    input.adminEmail,
+    adminPassword,
+    correlationId,
+  );
   const buildSession = await switchTenant(
     mainBase,
     signinSession.accessToken,

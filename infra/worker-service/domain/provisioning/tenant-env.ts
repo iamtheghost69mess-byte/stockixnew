@@ -176,7 +176,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     // ── Auth ───────────────────────────────────────────────────────────
     JWT_SECRET: params.jwtSecret,
 
-    // ── Proxy port (kept for Traefik config — server still binds a random host port) ──
+    // ── Proxy port — Traefik upstream + tenant-stack server host bind ──
     PUBLIC_PROXY_PORT: String(params.publicProxyPort),
     PUBLIC_PROXY_SSL_PORT: "443",
 

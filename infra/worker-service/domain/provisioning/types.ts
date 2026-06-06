@@ -61,6 +61,10 @@ export type ProvisionResult =
       posError?: string;
       /** Final tenant row status when Finance succeeded but POS did not (`partial`). */
       tenantStatus?: "active" | "partial";
+      /**
+       * `ok: true` with `tenantStatus: "partial"` is valid (Finance usable, POS/wire incomplete).
+       * `ok: false` is for terminal job failure (including POS-only retry failure).
+       */
     }
   | { ok: false; message: string; cause?: string };
 

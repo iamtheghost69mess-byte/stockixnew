@@ -1,5 +1,10 @@
 import { normalizeFinanceApiJson } from "@repo/shared/finance-api";
 import {
+  formatSigninError,
+  signinToFinanceSession,
+  signinWithRetry,
+} from "./finance-auth-client.js";
+import {
   type OrgBuildSettings,
   normalizeDateFormatForFinanceBuild,
   normalizeFiscalYearForFinanceBuild,
@@ -14,6 +19,10 @@ export interface BuildOrgInput {
   correlationId: string;
   /** When set, skip sign-in and build under this Finance session (sub-org on parent stack). */
   session?: { accessToken: string; organizationId: string };
+  /** Retry sign-in after bootstrap (handles membership visibility race). */
+  preferRetryAfterBootstrap?: boolean;
+  /** Expected org id from provision-user; mismatch surfaces as signin_org_mismatch. */
+  expectedOrganizationId?: string;
 }
 
 export interface BuildOrgResult {
@@ -40,16 +49,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function readString(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
-}
-
-function parseSigninToken(body: unknown): { accessToken: string; organizationId: string } | null {
-  if (!isRecord(body)) return null;
-  const accessToken =
-    readString(body.accessToken) ?? readString(body.access_token) ?? readString(body.token);
-  const organizationId =
-    readString(body.organizationId) ?? readString(body.organization_id);
-  if (!accessToken || !organizationId) return null;
-  return { accessToken, organizationId };
 }
 
 function isTenantAlreadyBuilt(rawText: string, json: unknown): boolean {
@@ -86,31 +85,40 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-async function signin(
-  base: string,
-  email: string,
-  password: string,
-  correlationId: string,
-): Promise<{ accessToken: string; organizationId: string } | null> {
-  const res = await fetch(`${base}/api/auth/signin`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-request-id": correlationId,
-      "x-correlation-id": correlationId,
-    },
-    // Finance AuthSigninDto uses `credential` (not `email`) — see Local.strategy usernameField.
-    body: JSON.stringify({ credential: email, password }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  let json: unknown;
-  try {
-    json = normalizeFinanceApiJson((await res.json()) as unknown);
-  } catch {
-    return null;
+async function resolveBuildSession(
+  input: BuildOrgInput,
+  log: (m: string) => void,
+): Promise<{ accessToken: string; organizationId: string } | { error: string }> {
+  if (input.session) {
+    return input.session;
   }
-  if (!res.ok) return null;
-  return parseSigninToken(json);
+  const signinOpts = {
+    expectedOrganizationId: input.expectedOrganizationId,
+    log,
+  };
+  const signinResult = input.preferRetryAfterBootstrap
+    ? await signinWithRetry(
+        input.internalBaseUrl,
+        input.adminEmail,
+        input.adminPassword,
+        input.correlationId,
+        signinOpts,
+      )
+    : await signinToFinanceSession(
+        input.internalBaseUrl,
+        input.adminEmail,
+        input.adminPassword,
+        input.correlationId,
+      );
+  if (!signinResult.ok) {
+    const formatted = formatSigninError(signinResult);
+    log(`[build] Finance sign-in failed: ${formatted}`);
+    return { error: formatted };
+  }
+  return {
+    accessToken: signinResult.accessToken,
+    organizationId: signinResult.organizationId,
+  };
 }
 
 async function currentHasBuiltAt(
@@ -148,11 +156,11 @@ export async function fetchBuildOrganization(
 ): Promise<BuildOrgResult> {
   const base = financeApiBase(input.internalBaseUrl);
 
-  const creds =
-    input.session ?? (await signin(base, input.adminEmail, input.adminPassword, input.correlationId));
-  if (!creds) {
-    return { ok: false, error: "signin_failed" };
+  const sessionResult = await resolveBuildSession(input, log);
+  if ("error" in sessionResult) {
+    return { ok: false, error: sessionResult.error };
   }
+  const creds = sessionResult;
 
   const authHeaders = {
     "Content-Type": "application/json",

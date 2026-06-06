@@ -1,9 +1,49 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import {
+  appendProvisionFailureEvent,
   readOrganizationIdFromJobPayload,
   type TerminalProvisionJob,
 } from "../src/provisioning/provision-failure.js";
+import { logger } from "../src/lib/logger.js";
+
+vi.mock("../src/lib/logger.js", () => ({
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
+describe("appendProvisionFailureEvent", () => {
+  beforeEach(() => {
+    vi.mocked(logger.error).mockClear();
+  });
+
+  it("logs when insert fails instead of swallowing", async () => {
+    const db = {
+      insert: () => ({
+        values: () => ({
+          catch: (handler: (err: unknown) => void) => {
+            handler(new Error("insert failed"));
+          },
+        }),
+      }),
+    };
+    await appendProvisionFailureEvent(db as never, {
+      correlationId: "corr-1",
+      tenantId: "tenant-1",
+      message: "provision failed",
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      "[provision-failure] appendProvisionFailureEvent insert failed",
+      expect.objectContaining({
+        correlationId: "corr-1",
+        tenantId: "tenant-1",
+      }),
+    );
+  });
+});
 
 describe("readOrganizationIdFromJobPayload", () => {
   it("returns organizationId when present", () => {

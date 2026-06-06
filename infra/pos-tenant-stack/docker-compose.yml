@@ -10,8 +10,8 @@
 # Redis   → stockix-redis:6379   key prefix: tenant:{slug}:queue:*
 #
 # Shared Mongo (stockix-mongo) lives in infra/shared compose — cross-project
-# depends_on is not supported here. Readiness is enforced by shared RS healthcheck
-# and provisionTenantDatabases() TCP verify before POS compose up.
+# depends_on is not supported here. Readiness is enforced by worker preflight
+# ensureSharedMongoReplicaSetReady() (rs-init + PRIMARY) before POS compose up.
 
 services:
   pos-backend:
