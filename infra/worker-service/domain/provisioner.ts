@@ -556,18 +556,18 @@ export async function deprovisionTenant(
     );
   }
 
-  await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
-  await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
-  await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, tenantId));
-  await db.delete(tenants).where(eq(tenants.id, tenantId));
-  cleanupResults.postgresRows = true;
-
   try {
     await rm(join(defaultTenantEnvRoot(), row.slug), { recursive: true, force: true });
     cleanupResults.envDir = true;
   } catch {
     log(`[deprovision] could not remove tenant env dir for ${row.slug}`);
   }
+
+  await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
+  await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
+  await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, tenantId));
+  await db.delete(tenants).where(eq(tenants.id, tenantId));
+  cleanupResults.postgresRows = true;
 
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };

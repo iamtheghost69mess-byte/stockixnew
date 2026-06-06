@@ -10,6 +10,7 @@ import {
   throwErrorIfTenantAlreadySeeded,
   throwErrorIfTenantNotBuilt,
 } from './_utils';
+import { ensureSeedTsRuntime } from '@/libs/migration-seed/ensure-seed-ts-runtime';
 import { SeedMigration } from '@/libs/migration-seed/SeedMigration';
 import { TenantRepository } from '../System/repositories/Tenant.repository';
 import { TenancyContext } from '../Tenancy/TenancyContext.service';
@@ -104,6 +105,8 @@ export class TenantsManagerService {
     throwErrorIfTenantAlreadySeeded(tenant);
 
     const seedContext = await this.getSeedMigrationContext();
+
+    ensureSeedTsRuntime();
 
     // Seeds the organization database data.
     await new SeedMigration(this.tenantKnex(), seedContext).latest();

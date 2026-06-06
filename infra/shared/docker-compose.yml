@@ -167,29 +167,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  # ─────────────────────────────────────────────────────────────
-  # Shared Nginx — serves Finance webapp static assets for all tenants
-  # Static root: /var/www/{slug}/public/ (populated by provision-runtime, future)
-  # ─────────────────────────────────────────────────────────────
-  stockix-nginx:
-    image: nginx:alpine
-    container_name: stockix-shared-nginx-1
-    restart: unless-stopped
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - stockix_webapp_static:/var/www:ro
-    networks:
-      stockix-shared:
-        aliases:
-          - shared-nginx
-          - stockix-nginx
-      stockix_public: {}
-    mem_limit: 64m
-    cpus: "0.1"
-    mem_swappiness: 0
-    security_opt:
-      - no-new-privileges:true
-
 volumes:
   shared_mysql_data:
     name: stockix_shared_mysql
@@ -197,8 +174,6 @@ volumes:
     name: stockix_shared_mongo
   shared_tenant_redis_data:
     name: stockix_shared_tenant_redis
-  stockix_webapp_static:
-    name: stockix_webapp_static
 
 networks:
   stockix-shared:
@@ -207,8 +182,3 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
-  # Traefik attaches here in prod (infra/prod). External so dev-stockix / ensure-tenant-networks
-  # can pre-create the bridge before compose up (avoids compose label conflict on reuse).
-  stockix_public:
-    name: stockix_public
-    external: true
