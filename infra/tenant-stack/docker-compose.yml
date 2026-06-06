@@ -191,32 +191,7 @@ services:
         export SYSTEM_DB_PASSWORD="$${SYSTEM_DB_PASSWORD:-$${DB_PASSWORD}}"
         export DB_ROOT_PASSWORD="$${DB_ROOT_PASSWORD:-}"
         echo "MIGRATION_ENV DB_USER=$${DB_USER} DB_PASSWORD_LEN=$${#DB_PASSWORD} SYSTEM_DB_USER=$${SYSTEM_DB_USER} SYSTEM_DB_PASSWORD_LEN=$${#SYSTEM_DB_PASSWORD}"
-        # Run migrations via knex directly (bypasses the webpack empty-context bug in build/commands.js)
-        until node -e "
-const knex = require('/app/node_modules/knex');
-const env = process.env;
-const db = knex({
-  client: 'mysql2',
-  connection: {
-    host: env.SYSTEM_DB_HOST || env.DB_HOST || 'mysql',
-    user: env.SYSTEM_DB_USER || env.DB_USER,
-    password: env.SYSTEM_DB_PASSWORD || env.DB_PASSWORD,
-    database: env.SYSTEM_DB_NAME,
-    ssl: false
-  }
-});
-db.migrate.latest({ directory: '/app/packages/server/src/system/migrations', extension: 'js' })
-  .then(function(r) {
-    var files = r[1];
-    console.log('Migrations applied: ' + (files.length ? files.join(', ') : 'none (already up to date)'));
-    return db.destroy();
-  })
-  .then(function() { process.exit(0); })
-  .catch(function(e) {
-    console.error('Migration error: ' + e.message);
-    db.destroy().then(function() { process.exit(1); });
-  });
-"; do
+        until node -e "const knex=require('/app/node_modules/knex');const env=process.env;const db=knex({client:'mysql2',connection:{host:env.SYSTEM_DB_HOST||env.DB_HOST||'mysql',user:env.SYSTEM_DB_USER||env.DB_USER,password:env.SYSTEM_DB_PASSWORD||env.DB_PASSWORD,database:env.SYSTEM_DB_NAME,ssl:false}});db.migrate.latest({directory:'/app/packages/server/src/system/migrations',extension:'js'}).then(function(r){var f=r[1];console.log('Migrations: '+(f.length?f.join(','):'none'));return db.destroy();}).then(function(){process.exit(0);}).catch(function(e){console.error('Migration error:'+e.message);db.destroy().then(function(){process.exit(1);});});"; do
           echo 'DB not ready, retrying in 5s...'
           sleep 5
         done
