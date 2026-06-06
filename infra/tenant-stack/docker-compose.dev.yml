@@ -1,0 +1,13 @@
+# Local dev overrides — adds build targets for Finance tenant stack.
+# Production provisioning uses image-only infra/tenant-stack/docker-compose.yml with --no-build.
+services:
+  server:
+    build:
+      context: ${STOCKIX_TENANT_APP_ROOT}
+      dockerfile: packages/server/Dockerfile
+      target: app
+  database_migration:
+    build:
+      context: ${STOCKIX_TENANT_APP_ROOT}
+      dockerfile: packages/server/Dockerfile
+      target: migration

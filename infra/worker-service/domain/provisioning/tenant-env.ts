@@ -155,6 +155,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     TENANT_DB_USER: tenantDbUser,
     TENANT_DB_PASSWORD: params.dbPassword,
     TENANT_DB_NAME_PREFIX: `stockix_${mysqlSafe}_`,
+    // Legacy Finance typo — upstream TenantDBManager reads TENANT_DB_NAME_PERFIX; keep until fixed.
     TENANT_DB_NAME_PERFIX: `stockix_${mysqlSafe}_`,
     TENANT_DB_CHARSET: "utf8mb4",
 

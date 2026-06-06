@@ -25,4 +25,17 @@ describe("tenant-stack docker-compose.yml", () => {
     const migrationBlock = composeText.slice(composeText.indexOf("database_migration:"));
     expect(migrationBlock).not.toContain('test: ["CMD-SHELL", "exit 0"]');
   });
+
+  it("is image-only in production (no build stanzas)", () => {
+    expect(composeText).not.toMatch(/^\s+build:/m);
+  });
+
+  it("sets NODE_ENV=production on Finance server", () => {
+    expect(composeText).toContain("- NODE_ENV=production");
+  });
+
+  it("passes branding vars through server environment", () => {
+    expect(composeText).toContain("REACT_APP_STOCKIX_API_URL=${REACT_APP_STOCKIX_API_URL:-}");
+    expect(composeText).toContain("REACT_APP_STOCKIX_PRIMARY_COLOR=${REACT_APP_STOCKIX_PRIMARY_COLOR:-}");
+  });
 });

@@ -16,10 +16,6 @@
 services:
   server:
     image: stockix-server:local
-    build:
-      context: ${STOCKIX_TENANT_APP_ROOT}
-      dockerfile: packages/server/Dockerfile
-      target: app
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/ping || exit 1"]
@@ -40,6 +36,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      - NODE_ENV=production
       - NEW_RELIC_ENABLED=false
       - NEW_RELIC_APP_NAME=stockix-tenant
       # Mail — copied from platform env at provision time
@@ -102,6 +99,13 @@ services:
       - THROTTLE_AUTH_TTL=${THROTTLE_AUTH_TTL:-60000}
       - THROTTLE_AUTH_LIMIT=${THROTTLE_AUTH_LIMIT:-200}
       - BILLING_ENABLED=false
+      # Branding — passed from tenant .env at provision time
+      - REACT_APP_STOCKIX_API_URL=${REACT_APP_STOCKIX_API_URL:-}
+      - REACT_APP_STOCKIX_TENANT_ID=${REACT_APP_STOCKIX_TENANT_ID:-}
+      - REACT_APP_STOCKIX_DISCOVERY_SLUG=${REACT_APP_STOCKIX_DISCOVERY_SLUG:-}
+      - REACT_APP_STOCKIX_APP_NAME=${REACT_APP_STOCKIX_APP_NAME:-}
+      - REACT_APP_STOCKIX_LOGO_URL=${REACT_APP_STOCKIX_LOGO_URL:-}
+      - REACT_APP_STOCKIX_PRIMARY_COLOR=${REACT_APP_STOCKIX_PRIMARY_COLOR:-}
     ports:
       # Bind on all interfaces so the infra-worker container can reach this via host.docker.internal.
       - "0.0.0.0:${PUBLIC_PROXY_PORT}:3000"
@@ -114,10 +118,6 @@ services:
 
   database_migration:
     image: stockix-database-migration:local
-    build:
-      context: ${STOCKIX_TENANT_APP_ROOT}
-      dockerfile: packages/server/Dockerfile
-      target: migration
     environment:
       - DB_CLIENT=mysql
       - DB_HOST=stockix-mysql

@@ -129,7 +129,7 @@ async function patchControlPlaneOrganization(
   patch: { financeOrganizationId?: string; provisioningError?: string | null },
   log: (m: string) => void,
 ): Promise<void> {
-  const apiBase = `http://localhost:${apiConfig.port}`;
+  const apiBase = apiConfig.controlPlaneApiBaseUrl;
   const saveUrl = `${apiBase}/internal/organizations/${controlPlaneOrgId}`;
   const secret = apiConfig.workerSecret;
   const saveRes = await fetch(saveUrl, {
