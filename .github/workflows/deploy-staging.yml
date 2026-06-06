@@ -167,9 +167,9 @@ jobs:
           fi
           cd "${REPO_ROOT}"
           echo "=== Building tenant images ==="
-          pnpm docker:prebuild 2>&1 | tail -20 || \
-            echo "WARNING: Tenant images build failed — provisioning may not work until pnpm docker:prebuild succeeds"
-          echo "Tenant images step finished."
+          pnpm docker:prebuild || exit 1
+          node scripts/prebuild-tenant-images.mjs --verify || exit 1
+          echo "Tenant images verified."
           cd infra/staging
           docker image prune -f --filter "until=168h" || true
           trap - ERR

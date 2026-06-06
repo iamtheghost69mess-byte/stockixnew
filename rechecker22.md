@@ -58,7 +58,9 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ## 2. Docker Compose / Docker API
 
-> **Wave 2 (2026-06-07):** Items 1–4 repaired. Finance server binds `PUBLIC_PROXY_PORT`; server `depends_on` migration (worker uses `--no-deps`); fake migration healthcheck removed; worker `ensureSharedMongoReplicaSetReady()` runs shared rs-init before POS-sensitive steps. Unit tests: 20 passed. Combined smoke pending local stack.
+> **Wave 2 (2026-06-07):** Items 1–4 repaired. Finance `PUBLIC_PROXY_PORT` bind, migration `depends_on`, fake HC removed, Mongo rs0 preflight. Unit tests: 20 passed.
+
+> **Wave 3 (2026-06-07):** Items 5–7 repaired. POS `--env-file`, socket-proxy hardening, Traefik via proxy. Unit tests: 26 passed. Combined smoke pending local stack.
 
 ### ✅ Finance host port ignores allocated `PUBLIC_PROXY_PORT` — **repaired (Wave 2, 2026-06-07)**
 
@@ -88,37 +90,39 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 - **Impact:** POS could start before rs0 PRIMARY; first Mongo writes fail.
 - **Repair:** `ensureSharedMongoReplicaSetReady()` runs `stockix-mongo-rs-init` from shared compose during `provisionTenantDatabases()`.
 
-### ❌ POS compose omits `--env-file`
+### ✅ POS compose omits `--env-file` — **repaired (Wave 3, 2026-06-07)**
 
 - **File:** `infra/worker-service/src/module-stacks.ts` → `provisionPosStack`
-- **What is broken:** Uses execa `env` only; Finance path uses `ExecaDockerComposeRunner` with `--env-file`.
+- **Was broken:** Used execa `env` only; Finance path uses `ExecaDockerComposeRunner` with `--env-file`.
 - **Impact:** Harder to reproduce/debug; inconsistent with Finance provisioning.
-- **Fix:** Align POS invocation with Finance runner.
+- **Repair:** POS up/down uses `ExecaDockerComposeRunner` with tenant `{slug}/.env` via `resolvePosTenantEnvPath()`; runtime overrides remain in merged `composeEnv`.
 
-### ❌ Docker socket proxy allows POST and BUILD
+### ✅ Docker socket proxy allows POST and BUILD — **repaired (Wave 3, 2026-06-07)**
 
 - **File:** `infra/prod/docker-compose.yml` → `socket-proxy`
-- **What is broken:** `POST:1`, `BUILD:1` enabled.
-- **Impact:** Not a minimal read-only proxy; worker can mutate Docker broadly.
-- **Fix:** Restrict to required operations if hardening is required.
+- **Was broken:** `BUILD:1` enabled alongside `POST:1`.
+- **Impact:** Unnecessary image-build capability via proxy.
+- **Repair:** `BUILD:0`, `EVENTS:1` (Traefik watches); `POST:1` retained for worker compose mutations. Documented in `OPERATIONS.md`.
 
-### ❌ Traefik mounts Docker socket directly
+### ✅ Traefik mounts Docker socket directly — **repaired (Wave 3, 2026-06-07)**
 
 - **File:** `infra/prod/docker-compose.yml` → `traefik`
-- **What is broken:** `/var/run/docker.sock:ro` on Traefik while worker uses socket-proxy.
+- **Was broken:** `/var/run/docker.sock:ro` on Traefik while worker uses socket-proxy.
 - **Impact:** Split security model.
-- **Fix:** Route Traefik through proxy or document accepted risk.
+- **Repair:** Traefik Docker provider uses `tcp://socket-proxy:2375`; host socket mount and `group_add` removed; Traefik joins `socket_proxy_network`.
 
 ---
 
 ## 3. Docker images
 
-### ❌ Required Finance images must be pre-built
+> **Wave 3 (2026-06-07):** Item 1 repaired — deploy pipelines run synchronous `pnpm docker:prebuild` + `--verify`; production worker startup hard-fails on missing Finance images.
 
-- **File:** `infra/worker-service/domain/provisioning/check-tenant-images.ts`
-- **What is broken:** Missing `stockix-server:local` / `stockix-database-migration:local` hard-fails provision.
-- **Impact:** Fresh VPS without `pnpm docker:prebuild` blocks all accounting provisions.
-- **Fix:** Enforce tenant image build in deploy pipeline.
+### ✅ Required Finance images must be pre-built — **repaired (Wave 3, 2026-06-07)**
+
+- **File:** `infra/worker-service/domain/provisioning/check-tenant-images.ts`, deploy workflows
+- **Was broken:** Provision hard-failed but deploy ran prebuild in background (prod) or ignored failures (staging); worker only warned at startup.
+- **Impact:** Fresh VPS could deploy successfully without tenant images; provisions blocked at runtime.
+- **Repair:** `deploy.yml` / `deploy-staging.yml` synchronous prebuild + verify; prod `checkRequiredTenantImages()` calls `assertRequiredTenantImages()`; image prune moved before prebuild on prod deploy.
 
 ### ❌ Missing POS frontend image is non-fatal
 

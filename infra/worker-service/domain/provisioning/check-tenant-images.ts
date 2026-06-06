@@ -1,5 +1,7 @@
 import { execa } from "execa";
 
+import { apiConfig } from "@repo/config";
+
 import {
   POS_FRONTEND_STUB_LABEL,
   RECOMMENDED_POS_TENANT_IMAGES,
@@ -17,22 +19,27 @@ export async function imageExists(tag: string): Promise<boolean> {
 
 /** Warn at worker startup when Finance images were not pre-built (provision may be slow). */
 export async function checkRequiredTenantImages(): Promise<void> {
-  const missing: string[] = [];
-  for (const image of REQUIRED_STOCKIX_TENANT_IMAGES) {
-    if (!(await imageExists(image))) {
-      missing.push(image);
+  if (apiConfig.nodeEnv === "production") {
+    await assertRequiredTenantImages();
+    console.log("[worker] All tenant images pre-built and ready.");
+  } else {
+    const missing: string[] = [];
+    for (const image of REQUIRED_STOCKIX_TENANT_IMAGES) {
+      if (!(await imageExists(image))) {
+        missing.push(image);
+      }
     }
-  }
-  if (missing.length > 0) {
-    console.warn("[worker] WARNING: Required tenant images not found:");
-    for (const img of missing) {
-      console.warn(`[worker]   - ${img}`);
+    if (missing.length > 0) {
+      console.warn("[worker] WARNING: Required tenant images not found:");
+      for (const img of missing) {
+        console.warn(`[worker]   - ${img}`);
+      }
+      console.warn("[worker] Run: pnpm docker:prebuild");
+      console.warn("[worker] Provisioning may build images during the job and time out.");
+      return;
     }
-    console.warn("[worker] Run: pnpm docker:prebuild");
-    console.warn("[worker] Provisioning may build images during the job and time out.");
-    return;
+    console.log("[worker] All tenant images pre-built and ready.");
   }
-  console.log("[worker] All tenant images pre-built and ready.");
 
   const missingPos: string[] = [];
   for (const image of RECOMMENDED_POS_TENANT_IMAGES) {
