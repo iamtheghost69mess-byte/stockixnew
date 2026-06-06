@@ -4,6 +4,8 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 **Architecture note:** Finance uses **shared MySQL** (`stockix-mysql`), not per-tenant PostgreSQL. MongoDB is shared (`stockix-mongo`) with per-tenant database `{slug}_pos`. Redis is shared with key prefix `tenant:{slug}:`.
 
+> **Reconciliation audit (2026-06-07):** Waves 1–3 verified in code; Waves 4–6 repaired in this pass. **36 worker/API unit tests passed.** Combined smoke (`provision-diagnose --slug smoke-rechecker22`) **failed** — `fetch failed` (control-plane API at `http://localhost:4000` not running). Waves 1–6 remain **code-verified only** until full stack smoke succeeds.
+
 ---
 
 ## How provisioning flows
@@ -117,6 +119,8 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 > **Wave 3 (2026-06-07):** Item 1 repaired — deploy pipelines run synchronous `pnpm docker:prebuild` + `--verify`; production worker startup hard-fails on missing Finance images.
 
+> **Wave 4 (2026-06-07):** Items 2–3 repaired — POS frontend fail-fast; prod compose image-only (`docker-compose.dev.yml` for local builds).
+
 ### ✅ Required Finance images must be pre-built — **repaired (Wave 3, 2026-06-07)**
 
 - **File:** `infra/worker-service/domain/provisioning/check-tenant-images.ts`, deploy workflows
@@ -124,72 +128,78 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 - **Impact:** Fresh VPS could deploy successfully without tenant images; provisions blocked at runtime.
 - **Repair:** `deploy.yml` / `deploy-staging.yml` synchronous prebuild + verify; prod `checkRequiredTenantImages()` calls `assertRequiredTenantImages()`; image prune moved before prebuild on prod deploy.
 
-### ❌ Missing POS frontend image is non-fatal
+### ✅ Missing POS frontend image is non-fatal — **repaired (Wave 4, 2026-06-07)**
 
 - **File:** `infra/worker-service/src/module-stacks.ts`
-- **What is broken:** If `stockix-pos-frontend:local` missing, frontend service skipped with log only.
-- **Impact:** Tenant can be “active” with backend-only POS; Traefik frontend route broken.
-- **Fix:** Fail when POS module licensed and frontend image absent.
+- **Was broken:** If `stockix-pos-frontend:local` missing, frontend service skipped with log only.
+- **Impact:** Tenant could be “active” with backend-only POS; Traefik frontend route broken.
+- **Repair:** POS provision throws when frontend image missing or stub; `pos-frontend` always included in compose up.
 
-### ❌ Build stanzas in prod-shaped compose
+### ✅ Build stanzas in prod-shaped compose — **repaired (Wave 4, 2026-06-07)**
 
-- **File:** `infra/tenant-stack/docker-compose.yml`
-- **What is broken:** `build:` targets remain while runtime uses `--no-build`.
-- **Impact:** Accidental `up` without `--no-build` triggers long VPS builds.
-- **Fix:** Split prod (image-only) from dev overrides.
+- **File:** `infra/tenant-stack/docker-compose.yml`, `infra/tenant-stack/docker-compose.dev.yml`
+- **Was broken:** `build:` targets remained while runtime uses `--no-build`.
+- **Impact:** Accidental `up` without `--no-build` triggered long VPS builds.
+- **Repair:** Prod compose is image-only; dev overrides in `docker-compose.dev.yml`.
 
 ---
 
 ## 4. Environment variables
 
-### ❌ POS missing JWT / platform / license secrets
+> **Wave 4 (2026-06-07):** §4.1–§4.2 repaired (POS JWT/license secrets, Finance `NODE_ENV`).
 
-- **Files:** `infra/pos-tenant-stack/docker-compose.yml`, `services/posnew/apps/pos-backend/config/config.js`
-- **What is broken:** Compose sets `AUTH_TOKEN_SECRET` but not `JWT_SECRET`, `PLATFORM_JWT_SECRET`, `LICENSE_SIGNING_SECRET`, `FIELD_ENCRYPTION_KEY`.
+> **Wave 5 (2026-06-07):** §4.3–§4.4, §4.6–§4.7 repaired (branding passthrough, PERFIX documented, MySQL fail-fast, explicit Resend key).
+
+> **Reconciliation:** §4.5 port mismatch resolved via Wave 2 `PUBLIC_PROXY_PORT` bind.
+
+### ✅ POS missing JWT / platform / license secrets — **repaired (Wave 4, 2026-06-07)**
+
+- **Files:** `infra/pos-tenant-stack/docker-compose.yml`, `infra/worker-service/src/module-stacks.ts`
+- **Was broken:** Compose set `AUTH_TOKEN_SECRET` but not `JWT_SECRET`, `PLATFORM_JWT_SECRET`, `LICENSE_SIGNING_SECRET`, `FIELD_ENCRYPTION_KEY`.
 - **Impact:** Staff/platform JWT and license enforcement broken or undefined in production.
-- **Fix:** Inject required secrets into POS compose env from platform config.
+- **Repair:** `resolvePosJwtEnv()` injects secrets from `@repo/config` + platform env into POS compose.
 
-### ❌ Finance server missing `NODE_ENV=production`
+### ✅ Finance server missing `NODE_ENV=production` — **repaired (Wave 4, 2026-06-07)**
 
 - **File:** `infra/tenant-stack/docker-compose.yml` → `server`
-- **What is broken:** `NODE_ENV` not set in container.
+- **Was broken:** `NODE_ENV` not set in container.
 - **Impact:** Dev defaults, weaker security/cookie behavior in prod.
-- **Fix:** Set `NODE_ENV=production`.
+- **Repair:** `NODE_ENV=production` in `server.environment`.
 
-### ❌ Branding vars not injected into Finance container
+### ✅ Branding vars not injected into Finance container — **repaired (Wave 5, 2026-06-07)**
 
-- **File:** `infra/worker-service/domain/provisioning/tenant-env.ts` vs compose `server.environment`
-- **What is broken:** `REACT_APP_STOCKIX_*` written to tenant `.env` but not passed in compose environment block.
+- **File:** `infra/tenant-stack/docker-compose.yml` → `server.environment`
+- **Was broken:** `REACT_APP_STOCKIX_*` written to tenant `.env` but not passed in compose environment block.
 - **Impact:** Runtime branding fetch may not work unless baked at image build.
-- **Fix:** Add branding vars to compose `server.environment`.
+- **Repair:** Branding vars passed via `${REACT_APP_STOCKIX_*}` in compose `server.environment`.
 
-### ❌ Duplicate typo env key `TENANT_DB_NAME_PERFIX`
+### ✅ Duplicate typo env key `TENANT_DB_NAME_PERFIX` — **documented (Wave 5, 2026-06-07)**
 
 - **File:** `infra/worker-service/domain/provisioning/tenant-env.ts`
-- **What is broken:** Both `TENANT_DB_NAME_PREFIX` and `TENANT_DB_NAME_PERFIX` set (typo duplicate).
-- **Impact:** Legacy Finance may depend on misspelled key; drift risk.
-- **Fix:** Confirm Finance usage; remove typo when upstream fixed.
+- **Was broken:** Both `TENANT_DB_NAME_PREFIX` and `TENANT_DB_NAME_PERFIX` set (typo duplicate).
+- **Impact:** Legacy Finance depends on misspelled key; drift risk.
+- **Repair:** PERFIX kept as legacy alias with deprecation comment; compose maps PERFIX → PREFIX value.
 
-### ❌ `FINANCE_INTERNAL_BASE_URL` uses wrong port
+### ✅ `FINANCE_INTERNAL_BASE_URL` uses wrong port — **repaired (Wave 2, 2026-06-07)**
 
-- **File:** `infra/worker-service/domain/provisioning/build-finance-internal-url.ts`
-- **What is broken:** Uses Postgres-allocated `internalPort`, not Docker-published port.
-- **Impact:** POS `bigcapitalSyncWorker` calls wrong Finance URL.
-- **Fix:** Use resolved publish port or fix compose binding to match allocation.
+- **File:** `infra/worker-service/domain/provisioning/build-finance-internal-url.ts` + compose bind
+- **Was broken:** Used allocated port while compose published ephemeral host port.
+- **Impact:** POS `bigcapitalSyncWorker` called wrong Finance URL.
+- **Repair:** Compose binds `PUBLIC_PROXY_PORT`; internal URL uses same allocation. Runtime smoke pending.
 
-### ❌ Host-run worker MySQL host misconfiguration
+### ✅ Host-run worker MySQL host misconfiguration — **repaired (Wave 5, 2026-06-07)**
 
-- **File:** `infra/worker-service/domain/provisioner.ts` → `workerSharedMysqlHost`
-- **What is broken:** Requires `WORKER_SHARED_MYSQL_HOST=127.0.0.1` when worker runs on host; warn-only if unset.
-- **Impact:** Local/dev DB provision fails with opaque connection errors.
-- **Fix:** Fail fast in non-container worker when shared MySQL unreachable.
+- **File:** `infra/worker-service/domain/provisioner.ts` → `assertWorkerCanReachSharedMysql`
+- **Was broken:** Warn-only when `WORKER_SHARED_MYSQL_HOST` unset; opaque connection errors.
+- **Impact:** Local/dev DB provision failed without clear cause.
+- **Repair:** TCP preflight before mysql2 connect; production host-run requires `WORKER_SHARED_MYSQL_HOST`.
 
-### ❌ RESEND_API_KEY fallback to MAIL_PASSWORD
+### ✅ RESEND_API_KEY fallback to MAIL_PASSWORD — **repaired (Wave 5, 2026-06-07)**
 
-- **File:** `infra/worker-service/src/module-stacks.ts`
-- **What is broken:** `RESEND_API_KEY` falls back to SMTP `MAIL_PASSWORD`.
-- **Impact:** POS email jobs fail; misleading config.
-- **Fix:** Require explicit `RESEND_API_KEY` for POS.
+- **File:** `infra/worker-service/src/module-stacks.ts` → `resolvePosResendApiKey`
+- **Was broken:** `RESEND_API_KEY` fell back to SMTP `MAIL_PASSWORD`.
+- **Impact:** POS email jobs failed; misleading config.
+- **Repair:** Explicit `RESEND_API_KEY` required when POS module provision runs.
 
 ---
 
@@ -209,12 +219,12 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 - **Impact:** Orphan databases accumulate.
 - **Fix:** Stop creating unused DB or wire Finance to use it.
 
-### ❌ Mongo verification is TCP-only
+### ❌ Mongo verification is TCP-only — **repaired (Wave 2, 2026-06-07)**
 
-- **File:** `infra/worker-service/domain/provisioner.ts` → `verifyTcpReachable`
-- **What is broken:** No rs0 PRIMARY check before provision continues.
-- **Impact:** Provision proceeds while replica set still initializing.
-- **Fix:** Verify `rs.status()` PRIMARY before POS/Finance Mongo use.
+- **File:** `infra/worker-service/domain/provisioner.ts` → `ensureSharedMongoReplicaSetReady`
+- **Was broken:** No rs0 PRIMARY check before provision continued.
+- **Impact:** Provision proceeded while replica set still initializing.
+- **Repair:** `ensureSharedMongoReplicaSetReady()` runs rs-init and blocks until PRIMARY.
 
 ### ❌ PostgreSQL / pgcrypto not applicable
 
@@ -225,26 +235,30 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ## 6. Traefik routing
 
-### ❌ Traefik upstream port mismatch
+> **Wave 6 (2026-06-07):** §6.2–§6.3 repaired (early edge publish, production network preflight).
 
-- **File:** `infra/worker-service/domain/traefik-config.ts` → `writeTenantTraefikConfig`
-- **What is broken:** Upstream `http://{TRAEFIK_TENANT_UPSTREAM_HOST}:{internalPort}` uses DB allocation, not Docker publish port.
-- **Impact:** `{slug}.{ROOT_DOMAIN}` routes to wrong port → 502 / broken Finance UI.
-- **Fix:** Use resolved publish port or bind compose to `PUBLIC_PROXY_PORT`.
+> **Reconciliation:** §6.1 upstream port mismatch resolved via Wave 2 `PUBLIC_PROXY_PORT` bind.
 
-### ❌ Traefik publish late in pipeline
+### ✅ Traefik upstream port mismatch — **repaired (Wave 2, 2026-06-07)**
+
+- **File:** `infra/worker-service/domain/traefik-config.ts` + compose bind
+- **Was broken:** Upstream used DB allocation while compose published ephemeral port.
+- **Impact:** `{slug}.{ROOT_DOMAIN}` routed to wrong port → 502.
+- **Repair:** Compose binds `PUBLIC_PROXY_PORT`; Traefik and worker use same value.
+
+### ✅ Traefik publish late in pipeline — **repaired (Wave 6, 2026-06-07)**
 
 - **File:** `infra/worker-service/src/provision-runtime.ts` → `edge.publish`
-- **What is broken:** Traefik YAML written after org build, warehouse, POS defaults, etc.
+- **Was broken:** Traefik YAML written after org build, warehouse, POS defaults, etc.
 - **Impact:** Long window where stack is up but subdomain unreachable.
-- **Fix:** Publish route after server health + port resolution (update if port changes).
+- **Repair:** `edge.publish` runs immediately after tenant health check + port confirm.
 
-### ❌ Auto-create `stockix_public` without Traefik
+### ✅ Auto-create `stockix_public` without Traefik — **repaired (Wave 6, 2026-06-07)**
 
 - **File:** `infra/worker-service/domain/provisioning/ensure-tenant-networks.ts`
-- **What is broken:** Creates missing external networks in local dev without full edge stack.
-- **Impact:** Silent partial routing in dev-shaped runs.
-- **Fix:** Fail preflight if prod-shaped provision and shared/prod stack not up.
+- **Was broken:** Created missing external networks in local dev without full edge stack.
+- **Impact:** Silent partial routing in prod-shaped runs.
+- **Repair:** Production preflight fails if `stockix-shared` / `stockix_public` missing; dev still auto-creates.
 
 **POS Traefik:** `{slug}-pos.{domain}` and `{slug}-pos-api.{domain}` via `writePosTraefikConfig` — same host/port allocation issues apply to backend/frontend host ports.
 
@@ -252,51 +266,54 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ## 7. Migration & setup scripts
 
-### ❌ Post-bootstrap org build blocked by signin
+> **Reconciliation:** §7.1 and §7.3 duplicate Wave 1 signin/bootstrap fixes. §7.2 remains a smoke-verify risk.
 
-- **Files:** `fetch-stockix-finance-build-org.ts`, `provision-test-run2.log`
-- **What is broken:** Reproduced: ping OK → bootstrap OK → `signin_failed`.
-- **Impact:** Blocks COA, warehouse, POS integration for accounting tenants.
-- **Fix:** Debug Finance signin immediately after `provision-user`.
+### ✅ Post-bootstrap org build blocked by signin — **repaired (Wave 1, 2026-06-07; smoke pending)**
 
-### ❌ Finance signin 401 when org membership missing
+- **Files:** `fetch-stockix-finance-build-org.ts`, `finance-auth-client.ts`
+- **Was broken:** Ping OK → bootstrap OK → opaque `signin_failed`.
+- **Impact:** Blocked COA, warehouse, POS integration.
+- **Repair:** Structured signin codes + post-bootstrap retry. End-to-end smoke not yet run locally.
+
+### ⚠️ Finance signin 401 when org membership missing — **verify on smoke**
 
 - **File:** `services/stockix-finance/packages/server/src/modules/Auth/Auth.controller.ts`
-- **What is broken:** `UnauthorizedException('No organization found for this user')` when UserTenant / tenantId resolution fails.
-- **Impact:** Surfaces as generic `signin_failed` in worker.
-- **Fix:** Ensure `provision-user` always creates consistent `user.tenantId` + `UserTenant` before build.
+- **Risk:** `UnauthorizedException('No organization found for this user')` when UserTenant resolution fails.
+- **Impact:** Surfaces as structured signin code in worker; root cause may remain in Finance.
+- **Status:** Worker surfaces `signin_no_organization`; needs live provision smoke to confirm fix.
 
-### ❌ Bootstrap payload uses snake_case field names
+### ✅ Bootstrap payload uses snake_case field names — **repaired (Wave 1, 2026-06-07)**
 
-- **File:** `infra/worker-service/domain/provisioning/adapters/fetch-stockix-finance-bootstrap.ts`
-- **What is broken:** Sends `first_name` / `last_name`; DTO expects `firstName` / `lastName`.
-- **Impact:** Relies on Finance `SerializeInterceptor` snake/camel transform; breaks if route skips interceptor.
-- **Fix:** Send camelCase matching `ProvisionUserDto`.
+- **File:** `fetch-stockix-finance-bootstrap.ts`
+- **Was broken:** Sent `first_name` / `last_name`; DTO expects camelCase.
+- **Repair:** Sends `firstName` / `lastName` matching `ProvisionUserDto`.
 
 ---
 
 ## 8. Node.js control plane logic
 
-### ❌ Partial POS outcomes not always job failures
+> **Wave 6 (2026-06-07):** §8.2–§8.3 repaired (stuck threshold, internal API URL).
+
+### ⚠️ Partial POS outcomes not always job failures — **partial by design**
 
 - **Files:** `provision-runtime.ts`, `apps/api` readiness / job status
-- **What is broken:** Job may complete while `tenantStatus: partial` and `partialFailureKind` set.
-- **Impact:** Dashboard shows inconsistent success vs readiness.
-- **Fix:** Map partial failures to terminal job state or block readiness until retry.
+- **Context:** Full provision with accounting+POS may complete with `tenantStatus: "partial"` by design.
+- **Repair (Wave 1):** POS-only retry failures return `ok: false`; worker logs correct outcome via `resolveProvisionJobOutcome`.
+- **Remaining:** Dashboard/readiness mapping for full-provision partial states (Wave 7+).
 
-### ❌ Stuck reconciler vs long worker timeout
+### ✅ Stuck reconciler vs long worker timeout — **repaired (Wave 6, 2026-06-07)**
 
 - **File:** `apps/api/src/provisioning/stuck-reconciler.ts`
-- **What is broken:** Stuck threshold ~10 minutes; `WORKER_JOB_EXECUTION_TIMEOUT_MS` up to 45 minutes.
+- **Was broken:** Stuck threshold ~10 minutes; worker timeout up to 45 minutes.
 - **Impact:** False failed status or duplicate retries on slow provisions.
-- **Fix:** Align stuck threshold with worker timeout and heartbeats.
+- **Repair:** `STUCK_MS = workerJobExecutionTimeoutMs + 5min` grace.
 
-### ❌ financeOrganizationId save uses localhost from worker
+### ✅ financeOrganizationId save uses localhost from worker — **repaired (Wave 6, 2026-06-07)**
 
-- **File:** `infra/worker-service/src/provision-runtime.ts`
-- **What is broken:** PATCH to `http://localhost:${apiConfig.port}` from inside worker container.
-- **Impact:** Mapping save fails in Docker unless API on localhost; warning-only.
-- **Fix:** Use `API_HOST` / internal service URL from worker env.
+- **File:** `infra/worker-service/src/provision-runtime.ts`, `org-provision-runtime.ts`
+- **Was broken:** PATCH to `http://localhost:${port}` from inside worker container.
+- **Impact:** Mapping save failed in Docker unless API on localhost.
+- **Repair:** Uses `apiConfig.controlPlaneApiBaseUrl` (`API_HOST` + port; prod: `http://api:4000`).
 
 **Positive (not failures):** Concurrent provision guard (`provision-lock.ts`), provision journal/resume ops, rollback with compose down + optional DB teardown, lifecycle job failure marking in `provision-failure.ts`.
 
@@ -304,19 +321,19 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ## 9. Networking & connectivity
 
-### ❌ Split-brain success: internal OK, public broken
+> **Reconciliation:** §9.1–§9.2 port desync resolved via Wave 2 compose bind.
 
-- **Files:** `provision-runtime.ts` (internal URL resolution), `traefik-config.ts`
-- **What is broken:** Worker reaches Finance via `stockix_internal` IP or ephemeral publish port; Traefik uses different port number.
-- **Impact:** Provisioning logs show success while tenant URL fails.
-- **Fix:** Single source of truth for host port (compose binding).
+### ✅ Split-brain success: internal OK, public broken — **repaired (Wave 2, 2026-06-07)**
 
-### ❌ POS → Finance internal URL wrong
+- **Files:** compose bind + `traefik-config.ts`
+- **Was broken:** Worker reached Finance via internal IP; Traefik used different port.
+- **Repair:** Single source of truth — `PUBLIC_PROXY_PORT` bind. Smoke pending.
 
-- **File:** `infra/pos-tenant-stack/docker-compose.yml` → `FINANCE_INTERNAL_BASE_URL`
-- **What is broken:** Defaults to `host.docker.internal:{internalPort}` with wrong port.
-- **Impact:** `bigcapitalSyncWorker` cannot sync with Finance.
-- **Fix:** Internal network IP or correct published port.
+### ✅ POS → Finance internal URL wrong — **repaired (Wave 2, 2026-06-07)**
+
+- **File:** `build-finance-internal-url.ts` + compose bind
+- **Was broken:** URL used wrong published port.
+- **Repair:** Internal URL uses same allocated port as compose bind.
 
 ### ❌ Host vs container worker env overrides
 
@@ -369,53 +386,70 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 ---
 
-## Severity summary
+## Severity summary (post-reconciliation)
 
-| Severity | Count | Meaning |
-|----------|-------|---------|
-| **CRITICAL** | 6 | Blocks provisioning entirely or public access |
-| **HIGH** | 14 | Silent failure or partial tenant |
-| **MEDIUM** | 11 | Degraded state |
-| **LOW** | 6 | Risk or tech debt |
+| Severity | Open | Fixed in code | Smoke-pending |
+|----------|------|-------------|---------------|
+| **CRITICAL** | 0 | 8 | 2 (signin, port E2E) |
+| **HIGH** | 4 | 12 | 1 |
+| **MEDIUM** | 6 | 3 | 0 |
+| **LOW** | 4 | 0 | 0 |
 
----
-
-## Top 3 most likely root causes of current failures
-
-### 1. Host port desync (CRITICAL)
-
-`tenant_deployments.internal_port` and Traefik use ports **4100–4999** from Postgres sequence `tenant_port_seq`. Finance compose publishes **`0.0.0.0::3000`** (random host port). Worker health/bootstrap can succeed via Docker internal IP or `docker compose port`, while **public Traefik routes and POS `FINANCE_INTERNAL_BASE_URL` fail**.
-
-**Primary fix:** In `infra/tenant-stack/docker-compose.yml`, bind:
-
-```yaml
-ports:
-  - "127.0.0.1:${PUBLIC_PROXY_PORT}:3000"
-```
-
-Then ensure Traefik and POS use the same port value.
-
-### 2. `signin_failed` after bootstrap (CRITICAL)
-
-Reproduced in `provision-test-run2.log`: `/api/internal/provision-user` succeeds; organization build signin fails with no HTTP detail. Blocks seeding, warehouse activation, and POS wiring.
-
-**Primary fix:** Improve error surfacing in `fetch-stockix-finance-build-org.ts`; verify Finance `UserTenant` / `user.tenantId` / password hash immediately after provision-user.
-
-### 3. Incomplete POS env and wrong Finance URL (HIGH)
-
-POS stack missing `JWT_SECRET`, `PLATFORM_JWT_SECRET`, `LICENSE_SIGNING_SECRET`; `FINANCE_INTERNAL_BASE_URL` uses wrong port. Causes POS auth/license failures and broken Bigcapital sync even when containers start.
-
-**Primary fix:** Extend POS compose env in `module-stacks.ts`; fix Finance internal URL to match resolved host port.
+**Totals:** ~23 fixed in code (Waves 1–6), ~14 open (Wave 7–8 + ops), ~3 smoke-pending.
 
 ---
 
-## Recommended fix order
+## Top 3 current risks (2026-06-07)
 
-1. **Bind Finance compose port to `PUBLIC_PROXY_PORT`** — unblocks Traefik and POS→Finance.
-2. **Fix signin / org build path** — unblocks accounting tenant completion.
-3. **Complete POS env injection** — unblocks POS + integration modules.
-4. **Structured provision errors** — reduces time-to-diagnose on remaining issues.
-5. **Preflight checks** — MySQL/Mongo/rs0/images/networks before compose up.
+### 1. Combined smoke not run (HIGH)
+
+Waves 1–6 code fixes are unit-tested (36 passed) but **`provision-diagnose` has not succeeded** locally — API at `localhost:4000` was down. Signin/port/Traefik timing fixes need end-to-end validation.
+
+### 2. Wave 7–8 data + safety items (MEDIUM)
+
+System DB drop on migration retry, orphan `_finance` DB, compose `-v` preflight, secret log redaction, Postgres/pgcrypto doc drift — still open.
+
+### 3. Finance signin membership edge case (MEDIUM)
+
+Worker now surfaces structured codes; Finance `Auth.controller` may still reject users missing `UserTenant` — verify on smoke before calling accounting provision production-ready.
+
+---
+
+## Recommended fix order (remaining)
+
+1. **Run combined smoke** — `pnpm --filter api provision-diagnose` with full stack.
+2. **Wave 7** — migration reset gate, orphan DB cleanup, preflight `-v` removal.
+3. **Wave 8** — ops docs (MySQL not Postgres), Redis prefix tests, readiness gates.
+4. **Optional** — route `db-backup` through socket-proxy.
+
+---
+
+## Verification ledger
+
+| Wave | Scope | Code | Unit tests | Smoke | Deploy |
+|------|-------|------|------------|-------|--------|
+| 1 | Signin, outcomes, failure logs | ✅ | ✅ 21+ | ⏳ pending | — |
+| 2 | Compose port, migration, Mongo rs0 | ✅ | ✅ | ⏳ pending | — |
+| 3 | POS env-file, proxy, prebuild | ✅ | ✅ 26→36 | ⏳ pending | ✅ deploy.yml |
+| 4 | POS frontend, compose split, secrets, NODE_ENV | ✅ | ✅ 36 | ⏳ pending | — |
+| 5 | Branding, PERFIX, MySQL, Resend | ✅ | ✅ 36 | ⏳ pending | — |
+| 6 | Early publish, networks, stuck, API URL | ✅ | ✅ 36 | ⏳ pending | — |
+| 7–8 | DB reset, docs, preflight hardening | ❌ open | — | — | — |
+
+---
+
+## Top 3 most likely root causes of current failures (historical — superseded)
+
+<details>
+<summary>Pre-Wave audit (June 2026 PROV2CHECK) — kept for reference</summary>
+
+### 1. Host port desync (CRITICAL) — **fixed Wave 2**
+
+### 2. `signin_failed` after bootstrap (CRITICAL) — **fixed Wave 1; smoke pending**
+
+### 3. Incomplete POS env and wrong Finance URL (HIGH) — **fixed Waves 2 + 4**
+
+</details>
 
 ---
 

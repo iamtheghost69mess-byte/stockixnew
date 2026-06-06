@@ -157,11 +157,7 @@ export async function provisionTenantDatabases(
     );
   }
 
-  if (process.env.NODE_ENV !== "production" && !process.env.WORKER_SHARED_MYSQL_HOST?.trim()) {
-    log(
-      "[db-provision][warn] WORKER_SHARED_MYSQL_HOST unset — using SHARED_MYSQL_HOST (set 127.0.0.1 when worker runs on host)",
-    );
-  }
+  await assertWorkerCanReachSharedMysql(log);
 
   log(`[db-provision] creating MySQL databases for tenant "${slug}"`);
 
@@ -392,6 +388,30 @@ function verifyTcpReachable(host: string, port: number, label: string): Promise<
       reject(new Error(`[db-provision] ${label} at ${host}:${port} not reachable: ${err.message}`));
     });
   });
+}
+
+function isWorkerRunningInContainer(): boolean {
+  return Boolean(process.env.DOCKER_HOST?.trim());
+}
+
+/** Fail fast when host-run worker cannot reach shared MySQL before opening mysql2 connection. */
+async function assertWorkerCanReachSharedMysql(log: (m: string) => void): Promise<void> {
+  const mysqlHost = workerSharedMysqlHost();
+  const onHost = !isWorkerRunningInContainer();
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (onHost && !process.env.WORKER_SHARED_MYSQL_HOST?.trim()) {
+    if (isProduction) {
+      throw new Error(
+        "[db-provision] WORKER_SHARED_MYSQL_HOST must be set when worker runs on host in production",
+      );
+    }
+    log(
+      "[db-provision][warn] WORKER_SHARED_MYSQL_HOST unset — probing SHARED_MYSQL_HOST (set 127.0.0.1 when worker runs on host)",
+    );
+  }
+
+  await verifyTcpReachable(mysqlHost, 3306, "shared MySQL");
 }
 
 async function resolveSharedInfraEnvFile(): Promise<string | undefined> {

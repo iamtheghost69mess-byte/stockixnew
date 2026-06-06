@@ -5,7 +5,7 @@ import {
 } from "@repo/db/schema";
 import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { createDb } from "@repo/db";
-import { infraConfig } from "@repo/config";
+import { apiConfig, infraConfig } from "@repo/config";
 
 import { logger } from "../lib/logger.js";
 import { resolveAndPersistFinanceTenantId } from "../finance-tenant-resolve.js";
@@ -17,7 +17,8 @@ import {
 
 type Db = ReturnType<typeof createDb>;
 
-const STUCK_MS = 10 * 60 * 1000;
+/** Grace after worker job timeout before reconciler treats provisioning as stuck. */
+const STUCK_MS = apiConfig.workerJobExecutionTimeoutMs + 5 * 60 * 1000;
 
 let stuckReconcilerInterval: ReturnType<typeof setInterval> | null = null;
 

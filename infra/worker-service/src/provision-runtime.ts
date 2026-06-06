@@ -1672,6 +1672,36 @@ export async function executeProvisionRuntime(
       });
     }
     await checkNotCancelled();
+    if (!hasOp("edge.publish")) {
+      log("[provision] step start: edge.publish");
+      await assertTenantPortAvailable(db, port, {
+        excludeTenantId: tenantId ?? undefined,
+        slug: input.slug,
+      });
+      try {
+        await edge.publish(input.slug, port, rootDomain, project);
+      } catch (error) {
+        await trace.event("edge", "Traefik edge publish failed", {
+          level: "error",
+          meta: {
+            slug: input.slug,
+            internalPort: port,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        throw error;
+      }
+      await markOp("edge.publish", "Traefik edge publish completed", {
+        slug: input.slug,
+        internalPort: port,
+      });
+      log("[provision] step done: edge.publish");
+    } else {
+      await trace.event("resume", "Skipping edge publish (already journaled)", {
+        meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
+      });
+    }
+    await checkNotCancelled();
     if (!hasOp("tenant.bootstrap_admin")) {
       log("[provision] step start: tenant.bootstrap_admin");
       await trace.event("progress", "Starting bootstrap admin registration", {
@@ -1887,7 +1917,7 @@ export async function executeProvisionRuntime(
           financeOrganizationId = buildResult.financeOrganizationId;
         }
         if (input.controlPlaneOrgId && buildResult.financeOrganizationId) {
-          const apiBase = `http://localhost:${apiConfig.port}`;
+          const apiBase = apiConfig.controlPlaneApiBaseUrl;
           const saveUrl = `${apiBase}/internal/organizations/${input.controlPlaneOrgId}`;
           const secret = apiConfig.workerSecret;
           try {
@@ -2185,35 +2215,6 @@ export async function executeProvisionRuntime(
     }
 
     await checkNotCancelled();
-    if (!hasOp("edge.publish")) {
-      log("[provision] step start: edge.publish");
-      await assertTenantPortAvailable(db, port, {
-        excludeTenantId: tenantId ?? undefined,
-        slug: input.slug,
-      });
-      try {
-        await edge.publish(input.slug, port, rootDomain, project);
-      } catch (error) {
-        await trace.event("edge", "Traefik edge publish failed", {
-          level: "error",
-          meta: {
-            slug: input.slug,
-            internalPort: port,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-        throw error;
-      }
-      await markOp("edge.publish", "Traefik edge publish completed", {
-        slug: input.slug,
-        internalPort: port,
-      });
-      log("[provision] step done: edge.publish");
-    } else {
-      await trace.event("resume", "Skipping edge publish (already journaled)", {
-        meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
-      });
-    }
     let forceWireRerun: boolean = wireOnlyRetry;
     if (tenantId) {
       const [partialRow] = await db

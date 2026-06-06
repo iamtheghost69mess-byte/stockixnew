@@ -156,6 +156,7 @@ export const env = {
   DATABASE_URL: readOptionalString("DATABASE_URL"),
   DB_WAIT_TIMEOUT_MS: readNumber("DB_WAIT_TIMEOUT_MS", 90_000),
   PORT: readNumber("PORT", 4000),
+  API_HOST: readOptionalString("API_HOST"),
   PLATFORM_API_SECRET: readOptionalString("PLATFORM_API_SECRET"),
   DASHBOARD_URL: readOptionalString("DASHBOARD_URL"),
   BOOTSTRAP_ADMIN_EMAIL: readOptionalString("BOOTSTRAP_ADMIN_EMAIL"),
@@ -357,6 +358,13 @@ export const apiConfig = {
   },
   get port() {
     return env.PORT;
+  },
+  /** Control-plane API hostname for worker → API calls (Docker: `api`; host dev: `127.0.0.1`). */
+  get apiHost() {
+    return env.API_HOST?.trim() || "127.0.0.1";
+  },
+  get controlPlaneApiBaseUrl() {
+    return `http://${this.apiHost}:${this.port}`;
   },
   get publicBaseUrlScheme() {
     return env.PUBLIC_BASE_URL_SCHEME;

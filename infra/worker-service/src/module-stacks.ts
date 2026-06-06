@@ -64,6 +64,44 @@ async function assertPosTenantEnvFile(slug: string): Promise<string> {
   return envPath;
 }
 
+/** JWT / license secrets injected into POS compose env (exported for tests). */
+export function resolvePosJwtEnv(): {
+  JWT_SECRET: string;
+  PLATFORM_JWT_SECRET: string;
+  LICENSE_SIGNING_SECRET: string;
+  FIELD_ENCRYPTION_KEY: string;
+} {
+  const jwtSecret = apiConfig.authTokenSecret;
+  const platformFromEnv = process.env.PLATFORM_JWT_SECRET?.trim();
+  const platformJwtSecret =
+    platformFromEnv
+    || (apiConfig.nodeEnv !== "production" && jwtSecret
+      ? `${jwtSecret}:platform`
+      : "");
+  if (!platformJwtSecret) {
+    throw new Error(
+      "[provision][pos] PLATFORM_JWT_SECRET is required when provisioning POS in production",
+    );
+  }
+  return {
+    JWT_SECRET: jwtSecret,
+    PLATFORM_JWT_SECRET: platformJwtSecret,
+    LICENSE_SIGNING_SECRET: apiConfig.licenseSigningSecret,
+    FIELD_ENCRYPTION_KEY: process.env.FIELD_ENCRYPTION_KEY?.trim() ?? "",
+  };
+}
+
+/** Require explicit Resend API key for POS email (no SMTP password fallback). */
+export function resolvePosResendApiKey(): string {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) {
+    throw new Error(
+      "[provision][pos] RESEND_API_KEY is required when provisioning POS (set in platform env)",
+    );
+  }
+  return key;
+}
+
 function repoRoot(): string {
 
   return apiConfig.repoRoot ?? process.cwd();
@@ -353,10 +391,10 @@ export async function provisionPosStack(
   opts.log(`[provision][pos] compose up project=${project}`);
 
   const stockixRepoRoot = repoRoot();
-  const resendApiKey =
-    process.env.RESEND_API_KEY?.trim() || env.MAIL_PASSWORD?.trim() || "";
+  const resendApiKey = resolvePosResendApiKey();
   const resendFromEmail =
     process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
+  const posJwtEnv = resolvePosJwtEnv();
 
   const tenantEnv = await readTenantEnvFile(opts.slug);
   const envPath = await assertPosTenantEnvFile(opts.slug);
@@ -379,6 +417,7 @@ export async function provisionPosStack(
     POS_FRONTEND_HOST_PORT: String(frontendPort),
     TENANT_ID: opts.tenantId,
     AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+    ...posJwtEnv,
     POS_PLATFORM_API_KEY: platformApiKey,
     POS_BACKEND_URL: posApiUrl,
     POS_FRONTEND_URL: posUrl,
@@ -396,27 +435,26 @@ export async function provisionPosStack(
       "stockix-pos-backend:local not found — run pnpm pos:images:build before POS provision",
     );
   }
+  if (!(await dockerImageExists("stockix-pos-frontend:local"))) {
+    throw new Error(
+      "stockix-pos-frontend:local not found — run pnpm pos:images:build before POS provision",
+    );
+  }
+  if (await isPosFrontendStubImage()) {
+    throw new ProvisionError(
+      "POS frontend image is a stub build. " +
+        "Run `pnpm pos:images:build` (not `pnpm pos:images:build:stub`) " +
+        "to build the real frontend image before provisioning POS.",
+      "POS_FRONTEND_STUB_IMAGE",
+    );
+  }
 
   const upServices = [
     "pos-backend",
     "pos-platform-worker",
     "pos-bigcapital-worker",
+    "pos-frontend",
   ];
-  if (await dockerImageExists("stockix-pos-frontend:local")) {
-    if (await isPosFrontendStubImage()) {
-      throw new ProvisionError(
-        "POS frontend image is a stub build. " +
-          "Run `pnpm pos:images:build` (not `pnpm pos:images:build:stub`) " +
-          "to build the real frontend image before provisioning POS.",
-        "POS_FRONTEND_STUB_IMAGE",
-      );
-    }
-    upServices.push("pos-frontend");
-  } else {
-    opts.log(
-      "[provision][pos] stockix-pos-frontend:local not found — skipping frontend container (pnpm pos:images:build)",
-    );
-  }
 
   // Use pre-built images only — do not pass --build (would rebuild pos-frontend from the full Next Dockerfile).
   try {
