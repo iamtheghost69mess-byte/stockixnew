@@ -4,7 +4,7 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 
 **Architecture note:** Finance uses **shared MySQL** (`stockix-mysql`), not per-tenant PostgreSQL. MongoDB is shared (`stockix-mongo`) with per-tenant database `{slug}_pos`. Redis is shared with key prefix `tenant:{slug}:`.
 
-> **Reconciliation audit (2026-06-07):** Waves 1–3 verified in code; Waves 4–6 repaired in this pass. **36 worker/API unit tests passed.** Combined smoke (`provision-diagnose --slug smoke-rechecker22`) **failed** — `fetch failed` (control-plane API at `http://localhost:4000` not running). Waves 1–6 remain **code-verified only** until full stack smoke succeeds.
+> **Reconciliation audit (2026-06-07, test run 01:55 UTC):** Waves 1–6 + §12 verified in code. **54 worker/readiness unit tests passed** (17 files); **312/312** full `apps/api` suite passed (71 files); `pnpm tsc --noEmit` exit 0. API `/health` → **200**. Combined smoke (`provision-diagnose --slug smoke-responsechecker2`) **failed at auth** — `GET /owners -> 401` (needs `--owner-id`, `OWNER_ID`, or `PROVISION_AUTH_BEARER` / `--auth-bearer`). Runtime provision path **not yet validated** end-to-end.
 
 ---
 
@@ -397,15 +397,40 @@ Full diagnostic output from **PROV2CHECK** (June 2026). This document reports **
 | **MEDIUM** | 6 | 3 | 0 |
 | **LOW** | 4 | 0 | 0 |
 
-**Totals:** ~27 fixed in code (Waves 1–6 + §12), ~10 open (Wave 7–8 remainder + ops), ~3 smoke-pending. **54 unit tests passed.**
+**Totals:** ~27 fixed in code (Waves 1–6 + §12), ~10 open (Wave 7–8 remainder + ops), ~3 smoke-pending. **54 worker/readiness + 312 full API tests passed** (2026-06-07).
+
+---
+
+## Test execution snapshot (2026-06-07)
+
+| Command | Result | Notes |
+|---------|--------|-------|
+| `cd apps/api && pnpm test ../../infra/worker-service tests/readiness-module-gating.test.ts` | ✅ **54/54** (17 files, 14.3s) | All Wave 1–6 + §12 worker/readiness tests |
+| `cd apps/api && pnpm test` | ✅ **312/312** (71 files, 56.2s) | Full control-plane suite |
+| `cd apps/api && pnpm tsc --noEmit` | ✅ exit 0 | No type errors |
+| `GET http://127.0.0.1:4000/health` | ✅ **200** | API reachable |
+| `pnpm --filter api provision-diagnose -- --slug smoke-responsechecker2 --admin-email admin@localhost` | ❌ exit 1 | `GET /owners -> 401 unauthorized` — pass auth (`PROVISION_AUTH_BEARER`, `--auth-bearer`, or `--owner-id`) |
+
+### Worker test files by wave (all passing)
+
+| Wave | Test file(s) |
+|------|----------------|
+| 1 | `finance-auth-client.test.ts`, `provision-outcome-rules.test.ts`, `fetch-stockix-finance-build-org.test.ts` |
+| 2 | `tenant-stack-compose.test.ts`, `provisioner.mongo-rs.test.ts`, `prod-compose-contract.test.ts`, `check-tenant-images.test.ts` |
+| 3 | `module-stacks.pos-compose.test.ts`, `execa-docker-compose-runner.test.ts` |
+| 4 | `tenant-stack-dev-compose.test.ts`, `prod-compose-contract.test.ts` |
+| 5 | `ensure-tenant-networks.test.ts`, `redis-key-prefix.test.ts` (prefix contract) |
+| 6 | `provision-runtime.compose-args.test.ts`, `ensure-tenant-networks.test.ts` |
+| §12 | `build-preflight-down-args.test.ts`, `redact-compose-log.test.ts`, `redis-key-prefix.test.ts` |
+| API | `readiness-module-gating.test.ts`, `provision-failure.test.ts`, `retry-provision-partial.test.ts` |
 
 ---
 
 ## Top 3 current risks (2026-06-07)
 
-### 1. Combined smoke not run (HIGH)
+### 1. Combined smoke blocked on auth (HIGH)
 
-Waves 1–6 + §12 code fixes are unit-tested (**54 passed**) but **`provision-diagnose` has not succeeded** locally — API at `localhost:4000` was down. Signin/port fixes need end-to-end validation.
+Unit tests pass (**54 + 312**), API health is **200**, but **`provision-diagnose` fails at `GET /owners` (401)** without owner auth. Signin/port fixes still need an authenticated end-to-end provision run.
 
 ### 2. Wave 7–8 data + docs items (MEDIUM)
 
@@ -419,7 +444,7 @@ Worker now surfaces structured codes; Finance `Auth.controller` may still reject
 
 ## Recommended fix order (remaining)
 
-1. **Run combined smoke** — `pnpm --filter api provision-diagnose` with full stack.
+1. **Run combined smoke** — `pnpm --filter api provision-diagnose -- --slug smoke-<unique> --admin-email <email> --auth-bearer <token>` (or `--owner-id` / `OWNER_ID`) with full Docker stack.
 2. **Wave 7** — migration reset gate, orphan DB cleanup.
 3. **Wave 8** — ops docs (MySQL not Postgres).
 4. **Optional** — route `db-backup` through socket-proxy.
@@ -430,13 +455,14 @@ Worker now surfaces structured codes; Finance `Auth.controller` may still reject
 
 | Wave | Scope | Code | Unit tests | Smoke | Deploy |
 |------|-------|------|------------|-------|--------|
-| 1 | Signin, outcomes, failure logs | ✅ | ✅ 21+ | ⏳ pending | — |
-| 2 | Compose port, migration, Mongo rs0 | ✅ | ✅ | ⏳ pending | — |
-| 3 | POS env-file, proxy, prebuild | ✅ | ✅ 26→36 | ⏳ pending | ✅ deploy.yml |
-| 4 | POS frontend, compose split, secrets, NODE_ENV | ✅ | ✅ 36 | ⏳ pending | — |
-| 5 | Branding, PERFIX, MySQL, Resend | ✅ | ✅ 36 | ⏳ pending | — |
-| 6 | Early publish, networks, stuck, API URL | ✅ | ✅ 36 | ⏳ pending | — |
-| §12 | Redis prefix tests, log redaction, preflight down, readiness | ✅ | ✅ 54 | ⏳ pending | — |
+| 1 | Signin, outcomes, failure logs | ✅ | ✅ pass | ❌ auth 401 | — |
+| 2 | Compose port, migration, Mongo rs0 | ✅ | ✅ pass | ❌ auth 401 | — |
+| 3 | POS env-file, proxy, prebuild | ✅ | ✅ pass | ❌ auth 401 | ✅ deploy.yml |
+| 4 | POS frontend, compose split, secrets, NODE_ENV | ✅ | ✅ pass | ❌ auth 401 | — |
+| 5 | Branding, PERFIX, MySQL, Resend | ✅ | ✅ pass | ❌ auth 401 | — |
+| 6 | Early publish, networks, stuck, API URL | ✅ | ✅ pass | ❌ auth 401 | — |
+| §12 | Redis prefix tests, log redaction, preflight down, readiness | ✅ | ✅ 54/54 | ❌ auth 401 | — |
+| Full API | Control-plane suite | ✅ | ✅ 312/312 | — | — |
 | 7–8 | DB reset, docs (remainder) | ❌ partial | — | — | — |
 
 ---

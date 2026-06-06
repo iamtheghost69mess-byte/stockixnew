@@ -19,6 +19,8 @@
 
 **Overall repair confidence:** 100% (22 verified / 22 Wave 1–6 automated checks)
 
+**Test run (2026-06-07):** 54/54 worker+readiness tests ✅ · 312/312 full API suite ✅ · `tsc --noEmit` ✅ · `/health` 200 ✅ · `provision-diagnose` ❌ (401 on `/owners` — auth required)
+
 **Note:** Section 12 cross-cutting repairs (preflight `-v` default removal, compose log redaction, Redis prefix tests) were implemented after the original Wave 1–6 plan and are documented under “Still Open / Post-Wave discrepancies” below.
 
 ---
@@ -487,16 +489,70 @@ Root `pnpm tsc --noEmit` prints CLI help (no root tsconfig); use `apps/api` proj
 
 ---
 
+## Test Execution Results (2026-06-07, 01:55 local)
+
+All commands run from `apps/api` unless noted.
+
+| Check | Command | Result | Detail |
+|-------|---------|--------|--------|
+| Worker + readiness | `pnpm test ../../infra/worker-service tests/readiness-module-gating.test.ts` | ✅ **PASS** | 54/54 tests, 17 files, vitest 14.3s |
+| Full control-plane | `pnpm test` | ✅ **PASS** | 312/312 tests, 71 files, vitest 56.2s |
+| Typecheck | `pnpm tsc --noEmit` | ✅ **PASS** | Exit code 0 |
+| API liveness | `GET http://127.0.0.1:4000/health` | ✅ **PASS** | HTTP 200 |
+| Provision smoke | `pnpm provision-diagnose -- --slug smoke-responsechecker2 --admin-email admin@localhost` | ❌ **FAIL** | Exit 1 — `GET /owners -> 401 unauthorized` |
+
+### What is working (automated)
+
+| Area | Status | Evidence |
+|------|--------|----------|
+| Wave 1 signin codes | ✅ | `finance-auth-client.test.ts` — structured codes; no bare `signin_failed` |
+| Wave 1 provision outcomes | ✅ | `provision-outcome-rules.test.ts`, `retry-provision-partial.test.ts` |
+| Wave 1 failure event logging | ✅ | `provision-failure.test.ts` |
+| Wave 2 compose / Mongo rs0 | ✅ | `tenant-stack-compose.test.ts`, `provisioner.mongo-rs.test.ts` |
+| Wave 3 POS compose / docker runner | ✅ | `module-stacks.pos-compose.test.ts`, `execa-docker-compose-runner.test.ts` |
+| Wave 4 dev/prod compose split | ✅ | `tenant-stack-dev-compose.test.ts`, `prod-compose-contract.test.ts` |
+| Wave 5 networks / Redis prefix | ✅ | `ensure-tenant-networks.test.ts`, `redis-key-prefix.test.ts` |
+| Wave 6 runtime compose args | ✅ | `provision-runtime.compose-args.test.ts` |
+| Wave 6 readiness / edge.publish | ✅ | `readiness-module-gating.test.ts` |
+| §12 preflight down (no default `-v`) | ✅ | `build-preflight-down-args.test.ts` |
+| §12 compose log redaction | ✅ | `redact-compose-log.test.ts` |
+| §12 Redis prefix inventory | ✅ | `redis-key-prefix.test.ts` |
+| Static code verification (22 checks) | ✅ | All Wave 1–6 file:line checks in this report |
+
+### What is not working / not yet validated
+
+| Item | Status | Blocker |
+|------|--------|---------|
+| End-to-end `provision-diagnose` | ❌ | `GET /owners` returns 401 without `--owner-id`, `OWNER_ID`, or `PROVISION_AUTH_BEARER` |
+| Finance signin after bootstrap (OPEN.7) | ⚠️ smoke pending | Requires authenticated provision run + live Finance stack |
+| System DB drop on migration (OPEN.1) | 📋 open | No code fix yet |
+| Orphan `_finance` DB (OPEN.3) | 📋 open | No code fix yet |
+| pgcrypto / Postgres doc drift (OPEN.5) | 📋 open | Docs only |
+
+### Smoke failure output (captured)
+
+```
+[2026-06-06T22:55:40.666Z] API=http://localhost:4000
+❌ GET /owners -> 401 (pass --owner-id or set OWNER_ID for protected environments)
+{ "error": "unauthorized" }
+```
+
+---
+
 ## Final Verdict
 
 **Repairs verified in code:** 22 / 22 (Wave 1–6 automated checks)  
+**Unit tests (worker + readiness):** 54 / 54 ✅  
+**Unit tests (full apps/api):** 312 / 312 ✅  
+**Typecheck:** ✅  
+**API health:** ✅ 200  
 **Repairs with issues:** 0  
 **Open items (expected Wave 7–8):** 4 (OPEN.1, OPEN.3, OPEN.5, OPEN.7)  
-**Smoke test needed:** W1.2 signin end-to-end, OPEN.7 Finance UserTenant membership, full `provision-diagnose` stack run
+**Smoke test:** ❌ blocked on owner auth (not connectivity)
 
-**Production readiness:** **READY FOR SMOKE** (Wave 1–6 code verified; runtime smoke not yet run)
+**Production readiness:** **READY FOR AUTHENTICATED SMOKE** — all automated tests pass; `provision-diagnose` needs owner bearer token or `--owner-id` before provision path can be exercised.
 
 ### Next Steps:
 
-1. Run `pnpm --filter api provision-diagnose -- --slug smoke-<unique> --admin-email <email>` with full Docker stack and API at `:4000`.
+1. Run `pnpm --filter api provision-diagnose -- --slug smoke-<unique> --admin-email <email> --auth-bearer <token>` (or `--owner-id <uuid>`) with full Docker stack and worker running.
 2. Defer Wave 7 (migration reset gate, orphan `_finance` DB) and Wave 8 (ops doc cleanup for pgcrypto references) until after smoke passes.
