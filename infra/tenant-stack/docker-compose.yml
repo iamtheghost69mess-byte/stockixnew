@@ -104,7 +104,10 @@ services:
       - BILLING_ENABLED=false
     ports:
       # Bind on all interfaces so the infra-worker container can reach this via host.docker.internal.
-      - "0.0.0.0::3000"
+      - "0.0.0.0:${PUBLIC_PROXY_PORT}:3000"
+    depends_on:
+      database_migration:
+        condition: service_completed_successfully
     networks:
       - stockix-shared
       - stockix_public
@@ -128,12 +131,6 @@ services:
       - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
     restart: "no"
-    healthcheck:
-      test: ["CMD-SHELL", "exit 0"]
-      interval: 30s
-      timeout: 5s
-      retries: 1
-      start_period: 10s
     networks:
       - stockix-shared
     mem_limit: 256m

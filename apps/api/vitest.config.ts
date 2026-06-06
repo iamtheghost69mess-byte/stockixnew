@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "../../infra/worker-service/**/*.test.ts"],
     typecheck: { tsconfig: "./tsconfig.test.json" },
     globals: true,
     clearMocks: true,

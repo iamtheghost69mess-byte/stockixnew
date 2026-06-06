@@ -42,6 +42,10 @@ import {
 import { z } from "zod";
 import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import {
+  resolveProvisionJobOutcome,
+  type ProvisionJobOutcome,
+} from "../domain/provisioning/provision-outcome-rules.js";
+import {
   assertNoConcurrentTenantLifecycleJob,
   withTenantLifecycleAdvisoryLock,
 } from "../domain/provisioning/provision-lock.js";
@@ -290,6 +294,7 @@ async function markJobComplete(
       adminPin: string;
       allRoles: { role: string; username: string; pin: string }[];
     };
+    completionOutcome?: ProvisionJobOutcome;
   },
 ): Promise<void> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
@@ -345,6 +350,9 @@ async function markJobComplete(
   }
   if (opts?.posDefaultCredentials) {
     completionBody.posDefaultCredentials = opts.posDefaultCredentials;
+  }
+  if (opts?.completionOutcome) {
+    completionBody.completionOutcome = opts.completionOutcome;
   }
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/complete`, {
     method: "POST",
@@ -512,6 +520,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     adminPin: string;
     allRoles: { role: string; username: string; pin: string }[];
   };
+  completionOutcome?: ProvisionJobOutcome;
 }> {
   const guard = async () => {
     await assertProvisionNotCancelled(job.id);
@@ -549,6 +558,10 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   if (!result.ok) {
     throw new Error(result.message);
   }
+  const completionOutcome = resolveProvisionJobOutcome({
+    ok: result.ok,
+    tenantStatus: result.tenantStatus,
+  });
   await db.insert(adminAuditLog).values({
     actorId: String(payload.ownerId ?? ""),
     action: "tenant.create",
@@ -595,6 +608,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     posUrl: result.posUrl,
     posApiUrl: result.posApiUrl,
     posDefaultCredentials: result.posDefaultCredentials,
+    completionOutcome,
   };
 }
 
@@ -864,6 +878,7 @@ async function loop() {
               adminPin: string;
               allRoles: { role: string; username: string; pin: string }[];
             };
+            completionOutcome?: ProvisionJobOutcome;
           }
         | undefined;
       if (job.type === "tenant.provision") {
@@ -874,6 +889,9 @@ async function loop() {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
       await markJobComplete(job.id, provisionComplete);
+      const jobOutcome =
+        provisionComplete?.completionOutcome
+        ?? (job.type === "tenant.provision" || job.type === "add_module" ? "success" : "success");
       await emitWorkerMetric("worker.job.success", 1, { jobType: job.type });
       logger.info(
         JSON.stringify({
@@ -882,7 +900,7 @@ async function loop() {
           workerId,
           jobId: job.id,
           jobType: job.type,
-          outcome: "success",
+          outcome: jobOutcome,
         }),
       );
     } catch (error) {

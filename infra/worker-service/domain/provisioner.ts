@@ -208,11 +208,11 @@ export async function provisionTenantDatabases(
     await conn.end();
   }
 
-  // Verify MongoDB reachable via TCP — no mongodb driver needed.
-  // The Finance server auto-creates the {slug}_pos database on first write.
+  // Verify MongoDB reachable via TCP, then ensure rs0 PRIMARY for POS replicaSet URIs.
   log(`[db-provision] verifying stockix-mongo reachability for tenant "${slug}"`);
   await verifyTcpReachable(workerSharedMongoHost(), 27017, "stockix-mongo");
-  log(`[db-provision] stockix-mongo reachable — ${slug}_pos will be auto-created on first write`);
+  await ensureSharedMongoReplicaSetReady(log);
+  log(`[db-provision] stockix-mongo ready (rs0 PRIMARY) — ${slug}_pos will be auto-created on first write`);
 }
 
 /**
@@ -392,6 +392,54 @@ function verifyTcpReachable(host: string, port: number, label: string): Promise<
       reject(new Error(`[db-provision] ${label} at ${host}:${port} not reachable: ${err.message}`));
     });
   });
+}
+
+async function resolveSharedInfraEnvFile(): Promise<string | undefined> {
+  const envFile = join(getRepoRoot(), "infra", "prod", ".env");
+  try {
+    await stat(envFile);
+    return envFile;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Idempotent rs0 bootstrap via shared compose (same as infra/prod OPERATIONS.md).
+ * Blocks until PRIMARY or throws — required before POS stacks using ?replicaSet=rs0.
+ */
+export async function ensureSharedMongoReplicaSetReady(log: (m: string) => void): Promise<void> {
+  const repoRoot = getRepoRoot();
+  const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+  const envFile = await resolveSharedInfraEnvFile();
+  log("[db-provision] ensuring shared Mongo replica set rs0 is PRIMARY");
+  const args = [
+    "compose",
+    "-f",
+    sharedComposeFile,
+    "-p",
+    "stockix-shared",
+    ...(envFile ? ["--env-file", envFile] : []),
+    "run",
+    "--rm",
+    "stockix-mongo-rs-init",
+  ];
+  const result = await execa("docker", args, {
+    stdio: "pipe",
+    env: process.env,
+    reject: false,
+  });
+  if (result.exitCode !== 0) {
+    const detail = [result.stderr, result.stdout]
+      .map((chunk) => chunk?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 500);
+    throw new Error(
+      `[db-provision] mongo rs0 not ready: stockix-mongo-rs-init exited ${result.exitCode}${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  log("[db-provision] shared Mongo replica set rs0 is PRIMARY");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import type { createDb } from "@repo/db";
 
 import { invalidateTenantReadinessCache } from "./readiness-engine.js";
+import { logger } from "../lib/logger.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -152,7 +153,13 @@ export async function appendProvisionFailureEvent(
       level: "error",
       message: trimError(opts.message),
     })
-    .catch(() => undefined);
+    .catch((error) => {
+      logger.error("[provision-failure] appendProvisionFailureEvent insert failed", {
+        correlationId: opts.correlationId,
+        tenantId: opts.tenantId ?? null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 }
 
 export async function markLifecycleJobTerminalFailure(
@@ -173,5 +180,11 @@ export async function markLifecycleJobTerminalFailure(
       updatedAt: new Date(),
     })
     .where(eq(tenantLifecycleJobs.correlationId, opts.correlationId))
-    .catch(() => undefined);
+    .catch((error) => {
+      logger.error("[provision-failure] markLifecycleJobTerminalFailure update failed", {
+        correlationId: opts.correlationId,
+        status: opts.status ?? "failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 }
