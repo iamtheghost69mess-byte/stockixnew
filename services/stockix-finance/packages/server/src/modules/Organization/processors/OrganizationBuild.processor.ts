@@ -1,5 +1,4 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Scope } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { ClsService, UseCls } from 'nestjs-cls';
 import {
@@ -10,7 +9,6 @@ import { BuildOrganizationService } from '../commands/BuildOrganization.service'
 
 @Processor({
   name: OrganizationBuildQueue,
-  scope: Scope.REQUEST,
 })
 export class OrganizationBuildProcessor extends WorkerHost {
   constructor(

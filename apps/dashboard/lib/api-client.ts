@@ -68,3 +68,69 @@ export async function apiFetch(
 
   throw lastError instanceof Error ? lastError : new Error("apiFetch failed");
 }
+
+const SSE_HEADERS = {
+  "content-type": "text/event-stream",
+  "cache-control": "no-cache, no-transform",
+  connection: "keep-alive",
+  "x-accel-buffering": "no",
+} as const;
+
+/**
+ * Proxy a long-lived SSE upstream without throwing when the control-plane restarts
+ * (ECONNRESET during pipe). Client EventSource reconnect handles recovery.
+ */
+export function proxyControlPlaneEventStream(
+  upstream: Response,
+  req: Request,
+): Response {
+  if (!upstream.ok || !upstream.body) {
+    return new Response("Stream unavailable", {
+      status: upstream.status >= 400 ? upstream.status : 503,
+    });
+  }
+
+  const reader = upstream.body.getReader();
+  const stream = new ReadableStream({
+    start(controller) {
+      const pump = async (): Promise<void> => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(value);
+          }
+        } catch {
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
+        }
+      };
+      void pump();
+    },
+    cancel() {
+      void reader.cancel();
+    },
+  });
+
+  req.signal.addEventListener(
+    "abort",
+    () => {
+      void reader.cancel();
+    },
+    { once: true },
+  );
+
+  return new Response(stream, {
+    status: upstream.status,
+    headers: {
+      ...SSE_HEADERS,
+      "content-type": upstream.headers.get("content-type") ?? SSE_HEADERS["content-type"],
+    },
+  });
+}
