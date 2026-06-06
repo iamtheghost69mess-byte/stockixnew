@@ -1,5 +1,6 @@
 import { dashboardConfig } from "@repo/config";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, proxyControlPlaneEventStream } from "@/lib/api-client";
+import { isApiConnectionError } from "@/lib/api-connection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,20 +13,11 @@ export async function GET(req: Request) {
       req,
     );
 
-    if (!res.ok || !res.body) {
-      return new Response("Stream unavailable", { status: 503 });
+    return proxyControlPlaneEventStream(res, req);
+  } catch (error) {
+    if (isApiConnectionError(error)) {
+      return new Response("Notification stream unavailable", { status: 503 });
     }
-
-    return new Response(res.body, {
-      status: 200,
-      headers: {
-        "content-type": res.headers.get("content-type") ?? "text/event-stream",
-        "cache-control": "no-cache, no-transform",
-        connection: "keep-alive",
-        "x-accel-buffering": "no",
-      },
-    });
-  } catch {
     const fallback = dashboardConfig.nextPublicApiUrl;
     return new Response(
       `Notification stream unavailable${fallback ? ` (${fallback})` : ""}`,
