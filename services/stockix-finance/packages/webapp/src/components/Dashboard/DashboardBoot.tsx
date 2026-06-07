@@ -59,16 +59,22 @@ export function useApplicationBoot() {
 
   const orgLanguage = organization?.metadata?.language;
 
+  const normalizeLocale = (value) => {
+    const raw = String(value || 'en').trim().toLowerCase();
+    return raw.split('-')[0] || 'en';
+  };
+
   // Sync locale cookie with organization language (reload at most once per mismatch).
   React.useEffect(() => {
     if (!orgLanguage) {
       return;
     }
-    const currentLocale = getCookie('locale', 'en');
-    if (currentLocale === orgLanguage) {
+    const desiredLocale = normalizeLocale(orgLanguage);
+    const currentLocale = normalizeLocale(getCookie('locale', 'en'));
+    if (currentLocale === desiredLocale) {
       return;
     }
-    setCookie('locale', orgLanguage);
+    setCookie('locale', desiredLocale);
     if (!isBooted.current) {
       window.location.reload();
     }
@@ -102,7 +108,9 @@ export function useApplicationBoot() {
   useWhen(
     isAuthUserSuccess &&
       isCurrentOrganizationSuccess &&
-      (!orgLanguage || getCookie('locale', 'en') === orgLanguage),
+      (!orgLanguage
+        || normalizeLocale(getCookie('locale', 'en'))
+          === normalizeLocale(orgLanguage)),
     () => {
       isBooted.current = true;
     },

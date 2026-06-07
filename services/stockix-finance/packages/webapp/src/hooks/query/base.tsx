@@ -7,7 +7,8 @@ export const queryConfig = {
       staleTime: 30000,
       retry: (failureCount, error) => {
         const status = error?.response?.status;
-        if (status === 401 || status === 403) return false;
+        // 404 is a definitive client/path miss — do not hammer the server on tab focus.
+        if (status === 401 || status === 403 || status === 404) return false;
         return failureCount < 3;
       },
     },

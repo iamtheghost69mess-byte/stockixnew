@@ -2,7 +2,7 @@
 import { useMutation } from 'react-query';
 import { batch } from 'react-redux';
 import useApiRequest, { useAuthApiRequest } from '../useRequest';
-import { removeCookie, setCookie } from '../../utils';
+import { clearMustChangePasswordCookie, removeCookie, setCookie } from '../../utils';
 import { useRequestQuery } from '../useQueryRequest';
 import t from './types';
 import {
@@ -36,7 +36,7 @@ export function setAuthLoginCookies(data) {
   if (data.must_change_password) {
     setCookie('must_change_password', '1', 1);
   } else {
-    removeCookie('must_change_password');
+    clearMustChangePasswordCookie();
   }
 
   if (data?.tenant?.metadata?.language) {
@@ -112,7 +112,14 @@ export const useAuthChangePassword = (props) => {
   return useMutation(
     (values: { password: string }) =>
       apiRequest.post(AuthRoute.ChangePassword, values),
-    props,
+    {
+      onSuccess: (res) => {
+        if (res?.data?.must_change_password === false) {
+          clearMustChangePasswordCookie();
+        }
+      },
+      ...props,
+    },
   );
 };
 

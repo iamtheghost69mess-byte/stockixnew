@@ -138,6 +138,21 @@ export class OrganizationController {
     return organization;
   }
 
+  /**
+   * Legacy Express path: GET /api/organization → { organization }.
+   * Nest canonical path remains GET /api/organization/current.
+   */
+  @Get()
+  @HttpCode(200)
+  @IgnoreUserVerifiedRoute()
+  @ApiOperation({ summary: 'Get current organization (legacy path)' })
+  async getOrganizationLegacy() {
+    const organization =
+      await this.getCurrentOrgService.getCurrentOrganization();
+
+    return { organization };
+  }
+
   @Get('base-currency-mutate')
   async baseCurrencyMutate() {
     const abilities =

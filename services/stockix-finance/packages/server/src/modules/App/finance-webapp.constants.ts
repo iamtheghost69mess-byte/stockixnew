@@ -22,3 +22,8 @@ export function isFinanceWebappApiPath(pathname: string): boolean {
     || pathname.startsWith('/socket')
   );
 }
+
+/** Built asset paths (manifest, fonts, hashed chunks) must not fall through to SPA index.html. */
+export function isFinanceWebappStaticAssetPath(pathname: string): boolean {
+  return /\.[a-zA-Z0-9]+$/.test(pathname);
+}

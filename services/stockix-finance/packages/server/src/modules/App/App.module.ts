@@ -20,6 +20,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { PassportModule } from '@nestjs/passport';
 import { ClsModule, ClsService } from 'nestjs-cls';
 import { AppController } from './App.controller';
+import { FinanceWebappSpaController } from './finance-webapp-spa.controller';
 import { AppService } from './App.service';
 import { ItemsModule } from '../Items/Items.module';
 import { config } from '../../common/config';
@@ -288,7 +289,7 @@ const financeWebappImports = isFinanceWebappBuilt()
     SocketModule,
     ExchangeRatesModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, FinanceWebappSpaController],
   providers: [
     {
       provide: APP_PIPE,
