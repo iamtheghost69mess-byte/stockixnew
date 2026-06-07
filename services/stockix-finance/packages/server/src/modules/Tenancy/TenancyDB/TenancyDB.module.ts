@@ -4,6 +4,7 @@ import { Global, Module } from '@nestjs/common';
 import { ClsModule, ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
 import { buildTenantKnexOptionsFromConfig } from '@/database/finance-knex-options';
+import { NativeFsMigrations } from '@/database/native-fs-migrations';
 import { TENANCY_DB_CONNECTION } from './TenancyDB.constants';
 import { UnitOfWork } from './UnitOfWork.service';
 
@@ -25,12 +26,12 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
     if (cachedInstance) {
       return cachedInstance;
     }
+    const migrationsDir = configService.get<string>('tenantDatabase.migrationsDir');
     const knexInstance = knex(
       buildTenantKnexOptionsFromConfig(configService, database, {
         pool: { min: 0, max: 7 },
         migrations: {
-          directory: configService.get('tenantDatabase.migrationsDir'),
-          loadExtensions: ['.js'],
+          migrationSource: new NativeFsMigrations(migrationsDir, false, ['.js']),
         },
         seeds: {
           directory: configService.get('tenantDatabase.seedsDir'),

@@ -96,10 +96,8 @@ class FsMigrations {
    * @returns {string}
    */
   public getMigration(migration: MigrateItem): string {
-    return importWebpackSeedModule(
-      migration.file.replace('.ts', ''),
-      this.seedsDirectory,
-    );
+    const moduleName = migration.file.replace(/\.(ts|js)$/, '');
+    return importWebpackSeedModule(moduleName, this.seedsDirectory);
   }
 }
 

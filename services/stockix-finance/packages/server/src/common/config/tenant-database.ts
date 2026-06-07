@@ -2,9 +2,11 @@ import { existsSync } from 'fs';
 import * as path from 'path';
 import { registerAs } from '@nestjs/config';
 
-/** Webpack build lands under build/common/config; dev uses src/common/config. */
+/** Dev: src/common/config. Webpack bundle: build/ (index.js root). */
 function resolveTenantDatabaseSubdir(subdir: string): string {
   const candidates = [
+    path.join(__dirname, 'database/tenant', subdir),
+    path.join(__dirname, '../src/database/tenant', subdir),
     path.join(__dirname, '../../database/tenant', subdir),
     path.join(__dirname, '../../../src/database/tenant', subdir),
   ];
