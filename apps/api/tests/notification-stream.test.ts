@@ -72,6 +72,20 @@ describe("notification stream (Redis pub/sub with DB fallback)", () => {
     expect(result).toEqual(rows);
   });
 
+  it("primed unread rows use prime SSE event (not notification)", () => {
+    const replayEvent = (row: OwnerNotification) =>
+      row.readAt ? null : { event: "prime" as const, id: row.id };
+
+    const unread = sampleNotification({ readAt: null });
+    const read = sampleNotification({
+      id: "33333333-3333-3333-3333-333333333333",
+      readAt: new Date(),
+    });
+
+    expect(replayEvent(unread)?.event).toBe("prime");
+    expect(replayEvent(read)).toBeNull();
+  });
+
   it("primed notification ids are not re-emitted on poll", () => {
     const primed = [
       sampleNotification({ id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }),

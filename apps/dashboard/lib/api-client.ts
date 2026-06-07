@@ -93,35 +93,47 @@ export function proxyControlPlaneEventStream(
   const reader = upstream.body.getReader();
   const stream = new ReadableStream({
     start(controller) {
+      const closeQuietly = (): void => {
+        try {
+          controller.close();
+        } catch {
+          /* client already gone */
+        }
+      };
+
       const pump = async (): Promise<void> => {
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
-              controller.close();
+              closeQuietly();
               return;
             }
-            controller.enqueue(value);
+            try {
+              controller.enqueue(value);
+            } catch {
+              await reader.cancel().catch(() => undefined);
+              return;
+            }
           }
         } catch {
-          try {
-            controller.close();
-          } catch {
-            /* already closed */
-          }
+          closeQuietly();
         }
       };
-      void pump();
+
+      void pump().catch(() => {
+        closeQuietly();
+      });
     },
     cancel() {
-      void reader.cancel();
+      void reader.cancel().catch(() => undefined);
     },
   });
 
   req.signal.addEventListener(
     "abort",
     () => {
-      void reader.cancel();
+      void reader.cancel().catch(() => undefined);
     },
     { once: true },
   );
