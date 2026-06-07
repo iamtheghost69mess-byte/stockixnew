@@ -15,6 +15,21 @@ import {
 
 const { app, db, databaseUrl, port } = createControlPlaneApp();
 
+if (apiConfig.nodeEnv === "production") {
+  const { ensureControlPlaneRedisReady } = await import("./lib/redis.js");
+  try {
+    await ensureControlPlaneRedisReady(10_000);
+    logger.info("Control plane Redis ready", { event: "startup_redis_ready" });
+  } catch (error) {
+    logger.error(
+      "Control plane Redis failed readiness check — refusing to start",
+      error,
+      { event: "startup_redis_unavailable" },
+    );
+    process.exit(1);
+  }
+}
+
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 2000;
 let retryCount = 0;

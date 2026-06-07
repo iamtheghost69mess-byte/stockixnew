@@ -1569,15 +1569,23 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
 
   return streamSSE(c, async (stream) => {
     const sent = new Set<string>();
-    const forward = async (payload: ProvisionEventPayload) => {
-      if (sent.has(payload.id)) return;
-      sent.add(payload.id);
-      await stream.writeSSE({
-        event: "provision",
-        data: JSON.stringify(payload),
-      });
-    };
     let closed = false;
+    const safeWrite = async (event: string, data: string): Promise<boolean> => {
+      if (closed) return false;
+      try {
+        await stream.writeSSE({ event, data });
+        return true;
+      } catch {
+        closed = true;
+        return false;
+      }
+    };
+
+    const forward = async (payload: ProvisionEventPayload) => {
+      if (sent.has(payload.id) || closed) return;
+      sent.add(payload.id);
+      await safeWrite("provision", JSON.stringify(payload));
+    };
     stream.onAbort(() => {
       closed = true;
     });
@@ -1594,7 +1602,9 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     let lastEventPhase = replayRows[replayRows.length - 1]?.phase;
     const unsubscribe = subscribeProvision(correlationId, (payload) => {
       lastEventPhase = payload.phase;
-      void forward(payload);
+      void forward(payload).catch(() => {
+        closed = true;
+      });
     });
 
     let lastPingAt = 0;
@@ -1615,10 +1625,7 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
         lastJob?.status === "completed" || lastEventPhase === "complete"
           ? "complete"
           : "failed";
-      await stream.writeSSE({
-        event: "done",
-        data: JSON.stringify({ status, correlationId }),
-      });
+      await safeWrite("done", JSON.stringify({ status, correlationId }));
       return true;
     };
 
@@ -1634,8 +1641,9 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
 
       const now = Date.now();
       if (now - lastPingAt >= STREAM_PING_MS) {
-        await stream.writeSSE({ event: "ping", data: String(now) });
-        lastPingAt = now;
+        if (await safeWrite("ping", String(now))) {
+          lastPingAt = now;
+        }
       }
 
       await new Promise((resolve) => setTimeout(resolve, STREAM_JOB_POLL_MS));

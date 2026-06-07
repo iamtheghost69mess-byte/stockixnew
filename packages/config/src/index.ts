@@ -105,6 +105,25 @@ function validateRecommendedEnvForProfile(profile: string): string[] {
   });
 }
 
+const DEV_WORKER_SECRET = "dev-worker-secret";
+const MIN_WORKER_SECRET_LENGTH = 32;
+
+/** Validates WORKER_SECRET for staging/production — exported for unit tests. */
+export function validateWorkerSecret(profile: string, workerSecret: string | undefined): void {
+  if (profile !== "production" && profile !== "staging") {
+    return;
+  }
+  const secret = workerSecret?.trim() ?? "";
+  if (!secret || secret === DEV_WORKER_SECRET) {
+    throw new Error("[config] WORKER_SECRET must be set in staging/production");
+  }
+  if (secret.length < MIN_WORKER_SECRET_LENGTH) {
+    throw new Error(
+      `[config] WORKER_SECRET must be at least ${MIN_WORKER_SECRET_LENGTH} characters in staging/production`,
+    );
+  }
+}
+
 function validateRequiredEnvForProfile(profile: string) {
   const requiredByProfile: Record<string, string[]> = {
     development: [],
@@ -345,6 +364,9 @@ export const apiConfig = {
   get workerConcurrency() {
     return env.WORKER_CONCURRENCY;
   },
+  get provisionPollMs() {
+    return env.PROVISION_POLL_MS;
+  },
   get mysqlProxyHost() {
     return env.MYSQL_PROXY_HOST;
   },
@@ -528,10 +550,8 @@ export const apiConfig = {
   },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);
+    validateWorkerSecret(env.NODE_ENV, env.WORKER_SECRET);
     if (env.NODE_ENV === "production") {
-      if (!env.WORKER_SECRET || env.WORKER_SECRET === "dev-worker-secret") {
-        throw new Error("[config] WORKER_SECRET must be set in production");
-      }
       const platformSecret = env.PLATFORM_API_SECRET?.trim();
       if (!platformSecret || platformSecret === "__MUST_OVERRIDE__") {
         throw new Error("[config] PLATFORM_API_SECRET must be set in production");

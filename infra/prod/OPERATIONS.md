@@ -50,6 +50,40 @@ To run multiple API instances:
 
 Do **not** scale the API before the Redis provision bus is live — in-memory provision events will not propagate across instances.
 
+### Infra worker throughput
+
+- `WORKER_CONCURRENCY` (default `1`, root `.env` often `2`) runs parallel poll loops in **one** process (`worker.ts`).
+- Job claim uses `FOR UPDATE SKIP LOCKED` — multiple worker **containers** can share load safely.
+- Per-tenant work is serialized by `withTenantLifecycleAdvisoryLock` (dedicated PG connection, `provision-lock.ts`).
+- Scale workers: `docker compose -f infra/prod/docker-compose.yml --env-file .env up -d --scale infra-worker=2 infra-worker`
+- Tune poll interval: `PROVISION_POLL_MS` in `.env` (wired to worker; default `2000`).
+
+Load test: queue N `tenant.provision` jobs and compare wall time with `WORKER_CONCURRENCY=1` vs `2` and with `--scale infra-worker=2`.
+
+## Shared data plane verification (P0-1 / P0-2)
+
+Repo defaults (`infra/shared/docker-compose.yml`): MySQL `max_connections=1000`, ProxySQL on `:6033`, tenant Redis `requirepass` + `512mb` + `noeviction`.
+
+On the production host after `stockix-shared` is up:
+
+```bash
+. scripts/load-env-file.sh infra/prod/.env
+bash scripts/verify-shared-infra.sh
+```
+
+**Connection budget (P0-1):**
+
+| Layer | Limit | Notes |
+|-------|-------|-------|
+| MySQL | 1000 | `stockix-mysql` |
+| ProxySQL → MySQL | 200 per backend | `proxysql.cnf.template` |
+| ProxySQL clients | 2048 | pooler front door |
+| Per-tenant Finance | ~5–15 connections | via `:6033` |
+
+Alert when `Threads_connected` > 800 sustained (see Monitoring).
+
+**Tenant Redis (P0-2):** `TENANT_REDIS_PASSWORD` must be set in prod `.env`. Tenant `.env` files get `redis://:password@stockix-redis:6379/0` via `buildTenantRedisUrl()`. Local dev without password uses passwordless URL — prod only.
+
 ## Security boundaries
 
 PMS tables live in the **same control-plane Postgres** database as tenants, licenses, and audit data. Isolation is enforced at the **application layer** (`tenantId` on every query via `x-stockix-tenant-id` / proxy headers). There is no per-tenant Postgres database for PMS today.
@@ -704,6 +738,29 @@ curl -X POST "https://api.${ROOT_DOMAIN}/tenants/${TENANT_ID}/retry-provision" \
 ## Monitoring
 
 `docker compose ps` reports `healthy` / `unhealthy` for `api-bullmq`, `db-backup`, `prometheus`, and `grafana`. If `db-backup` is `unhealthy`, the cron daemon is not running and backups are not scheduled. Grafana: `https://grafana.${ROOT_DOMAIN}` (see `GRAFANA_ADMIN_PASSWORD` in `.env`).
+
+Prometheus scrapes `GET /metrics` on `api:4000` and `infra-worker:9090` (`infra/prod/prometheus.yml`).
+
+**Suggested alerts:**
+
+| Signal | Command / metric | Threshold |
+|--------|------------------|-----------|
+| MySQL connections | `SHOW GLOBAL STATUS LIKE 'Threads_connected'` | > 800 for 5m |
+| Redis memory | `redis-cli INFO memory` → `used_memory` | > 90% of `maxmemory` |
+| Redis evictions | `evicted_keys` | must stay 0 (`noeviction`) |
+| Worker jobs dead | `worker_job_result` logs / Grafana | any `tenant.provision` → `dead` |
+| Backup cron | `db-backup` healthcheck | unhealthy |
+
+**Provision SSE soak (P0-5):** After deploy, open dashboard provision stream during a test provision; restart API once mid-stream (`docker compose restart api`). BFF must return graceful stream close (not HTTP 500). Dashboard `proxyControlPlaneEventStream` pumps upstream; client EventSource reconnects. Run API **without** file watcher in production.
+
+```bash
+# Staging soak (manual): watch BFF route while restarting API
+curl -N -H "Cookie: ..." "https://app.${ROOT_DOMAIN}/api/tenants/provision-stream/${CORRELATION_ID}"
+docker compose restart api
+# Expect: stream ends cleanly; UI reconnects via EventSource
+```
+
+Advisory lock debugging: set `PROVISION_LOCK_DEBUG=1` on worker to log `pg_backend_pid` on acquire/release (`provision-lock.ts`).
 
 ---
 

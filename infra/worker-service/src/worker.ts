@@ -60,7 +60,10 @@ import { executeAddModuleRuntime } from "./provision-runtime.js";
 import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
-const pollMs = 1500;
+const pollMs = Math.max(
+  250,
+  parseInt(process.env.PROVISION_POLL_MS ?? String(apiConfig.provisionPollMs), 10) || apiConfig.provisionPollMs,
+);
 const POLL_INTERVAL_MS = pollMs;
 const workerConcurrency = Math.max(
   1,
@@ -564,89 +567,93 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
     logger.info(`[worker][${job.id}] preflight.scrub completed for slug=${payload.slug}`);
   }
   await guard();
-  if (job.tenantId) {
-    // Concurrent provision guard — prevents duplicate compose/DB ops
-    // for same tenant. See provision-lock.ts for implementation.
-    await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
-  }
-  const result = await provisionTenant(
-    db,
-    {
-      slug: payload.slug,
-      name: payload.name,
-      ownerId: payload.ownerId,
-      adminEmail: payload.adminEmail,
-      adminFirstName: payload.adminFirstName,
-      adminLastName: payload.adminLastName,
-      planSlug: payload.planSlug,
-      modules: payload.modules,
-      stockixTenantId: payload.stockixTenantId,
-      stockixApiUrl: payload.stockixApiUrl,
-      parentTenantSlug: payload.parentTenantSlug,
-      mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
-      controlPlaneOrgId: payload.organizationId ?? undefined,
-      retryModules: payload.retryModules,
-    },
-    (m) => logger.info(`[worker][${job.id}] ${m}`),
-    job.correlationId ?? randomUUID(),
-    guard,
-    job.id,
-  );
-  if (!result.ok) {
-    throw new Error(result.message);
-  }
-  const completionOutcome = resolveProvisionJobOutcome({
-    ok: result.ok,
-    tenantStatus: result.tenantStatus,
-  });
-  await db.insert(adminAuditLog).values({
-    actorId: String(payload.ownerId ?? ""),
-    action: "tenant.create",
-    targetTenantId: result.tenantId,
-    ipAddress: workerId,
-    userAgent: "infra-worker",
-    metadata: { mode: "job_worker", jobId: job.id },
-  }).catch(async (error) => {
-    if (job.correlationId) {
-      await db.insert(tenantProvisionEvents).values({
-        correlationId: job.correlationId,
-        phase: "audit",
-        level: "error",
-        message: "Failed to write admin audit log after successful provision",
-        tenantId: result.tenantId,
-        meta: {
-          step: "admin_audit_log",
-          error: error instanceof Error ? error.message : String(error),
-          jobId: job.id,
-        },
-      }).catch((nestedError) => {
-        logger.error(
-          `[worker][${job.id}] failed to persist audit failure event: ${
-            nestedError instanceof Error ? nestedError.message : String(nestedError)
-          }`,
-        );
-      });
+
+  const executeProvision = async () => {
+    if (job.tenantId) {
+      await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
     }
-  });
-  // Return the one-time password so the loop can pass it to markJobComplete
-  // without persisting it to any database (CRIT-02).
-  return {
-    oneTimeAdminPassword: result.oneTimeAdminPassword,
-    financeOrganizationId: result.financeOrganizationId,
-    financeTenantId: result.financeTenantId,
-    financeDefaultWarehouseId: result.financeDefaultWarehouseId,
-    posStatus: result.posStatus,
-    posError: result.posError,
-    tenantStatus: result.tenantStatus,
-    walkInCustomerId: result.walkInCustomerId,
-    cashAccountId: result.cashAccountId,
-    cardAccountId: result.cardAccountId,
-    posOrganizationId: result.posOrganizationId,
-    posUrl: result.posUrl,
-    posApiUrl: result.posApiUrl,
-    posDefaultCredentials: result.posDefaultCredentials,
-    completionOutcome,
+    const result = await provisionTenant(
+      db,
+      {
+        slug: payload.slug,
+        name: payload.name,
+        ownerId: payload.ownerId,
+        adminEmail: payload.adminEmail,
+        adminFirstName: payload.adminFirstName,
+        adminLastName: payload.adminLastName,
+        planSlug: payload.planSlug,
+        modules: payload.modules,
+        stockixTenantId: payload.stockixTenantId,
+        stockixApiUrl: payload.stockixApiUrl,
+        parentTenantSlug: payload.parentTenantSlug,
+        mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
+        controlPlaneOrgId: payload.organizationId ?? undefined,
+        retryModules: payload.retryModules,
+      },
+      (m) => logger.info(`[worker][${job.id}] ${m}`),
+      job.correlationId ?? randomUUID(),
+      guard,
+      job.id,
+    );
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    const completionOutcome = resolveProvisionJobOutcome({
+      ok: result.ok,
+      tenantStatus: result.tenantStatus,
+    });
+    await db.insert(adminAuditLog).values({
+      actorId: String(payload.ownerId ?? ""),
+      action: "tenant.create",
+      targetTenantId: result.tenantId,
+      ipAddress: workerId,
+      userAgent: "infra-worker",
+      metadata: { mode: "job_worker", jobId: job.id },
+    }).catch(async (error) => {
+      if (job.correlationId) {
+        await db.insert(tenantProvisionEvents).values({
+          correlationId: job.correlationId,
+          phase: "audit",
+          level: "error",
+          message: "Failed to write admin audit log after successful provision",
+          tenantId: result.tenantId,
+          meta: {
+            step: "admin_audit_log",
+            error: error instanceof Error ? error.message : String(error),
+            jobId: job.id,
+          },
+        }).catch((nestedError) => {
+          logger.error(
+            `[worker][${job.id}] failed to persist audit failure event: ${
+              nestedError instanceof Error ? nestedError.message : String(nestedError)
+            }`,
+          );
+        });
+      }
+    });
+    return {
+      oneTimeAdminPassword: result.oneTimeAdminPassword,
+      financeOrganizationId: result.financeOrganizationId,
+      financeTenantId: result.financeTenantId,
+      financeDefaultWarehouseId: result.financeDefaultWarehouseId,
+      posStatus: result.posStatus,
+      posError: result.posError,
+      tenantStatus: result.tenantStatus,
+      walkInCustomerId: result.walkInCustomerId,
+      cashAccountId: result.cashAccountId,
+      cardAccountId: result.cardAccountId,
+      posOrganizationId: result.posOrganizationId,
+      posUrl: result.posUrl,
+      posApiUrl: result.posApiUrl,
+      posDefaultCredentials: result.posDefaultCredentials,
+      completionOutcome,
+    };
   };
+
+  if (job.tenantId) {
+    return withTenantLifecycleAdvisoryLock(db, job.tenantId, executeProvision);
+  }
+  return executeProvision();
 }
 
 async function runOrgProvisionJob(
@@ -703,28 +710,25 @@ async function runAddModuleJob(
   };
 }> {
   const payload = addModulePayloadSchema.parse(job.payload);
-  const result = await executeAddModuleRuntime(
-    db,
-    {
-      tenantId: payload.tenantId,
-      slug: payload.slug,
-      name: payload.name,
-      adminEmail: payload.adminEmail,
-      module: payload.module,
-      planSlug: payload.planSlug,
-    },
-    (m) => logger.info(`[worker][${job.id}] ${m}`),
-    job.correlationId ?? randomUUID(),
-  );
-  return {
-    tenantStatus: result.tenantStatus,
-    posStatus: result.posStatus,
-    posError: result.posError,
-    posOrganizationId: result.posOrganizationId,
-    posUrl: result.posUrl,
-    posApiUrl: result.posApiUrl,
-    posDefaultCredentials: result.posDefaultCredentials,
-  };
+  const executeAddModule = async () =>
+    executeAddModuleRuntime(
+      db,
+      {
+        tenantId: payload.tenantId,
+        slug: payload.slug,
+        name: payload.name,
+        adminEmail: payload.adminEmail,
+        module: payload.module,
+        planSlug: payload.planSlug,
+      },
+      (m) => logger.info(`[worker][${job.id}] ${m}`),
+      job.correlationId ?? randomUUID(),
+    );
+
+  if (payload.tenantId) {
+    return withTenantLifecycleAdvisoryLock(db, payload.tenantId, executeAddModule);
+  }
+  return executeAddModule();
 }
 
 async function runRemoveModuleJob(
@@ -999,6 +1003,18 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
 }
 
 async function loop() {
+  try {
+    apiConfig.validateRequiredEnv();
+  } catch (error) {
+    logger.error(
+      JSON.stringify({
+        level: "error",
+        event: "worker_secret_rejected",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    process.exit(1);
+  }
   const databaseUrl = apiConfig.databaseUrl;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is required for infra worker");
