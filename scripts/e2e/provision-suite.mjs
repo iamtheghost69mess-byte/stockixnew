@@ -164,7 +164,10 @@ async function provisionAndAssert({
     assertIncludes(mysql.dbs, mysql.systemDb, "MySQL system DB");
     assertTruthy(tenant.deployment.financeOrganizationId ?? tenant.financeOrganizationId, "financeOrganizationId");
 
-    const password = tenant.deployment.financeAdminPassword ?? bootstrapAdminPassword(slug);
+    const password =
+      polled.body.oneTimeAdminPassword
+      ?? tenant.deployment.financeAdminPassword
+      ?? bootstrapAdminPassword(slug);
     const adminEmail = tenant.adminEmail;
     const session = await financeSignIn(dep.internalPort, adminEmail, password);
     assertTruthy(session.accessToken, "Finance admin session");
