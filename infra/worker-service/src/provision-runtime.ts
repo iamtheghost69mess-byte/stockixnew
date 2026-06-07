@@ -174,7 +174,7 @@ async function runPosProvisionStep(params: {
         posOrganizationId,
         posUrl,
         posApiUrl,
-        afterBackendHealthy: async () => {
+        afterBootstrap: async () => {
           if (params.hasOp?.("pos.schema_migration")) {
             params.log("[provision][pos] Skipping schema migration (already journaled)");
             return;
@@ -195,7 +195,7 @@ async function runPosProvisionStep(params: {
               COMPOSE_PROJECT_NAME: project,
             } as Record<string, string>,
             service: "pos-backend",
-            command: ["npm", "run", "migrate:schema"],
+            command: ["node", "scripts/run-schema-migrations.js"],
             timeoutMs: 60_000,
             log: params.log,
           });

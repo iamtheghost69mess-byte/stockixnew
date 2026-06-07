@@ -263,8 +263,8 @@ export type ProvisionPosStackInput = {
 
   posApiUrl?: string;
 
-  /** Called after pos-backend health check passes and before org bootstrap. */
-  afterBackendHealthy?: () => Promise<void>;
+  /** Called after POS org bootstrap (Organization must exist before schema migrations). */
+  afterBootstrap?: () => Promise<void>;
 
 };
 
@@ -489,9 +489,6 @@ export async function provisionPosStack(
       ? buildPosPublicUrls(opts.slug, { backendPort, frontendPort }).posApiUrl
       : posApiUrl;
   await waitForPosBackend(backendBase, opts.log);
-  if (opts.afterBackendHealthy) {
-    await opts.afterBackendHealthy();
-  }
 
   let bootstrap: Awaited<ReturnType<typeof bootstrapPosOrganization>>;
   if (opts.trace && opts.hasOp?.("pos.bootstrap_organization")) {
@@ -532,7 +529,9 @@ export async function provisionPosStack(
     });
   }
 
-
+  if (opts.afterBootstrap) {
+    await opts.afterBootstrap();
+  }
 
   if (rootDomain === "localhost") {
     opts.log(

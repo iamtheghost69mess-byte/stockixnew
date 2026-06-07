@@ -30,13 +30,16 @@ RUN apk add --no-cache dumb-init \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production
-WORKDIR /app
 
 # Non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
-USER nodejs
 
-COPY --from=build --chown=nodejs:nodejs /app/services/posnew/apps/pos-backend ./
+# Preserve pnpm workspace layout so node_modules symlinks resolve (/app/node_modules/.pnpm).
+COPY --from=build --chown=nodejs:nodejs /app/node_modules /app/node_modules
+COPY --from=build --chown=nodejs:nodejs /app/services/posnew/apps/pos-backend /app/services/posnew/apps/pos-backend
+
+USER nodejs
+WORKDIR /app/services/posnew/apps/pos-backend
 
 EXPOSE 8010
 
