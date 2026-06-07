@@ -97,7 +97,12 @@ guestFormsRouter.get("/booking/:bookingId", async (c) => {
   const [submission] = await db
     .select()
     .from(pmsGuestFormSubmissions)
-    .where(eq(pmsGuestFormSubmissions.bookingId, bookingId))
+    .where(
+      and(
+        eq(pmsGuestFormSubmissions.bookingId, bookingId),
+        eq(pmsGuestFormSubmissions.tenantId, tenantId(c)),
+      ),
+    )
     .limit(1);
 
   if (!submission) return c.json({ submission: null });

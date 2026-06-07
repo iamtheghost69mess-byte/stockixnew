@@ -47,6 +47,7 @@ import {
 } from "../domain/provisioning/provision-outcome-rules.js";
 import {
   assertNoConcurrentTenantLifecycleJob,
+  shutdownAdvisoryLockClient,
   withTenantLifecycleAdvisoryLock,
 } from "../domain/provisioning/provision-lock.js";
 import {
@@ -67,12 +68,19 @@ const workerConcurrency = Math.max(
 );
 let lastSuccessfulPollAt = Date.now();
 
-const healthServer = http.createServer((req, res) => {
+const healthServer = http.createServer(async (req, res) => {
   if (req.url === "/health" && req.method === "GET") {
     const lastPollAge = Date.now() - lastSuccessfulPollAt;
     const healthy = lastPollAge < POLL_INTERVAL_MS * 2;
     res.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: healthy ? "ok" : "degraded", lastPollAge }));
+    return;
+  }
+  if (req.url === "/metrics" && req.method === "GET") {
+    const { renderWorkerPrometheusMetrics } = await import("./worker-prometheus.js");
+    const body = await renderWorkerPrometheusMetrics();
+    res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+    res.end(body);
     return;
   }
   res.writeHead(404);
@@ -222,6 +230,15 @@ async function withExecutionTimeout<T>(promise: Promise<T>, timeoutMs: number): 
 }
 
 async function emitWorkerMetric(name: string, value: number, tags: Record<string, string | number>) {
+  const jobType = String(tags.jobType ?? "unknown");
+  if (name === "worker.job.success") {
+    const { workerJobSuccessTotal } = await import("./worker-prometheus.js");
+    workerJobSuccessTotal.inc({ jobType }, value);
+  } else if (name === "worker.job.failure") {
+    const { workerJobFailureTotal } = await import("./worker-prometheus.js");
+    workerJobFailureTotal.inc({ jobType }, value);
+  }
+
   const endpoint = apiConfig.metricsEndpoint;
   if (!endpoint) return;
   await fetch(endpoint, {
@@ -393,7 +410,7 @@ async function markJobHeartbeat(jobId: string): Promise<void> {
   if (!res.ok) throw new Error(`heartbeat_failed:${res.status}`);
 }
 
-async function markJobFailure(jobId: string, message: string, noRetry = false): Promise<void> {
+async function markJobFailure(jobId: string, message: string, noRetry = false, cancelled = false): Promise<void> {
   // Use WORKER_SECRET to authenticate with the internal job endpoints (CRIT-01).
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
@@ -409,6 +426,7 @@ async function markJobFailure(jobId: string, message: string, noRetry = false): 
       error: message,
       workerId,
       noRetry,
+      cancelled,
       ...(activeClaimToken ? { claimToken: activeClaimToken } : {}),
     }),
     signal: timeoutSignal(requestTimeoutMs),
@@ -897,7 +915,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
           || job.type === "organization.provision"
           || job.type === "add_module"
           || isPermanentProvisionError(message);
-        await markJobFailure(job.id, message, noRetry);
+        await markJobFailure(job.id, message, noRetry, cancelledByUser);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         logger.info(
           JSON.stringify({
@@ -992,6 +1010,8 @@ async function loop() {
     JSON.stringify({
       level: "info",
       type: "worker_start",
+      event: "worker_secret_validated",
+      length: apiConfig.workerSecret.length,
       jobExecutionTimeoutMs,
       apiBaseUrl,
       ...runtimeFingerprint,
@@ -1032,10 +1052,15 @@ async function loop() {
 process.on("SIGTERM", () => {
   shuttingDown = true;
   logger.info(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGTERM", workerId }));
+  void shutdownAdvisoryLockClient();
 });
 process.on("SIGINT", () => {
   shuttingDown = true;
   logger.info(JSON.stringify({ level: "info", type: "worker_shutdown", signal: "SIGINT", workerId }));
+  void shutdownAdvisoryLockClient();
+});
+process.on("exit", () => {
+  void shutdownAdvisoryLockClient();
 });
 process.on("uncaughtException", (error) => {
   Sentry.captureException(error);

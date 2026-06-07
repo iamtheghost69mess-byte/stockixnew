@@ -22,7 +22,10 @@ export default registerAs('tenantDatabase', () => ({
   port: process.env.TENANT_DB_PORT || process.env.DB_PORT || 5432,
   user: process.env.TENANT_DB_USER || process.env.DB_USER,
   password: process.env.TENANT_DB_PASSWORD || process.env.DB_PASSWORD,
-  dbNamePrefix: process.env.TENANT_DB_NAME_PERFIX || 'stockix_tenant_',
+  dbNamePrefix:
+    process.env.TENANT_DB_NAME_PREFIX
+    || process.env.TENANT_DB_NAME_PERFIX
+    || 'stockix_tenant_',
   migrationsDir: resolveTenantDatabaseSubdir('migrations'),
   seedsDir: resolveTenantDatabaseSubdir('seeds/core'),
 }));

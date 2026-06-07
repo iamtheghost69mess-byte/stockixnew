@@ -426,17 +426,22 @@ export function TenantList(props: Props) {
                   ? tenants.map((t) => {
                 const tenantStatus = (t.tenantStatus ?? "").toLowerCase();
                 const deploymentStatus = (t.deploymentStatus ?? "unknown").toLowerCase();
+                const isDeprovisioning = tenantStatus === "deprovisioning";
                 const status =
-                  tenantStatus === "partial"
+                  isDeprovisioning
+                    ? "deprovisioning"
+                    : tenantStatus === "partial"
                     ? "partial"
                     : deploymentStatus;
                 const canSuspend =
+                  !isDeprovisioning &&
                   (tenantStatus === "active" || tenantStatus === "partial")
                   && deploymentStatus !== "suspended";
                 const publicOrigin = tenantPublicBaseUrl(t.slug, t.internalPort);
                 const canOpen = deploymentStatus === "active" && Boolean(publicOrigin);
                 const loginHref = publicOrigin ? `${publicOrigin}/auth/login` : null;
                 const busy =
+                  isDeprovisioning ||
                   deletingId === t.tenantId ||
                   suspendingId === t.tenantId ||
                   reactivatingId === t.tenantId ||
@@ -479,7 +484,7 @@ export function TenantList(props: Props) {
                     <TableCell className="align-top">
                       <div className="flex flex-wrap items-center gap-2">
                         <TenantStatusBadge status={status} />
-                        {deletingId === t.tenantId ? (
+                        {deletingId === t.tenantId && !isDeprovisioning ? (
                           <Badge variant="secondary" className="gap-1">
                             <Loader2 className="size-3 animate-spin" aria-hidden />
                             Deleting…

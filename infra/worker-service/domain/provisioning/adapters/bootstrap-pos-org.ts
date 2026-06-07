@@ -169,7 +169,7 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForPosBackend(base: string, log: BootstrapPosOrgInput["log"]): Promise<void> {
+export async function waitForPosBackend(base: string, log: BootstrapPosOrgInput["log"]): Promise<void> {
   const started = Date.now();
   // /health and /ready are exempt from production HTTPS enforcement (see pos-backend app.js).
   const paths = ["/health", "/ready"];

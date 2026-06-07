@@ -197,3 +197,9 @@ Bootstrap: [`src/index.ts`](apps/api/src/index.ts) (~57 lines) → [`src/app/cre
 All domain routes are mounted via `registerControlPlaneRoutes` in [`routes/register-control-plane-routes.ts`](apps/api/src/routes/register-control-plane-routes.ts).
 
 **CI checks:** `pnpm run check:routes`, `pnpm run check:known-paths`, `pnpm run check:tenant-scope`, `pnpm run check:api-structure`.
+
+## Idempotency contract
+
+Mutating routes under `/owners`, `/tenants`, `/licenses`, `/admin`, and `/api-keys` require an `Idempotency-Key` header (24h TTL, Redis/Postgres-backed via `api_idempotency_keys`). Duplicate keys with the same request hash replay the cached response; hash conflicts return 409.
+
+**Naturally idempotent (no middleware):** all GET routes; `/notifications/read*`; `/internal/*` (worker-only); webhooks (provider signatures); org slug inserts scoped by `(tenant_id, slug)` unique constraint.

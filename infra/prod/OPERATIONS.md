@@ -29,7 +29,7 @@ docker compose --env-file .env up -d --build api api-bullmq infra-worker control
 
 | Service | Replicas | `RUN_BULLMQ_CONSUMERS` | Traefik |
 |---------|----------|------------------------|---------|
-| `api` | 1 (Compose; `deploy.replicas` needs Swarm) | `false` | yes — `api.${ROOT_DOMAIN}` |
+| `api` | 1 (single Compose service; use `--scale api=N` only after Redis provision bus) | `false` | yes — `api.${ROOT_DOMAIN}` |
 | `api-bullmq` | 1 | `true` | no — internal only |
 
 Post-deploy smoke (from repo root on server):
@@ -37,6 +37,28 @@ Post-deploy smoke (from repo root on server):
 ```bash
 bash scripts/prod-scale-smoke.sh
 ```
+
+## Scaling
+
+The control-plane API runs as a **single** Compose service (`api`). Plain Docker Compose ignores Swarm-only `deploy.replicas`.
+
+To run multiple API instances:
+
+1. Deploy **P1-7 Redis provision pub/sub** (`CONTROL_PLANE_REDIS_URL` + `provision-pubsub.ts`) so provision SSE survives API restarts and cross-instance fan-out.
+2. Scale explicitly: `docker compose --env-file .env up -d --scale api=2 api`
+3. Confirm Traefik load-balances health-checked backends.
+
+Do **not** scale the API before the Redis provision bus is live — in-memory provision events will not propagate across instances.
+
+## Security boundaries
+
+PMS tables live in the **same control-plane Postgres** database as tenants, licenses, and audit data. Isolation is enforced at the **application layer** (`tenantId` on every query via `x-stockix-tenant-id` / proxy headers). There is no per-tenant Postgres database for PMS today.
+
+**Risk:** a control-plane SQL injection or service bug that bypasses tenant scoping could expose cross-tenant PMS data.
+
+**Mitigation today:** mandatory `tenantId` filters in `services/pms/` route handlers; periodic grep audit; proxy injects tenant header.
+
+**Before public multi-tenant scale:** migrate PMS to per-tenant Postgres (see `TODO(security)` in `packages/db/src/schema.ts`).
 
 ## Database migrations
 
@@ -370,7 +392,7 @@ docker exec stockix-shared-stockix-redis-1 \
 ls -la "${TRAEFIK_DYNAMIC_DIR}/tenant-${SLUG}.yml" \
        "${TRAEFIK_DYNAMIC_DIR}/tenant-pos-${SLUG}.yml" 2>/dev/null || echo "none"
 
-# 7. Run orphan audit
+# 7. Run orphan audit (includes legacy stockix_*_finance DBs — also dropped by deprovisionTenantDatabases)
 cd /opt/stockix/stockixnew
 npx tsx infra/worker-service/scripts/audit-orphan-dbs.ts
 ```
@@ -677,4 +699,43 @@ curl -X POST "https://api.${ROOT_DOMAIN}/tenants/${TENANT_ID}/retry-provision" \
 
 - Lifecycle advisory lock (`withTenantLifecycleAdvisoryLock`) prevents concurrent operations on same tenant
 - Journal `hasOp`/`markOp` allows retry from last checkpoint
-- `audit-orphan-dbs.ts` run weekly as cron to detect ghosts early
+- `audit-orphan-dbs.ts` run weekly as cron to detect ghosts early (checks `stockix_*_finance` and `stockix_*_system`; `_finance` is included in automated deprovision cleanup)
+
+## Monitoring
+
+`docker compose ps` reports `healthy` / `unhealthy` for `api-bullmq`, `db-backup`, `prometheus`, and `grafana`. If `db-backup` is `unhealthy`, the cron daemon is not running and backups are not scheduled. Grafana: `https://grafana.${ROOT_DOMAIN}` (see `GRAFANA_ADMIN_PASSWORD` in `.env`).
+
+---
+
+## M6 — Runtime asset restore
+
+`backup-runtime.sh` (cron at `:05` after shared backup) uploads three artifact classes to B2:
+
+| Prefix | Contents | Restore notes |
+|--------|----------|---------------|
+| `redis/` | Shared tenant Redis RDB (`BGSAVE` + `docker cp`) | Stop Redis, replace `/data/dump.rdb`, restart |
+| `traefik/` | Tar of `TRAEFIK_DYNAMIC_DIR` | Extract to host path, reload Traefik |
+| `tenant-envs/` | GPG-encrypted tar of `TENANT_ENV_ROOT` | `gpg --decrypt` with `BACKUP_ENCRYPTION_KEY`, extract to host |
+
+Manual run on production host:
+
+```bash
+cd /opt/stockix/stockixnew/infra/prod
+. ../../scripts/load-env-file.sh .env
+bash backup/backup-runtime.sh
+```
+
+Verify B2 objects:
+
+```bash
+aws --endpoint-url "$BACKUP_B2_ENDPOINT" s3 ls "s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX}/redis/"
+aws --endpoint-url "$BACKUP_B2_ENDPOINT" s3 ls "s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX}/traefik/"
+aws --endpoint-url "$BACKUP_B2_ENDPOINT" s3 ls "s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX}/tenant-envs/"
+```
+
+Decrypt tenant env archive (requires `BACKUP_ENCRYPTION_KEY`):
+
+```bash
+gpg --decrypt --batch --passphrase "$BACKUP_ENCRYPTION_KEY" tenant_envs_YYYYMMDD_HHMMSS.tar.gz.gpg \
+  | tar -xzf - -C /opt/stockix/tenants
+```

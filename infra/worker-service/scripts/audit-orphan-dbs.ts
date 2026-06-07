@@ -4,14 +4,13 @@
  *
  * Run: npx tsx infra/worker-service/scripts/audit-orphan-dbs.ts
  *
- * Reports databases present on MySQL with no matching active tenant slug.
+ * Reports databases present on MySQL with no matching tenant slug in Postgres.
  * Does NOT delete anything — report only.
  */
 
 import { config } from "dotenv";
 import { resolve } from "node:path";
 import mysql from "mysql2/promise";
-import { inArray } from "drizzle-orm";
 import { createDb } from "@repo/db";
 import { tenants } from "@repo/db/schema";
 
@@ -22,6 +21,10 @@ function schemaSlug(schemaName: string): string {
     .replace(/^stockix_/, "")
     .replace(/_finance$/, "")
     .replace(/_system$/, "");
+}
+
+function isFinanceDb(schemaName: string): boolean {
+  return schemaName.endsWith("_finance");
 }
 
 async function auditOrphanDbs(): Promise<void> {
@@ -43,39 +46,55 @@ async function auditOrphanDbs(): Promise<void> {
     connectTimeout: 15_000,
   });
 
-  const [rows] = await conn.query<Array<{ schema_name: string }>>(
+  const [financeRows] = await conn.query<Array<{ schema_name: string }>>(
     `SELECT schema_name FROM information_schema.schemata
-     WHERE schema_name LIKE 'stockix_%_finance'
-        OR schema_name LIKE 'stockix_%_system'`,
+     WHERE schema_name LIKE 'stockix\\_%\\_finance' ESCAPE '\\'`,
   );
+  const [systemRows] = await conn.query<Array<{ schema_name: string }>>(
+    `SELECT schema_name FROM information_schema.schemata
+     WHERE schema_name LIKE 'stockix\\_%\\_system' ESCAPE '\\'`,
+  );
+  const rows = [...financeRows, ...systemRows];
 
   const db = createDb(databaseUrl);
-  const activeTenants = await db
-    .select({ slug: tenants.slug })
-    .from(tenants)
-    .where(inArray(tenants.status, ["active", "partial"]));
-
-  const activeSlugs = new Set(activeTenants.map((t) => t.slug));
+  const knownTenants = await db.select({ slug: tenants.slug }).from(tenants);
+  const knownSlugs = new Set(knownTenants.map((t) => t.slug));
 
   const orphans = rows.filter((r) => {
     const slug = schemaSlug(r.schema_name);
-    return slug.length > 0 && !activeSlugs.has(slug);
+    return slug.length > 0 && !knownSlugs.has(slug);
   });
 
-  console.log("=== Orphaned Databases ===");
-  if (orphans.length === 0) {
+  const financeOrphans = orphans.filter((r) => isFinanceDb(r.schema_name));
+  const systemOrphans = orphans.filter((r) => !isFinanceDb(r.schema_name));
+
+  console.log("=== Orphaned _finance databases ===");
+  if (financeOrphans.length === 0) {
     console.log("None found.");
   } else {
-    for (const r of orphans) {
+    for (const r of financeOrphans) {
       console.log(" -", r.schema_name);
     }
     console.log(
-      "\nThese databases have no active tenant. Review before manual cleanup.",
+      "\nLegacy compat DBs with no Postgres tenant row. Drop manually after review:",
+    );
+    console.log("  DROP DATABASE IF EXISTS stockix_{safe}_finance;");
+  }
+
+  console.log("\n=== Orphaned _system databases ===");
+  if (systemOrphans.length === 0) {
+    console.log("None found.");
+  } else {
+    for (const r of systemOrphans) {
+      console.log(" -", r.schema_name);
+    }
+    console.log(
+      "\nThese databases have no matching tenant. Review before manual cleanup.",
     );
   }
 
   await conn.end();
-  process.exit(0);
+  process.exit(orphans.length === 0 ? 0 : 1);
 }
 
 auditOrphanDbs().catch((e) => {

@@ -1,11 +1,20 @@
 import { apiConfig } from "@repo/config";
 import { logger } from "./logger.js";
+import { apiRequestLatencyMs, apiRequestTotal } from "./prometheus.js";
 
 export async function emitMetric(
   name: string,
   value: number,
   tags: Record<string, string | number>,
 ): Promise<void> {
+  if (name === "api.request.latency_ms") {
+    const method = String(tags.method ?? "unknown");
+    const path = String(tags.path ?? "unknown");
+    const status = String(tags.status ?? "0");
+    apiRequestTotal.inc({ method, path, status });
+    apiRequestLatencyMs.observe({ method, path, status }, value);
+  }
+
   const endpoint = apiConfig.metricsEndpoint;
   if (!endpoint) return;
   await fetch(endpoint, {

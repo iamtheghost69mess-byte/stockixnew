@@ -53,7 +53,7 @@ export function requiredApiRole(pathname: string, method: string): Role | null {
   return "read_only";
 }
 
-/** Permission-string RBAC — used in unit tests. Production uses `createRoleRankRbacMiddleware`. */
+/** Permission-string RBAC — production middleware for control-plane routes. */
 export function createRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> {
   return async (c, next) => {
     const method = c.req.method.toUpperCase();

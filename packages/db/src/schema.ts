@@ -101,31 +101,39 @@ export const tenants = pgTable(
   (t) => [
     uniqueIndex("tenants_slug_unique").on(t.slug),
     uniqueIndex("tenants_organization_number_unique").on(t.organizationNumber),
+    index("tenants_owner_id_idx").on(t.ownerId),
   ],
 );
 
-export const organizations = pgTable("organizations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: uuid("tenant_id")
-    .notNull()
-    .references(() => tenants.id, { onDelete: "cascade" }),
-  name: varchar("name", { length: 255 }).notNull(),
-  slug: varchar("slug", { length: 100 }).notNull().unique(),
-  subdomain: varchar("subdomain", { length: 255 }).notNull().unique(),
-  status: varchar("status", { length: 50 }).notNull().default("provisioning"),
-  // provisioning | active | suspended | failed
-  isPrimary: boolean("is_primary").notNull().default(false),
-  financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
-  /** Mongo ObjectId of the POS organization wired to this control-plane org. */
-  posOrganizationId: text("pos_organization_id"),
-  provisioningError: text("provisioning_error"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }).notNull(),
+    subdomain: varchar("subdomain", { length: 255 }).notNull().unique(),
+    status: varchar("status", { length: 50 }).notNull().default("provisioning"),
+    // provisioning | active | suspended | failed
+    isPrimary: boolean("is_primary").notNull().default(false),
+    financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
+    /** Mongo ObjectId of the POS organization wired to this control-plane org. */
+    posOrganizationId: text("pos_organization_id"),
+    provisioningError: text("provisioning_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("organizations_tenant_id_idx").on(t.tenantId),
+    uniqueIndex("organizations_tenant_slug_unique").on(t.tenantId, t.slug),
+  ],
+);
 
 /** Optional per-owner access to a specific organization (future enforcement / Team matrix). */
 export const ownerOrganizationAccess = pgTable(
@@ -338,6 +346,7 @@ export const tenantLifecycleJobs = pgTable(
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     claimedBy: text("claimed_by"),
     claimToken: uuid("claim_token"),
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
     lastError: text("last_error"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -576,6 +585,7 @@ export const blacklistedFingerprints = pgTable(
 );
 
 // ─── PMS: Core tables ────────────────────────────────────────────────────────
+// TODO(security): isolate PMS to per-tenant Postgres before public launch
 
 export const pmsProperties = pgTable(
   "pms_properties",

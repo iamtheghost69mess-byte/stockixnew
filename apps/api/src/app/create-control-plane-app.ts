@@ -25,6 +25,7 @@ import { securityHeadersMiddleware } from "../middleware/security-headers.js";
 import { registerAuthRoutes } from "../routes/auth/index.js";
 import { registerControlPlaneRoutes } from "../routes/register-control-plane-routes.js";
 import { registerWebhooks } from "../routes/webhooks.js";
+import { assertPermissionMatrixValid } from "../permissions/validate-permission-matrix.js";
 
 export type ControlPlaneApp = {
   app: Hono<ControlPlaneAuthEnv>;
@@ -63,6 +64,7 @@ export function createControlPlaneApp(): ControlPlaneApp {
   const workerSecret = apiConfig.workerSecret;
 
   apiConfig.validateRequiredEnv();
+  assertPermissionMatrixValid();
 
   if (apiConfig.nodeEnv === "production" && !apiConfig.controlPlaneRedisUrl) {
     logger.error(

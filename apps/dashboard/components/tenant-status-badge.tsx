@@ -51,6 +51,14 @@ export default function TenantStatusBadge({ status }: { status: string }) {
     );
   }
 
+  if (normalized === "deprovisioning") {
+    return (
+      <Badge variant="secondary" className="text-muted-foreground">
+        Removing…
+      </Badge>
+    );
+  }
+
   if (normalized === "failed") {
     return (
       <Badge variant="destructive">

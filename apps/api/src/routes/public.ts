@@ -73,6 +73,12 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
     }),
   );
 
+  app.get("/metrics", async (c) => {
+    const { renderPrometheusMetrics } = await import("../lib/prometheus.js");
+    const body = await renderPrometheusMetrics();
+    return c.text(body, 200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+  });
+
   /** Deprecated — UUID-based discovery removed (use slug route). */
   app.get("/public/tenant-orgs/:tenantId", (c) =>
     c.json({ success: false, error: "Not found", path: c.req.path }, 404),

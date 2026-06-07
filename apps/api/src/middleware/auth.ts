@@ -12,8 +12,15 @@ import {
 } from "../services/api-keys.js";
 import { validateOwnerSession } from "../services/auth/session-validation.js";
 import { verifySessionToken } from "../services/auth/tokens.js";
+import { loadOwnerAuthById } from "../permissions/resolve-owner-permissions.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+async function attachActorPermissions(db: Db, actorId: string): Promise<string[]> {
+  const auth = await loadOwnerAuthById(db, actorId);
+  if (!auth) return [];
+  return [...auth.permissions];
+}
 
 export type ControlPlaneAuthEnv = {
   Variables: {
@@ -154,6 +161,7 @@ export function createActorResolver(
       }
       c.set("actorId", session.sub);
       c.set("actorRole", session.role);
+      c.set("actorPermissions", await attachActorPermissions(db, session.sub));
       await next();
       return;
     }
@@ -174,6 +182,7 @@ export function createActorResolver(
       c.set("actorId", resolved.ownerId);
       c.set("actorRole", "read_only");
       c.set("actorEffectiveRole", "read_only");
+      c.set("actorPermissions", await attachActorPermissions(db, resolved.ownerId));
       c.set("apiKeyId", resolved.keyId);
       scheduleApiKeyLastUsedTouch(db, resolved.keyId);
       await next();
@@ -198,6 +207,7 @@ export function createActorResolver(
       }
       c.set("actorId", platformActor.id);
       c.set("actorRole", "super_admin");
+      c.set("actorPermissions", await attachActorPermissions(db, platformActor.id));
       await next();
       return;
     }
@@ -218,6 +228,7 @@ export function createActorResolver(
     }
     c.set("actorId", session.sub);
     c.set("actorRole", session.role);
+    c.set("actorPermissions", await attachActorPermissions(db, session.sub));
     await next();
   };
 }

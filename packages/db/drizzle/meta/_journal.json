@@ -379,6 +379,27 @@
       "when": 1781160000000,
       "tag": "0054_tenant_status_failed",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781170000000,
+      "tag": "0055_tenant_org_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781180000000,
+      "tag": "0056_organizations_tenant_slug_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1781190000000,
+      "tag": "0057_tenant_lifecycle_jobs_cancel_requested_at",
+      "breakpoints": true
     }
   ]
 }
