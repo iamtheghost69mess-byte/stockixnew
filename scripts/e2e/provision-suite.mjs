@@ -224,7 +224,7 @@ async function teardownTenant(tenantId, slug) {
   console.log(`  · deprovision ${tenantId} (${slug})`);
   const gone = await deprovisionTenant(api, tenantId);
   assertEqual(gone.ok, true, "tenant deleted from Postgres");
-  assertTeardownClean(slug);
+  await assertTeardownClean(slug);
 }
 
 async function scenarioFinanceOnly() {

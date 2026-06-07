@@ -257,28 +257,30 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
     return false;
   }
 
-  const pattern = `tenant:${slug}:*`;
+  const patterns = [`tenant:${slug}:*`, `bull:tenant:${slug}:*`];
   const redisPassword = process.env.TENANT_REDIS_PASSWORD?.trim();
   const redisCliArgs = ["exec", redisContainer, "redis-cli"];
   if (redisPassword && redisPassword !== "__MUST_OVERRIDE__") {
     redisCliArgs.push("-a", redisPassword);
   }
   try {
-    const { stdout } = await execa(
-      "docker",
-      [
-        ...redisCliArgs,
-        "EVAL",
-        "local c='0'; local n=0; repeat local r=redis.call('SCAN',c,'MATCH',ARGV[1],'COUNT',100); c=r[1]; for _,k in ipairs(r[2]) do redis.call('DEL',k); n=n+1 end until c=='0'; return n",
-        "0",
-        pattern,
-      ],
-      { stdio: "pipe" },
-    );
-    const count = Number.parseInt(stdout.trim(), 10);
-    log(
-      `[db-deprovision] flushed ${Number.isFinite(count) ? count : 0} Redis keys matching ${pattern}`,
-    );
+    let total = 0;
+    for (const pattern of patterns) {
+      const { stdout } = await execa(
+        "docker",
+        [
+          ...redisCliArgs,
+          "EVAL",
+          "local c='0'; local n=0; repeat local r=redis.call('SCAN',c,'MATCH',ARGV[1],'COUNT',100); c=r[1]; for _,k in ipairs(r[2]) do redis.call('DEL',k); n=n+1 end until c=='0'; return n",
+          "0",
+          pattern,
+        ],
+        { stdio: "pipe" },
+      );
+      const count = Number.parseInt(stdout.trim(), 10);
+      if (Number.isFinite(count)) total += count;
+      log(`[db-deprovision] flushed ${Number.isFinite(count) ? count : 0} Redis keys matching ${pattern}`);
+    }
     return true;
   } catch (err) {
     log(
@@ -313,13 +315,16 @@ export function tenantMysqlDatabaseNames(slug: string): {
   systemDb: string;
   tenantUser: string;
   orgDbPattern: string;
+  dbPrefix: string;
 } {
   const safe = slugToMysqlSafe(slug);
+  const dbPrefix = `stockix_${safe}_`;
   return {
-    financeDb: `stockix_${safe}_finance`,
-    systemDb: `stockix_${safe}_system`,
+    financeDb: `${dbPrefix}finance`,
+    systemDb: `${dbPrefix}system`,
     tenantUser: tenantMysqlUsername(slug),
-    orgDbPattern: `stockix_${safe}_%`,
+    orgDbPattern: `${dbPrefix}%`,
+    dbPrefix,
   };
 }
 
@@ -472,7 +477,7 @@ export async function deprovisionTenantDatabases(
   slug: string,
   log: (m: string) => void,
 ): Promise<DeprovisionDataPlaneResult> {
-  const { financeDb, systemDb, tenantUser, orgDbPattern } = tenantMysqlDatabaseNames(slug);
+  const { financeDb, systemDb, tenantUser, dbPrefix } = tenantMysqlDatabaseNames(slug);
   const rootPassword = sharedMysqlRootPassword();
   const result: DeprovisionDataPlaneResult = {
     mysqlDbs: false,
@@ -487,7 +492,7 @@ export async function deprovisionTenantDatabases(
         "Cannot safely remove tenant MySQL databases. " +
         "Deprovision aborted — Postgres rows NOT deleted. " +
         "Set the password and retry, or manually drop: " +
-        `DROP matching ${orgDbPattern} and revoke ${tenantUser}`,
+        `DROP matching ${dbPrefix}* and revoke ${tenantUser}`,
     );
   }
 
@@ -505,14 +510,12 @@ export async function deprovisionTenantDatabases(
       await conn.execute(`DROP DATABASE IF EXISTS \`${financeDb}\``);
       await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
 
-      const likePattern = mysqlLikePatternEscape(orgDbPattern);
       const [orgRows] = await conn.query<RowDataPacket[]>(
-        `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ? ESCAPE '\\\\'`,
-        [likePattern],
+        `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE 'stockix%'`,
       );
       for (const row of orgRows) {
         const dbName = row.schemaName as string;
-        if (!dbName) continue;
+        if (!dbName?.startsWith(dbPrefix)) continue;
         await conn.execute(`DROP DATABASE IF EXISTS \`${dbName}\``);
         log(`[db-deprovision] Dropped DB: ${dbName}`);
       }
