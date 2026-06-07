@@ -10,7 +10,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** Fallback poll when Redis pub/sub is unavailable (dev without Redis). */
 export const NOTIFICATION_STREAM_POLL_MS = 10_000;
 export const NOTIFICATION_STREAM_PING_MS = 30_000;
-/** Rows already in inbox at connect — primed into sent set without SSE emit. */
+/** Unread rows replayed as SSE `prime` events when a stream connects (not live `notification`). */
 export const NOTIFICATION_STREAM_PRIME_LIMIT = 50;
 export const NOTIFICATION_STREAM_POLL_ROW_LIMIT = 100;
 

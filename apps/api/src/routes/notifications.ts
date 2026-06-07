@@ -115,8 +115,9 @@ export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void
       });
       for (const row of unreadRows) {
         sent.add(row.id);
+        // `prime` = inbox catch-up on connect/reconnect — must not trigger Sonner toasts.
         await stream.writeSSE({
-          event: "notification",
+          event: "prime",
           data: JSON.stringify(serializeNotification(row)),
         });
       }

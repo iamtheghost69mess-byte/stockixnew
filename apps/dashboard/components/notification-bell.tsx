@@ -195,8 +195,6 @@ export function NotificationBell() {
   const [hasMore, setHasMore] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Suppress toasts for unread rows replayed when the SSE connection opens. */
-  const ssePrimingRef = useRef(true);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -229,12 +227,17 @@ export function NotificationBell() {
       esRef.current = null;
     }
 
-    ssePrimingRef.current = true;
     const es = new EventSource("/api/notifications/stream");
     esRef.current = es;
 
+    const mergeNotification = (notification: Notification): void => {
+      setNotifications((prev) => {
+        if (prev.some((n) => n.id === notification.id)) return prev;
+        return [notification, ...prev].slice(0, LIST_LIMIT);
+      });
+    };
+
     const onConnected = (ev: MessageEvent) => {
-      ssePrimingRef.current = false;
       try {
         const data = JSON.parse(String(ev.data)) as { unread?: number };
         if (typeof data.unread === "number") setUnreadCount(data.unread);
@@ -243,6 +246,16 @@ export function NotificationBell() {
       }
     };
 
+    /** Inbox catch-up on connect/reconnect — sync bell only, never Sonner. */
+    const onPrime = (ev: MessageEvent) => {
+      try {
+        mergeNotification(JSON.parse(String(ev.data)) as Notification);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    /** Live event after connect — update bell and show bottom-right toast. */
     const onNotification = (ev: MessageEvent) => {
       let notification: Notification;
       try {
@@ -251,18 +264,13 @@ export function NotificationBell() {
         return;
       }
 
-      setNotifications((prev) => {
-        if (prev.some((n) => n.id === notification.id)) return prev;
-        return [notification, ...prev].slice(0, LIST_LIMIT);
-      });
-
-      if (ssePrimingRef.current) return;
-
+      mergeNotification(notification);
       setUnreadCount((prev) => prev + 1);
       showNotificationToast(notification, (url) => router.push(url));
     };
 
     es.addEventListener("connected", onConnected);
+    es.addEventListener("prime", onPrime);
     es.addEventListener("notification", onNotification);
     es.addEventListener("ping", () => {
       /* keep-alive */
