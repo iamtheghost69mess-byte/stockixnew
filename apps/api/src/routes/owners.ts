@@ -23,7 +23,10 @@ import { resendOwnerInvite } from "../services/invites/invites.js";
 import { isOwnerInviteMailQueueEnabled } from "../jobs/owner-invite-mail-queue.js";
 type Db = ReturnType<typeof createDb>;
 
-
+/**
+ * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
+ * GET routes are naturally idempotent. `/internal/*` and webhooks are out of scope.
+ */
 export function registerOwnerRoutes(app: Hono<ControlPlaneAuthEnv>, db: Db | null): void {
 app.get("/owners", async (c) => {
   if (!db) {

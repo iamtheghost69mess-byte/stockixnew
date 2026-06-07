@@ -50,6 +50,40 @@ To run multiple API instances:
 
 Do **not** scale the API before the Redis provision bus is live — in-memory provision events will not propagate across instances.
 
+**P1-6 note:** There is no `deploy.replicas` in `docker-compose.yml` (Compose v2 ignores Swarm-only keys). Use explicit `--scale api=N` as above.
+
+## PMS platform Postgres isolation (P1-8)
+
+PMS (`services/pms`) uses the **same platform Postgres** as the control plane (`DATABASE_URL`). Tenant isolation is **application-layer only**:
+
+| Control | Mechanism |
+|---------|-----------|
+| Tenant scope | Every PMS route reads `tenantId` from the authenticated Stockix product token (`services/pms/src/routes/_utils.ts`) |
+| Data access | Queries filter by `tenant_id` / property ownership — no separate PMS database or Postgres RLS |
+| Blast radius | Compromised platform DB credentials or a missing `WHERE tenant_id = …` clause could cross tenants |
+
+**Accepted for current scale:** single Postgres with strict code review on PMS queries and proxy routes (`apps/api` `/pms/*`). **Future hardening:** dedicated `pms` Postgres schema with RLS, or separate database instance per compliance tier.
+
+## Runtime asset backups (P1-5)
+
+`db-backup` runs `backup-runtime.sh` twice daily (cron `5 2,14 * * *`) covering:
+
+| Asset | Backup path on B2 |
+|-------|-------------------|
+| Tenant Redis RDB | `{prefix}/redis/redis_*.rdb` |
+| Traefik dynamic YAML | `{prefix}/traefik/traefik_*.tar.gz` |
+| Tenant `.env` dirs | `{prefix}/tenant-envs/tenant_envs_*.tar.gz.gpg` (requires `BACKUP_ENCRYPTION_KEY`) |
+
+Verify after deploy:
+
+```bash
+aws --endpoint-url "$BACKUP_B2_ENDPOINT" s3 ls "s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX}/redis/" | tail -3
+aws --endpoint-url "$BACKUP_B2_ENDPOINT" s3 ls "s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX}/traefik/" | tail -3
+aws --endpoint-url "$BACKUP_B2_ENDPOINT" s3 ls "s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX}/tenant-envs/" | tail -3
+```
+
+Restore notes: `infra/prod/OPERATIONS.md` § backup restore (runtime assets table).
+
 ### Infra worker throughput
 
 - `WORKER_CONCURRENCY` (default `1`, root `.env` often `2`) runs parallel poll loops in **one** process (`worker.ts`).
@@ -59,6 +93,25 @@ Do **not** scale the API before the Redis provision bus is live — in-memory pr
 - Tune poll interval: `PROVISION_POLL_MS` in `.env` (wired to worker; default `2000`).
 
 Load test: queue N `tenant.provision` jobs and compare wall time with `WORKER_CONCURRENCY=1` vs `2` and with `--scale infra-worker=2`.
+
+## Traefik dashboard exposure (P3-6)
+
+Prod Traefik binds the API/dashboard to **localhost only** (`127.0.0.1:8080:8080` in `infra/prod/docker-compose.yml`). The dashboard is enabled (`--api.dashboard=true`) with `--api.insecure=true` for operator debugging on the host — it is **not** exposed on the public internet.
+
+- **Access:** SSH to the host, then `curl http://127.0.0.1:8080/dashboard/` or port-forward.
+- **Do not** publish `:8080` on `0.0.0.0` or add a public Traefik router for the dashboard.
+- Dynamic tenant routes live under `${TRAEFIK_DYNAMIC_DIR}`; TLS terminates on `:443` via Cloudflare DNS challenge.
+
+## Quarterly DR drill (P3-7)
+
+Automated pre-checks (backup listing + `/ready`):
+
+```bash
+bash scripts/dr-drill.sh
+bash scripts/dr-drill.sh --check-only   # skip docker compose ps
+```
+
+Complete the manual restore steps printed by the script; log RTO/RPO. Full failover: `infra/prod/FAILOVER_RUNBOOK.md`.
 
 ## Shared data plane verification (P0-1 / P0-2)
 

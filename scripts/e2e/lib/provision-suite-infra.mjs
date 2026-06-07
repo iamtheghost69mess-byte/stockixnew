@@ -1,0 +1,290 @@
+/**
+ * Docker/infra checks, Finance/POS probes, teardown, and SQL helpers for E2E suite.
+ */
+
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { execa } from "execa";
+import {
+  SuiteError,
+  assertEqual,
+  assertTruthy,
+  readJson,
+  sleep,
+  tenantMysqlNames,
+} from "./provision-suite-core.mjs";
+
+export const MYSQL_CONTAINER =
+  process.env.HEALTH_MYSQL_CONTAINER ?? "stockix-shared-stockix-mysql-1";
+export const MONGO_CONTAINER =
+  process.env.HEALTH_MONGO_CONTAINER ?? "stockix-shared-stockix-mongo-1";
+export const REDIS_CONTAINER =
+  process.env.HEALTH_REDIS_CONTAINER ?? "stockix-shared-stockix-redis-1";
+export const MYSQL_ROOT = process.env.SHARED_MYSQL_ROOT_PASSWORD ?? "";
+export const TRAEFIK_DIR = (process.env.TRAEFIK_DYNAMIC_DIR ?? "/opt/stockix/traefik-dynamic").replace(
+  /\/+$/,
+  "",
+);
+export const POS_API_KEY = (process.env.POS_PLATFORM_API_KEY ?? "").trim();
+
+function runShell(cmd) {
+  try {
+    const out = execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
+    return { ok: true, out: out.trim() };
+  } catch (err) {
+    return { ok: false, out: [err?.stdout, err?.stderr, err?.message].filter(Boolean).join("\n").trim() };
+  }
+}
+
+export async function dockerProjectSnapshot(project) {
+  try {
+    const { stdout } = await execa("docker", [
+      "ps",
+      "-a",
+      "--filter",
+      `label=com.docker.compose.project=${project}`,
+      "--format",
+      "{{.Names}}|{{.Status}}",
+    ]);
+    return stdout
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [name = "", status = ""] = row.split("|");
+        return { name, status };
+      });
+  } catch (error) {
+    return [{ name: "(docker failed)", status: error instanceof Error ? error.message : String(error) }];
+  }
+}
+
+export function dockerRunningHealthy(containers) {
+  const running = containers.filter(
+    (c) => c.status.toLowerCase().includes("up") && !c.status.toLowerCase().includes("exited"),
+  );
+  const healthy = running.filter((c) => /healthy/i.test(c.status) || !/unhealthy/i.test(c.status));
+  return { running, healthy };
+}
+
+export async function dockerServicePort(project, service, containerPort) {
+  try {
+    const { stdout } = await execa("docker", ["compose", "-p", project, "port", service, String(containerPort)]);
+    const match = stdout.trim().match(/:(\d+)\s*$/);
+    return match?.[1] ? Number(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyFinancePing(port) {
+  for (let i = 0; i < 25; i += 1) {
+    for (const path of ["/api/ping/", "/api/ping"]) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(5_000) });
+        if (res.ok) return { ok: true, status: res.status };
+      } catch {
+        /* retry */
+      }
+    }
+    await sleep(2_000);
+  }
+  return { ok: false };
+}
+
+export async function financeSignIn(port, email, password) {
+  const res = await fetch(`http://127.0.0.1:${port}/api/auth/signin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await readJson(res);
+  if (!res.ok) throw new SuiteError(`Finance signin failed HTTP ${res.status}`, body);
+  const accessToken = body.accessToken ?? body.access_token ?? body.token;
+  assertTruthy(accessToken, "Finance accessToken");
+  return {
+    accessToken,
+    organizationId: body.organizationId ?? body.organization_id,
+    body,
+  };
+}
+
+export async function financeSwitchTenant(port, accessToken, organizationId) {
+  const res = await fetch(`http://127.0.0.1:${port}/api/auth/switch-tenant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ organizationId }),
+  });
+  const body = await readJson(res);
+  if (!res.ok) throw new SuiteError(`switch-tenant failed HTTP ${res.status}`, body);
+  const nextOrg = body.organizationId ?? body.organization_id ?? organizationId;
+  assertEqual(String(nextOrg), String(organizationId), "switch-tenant organizationId");
+  return { accessToken: body.accessToken ?? body.access_token ?? accessToken, organizationId: nextOrg, body };
+}
+
+export function listMysqlDatabases(slug) {
+  if (!MYSQL_ROOT) return { ok: false, dbs: [], out: "SHARED_MYSQL_ROOT_PASSWORD unset" };
+  const { orgDbPattern, systemDb } = tenantMysqlNames(slug);
+  const q = runShell(
+    `docker exec ${MYSQL_CONTAINER} mysql -uroot -p"${MYSQL_ROOT.replace(/"/g, '\\"')}" -N -e "SHOW DATABASES LIKE '${orgDbPattern}';" 2>&1`,
+  );
+  return { ok: q.ok, dbs: q.out.split("\n").map((s) => s.trim()).filter(Boolean), systemDb, out: q.out };
+}
+
+export function mongoDbExists(slug) {
+  const q = runShell(
+    `docker exec ${MONGO_CONTAINER} mongosh --quiet --eval "db.getMongo().getDBNames().includes('${slug}_pos')" 2>&1`,
+  );
+  return q.ok && /true/i.test(q.out);
+}
+
+export function redisKeysForSlug(slug) {
+  const q = runShell(`docker exec ${REDIS_CONTAINER} redis-cli --scan --pattern "*${slug}*" 2>&1`);
+  return q.out.split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
+export function bullmqQueueKeys(slug) {
+  const q = runShell(
+    `docker exec ${REDIS_CONTAINER} redis-cli --scan --pattern "bull:tenant:${slug}:bigcapital_sync:*" 2>&1 | head -20`,
+  );
+  return q.out.split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
+export function traefikFileExists(slug, kind = "finance") {
+  const file =
+    kind === "pos" ? join(TRAEFIK_DIR, `tenant-pos-${slug}.yml`) : join(TRAEFIK_DIR, `tenant-${slug}.yml`);
+  return existsSync(file) ? file : null;
+}
+
+export function readTraefikFile(slug, kind = "finance") {
+  const path = traefikFileExists(slug, kind);
+  return path ? readFileSync(path, "utf8") : null;
+}
+
+export async function verifyPosBackend(baseUrl) {
+  for (const path of ["/health", "/ready"]) {
+    try {
+      const res = await fetch(`${baseUrl}${path}`, { signal: AbortSignal.timeout(8_000) });
+      if (res.ok) return { ok: true, path, status: res.status };
+    } catch {
+      /* retry */
+    }
+  }
+  return { ok: false };
+}
+
+export async function verifyPosOrgApi(baseUrl, orgId) {
+  const headers = { Accept: "application/json", "X-Forwarded-Proto": "https" };
+  if (POS_API_KEY) headers["X-Api-Key"] = POS_API_KEY;
+  const res = await fetch(`${baseUrl}/api/platform/v1/organizations/${orgId}`, {
+    headers,
+    signal: AbortSignal.timeout(10_000),
+  });
+  return { ok: res.ok, status: res.status, body: await readJson(res) };
+}
+
+export async function verifyPosWireHealth(baseUrl, orgId) {
+  const headers = { Accept: "application/json", "X-Forwarded-Proto": "https" };
+  if (POS_API_KEY) headers["X-Api-Key"] = POS_API_KEY;
+  const res = await fetch(
+    `${baseUrl}/api/platform/v1/organizations/${orgId}/integration/bigcapital/health`,
+    { headers, signal: AbortSignal.timeout(15_000) },
+  );
+  return { ok: res.ok, status: res.status, body: await readJson(res) };
+}
+
+export async function posAdminLogin(baseUrl, pin) {
+  const res = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: String(pin) }),
+  });
+  return { ok: res.ok, status: res.status, body: await readJson(res) };
+}
+
+export async function pollTenantDeleted(api, tenantId, maxMs = 10 * 60 * 1000) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const res = await api("GET", `/tenants/${tenantId}`);
+    if (res.status === 404) return { ok: true };
+    await sleep(5000);
+  }
+  return { ok: false };
+}
+
+export async function deprovisionTenant(api, tenantId) {
+  const res = await api("DELETE", `/tenants/${tenantId}?volumes=true`);
+  if (res.status !== 200 && res.status !== 202) {
+    throw new SuiteError(`DELETE /tenants/${tenantId} → HTTP ${res.status}`, res.data);
+  }
+  return pollTenantDeleted(api, tenantId);
+}
+
+export function assertTeardownClean(slug) {
+  const mysql = listMysqlDatabases(slug);
+  if (mysql.dbs.length) throw new SuiteError(`MySQL databases still present after deprovision`, { slug, dbs: mysql.dbs });
+  if (mongoDbExists(slug)) throw new SuiteError(`MongoDB ${slug}_pos still exists`, { slug });
+  const redis = redisKeysForSlug(slug);
+  if (redis.length) throw new SuiteError(`Redis keys still present`, { slug, redis: redis.slice(0, 10) });
+  if (traefikFileExists(slug, "finance") || traefikFileExists(slug, "pos")) {
+    throw new SuiteError(`Traefik YAML still present`, { slug });
+  }
+}
+
+export async function assertOrgSlugUniqueConstraint(tenantId, duplicateSlug) {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new SuiteError("DATABASE_URL required for org slug constraint test");
+  const sql = (await import("postgres")).default;
+  const pg = sql(dbUrl, { max: 1 });
+  try {
+    await pg`
+      INSERT INTO organizations (id, tenant_id, name, slug, subdomain, status, is_primary, created_at, updated_at)
+      VALUES (${randomUUID()}, ${tenantId}, 'dup-test', ${duplicateSlug}, ${duplicateSlug + ".test"}, 'provisioning', false, NOW(), NOW())
+    `;
+    throw new SuiteError("Expected duplicate org slug insert to fail");
+  } catch (err) {
+    if (err instanceof SuiteError) throw err;
+    if ((err?.code ?? err?.cause?.code) !== "23505") {
+      throw new SuiteError(`Expected unique violation 23505`, { err: String(err) });
+    }
+  } finally {
+    await pg.end({ timeout: 5 });
+  }
+}
+
+export async function assertOrgSlugAllowedAcrossTenants(_tenantIdA, tenantIdB, sharedSlug) {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new SuiteError("DATABASE_URL required for cross-tenant org slug test");
+  const sql = (await import("postgres")).default;
+  const pg = sql(dbUrl, { max: 1 });
+  const newId = randomUUID();
+  try {
+    await pg`
+      INSERT INTO organizations (id, tenant_id, name, slug, subdomain, status, is_primary, created_at, updated_at)
+      VALUES (${newId}, ${tenantIdB}, 'cross-tenant slug ok', ${sharedSlug}, ${sharedSlug + ".x"}, 'provisioning', false, NOW(), NOW())
+    `;
+  } finally {
+    await pg`DELETE FROM organizations WHERE id = ${newId}`.catch(() => undefined);
+    await pg.end({ timeout: 5 });
+  }
+}
+
+export async function setOwnerPasswordForE2e(email, password) {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new SuiteError("DATABASE_URL required to set test owner password");
+  const bcrypt = (await import("bcryptjs")).default;
+  const hash = await bcrypt.hash(password, 12);
+  const sql = (await import("postgres")).default;
+  const pg = sql(dbUrl, { max: 1 });
+  try {
+    const rows = await pg`
+      UPDATE owners SET password_hash = ${hash}, status = 'active', updated_at = NOW()
+      WHERE email = ${email} RETURNING id
+    `;
+    if (!rows.length) throw new SuiteError(`Owner not found for email ${email}`);
+  } finally {
+    await pg.end({ timeout: 5 });
+  }
+}

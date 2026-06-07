@@ -173,6 +173,22 @@ export function slugToMysqlSafe(slug: string): string {
   return slug.replace(/[^a-z0-9]/gi, "_").toLowerCase().slice(0, 28);
 }
 
+/** MySQL identifiers for a tenant slug (legacy `_finance` + `_system` + scoped user). */
+export function tenantMysqlDatabaseNames(slug: string): {
+  financeDb: string;
+  systemDb: string;
+  tenantUser: string;
+  orgDbPattern: string;
+} {
+  const safe = slugToMysqlSafe(slug);
+  return {
+    financeDb: `stockix_${safe}_finance`,
+    systemDb: `stockix_${safe}_system`,
+    tenantUser: `tenant_${safe}`,
+    orgDbPattern: `stockix_${safe}_%`,
+  };
+}
+
 /**
  * Provision tenant databases on shared infrastructure.
  * Called BEFORE docker compose up.
@@ -186,10 +202,7 @@ export async function provisionTenantDatabases(
   dbPassword: string,
   log: (m: string) => void,
 ): Promise<void> {
-  const safe = slugToMysqlSafe(slug);
-  const financeDb = `stockix_${safe}_finance`;
-  const systemDb  = `stockix_${safe}_system`;
-  const tenantUser = `tenant_${safe}`;
+  const { financeDb, systemDb, tenantUser, orgDbPattern } = tenantMysqlDatabaseNames(slug);
   const mysqlHost  = workerSharedMysqlHost();
   const rootPassword = sharedMysqlRootPassword();
 
@@ -237,7 +250,7 @@ export async function provisionTenantDatabases(
     // Wildcard grant covers org-level DBs created at runtime by Finance
     // TenantDBManager: stockix_{safe}_{organizationId} (uses tenant SYSTEM_DB_USER via knex-db-manager)
     await conn.execute(
-      `GRANT ALL PRIVILEGES ON \`stockix_${safe}_%\`.* TO '${tenantUser}'@'%'`,
+      `GRANT ALL PRIVILEGES ON \`${orgDbPattern}\`.* TO '${tenantUser}'@'%'`,
     );
     await conn.execute("FLUSH PRIVILEGES");
     log(`[db-provision] MySQL ready: ${financeDb}, ${systemDb}, user: ${tenantUser}`);
@@ -320,10 +333,7 @@ export async function deprovisionTenantDatabases(
   slug: string,
   log: (m: string) => void,
 ): Promise<DeprovisionDataPlaneResult> {
-  const safe = slugToMysqlSafe(slug);
-  const financeDb  = `stockix_${safe}_finance`;
-  const systemDb   = `stockix_${safe}_system`;
-  const tenantUser = `tenant_${safe}`;
+  const { financeDb, systemDb, tenantUser, orgDbPattern } = tenantMysqlDatabaseNames(slug);
   const rootPassword = sharedMysqlRootPassword();
   const result: DeprovisionDataPlaneResult = {
     mysqlDbs: false,
@@ -338,7 +348,7 @@ export async function deprovisionTenantDatabases(
         "Cannot safely remove tenant MySQL databases. " +
         "Deprovision aborted — Postgres rows NOT deleted. " +
         "Set the password and retry, or manually drop: " +
-        `stockix_${safe}_% and revoke tenant_${safe}`,
+        `DROP matching ${orgDbPattern} and revoke ${tenantUser}`,
     );
   }
 
@@ -358,7 +368,7 @@ export async function deprovisionTenantDatabases(
 
       const [orgRows] = await conn.query<RowDataPacket[]>(
         `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ?`,
-        [`stockix_${safe}_%`],
+        [orgDbPattern],
       );
       for (const row of orgRows) {
         const dbName = row.schemaName as string;
@@ -539,6 +549,15 @@ async function financeStackContainersRunning(project: string): Promise<boolean> 
   }
 }
 
+/** Fail deprovision when finance compose down did not stop all project containers. */
+export async function assertFinanceStackStopped(project: string): Promise<void> {
+  if (await financeStackContainersRunning(project)) {
+    throw new Error(
+      `[deprovision] Finance stack ${project} still has running containers after compose down`,
+    );
+  }
+}
+
 export async function deprovisionTenant(
   db: PostgresJsDatabase<typeof dbSchema>,
   tenantId: string,
@@ -554,7 +573,7 @@ export async function deprovisionTenant(
   const row = found[0];
   if (!row) return { ok: false, message: "Tenant not found" };
 
-  const safe = slugToMysqlSafe(row.slug);
+  const { orgDbPattern, tenantUser } = tenantMysqlDatabaseNames(row.slug);
   const rootPassword = sharedMysqlRootPassword();
   // CRITICAL: Never delete Postgres tenant rows until data plane
   // cleanup succeeds. Orphaned shared DB data is a security risk.
@@ -564,7 +583,7 @@ export async function deprovisionTenant(
         "Cannot safely remove tenant MySQL databases. " +
         "Deprovision aborted — Postgres rows NOT deleted. " +
         "Set the password and retry, or manually drop: " +
-        `stockix_${safe}_% and revoke tenant_${safe}`,
+        `DROP matching ${orgDbPattern} and revoke ${tenantUser}`,
     );
   }
 
@@ -608,6 +627,7 @@ export async function deprovisionTenant(
       await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, {
         timeoutMs: 2 * 60 * 1000,
       });
+      await assertFinanceStackStopped(project);
       dockerStatus = "stopped";
       cleanupResults.financeCompose = true;
     }
@@ -697,10 +717,16 @@ export async function deprovisionTenant(
   cleanupResults.traefikYaml = financeTraefikRemoved && posTraefikRemoved;
 
   const dataPlaneClean =
-    cleanupResults.mysqlDbs && cleanupResults.mongoDb && cleanupResults.redisKeys;
+    cleanupResults.financeCompose &&
+    cleanupResults.mysqlDbs &&
+    cleanupResults.mongoDb &&
+    cleanupResults.redisKeys;
   if (!dataPlaneClean) {
     const failed = Object.entries(cleanupResults)
-      .filter(([key, ok]) => !ok && ["mysqlDbs", "mongoDb", "redisKeys"].includes(key))
+      .filter(
+        ([key, ok]) =>
+          !ok && ["financeCompose", "mysqlDbs", "mongoDb", "redisKeys"].includes(key),
+      )
       .map(([key]) => key);
     throw new Error(
       `[deprovision] Data plane cleanup incomplete: ${failed.join(", ")}. ` +

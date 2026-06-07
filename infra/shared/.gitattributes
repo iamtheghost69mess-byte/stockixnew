@@ -1,1 +1,2 @@
 mongo/rs-init.sh text eol=lf
+proxysql-entrypoint.sh text eol=lf

@@ -138,6 +138,7 @@ async function upSharedInfra(env) {
   if (!existsSync(SHARED_COMPOSE)) {
     throw new Error(`Missing ${SHARED_COMPOSE}`);
   }
+  ensureDockerNetwork("stockix_internal");
   ensureDockerNetwork("stockix_public");
   const envFiles = sharedComposeEnvFiles();
   const args = sharedComposeArgs(envFiles);
