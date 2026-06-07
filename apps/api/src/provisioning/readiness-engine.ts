@@ -1,7 +1,4 @@
-import { apiConfig } from "@repo/config";
-import { execa } from "execa";
 import { parseTenantModules, type StockixModule } from "../services/auth/stockix-product-token.js";
-import { resolvePosBackendHealthUrl } from "../pos-public-url.js";
 import type { createDb } from "@repo/db";
 import {
   tenantDeployments,
@@ -9,7 +6,7 @@ import {
   tenantProvisionEvents,
   tenants,
 } from "@repo/db/schema";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 
 export type TenantReadinessStatus = "NOT_READY" | "READY" | "DEGRADED" | "FAILED";
 
@@ -30,6 +27,12 @@ export type TenantReadiness = {
 };
 
 type Db = ReturnType<typeof createDb>;
+type ProvisionEventRow = {
+  phase: string;
+  meta: Record<string, unknown> | null;
+  message: string;
+};
+
 const READINESS_CACHE_TTL_MS = 2_000;
 const readinessCache = new Map<string, { expiresAt: number; value: TenantReadiness }>();
 
@@ -41,32 +44,7 @@ export function invalidateTenantReadinessCache(correlationId?: string): void {
   readinessCache.delete(correlationId);
 }
 
-async function resolveServerPingUrl(composeProjectName: string): Promise<string | null> {
-  // The API container is in stockix_internal. Use the tenant server container's
-  // IP in that network for direct reachability (host-published ports are blocked
-  // by Docker isolation between bridge networks on Linux).
-  const workerNetwork = apiConfig.workerInternalNetwork;
-  const containerName = `${composeProjectName}-server-1`;
-  try {
-    const { stdout } = await execa("docker", [
-      "inspect",
-      "--format",
-      `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
-      containerName,
-    ]);
-    const ip = stdout.trim();
-    if (ip && ip !== "<no value>" && ip !== "") {
-      return `http://${ip}:3000/api/ping`;
-    }
-  } catch {
-    // fall through
-  }
-  return null;
-}
-
-function hasBootstrapAdminEvent(
-  events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
-): boolean {
+function hasBootstrapAdminEvent(events: ProvisionEventRow[]): boolean {
   for (const e of events) {
     if (e.phase === "journal" && e.meta && e.meta.operationKey === "tenant.bootstrap_admin") {
       return true;
@@ -78,10 +56,13 @@ function hasBootstrapAdminEvent(
   return false;
 }
 
-function isRouteActiveFromEvents(
-  slug: string | null,
-  events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
-): boolean {
+function hasJournalOpEvent(events: ProvisionEventRow[], operationKey: string): boolean {
+  return events.some(
+    (e) => e.phase === "journal" && e.meta?.operationKey === operationKey,
+  );
+}
+
+function isRouteActiveFromEvents(slug: string | null, events: ProvisionEventRow[]): boolean {
   if (!slug) return false;
   return events.some(
     (e) =>
@@ -95,14 +76,12 @@ function isRouteActiveFromEvents(
 /** Exported for unit tests — accounting routeActive requires journaled edge.publish. */
 export function isFinanceTraefikRouteActiveFromEvents(
   slug: string | null,
-  events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
+  events: ProvisionEventRow[],
 ): boolean {
   return isRouteActiveFromEvents(slug, events);
 }
 
-export function hasPosStackCompletedEvent(
-  events: Array<{ phase: string; meta: Record<string, unknown> | null; message: string }>,
-): boolean {
+export function hasPosStackCompletedEvent(events: ProvisionEventRow[]): boolean {
   return events.some(
     (e) =>
       e.phase === "pos.stack.completed"
@@ -295,37 +274,15 @@ export async function getTenantReadiness(
     const posStackReady = hasPosStackCompletedEvent(events);
     const posOrganizationLinked = Boolean(tenant?.posOrganizationId?.trim());
 
-    let financeResponding = false;
-    if (
-      jobCompleted &&
-      tenantExists &&
-      needsAccounting &&
-      tenant?.composeProjectName &&
-      deploymentValid
-    ) {
-      const pingUrl = await resolveServerPingUrl(tenant.composeProjectName);
-      if (pingUrl) {
-        try {
-          const response = await fetch(pingUrl, { signal: AbortSignal.timeout(5000) });
-          financeResponding = response.ok;
-        } catch {
-          financeResponding = false;
-        }
-      }
-    }
+    const financeResponding =
+      hasJournalOpEvent(events, "tenant.health_check")
+      || events.some((e) => e.phase === "health" && e.message.toLowerCase().includes("healthy"));
 
-    let posResponding = false;
-    if (jobCompleted && tenantExists && needsPos && tenant?.slug) {
-      const healthUrl = await resolvePosBackendHealthUrl(tenant.slug);
-      if (healthUrl) {
-        try {
-          const response = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
-          posResponding = response.ok;
-        } catch {
-          posResponding = false;
-        }
-      }
-    }
+    const posResponding =
+      hasJournalOpEvent(events, "pos.schema_migration")
+      || hasJournalOpEvent(events, "pos.bootstrap_organization")
+      || posStackReady
+      || posOrganizationLinked;
 
     const financeTenantLinked =
       tenant?.financeTenantId != null && Number(tenant.financeTenantId) > 0;
@@ -371,7 +328,7 @@ export async function getTenantReadiness(
       reasons.push(needsAccounting ? "bootstrap_admin_not_confirmed" : "pos_stack_not_completed");
     }
     if (!checks.tenantResponding) {
-      reasons.push(needsAccounting ? "tenant_ping_unreachable" : "pos_health_unreachable");
+      reasons.push(needsAccounting ? "tenant_health_check_pending" : "pos_health_pending");
     }
     if (!checks.financeTenantLinked) reasons.push("finance_tenant_id_missing");
     if (!checks.financeLicenseSynced) reasons.push("finance_license_sync_missing");

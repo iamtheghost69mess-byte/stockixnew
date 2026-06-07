@@ -4,7 +4,7 @@ import type { createDb } from "@repo/db";
 
 import { createActorResolver, createPlatformAuthGate, type ControlPlaneAuthEnv } from "./auth.js";
 import { createIdempotencyMiddleware } from "./idempotency.js";
-import { createRoleRankRbacMiddleware } from "./rbac.js";
+import { createRbacMiddleware } from "./rbac.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -20,5 +20,5 @@ export function registerControlPlaneMiddleware(
   app.use("/*", createPlatformAuthGate(platformApiSecret, workerSecret));
   app.use("/*", createActorResolver(db, platformApiSecret));
   app.use("/*", createIdempotencyMiddleware(db));
-  app.use("/*", createRoleRankRbacMiddleware(db));
+  app.use("/*", createRbacMiddleware(db));
 }

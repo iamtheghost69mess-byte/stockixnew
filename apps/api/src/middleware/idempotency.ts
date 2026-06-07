@@ -12,10 +12,16 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const IDEMPOTENCY_TTL_HOURS = 24;
 
+/** Routes that enqueue jobs or trigger external side effects — require Idempotency-Key. */
+const IDEMPOTENT_PREFIXES = ["/owners", "/tenants", "/licenses", "/admin", "/api-keys"];
+
 /**
  * Creates the idempotency key middleware.
  * Enforces Idempotency-Key header on privileged writes (POST/PATCH/DELETE)
- * to /owners and /tenants. Replays cached responses for duplicate requests.
+ * to control-plane mutation routes. Replays cached responses for duplicate requests.
+ *
+ * Naturally idempotent (no middleware): GET routes, `/notifications/*` mark-read,
+ * `/internal/*` (worker secret), webhooks (provider signatures).
  */
 export function createIdempotencyMiddleware(
   db: Db | null,
@@ -25,7 +31,7 @@ export function createIdempotencyMiddleware(
     const path = c.req.path;
     const isPrivilegedWrite =
       ["POST", "PATCH", "DELETE"].includes(method) &&
-      (path.startsWith("/owners") || path.startsWith("/tenants"));
+      IDEMPOTENT_PREFIXES.some((prefix) => path.startsWith(prefix));
     if (!isPrivilegedWrite) return next();
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 

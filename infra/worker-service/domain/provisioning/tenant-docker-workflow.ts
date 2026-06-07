@@ -1,4 +1,5 @@
 import type { IDockerComposeRunner } from "./contracts.js";
+import { execa } from "execa";
 
 type ComposeCtx = {
   composeFile: string;
@@ -25,4 +26,40 @@ export async function composeDownBestEffort(
     .then(() => true)
     .catch(() => false);
   return result;
+}
+
+export async function runDockerExec(params: {
+  composeFile: string;
+  project: string;
+  envPath: string;
+  composeEnv: Record<string, string>;
+  service: string;
+  command: string[];
+  timeoutMs?: number;
+  log?: (message: string) => void;
+}): Promise<void> {
+  const { composeFile, project, envPath, composeEnv, service, command, timeoutMs, log } = params;
+  log?.(`[docker] exec ${project}/${service}: ${command.join(" ")}`);
+  await execa(
+    "docker",
+    [
+      "compose",
+      "-f",
+      composeFile,
+      "-p",
+      project,
+      "--env-file",
+      envPath,
+      "exec",
+      "-T",
+      service,
+      ...command,
+    ],
+    {
+      env: composeEnv,
+      stdio: "pipe",
+      extendEnv: true,
+      timeout: timeoutMs ?? 60_000,
+    },
+  );
 }

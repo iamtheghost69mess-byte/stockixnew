@@ -94,11 +94,11 @@ services:
     mem_swappiness: 0
     oom_kill_disable: false
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      test: ["CMD-SHELL", "pgrep -f 'node workers/platformWorker.js' > /dev/null && node -e \"const u=process.env.REDIS_URL;if(!u)process.exit(1);import('ioredis').then(({default:R})=>{const c=new R(u,{maxRetriesPerRequest:1,lazyConnect:true});return c.connect().then(()=>c.ping()).then((p)=>{c.disconnect();process.exit(p==='PONG'?0:1)}).catch(()=>process.exit(1))})\""]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
   pos-bigcapital-worker:
     image: stockix-pos-backend:local
@@ -129,11 +129,11 @@ services:
     mem_swappiness: 0
     oom_kill_disable: false
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      test: ["CMD-SHELL", "pgrep -f 'node workers/bigcapitalSyncWorker.js' > /dev/null && node -e \"const u=process.env.REDIS_URL;if(!u)process.exit(1);import('ioredis').then(({default:R})=>{const c=new R(u,{maxRetriesPerRequest:1,lazyConnect:true});return c.connect().then(()=>c.ping()).then((p)=>{c.disconnect();process.exit(p==='PONG'?0:1)}).catch(()=>process.exit(1))})\""]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
   pos-frontend:
     image: stockix-pos-frontend:local

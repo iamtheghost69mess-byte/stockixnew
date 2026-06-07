@@ -215,10 +215,9 @@ export async function provisionTenantDatabases(
   });
 
   try {
-    // NOTE: stockix_{safe}_finance is provisioned for legacy compatibility.
-    // Finance TenantDBManager uses stockix_{safe}_{organizationId} at runtime.
-    // Do not drop _finance on deprovision — it may be referenced by some modules.
-    // Track in Architecture2.md P1 — orphan DB audit pending.
+    // LEGACY COMPAT: stockix_{safe}_finance is created for upstream BigCapital compatibility.
+    // It is intentionally included in deprovisionTenantDatabases() cleanup below.
+    // Do not remove the creation without also removing the deprovision cleanup.
     await conn.execute(
       `CREATE DATABASE IF NOT EXISTS \`${financeDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
@@ -527,6 +526,19 @@ export async function provisionTenant(
   );
 }
 
+async function financeStackContainersRunning(project: string): Promise<boolean> {
+  try {
+    const { stdout } = await execa(
+      "docker",
+      ["ps", "--filter", `name=${project}`, "--format", "{{.Names}}"],
+      { stdio: "pipe" },
+    );
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function deprovisionTenant(
   db: PostgresJsDatabase<typeof dbSchema>,
   tenantId: string,
@@ -577,13 +589,28 @@ export async function deprovisionTenant(
   };
 
   try {
-    await stat(envPath);
-    const downArgs = ["down", "--remove-orphans", "--timeout", "30"];
-    if (options.removeVolumes) downArgs.push("-v");
-    if (options.removeImages) downArgs.push("--rmi", "local");
-    await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, { timeoutMs: 2 * 60 * 1000 });
-    dockerStatus = "stopped";
-    cleanupResults.financeCompose = true;
+    const financeRunning = await financeStackContainersRunning(project);
+    if (!financeRunning) {
+      log(
+        JSON.stringify({
+          event: "deprovision_finance_already_stopped",
+          project,
+          slug: row.slug,
+        }),
+      );
+      dockerStatus = "skipped";
+      cleanupResults.financeCompose = true;
+    } else {
+      await stat(envPath);
+      const downArgs = ["down", "--remove-orphans", "--timeout", "30"];
+      if (options.removeVolumes) downArgs.push("-v");
+      if (options.removeImages) downArgs.push("--rmi", "local");
+      await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, {
+        timeoutMs: 2 * 60 * 1000,
+      });
+      dockerStatus = "stopped";
+      cleanupResults.financeCompose = true;
+    }
 
     const repoRoot = getRepoRoot();
     const moduleComposeEnv = {
@@ -607,7 +634,13 @@ export async function deprovisionTenant(
       cleanupResults.posCompose = true;
     } catch (err) {
       log(
-        `[deprovision] POS stack teardown failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        JSON.stringify({
+          level: "warn",
+          event: "deprovision_pos_compose_down_failed",
+          project: posProject,
+          slug: row.slug,
+          message: err instanceof Error ? err.message : String(err),
+        }),
       );
     }
 
@@ -626,11 +659,19 @@ export async function deprovisionTenant(
       cleanupResults.pmsCompose = true;
     } catch (err) {
       log(
-        `[deprovision] PMS stack teardown failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        JSON.stringify({
+          level: "warn",
+          event: "deprovision_pms_compose_down_failed",
+          project: pmsProject,
+          slug: row.slug,
+          message: err instanceof Error ? err.message : String(err),
+        }),
       );
     }
-  } catch {
-    dockerStatus = "skipped";
+  } catch (err) {
+    throw err instanceof Error
+      ? err
+      : new Error(`[deprovision] finance compose down failed: ${String(err)}`);
   }
 
   // Clean up shared infrastructure AFTER containers are down

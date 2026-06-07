@@ -47,6 +47,7 @@ import {
   applyTenantLicenseSuspend,
 } from "../tenant-license-lifecycle.js";
 import { subscribeProvision } from "../provision-bus.js";
+import { assertCorrelationJobAccess } from "./provision-correlation-auth.js";
 import {
   createProvisionTracer,
   rowToProvisionPayload,
@@ -785,6 +786,7 @@ app.delete("/tenants/:tenantId", async (c) => {
     await insertTenantJob(db, {
       type: "tenant.deprovision",
       tenantId: childTenant.id,
+      maxAttempts: 3,
       payload: {
         tenantId: childTenant.id,
         removeVolumes: true,
@@ -822,6 +824,7 @@ app.delete("/tenants/:tenantId", async (c) => {
   const job = await insertTenantJob(db, {
     type: "tenant.deprovision",
     tenantId: parsed.data,
+    maxAttempts: 3,
     payload: {
       tenantId: parsed.data,
       removeVolumes,
@@ -1030,23 +1033,32 @@ app.post("/tenants", async (c) => {
 app.post("/tenants/provision-stop/:correlationId", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
   const correlationId = c.req.param("correlationId");
-  const [job] = await db
-    .select({
-      id: tenantLifecycleJobs.id,
-      type: tenantLifecycleJobs.type,
-      status: tenantLifecycleJobs.status,
-      attempts: tenantLifecycleJobs.attempts,
-      maxAttempts: tenantLifecycleJobs.maxAttempts,
-      tenantId: tenantLifecycleJobs.tenantId,
-    })
-    .from(tenantLifecycleJobs)
-    .where(eq(tenantLifecycleJobs.correlationId, correlationId))
-    .orderBy(desc(tenantLifecycleJobs.createdAt))
-    .limit(1);
-
-  if (!job || job.type !== "tenant.provision") {
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+  const access = await assertCorrelationJobAccess(
+    db,
+    correlationId,
+    actorId,
+    actorRole,
+    actorPermissions,
+  );
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
+  }
+  const job = access.job;
+  if (job.type !== "tenant.provision") {
     return c.json({ error: "provision_job_not_found" }, 404);
   }
+
+  await logAudit(db, {
+    actorId,
+    action: "tenant.provision_stop",
+    targetTenantId: job.tenantId ?? undefined,
+    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    userAgent: c.req.header("user-agent") ?? null,
+    metadata: { correlationId, jobId: job.id },
+  });
 
   const trace = createProvisionTracer(
     db,
@@ -1094,38 +1106,19 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
     await db
       .update(tenantLifecycleJobs)
       .set({
-        status: "dead",
-        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        cancelRequestedAt: new Date(),
         lastError: sql`'cancelled_by_user'`,
-        claimedAt: null,
-        claimedBy: null,
         updatedAt: new Date(),
       })
       .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "running")));
-    await trace.event("cancel", "Provision stop requested; worker will abort at next checkpoint", {
+    await trace.event("provision_cancelled", "Provision stop requested; worker will abort at next checkpoint", {
       level: "warn",
-      meta: { status: "running" },
+      meta: { status: "running", jobId: job.id },
     }).catch((error) => {
       logger.error("provision-stop trace write failed", error);
     });
-    if (job.tenantId) {
-      await db
-        .update(tenantDeployments)
-        .set({
-          status: "failed",
-          lastError: sql`'cancelled_by_user'`,
-          updatedAt: new Date(),
-        })
-        .where(eq(tenantDeployments.tenantId, job.tenantId));
-      await insertTenantJob(db, {
-        type: "tenant.deprovision",
-        tenantId: job.tenantId,
-        payload: { tenantId: job.tenantId, removeVolumes: true, removeImages: true },
-        priority: 10,
-      });
-    }
     purgeProvisionCaches([correlationId]);
-    return c.json({ ok: true, status: "cancelled", correlationId });
+    return c.json({ ok: true, status: "cancelling", correlationId });
   }
 
   return c.json({ ok: true, status: job.status, correlationId });
@@ -1252,38 +1245,21 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
     await db
       .update(tenantLifecycleJobs)
       .set({
-        status: "dead",
-        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        cancelRequestedAt: new Date(),
         lastError: sql`'cancelled_by_user'`,
-        claimedAt: null,
-        claimedBy: null,
         updatedAt: new Date(),
       })
       .where(and(eq(tenantLifecycleJobs.id, job.id), eq(tenantLifecycleJobs.status, "running")));
     await trace
-      .event("cancel", "Provision stop requested; worker will abort at next checkpoint", {
+      .event("provision_cancelled", "Provision stop requested; worker will abort at next checkpoint", {
         level: "warn",
         meta: { status: "running", tenantId: parsed.data },
       })
       .catch((error) => {
         logger.error("tenant-provision-stop trace write failed", error);
       });
-    await db
-      .update(tenantDeployments)
-      .set({
-        status: "failed",
-        lastError: sql`'cancelled_by_user'`,
-        updatedAt: new Date(),
-      })
-      .where(eq(tenantDeployments.tenantId, parsed.data));
-    await insertTenantJob(db, {
-      type: "tenant.deprovision",
-      tenantId: parsed.data,
-      payload: { tenantId: parsed.data, removeVolumes: true, removeImages: true },
-      priority: 10,
-    });
     purgeProvisionCaches([correlationId]);
-    return c.json({ ok: true, status: "cancelled", correlationId });
+    return c.json({ ok: true, status: "cancelling", correlationId });
   }
 
   return c.json({ ok: true, status: job.status, correlationId });
@@ -1294,6 +1270,19 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
   const correlationId = c.req.param("correlationId");
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+  const access = await assertCorrelationJobAccess(
+    db,
+    correlationId,
+    actorId,
+    actorRole,
+    actorPermissions,
+  );
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
+  }
   const dbClient = db;
   const jobs = await listTenantJobs(dbClient, correlationId);
   const lastJob = jobs[jobs.length - 1] ?? null;
@@ -1542,6 +1531,19 @@ app.get("/tenants/provision-stream/:correlationId", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
   const correlationId = c.req.param("correlationId");
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+  const access = await assertCorrelationJobAccess(
+    db,
+    correlationId,
+    actorId,
+    actorRole,
+    actorPermissions,
+  );
+  if (!access.ok) {
+    return c.json({ error: access.error }, access.status);
+  }
   const dbClient = db;
   const jobs = await listTenantJobs(dbClient, correlationId);
   const anyRow = await db
@@ -2062,6 +2064,7 @@ app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
     await insertTenantJob(db, {
       type: "tenant.deprovision",
       tenantId: childTenant.id,
+      maxAttempts: 3,
       payload: {
         tenantId: childTenant.id,
         removeVolumes,

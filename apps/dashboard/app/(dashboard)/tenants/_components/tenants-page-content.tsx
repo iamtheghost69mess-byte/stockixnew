@@ -183,16 +183,15 @@ export function TenantsPageContent() {
           throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
         }
         setDeleteProgressMessage("Removal queued. Finishing up…");
-        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.tenantId === tenantId ? { ...t, tenantStatus: "deprovisioning" } : t,
+          ),
+        );
         setTenantAccess(null);
         setOneTimePassword(null);
-        toast.success(
-          data.hardDeleted
-            ? `Tenant "${slug}" deleted.`
-            : `Tenant "${slug}" removal started. Docker cleanup may take up to a minute.`,
-        );
+        toast.success(`Tenant "${slug}" removal started. Cleanup may take up to a minute.`);
         void load().catch(() => {});
-        await new Promise((r) => setTimeout(r, 600));
       } catch (e) {
         const message = String(e);
         if (message.includes("tenant_not_found")) {
@@ -325,6 +324,17 @@ export function TenantsPageContent() {
   useEffect(() => {
     load().catch((e) => setError(String(e)));
   }, [load]);
+
+  useEffect(() => {
+    const hasDeprovisioning = tenants.some(
+      (t) => (t.tenantStatus ?? "").toLowerCase() === "deprovisioning",
+    );
+    if (!hasDeprovisioning) return;
+    const interval = window.setInterval(() => {
+      load().catch((e) => setError(String(e)));
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, [tenants, load]);
 
   useEffect(() => {
     if (searchParams.get("provision") !== "1") return;

@@ -1,0 +1,68 @@
+{
+  "title": "Stockix Overview",
+  "uid": "stockix-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "API request rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(stockix_api_request_total[5m])",
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "API p99 latency (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(stockix_api_request_latency_ms_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Worker job queue depth",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "stockix_worker_job_pending_total",
+          "legendFormat": "pending"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Active tenants",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "stockix_active_tenants_total",
+          "legendFormat": "tenants"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Provision job success/failure rate",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(stockix_worker_job_success_total[5m])",
+          "legendFormat": "success/s"
+        },
+        {
+          "expr": "rate(stockix_worker_job_failure_total[5m])",
+          "legendFormat": "failure/s"
+        }
+      ]
+    }
+  ]
+}

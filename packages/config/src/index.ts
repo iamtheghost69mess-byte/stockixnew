@@ -532,6 +532,10 @@ export const apiConfig = {
       if (!env.WORKER_SECRET || env.WORKER_SECRET === "dev-worker-secret") {
         throw new Error("[config] WORKER_SECRET must be set in production");
       }
+      const platformSecret = env.PLATFORM_API_SECRET?.trim();
+      if (!platformSecret || platformSecret === "__MUST_OVERRIDE__") {
+        throw new Error("[config] PLATFORM_API_SECRET must be set in production");
+      }
       const redisPassword = env.TENANT_REDIS_PASSWORD?.trim();
       if (!redisPassword || redisPassword === "__MUST_OVERRIDE__") {
         throw new Error("[config] TENANT_REDIS_PASSWORD must be set in production");

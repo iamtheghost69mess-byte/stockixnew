@@ -60,7 +60,7 @@ import {
   assertNoConcurrentTenantLifecycleJob,
   withTenantLifecycleAdvisoryLock,
 } from "../domain/provisioning/provision-lock.js";
-import { composeDownBestEffort } from "../domain/provisioning/tenant-docker-workflow.js";
+import { composeDownBestEffort, runDockerExec } from "../domain/provisioning/tenant-docker-workflow.js";
 import { TENANT_SERVER_UP_COMPOSE_ARGS } from "../domain/provisioning/tenant-server-compose-args.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
 import { provisionChatwootAccount } from "./chatwoot-provision.js";
@@ -71,6 +71,7 @@ import {
   shouldProvisionFinanceStack,
   provisionPmsStack,
   provisionPosStackTracked,
+  resolvePosTenantEnvPath,
   resolveTenantModules,
 } from "./module-stacks.js";
 
@@ -173,6 +174,34 @@ async function runPosProvisionStep(params: {
         posOrganizationId,
         posUrl,
         posApiUrl,
+        afterBackendHealthy: async () => {
+          if (params.hasOp?.("pos.schema_migration")) {
+            params.log("[provision][pos] Skipping schema migration (already journaled)");
+            return;
+          }
+          const { repoRoot } = getTenantStackPaths();
+          const composeFile = join(repoRoot, "infra", "pos-tenant-stack", "docker-compose.yml");
+          const project = `stockix-pos-${params.slug}`;
+          const envPath = resolvePosTenantEnvPath(params.slug);
+          const tenantEnv = await readTenantEnvFile(params.slug);
+          params.log("[provision] step start: pos.schema_migration");
+          await runDockerExec({
+            composeFile,
+            project,
+            envPath,
+            composeEnv: {
+              ...process.env,
+              ...tenantEnv,
+              COMPOSE_PROJECT_NAME: project,
+            } as Record<string, string>,
+            service: "pos-backend",
+            command: ["npm", "run", "migrate:schema"],
+            timeoutMs: 60_000,
+            log: params.log,
+          });
+          await params.markOp?.("pos.schema_migration", "POS Mongo schema migrations applied");
+          params.log("[provision] step done: pos.schema_migration");
+        },
       },
       params.trace,
     );
@@ -393,6 +422,8 @@ export async function rollbackProvision(
   const log = options.log ?? (() => undefined);
   const trimmedReason = reason.slice(0, 4000);
 
+  // Keep the Postgres tenant row in `failed` status as the ops handle when rollback
+  // cleanup is incomplete — never delete tenant rows from rollbackProvision().
   await db
     .update(tenants)
     .set({ status: "failed" })
@@ -415,10 +446,11 @@ export async function rollbackProvision(
       );
     });
 
+  const jobTerminalStatus = trimmedReason.startsWith("cancelled_by_user") ? "cancelled" : "failed";
   await db
     .update(tenantLifecycleJobs)
     .set({
-      status: "failed",
+      status: jobTerminalStatus,
       lastError: trimmedReason,
       completedAt: new Date(),
       updatedAt: new Date(),
@@ -503,16 +535,47 @@ export async function rollbackProvision(
   }
 
   const journalState = await loadProvisionJournalState(db, correlationId);
+  if (journalState.completedOps.has("pos.schema_migration")) {
+    log("[rollback] pos.schema_migration completed — POS compose down + Mongo deprovision will revert schema state");
+  }
   if (rollbackSlug && journalState.completedOps.has("docker.data_step")) {
-    // Hard rollback: tear down shared DB resources if data step completed
-    // Non-fatal — orphaned resources logged for operator cleanup
-    try {
-      await deprovisionTenantDatabases(rollbackSlug, log);
+    const cleanupResult = await deprovisionTenantDatabases(rollbackSlug, log);
+    const cleanupComplete =
+      cleanupResult.mysqlDbs && cleanupResult.mongoDb && cleanupResult.redisKeys;
+    if (cleanupComplete) {
       log(`[rollback] shared DB teardown completed for slug=${rollbackSlug}`);
-    } catch (err) {
+    } else {
       log(
-        `[rollback] shared DB teardown warning: ${err instanceof Error ? err.message : String(err)}`,
+        JSON.stringify({
+          level: "warn",
+          event: "rollback_incomplete",
+          cleanupResult,
+          slug: rollbackSlug,
+          reason: trimmedReason,
+        }),
       );
+      await db
+        .insert(tenantProvisionEvents)
+        .values({
+          correlationId,
+          tenantId,
+          phase: "rollback",
+          level: "warn",
+          message: "rollback_incomplete",
+          meta: {
+            operationKey: "rollback_incomplete",
+            cleanupResult,
+            slug: rollbackSlug,
+            reason: trimmedReason,
+          },
+        })
+        .catch((error) => {
+          log(
+            `[rollback] rollback_incomplete event insert failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        });
     }
   }
 

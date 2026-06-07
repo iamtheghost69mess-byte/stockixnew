@@ -13,7 +13,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // Bundle jose (not hoisted to repo root). nodemailer stays external — listed in root package.json for worker runtime.
-  noExternal: [/^@repo\//, "jose", /^@repo\/platform-worker-shared/],
+  noExternal: [/^@repo\//, "jose", "prom-client", /^@repo\/platform-worker-shared/],
   esbuildOptions(options) {
     options.alias = {
       "@repo/config/public": path.resolve(

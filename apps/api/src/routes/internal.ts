@@ -314,6 +314,7 @@ app.get("/internal/jobs/:jobId/cancel-check", async (c) => {
       id: tenantLifecycleJobs.id,
       status: tenantLifecycleJobs.status,
       lastError: tenantLifecycleJobs.lastError,
+      cancelRequestedAt: tenantLifecycleJobs.cancelRequestedAt,
     })
     .from(tenantLifecycleJobs)
     .where(eq(tenantLifecycleJobs.id, jobId))
@@ -321,20 +322,11 @@ app.get("/internal/jobs/:jobId/cancel-check", async (c) => {
   if (!job) {
     return c.json({ cancelled: true, reason: "job_not_found" });
   }
-  if (job.status !== "running") {
+  if (job.status === "cancelled" || job.status === "dead" || job.status === "completed") {
     return c.json({ cancelled: true, reason: `status=${job.status}` });
   }
-  const lastErrorMessage =
-    typeof job.lastError === "string"
-      ? job.lastError
-      : (job.lastError &&
-          typeof job.lastError === "object" &&
-          "message" in job.lastError &&
-          typeof (job.lastError as { message?: unknown }).message === "string")
-        ? String((job.lastError as { message: string }).message)
-        : "";
-  if (lastErrorMessage === "cancel_requested_by_user") {
-    return c.json({ cancelled: true, reason: "cancel_requested_by_user" });
+  if (job.status === "running" && job.cancelRequestedAt) {
+    return c.json({ cancelled: true, reason: "cancel_requested" });
   }
   return c.json({ cancelled: false });
 });
@@ -1132,6 +1124,7 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
   const claimToken = String((body as { claimToken?: unknown }).claimToken ?? "").trim();
   const errorMessage = String((body as { error?: unknown }).error ?? "job_failed").slice(0, 4000);
   const noRetry = (body as { noRetry?: unknown }).noRetry === true;
+  const cancelled = (body as { cancelled?: unknown }).cancelled === true;
   const requestId = c.get("requestId");
   const [updated] = await db.transaction(async (tx) => {
     const [job] = await tx
@@ -1155,18 +1148,20 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
     }
     const nextAttempts = (job.attempts ?? 0) + 1;
     const maxAttempts = job.maxAttempts ?? 5;
-    const exhausted = noRetry || nextAttempts >= maxAttempts;
+    const exhausted = cancelled || noRetry || nextAttempts >= maxAttempts;
     const retryDelayMs = Math.min(60_000, 2 ** Math.max(0, nextAttempts - 1) * 1000);
+    const terminalStatus = cancelled ? "cancelled" : exhausted ? "dead" : "pending";
     const [next] = await tx
       .update(tenantLifecycleJobs)
       .set({
-        status: exhausted ? "dead" : "pending",
+        status: terminalStatus,
         attempts: nextAttempts,
         lastError: sql`${errorMessage}`,
         runAt: exhausted ? new Date() : new Date(Date.now() + retryDelayMs),
         claimedAt: null,
         claimedBy: null,
         claimToken: null,
+        cancelRequestedAt: null,
         completedAt: exhausted ? new Date() : null,
         updatedAt: new Date(),
       })
@@ -1183,16 +1178,24 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
   if (updated) {
     const attempts = Number(updated.attempts ?? 0);
     const maxAttempts = Number(updated.maxAttempts ?? 0);
-    const exhausted = updated.status === "dead";
-    await emitMetric(exhausted ? "worker.job.dead" : "worker.job.retry", 1, {
-      requestId,
-      jobId: updated.id,
-      jobType: updated.type,
-      attempts,
-      maxAttempts,
-      noRetry: noRetry ? 1 : 0,
-    });
-    emitInternalJobAudit(c, exhausted ? "job.dead" : "job.retry_scheduled", {
+    const exhausted = updated.status === "dead" || updated.status === "cancelled";
+    await emitMetric(
+      updated.status === "cancelled"
+        ? "worker.job.cancelled"
+        : exhausted
+          ? "worker.job.dead"
+          : "worker.job.retry",
+      1,
+      {
+        requestId,
+        jobId: updated.id,
+        jobType: updated.type,
+        attempts,
+        maxAttempts,
+        noRetry: noRetry ? 1 : 0,
+      },
+    );
+    emitInternalJobAudit(c, updated.status === "cancelled" ? "job.cancelled" : exhausted ? "job.dead" : "job.retry_scheduled", {
       jobId: updated.id,
       status: updated.status,
       attempts,
