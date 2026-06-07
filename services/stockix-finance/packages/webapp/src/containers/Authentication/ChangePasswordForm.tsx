@@ -5,7 +5,7 @@ import { Form } from 'formik';
 import { FFormGroup, FInputGroup, FormattedMessage as T } from '@/components';
 import { AuthSubmitButton } from './_components';
 
-export default function ChangePasswordForm({ isSubmitting, isRequired }) {
+export default function ChangePasswordForm({ isSubmitting, isRequired, completed }) {
   return (
     <Form>
       <FFormGroup name={'password'} label={<T id={'new_password'} />}>
@@ -20,10 +20,15 @@ export default function ChangePasswordForm({ isSubmitting, isRequired }) {
         fill={true}
         intent={Intent.PRIMARY}
         type="submit"
-        loading={isSubmitting}
+        loading={isSubmitting || completed}
+        disabled={completed}
         large={true}
       >
-        <T id={'submit'} />
+        {isRequired ? (
+          <T id={'change_password_save_and_continue'} />
+        ) : (
+          <T id={'submit'} />
+        )}
       </AuthSubmitButton>
     </Form>
   );

@@ -1,14 +1,14 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useState } from 'react';
 import intl from 'react-intl-universal';
 import { Formik } from 'formik';
 import { Intent, Position } from '@blueprintjs/core';
-import { useHistory, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 import { AppToaster, FormattedMessage as T } from '@/components';
 import { useAuthChangePassword } from '@/hooks/query';
 import AuthInsider from '@/containers/Authentication/AuthInsider';
-import { removeCookie } from '@/utils';
+import { clearMustChangePasswordCookie } from '@/utils';
 import { AuthInsiderCard } from './_components';
 import ChangePasswordForm from './ChangePasswordForm';
 import { ResetPasswordSchema } from './utils';
@@ -22,24 +22,40 @@ const initialValues = {
  * Required password change after bootstrap / provisioned login.
  */
 export default function ChangePassword() {
-  const history = useHistory();
   const location = useLocation();
   const { mutateAsync: changePasswordMutate } = useAuthChangePassword();
+  const [completed, setCompleted] = useState(false);
   const isRequired = new URLSearchParams(location.search).get('required') === 'true';
 
-  const handleSubmit = (values, { setSubmitting }) => {
+  const handleSubmit = (values, { setSubmitting, resetForm }) => {
+    if (completed) {
+      return;
+    }
+
     changePasswordMutate({ password: values.password })
       .then(() => {
-        removeCookie('must_change_password');
+        clearMustChangePasswordCookie();
+        setCompleted(true);
+        resetForm();
         AppToaster.show({
           message: intl.get('password_successfully_updated'),
           intent: Intent.SUCCESS,
           position: Position.BOTTOM,
         });
-        history.push('/');
-        setSubmitting(false);
+        // Hard navigation clears stale router/guard state after bootstrap login.
+        window.setTimeout(() => {
+          window.location.replace('/');
+        }, 400);
       })
-      .catch(() => {
+      .catch((error) => {
+        const message =
+          error?.response?.data?.message
+          || intl.get('an_unexpected_error_occurred');
+        AppToaster.show({
+          message,
+          intent: Intent.DANGER,
+          position: Position.BOTTOM,
+        });
         setSubmitting(false);
       });
   };
@@ -47,11 +63,18 @@ export default function ChangePassword() {
   return (
     <AuthInsider>
       <AuthInsiderCard>
-        <p style={{ marginBottom: '1rem' }}>
+        <h2 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>
           {isRequired ? (
-            'You must set a new password before continuing.'
+            <T id={'change_password_required_title'} />
           ) : (
+            <T id={'choose_a_new_password'} />
+          )}
+        </h2>
+        <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted, #8a9ba8)' }}>
+          {isRequired ? (
             <T id={'change_password_required_hint'} />
+          ) : (
+            <T id={'choose_a_new_password'} />
           )}
         </p>
         <Formik
@@ -60,6 +83,7 @@ export default function ChangePassword() {
           onSubmit={handleSubmit}
           component={ChangePasswordForm}
           isRequired={isRequired}
+          completed={completed}
         />
       </AuthInsiderCard>
     </AuthInsider>

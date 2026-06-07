@@ -35,9 +35,12 @@ export function useCurrentOrganization(props) {
 
   return useRequestQuery(
     [t.ORGANIZATION_CURRENT],
-    { method: 'get', url: `organization` },
+    // ORIGINAL: { method: 'get', url: `organization` },
+    { method: 'get', url: `organization/current` },
     {
-      select: (res) => res.data.organization,
+      // Nest returns the org at the root; legacy Express wrapped it as { organization }.
+      // ORIGINAL: select: (res) => res.data.organization,
+      select: (res) => res.data?.organization ?? res.data,
       defaultData: {},
       onSuccess: (data) => {
         const organization = omit(data, ['subscriptions']);
@@ -95,7 +98,8 @@ export function useUpdateOrganization(props) {
 export function useOrgBaseCurrencyMutateAbilities(props) {
   return useRequestQuery(
     [t.ORGANIZATION_MUTATE_BASE_CURRENCY_ABILITIES],
-    { method: 'get', url: `organization/base_currency_mutate` },
+    // ORIGINAL: url: `organization/base_currency_mutate`,
+    { method: 'get', url: `organization/base-currency-mutate` },
     {
       select: (res) => res.data.abilities,
       defaultData: [],

@@ -77,6 +77,6 @@ export class AuthedController {
   @ApiBody({ type: AuthChangePasswordDto })
   async changePassword(@Body() body: AuthChangePasswordDto) {
     await this.authApp.changePassword(body.password);
-    return { success: true };
+    return { success: true, must_change_password: false };
   }
 }

@@ -6,6 +6,7 @@ import {
   isFinanceWebappBuilt,
   FINANCE_WEBAPP_INDEX,
   isFinanceWebappApiPath,
+  isFinanceWebappStaticAssetPath,
 } from './finance-webapp.constants';
 
 /**
@@ -30,6 +31,10 @@ export class FinanceWebappSpaController {
       return;
     }
     if (isFinanceWebappApiPath(req.path)) {
+      next();
+      return;
+    }
+    if (isFinanceWebappStaticAssetPath(req.path)) {
       next();
       return;
     }

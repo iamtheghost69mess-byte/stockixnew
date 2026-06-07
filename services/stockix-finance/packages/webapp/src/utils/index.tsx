@@ -27,6 +27,13 @@ export const removeCookie = (name) => {
   return jsCookie.remove(name, { path: '/' });
 };
 
+/** Clears the bootstrap must-change-password gate (cookie + legacy variants). */
+export const clearMustChangePasswordCookie = () => {
+  removeCookie('must_change_password');
+  jsCookie.remove('must_change_password', { path: '/', secure: false });
+  jsCookie.remove('must_change_password', { path: '/', secure: true });
+};
+
 export function removeEmptyFromObject(obj) {
   obj = Object.assign({}, obj);
   var keys = Object.keys(obj);
