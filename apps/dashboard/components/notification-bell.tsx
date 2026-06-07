@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -15,6 +15,10 @@ import {
 
 import { toast } from "@/components/reusabletoast";
 import { clientGet, clientPost } from "@/lib/client-fetch";
+import {
+  subscribeOwnerNotificationStream,
+  type StreamNotification,
+} from "@/lib/notification-stream-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,19 +32,7 @@ import { cn } from "@/lib/utils";
 
 type NotificationSeverity = "info" | "success" | "warning" | "error";
 
-type Notification = {
-  id: string;
-  type: string;
-  severity: NotificationSeverity;
-  title: string;
-  body: string;
-  tenantId?: string | null;
-  actionUrl?: string | null;
-  actionLabel?: string | null;
-  readAt: string | null;
-  createdAt: string;
-  meta?: Record<string, unknown> | null;
-};
+type Notification = StreamNotification;
 
 type NotificationsListResponse = {
   success?: boolean;
@@ -193,8 +185,13 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
-  const esRef = useRef<EventSource | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const mergeNotification = useCallback((notification: Notification): void => {
+    setNotifications((prev) => {
+      if (prev.some((n) => n.id === notification.id)) return prev;
+      return [notification, ...prev].slice(0, LIST_LIMIT);
+    });
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -221,80 +218,19 @@ export function NotificationBell() {
     if (open) void fetchNotifications();
   }, [open, fetchNotifications]);
 
-  const connectSSE = useCallback(() => {
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-    }
-
-    const es = new EventSource("/api/notifications/stream");
-    esRef.current = es;
-
-    const mergeNotification = (notification: Notification): void => {
-      setNotifications((prev) => {
-        if (prev.some((n) => n.id === notification.id)) return prev;
-        return [notification, ...prev].slice(0, LIST_LIMIT);
-      });
-    };
-
-    const onConnected = (ev: MessageEvent) => {
-      try {
-        const data = JSON.parse(String(ev.data)) as { unread?: number };
-        if (typeof data.unread === "number") setUnreadCount(data.unread);
-      } catch {
-        /* ignore */
-      }
-    };
-
-    /** Inbox catch-up on connect/reconnect — sync bell only, never Sonner. */
-    const onPrime = (ev: MessageEvent) => {
-      try {
-        mergeNotification(JSON.parse(String(ev.data)) as Notification);
-      } catch {
-        /* ignore */
-      }
-    };
-
-    /** Live event after connect — update bell and show bottom-right toast. */
-    const onNotification = (ev: MessageEvent) => {
-      let notification: Notification;
-      try {
-        notification = JSON.parse(String(ev.data)) as Notification;
-      } catch {
-        return;
-      }
-
-      mergeNotification(notification);
-      setUnreadCount((prev) => prev + 1);
-      showNotificationToast(notification, (url) => router.push(url));
-    };
-
-    es.addEventListener("connected", onConnected);
-    es.addEventListener("prime", onPrime);
-    es.addEventListener("notification", onNotification);
-    es.addEventListener("ping", () => {
-      /* keep-alive */
-    });
-
-    es.onerror = () => {
-      es.close();
-      esRef.current = null;
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = setTimeout(() => {
-        connectSSE();
-        void fetchNotifications();
-      }, 5000);
-    };
-  }, [fetchNotifications, router]);
-
   useEffect(() => {
-    connectSSE();
-    return () => {
-      esRef.current?.close();
-      esRef.current = null;
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-    };
-  }, [connectSSE]);
+    return subscribeOwnerNotificationStream({
+      onConnected: (unread) => {
+        if (typeof unread === "number") setUnreadCount(unread);
+      },
+      onPrime: mergeNotification,
+      onLive: (notification) => {
+        mergeNotification(notification);
+        setUnreadCount((prev) => prev + 1);
+        showNotificationToast(notification, (url) => router.push(url));
+      },
+    });
+  }, [mergeNotification, router]);
 
   const handleMarkRead = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();

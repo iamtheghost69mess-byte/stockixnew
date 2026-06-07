@@ -123,13 +123,14 @@ export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void
       }
 
       const unread = await getUnreadCount(db, ownerId);
+      const liveAfter = new Date().toISOString();
       await stream.writeSSE({
         event: "connected",
-        data: JSON.stringify({ unread }),
+        data: JSON.stringify({ unread, liveAfter }),
       });
 
       let lastPingAt = 0;
-      const streamStartedAt = new Date(Date.now() - 1000);
+      const streamStartedAt = new Date();
 
       const emitIfNew = async (payload: unknown) => {
         if (closed) return;

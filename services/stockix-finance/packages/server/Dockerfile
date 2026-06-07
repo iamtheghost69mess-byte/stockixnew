@@ -15,9 +15,18 @@ ENV PUPPETEER_SKIP_DOWNLOAD=1
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json .npmrc ./
 COPY --chown=node:node packages/server/package.json ./packages/server/
+COPY --chown=node:node packages/webapp/package.json ./packages/webapp/
 COPY --chown=node:node shared ./shared
 
 RUN pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Finance webapp (Vite) — served by NestJS with SPA fallback at runtime.
+# -----------------------------------------------------------------------------
+FROM deps AS build-webapp
+COPY --chown=node:node ./packages/webapp ./packages/webapp
+RUN pnpm --filter @stockix/utils run build \
+  && pnpm --filter @stockix/webapp run build
 
 # -----------------------------------------------------------------------------
 # Migration image: only the CLI webpack bundle (`commands.js`).
@@ -50,5 +59,6 @@ RUN pnpm run build:server --skip-nx-cache \
   && find build/database/tenant/migrations -name '*.ts' -delete
 
 FROM build-app AS app
+COPY --from=build-webapp /app/packages/webapp/dist ./packages/server/webapp-dist
 # Plain node boot (~200MB). ts-node loads lazily during tenant seed only (ensure-seed-ts-runtime.ts).
 CMD [ "node", "./packages/server/build/index.js" ]

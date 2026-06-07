@@ -9,7 +9,7 @@
 #   MongoDB → stockix-mongo:27017  DB: {slug}_pos
 #   Redis  → stockix-redis:6379   key prefix: tenant:{slug}:
 #
-# Finance UI is served by the NestJS server via ServeStaticModule (/public).
+# Finance UI is bundled into the server image (Vite dist → webapp-dist) with SPA fallback.
 #
 # Traefik terminates TLS. Tenant subdomain: {slug}.stockix.cloud
 
