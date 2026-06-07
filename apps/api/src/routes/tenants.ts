@@ -394,6 +394,10 @@ app.get("/tenants", async (c) => {
       );
     } else if (statusFilter === "partial") {
       conditions.push(eq(tenants.status, "partial"));
+    } else if (statusFilter === "failed") {
+      conditions.push(
+        or(eq(tenantDeployments.status, "failed"), eq(tenants.status, "failed"))!,
+      );
     } else {
       conditions.push(eq(tenantDeployments.status, statusFilter));
     }
@@ -484,7 +488,12 @@ app.get("/tenants", async (c) => {
         .select({ c: count() })
         .from(tenants)
         .leftJoin(tenantDeployments, dirJoin)
-        .where(and(childOrgFilter, eq(tenantDeployments.status, "failed"))),
+        .where(
+          and(
+            childOrgFilter,
+            or(eq(tenantDeployments.status, "failed"), eq(tenants.status, "failed"))!,
+          ),
+        ),
       db
         .select({ c: count() })
         .from(tenants)
@@ -595,6 +604,12 @@ app.get("/tenants/export.csv", async (c) => {
     if (statusFilter === "provisioning") {
       conditions.push(
         or(eq(tenantDeployments.status, "provisioning"), eq(tenantDeployments.status, "pending"))!,
+      );
+    } else if (statusFilter === "partial") {
+      conditions.push(eq(tenants.status, "partial"));
+    } else if (statusFilter === "failed") {
+      conditions.push(
+        or(eq(tenantDeployments.status, "failed"), eq(tenants.status, "failed"))!,
       );
     } else {
       conditions.push(eq(tenantDeployments.status, statusFilter));
@@ -709,6 +724,31 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Tenant already deleted.",
     }, 200);
   }
+  if (target.tenantStatus === "deprovisioning") {
+    const [existingJob] = await db
+      .select({ id: tenantLifecycleJobs.id })
+      .from(tenantLifecycleJobs)
+      .where(
+        and(
+          eq(tenantLifecycleJobs.tenantId, parsed.data),
+          eq(tenantLifecycleJobs.type, "tenant.deprovision"),
+          or(
+            eq(tenantLifecycleJobs.status, "pending"),
+            eq(tenantLifecycleJobs.status, "running"),
+          ),
+        ),
+      )
+      .orderBy(desc(tenantLifecycleJobs.createdAt))
+      .limit(1);
+    return c.json({
+      accepted: true,
+      deleted: true,
+      alreadyQueued: true,
+      slug: target.slug,
+      jobId: existingJob?.id ?? null,
+      message: "Tenant deprovision is already in progress.",
+    }, 202);
+  }
   // Never run Docker or compose in the API process — always queue tenant.deprovision for the worker.
   // Deprovision child org stacks (separate tenants rows, slug = org.slug) before parent.
   // Jobs are async; we only enqueue here — parent deprovision is still queued immediately after.
@@ -820,6 +860,14 @@ app.delete("/tenants/:tenantId", async (c) => {
       slug: target.slug,
     },
   });
+  await db
+    .update(tenants)
+    .set({ status: "deprovisioning" })
+    .where(eq(tenants.id, parsed.data));
+  await db
+    .update(tenantDeployments)
+    .set({ status: "deprovisioning", updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, parsed.data));
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.delete",

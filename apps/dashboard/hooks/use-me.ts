@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useState } from "react";
-import { permissionsForRoleSlug } from "@repo/shared/permissions";
+import { capabilitiesFromPermissions, permissionsForRoleSlug } from "@repo/shared/permissions";
 
 import { MeContext } from "@/components/me-provider";
 
@@ -36,7 +36,11 @@ function normalizeMe(raw: Me): Me {
     raw.permissions && raw.permissions.length > 0
       ? raw.permissions
       : [...permissionsForRoleSlug(raw.role)];
-  return { ...raw, permissions };
+  return {
+    ...raw,
+    permissions,
+    capabilities: capabilitiesFromPermissions(permissions),
+  };
 }
 
 function isValidMe(raw: Me | undefined): raw is Me {
