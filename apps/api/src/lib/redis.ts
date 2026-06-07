@@ -35,3 +35,33 @@ export function getControlPlaneRedisClient(): Redis | null {
   }
   return controlPlaneRedis;
 }
+
+/** Block startup until control-plane Redis responds to PING (production hard-fail). */
+export async function ensureControlPlaneRedisReady(timeoutMs = 10_000): Promise<void> {
+  const url = apiConfig.controlPlaneRedisUrl;
+  if (!url) {
+    throw new Error("CONTROL_PLANE_REDIS_URL is not configured");
+  }
+  const client = getControlPlaneRedisClient();
+  if (!client) {
+    throw new Error("Control plane Redis client failed to initialize");
+  }
+  const deadline = Date.now() + timeoutMs;
+  let lastError: Error | null = null;
+  while (Date.now() < deadline) {
+    try {
+      if (client.status === "wait") {
+        await client.connect();
+      }
+      const pong = await client.ping();
+      if (pong === "PONG") {
+        return;
+      }
+      lastError = new Error(`unexpected Redis PING response: ${pong}`);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw lastError ?? new Error("Control plane Redis not ready within timeout");
+}

@@ -2,6 +2,8 @@ import { EventEmitter } from "node:events";
 
 import type { Redis } from "ioredis";
 
+import { apiConfig } from "@repo/config";
+
 import type { ProvisionEventPayload } from "../provision-trace.js";
 import { getControlPlaneRedisClient } from "./redis.js";
 import { logger } from "./logger.js";
@@ -14,18 +16,39 @@ export function provisionChannel(correlationId: string): string {
   return `${CHANNEL_PREFIX}:${correlationId}`;
 }
 
+/** Production requires Redis pub/sub — dev/test may use in-process EventEmitter. */
+export function isProductionProvisionPubSub(): boolean {
+  return apiConfig.nodeEnv === "production";
+}
+
 export async function publishProvisionEvent(payload: ProvisionEventPayload): Promise<void> {
   const client = getControlPlaneRedisClient();
   if (!client) {
+    if (isProductionProvisionPubSub()) {
+      logger.error("Provision pub/sub requires CONTROL_PLANE_REDIS_URL in production", {
+        correlationId: payload.correlationId,
+        event: "provision_pubsub_redis_missing",
+      });
+      throw new Error("provision_pubsub_redis_unavailable");
+    }
     localBus.emit(provisionChannel(payload.correlationId), payload);
     return;
   }
   try {
     await client.publish(provisionChannel(payload.correlationId), JSON.stringify(payload));
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isProductionProvisionPubSub()) {
+      logger.error("Redis provision publish failed in production", {
+        correlationId: payload.correlationId,
+        err: message,
+        event: "provision_pubsub_publish_failed",
+      });
+      throw err instanceof Error ? err : new Error(message);
+    }
     logger.debug("Redis provision publish skipped", {
       correlationId: payload.correlationId,
-      err: err instanceof Error ? err.message : String(err),
+      err: message,
     });
     localBus.emit(provisionChannel(payload.correlationId), payload);
   }
@@ -38,6 +61,12 @@ export function subscribeProvisionEvents(
 ): () => void {
   const client = getControlPlaneRedisClient();
   if (!client) {
+    if (isProductionProvisionPubSub()) {
+      queueMicrotask(() => {
+        onError(new Error("provision_pubsub_redis_unavailable"));
+      });
+      return () => undefined;
+    }
     const channel = provisionChannel(correlationId);
     localBus.on(channel, onMessage);
     return () => {
