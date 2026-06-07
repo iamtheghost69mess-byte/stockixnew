@@ -106,7 +106,9 @@ export class TenantsManagerService {
 
     const seedContext = await this.getSeedMigrationContext();
 
-    ensureSeedTsRuntime();
+    if (process.env.NODE_ENV !== 'production') {
+      ensureSeedTsRuntime();
+    }
 
     // Seeds the organization database data.
     await new SeedMigration(this.tenantKnex(), seedContext).latest();

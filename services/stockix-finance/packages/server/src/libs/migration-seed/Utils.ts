@@ -1,6 +1,9 @@
 // @ts-nocheck
 import * as fs from 'fs';
 import * as path from 'path';
+import { createRequire } from 'module';
+
+const nativeRequire = createRequire(__filename);
 
 /**
  * Detarmines the module type of the given file path.
@@ -43,25 +46,20 @@ export async function importWebpackSeedModule(
   moduleName: string,
   seedsDirectory: string,
 ): any {
-  // Convert the seeds directory to a relative path from this file's location
-  const utilsDir = __dirname;
   const seedsDirAbsolute = path.isAbsolute(seedsDirectory)
     ? seedsDirectory
     : path.resolve(process.cwd(), seedsDirectory);
 
-  // Get relative path from Utils.js location to seeds directory
-  const relativePath = path.relative(utilsDir, seedsDirAbsolute);
+  const jsPath = path.join(seedsDirAbsolute, `${moduleName}.js`);
+  const tsPath = path.join(seedsDirAbsolute, `${moduleName}.ts`);
 
-  // Convert to forward slashes for import (works on all platforms)
-  const importPath = relativePath.split(path.sep).join('/');
-
-  // Construct the import path (add ./ prefix if not already present, or handle empty/current dir)
-  let finalPath = importPath;
-  if (!finalPath || finalPath === '.') {
-    finalPath = './';
-  } else if (!finalPath.startsWith('.')) {
-    finalPath = `./${finalPath}`;
+  if (fs.existsSync(jsPath)) {
+    return nativeRequire(jsPath);
   }
-
-  return import(`${finalPath}/${moduleName}`);
+  if (fs.existsSync(tsPath)) {
+    return nativeRequire(tsPath);
+  }
+  throw new Error(
+    `Cannot find seed module ${moduleName} in ${seedsDirAbsolute}`,
+  );
 }

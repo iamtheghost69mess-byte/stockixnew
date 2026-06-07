@@ -96,7 +96,12 @@ async function provisionAndAssert({
   slug,
   modules,
   requiredJournalOps,
-  optionalJournalOps = ["tenant.complete_setup_wizard", "tenant.fetch_org_settings"],
+  optionalJournalOps = [
+    "preflight.scrub",
+    "tenant.sync_finance_license_before_build",
+    "tenant.complete_setup_wizard",
+    "tenant.fetch_org_settings",
+  ],
   expectFinance = false,
   expectPos = false,
 }) {

@@ -44,7 +44,10 @@ COPY --chown=node:node ./packages/server ./packages/server
 RUN pnpm run build:server --skip-nx-cache \
   && mkdir -p packages/i18n \
   && cp -r packages/server/src/i18n/. packages/i18n/ \
-  && cd packages/server && node ./scripts/compile-tenant-migrations.mjs
+  && cd packages/server && node ./scripts/compile-tenant-migrations.mjs \
+  && mkdir -p build/database/tenant \
+  && cp -r src/database/tenant/migrations build/database/tenant/ \
+  && find build/database/tenant/migrations -name '*.ts' -delete
 
 FROM build-app AS app
 # Plain node boot (~200MB). ts-node loads lazily during tenant seed only (ensure-seed-ts-runtime.ts).
