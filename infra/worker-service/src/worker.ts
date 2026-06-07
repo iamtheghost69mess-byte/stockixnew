@@ -176,29 +176,35 @@ function isApiConnectionError(error: unknown): boolean {
 }
 
 async function waitForApiReady(): Promise<void> {
-  const healthUrl = `${apiBaseUrl}/health`;
+  const readyUrl = `${apiBaseUrl}/ready`;
   const started = Date.now();
+  let consecutiveOk = 0;
   logger.info(
     JSON.stringify({
       level: "info",
       type: "worker_waiting_for_api",
-      healthUrl,
+      readyUrl,
       maxWaitMs: apiReadyMaxWaitMs,
     }),
   );
   while (!shuttingDown && Date.now() - started < apiReadyMaxWaitMs) {
     try {
-      const res = await fetch(healthUrl, { signal: timeoutSignal(5_000) });
+      const res = await fetch(readyUrl, { signal: timeoutSignal(5_000) });
       if (res.ok) {
-        logger.info(JSON.stringify({ level: "info", type: "worker_api_ready", healthUrl }));
-        return;
+        consecutiveOk++;
+        if (consecutiveOk >= 2) {
+          logger.info(JSON.stringify({ level: "info", type: "worker_api_ready", readyUrl }));
+          return;
+        }
+      } else {
+        consecutiveOk = 0;
       }
     } catch {
-      // API still starting (tsx watch) or temporarily down
+      consecutiveOk = 0;
     }
     await new Promise((r) => setTimeout(r, 1_000));
   }
-  throw new Error(`api_not_ready:${healthUrl}`);
+  throw new Error(`api_not_ready:${readyUrl}`);
 }
 
 function logApiUnreachable(): void {

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findFreePort } from "./find-free-port.mjs";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
-import { waitForHttp } from "./wait-for-http.mjs";
+import { waitForControlPlaneReady, waitForHttp } from "./wait-for-http.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
@@ -24,9 +24,9 @@ const apiHealthUrl =
   "http://127.0.0.1:4000";
 
 try {
-  await waitForHttp(`${apiHealthUrl}/health`, {
-    timeoutMs: parseInt(process.env.STOCKIX_DEV_API_WAIT_MS || "120000", 10),
-    label: `API (${apiHealthUrl})`,
+  await waitForControlPlaneReady(apiHealthUrl, {
+    timeoutMs: parseInt(process.env.STOCKIX_DEV_API_WAIT_MS || "180000", 10),
+    label: `Dashboard → API (${apiHealthUrl})`,
   });
 } catch (error) {
   console.error(
@@ -87,3 +87,26 @@ const child = spawn(process.execPath, [nextBin, ...nextDevArgs], {
 });
 
 child.on("exit", (code) => process.exit(code ?? 0));
+
+void (async () => {
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    await waitForHttp(`${base}/login`, {
+      timeoutMs: parseInt(process.env.STOCKIX_DEV_DASHBOARD_WAIT_MS || "180000", 10),
+      label: `Dashboard (${base})`,
+      stableChecks: 1,
+    });
+    console.log("[dashboard] Warming routes (login, home)…");
+    for (const route of ["/login", "/"]) {
+      await fetch(`${base}${route}`).catch(() => undefined);
+    }
+    console.log("[dashboard] Warm-up complete");
+  } catch (error) {
+    console.warn(
+      `[dashboard] Warm-up skipped: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+})();
+
+process.on("SIGINT", () => child.kill("SIGINT"));
+process.on("SIGTERM", () => child.kill("SIGTERM"));

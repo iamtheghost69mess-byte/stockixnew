@@ -60,16 +60,21 @@ try {
 
 
 
+// Default: stable API (no --watch) so dashboard/worker are not racing a restarting process.
+// Opt in to hot reload: STOCKIX_DEV_API_WATCH=1 pnpm dev
+const watchApi = process.env.STOCKIX_DEV_API_WATCH === "1";
 const stableApi =
-  process.env.STOCKIX_DEV_STABLE_API === "1" || process.env.STOCKIX_E2E === "1";
+  !watchApi ||
+  process.env.STOCKIX_DEV_STABLE_API === "1" ||
+  process.env.STOCKIX_E2E === "1";
 
 if (stableApi) {
-  console.log(`[api] starting on http://127.0.0.1:${port} (stable — no file watch; use for E2E/SSE) …`);
+  console.log(`[api] starting on http://127.0.0.1:${port} (stable — no file watch) …`);
 } else {
   console.log(`[api] starting on http://127.0.0.1:${port} (node --watch + tsx) …`);
   console.warn(
-    "⚠️  API running with --watch. SSE connections will drop on file change. " +
-      "Use STOCKIX_DEV_STABLE_API=1 pnpm dev (or run pnpm test:e2e after a stable boot) for E2E.",
+    "⚠️  API running with --watch. Login and provisioning may fail briefly after file saves. " +
+      "Unset STOCKIX_DEV_API_WATCH for the default stable local dev experience.",
   );
 }
 

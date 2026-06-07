@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, LIFECYCLE_TIMEOUT_MS } from "@/lib/api-client";
 import { isApiConnectionError } from "@/lib/api-connection";
+
+const LOGIN_DEV_RETRIES = 4;
 
 export async function POST(req: Request) {
   const payload = (await req.json().catch(() => ({}))) as {
@@ -23,6 +25,8 @@ export async function POST(req: Request) {
         }),
       },
       req,
+      LOGIN_DEV_RETRIES,
+      LIFECYCLE_TIMEOUT_MS,
     );
   } catch (err) {
     if (isApiConnectionError(err)) {
@@ -30,6 +34,7 @@ export async function POST(req: Request) {
         {
           error:
             "Control-plane API is not reachable. From the repo root run `pnpm dev` (or start the API on the configured port).",
+          retryable: true,
         },
         { status: 503 },
       );

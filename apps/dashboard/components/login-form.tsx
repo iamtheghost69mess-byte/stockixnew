@@ -48,31 +48,46 @@ export function LoginForm({
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          mfaCode: needsMfa ? mfaCode.trim() || undefined : undefined,
-        }),
-      });
-      const data = (await res.json()) as {
-        error?: string;
-        requiresMfa?: boolean;
-      };
-      if (!res.ok) {
-        if (data.error === "mfa_required") {
-          setNeedsMfa(true);
-          setError("");
+      let lastError = "";
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            mfaCode: needsMfa ? mfaCode.trim() || undefined : undefined,
+          }),
+        });
+        const data = (await res.json()) as {
+          error?: string;
+          requiresMfa?: boolean;
+          retryable?: boolean;
+        };
+        if (res.status === 503 && data.retryable && attempt < 5) {
+          lastError = "Control plane is starting — retrying…";
+          setError(lastError);
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        if (!res.ok) {
+          if (data.error === "mfa_required") {
+            setNeedsMfa(true);
+            setError("");
+            return;
+          }
+          setError(data.error ?? "Invalid credentials");
           return;
         }
-        setError(data.error ?? "Invalid credentials");
+        resetMeCache();
+        router.push(params.get("from") ?? "/");
+        router.refresh();
         return;
       }
-      resetMeCache();
-      router.push(params.get("from") ?? "/");
-      router.refresh();
+      setError(
+        lastError ||
+          "Control-plane API is not reachable. From the repo root run `pnpm dev` and wait for “API ready”.",
+      );
     } catch {
       setError("Network error — please try again");
     } finally {
