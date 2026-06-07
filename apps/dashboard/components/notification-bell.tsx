@@ -195,6 +195,8 @@ export function NotificationBell() {
   const [hasMore, setHasMore] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Suppress toasts for unread rows replayed when the SSE connection opens. */
+  const ssePrimingRef = useRef(true);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -227,10 +229,12 @@ export function NotificationBell() {
       esRef.current = null;
     }
 
+    ssePrimingRef.current = true;
     const es = new EventSource("/api/notifications/stream");
     esRef.current = es;
 
     const onConnected = (ev: MessageEvent) => {
+      ssePrimingRef.current = false;
       try {
         const data = JSON.parse(String(ev.data)) as { unread?: number };
         if (typeof data.unread === "number") setUnreadCount(data.unread);
@@ -251,6 +255,9 @@ export function NotificationBell() {
         if (prev.some((n) => n.id === notification.id)) return prev;
         return [notification, ...prev].slice(0, LIST_LIMIT);
       });
+
+      if (ssePrimingRef.current) return;
+
       setUnreadCount((prev) => prev + 1);
       showNotificationToast(notification, (url) => router.push(url));
     };
