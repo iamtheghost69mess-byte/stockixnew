@@ -80,6 +80,7 @@ import {
   appendProvisionEventSafe,
   decryptProvisionSecret,
   encryptProvisionSecret,
+  loadLatestPosBootstrapCredentials,
   loadProvisionEventsJson,
 } from "../lib/provision-events.js";
 import { isRecord, readNonEmptyString } from "../lib/record-utils.js";
@@ -262,36 +263,7 @@ export function maskPinForDisplay(pin: string): string {
   return `${trimmed.slice(0, 2)}${"•".repeat(Math.min(trimmed.length - 2, 8))}`;
 }
 
-export async function loadLatestPosBootstrapCredentials(
-  dbClient: DbClient,
-  tenantId: string,
-): Promise<PosDefaultCredentialsPayload | null> {
-  const secretRows = await dbClient
-    .select({ meta: tenantProvisionEvents.meta })
-    .from(tenantProvisionEvents)
-    .where(
-      and(
-        eq(tenantProvisionEvents.tenantId, tenantId),
-        eq(tenantProvisionEvents.phase, "secret"),
-      ),
-    )
-    .orderBy(desc(tenantProvisionEvents.createdAt))
-    .limit(30);
-  for (const secretRow of secretRows) {
-    const meta = secretRow.meta;
-    if (!meta || typeof meta !== "object" || meta.type !== "pos_bootstrap_pins") continue;
-    const cipher = meta.cipher as string | undefined;
-    if (typeof cipher !== "string") continue;
-    const decrypted = decryptProvisionSecretLocal(cipher);
-    if (!decrypted) continue;
-    try {
-      return JSON.parse(decrypted) as PosDefaultCredentialsPayload;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
+export { loadLatestPosBootstrapCredentials } from "../lib/provision-events.js";
 
 export async function loadLatestFinanceAdminPasswordFromEvents(
   dbClient: DbClient,

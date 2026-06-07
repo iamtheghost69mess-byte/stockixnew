@@ -203,7 +203,7 @@ async function provisionAndAssert({
     assertEqual(credRes.status, 200, "GET pos-credentials");
     const adminRole = (credRes.data?.roles ?? []).find((r) => r.role === "admin" || r.role === "owner");
     assertTruthy(adminRole?.pin && !adminRole.masked, "POS admin PIN");
-    const login = await posAdminLogin(posBase, adminRole.pin);
+    const login = await posAdminLogin(posBase, adminRole.pin, { slug });
     assertEqual(login.ok, true, "POS admin login");
   }
 

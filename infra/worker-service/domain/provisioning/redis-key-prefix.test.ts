@@ -54,21 +54,28 @@ describe("POS BullMQ queue prefix contract", () => {
     };
   }
 
-  it("prefixes every POS queue base name when REDIS_KEY_PREFIX is set", () => {
+  it("keeps base queue names colon-free and uses BullMQ prefix for tenant isolation", () => {
     const prefix = "tenant:acme-corp:";
-    const jobQueue = loadJobQueueWithPrefix(prefix);
+    const jobQueue = loadJobQueueWithPrefix(prefix) as {
+      queueName: (base: string) => string;
+      bullMqPrefix: () => string;
+      QUEUE_BASE_NAMES: string[];
+    };
+    expect(jobQueue.bullMqPrefix()).toBe("bull:tenant:acme-corp");
     for (const base of jobQueue.QUEUE_BASE_NAMES) {
       const resolved = jobQueue.queueName(base);
-      expect(resolved.startsWith(prefix)).toBe(true);
-      expect(resolved).toBe(`${prefix}${base}`);
+      expect(resolved).toBe(base);
+      expect(resolved.includes(":")).toBe(false);
     }
     delete process.env.REDIS_KEY_PREFIX;
   });
 
-  it("does not double-prefix when base already includes prefix", () => {
+  it("strips legacy prefixed queue names when resolving base name", () => {
     const prefix = "tenant:acme:";
-    const jobQueue = loadJobQueueWithPrefix(prefix);
-    expect(jobQueue.queueName(`${prefix}email`)).toBe(`${prefix}email`);
+    const jobQueue = loadJobQueueWithPrefix(prefix) as {
+      queueName: (base: string) => string;
+    };
+    expect(jobQueue.queueName(`${prefix}email`)).toBe("email");
     delete process.env.REDIS_KEY_PREFIX;
   });
 });

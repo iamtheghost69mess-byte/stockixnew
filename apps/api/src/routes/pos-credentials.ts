@@ -1,17 +1,23 @@
-import { tenantDeployments, tenants } from "@repo/db/schema";
-import { eq } from "drizzle-orm";
+import { tenantDeployments, tenantLifecycleJobs, tenants } from "@repo/db/schema";
+import { desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { Context } from "hono";
 import type { Hono } from "hono";
 import { z } from "zod";
 import * as schema from "@repo/db/schema";
 import { posProxyJson } from "../pos-proxy.js";
+import { effectivePosApiUrl } from "../pos-public-url.js";
 import { logAudit } from "../audit.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import {
   assertTenantModuleLicensed,
   respondModuleAccessDenied,
 } from "../lib/tenant-module-access.js";
+import { loadLatestPosBootstrapCredentials } from "../lib/provision-events.js";
+import {
+  type PosDefaultCredentialsPayload,
+  provisionPosCredentialsCache,
+} from "../lib/provision-caches.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -88,6 +94,26 @@ async function loadTenantPosOrgId(
   };
 }
 
+async function resolveStoredPosCredentials(
+  db: Db,
+  tenantId: string,
+): Promise<PosDefaultCredentialsPayload | null> {
+  const fromEvents = await loadLatestPosBootstrapCredentials(db, tenantId);
+  if (fromEvents?.allRoles?.length) return fromEvents;
+
+  const [latestJob] = await db
+    .select({ correlationId: tenantLifecycleJobs.correlationId })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.tenantId, tenantId))
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+  const correlationId = latestJob?.correlationId;
+  if (!correlationId) return null;
+  const cached = provisionPosCredentialsCache.get(correlationId);
+  if (!cached || Date.now() > cached.expiresAt) return null;
+  return cached.credentials;
+}
+
 export function registerPosCredentialsRoutes(
   app: Hono<ControlPlaneAuthEnv>,
   db: Db | null,
@@ -116,9 +142,41 @@ export function registerPosCredentialsRoutes(
       );
     }
 
+    const posApiBase = await effectivePosApiUrl(loaded.tenant.slug);
+    if (!posApiBase) {
+      return c.json(
+        { error: "pos_unavailable", message: "Cannot resolve tenant POS API URL" },
+        503,
+      );
+    }
+
+    const stored = await resolveStoredPosCredentials(db, tenantParsed.data);
+    if (stored?.allRoles?.length) {
+      const roles: PosCredentialRole[] = stored.allRoles.map((row) => ({
+        role: String(row.role).toLowerCase().trim(),
+        username: String(row.username ?? row.role).toLowerCase().trim(),
+        pin: String(row.pin).trim(),
+        masked: false,
+      }));
+
+      await logAudit(db, {
+        actorId: (c.get("actorId") as string | undefined) ?? "",
+        action: "tenant.pos_credentials_revealed",
+        targetTenantId: loaded.tenant.id,
+        ipAddress: c.req.header("x-forwarded-for") ?? null,
+        userAgent: c.req.header("user-agent") ?? null,
+        metadata: { posOrganizationId: loaded.posOrganizationId, roleCount: roles.length, source: "provision_secret" },
+      });
+
+      return c.json({ roles, posOrganizationId: loaded.posOrganizationId });
+    }
+
     const { data, status } = await posProxyJson(
       `/organizations/${encodeURIComponent(loaded.posOrganizationId)}/credentials`,
       "GET",
+      undefined,
+      undefined,
+      posApiBase,
     );
 
     if (status < 200 || status >= 300) {
@@ -172,11 +230,21 @@ export function registerPosCredentialsRoutes(
       );
     }
 
+    const posApiBase = await effectivePosApiUrl(loaded.tenant.slug);
+    if (!posApiBase) {
+      return c.json(
+        { error: "pos_unavailable", message: "Cannot resolve tenant POS API URL" },
+        503,
+      );
+    }
+
     const role = bodyParsed.data.role.toLowerCase().trim();
     const { data, status } = await posProxyJson(
       `/organizations/${encodeURIComponent(loaded.posOrganizationId)}/reset-pin`,
       "POST",
       { role },
+      undefined,
+      posApiBase,
     );
 
     if (status < 200 || status >= 300) {

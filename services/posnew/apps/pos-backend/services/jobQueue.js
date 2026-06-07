@@ -51,16 +51,23 @@ const PREFIX = process.env.REDIS_KEY_PREFIX ?? "";
 // Redis namespacing convention (Stockix shared Redis):
 // Finance BullMQ (forRoot prefix): bull:{REDIS_KEY_PREFIX}{QueueName}:*
 //   e.g. bull:tenant:acme:SendInviteUserMailQueue:*
-// POS BullMQ (queue name = PREFIX + base): bull:{REDIS_KEY_PREFIX}{queue_name}:*
+// POS BullMQ (prefix option): bull:{REDIS_KEY_PREFIX}{base_queue_name}:*
 //   e.g. bull:tenant:acme:bigcapital_sync:*
 // Finance Agenda jobs: agenda:{tenant_slug}:* (Mongo collection — see stockix-finance agenda loader)
 // Sessions: tenant:{slug}:session:* (JWT-only today; no Redis session store)
 // Do NOT use unprefixed keys on stockix-redis
 
+function bullMqPrefix() {
+  if (!PREFIX) return "bull";
+  const normalized = PREFIX.endsWith(":") ? PREFIX.slice(0, -1) : PREFIX;
+  return `bull:${normalized}`;
+}
+
+/** Base queue name only — tenant isolation uses BullMQ `prefix` (colons are invalid in queue names). */
 function queueName(base) {
-  if (!base) return PREFIX;
-  if (PREFIX && base.startsWith(PREFIX)) return base;
-  return `${PREFIX}${base}`;
+  if (!base) return "";
+  if (PREFIX && base.startsWith(PREFIX)) return base.slice(PREFIX.length);
+  return base;
 }
 
 const QUEUE_BASE_NAMES = [
@@ -84,6 +91,7 @@ function getQueue(name) {
   if (!queues[resolved]) {
     queues[resolved] = new Queue(resolved, {
       connection: conn,
+      prefix: bullMqPrefix(),
       defaultJobOptions: {
         attempts: 5,
         backoff: { type: "exponential", delay: 2000 },
@@ -134,10 +142,14 @@ async function retryFailedJob(queueName, jobId) {
   return { ok: true };
 }
 
-function createWorker(rawQueueName, processor) {
+function createWorker(rawQueueName, processor, opts = {}) {
   const conn = getConnection();
   if (!conn || !Worker) return null;
-  return new Worker(queueName(rawQueueName), processor, { connection: conn });
+  return new Worker(queueName(rawQueueName), processor, {
+    connection: conn,
+    prefix: bullMqPrefix(),
+    ...opts,
+  });
 }
 
 async function listAllJobs(filters = {}) {
@@ -228,6 +240,7 @@ module.exports = {
   QUEUE_NAMES,
   QUEUE_BASE_NAMES,
   queueName,
+  bullMqPrefix,
   getQueue,
   getConnection,
   addJob,
