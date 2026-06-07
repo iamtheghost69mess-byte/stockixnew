@@ -1498,13 +1498,31 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
     const tenantIdForPos =
       lastJob.tenantId
       ?? (typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null);
+    let resolvedTenantId =
+      (typeof lastJob.tenantId === "string" ? lastJob.tenantId : null)
+      ?? (typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null);
+    if (!resolvedTenantId && lastJob.payload && typeof lastJob.payload === "object") {
+      const payloadSlug =
+        "slug" in lastJob.payload && typeof lastJob.payload.slug === "string"
+          ? lastJob.payload.slug
+          : null;
+      if (payloadSlug) {
+        const [tenantRow] = await db
+          .select({ id: tenants.id })
+          .from(tenants)
+          .where(eq(tenants.slug, payloadSlug))
+          .limit(1);
+        resolvedTenantId = tenantRow?.id ?? null;
+      }
+    }
     let posUrl: string | null =
       typeof eventMeta.posUrl === "string" ? eventMeta.posUrl : null;
-    if (tenantIdForPos && !posUrl) {
+    if ((tenantIdForPos ?? resolvedTenantId) && !posUrl) {
+      const posLookupId = tenantIdForPos ?? resolvedTenantId;
       const [depRow] = await db
         .select({ posUrl: tenantDeployments.posUrl })
         .from(tenantDeployments)
-        .where(eq(tenantDeployments.tenantId, tenantIdForPos))
+        .where(eq(tenantDeployments.tenantId, posLookupId!))
         .limit(1);
       posUrl = depRow?.posUrl ?? null;
     }
@@ -1514,9 +1532,7 @@ app.get("/tenants/provision-status/:correlationId", async (c) => {
       readiness,
       correlationId,
       jobId: lastJob.id,
-      tenantId:
-        (typeof lastJob.tenantId === "string" ? lastJob.tenantId : null)
-        ?? (typeof eventMeta.tenantId === "string" ? eventMeta.tenantId : null),
+      tenantId: resolvedTenantId,
       deploymentId: typeof eventMeta.deploymentId === "string" ? eventMeta.deploymentId : null,
       composeProjectName:
         typeof eventMeta.composeProjectName === "string" ? eventMeta.composeProjectName : null,

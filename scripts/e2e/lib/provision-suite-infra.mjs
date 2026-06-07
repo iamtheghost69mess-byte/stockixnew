@@ -176,12 +176,16 @@ export async function financeSwitchTenant(port, accessToken, organizationId) {
 
 export function listMysqlDatabases(slug) {
   if (!MYSQL_ROOT) return { ok: false, dbs: [], out: "SHARED_MYSQL_ROOT_PASSWORD unset" };
-  const { orgDbPattern, systemDb } = tenantMysqlNames(slug);
-  const likePattern = mysqlLikePatternEscape(orgDbPattern);
+  const { dbPrefix, systemDb } = tenantMysqlNames(slug);
   const q = runShell(
-    `docker exec ${MYSQL_CONTAINER} mysql -uroot -p"${MYSQL_ROOT.replace(/"/g, '\\"')}" -N -e "SHOW DATABASES LIKE '${likePattern}' ESCAPE '\\\\';" 2>&1`,
+    `docker exec ${MYSQL_CONTAINER} mysql -uroot -p"${MYSQL_ROOT.replace(/"/g, '\\"')}" -N -e "SHOW DATABASES LIKE 'stockix%';" 2>&1`,
   );
-  return { ok: q.ok, dbs: q.out.split("\n").map((s) => s.trim()).filter(Boolean), systemDb, out: q.out };
+  const all = q.out
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((line) => line && !line.startsWith("mysql:") && !line.startsWith("ERROR"));
+  const dbs = all.filter((db) => db.startsWith(dbPrefix));
+  return { ok: q.ok && dbs.length > 0, dbs, systemDb, out: q.out };
 }
 
 export function mongoDbExists(slug) {
