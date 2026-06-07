@@ -25,9 +25,12 @@ import {
   MAX_WAIT_MS,
   mergeProvisionEvents,
   pollUntilTenantRemoved,
+  PROVISION_CORRELATION_SESSION_KEY,
+  READINESS_GRACE_MS,
   startElapsedTimer,
   POLL_MS,
   readJson,
+  type ProvisionPhase,
   type ProvisionPollComplete,
   type ProvisionPollFailed,
   type ProvisionPollRunning,
@@ -71,6 +74,7 @@ export function TenantsPageContent() {
     null,
   );
   const [stoppingProvision, setStoppingProvision] = useState(false);
+  const [provisionPhase, setProvisionPhase] = useState<ProvisionPhase>("submitting");
   const [elapsedSec, setElapsedSec] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteProgress, setDeleteProgress] = useState<{
@@ -552,8 +556,10 @@ export function TenantsPageContent() {
 
   const pollUntilDone = async (
     correlationId: string,
+    onPhase?: (phase: ProvisionPhase) => void,
   ): Promise<ProvisionPollComplete> => {
     const deadline = Date.now() + MAX_WAIT_MS;
+    let completeSeenAt: number | null = null;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_MS));
       const sr = await fetch(
@@ -597,6 +603,10 @@ export function TenantsPageContent() {
         );
       }
 
+      if ("status" in sj && (sj.status === "queued" || sj.status === "running")) {
+        onPhase?.("provisioning");
+      }
+
       if ("status" in sj && sj.status === "complete") {
         const ok = sj as ProvisionPollComplete;
         setOneTimePassword((prev) => ok.oneTimeAdminPassword ?? prev ?? null);
@@ -607,12 +617,23 @@ export function TenantsPageContent() {
           await load();
           return ok;
         }
+        onPhase?.("readiness");
+        completeSeenAt ??= Date.now();
         const reasons = ok.readiness?.reasons?.length
           ? ok.readiness.reasons.join(", ")
           : "readiness checks still converging";
         setError(
           `Provisioning completed but tenant is not ready yet (${reasons}). Waiting for readiness...`,
         );
+        if (Date.now() - completeSeenAt >= READINESS_GRACE_MS) {
+          await load();
+          return {
+            ...ok,
+            note:
+              ok.note ??
+              "Provision job finished; readiness did not fully converge within 2 minutes. Check the tenant list and Docker.",
+          };
+        }
       }
     }
     const finalRes = await fetch(`/api/tenants/provision-status/${correlationId}`);
@@ -697,7 +718,10 @@ export function TenantsPageContent() {
     setTenantAccess(null);
     setProvisionLog([]);
     setStreamCorrelationId(null);
+    setProvisionPhase("submitting");
     setLoading(true);
+    const submitController = new AbortController();
+    const submitTimeoutId = window.setTimeout(() => submitController.abort(), 90_000);
     try {
       const res = await fetch("/api/tenants", {
         method: "POST",
@@ -713,6 +737,7 @@ export function TenantsPageContent() {
           modules: payload?.modules ?? ["accounting"],
           assign_existing_license_id: payload?.assignExistingLicenseId ?? undefined,
         }),
+        signal: submitController.signal,
       });
 
       const data = (await readJson(res)) as {
@@ -724,8 +749,11 @@ export function TenantsPageContent() {
       };
 
       if (res.status === 202 && data.accepted && data.correlationId) {
+        setProvisionPhase("provisioning");
         setStreamCorrelationId(data.correlationId);
-        const ok = await pollUntilDone(data.correlationId);
+        sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY, data.correlationId);
+        const ok = await pollUntilDone(data.correlationId, setProvisionPhase);
+        sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
         const generatedPublicUrl = tenantPublicBaseUrl(nextSlug, ok.internalPort ?? null);
         const reportedPublicUrl =
           typeof ok.baseUrl === "string" &&
@@ -742,13 +770,20 @@ export function TenantsPageContent() {
         setAdminEmail("");
         setAdminFirstName("");
         setAdminLastName("");
+        setAddTenantOpen(false);
         return;
       }
 
       if (!res.ok) {
+        const retryable503 =
+          res.status === 503
+          && (data as { retryable?: boolean }).retryable === true;
         const base = formatApiError(
           data,
-          data.message ?? data.error ?? `HTTP ${res.status}`,
+          retryable503
+            ? (data.message
+              ?? "Control-plane API is not responding. Run `pnpm dev:kill` then `pnpm dev` and wait for API ready.")
+            : (data.message ?? data.error ?? `HTTP ${res.status}`),
         );
         const detail =
           data.detail && typeof data.detail === "object"
@@ -764,12 +799,75 @@ export function TenantsPageContent() {
 
       setError("Unexpected response (expected 202 Accepted).");
     } catch (e) {
-      setError(String(e));
+      const message =
+        e instanceof DOMException && e.name === "AbortError"
+          ? "Provision request timed out after 90s. The control-plane API may be hung — run `pnpm dev:kill` then `pnpm dev`, wait for API ready, and retry."
+          : String(e);
+      setError(message);
+      sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
     } finally {
+      window.clearTimeout(submitTimeoutId);
       setStreamCorrelationId(null);
+      setProvisionPhase("submitting");
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (loading || streamCorrelationId) return;
+    const saved = sessionStorage.getItem(PROVISION_CORRELATION_SESSION_KEY);
+    if (!saved) return;
+
+    let cancelled = false;
+    void (async () => {
+      const sr = await fetch(`/api/tenants/provision-status/${saved}`);
+      if (cancelled) return;
+      const sj = (await readJson(sr)) as { status?: string; error?: string };
+      if (
+        sr.status === 404
+        || sj.status === "complete"
+        || sj.status === "failed"
+      ) {
+        sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+        return;
+      }
+      if (!sr.ok) return;
+
+      setLoading(true);
+      setProvisionPhase(
+        sj.status === "queued" || sj.status === "running"
+          ? "provisioning"
+          : "submitting",
+      );
+      setStreamCorrelationId(saved);
+      try {
+        const ok = await pollUntilDone(saved, setProvisionPhase);
+        const slugFromEvents = provisionLog.find((e) => e.slug)?.slug;
+        if (slugFromEvents) {
+          setTenantAccess({
+            publicUrl: tenantPublicBaseUrl(slugFromEvents, ok.internalPort ?? null),
+            adminEmail: "",
+          });
+        }
+        sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+        void load().catch(() => {});
+      } catch (e) {
+        setError(String(e));
+        sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+      } finally {
+        if (!cancelled) {
+          setStreamCorrelationId(null);
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Resume once on mount when a prior provision was interrupted (e.g. Fast Refresh).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const canManageTenants = Boolean(me?.capabilities.canManageTenants);
 
@@ -791,6 +889,7 @@ export function TenantsPageContent() {
       <TenantProvisionBanner
         loading={loading}
         elapsedSec={elapsedSec}
+        provisionPhase={provisionPhase}
         provisionLog={provisionLog}
         streamCorrelationId={streamCorrelationId}
         stoppingProvision={stoppingProvision}
@@ -811,10 +910,17 @@ export function TenantsPageContent() {
       <TenantPosBootstrapBanner posDefaultCredentials={posDefaultCredentials} />
 
       <TenantCreateWizard
-        dialog={{ open: addTenantOpen, onOpenChange: setAddTenantOpen }}
+        dialog={{
+          open: addTenantOpen,
+          onOpenChange: (open) => {
+            if (!open && loading) return;
+            setAddTenantOpen(open);
+          },
+        }}
         loading={loading}
         provisionLog={provisionLog}
         elapsedSec={elapsedSec}
+        provisionPhase={provisionPhase}
         oneTimePassword={oneTimePassword}
         posDefaultCredentials={posDefaultCredentials}
         tenantAccess={tenantAccess}

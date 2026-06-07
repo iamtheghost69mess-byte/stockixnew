@@ -54,6 +54,7 @@ type Props = {
   loading: boolean;
   provisionLog: ProvisionEventRow[];
   elapsedSec: number;
+  provisionPhase?: "submitting" | "provisioning" | "readiness";
   oneTimePassword: string | null;
   posDefaultCredentials?: {
     adminPin: string;
@@ -112,6 +113,7 @@ export default function TenantCreateWizard(props: Props) {
     loading,
     provisionLog,
     elapsedSec,
+    provisionPhase = "provisioning",
     oneTimePassword,
     posDefaultCredentials = null,
     tenantAccess,
@@ -119,7 +121,6 @@ export default function TenantCreateWizard(props: Props) {
     onReset,
     dialog,
   } = props;
-  void { loading, provisionLog, elapsedSec };
 
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -612,11 +613,40 @@ export default function TenantCreateWizard(props: Props) {
                 <AlertDescription>{formError}</AlertDescription>
               </Alert>
             ) : null}
+            {loading ? (
+              <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-sm">
+                <p className="font-medium">
+                  {provisionPhase === "submitting"
+                    ? "Submitting to control plane…"
+                    : provisionPhase === "readiness"
+                      ? "Waiting for readiness checks…"
+                      : "Provisioning tenant…"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Elapsed {elapsedSec}s · Docker worker runs after the API accepts the job.
+                  If this stays on &quot;Submitting&quot; for 1–2 minutes, the API may be hung —
+                  restart with <span className="font-mono">pnpm dev:kill</span> then{" "}
+                  <span className="font-mono">pnpm dev</span>.
+                </p>
+                <div className="max-h-40 overflow-y-auto rounded-md border bg-background/80 px-2 py-2 font-mono text-[11px] leading-snug">
+                  {provisionLog.length === 0 ? (
+                    <p className="text-muted-foreground">Waiting for worker trace events…</p>
+                  ) : (
+                    provisionLog.slice(-12).map((e) => (
+                      <div key={e.id} className="border-b border-border/40 py-1 last:border-b-0">
+                        <span className="text-muted-foreground">{e.createdAt.slice(11, 19)}</span>{" "}
+                        [{e.phase}] {e.message}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
             <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => setStep(3)}>
+              <Button type="button" variant="ghost" onClick={() => setStep(3)} disabled={loading}>
                 Back
               </Button>
-              <Button disabled={loading} onClick={() => void submit()}>
+              <Button type="button" disabled={loading} onClick={() => void submit()}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

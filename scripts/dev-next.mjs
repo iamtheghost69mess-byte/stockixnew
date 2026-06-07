@@ -96,8 +96,8 @@ void (async () => {
       label: `Dashboard (${base})`,
       stableChecks: 1,
     });
-    console.log("[dashboard] Warming routes (login, home)…");
-    for (const route of ["/login", "/"]) {
+    console.log("[dashboard] Warming routes (login, home, tenant API)…");
+    for (const route of ["/login", "/", "/api/tenants?page=1&pageSize=1"]) {
       await fetch(`${base}${route}`).catch(() => undefined);
     }
     console.log("[dashboard] Warm-up complete");
