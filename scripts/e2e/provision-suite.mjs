@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import {
   API,
-  COMBINED_EXTRA_OPS,
+  COMBINED_JOURNAL_OPS,
   FINANCE_JOURNAL_OPS,
   POS_JOURNAL_OPS,
   SuiteError,
@@ -260,7 +260,7 @@ async function scenarioCombined() {
   const ctx = await provisionAndAssert({
     slug,
     modules: ["accounting", "pos"],
-    requiredJournalOps: [...FINANCE_JOURNAL_OPS, ...POS_JOURNAL_OPS, ...COMBINED_EXTRA_OPS],
+    requiredJournalOps: COMBINED_JOURNAL_OPS,
     expectFinance: true,
     expectPos: true,
   });

@@ -25,6 +25,15 @@ export const FINANCE_JOURNAL_OPS = [
 export const POS_JOURNAL_OPS = ["pos.bootstrap_organization", "pos.schema_migration"];
 export const COMBINED_EXTRA_OPS = ["tenant.seed_pos_defaults", "tenant.wire_pos_integration"];
 
+/** Finance + POS journal order matches worker: seed defaults before POS stack, wire after POS is up. */
+export const COMBINED_JOURNAL_OPS = [
+  ...FINANCE_JOURNAL_OPS,
+  "tenant.seed_pos_defaults",
+  "pos.bootstrap_organization",
+  "pos.schema_migration",
+  "tenant.wire_pos_integration",
+];
+
 export class SuiteError extends Error {
   constructor(message, ctx = {}) {
     super(message);
