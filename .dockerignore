@@ -1,6 +1,8 @@
 **/node_modules
 **/.next
 **/dist
+!packages/auth/dist
+!packages/auth/dist/**
 **/.turbo
 **/coverage
 infra/worker-service/.runtime/

@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createConnection } from "node:net";
@@ -52,14 +53,118 @@ function sharedMongoHost(): string {
   return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
 }
 
+function workerProxySqlAdminHost(): string {
+  if (process.env.WORKER_SHARED_MYSQL_HOST?.trim() === "127.0.0.1") {
+    return "127.0.0.1";
+  }
+  return process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
+}
+
+function proxySqlAdminCredentials(): { user: string; password: string } {
+  return {
+    user: process.env.PROXYSQL_ADMIN_USER ?? "admin",
+    password: process.env.PROXYSQL_ADMIN_PASSWORD ?? "admin",
+  };
+}
+
+function escapeProxySqlLiteral(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "''");
+}
+
+type ProxySqlAdminConnection = {
+  query: (sql: string, values?: unknown[]) => Promise<unknown>;
+};
+
+async function applyProxySqlUserSync(
+  conn: ProxySqlAdminConnection,
+  username: string,
+  password: string,
+): Promise<void> {
+  await conn.query("DELETE FROM mysql_users WHERE username = ?", [username]);
+  await conn.query(
+    "INSERT INTO mysql_users (username, password, default_hostgroup, active, max_connections) VALUES (?, ?, 0, 1, 200)",
+    [username, password],
+  );
+  await conn.query("LOAD MYSQL USERS TO RUNTIME");
+  await conn.query("SAVE MYSQL USERS TO DISK");
+}
+
+async function applyProxySqlUserSyncViaDockerExec(
+  username: string,
+  password: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const repoRoot = getRepoRoot();
+  const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+  const container = await getComposeContainerName(
+    "stockix-shared",
+    sharedComposeFile,
+    "stockix-mysql-proxy",
+  );
+  if (!container) {
+    throw new Error("[db-provision] ProxySQL container not found for admin sync fallback");
+  }
+
+  const { user: adminUser, password: adminPassword } = proxySqlAdminCredentials();
+  const safeUser = escapeProxySqlLiteral(username);
+  const safePassword = escapeProxySqlLiteral(password);
+  const sql = [
+    `DELETE FROM mysql_users WHERE username='${safeUser}';`,
+    `INSERT INTO mysql_users (username, password, default_hostgroup, active, max_connections) VALUES ('${safeUser}', '${safePassword}', 0, 1, 200);`,
+    "LOAD MYSQL USERS TO RUNTIME;",
+    "SAVE MYSQL USERS TO DISK;",
+  ].join(" ");
+
+  await execa(
+    "docker",
+    [
+      "exec",
+      container,
+      "mysql",
+      "-h127.0.0.1",
+      "-P6032",
+      `-u${adminUser}`,
+      `-p${adminPassword}`,
+      "-e",
+      sql,
+    ],
+    { stdio: "pipe" },
+  );
+  log(`[db-provision] ProxySQL user registered via docker exec: ${username}`);
+}
+
+async function verifyProxySqlTenantLogin(
+  username: string,
+  password: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const host = workerProxySqlAdminHost();
+  const mysql2 = await import("mysql2/promise");
+  const conn = await mysql2.createConnection({
+    host,
+    port: 6033,
+    user: username,
+    password,
+    connectTimeout: 10_000,
+  });
+  try {
+    await conn.query("SELECT 1");
+    log(`[db-provision] ProxySQL tenant login verified: ${username}@${host}:6033`);
+  } finally {
+    await conn.end();
+  }
+}
+
 async function registerMysqlUserInProxySql(
   username: string,
   password: string,
   log: (m: string) => void,
 ): Promise<void> {
-  const proxyHost = process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
-  const adminUser = process.env.PROXYSQL_ADMIN_USER ?? "admin";
-  const adminPassword = process.env.PROXYSQL_ADMIN_PASSWORD ?? "admin";
+  const proxyHost = workerProxySqlAdminHost();
+  const { user: adminUser, password: adminPassword } = proxySqlAdminCredentials();
+  let synced = false;
+  let directError: unknown;
+
   try {
     const mysql2 = await import("mysql2/promise");
     const conn = await mysql2.createConnection({
@@ -70,20 +175,38 @@ async function registerMysqlUserInProxySql(
       connectTimeout: 10_000,
     });
     try {
-      await conn.query("DELETE FROM mysql_users WHERE username = ?", [username]);
-      await conn.query(
-        "INSERT INTO mysql_users (username, password, default_hostgroup, active, max_connections) VALUES (?, ?, 0, 1, 200)",
-        [username, password],
-      );
-      await conn.query("LOAD MYSQL USERS TO RUNTIME");
-      await conn.query("SAVE MYSQL USERS TO DISK");
+      await applyProxySqlUserSync(conn, username, password);
       log(`[db-provision] ProxySQL user registered: ${username}`);
+      synced = true;
     } finally {
       await conn.end();
     }
   } catch (err) {
+    directError = err;
     log(
-      `[db-provision] ProxySQL user sync warning for ${username}: ${
+      `[db-provision] ProxySQL admin connect failed (${proxyHost}:6032), trying docker exec fallback…`,
+    );
+  }
+
+  if (!synced) {
+    try {
+      await applyProxySqlUserSyncViaDockerExec(username, password, log);
+      synced = true;
+    } catch (execErr) {
+      const directMsg =
+        directError instanceof Error ? directError.message : String(directError ?? "unknown");
+      const execMsg = execErr instanceof Error ? execErr.message : String(execErr);
+      throw new Error(
+        `[db-provision] ProxySQL user sync failed for ${username} (direct: ${directMsg}; docker exec: ${execMsg})`,
+      );
+    }
+  }
+
+  try {
+    await verifyProxySqlTenantLogin(username, password, log);
+  } catch (err) {
+    throw new Error(
+      `[db-provision] ProxySQL user sync post-verify failed for ${username}: ${
         err instanceof Error ? err.message : String(err)
       }`,
     );
@@ -165,12 +288,23 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
   }
 }
 
+/** MySQL usernames are limited to 32 characters (including the `tenant_` prefix). */
+export const MYSQL_USERNAME_MAX_LEN = 32;
+const TENANT_MYSQL_USER_PREFIX = "tenant_";
+const TENANT_MYSQL_USER_SAFE_MAX = MYSQL_USERNAME_MAX_LEN - TENANT_MYSQL_USER_PREFIX.length;
+
 /**
- * Sanitize a tenant slug for use as a MySQL identifier and username.
- * MySQL usernames max 32 chars.
+ * Sanitize a tenant slug for use as a MySQL identifier segment.
+ * Database names may use up to 28 chars; usernames use {@link tenantMysqlUsername}.
  */
-export function slugToMysqlSafe(slug: string): string {
-  return slug.replace(/[^a-z0-9]/gi, "_").toLowerCase().slice(0, 28);
+export function slugToMysqlSafe(slug: string, maxLen = 28): string {
+  return slug.replace(/[^a-z0-9]/gi, "_").toLowerCase().slice(0, maxLen);
+}
+
+/** Per-tenant MySQL user — max 32 chars (`tenant_` + up to 25 safe slug chars). */
+export function tenantMysqlUsername(slug: string): string {
+  const safe = slugToMysqlSafe(slug, TENANT_MYSQL_USER_SAFE_MAX);
+  return `${TENANT_MYSQL_USER_PREFIX}${safe}`;
 }
 
 /** MySQL identifiers for a tenant slug (legacy `_finance` + `_system` + scoped user). */
@@ -184,9 +318,14 @@ export function tenantMysqlDatabaseNames(slug: string): {
   return {
     financeDb: `stockix_${safe}_finance`,
     systemDb: `stockix_${safe}_system`,
-    tenantUser: `tenant_${safe}`,
+    tenantUser: tenantMysqlUsername(slug),
     orgDbPattern: `stockix_${safe}_%`,
   };
+}
+
+/** Escape `_` / `%` for MySQL LIKE (slug underscores are not wildcards). */
+export function mysqlLikePatternEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/_/g, "\\_").replace(/%/g, "\\%");
 }
 
 /**
@@ -277,7 +416,7 @@ export async function resetSystemDatabaseForMigration(
 ): Promise<void> {
   const safe = slugToMysqlSafe(slug);
   const systemDb = `stockix_${safe}_system`;
-  const tenantUser = `tenant_${safe}`;
+  const tenantUser = tenantMysqlUsername(slug);
   const mysqlHost = workerSharedMysqlHost();
   const rootPassword = sharedMysqlRootPassword();
 
@@ -366,9 +505,10 @@ export async function deprovisionTenantDatabases(
       await conn.execute(`DROP DATABASE IF EXISTS \`${financeDb}\``);
       await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
 
+      const likePattern = mysqlLikePatternEscape(orgDbPattern);
       const [orgRows] = await conn.query<RowDataPacket[]>(
-        `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ?`,
-        [orgDbPattern],
+        `SELECT schema_name AS schemaName FROM information_schema.schemata WHERE schema_name LIKE ? ESCAPE '\\\\'`,
+        [likePattern],
       );
       for (const row of orgRows) {
         const dbName = row.schemaName as string;
@@ -467,13 +607,36 @@ async function assertWorkerCanReachSharedMysql(log: (m: string) => void): Promis
 }
 
 async function resolveSharedInfraEnvFile(): Promise<string | undefined> {
-  const envFile = join(getRepoRoot(), "infra", "prod", ".env");
+  const rootEnv = join(getRepoRoot(), ".env");
   try {
-    await stat(envFile);
-    return envFile;
+    await stat(rootEnv);
+    return rootEnv;
   } catch {
-    return undefined;
+    const prodEnv = join(getRepoRoot(), "infra", "prod", ".env");
+    try {
+      await stat(prodEnv);
+      return prodEnv;
+    } catch {
+      return undefined;
+    }
   }
+}
+
+function sharedInfraComposeArgs(envFile: string | undefined): string[] {
+  const repoRoot = getRepoRoot();
+  const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+  const devPortsFile = join(repoRoot, "infra", "shared", "docker-compose.dev-ports.yml");
+  const args = ["compose", "-f", sharedComposeFile];
+  try {
+    if (statSync(devPortsFile).isFile()) {
+      args.push("-f", devPortsFile);
+    }
+  } catch {
+    /* dev-ports overlay optional outside local dev */
+  }
+  args.push("-p", "stockix-shared");
+  if (envFile) args.push("--env-file", envFile);
+  return args;
 }
 
 /**
@@ -481,17 +644,10 @@ async function resolveSharedInfraEnvFile(): Promise<string | undefined> {
  * Blocks until PRIMARY or throws — required before POS stacks using ?replicaSet=rs0.
  */
 export async function ensureSharedMongoReplicaSetReady(log: (m: string) => void): Promise<void> {
-  const repoRoot = getRepoRoot();
-  const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
   const envFile = await resolveSharedInfraEnvFile();
   log("[db-provision] ensuring shared Mongo replica set rs0 is PRIMARY");
   const args = [
-    "compose",
-    "-f",
-    sharedComposeFile,
-    "-p",
-    "stockix-shared",
-    ...(envFile ? ["--env-file", envFile] : []),
+    ...sharedInfraComposeArgs(envFile),
     "run",
     "--rm",
     "stockix-mongo-rs-init",
@@ -750,3 +906,5 @@ export async function deprovisionTenant(
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }
+
+export { escapeProxySqlLiteral, registerMysqlUserInProxySql };

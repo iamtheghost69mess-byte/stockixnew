@@ -194,6 +194,8 @@ export const env = {
   /** HS256 secret for POS offline license JWTs; min 32 chars in staging/production. */
   LICENSE_SIGNING_SECRET: readOptionalString("LICENSE_SIGNING_SECRET"),
   AUTH_TOKEN_SECRET: readOptionalString("AUTH_TOKEN_SECRET"),
+  /** POS platform JWT verification; dev fallback is `{AUTH_TOKEN_SECRET}:platform`. */
+  PLATFORM_JWT_SECRET: readOptionalString("PLATFORM_JWT_SECRET"),
   ALLOW_BOOTSTRAP_LOGIN: readBooleanLike("ALLOW_BOOTSTRAP_LOGIN"),
   PLATFORM_ADMIN_EMAIL: readOptionalString("PLATFORM_ADMIN_EMAIL"),
   PLATFORM_ADMIN_PASSWORD: readOptionalString("PLATFORM_ADMIN_PASSWORD"),
@@ -459,6 +461,9 @@ export const apiConfig = {
   },
   get authTokenSecret() {
     return env.AUTH_TOKEN_SECRET ?? env.SESSION_SECRET ?? readRequiredString("AUTH_TOKEN_SECRET");
+  },
+  get platformJwtSecret() {
+    return env.PLATFORM_JWT_SECRET;
   },
   get allowBootstrapLogin() {
     return env.ALLOW_BOOTSTRAP_LOGIN === "true" || env.ALLOW_BOOTSTRAP_LOGIN === "1";

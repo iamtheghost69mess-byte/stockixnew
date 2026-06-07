@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultTenantEnvRoot } from "../env-paths.js";
-import { slugToMysqlSafe } from "../provisioner.js";
+import { slugToMysqlSafe, tenantMysqlUsername } from "../provisioner.js";
 import { apiConfig, env } from "@repo/config";
 import {
   encryptDeploymentSecret,
@@ -123,7 +123,7 @@ function buildTenantRedisKeyPrefix(slug: string): string {
  * The provisioner creates this user with GRANT on stockix_{safe}_% (finance, system, org DBs).
  */
 function buildTenantMysqlUser(slug: string): string {
-  return `tenant_${slugToMysqlSafe(slug)}`;
+  return tenantMysqlUsername(slug);
 }
 
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */

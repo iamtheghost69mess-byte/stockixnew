@@ -50,6 +50,7 @@ import {
   loginAsOwner,
   resolveOwnerId,
   setOwnerPasswordForE2e,
+  assertHostInfraReachable,
   sleep,
   traefikFileExists,
   verifyFinancePing,
@@ -324,7 +325,11 @@ async function scenarioFailureInjection() {
   const events = polled.body?.events ?? [];
   assertIncludes(journalOpsFromEvents(events), "docker.data_step", "journaled docker.data_step before crash");
 
-  const tenantId = polled.body?.tenantId;
+  let tenantId = polled.body?.tenantId;
+  if (!tenantId) {
+    const list = await api("GET", `/tenants?search=${encodeURIComponent(slug)}`);
+    tenantId = list.data?.tenants?.find((t) => t.slug === slug)?.tenantId;
+  }
   assertTruthy(tenantId, "tenantId on failed provision");
   const tenant = await getTenant(api, tenantId);
   assertEqual(tenant.status, "failed", "tenant.status after rollback");
@@ -355,7 +360,7 @@ async function scenarioCorrelation403() {
   const foreignPassword = `E2e-${randomUUID().slice(0, 12)}!aA1`;
   const createOwner = await api("POST", "/owners", { email: foreignEmail, name: "E2E Foreign Owner" });
   assertEqual(createOwner.status, 201, "create foreign owner");
-  await setOwnerPasswordForE2e(foreignEmail, foreignPassword);
+  await setOwnerPasswordForE2e(foreignEmail, foreignPassword, "read_only");
 
   const foreignHeaders = { current: {} };
   await loginAsOwner(foreignEmail, foreignPassword, foreignHeaders);
@@ -378,14 +383,20 @@ async function main() {
   console.log("API:", API);
 
   if (onlyArg === "preflight") {
-    await preflight(authHeadersRef);
+    await preflight(authHeadersRef, { assertHostInfraReachable });
     console.log("Preflight OK");
     return;
   }
 
-  await preflight(authHeadersRef);
+  await preflight(authHeadersRef, { assertHostInfraReachable });
 
   const scenarios = [];
+  if (onlyArg === "failure") {
+    scenarios.push(["Failure injection — rollback after docker.data_step", scenarioFailureInjection]);
+  } else if (runAll) {
+    scenarios.push(["Failure injection — rollback after docker.data_step", scenarioFailureInjection]);
+  }
+
   if (onlyArg === "finance") scenarios.push(["Scenario 1 — Finance-only", scenarioFinanceOnly]);
   else if (runAll) scenarios.push(["Scenario 1 — Finance-only", scenarioFinanceOnly]);
 
@@ -409,9 +420,6 @@ async function main() {
       },
     ]);
   }
-
-  if (onlyArg === "failure") scenarios.push(["Failure injection — rollback after docker.data_step", scenarioFailureInjection]);
-  else if (runAll) scenarios.push(["Failure injection — rollback after docker.data_step", scenarioFailureInjection]);
 
   if (onlyArg === "correlation") scenarios.push(["Correlation route 403 — foreign owner", scenarioCorrelation403]);
   else if (runAll) scenarios.push(["Correlation route 403 — foreign owner", scenarioCorrelation403]);

@@ -39,10 +39,13 @@ function createSystemKnex() {
     );
   }
 
+  const port = Number(process.env.SYSTEM_DB_PORT || process.env.DB_PORT || 6033);
+
   return Knex({
     client: process.env.SYSTEM_DB_CLIENT || process.env.DB_CLIENT || "mysql2",
     connection: {
       host,
+      port: Number.isFinite(port) && port > 0 ? port : 6033,
       user,
       password,
       database,

@@ -7,6 +7,10 @@ services:
   stockix-mysql:
     ports:
       - "127.0.0.1:3306:3306"
+  stockix-mysql-proxy:
+    ports:
+      - "127.0.0.1:6032:6032"
+      - "127.0.0.1:6033:6033"
   stockix-mongo:
     ports:
       - "127.0.0.1:27017:27017"

@@ -257,7 +257,7 @@ Integration tests against the **real** local stack (API, worker, Docker, shared 
 ### Prerequisites
 
 ```sh
-pnpm dev                    # API + worker + shared infra (stockix-shared)
+STOCKIX_DEV_STABLE_API=1 pnpm dev   # recommended for E2E — API without --watch (SSE won't drop mid-provision)
 pnpm docker:prebuild        # Finance tenant images
 pnpm pos:images:build       # POS tenant images (for POS/combined scenarios)
 ```
