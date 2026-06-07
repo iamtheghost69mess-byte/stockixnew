@@ -29,7 +29,7 @@ export default function Login() {
 
   const handleSubmit = (values, { setSubmitting }) => {
     loginMutate({
-      email: values.crediential,
+      credential: values.crediential,
       password: values.password,
     }).catch(({ response }) => {
       const { data: error } = response;
