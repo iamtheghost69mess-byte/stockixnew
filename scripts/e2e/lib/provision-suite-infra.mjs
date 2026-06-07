@@ -148,7 +148,7 @@ export async function financeSignIn(port, email, password) {
   const res = await fetch(`http://127.0.0.1:${port}/api/auth/signin`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ credential: email, password }),
   });
   const body = await readJson(res);
   if (!res.ok) throw new SuiteError(`Finance signin failed HTTP ${res.status}`, body);
@@ -195,16 +195,36 @@ export function mongoDbExists(slug) {
   return q.ok && /true/i.test(q.out);
 }
 
+function redisCliExecArgs() {
+  const args = ["exec", REDIS_CONTAINER, "redis-cli"];
+  const pwd = process.env.TENANT_REDIS_PASSWORD?.trim();
+  if (pwd && pwd !== "__MUST_OVERRIDE__") args.push("-a", pwd);
+  return args;
+}
+
+function parseRedisScanOutput(out) {
+  return out
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(
+      (line) =>
+        line
+        && !line.startsWith("Warning:")
+        && !line.includes("NOAUTH")
+        && !line.startsWith("AUTH"),
+    );
+}
+
 export function redisKeysForSlug(slug) {
-  const q = runShell(`docker exec ${REDIS_CONTAINER} redis-cli --scan --pattern "*${slug}*" 2>&1`);
-  return q.out.split("\n").map((s) => s.trim()).filter(Boolean);
+  const q = runShell(`docker ${redisCliExecArgs().join(" ")} --scan --pattern "*${slug}*" 2>&1`);
+  return parseRedisScanOutput(q.out);
 }
 
 export function bullmqQueueKeys(slug) {
   const q = runShell(
-    `docker exec ${REDIS_CONTAINER} redis-cli --scan --pattern "bull:tenant:${slug}:bigcapital_sync:*" 2>&1 | head -20`,
+    `docker ${redisCliExecArgs().join(" ")} --scan --pattern "bull:tenant:${slug}:bigcapital_sync:*" 2>&1 | head -20`,
   );
-  return q.out.split("\n").map((s) => s.trim()).filter(Boolean);
+  return parseRedisScanOutput(q.out);
 }
 
 export function traefikFileExists(slug, kind = "finance") {
@@ -277,7 +297,16 @@ export async function deprovisionTenant(api, tenantId) {
   return pollTenantDeleted(api, tenantId);
 }
 
-export function assertTeardownClean(slug) {
+export async function assertTeardownClean(slug, maxMs = 120_000) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const mysql = listMysqlDatabases(slug);
+    const mongo = mongoDbExists(slug);
+    const redis = redisKeysForSlug(slug);
+    const traefik = traefikFileExists(slug, "finance") || traefikFileExists(slug, "pos");
+    if (!mysql.dbs.length && !mongo && !redis.length && !traefik) return;
+    await sleep(5000);
+  }
   const mysql = listMysqlDatabases(slug);
   if (mysql.dbs.length) throw new SuiteError(`MySQL databases still present after deprovision`, { slug, dbs: mysql.dbs });
   if (mongoDbExists(slug)) throw new SuiteError(`MongoDB ${slug}_pos still exists`, { slug });

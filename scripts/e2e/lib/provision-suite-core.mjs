@@ -2,7 +2,7 @@
  * Core API client, journal/SSE assertions, and provision polling for E2E suite.
  */
 
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { env, moduleGatingConfig } from "@repo/config";
 import { execa } from "execa";
 
@@ -60,7 +60,7 @@ export function mysqlLikePatternEscape(value) {
 export function bootstrapAdminPassword(slug) {
   const raw = process.env.DEPLOYMENT_SECRET_KEY?.trim();
   if (!raw || raw.length < 32) throw new SuiteError("DEPLOYMENT_SECRET_KEY missing or too short in .env");
-  const hmacKey = Buffer.from(raw, "hex");
+  const hmacKey = createHash("sha256").update(raw).digest();
   return createHmac("sha256", hmacKey).update(`bootstrap:${slug}`, "utf8").digest("base64url");
 }
 
