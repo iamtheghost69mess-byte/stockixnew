@@ -109,9 +109,25 @@ import { BillLandedCostsModule } from '../BillLandedCosts/BillLandedCosts.module
 import { SocketModule } from '../Socket/Socket.module';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppThrottleModule } from './AppThrottle.module';
+import {
+  isFinanceWebappBuilt,
+  FINANCE_WEBAPP_DIST,
+} from './finance-webapp.constants';
+import { FinanceWebappSpaController } from './finance-webapp-spa.controller';
+
+const financeWebappImports = isFinanceWebappBuilt()
+  ? [
+      ServeStaticModule.forRoot({
+        rootPath: FINANCE_WEBAPP_DIST,
+        serveRoot: '/',
+        exclude: ['/api*', '/swagger*', '/public*', '/socket*'],
+      }),
+    ]
+  : [];
 
 @Module({
   imports: [
+    ...financeWebappImports,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '../../..', 'public'),
       serveRoot: '/public',
@@ -274,7 +290,9 @@ import { AppThrottleModule } from './AppThrottle.module';
     SocketModule,
     ExchangeRatesModule,
   ],
-  controllers: [AppController],
+  controllers: isFinanceWebappBuilt()
+    ? [AppController, FinanceWebappSpaController]
+    : [AppController],
   providers: [
     {
       provide: APP_PIPE,

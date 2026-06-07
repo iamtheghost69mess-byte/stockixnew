@@ -1680,10 +1680,8 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
 
-    // Finance webapp static assets are served by the Finance NestJS server itself
-    // via ServeStaticModule (/public route) — no static copy to shared nginx volume needed.
-    // Architecture2.md §5.4 — shared nginx is static-only CDN; Finance UI served by server.
-    // K6 closed: ServeStaticModule confirmed in App.module.ts:115-117.
+    // Finance webapp static assets are bundled in stockix-server:local (webapp-dist)
+    // and served by NestJS with SPA fallback — no separate nginx/webapp container.
 
     // SECURITY NOTE: tenant server joins stockix_internal for bootstrap only.
     // Accepted risk — documented in Architecture2.md §16.
