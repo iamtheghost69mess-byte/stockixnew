@@ -164,8 +164,8 @@ export async function resolveOwnerId(api) {
 export function journalOpsFromEvents(events) {
   const ops = [];
   for (const e of events ?? []) {
-    const key =
-      e?.phase === "journal" && e?.meta?.operationKey ? e.meta.operationKey : e?.meta?.operationKey ?? null;
+    if (e?.phase !== "journal") continue;
+    const key = e?.meta?.operationKey;
     if (key && !ops.includes(key)) ops.push(key);
   }
   return ops;
