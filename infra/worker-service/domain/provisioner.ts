@@ -3,8 +3,14 @@ import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createConnection } from "node:net";
 
-import { adminAuditLog, tenantDeployments, tenantProvisionEvents, tenants } from "@repo/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  adminAuditLog,
+  tenantDeployments,
+  tenantLifecycleJobs,
+  tenantProvisionEvents,
+  tenants,
+} from "@repo/db/schema";
+import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
 import { execa } from "execa";
@@ -898,6 +904,25 @@ export async function deprovisionTenant(
     cleanupResults.envDir = true;
   } catch {
     log(`[deprovision] could not remove tenant env dir for ${row.slug}`);
+  }
+
+  if (options.lifecycleJobId) {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "completed",
+        completedAt: new Date(),
+        lastError: null,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tenantLifecycleJobs.id, options.lifecycleJobId),
+          eq(tenantLifecycleJobs.status, "running"),
+        ),
+      );
   }
 
   await db.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, tenantId));
