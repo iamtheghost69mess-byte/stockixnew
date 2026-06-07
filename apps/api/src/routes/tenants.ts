@@ -749,6 +749,39 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Tenant deprovision is already in progress.",
     }, 202);
   }
+  const [inFlightDeprovision] = await db
+    .select({ id: tenantLifecycleJobs.id })
+    .from(tenantLifecycleJobs)
+    .where(
+      and(
+        eq(tenantLifecycleJobs.tenantId, parsed.data),
+        eq(tenantLifecycleJobs.type, "tenant.deprovision"),
+        or(
+          eq(tenantLifecycleJobs.status, "pending"),
+          eq(tenantLifecycleJobs.status, "running"),
+        ),
+      ),
+    )
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1);
+  if (inFlightDeprovision) {
+    await db
+      .update(tenants)
+      .set({ status: "deprovisioning" })
+      .where(eq(tenants.id, parsed.data));
+    await db
+      .update(tenantDeployments)
+      .set({ status: "deprovisioning", updatedAt: new Date() })
+      .where(eq(tenantDeployments.tenantId, parsed.data));
+    return c.json({
+      accepted: true,
+      deleted: true,
+      alreadyQueued: true,
+      slug: target.slug,
+      jobId: inFlightDeprovision.id,
+      message: "Tenant deprovision is already in progress.",
+    }, 202);
+  }
   // Never run Docker or compose in the API process — always queue tenant.deprovision for the worker.
   // Deprovision child org stacks (separate tenants rows, slug = org.slug) before parent.
   // Jobs are async; we only enqueue here — parent deprovision is still queued immediately after.
@@ -847,27 +880,30 @@ app.delete("/tenants/:tenantId", async (c) => {
         ),
       ),
     );
-  const job = await insertTenantJob(db, {
-    type: "tenant.deprovision",
-    tenantId: parsed.data,
-    maxAttempts: 3,
-    payload: {
+  const job = await db.transaction(async (tx) => {
+    const inserted = await insertTenantJob(tx, {
+      type: "tenant.deprovision",
       tenantId: parsed.data,
-      removeVolumes,
-      removeImages: removeVolumes,
-      ownerId: target.ownerId,
-      tenantName: target.name,
-      slug: target.slug,
-    },
+      maxAttempts: 3,
+      payload: {
+        tenantId: parsed.data,
+        removeVolumes,
+        removeImages: removeVolumes,
+        ownerId: target.ownerId,
+        tenantName: target.name,
+        slug: target.slug,
+      },
+    });
+    await tx
+      .update(tenants)
+      .set({ status: "deprovisioning" })
+      .where(eq(tenants.id, parsed.data));
+    await tx
+      .update(tenantDeployments)
+      .set({ status: "deprovisioning", updatedAt: new Date() })
+      .where(eq(tenantDeployments.tenantId, parsed.data));
+    return inserted;
   });
-  await db
-    .update(tenants)
-    .set({ status: "deprovisioning" })
-    .where(eq(tenants.id, parsed.data));
-  await db
-    .update(tenantDeployments)
-    .set({ status: "deprovisioning", updatedAt: new Date() })
-    .where(eq(tenantDeployments.tenantId, parsed.data));
   await logAudit(db, {
     actorId: (c.get("actorId") as string | undefined) ?? "",
     action: "tenant.delete",

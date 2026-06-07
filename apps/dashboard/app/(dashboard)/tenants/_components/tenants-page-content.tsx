@@ -967,4 +967,20 @@ export function TenantsPageContent() {
         deleteVolumesOpen={deleteVolumesOpen}
         setDeleteVolumesOpen={setDeleteVolumesOpen}
         deleteTarget={deleteTarget}
-        setDeleteTarget={setDeleteTarge
+        setDeleteTarget={setDeleteTarget}
+        deleteSlugInput={deleteSlugInput}
+        setDeleteSlugInput={setDeleteSlugInput}
+        isDeletingTenant={isDeletingTenant}
+        deleteProgress={deleteProgress}
+        executeTenantDelete={executeTenantDelete}
+        bulkDeleteOpen={bulkDeleteOpen}
+        setBulkDeleteOpen={setBulkDeleteOpen}
+        bulkDeleteTargets={bulkDeleteTargets}
+        bulkDeleteConfirmInput={bulkDeleteConfirmInput}
+        setBulkDeleteConfirmInput={setBulkDeleteConfirmInput}
+        isBulkDeleting={isBulkDeleting}
+        executeBulkDelete={executeBulkDelete}
+      />
+    </div>
+  );
+}
