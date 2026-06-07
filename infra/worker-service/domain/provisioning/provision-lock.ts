@@ -1,8 +1,19 @@
 import { createHash } from "node:crypto";
-import { and, eq, ne, sql } from "drizzle-orm";
+import postgres from "postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";
+import { apiConfig } from "@repo/config";
+import { and, eq, ne } from "drizzle-orm";
 import { tenantLifecycleJobs } from "@repo/db/schema";
+
+let lockClient: ReturnType<typeof postgres> | null = null;
+
+function getLockClient() {
+  if (!lockClient) {
+    lockClient = postgres(apiConfig.databaseUrl, { max: 1 });
+  }
+  return lockClient;
+}
 
 export function tenantProvisionLockId(tenantId: string): number {
   const hash = createHash("sha256").update(tenantId).digest();
@@ -11,16 +22,17 @@ export function tenantProvisionLockId(tenantId: string): number {
 
 /** Session-level advisory lock for tenant lifecycle (provision/deprovision). */
 export async function withTenantLifecycleAdvisoryLock<T>(
-  db: PostgresJsDatabase<typeof dbSchema>,
+  _db: PostgresJsDatabase<typeof dbSchema>,
   tenantId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
   const lockId = tenantProvisionLockId(tenantId);
-  await db.execute(sql`SELECT pg_advisory_lock(${lockId})`);
+  const client = getLockClient();
+  await client`SELECT pg_advisory_lock(${lockId})`;
   try {
     return await fn();
   } finally {
-    await db.execute(sql`SELECT pg_advisory_unlock(${lockId})`);
+    await client`SELECT pg_advisory_unlock(${lockId})`;
   }
 }
 

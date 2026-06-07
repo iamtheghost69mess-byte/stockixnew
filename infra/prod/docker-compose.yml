@@ -58,9 +58,12 @@ x-stockix-platform-env: &stockix-platform-env
   # Shared infra — used by worker to provision tenant databases.
   SHARED_MYSQL_HOST: stockix-mysql
   SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
+  MYSQL_PROXY_HOST: ${MYSQL_PROXY_HOST:-stockix-mysql-proxy}
+  MYSQL_PROXY_PORT: ${MYSQL_PROXY_PORT:-6033}
   SHARED_MONGO_HOST: stockix-mongo
   TENANT_REDIS_HOST: stockix-redis
-  TENANT_REDIS_PORT: "6379"
+  TENANT_REDIS_PASSWORD: ${TENANT_REDIS_PASSWORD:-}
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
   MAX_TENANT_PORT: ${MAX_TENANT_PORT:-4999}
   WORKER_JOB_EXECUTION_TIMEOUT_MS: ${WORKER_JOB_EXECUTION_TIMEOUT_MS:-2700000}
   PROVISION_POLL_MS: ${PROVISION_POLL_MS:-2000}
@@ -236,6 +239,8 @@ services:
       - no-new-privileges:true
 
   api:
+    # Production entrypoint is baked into stockix-api image (node dist/index.js).
+    # Do not use --watch in production — drops all SSE connections on file change.
     image: ${API_IMAGE:-stockix-api:latest}
     restart: unless-stopped
     depends_on:

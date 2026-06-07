@@ -52,6 +52,44 @@ function sharedMongoHost(): string {
   return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
 }
 
+async function registerMysqlUserInProxySql(
+  username: string,
+  password: string,
+  log: (m: string) => void,
+): Promise<void> {
+  const proxyHost = process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
+  const adminUser = process.env.PROXYSQL_ADMIN_USER ?? "admin";
+  const adminPassword = process.env.PROXYSQL_ADMIN_PASSWORD ?? "admin";
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await mysql2.createConnection({
+      host: proxyHost,
+      port: 6032,
+      user: adminUser,
+      password: adminPassword,
+      connectTimeout: 10_000,
+    });
+    try {
+      await conn.query("DELETE FROM mysql_users WHERE username = ?", [username]);
+      await conn.query(
+        "INSERT INTO mysql_users (username, password, default_hostgroup, active, max_connections) VALUES (?, ?, 0, 1, 200)",
+        [username, password],
+      );
+      await conn.query("LOAD MYSQL USERS TO RUNTIME");
+      await conn.query("SAVE MYSQL USERS TO DISK");
+      log(`[db-provision] ProxySQL user registered: ${username}`);
+    } finally {
+      await conn.end();
+    }
+  } catch (err) {
+    log(
+      `[db-provision] ProxySQL user sync warning for ${username}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+}
+
 // REPAIRED: worker host override for host-run worker 2026-06-05
 /** Host-run worker reaches shared Mongo via published localhost ports in dev. */
 function workerSharedMongoHost(): string {
@@ -97,13 +135,16 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
   }
 
   const pattern = `tenant:${slug}:*`;
+  const redisPassword = process.env.TENANT_REDIS_PASSWORD?.trim();
+  const redisCliArgs = ["exec", redisContainer, "redis-cli"];
+  if (redisPassword && redisPassword !== "__MUST_OVERRIDE__") {
+    redisCliArgs.push("-a", redisPassword);
+  }
   try {
     const { stdout } = await execa(
       "docker",
       [
-        "exec",
-        redisContainer,
-        "redis-cli",
+        ...redisCliArgs,
         "EVAL",
         "local c='0'; local n=0; repeat local r=redis.call('SCAN',c,'MATCH',ARGV[1],'COUNT',100); c=r[1]; for _,k in ipairs(r[2]) do redis.call('DEL',k); n=n+1 end until c=='0'; return n",
         "0",
@@ -201,6 +242,7 @@ export async function provisionTenantDatabases(
     );
     await conn.execute("FLUSH PRIVILEGES");
     log(`[db-provision] MySQL ready: ${financeDb}, ${systemDb}, user: ${tenantUser}`);
+    await registerMysqlUserInProxySql(tenantUser, dbPassword, log);
   } finally {
     await conn.end();
   }

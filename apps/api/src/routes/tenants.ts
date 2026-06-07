@@ -1,5 +1,4 @@
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
 import { apiConfig, isMailConfigured } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
 import type { createDb } from "@repo/db";
@@ -38,7 +37,6 @@ import {
 } from "drizzle-orm";
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { execa } from "execa";
 import { z } from "zod";
 import { logAudit } from "../audit.js";
 import { decryptDeploymentSecret } from "@repo/shared/deployment-secrets";
@@ -341,67 +339,6 @@ export async function resolveFinanceAdminPasswordForTenant(
 export function canViewFinanceAdminPassword(actorRole: string): boolean {
   const rank = ROLE_RANK[actorRole as Role];
   return Number.isFinite(rank) && rank >= ROLE_RANK.support_agent;
-}
-
-export function composeProjectFromSlug(slug: string): string {
-  return `stockix-${slug}`;
-}
-
-async function bestEffortDockerProjectCleanup(project: string): Promise<void> {
-  try {
-    await execa("docker", ["compose", "-p", project, "down", "--volumes", "--remove-orphans"], {
-      stdio: "pipe",
-    });
-  } catch {
-    // Best-effort cleanup only.
-  }
-
-  try {
-    const { stdout } = await execa("docker", ["ps", "-a", "--format", "{{.ID}}\t{{.Names}}"]);
-    const ids = stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => line.split("\t"))
-      .filter((parts) => parts.length === 2 && parts[1]?.startsWith(`${project}-`))
-      .map((parts) => parts[0]!)
-      .filter(Boolean);
-    if (ids.length > 0) {
-      await execa("docker", ["rm", "-f", ...ids], { stdio: "pipe" });
-    }
-  } catch {
-    // Best-effort cleanup only.
-  }
-
-  try {
-    const { stdout } = await execa("docker", ["volume", "ls", "--format", "{{.Name}}"]);
-    const volumes = stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((name) => name.startsWith(`${project}_`));
-    if (volumes.length > 0) {
-      await execa("docker", ["volume", "rm", "-f", ...volumes], { stdio: "pipe" });
-    }
-  } catch {
-    // Best-effort cleanup only.
-  }
-
-  try {
-    await execa("docker", ["network", "rm", `${project}_default`], { stdio: "pipe" });
-  } catch {
-    // Best-effort cleanup only.
-  }
-}
-
-export async function scrubTenantRuntimeArtifacts(slug: string): Promise<void> {
-  const project = composeProjectFromSlug(slug);
-  await bestEffortDockerProjectCleanup(project);
-  await bestEffortDockerProjectCleanup(`stockix-pos-${slug}`);
-  await rm(`${apiConfig.tenantEnvRoot}/${slug}`, { recursive: true, force: true }).catch(() => undefined);
-  await rm(`${apiConfig.traefikDynamicDir}/tenant-${slug}.yml`, { force: true }).catch(() => undefined);
-  await rm(`${apiConfig.traefikDynamicDir}/tenant-pos-${slug}.yml`, { force: true }).catch(
-    () => undefined,
-  );
 }
 
 const stockixModuleZod = z.enum(["accounting", "pos", "pms", "chat"]);
@@ -991,6 +928,7 @@ app.post("/tenants", async (c) => {
     .where(eq(tenants.slug, body.slug))
     .limit(1);
 
+  let needsScrub = false;
   const existing = slugRecord[0];
   if (existing) {
     const canRecoverSlug =
@@ -999,7 +937,8 @@ app.post("/tenants", async (c) => {
       || existing.deploymentStatus === "failed"
       || existing.deploymentStatus === "provisioning";
     if (canRecoverSlug) {
-      await scrubTenantRuntimeArtifacts(body.slug);
+      // P0-4: scrub moved to worker (preflight.scrub) — no Docker I/O in API request path.
+      needsScrub = true;
       const rows = await db
         .select({ correlationId: tenantLifecycleJobs.correlationId })
         .from(tenantLifecycleJobs)
@@ -1022,8 +961,8 @@ app.post("/tenants", async (c) => {
       );
     }
   } else {
-    // Clean orphan runtime artifacts if DB has no tenant row for this slug.
-    await scrubTenantRuntimeArtifacts(body.slug);
+    // P0-4: orphan runtime cleanup runs in worker when needsScrub is set on the job payload.
+    needsScrub = true;
   }
   const stillTaken = await db
     .select({ id: tenants.id })
@@ -1067,6 +1006,7 @@ app.post("/tenants", async (c) => {
       modules: body.modules,
       assignExistingLicenseId: body.assign_existing_license_id ?? null,
       provisionRequestedById: c.get("actorId") as string,
+      needsScrub,
     },
   });
 

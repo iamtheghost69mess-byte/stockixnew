@@ -211,20 +211,6 @@ app.post("/internal/jobs/claim", async (c) => {
       }
     }
 
-    const [pending] = await tx
-      .select({ id: tenantLifecycleJobs.id })
-      .from(tenantLifecycleJobs)
-      .where(
-        and(
-          eq(tenantLifecycleJobs.status, "pending"),
-          sql`${tenantLifecycleJobs.attempts} < ${tenantLifecycleJobs.maxAttempts}`,
-          sql`${tenantLifecycleJobs.runAt} <= now()`,
-        ),
-      )
-      .orderBy(sql`${tenantLifecycleJobs.priority} DESC`, asc(tenantLifecycleJobs.createdAt))
-      .limit(1);
-    if (!pending?.id) return null;
-
     const claimToken = randomUUID();
     const [updated] = await tx
       .update(tenantLifecycleJobs)
@@ -235,7 +221,20 @@ app.post("/internal/jobs/claim", async (c) => {
         claimToken,
         updatedAt: new Date(),
       })
-      .where(and(eq(tenantLifecycleJobs.id, pending.id), eq(tenantLifecycleJobs.status, "pending")))
+      .where(
+        eq(
+          tenantLifecycleJobs.id,
+          sql`(
+            SELECT id FROM tenant_lifecycle_jobs
+            WHERE status = 'pending'
+              AND attempts < max_attempts
+              AND run_at <= NOW()
+            ORDER BY priority DESC, created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )`,
+        ),
+      )
       .returning();
     return updated ?? null;
   });

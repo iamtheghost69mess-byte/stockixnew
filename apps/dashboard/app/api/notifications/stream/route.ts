@@ -1,9 +1,20 @@
-import { dashboardConfig } from "@repo/config";
 import { apiFetch, proxyControlPlaneEventStream } from "@/lib/api-client";
-import { isApiConnectionError } from "@/lib/api-connection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const sseGracefulCloseHeaders = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+} as const;
+
+function sseGracefulCloseResponse(): Response {
+  return new Response("event: close\ndata: {}\n\n", {
+    status: 200,
+    headers: sseGracefulCloseHeaders,
+  });
+}
 
 export async function GET(req: Request) {
   try {
@@ -14,14 +25,7 @@ export async function GET(req: Request) {
     );
 
     return proxyControlPlaneEventStream(res, req);
-  } catch (error) {
-    if (isApiConnectionError(error)) {
-      return new Response("Notification stream unavailable", { status: 503 });
-    }
-    const fallback = dashboardConfig.nextPublicApiUrl;
-    return new Response(
-      `Notification stream unavailable${fallback ? ` (${fallback})` : ""}`,
-      { status: 503 },
-    );
+  } catch {
+    return sseGracefulCloseResponse();
   }
 }
