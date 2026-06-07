@@ -1,10 +1,6 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { apiConfig, env } from "@repo/config";
-import {
-  encryptDeploymentSecret,
-  isEncryptedDeploymentSecret,
-} from "@repo/shared/deployment-secrets";
 
 export type TenantEnvFileParams = {
   mysqlVolumeName: string;
@@ -33,6 +29,8 @@ export type TenantEnvFileParams = {
   stockixPrimaryColor?: string;
   /** Browser origins allowed for Finance Socket.IO (comma-separated). */
   socketAllowedOrigins?: string;
+  redisPassword?: string;
+  mongoRootPassword?: string;
 };
 
 /** Signup policy copied from repo root `.env` into each tenant Finance stack. */
@@ -52,11 +50,6 @@ function mailSecureEnvValue(): string {
   return env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
 }
 
-function maybeEncryptEnvValue(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || isEncryptedDeploymentSecret(trimmed)) return trimmed;
-  return encryptDeploymentSecret(trimmed, apiConfig.deploymentSecretKey);
-}
 
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
 export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, string> {
@@ -94,27 +87,27 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     ...signup,
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
-    MAIL_PASSWORD: mailPassword ? maybeEncryptEnvValue(mailPassword) : "",
+    MAIL_PASSWORD: mailPassword,
     MAIL_PORT: env.MAIL_PORT ?? "",
     MAIL_SECURE: mailSecureEnvValue(),
     MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
     MAIL_FROM_ADDRESS: env.MAIL_FROM_ADDRESS ?? "",
     REDIS_HOST: "redis",
     REDIS_PORT: "6379",
-    REDIS_PASSWORD: "",
+    REDIS_PASSWORD: params.redisPassword ?? "",
     REDIS_DB: "0",
     QUEUE_HOST: "redis",
     QUEUE_PORT: "6379",
     S3_REGION: params.s3Region,
-    S3_ACCESS_KEY_ID: s3AccessKeyId ? maybeEncryptEnvValue(s3AccessKeyId) : "",
-    S3_SECRET_ACCESS_KEY: s3SecretAccessKey ? maybeEncryptEnvValue(s3SecretAccessKey) : "",
+    S3_ACCESS_KEY_ID: s3AccessKeyId,
+    S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
     S3_ENDPOINT: params.s3Endpoint,
     S3_BUCKET: params.s3Bucket,
     S3_FORCE_PATH_STYLE: params.s3ForcePathStyle,
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
-    DEPLOYMENT_SECRET_KEY: apiConfig.deploymentSecretKey,
+    MONGO_ROOT_PASSWORD: params.mongoRootPassword ?? "",
     BILLING_ENABLED: "false",
     REACT_APP_STOCKIX_API_URL: params.stockixApiUrl ?? "",
     REACT_APP_STOCKIX_TENANT_ID: params.stockixTenantId ?? "",
@@ -128,6 +121,11 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),
     THROTTLE_AUTH_LIMIT: String(env.THROTTLE_AUTH_LIMIT),
+    PORT: "3000",
+    NODE_ENV: "production",
+    AGENDA_DB_COLLECTION: process.env.AGENDA_DB_COLLECTION ?? "stockix-jobs",
+    AGENDA_POOL_TIME: process.env.AGENDA_POOL_TIME ?? "every 1 minute",
+    AGENDA_CONCURRENCY: process.env.AGENDA_CONCURRENCY ?? "20",
   };
 }
 

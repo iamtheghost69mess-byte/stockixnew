@@ -43,9 +43,8 @@ export default class TenantDBManager implements ITenantDBManager {
     const databaseName = this.getDatabaseName(tenant);
 
     const results = await this.sysKnex.raw(
-      'SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = "' +
-        databaseName +
-        '"'
+      'SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?',
+      [databaseName],
     );
     return results[0].length > 0;
   }

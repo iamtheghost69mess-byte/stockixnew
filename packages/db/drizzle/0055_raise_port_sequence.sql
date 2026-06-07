@@ -1,0 +1,1 @@
+ALTER SEQUENCE "tenant_port_seq" MAXVALUE 49999;

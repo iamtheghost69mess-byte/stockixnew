@@ -8,7 +8,7 @@ services:
       dockerfile: services/posnew/apps/pos-backend/Dockerfile
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8010/api/ping || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8010/health || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -35,7 +35,7 @@ services:
       pos-mongo:
         condition: service_healthy
       pos-redis:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "127.0.0.1:${POS_HOST_PORT:-8010}:8010"
     mem_limit: 512m
@@ -73,7 +73,7 @@ services:
     mem_swappiness: 0
     oom_kill_disable: false
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection({host:'pos-redis',port:6379}).on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -105,7 +105,7 @@ services:
     mem_swappiness: 0
     oom_kill_disable: false
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection({host:'pos-redis',port:6379}).on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -196,3 +196,7 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME}_pos_mongo
   pos_redis:
     name: ${COMPOSE_PROJECT_NAME}_pos_redis
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:-stockix_pos}_net

@@ -57,7 +57,7 @@ let lastSuccessfulPollAt = Date.now();
 const healthServer = http.createServer((req, res) => {
   if (req.url === "/health" && req.method === "GET") {
     const lastPollAge = Date.now() - lastSuccessfulPollAt;
-    const healthy = lastPollAge < POLL_INTERVAL_MS * 2;
+    const healthy = lastPollAge < heartbeatIntervalMs * 2;
     res.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: healthy ? "ok" : "degraded", lastPollAge }));
     return;
@@ -406,6 +406,7 @@ function startJobHeartbeatLoop(jobId: string): () => void {
         `[worker][${jobId}] heartbeat failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+    lastSuccessfulPollAt = Date.now();
   }, heartbeatIntervalMs);
   return () => clearInterval(timer);
 }
@@ -512,6 +513,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   };
 }> {
   const guard = async () => {
+    if (shuttingDown) throw new Error("worker_shutting_down");
     await assertProvisionNotCancelled(job.id);
   };
   await guard();
@@ -601,6 +603,7 @@ async function runOrgProvisionJob(
   },
 ): Promise<void> {
   const guard = async () => {
+    if (shuttingDown) throw new Error("worker_shutting_down");
     await assertProvisionNotCancelled(job.id);
   };
   await guard();

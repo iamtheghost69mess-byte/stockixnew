@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { execa } from "execa";
 
@@ -457,6 +457,12 @@ export async function rollbackProvision(
     }
   }
 
+  if (composeCtx?.envPath) {
+    await rm(join(composeCtx.envPath, ".."), { recursive: true, force: true }).catch((rmErr) => {
+      log(`[rollback] env dir cleanup failed: ${rmErr instanceof Error ? rmErr.message : String(rmErr)}`);
+    });
+  }
+
   await db
     .insert(tenantProvisionEvents)
     .values({
@@ -770,11 +776,7 @@ export async function executeProvisionRuntime(
     await mkdir(join(stockixFinanceRoot, "docker/certbot/certs"), { recursive: true });
 
     const { secrets } = deps;
-    // Same admin email for all orgs under a tenant; password must match the parent stack's
-    // bootstrap key so operators can sign in everywhere. Sub-org jobs set parentTenantSlug.
-    const bootstrapPasswordKey =
-      input.parentTenantSlug?.trim() || input.slug.trim();
-    oneTimeAdminPassword = secrets.bootstrapAdminPassword(bootstrapPasswordKey);
+    oneTimeAdminPassword = secrets.randomHex(24);
     let jwtSecret = secrets.persistSecret(secrets.randomHex(32));
     let dbPasswordPlain = secrets.randomHex(16);
     let dbPassword = secrets.persistSecret(dbPasswordPlain);
@@ -783,6 +785,8 @@ export async function executeProvisionRuntime(
     const mongoUrlPersisted = "mongodb://mongo/stockix";
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
+    const redisPassword = secrets.randomHex(16);
+    const mongoRootPassword = secrets.randomHex(16);
     // S3 (Backblaze B2 / MinIO) is optional — empty values skip object storage; attachments need B2 in tenant .env.
     const optionalEnv = (name: string) => process.env[name]?.trim() ?? "";
     const s3Region = optionalEnv("S3_REGION") || "us-east-1";
@@ -1313,6 +1317,8 @@ export async function executeProvisionRuntime(
       adminEmail: input.adminEmail,
       agendashUser,
       agendashPassword,
+      redisPassword,
+      mongoRootPassword,
       s3Region,
       s3AccessKeyId,
       s3SecretAccessKey,
@@ -1699,7 +1705,7 @@ export async function executeProvisionRuntime(
           {
             internalBaseUrl: internalUrl,
             adminEmail: input.adminEmail,
-            adminPassword: secrets.bootstrapAdminPassword(bootstrapPasswordKey),
+            adminPassword: oneTimeAdminPassword!,
             settings: inheritedSettings,
             correlationId,
           },
@@ -1712,7 +1718,7 @@ export async function executeProvisionRuntime(
           financeOrganizationId = buildResult.financeOrganizationId;
         }
         if (input.controlPlaneOrgId && buildResult.financeOrganizationId) {
-          const apiBase = `http://localhost:${apiConfig.port}`;
+          const apiBase = `http://${process.env.API_HOST ?? "localhost"}:${apiConfig.port}`;
           const saveUrl = `${apiBase}/internal/organizations/${input.controlPlaneOrgId}`;
           const secret = apiConfig.workerSecret;
           try {

@@ -379,6 +379,13 @@
       "when": 1781160000000,
       "tag": "0054_tenant_status_failed",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1780790400000,
+      "tag": "0055_raise_port_sequence",
+      "breakpoints": true
     }
   ]
 }

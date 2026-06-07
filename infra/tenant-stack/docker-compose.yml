@@ -102,6 +102,7 @@ services:
       # Official image loads newrelic; without these it logs bootstrap errors locally.
       - NEW_RELIC_ENABLED=false
       - NEW_RELIC_APP_NAME=stockix-local
+      - NODE_ENV=production
       - MAIL_HOST=${MAIL_HOST:-}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
@@ -128,7 +129,7 @@ services:
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
       - TENANT_DB_NAME_PREFIX=${TENANT_DB_NAME_PREFIX:-${TENANT_DB_NAME_PERFIX}}
       - JWT_SECRET=${JWT_SECRET}
-      - MONGODB_DATABASE_URL=mongodb://mongo/stockix
+      - MONGODB_DATABASE_URL=mongodb://root:${MONGO_ROOT_PASSWORD}@mongo/stockix?authSource=admin
       - BASE_URL=${BASE_URL}
       - AGENDASH_AUTH_USER=${AGENDASH_AUTH_USER}
       - AGENDASH_AUTH_PASSWORD=${AGENDASH_AUTH_PASSWORD}
@@ -137,6 +138,7 @@ services:
       - SIGNUP_ALLOWED_EMAILS=${SIGNUP_ALLOWED_EMAILS}
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
       - DEPLOYMENT_SECRET_KEY=${DEPLOYMENT_SECRET_KEY}
+      - MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
       - THROTTLE_GLOBAL_TTL=${THROTTLE_GLOBAL_TTL:-60000}
       - THROTTLE_GLOBAL_LIMIT=${THROTTLE_GLOBAL_LIMIT:-2000}
       - THROTTLE_AUTH_TTL=${THROTTLE_AUTH_TTL:-60000}
@@ -239,6 +241,10 @@ services:
     # so provisioning still works if docker/mongo is missing from a shallow clone.
     image: mongo:5.0
     restart: unless-stopped
+    command: ["mongod", "--auth"]
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
@@ -248,7 +254,7 @@ services:
     volumes:
       - mongo:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand({ ping: 1 })' || exit 1"]
+      test: ["CMD-SHELL", "mongosh -u root -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 })' || exit 1"]
       interval: 10s
       timeout: 30s
       retries: 30
@@ -261,6 +267,9 @@ services:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}/docker/redis
     restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     mem_limit: 128m
     cpus: "0.25"
     mem_swappiness: 0
@@ -270,7 +279,7 @@ services:
     volumes:
       - redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -286,3 +295,7 @@ volumes:
   mongo:
   redis:
   nginx_logs:
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:-stockix_tenant}_net
