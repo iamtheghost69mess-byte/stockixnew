@@ -5,6 +5,7 @@ import { ClsModule, ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
 import { buildTenantKnexOptionsFromConfig } from '@/database/finance-knex-options';
 import { NativeFsMigrations } from '@/database/native-fs-migrations';
+import { sanitizeDatabaseName } from '@/utils/sanitize-database-name';
 import { TENANCY_DB_CONNECTION } from './TenancyDB.constants';
 import { UnitOfWork } from './UnitOfWork.service';
 
@@ -20,7 +21,7 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
     const prefix =
       configService.get<string>('tenantDatabase.dbNamePrefix') ??
       'stockix_tenant_';
-    const database = `${prefix}${organizationId}`;
+    const database = sanitizeDatabaseName(`${prefix}${organizationId}`);
     const cachedInstance = lruCache.get(database);
 
     if (cachedInstance) {
