@@ -69,6 +69,8 @@ export const DELETE_MAX_WAIT_MS = 5 * 60 * 1000;
 export const READINESS_GRACE_MS = 2 * 60 * 1000;
 
 export const PROVISION_CORRELATION_SESSION_KEY = "stockix:provision-correlation-id";
+/** Prevents re-resuming the same in-flight provision on every full page reload. */
+export const PROVISION_RESUME_ATTEMPTED_KEY = "stockix:provision-resume-attempted";
 
 export type ProvisionPhase = "submitting" | "provisioning" | "readiness";
 

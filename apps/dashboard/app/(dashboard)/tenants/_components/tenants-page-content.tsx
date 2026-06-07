@@ -26,6 +26,7 @@ import {
   mergeProvisionEvents,
   pollUntilTenantRemoved,
   PROVISION_CORRELATION_SESSION_KEY,
+  PROVISION_RESUME_ATTEMPTED_KEY,
   READINESS_GRACE_MS,
   startElapsedTimer,
   POLL_MS,
@@ -752,8 +753,10 @@ export function TenantsPageContent() {
         setProvisionPhase("provisioning");
         setStreamCorrelationId(data.correlationId);
         sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY, data.correlationId);
+        sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         const ok = await pollUntilDone(data.correlationId, setProvisionPhase);
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+        sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         const generatedPublicUrl = tenantPublicBaseUrl(nextSlug, ok.internalPort ?? null);
         const reportedPublicUrl =
           typeof ok.baseUrl === "string" &&
@@ -805,6 +808,7 @@ export function TenantsPageContent() {
           : String(e);
       setError(message);
       sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+      sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
     } finally {
       window.clearTimeout(submitTimeoutId);
       setStreamCorrelationId(null);
@@ -817,6 +821,7 @@ export function TenantsPageContent() {
     if (loading || streamCorrelationId) return;
     const saved = sessionStorage.getItem(PROVISION_CORRELATION_SESSION_KEY);
     if (!saved) return;
+    if (sessionStorage.getItem(PROVISION_RESUME_ATTEMPTED_KEY) === saved) return;
 
     let cancelled = false;
     void (async () => {
@@ -829,10 +834,12 @@ export function TenantsPageContent() {
         || sj.status === "failed"
       ) {
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+        sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         return;
       }
       if (!sr.ok) return;
 
+      sessionStorage.setItem(PROVISION_RESUME_ATTEMPTED_KEY, saved);
       setLoading(true);
       setProvisionPhase(
         sj.status === "queued" || sj.status === "running"
@@ -850,10 +857,12 @@ export function TenantsPageContent() {
           });
         }
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+        sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         void load().catch(() => {});
       } catch (e) {
         setError(String(e));
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+        sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
       } finally {
         if (!cancelled) {
           setStreamCorrelationId(null);
