@@ -1,13 +1,12 @@
 const { loadEnvIfDev } = require("../lib/load-env-if-dev");
 loadEnvIfDev();
 const mongoose = require("mongoose");
-const { Worker } = require("bullmq");
-const IORedis = require("ioredis");
 const escpos = require("@node-escpos/core");
 const USB = require("@node-escpos/usb-adapter");
 
 const connectDB = require("../config/database");
 const config = require("../config/config");
+const { createWorker } = require("../services/jobQueue");
 const PrintJob = require("../models/printJobModel");
 const Order = require("../models/orderModel");
 const Organization = require("../models/organizationModel");
@@ -155,12 +154,8 @@ async function main() {
   }
 
   await connectDB();
-  const connection = new IORedis(config.redisUrl, {
-    maxRetriesPerRequest: null,
-  });
 
-  const worker = new Worker("print-jobs", processPrintJob, {
-    connection,
+  const worker = createWorker("print-jobs", processPrintJob, {
     concurrency: 5,
     settings: {
       backoffStrategy(attemptsMade, type) {
@@ -171,6 +166,11 @@ async function main() {
       },
     },
   });
+
+  if (!worker) {
+    console.error("[print-jobs] Worker not started — Redis unavailable or bullmq missing");
+    process.exit(1);
+  }
 
   worker.on("completed", (job) => {
     // eslint-disable-next-line no-console

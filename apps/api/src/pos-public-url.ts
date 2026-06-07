@@ -72,6 +72,17 @@ export async function resolvePosBackendHealthUrl(slug: string): Promise<string |
   return `${publicScheme()}://${host}:${port}/health`;
 }
 
+/** Resolves a reachable POS API base URL for control-plane proxy calls. */
+export async function effectivePosApiUrl(slug: string): Promise<string | null> {
+  const root = apiConfig.rootDomain ?? "localhost";
+  if (root === "localhost") {
+    const port = await resolvePosBackendHostPort(slug);
+    if (port == null || !Number.isFinite(port) || port <= 0) return null;
+    return `${publicScheme()}://${localTenantHost()}:${port}`;
+  }
+  return `${publicScheme()}://${slug}-pos-api.${root}`;
+}
+
 /** Resolves a reachable POS URL in local dev (direct host port instead of Traefik subdomain). */
 export async function effectivePosUrl(
   slug: string,

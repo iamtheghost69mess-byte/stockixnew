@@ -1,8 +1,12 @@
 import { posConfig } from "@repo/config";
 
-function getPosPlatformBase(): string {
-  const url = posConfig.platformBaseUrl?.trim();
-  if (!url) throw new Error("POS_PLATFORM_BASE_URL is required. Set it in .env. Example: http://localhost:8010");
+function getPosPlatformBase(override?: string): string {
+  const url = override?.trim() || posConfig.platformBaseUrl?.trim();
+  if (!url) {
+    throw new Error(
+      "POS_PLATFORM_BASE_URL is required. Set it in .env. Example: http://localhost:8010",
+    );
+  }
   return url;
 }
 
@@ -11,8 +15,9 @@ export async function posProxy(
   method: string,
   body?: unknown,
   query?: Record<string, string | undefined>,
+  baseUrl?: string,
 ): Promise<Response> {
-  const url = new URL(`${getPosPlatformBase()}/api/platform/v1${path}`);
+  const url = new URL(`${getPosPlatformBase(baseUrl)}/api/platform/v1${path}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== "") {
@@ -25,6 +30,7 @@ export async function posProxy(
     method,
     headers: {
       "Content-Type": "application/json",
+      "X-Forwarded-Proto": "https",
       ...(platformApiKey ? { "X-Api-Key": platformApiKey } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -36,10 +42,11 @@ export async function posProxyJson(
   method: string,
   body?: unknown,
   query?: Record<string, string | undefined>,
+  baseUrl?: string,
 ): Promise<{ data: unknown; status: number }> {
   let res: Response;
   try {
-    res = await posProxy(path, method, body, query);
+    res = await posProxy(path, method, body, query, baseUrl);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "POS platform unreachable";

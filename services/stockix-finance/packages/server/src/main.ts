@@ -1,5 +1,7 @@
 import './bootstrap-decrypt-env';
 import './before';
+import { Container } from 'typedi';
+import LoggerInstance from '@/loaders/logger';
 import * as Sentry from '@sentry/node';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -13,6 +15,11 @@ global.__public_dirname = path.join(__dirname, '..', 'public');
 global.__static_dirname = path.join(__dirname, '../static');
 global.__views_dirname = path.join(global.__static_dirname, '/views');
 global.__images_dirname = path.join(global.__static_dirname, '/images');
+
+// Legacy typedi subscribers still resolve `logger` during Nest event emission.
+if (!Container.has('logger')) {
+  Container.set('logger', LoggerInstance);
+}
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error(

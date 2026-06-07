@@ -4,6 +4,10 @@ import { registerPosCredentialsRoutes } from "../src/pos-credentials-http.js";
 
 const posProxyJson = vi.fn();
 
+vi.mock("../src/pos-public-url.js", () => ({
+  effectivePosApiUrl: vi.fn(async () => "http://127.0.0.1:4140"),
+}));
+
 vi.mock("../src/pos-proxy.js", () => ({
   posProxyJson: (...args: unknown[]) => posProxyJson(...args),
 }));
@@ -83,6 +87,9 @@ describe("pos-credentials routes", () => {
     expect(posProxyJson).toHaveBeenCalledWith(
       `/organizations/${encodeURIComponent(posOrgId)}/credentials`,
       "GET",
+      undefined,
+      undefined,
+      "http://127.0.0.1:4140",
     );
   });
 

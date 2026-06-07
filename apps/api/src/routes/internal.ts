@@ -75,6 +75,27 @@ type ApiEnv = {
   };
 };
 
+async function resolveProvisionJobTenantId(
+  db: Db,
+  job: { tenantId: string | null; payload: unknown },
+): Promise<string | null> {
+  if (job.tenantId) return job.tenantId;
+  const payloadSlug =
+    job.payload &&
+    typeof job.payload === "object" &&
+    "slug" in job.payload &&
+    typeof (job.payload as { slug?: unknown }).slug === "string"
+      ? String((job.payload as { slug: string }).slug)
+      : null;
+  if (!payloadSlug) return null;
+  const [row] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.slug, payloadSlug))
+    .limit(1);
+  return row?.id ?? null;
+}
+
 export function registerInternalRoutes(app: Hono<ApiEnv>, db: Db | null): void {
 app.post("/internal/jobs/claim", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -449,6 +470,11 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
     .limit(1);
   if (!currentJob) return c.json({ error: "job_not_found" }, 404);
 
+  const resolvedTenantId =
+    currentJob.type === "tenant.provision"
+      ? await resolveProvisionJobTenantId(db, currentJob)
+      : currentJob.tenantId;
+
   if (
     currentJob.type === "tenant.provision"
     && currentJob.correlationId
@@ -505,7 +531,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       phase: "secret",
       level: "info",
       message: "Bootstrap admin OTP persisted",
-      tenantId: currentJob.tenantId,
+      tenantId: resolvedTenantId ?? currentJob.tenantId,
       meta: {
         type: "bootstrap_admin_otp",
         cipher: encryptProvisionSecret(oneTimeAdminPassword),
@@ -526,7 +552,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       phase: "secret",
       level: "info",
       message: "POS bootstrap PIN credentials persisted",
-      tenantId: currentJob.tenantId,
+      tenantId: resolvedTenantId ?? currentJob.tenantId,
       meta: {
         type: "pos_bootstrap_pins",
         cipher: encryptProvisionSecret(JSON.stringify(posDefaultCredentials)),
@@ -543,7 +569,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       phase: "provisioning.completed",
       level: "info",
       message: "Provisioning worker marked lifecycle job completed",
-      tenantId: currentJob.tenantId,
+      tenantId: resolvedTenantId ?? currentJob.tenantId,
       meta: { jobId: currentJob.id },
     });
   }
@@ -555,7 +581,7 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       typeof (currentJob.payload as { slug?: unknown }).slug === "string"
         ? String((currentJob.payload as { slug: string }).slug)
         : null;
-    let targetTenantId = currentJob.tenantId;
+    let targetTenantId = resolvedTenantId ?? currentJob.tenantId;
     if (!targetTenantId && payloadSlug) {
       const [row] = await db
         .select({ id: tenants.id })
@@ -563,6 +589,12 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         .where(eq(tenants.slug, payloadSlug))
         .limit(1);
       targetTenantId = row?.id ?? null;
+    }
+    if (targetTenantId && !currentJob.tenantId) {
+      await db
+        .update(tenantLifecycleJobs)
+        .set({ tenantId: targetTenantId, updatedAt: new Date() })
+        .where(eq(tenantLifecycleJobs.id, jobId));
     }
     if (targetTenantId) {
       const tenantStatusFromResult =

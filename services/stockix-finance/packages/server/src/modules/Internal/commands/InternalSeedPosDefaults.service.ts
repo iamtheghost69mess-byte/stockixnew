@@ -13,17 +13,14 @@ import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
 import { Customer } from '@/modules/Customers/models/Customer';
 import { Account } from '@/modules/Accounts/models/Account.model';
 import { Item } from '@/modules/Items/models/Item';
-import { CustomersApplication } from '@/modules/Customers/CustomersApplication.service';
-import { VendorsApplication } from '@/modules/Vendors/VendorsApplication.service';
 import { ItemsApplicationService } from '@/modules/Items/ItemsApplication.service';
-import { CreateCustomerDto } from '@/modules/Customers/dtos/CreateCustomer.dto';
-import { CreateVendorDto } from '@/modules/Vendors/dtos/CreateVendor.dto';
 import { CreateItemDto } from '@/modules/Items/dtos/Item.dto';
 import { Vendor } from '@/modules/Vendors/models/Vendor';
 import {
   POS_BRIDGE_ITEM_CODES,
   POS_BRIDGE_ITEM_NAMES,
 } from '../pos-bridge-items.constants';
+import { ContactService } from '@/modules/Contacts/types/Contacts.types';
 
 const WALK_IN_DISPLAY_NAME = 'Walk-in Customer';
 const POS_VENDOR_DISPLAY_NAME = 'POS Trade Vendor';
@@ -46,8 +43,6 @@ export class InternalSeedPosDefaultsService {
 
   constructor(
     private readonly cls: ClsService,
-    private readonly customersApplication: CustomersApplication,
-    private readonly vendorsApplication: VendorsApplication,
     private readonly itemsApplication: ItemsApplicationService,
 
     @Inject(TenantModel.name)
@@ -107,13 +102,20 @@ export class InternalSeedPosDefaultsService {
       return Number(existing.id);
     }
 
-    const dto = new CreateCustomerDto();
-    dto.displayName = WALK_IN_DISPLAY_NAME;
-    dto.customerType = 'individual';
-    dto.currencyCode = currencyCode;
-    dto.active = true;
+    const created = await this.customerModel()
+      .query()
+      .insertAndFetch({
+        contactService: ContactService.Customer,
+        contactType: 'individual',
+        displayName: WALK_IN_DISPLAY_NAME,
+        currencyCode,
+        active: true,
+        balance: 0,
+        openingBalance: 0,
+        openingBalanceExchangeRate: 1,
+        note: '',
+      });
 
-    const created = await this.customersApplication.createCustomer(dto);
     return Number(created.id);
   }
 
@@ -127,12 +129,20 @@ export class InternalSeedPosDefaultsService {
       return Number(existing.id);
     }
 
-    const dto = new CreateVendorDto();
-    dto.displayName = POS_VENDOR_DISPLAY_NAME;
-    dto.currencyCode = currencyCode;
-    dto.active = true;
+    const created = await this.vendorModel()
+      .query()
+      .insertAndFetch({
+        contactService: ContactService.Vendor,
+        contactType: 'business',
+        displayName: POS_VENDOR_DISPLAY_NAME,
+        currencyCode,
+        active: true,
+        balance: 0,
+        openingBalance: 0,
+        openingBalanceExchangeRate: 1,
+        note: '',
+      });
 
-    const created = await this.vendorsApplication.createVendor(dto);
     return Number(created.id);
   }
 

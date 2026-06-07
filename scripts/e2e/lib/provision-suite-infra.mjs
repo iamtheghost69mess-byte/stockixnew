@@ -195,6 +195,28 @@ export function mongoDbExists(slug) {
   return q.ok && /true/i.test(q.out);
 }
 
+function parseDeviceUuidFromSetCookie(response) {
+  if (typeof response.headers.getSetCookie === "function") {
+    for (const cookie of response.headers.getSetCookie()) {
+      const match = cookie.match(/device_uuid=([^;]+)/i);
+      if (match) return String(match[1]).trim();
+    }
+  }
+  const raw = response.headers.get("set-cookie") || "";
+  const match = raw.match(/device_uuid=([^;]+)/i);
+  return match ? String(match[1]).trim() : "";
+}
+
+export function approvePosDeviceInMongo(slug, deviceUuid) {
+  if (!slug || !deviceUuid) return false;
+  const dbName = `${slug}_pos`.replace(/'/g, "\\'");
+  const uuid = String(deviceUuid).replace(/'/g, "\\'");
+  const q = runShell(
+    `docker exec ${MONGO_CONTAINER} mongosh --quiet --eval "db.getSiblingDB('${dbName}').devices.updateOne({ uuid: '${uuid}' }, { $set: { status: 'approved', lastSeenAt: new Date() } }).modifiedCount" 2>&1`,
+  );
+  return q.ok && /\b1\b/.test(q.out);
+}
+
 function redisCliExecArgs() {
   const args = ["exec", REDIS_CONTAINER, "redis-cli"];
   const pwd = process.env.TENANT_REDIS_PASSWORD?.trim();
@@ -270,13 +292,28 @@ export async function verifyPosWireHealth(baseUrl, orgId) {
   return { ok: res.ok, status: res.status, body: await readJson(res) };
 }
 
-export async function posAdminLogin(baseUrl, pin) {
-  const res = await fetch(`${baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin: String(pin) }),
-  });
-  return { ok: res.ok, status: res.status, body: await readJson(res) };
+export async function posAdminLogin(baseUrl, pin, { slug } = {}) {
+  const makeRequest = (cookie = "") =>
+    fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-Proto": "https",
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: JSON.stringify({ pin: String(pin) }),
+    });
+
+  let res = await makeRequest();
+  let body = await readJson(res);
+  if (!res.ok && res.status === 403 && body?.code === "DEVICE_PENDING" && slug) {
+    const deviceUuid = parseDeviceUuidFromSetCookie(res);
+    if (deviceUuid && approvePosDeviceInMongo(slug, deviceUuid)) {
+      res = await makeRequest(`device_uuid=${deviceUuid}`);
+      body = await readJson(res);
+    }
+  }
+  return { ok: res.ok, status: res.status, body };
 }
 
 export async function pollTenantDeleted(api, tenantId, maxMs = 10 * 60 * 1000) {

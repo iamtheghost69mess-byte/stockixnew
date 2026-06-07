@@ -548,23 +548,20 @@ export async function provisionPosStack(
     await opts.afterBootstrap();
   }
 
+  if (opts.db) {
+    await assertTenantPortAvailable(opts.db, backendPort, {
+      excludeTenantId: opts.tenantId,
+      slug: opts.slug,
+    });
+    await assertTenantPortAvailable(opts.db, frontendPort, {
+      excludeTenantId: opts.tenantId,
+      slug: opts.slug,
+    });
+  }
+  opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
+  await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
   if (rootDomain === "localhost") {
-    opts.log(
-      `[provision][pos] localhost dev: skipping Traefik (open POS at ${posUrl})`,
-    );
-  } else {
-    if (opts.db) {
-      await assertTenantPortAvailable(opts.db, backendPort, {
-        excludeTenantId: opts.tenantId,
-        slug: opts.slug,
-      });
-      await assertTenantPortAvailable(opts.db, frontendPort, {
-        excludeTenantId: opts.tenantId,
-        slug: opts.slug,
-      });
-    }
-    opts.log(`[provision][pos] publishing Traefik routes pos=${posUrl} api=${posApiUrl}`);
-    await writePosTraefikConfig(opts.slug, backendPort, frontendPort, rootDomain);
+    opts.log(`[provision][pos] localhost dev: direct access at ${posUrl}`);
   }
 
 

@@ -27,6 +27,7 @@ import type { TenantProvisionServiceDeps } from "../domain/provisioning/tenant-p
 import {
   buildTenantEnvMap,
   buildTenantMongoUrl,
+  readTenantEnvFile,
   writeTenantEnvFileAtomic,
 } from "../domain/provisioning/tenant-env.js";
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
