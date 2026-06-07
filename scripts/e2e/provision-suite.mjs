@@ -138,7 +138,11 @@ async function provisionAndAssert({
     }
   }
 
-  const tenantId = polled.body.tenantId;
+  let tenantId = polled.body.tenantId;
+  if (!tenantId) {
+    const list = await api("GET", `/tenants?search=${encodeURIComponent(slug)}`);
+    tenantId = list.data?.tenants?.find((t) => t.slug === slug)?.tenantId;
+  }
   assertTruthy(tenantId, "tenantId after provision");
   const tenant = await getTenant(api, tenantId);
   assertEqual(tenant.status, "active", "tenant.status");

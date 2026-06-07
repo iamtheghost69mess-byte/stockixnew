@@ -43,9 +43,11 @@ export function slugToMysqlSafe(slug) {
 
 export function tenantMysqlNames(slug) {
   const safe = slugToMysqlSafe(slug);
+  const prefix = `stockix_${safe}_`;
   return {
-    systemDb: `stockix_${safe}_system`,
-    orgDbPattern: `stockix_${safe}_%`,
+    systemDb: `${prefix}system`,
+    orgDbPattern: `${prefix}%`,
+    dbPrefix: prefix,
     tenantUser: `tenant_${safe}`,
   };
 }
