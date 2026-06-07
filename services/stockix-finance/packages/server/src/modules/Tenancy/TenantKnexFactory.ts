@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import knex, { Knex } from 'knex';
-import { knexSnakeCaseMappers } from 'objection';
 import { TenantModel } from '@/modules/System/models/TenantModel';
 import { Inject } from '@nestjs/common';
+import { buildTenantKnexOptionsFromConfig } from '@/database/finance-knex-options';
 import { sanitizeDatabaseName } from '@/utils/sanitize-database-name';
 
 @Injectable()
@@ -32,18 +32,11 @@ export class TenantKnexFactory {
       return cached;
     }
 
-    const instance = knex({
-      client: this.configService.get('tenantDatabase.client'),
-      connection: {
-        host: this.configService.get('tenantDatabase.host'),
-        user: this.configService.get('tenantDatabase.user'),
-        password: this.configService.get('tenantDatabase.password'),
-        database,
-        charset: 'utf8',
-      },
-      pool: { min: 0, max: 7 },
-      ...knexSnakeCaseMappers({ upperCase: true }),
-    });
+    const instance = knex(
+      buildTenantKnexOptionsFromConfig(this.configService, database, {
+        pool: { min: 0, max: 7 },
+      }),
+    );
 
     this.cache.set(database, instance);
     return instance;

@@ -39,6 +39,7 @@ const providers = [
     inject: [SystemKnexConnection],
     useFactory: async (systemKnex: Knex) => {
       Model.knex(systemKnex);
+      return systemKnex;
     },
   },
 ];

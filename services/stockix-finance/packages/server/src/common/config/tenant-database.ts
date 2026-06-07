@@ -17,9 +17,9 @@ function resolveTenantDatabaseSubdir(subdir: string): string {
 }
 
 export default registerAs('tenantDatabase', () => ({
-  client: 'mysql',
+  client: 'mysql2',
   host: process.env.TENANT_DB_HOST || process.env.DB_HOST,
-  port: process.env.TENANT_DB_PORT || process.env.DB_PORT || 5432,
+  port: process.env.TENANT_DB_PORT || process.env.DB_PORT || 6033,
   user: process.env.TENANT_DB_USER || process.env.DB_USER,
   password: process.env.TENANT_DB_PASSWORD || process.env.DB_PASSWORD,
   dbNamePrefix:

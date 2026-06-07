@@ -2,7 +2,10 @@ import { CommandRunner } from 'nest-commander';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Knex from 'knex';
-import { knexSnakeCaseMappers } from 'objection';
+import {
+  buildSystemKnexOptionsFromConfig,
+  buildTenantKnexOptionsFromConfig,
+} from '@/database/finance-knex-options';
 
 @Injectable()
 export abstract class BaseCommand extends CommandRunner {
@@ -10,62 +13,51 @@ export abstract class BaseCommand extends CommandRunner {
     super();
   }
 
-  protected initSystemKnex(): any {
-    return Knex({
-      client: this.configService.get('systemDatabase.client'),
-      connection: {
-        host: this.configService.get('systemDatabase.host'),
-        user: this.configService.get('systemDatabase.user'),
-        password: this.configService.get('systemDatabase.password'),
-        database: this.configService.get('systemDatabase.databaseName'),
-        charset: 'utf8',
-      },
-      migrations: {
-        directory: this.configService.get('systemDatabase.migrationDir'),
-        loadExtensions: ['.js'],
-      },
-      seeds: {
-        directory: this.configService.get('systemDatabase.seedsDir'),
-      },
-      pool: { min: 0, max: 7 },
-      ...knexSnakeCaseMappers({ upperCase: true }),
-    });
+  protected initSystemKnex(): Knex {
+    return Knex(
+      buildSystemKnexOptionsFromConfig(this.configService, {
+        pool: { min: 0, max: 7 },
+        migrations: {
+          directory: this.configService.get('systemDatabase.migrationDir'),
+          loadExtensions: ['.js'],
+        },
+        seeds: {
+          directory: this.configService.get('systemDatabase.seedsDir'),
+        },
+      }),
+    );
   }
 
-  protected initTenantKnex(organizationId: string = ''): any {
-    return Knex({
-      client: this.configService.get('tenantDatabase.client'),
-      connection: {
-        host: this.configService.get('tenantDatabase.host'),
-        user: this.configService.get('tenantDatabase.user'),
-        password: this.configService.get('tenantDatabase.password'),
-        database: `${this.configService.get('tenantDatabase.dbNamePrefix')}${organizationId}`,
-        charset: 'utf8',
-      },
-      migrations: {
-        directory: this.configService.get('tenantDatabase.migrationsDir') || './src/database/migrations',
-        loadExtensions: ['.js'],
-      },
-      seeds: {
-        directory: this.configService.get('tenantDatabase.seedsDir') || './src/database/seeds/core',
-      },
-      pool: {
-        min: 0,
-        max: 5,
-      },
-      ...knexSnakeCaseMappers({ upperCase: true }),
-    });
+  protected initTenantKnex(organizationId: string = ''): Knex {
+    const prefix = this.configService.get<string>('tenantDatabase.dbNamePrefix') ?? '';
+    const database = `${prefix}${organizationId}`;
+    return Knex(
+      buildTenantKnexOptionsFromConfig(this.configService, database, {
+        pool: { min: 0, max: 5 },
+        migrations: {
+          directory:
+            this.configService.get('tenantDatabase.migrationsDir') ||
+            './src/database/migrations',
+          loadExtensions: ['.js'],
+        },
+        seeds: {
+          directory:
+            this.configService.get('tenantDatabase.seedsDir') ||
+            './src/database/seeds/core',
+        },
+      }),
+    );
   }
 
-  protected getAllSystemTenants(knex: any) {
+  protected getAllSystemTenants(knex: Knex) {
     return knex('tenants');
   }
 
-  protected getAllInitializedTenants(knex: any) {
+  protected getAllInitializedTenants(knex: Knex) {
     return knex('tenants').whereNotNull('initializedAt');
   }
 
-  protected exit(text: any): never {
+  protected exit(text: unknown): never {
     if (text instanceof Error) {
       console.error(`Error: ${text.message}\n${text.stack}`);
     } else {

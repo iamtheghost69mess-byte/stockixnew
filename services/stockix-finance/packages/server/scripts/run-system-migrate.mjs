@@ -5,7 +5,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Knex from "knex";
-import { knexSnakeCaseMappers } from "objection";
+import { buildFinanceMysqlKnexOptions, parseMysqlPort } from "./finance-knex-options.mjs";
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -39,27 +39,22 @@ function createSystemKnex() {
     );
   }
 
-  const port = Number(process.env.SYSTEM_DB_PORT || process.env.DB_PORT || 6033);
-
   return Knex({
-    client: process.env.SYSTEM_DB_CLIENT || process.env.DB_CLIENT || "mysql2",
-    connection: {
+    ...buildFinanceMysqlKnexOptions({
       host,
-      port: Number.isFinite(port) && port > 0 ? port : 6033,
+      port: parseMysqlPort(process.env.SYSTEM_DB_PORT || process.env.DB_PORT),
       user,
       password,
       database,
       charset: process.env.SYSTEM_DB_CHARSET || process.env.DB_CHARSET || "utf8",
-    },
+      pool: { min: 0, max: 7 },
+    }),
     migrations: {
       directory: systemMigrationDir(),
     },
     seeds: {
       directory: systemSeedsDir(),
     },
-    pool: { min: 0, max: 7 },
-    // Match BaseCommand / stockix CLI — migrations use knex('USERS') etc.
-    ...knexSnakeCaseMappers({ upperCase: true }),
   });
 }
 
