@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const strictProdSecrets = process.argv.includes("--strict-prod-secrets");
 
 function parseEnv(file) {
   const full = path.join(rootDir, file);
@@ -73,14 +74,33 @@ for (const k of critical) {
 }
 
 console.log("\n=== ALIGNMENT ===");
-function align(name, a, b) {
-  if (!a || !b) return `${name}: MISSING_SIDE`;
-  return `${name}: ${a === b ? "MATCH" : "MISMATCH"}`;
+
+/** @returns {{ line: string, fail: boolean }} */
+function align(name, a, b, { expectedMismatch = false } = {}) {
+  if (!a || !b) return { line: `${name}: MISSING_SIDE`, fail: false };
+  if (a === b) return { line: `${name}: MATCH`, fail: false };
+  if (expectedMismatch && !strictProdSecrets) {
+    return {
+      line: `${name}: MISMATCH (info — expected; prod uses different secrets than local root)`,
+      fail: false,
+    };
+  }
+  return { line: `${name}: MISMATCH`, fail: true };
 }
-console.log(align("AUTH_TOKEN_SECRET root↔pos", root.AUTH_TOKEN_SECRET, pos.AUTH_TOKEN_SECRET));
-console.log(align("POS_PLATFORM_API_KEY root↔pos", root.POS_PLATFORM_API_KEY, pos.POS_PLATFORM_API_KEY));
-console.log(align("AUTH_TOKEN_SECRET root↔prod", root.AUTH_TOKEN_SECRET, prod.AUTH_TOKEN_SECRET));
-console.log(align("POS_PLATFORM_API_KEY root↔prod", root.POS_PLATFORM_API_KEY, prod.POS_PLATFORM_API_KEY));
+
+const alignments = [
+  align("AUTH_TOKEN_SECRET root↔pos", root.AUTH_TOKEN_SECRET, pos.AUTH_TOKEN_SECRET),
+  align("POS_PLATFORM_API_KEY root↔pos", root.POS_PLATFORM_API_KEY, pos.POS_PLATFORM_API_KEY),
+  align("AUTH_TOKEN_SECRET root↔prod", root.AUTH_TOKEN_SECRET, prod.AUTH_TOKEN_SECRET, {
+    expectedMismatch: true,
+  }),
+  align("POS_PLATFORM_API_KEY root↔prod", root.POS_PLATFORM_API_KEY, prod.POS_PLATFORM_API_KEY, {
+    expectedMismatch: true,
+  }),
+];
+for (const row of alignments) {
+  console.log(row.line);
+}
 
 const exKeys = new Set(Object.keys(example));
 const rootKeys = new Set(Object.keys(root));
@@ -93,12 +113,19 @@ if (missingFromRoot.length) console.log(missingFromRoot.join(", "));
 console.log(`extra in root: ${extraInRoot.length}`);
 if (extraInRoot.length) console.log(extraInRoot.join(", "));
 
-const prodBlockers = [];
-if (!prod.POS_PLATFORM_API_KEY) prodBlockers.push("POS_PLATFORM_API_KEY");
-if (!prod.CF_DNS_API_TOKEN) prodBlockers.push("CF_DNS_API_TOKEN");
-if (!prod.CHATWOOT_API_ACCESS_TOKEN) prodBlockers.push("CHATWOOT_API_ACCESS_TOKEN (post-boot)");
+const prodHardBlockers = [];
+if (!prod.POS_PLATFORM_API_KEY) prodHardBlockers.push("POS_PLATFORM_API_KEY");
+if (!prod.CF_DNS_API_TOKEN) prodHardBlockers.push("CF_DNS_API_TOKEN");
+const prodOptional = [];
+if (!prod.CHATWOOT_API_ACCESS_TOKEN) prodOptional.push("CHATWOOT_API_ACCESS_TOKEN (post-boot)");
 console.log("\n=== PROD BLOCKERS ===");
-console.log(prodBlockers.length ? prodBlockers.join(", ") : "none (except optional post-boot tokens)");
+console.log(
+  prodHardBlockers.length
+    ? prodHardBlockers.join(", ")
+    : prodOptional.length
+      ? `none (optional post-boot: ${prodOptional.join(", ")})`
+      : "none",
+);
 
 console.log("\n=== LOCAL DEV READINESS ===");
 const localOk =
@@ -122,3 +149,22 @@ const prodOk =
   && !prod.ROOT_DOMAIN.includes("localhost");
 const prodTls = prod.CF_DNS_API_TOKEN ? "TLS ready" : "TLS blocked (CF_DNS_API_TOKEN empty)";
 console.log(prodOk ? `READY except manual: ${prodTls}, Chatwoot token post-boot` : "NOT READY — check infra/prod/.env");
+
+const alignmentFailures = alignments.filter((row) => row.fail);
+let exitCode = 0;
+if (!localOk) exitCode = 1;
+if (prodHardBlockers.length > 0) exitCode = 1;
+if (alignmentFailures.length > 0) exitCode = 1;
+
+if (exitCode === 0) {
+  console.log("\n=== RESULT ===");
+  console.log("PASS — no blocking env issues (root↔prod secret differences are informational unless --strict-prod-secrets)");
+} else {
+  console.log("\n=== RESULT ===");
+  console.log("FAIL — fix blocking issues above");
+  if (alignmentFailures.length > 0) {
+    console.log(`Alignment failures: ${alignmentFailures.map((r) => r.line).join("; ")}`);
+  }
+}
+
+process.exit(exitCode);

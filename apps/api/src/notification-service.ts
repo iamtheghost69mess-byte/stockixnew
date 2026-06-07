@@ -20,6 +20,7 @@ export type NotificationType =
   | "provision.partial"
   | "provision.module_added"
   | "provision.module_removed"
+  | "deprovision.complete"
   | "license.expiring"
   | "license.expired"
   | "license.revoked"

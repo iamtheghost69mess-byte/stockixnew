@@ -49,11 +49,11 @@ if [[ "${bullmq_count:-0}" -lt 1 ]]; then
   fail "api-bullmq not running — BullMQ jobs will not process"
 fi
 
-if [[ -n "${BACKUP_S3_BUCKET:-}" ]]; then
-  echo "Backup bucket configured: ${BACKUP_S3_BUCKET}"
-  echo "Verify latest object: aws s3 ls s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX:-stockix-platform-backups}/"
+if [[ -n "${BACKUP_B2_BUCKET:-}" ]]; then
+  echo "Backup bucket configured: ${BACKUP_B2_BUCKET}"
+  echo "Verify latest object: aws s3 ls s3://${BACKUP_B2_BUCKET}/${BACKUP_B2_PREFIX:-stockix-platform-backups}/ --endpoint-url \"${BACKUP_B2_ENDPOINT}\""
 else
-  echo "WARN: BACKUP_S3_BUCKET unset — enable db-backup service"
+  echo "WARN: BACKUP_B2_BUCKET unset — enable db-backup service"
 fi
 
 echo "Dashboard: ${DASHBOARD_BASE}"

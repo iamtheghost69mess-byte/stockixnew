@@ -238,6 +238,10 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),
     THROTTLE_AUTH_LIMIT: String(env.THROTTLE_AUTH_LIMIT),
+
+    // ── Observability (optional — set SENTRY_DSN in platform env) ─────
+    SENTRY_DSN: process.env.SENTRY_DSN?.trim() ?? "",
+    SENTRY_ENVIRONMENT: `tenant-${slug}`,
   };
 }
 

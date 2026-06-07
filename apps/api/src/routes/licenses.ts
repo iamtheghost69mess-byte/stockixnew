@@ -172,6 +172,10 @@ function planBillingInsertValues(data: {
   };
 }
 
+/**
+ * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
+ * GET routes and public `/plans` listing are naturally idempotent.
+ */
 export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
   app.get("/plans", async (c) => {
     if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);

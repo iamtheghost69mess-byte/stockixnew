@@ -86,6 +86,16 @@ type PosProvisionOutcome = {
   posDefaultCredentials?: import("../domain/provisioning/types.js").PosDefaultCredentials;
 };
 
+/** Non-production E2E hook: slugs `e2e-fail-inject-*` simulate a worker crash after a journaled step. */
+export function maybeInjectProvisionTestFailure(slug: string, operationKey: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  if (!slug.startsWith("e2e-fail-inject-")) return;
+  if (operationKey !== "docker.data_step") return;
+  throw new Error(
+    `[provision-test] simulated worker crash after ${operationKey} (slug=${slug})`,
+  );
+}
+
 function assertProvisionModuleEnv(modules: string[]): void {
   if (modules.includes("pos")) {
     const key = posConfig.platformApiKey.trim();
@@ -576,6 +586,12 @@ export async function rollbackProvision(
             }`,
           );
         });
+      throw new Error(
+        `[rollback] Shared DB teardown incomplete for slug=${rollbackSlug} ` +
+          `(mysqlDbs=${cleanupResult.mysqlDbs}, mongoDb=${cleanupResult.mongoDb}, ` +
+          `redisKeys=${cleanupResult.redisKeys}). Postgres tenant row kept in failed status — ` +
+          "run M2 orphan cleanup or retry deprovision.",
+      );
     }
   }
 
@@ -1603,6 +1619,7 @@ export async function executeProvisionRuntime(
       await markOp("docker.data_step", "Tenant databases provisioned on shared infra", {
         composeProjectName: project,
       });
+      maybeInjectProvisionTestFailure(input.slug, "docker.data_step");
       log("[provision] step done: docker.data_step");
     } else {
       await trace.event("resume", "Skipping data step (already journaled)", {

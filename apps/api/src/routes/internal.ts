@@ -24,9 +24,10 @@ import {
   getPlanLimits,
 } from "../license-utils.js";
 import {
+  notifyAddModuleFailed,
+  notifyDeprovisionComplete,
   notifyJobLifecycle,
   notifyModuleAdded,
-  notifyAddModuleFailed,
   notifyProvisionOutcome,
 } from "../notification-helpers.js";
 import { safeCreateNotification } from "../notification-service.js";
@@ -1099,6 +1100,23 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           correlationId: currentJob.correlationId,
         });
       }
+    }
+  }
+  if (currentJob?.type === "tenant.deprovision") {
+    const payload =
+      currentJob.payload && typeof currentJob.payload === "object"
+        ? (currentJob.payload as Record<string, unknown>)
+        : {};
+    const ownerId = typeof payload.ownerId === "string" ? payload.ownerId : null;
+    const tenantName = typeof payload.tenantName === "string" ? payload.tenantName : null;
+    const slug = typeof payload.slug === "string" ? payload.slug : null;
+    if (ownerId && tenantName && slug) {
+      notifyDeprovisionComplete(db, {
+        ownerId,
+        tenantName,
+        slug,
+        correlationId: currentJob.correlationId,
+      });
     }
   }
   if (currentJob?.type === "tenant.deprovision" && currentJob.tenantId) {

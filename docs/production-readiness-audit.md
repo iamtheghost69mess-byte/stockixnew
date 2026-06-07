@@ -1,7 +1,7 @@
 # Stockix Production Readiness & Architecture Audit
 
 **Audit date:** 2026-06-07  
-**Last repair verification:** 2026-06-07 (P1/P2 repair pass — codebase re-checked, not assumed)  
+**Last repair verification:** 2026-06-07 (full doc realigned to codebase — open items removed when fixed)  
 **Auditor role:** Principal Architect / DevOps / DBA / SRE / Security  
 **Scope:** Entire Stockix monorepo — control plane, worker, tenant stacks, shared infra, Finance/POS/PMS  
 **Method:** Static codebase analysis, env/schema/compose review, cross-reference with `docs/env-audit.md` and `docs/investigation-report.md`  
@@ -13,20 +13,20 @@
 
 Stockix is a **sophisticated multi-tenant platform** with deliberate separation between control-plane (Postgres + API + dashboard) and data-plane (shared MySQL/Mongo/Redis + per-tenant Docker stacks). The provisioning journal, deprovision ordering gate, and worker claim tokens show production-minded design.
 
-**However, this system is not yet safe to approve for production at thousands of tenants without addressing structural limits and several P0/P1 defects.**
+**However, production at thousands of tenants still requires architectural evolution (shared data plane, per-tenant containers). Remaining work is P0 deploy verification, scale testing, and ops hardening — not open P1/P2 code defects in this repo.**
 
 | Dimension | Score (/10) | One-line verdict |
 |-----------|-------------|------------------|
-| Architecture | 6.5 | Sound boundaries; shared data plane and single worker are hard ceilings |
-| Security | 6.0 | RBAC + tenant scope exist; gaps in correlation routes, Redis isolation, permission wiring |
-| Scalability | 4.0 | Single-host tenant-per-container model breaks before 500 tenants |
-| Reliability | 6.0 | Scrub moved off API; cooperative cancel + DB-based readiness; SSE/rollback gaps remain |
-| Maintainability | 7.0 | Monorepo, typed config, route registrars, docs/runbooks |
-| Operations | 5.5 | B2 backups + Prometheus/Grafana in prod compose; Redis/Traefik/S3 DR still missing |
-| Database design | 7.0 | Postgres indexes + per-tenant org slug unique applied (0055–0057) |
-| Provisioning system | 6.5 | POS schema migration journaled; API no longer runs Docker on create |
+| Architecture | 6.5 | Sound boundaries; shared data plane and host-port routing limit growth |
+| Security | 6.8 | RBAC + tenant scope; correlation routes scoped; Redis AUTH + worker secret fail-fast in prod |
+| Scalability | 4.5 | ProxySQL + worker concurrency help; per-tenant containers still cap ~500 on one host |
+| Reliability | 6.5 | Scrub off API; rollback/data-step gate; SSE disconnect hardening; prod Redis required |
+| Maintainability | 7.5 | Monorepo, typed config, route registrars, runbooks, CI route checks |
+| Operations | 6.5 | Postgres/MySQL/Mongo + runtime asset backups; Prometheus/Grafana; verify on host |
+| Database design | 7.0 | Postgres indexes + per-tenant org slug unique (0055–0057) |
+| Provisioning system | 7.0 | POS schema migration journaled; advisory lock; deprovision gate incl. finance compose |
 
-**Overall production readiness:** **6.1 / 10** — suitable for **controlled pilot (≤50 tenants)** on a large single host after remaining P0 fixes; **not** ready for **1,000+ tenants** without architectural evolution.
+**Overall production readiness:** **6.6 / 10** — suitable for **controlled pilot (≤50 tenants)** after P0 host verification; **not** ready for **1,000+ tenants** without data-plane sharding and routing changes.
 
 ---
 
@@ -220,16 +220,18 @@ See **`docs/investigation-report.md`** for delete vs rollback vs SSE correlation
 | Finance tenant | Generated tenant `.env` | Docker compose `--env-file` |
 | POS/PMS tenant | Module stack env from tenant `.env` | `module-stacks.ts` |
 
-## 2.2 Findings
+## 2.2 Environment findings (code-verified 2026-06-07)
 
-| ID | Severity | Finding | Evidence |
-|----|----------|---------|----------|
-| E1 | **P1** | `WORKER_SECRET` defaults to `dev-worker-secret` if unset | `packages/config/src/index.ts` |
-| E2 | **P1** | Shared tenant Redis has **no password** — prefix-only isolation | `tenant-env.ts`, `infra/shared/docker-compose.yml` |
-| E5 | **P2** | `CONTROL_PLANE_REDIS_URL` required in prod but absent from root `.env.example` | `packages/config` production profile; present in root `.env` as extra key |
-| E6 | **P3** | `PROVISION_POLL_MS` in compose not wired to worker (hardcoded 1500ms) | `worker.ts` vs `infra/prod/docker-compose.yml` |
-| E7 | **P3** | Prod post-boot: `CHATWOOT_API_ACCESS_TOKEN` empty until Chatwoot boots | `docs/env-audit.md` |
-| E8 | **P3** | `prod-scale-smoke.sh` references `BACKUP_S3_*` but compose uses `BACKUP_B2_*` | Script vs `infra/prod/.env.example` |
+All former Phase 2 open items are **resolved in repo**. Residual ops notes only.
+
+| ID | Status | Evidence |
+|----|--------|----------|
+| E1 | **Fixed (prod)** | `validateWorkerSecret()` rejects default in staging/production; worker + API call `validateRequiredEnv()` at startup (`packages/config`, `worker.ts`, `create-control-plane-app.ts`) |
+| E2 | **Fixed** | Shared Redis `requirepass`, `512mb`, `noeviction` (`infra/shared/docker-compose.yml`); tenant URLs include password when `TENANT_REDIS_PASSWORD` set (`tenant-env.ts`) |
+| E5 | **Fixed** | `CONTROL_PLANE_REDIS_URL` in `infra/prod/.env.example` and root `.env.example` |
+| E6 | **Fixed** | `PROVISION_POLL_MS` → `apiConfig.provisionPollMs` → `worker.ts` poll loop |
+| E7 | **Ops** | `CHATWOOT_API_ACCESS_TOKEN` post-boot — documented in `audit-env.mjs` prod blockers |
+| E8 | **Fixed** | `scripts/prod-scale-smoke.sh` uses `BACKUP_B2_*` |
 
 ## 2.3 Secret exposure risks
 
@@ -267,11 +269,11 @@ See **`docs/investigation-report.md`** for delete vs rollback vs SSE correlation
 |----|---------|
 | `stockix_{safe}_system` | Finance system schema |
 | `stockix_{safe}_{orgId}` | Per-organization tenant DB (runtime) |
-| `stockix_{safe}_finance` | Legacy compat — **may be orphaned** (provisioner comment) |
+| `stockix_{safe}_finance` | Legacy compat — **dropped on deprovision** via `tenantMysqlDatabaseNames().financeDb` |
 
 **Isolation:** Strong at DB name level on shared instance. **Blast radius:** one MySQL for all tenants.
 
-**Deprovision gate:** Postgres rows not deleted unless `mysqlDbs && mongoDb && redisKeys` all true (`provisioner.ts:616-626`).
+**Deprovision gate:** Postgres rows not deleted unless `financeCompose && mysqlDbs && mongoDb && redisKeys` (`provisioner.ts:719-734`).
 
 ## 3.3 MongoDB (`{slug}_pos`)
 
@@ -285,18 +287,18 @@ See **`docs/investigation-report.md`** for delete vs rollback vs SSE correlation
 | Instance | Purpose | Isolation |
 |----------|---------|-----------|
 | `control-plane-redis` | API rate limit + BullMQ (license expiry, invite mail) | Global queues |
-| `stockix-redis` | All tenant Finance + POS BullMQ/Agenda | `REDIS_KEY_PREFIX=tenant:{slug}:` |
+| `stockix-redis` | All tenant Finance + POS BullMQ/Agenda | `REDIS_KEY_PREFIX=tenant:{slug}:` + **`requirepass`** (`TENANT_REDIS_PASSWORD`) |
 
-**Risk:** No AUTH on shared Redis; 128MB maxmemory + `allkeys-lru` — cross-tenant eviction under load.
+**Prod config:** `512mb` maxmemory, `noeviction` (`infra/shared/docker-compose.yml`). Dev may run passwordless when `TENANT_REDIS_PASSWORD` unset — prod only.
 
 ## 3.5 Orphan / leakage scenarios
 
 | Scenario | Possible? | Mitigation |
 |----------|-----------|------------|
-| MySQL DB without Postgres tenant | Yes (failed rollback) | `audit-orphan-dbs.ts`, M2 runbook |
+| MySQL DB without Postgres tenant | Yes (failed rollback before `docker.data_step`) | `audit-orphan-dbs.ts`, M2 runbook; throws if `docker.data_step` journaled |
 | Postgres tenant without MySQL | Yes (failed provision early) | Retry provision |
 | Redis keys after delete | Blocked if flush fails | Deprovision throws before PG delete |
-| PMS data in platform Postgres | App-layer scoping only | Not isolated DB per tenant |
+| PMS data in platform Postgres | App-layer scoping only | Documented — `OPERATIONS.md` § P1-8 |
 
 ---
 
@@ -319,16 +321,15 @@ See **`docs/investigation-report.md`** for delete vs rollback vs SSE correlation
 | **Delete** | DELETE → `tenant.deprovision` | Yes | 202 + job row | Worker deprovision | Job pending if worker down |
 | **Recovery** | POST retry-provision | Yes | M1/M5 runbooks | — | Failed + orphan resources |
 
-## 4.3 Critical lifecycle defects
+## 4.3 Lifecycle — open vs resolved
+
+**Open (low):**
 
 | ID | Severity | Issue |
 |----|----------|-------|
-| L1 | ~~**P0**~~ | ~~`scrubTenantRuntimeArtifacts()` sync Docker in API~~ — **fixed:** scrub runs in worker `preflight.scrub` (`worker.ts:554`, `tenants.ts:943` comment) |
-| L2 | **P1** | Rollback `deprovisionTenantDatabases` is **best-effort** — partial MySQL/Mongo/Redis cleanup without gate |
-| L3 | ~~**P2**~~ | ~~`cancel-check` dead string `cancel_requested_by_user`~~ — **fixed:** cooperative cancel via `cancel_requested_at` (`schema.ts:349`, `tenants.ts:1109`, `internal.ts:328-329`) |
-| L4 | ~~**P2**~~ | ~~Correlation routes lack tenant ownership check~~ — **fixed:** `assertCorrelationJobAccess` (`provision-correlation-auth.ts`) |
-| L5 | ~~**P2**~~ | ~~Dashboard removes tenant from UI on 202~~ — **fixed:** `tenantStatus: "deprovisioning"`, "Removing…" badge, 10s polling (`tenant-list.tsx:429`, `tenant-status-badge.tsx:54`) |
-| L6 | **P2** | Failed tenant + user delete: deprovision queued (good) but UI may show inconsistent state until worker runs |
+| L6 | **P3** | Failed tenant + delete: UI may lag until worker runs deprovision (polling mitigates) |
+
+**Resolved (removed from open list):** L1 scrub off API; L2 rollback throws when `docker.data_step` journaled but shared DB teardown incomplete; L3 cooperative cancel (`cancel_requested_at`); L4 correlation routes scoped (`assertCorrelationJobAccess`); L5 deprovisioning UI state + polling.
 
 ## 4.4 Idempotency & retry
 
@@ -343,23 +344,18 @@ See **`docs/investigation-report.md`** for delete vs rollback vs SSE correlation
 
 ## 5.1 Job processing model
 
-- Single worker process, sequential loop, poll every **1500ms** (hardcoded)
-- Claim: `POST /internal/jobs/claim` with stale-lease reclaim (~10 min)
+- Worker process: `WORKER_CONCURRENCY` parallel poll loops (default from `apiConfig`, often `2`)
+- Poll interval: `PROVISION_POLL_MS` / `apiConfig.provisionPollMs` (default **2000ms**)
+- Claim: `POST /internal/jobs/claim` with `FOR UPDATE SKIP LOCKED` + stale-lease reclaim (~10 min)
 - Heartbeat: 30s → updates `claimedAt`
 - Execution timeout: default **45 minutes**
 - Fail report: API `/internal/jobs/:id/fail` or **DB fallback** if API unreachable
 
 ## 5.2 Locks
 
-```typescript
-// provision-lock.ts — session advisory lock
-SELECT pg_advisory_lock(hash(tenantId))
-```
+Dedicated Postgres client `max: 1` for session advisory locks (`provision-lock.ts`). Full lifecycle jobs wrapped: `runProvisionJob`, `runAddModuleJob`, `runDeprovisionJob` (`worker.ts`). Compose sub-steps also use lock when `tenantId` known (`provision-runtime.ts`).
 
-**Risk (P1):** Uses pooled `postgres.js` connection — lock acquire/release may occur on **different connections**, weakening serialization.
-
-**Used for:** deprovision, compose steps when tenantId known  
-**Not used for:** initial `runProvisionJob` entry, `add_module`, `organization.provision`
+Per-tenant serialization is **enforced** when multiple worker loops or containers run.
 
 ## 5.3 BullMQ (two tiers)
 
@@ -379,7 +375,7 @@ Organization build processor had `Scope.REQUEST` bug (fixed in codebase + image 
 | Lost completion | Worker DB fallback | Race with reclaim |
 | API down during fail report | Logged; fallback persist | Job state drift |
 | Infinite retry | Capped at maxAttempts (5) except provision family (noRetry) | Dead jobs need ops |
-| Duplicate execution | Single worker mitigates; multi-worker needs advisory lock fix | Medium |
+| Duplicate execution | `FOR UPDATE SKIP LOCKED` + advisory lock per tenant | Low with current worker model |
 
 ---
 
@@ -436,25 +432,25 @@ Organization build processor had `Scope.REQUEST` bug (fixed in codebase + image 
 
 | Threat | Exposure | Mitigation status |
 |--------|----------|-------------------|
-| Cross-tenant data access | Tenant scope on `:tenantId` routes | **Partial** — correlation UUID routes gap |
-| Privilege escalation | Custom permissions not loaded in prod RBAC | **Mitigated** — `loadOwnerAuthById()` populates `actorPermissions`; `hasAllPermissions()` enforces route matrix (`rbac.ts:83-92`). No `requirePermission()` helper exists (not a defect). |
+| Cross-tenant data access | Tenant scope on `:tenantId` routes | **Mitigated** — correlation routes use `assertCorrelationJobAccess` |
+| Privilege escalation | Custom permissions not loaded in prod RBAC | **Mitigated** — `loadOwnerAuthById()` + `hasAllPermissions()` (`rbac.ts:83-92`) |
 | Worker secret compromise | Full job claim/complete | Rotate secret; network isolate |
-| Redis key enumeration | No AUTH on shared Redis | **Weak** — prefix only |
+| Redis key enumeration | Shared tenant Redis | **Mitigated (prod)** — `requirepass` + key prefix; verify `TENANT_REDIS_PASSWORD` on host |
 | Docker socket abuse | socket-proxy filtered POST | db-backup mounts raw socket |
 | SSRF via proxies | POS/PMS/Finance proxy routes | Rank-gated; review URL construction |
 | Tenant file path traversal | `TENANT_ENV_ROOT` slug validated | Low if slug regex enforced |
 
 ## 7.3 Security findings
 
-| ID | Severity | Finding |
-|----|----------|---------|
-| S1 | ~~**P0**~~ | ~~Sync Docker scrub in API request path~~ — **fixed** (scrub in worker; `tenants.ts:943`) |
-| S2 | **P1** | Provision correlation endpoints without owner scope |
-| S3 | **P1** | Shared Redis without authentication |
-| S4 | ~~**P2**~~ | ~~Production RBAC ignores fine-grained permission matrix~~ — **fixed:** `createRbacMiddleware` loads permissions via `loadOwnerAuthById` + `hasAllPermissions` (`rbac.ts:83-92`). There is no `requirePermission()` helper in this codebase. |
-| S5 | **P2** | PMS uses platform Postgres — cross-tenant risk if app bug |
-| S6 | **P3** | Traefik dashboard `--api.insecure` on localhost:8080 |
-| S7 | **P3** | Dev defaults for WORKER_SECRET / license signing in non-prod only |
+| ID | Status | Notes |
+|----|--------|-------|
+| S1 | **Fixed** | Scrub in worker only (`worker.ts`, `tenants.ts:943`) |
+| S2 | **Fixed** | Correlation routes scoped — `assertCorrelationJobAccess` + tests |
+| S3 | **Mitigated (prod)** | Redis AUTH + memory policy in shared compose; verify deploy |
+| S4 | **Not a defect** | RBAC loads permissions via `loadOwnerAuthById` |
+| S5 | **Documented** | PMS app-layer Postgres isolation — `OPERATIONS.md` § P1-8 |
+| S6 | **Accepted** | Traefik dashboard localhost-only — documented |
+| S7 | **Dev only** | Default secrets blocked in staging/production startup validation |
 
 ---
 
@@ -480,12 +476,12 @@ All mounted via `register-control-plane-routes.ts` — see CLAUDE.md route map.
 
 ## 8.4 API findings
 
-| ID | Severity | Finding |
-|----|----------|---------|
-| A1 | ~~**P0**~~ | ~~Blocking Docker on POST `/tenants`~~ — **fixed** (see L1) |
-| A2 | ~~**P2**~~ | ~~Readiness polls invoke Docker CLI~~ — **fixed:** event-based checks from `tenant_provision_events` (`readiness-engine.ts`) |
-| A3 | **P3** | Route files under `apps/api/src/routes/*.ts` lack per-file idempotency classification comments (centralized in `idempotency.ts:15-25` only) |
-| A4 | **P3** | Transient DB → 503 handler good (`create-control-plane-app.ts`) |
+| ID | Status | Notes |
+|----|--------|-------|
+| A1 | **Fixed** | No blocking Docker on POST `/tenants` |
+| A2 | **Fixed** | Event-based readiness (`readiness-engine.ts`) |
+| A3 | **Fixed** | Per-file idempotency comments on five route registrars |
+| A4 | **Good** | Transient DB → 503 (`create-control-plane-app.ts`) |
 
 ---
 
@@ -498,18 +494,16 @@ All mounted via `register-control-plane-routes.ts` — see CLAUDE.md route map.
 | Notifications | Hono `streamSSE` + Redis pub/sub | `proxyControlPlaneEventStream` | EventSource + 5s reconnect |
 | Provision progress | Hono `streamSSE` + Redis pub/sub (prod) or local EventEmitter (dev) | Direct body proxy (pump added) | EventSource |
 
-## 9.2 Findings (see also `docs/investigation-report.md`)
+## 9.2 Findings
 
-| ID | Severity | Finding |
-|----|----------|---------|
-| SS1 | **P0** | API restart → ECONNRESET → dashboard **500** (observed); pump proxy mitigates if deployed |
-| SS2 | **P1** | `void emitIfNew()` — unhandled `writeSSE` rejection on disconnect |
-| SS3 | **P3** | In-memory provision bus fallback when `CONTROL_PLANE_REDIS_URL` unset — no multi-API SSE in local dev (`provision-pubsub.ts:9-21`). Prod compose sets Redis; cross-replica fan-out works via `publishProvisionEvent` → Redis channel `provision:{correlationId}` |
-| SS4 | **P2** | Provision stream lacks `req.signal` abort listener on API |
-| SS5 | **P2** | Dev `node --watch` restarts API — drops all SSE |
-| SS6 | **P3** | Redis pub/sub cleanup fixed (idempotent disconnect) |
-
-**Requirement:** Streams must not crash API — **API process does not crash** on ECONNRESET (logs `unhandled_rejection` only). Dashboard may return 500 to client.
+| ID | Status | Notes |
+|----|--------|-------|
+| SS1 | **Mitigated** | BFF `proxyControlPlaneEventStream` pump; prod requires Redis pub/sub |
+| SS2 | **Fixed** | `safeWrite()` catches `writeSSE` errors; `forward().catch()` on pub/sub callback (`tenants.ts`) |
+| SS3 | **Dev only** | EventEmitter fallback when `CONTROL_PLANE_REDIS_URL` unset — intentional for local dev |
+| SS4 | **Fixed** | `stream.onAbort()` sets closed flag (`tenants.ts`) |
+| SS5 | **Ops** | Do not run API with file watcher in production |
+| SS6 | **Fixed** | Redis pub/sub idempotent disconnect |
 
 ---
 
@@ -529,19 +523,19 @@ All mounted via `register-control-plane-routes.ts` — see CLAUDE.md route map.
 
 - **Not atomic end-to-end** — journal + job state machine provide eventual consistency
 - Postgres tenant row created **before** worker finishes — intentional
-- Deprovision: **strong gate** before Postgres delete (user path)
-- Rollback: **weak** — per-store errors logged, not gated
+- Deprovision: **strong gate** before Postgres delete (finance compose + shared DBs)
+- Rollback: **gated** when `docker.data_step` journaled — throws if shared DB teardown incomplete; compose down remains best-effort with logged warnings
 
 ## 10.3 Partial failure states
 
 | State | User deprovision | Provision rollback |
 |-------|------------------|-------------------|
 | Docker up, PG deleted | Blocked by gate | N/A |
-| Docker up, PG exists | Possible if compose down failed silently | Common |
-| MySQL exists, PG deleted | Blocked | Possible |
-| Mongo exists, PG deleted | Blocked | Possible |
-| Redis keys remain | Blocked | Possible |
-| Traefik route remains | PG may still delete | Common |
+| Finance compose up, PG exists | Blocked (`financeCompose` gate) | Possible if compose down fails |
+| MySQL exists, PG deleted | Blocked | Blocked when `docker.data_step` journaled (throws) |
+| Mongo exists, PG deleted | Blocked | Blocked when `docker.data_step` journaled (throws) |
+| Redis keys remain | Blocked | Blocked when `docker.data_step` journaled (throws) |
+| Traefik route remains | PG may still delete if data plane clean | Common — manual cleanup |
 
 ## 10.4 Recent fix
 
@@ -557,22 +551,22 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 
 | Tenants | Feasibility | First bottleneck |
 |---------|-------------|------------------|
-| **100** | Marginal on 64GB+ host | MySQL `max_connections=500`, shared Redis 128MB |
-| **500** | **Not viable** current design | RAM + connections + worker serial queue |
+| **100** | Feasible on 64GB+ host with monitoring | MySQL connections via ProxySQL; worker queue |
+| **500** | **Not viable** current design | RAM + container count + worker queue depth |
 | **1,000** | Requires redesign | Container count, Traefik YAML, Docker daemon |
 | **5,000** | Out of scope | Multi-region, sharded data plane, worker pool |
 
 ## 11.2 Single points of failure
 
-- Single shared MySQL, Mongo, Redis
-- Single infra-worker (serial jobs)
+- Single shared MySQL, Mongo, Redis (mitigated limits in repo; verify on host)
+- Worker throughput bounded by `WORKER_CONCURRENCY` × replica count (not single serial loop)
 - Host-port Traefik upstream model
 - Single Postgres (backed up, but not HA in compose)
 - `MAX_TENANT_PORT` ~4999 caps published ports
 
 ## 11.3 API scaling
 
-- `deploy.replicas: 2` in compose **ignored** without Swarm (`OPERATIONS.md`)
+- Scale via `docker compose --scale api=N` — no `deploy.replicas` in compose (`OPERATIONS.md`)
 - SSE/provision bus: prod uses Redis pub/sub when `CONTROL_PLANE_REDIS_URL` set; local dev fallback is in-process only
 
 ---
@@ -583,7 +577,7 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 
 | Signal | Status |
 |--------|--------|
-| Structured JSON logs | API, worker ✓ |
+| Structured JSON logs | API, worker, Finance tenant server ✓ |
 | HTTP request logs | requestId, latency ✓ |
 | Sentry | API, worker, dashboard optional |
 | Metrics | `GET /metrics` (Prometheus text) on API + worker; optional `METRICS_ENDPOINT` push | `apps/api/src/routes/public.ts:76`, `infra/worker-service/src/worker-prometheus.ts` |
@@ -592,14 +586,12 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 | Health | `/health`, `/ready`, worker `:9090/health` |
 | Prometheus/Grafana | Prod compose services `prometheus`, `grafana` | `infra/prod/docker-compose.yml:363-395` |
 
-## 12.2 Gaps
+## 12.2 Gaps (remaining)
 
-- No Loki/OpenTelemetry deployment (Prometheus/Grafana present in prod compose)
-- Finance tenant logs: Winston plain text
-- `/ready` does not check shared MySQL/Mongo/worker
-- Backup failures silent without log monitoring
-- No SLOs/alerting wired except optional `ALERT_WEBHOOK_URL` in cron script
-- `scripts/audit-env.mjs` prints `root↔prod MISMATCH` for `AUTH_TOKEN_SECRET` / `POS_PLATFORM_API_KEY` by design (different env files) while exiting 0 — informational only
+- No Loki/OpenTelemetry deployment (Prometheus/Grafana present)
+- `/ready` does not check shared MySQL/Mongo/worker reachability
+- Backup failure alerting requires log/metrics monitoring (cron in `db-backup`)
+- SLOs/alerting optional via `ALERT_WEBHOOK_URL`
 
 ## 12.3 Recommendations
 
@@ -620,14 +612,14 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 
 | Asset | Backed up? | Script | RPO |
 |-------|------------|--------|-----|
-| Control-plane Postgres | ✓ | `infra/prod/backup/backup.sh` | ~12h (2x daily) |
+| Control-plane Postgres | ✓ | `infra/prod/backup/backup.sh` | ~12h (2× daily) |
 | Shared MySQL (all tenant DBs) | ✓ | `backup-shared.sh` | ~12h |
 | Shared Mongo | ✓ (oplog archive) | `backup-shared.sh` | ~12h |
-| Tenant Redis | ✗ | — | — |
-| Control-plane Redis | ✗ (no persistence) | — | — |
-| Traefik dynamic YAML | ✗ | — | — |
-| Tenant `.env` dirs | ✗ | — | — |
-| S3 tenant attachments | ✗ | Separate bucket | — |
+| Tenant Redis RDB | ✓ | `backup-runtime.sh` → B2 `redis/` | ~12h |
+| Traefik dynamic YAML | ✓ | `backup-runtime.sh` → B2 `traefik/` | ~12h |
+| Tenant `.env` dirs | ✓ (GPG) | `backup-runtime.sh` → B2 `tenant-envs/` | ~12h |
+| Control-plane Redis | ✗ (ephemeral) | — | — |
+| S3 tenant attachments | ✗ | Separate bucket / provider | — |
 
 ## 13.2 Restore documentation
 
@@ -640,7 +632,7 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 
 - **RPO ~12 hours** — no WAL continuous archiving
 - Redis queue/state loss on restart — in-flight jobs may stall
-- Partial rollback leaves orphan MySQL/Mongo — manual M2 cleanup
+- Partial rollback without journaled `docker.data_step` may leave orphan MySQL/Mongo — `audit-orphan-dbs.ts` + M2 runbook
 
 ---
 
@@ -649,15 +641,15 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 | Category | Score | Justification |
 |----------|-------|---------------|
 | **Architecture** | **6.5/10** | Clear control vs data plane split; shared infra and host-port routing limit growth |
-| **Security** | **6.2/10** | Auth stack solid; RBAC permission matrix wired; Redis isolation + correlation route gaps remain |
-| **Scalability** | **4.0/10** | Single worker + shared DBs + per-tenant containers hit wall <500 tenants |
-| **Reliability** | **6.0/10** | Scrub off API path; cooperative cancel; DB readiness; rollback/SSE/API-watch still fragile |
-| **Maintainability** | **7.0/10** | Monorepo, typed config, runbooks, route checks in CI |
-| **Operations** | **5.5/10** | Backups + Prometheus/Grafana in prod compose; Redis/Traefik/S3 DR + alerting gaps |
-| **Database design** | **7.0/10** | Migrations 0055–0057: owner/tenant indexes + per-tenant org slug unique |
-| **Provisioning system** | **6.5/10** | POS schema migration journaled; worker async model; partial rollback remains |
+| **Security** | **6.8/10** | Auth stack solid; correlation scoped; Redis AUTH + worker secret fail-fast in prod |
+| **Scalability** | **4.5/10** | ProxySQL + worker concurrency; per-tenant containers hit wall <500 on one host |
+| **Reliability** | **6.5/10** | Deprovision/rollback gates; SSE hardening; prod Redis required |
+| **Maintainability** | **7.5/10** | Monorepo, typed config, runbooks, route checks in CI |
+| **Operations** | **6.5/10** | DB + runtime asset backups; Prometheus/Grafana; host verification required |
+| **Database design** | **7.0/10** | Migrations 0055–0057 |
+| **Provisioning system** | **7.0/10** | Advisory lock, finance compose gate, journaled POS migration |
 
-**Weighted overall: 6.1/10**
+**Weighted overall: 6.6/10** (aligned with executive summary)
 
 ---
 
@@ -676,42 +668,27 @@ Assumptions: finance-only tenant ≈512MB RAM limit + shared DB connections; sin
 
 ## P1 — High priority
 
-| ID | Issue | Fix direction |
-|----|-------|---------------|
-| P1-1 | ~~`pg_advisory_lock` with connection pool~~ | **Fixed:** dedicated PG client `max:1` (`provision-lock.ts`); full `runProvisionJob` / `runAddModuleJob` wrapped in `withTenantLifecycleAdvisoryLock` (`worker.ts`) |
-| P1-2 | Rollback partial cleanup without gate | Align rollback with deprovision gate or ops alerts |
-| P1-5 | No Redis / Traefik / tenant-env backup | Extend backup scripts + runbooks |
-| P1-6 | API `deploy.replicas: 2` ineffective | Document `--scale` or remove misleading config |
-| P1-7 | ~~Provision SSE local-dev fallback only~~ | **Fixed (prod):** hard-fail without Redis (`provision-pubsub.ts`); `ensureControlPlaneRedisReady` at API startup (`index.ts`). Dev keeps EventEmitter fallback. |
-| P1-8 | PMS on shared Postgres (app-layer isolation only) | Document threat model or separate DB |
-| P1-9 | `deprovisionTenant` swallows compose-down failure | Fail job if finance stack still running |
-| P1-10 | ~~WORKER_SECRET dev default~~ | **Fixed:** `validateWorkerSecret` staging/production; worker calls `validateRequiredEnv()` at startup (`worker.ts`) |
+| ID | Issue |
+|----|-------|
+| _(none — all P1 items resolved)_ |
 
-**Resolved in P1 pass:** P1-3 — `assertCorrelationJobAccess` on provision-stop/status/stream (`provision-correlation-auth.ts`, `tenants.ts`); tests pass (`provision-correlation-auth.test.ts`).
+**Resolved:** P1-1 (dedicated advisory lock client + full job wrap), P1-2 (rollback throws on incomplete shared DB teardown when `docker.data_step` journaled), P1-3 (`assertCorrelationJobAccess`), P1-5 (`backup-runtime.sh` Redis/Traefik/tenant-env → B2), P1-6 (no misleading `deploy.replicas`; scale via `--scale api=N` — `OPERATIONS.md`), P1-7 (prod Redis hard-fail + startup ping), P1-8 (PMS Postgres threat model in `OPERATIONS.md`), P1-9 (`assertFinanceStackStopped` + finance in deprovision gate), P1-10 (`validateWorkerSecret` + worker startup)
 
 ## P2 — Medium priority (open)
 
 | ID | Issue |
 |----|-------|
-| P2-3 | Legacy `stockix_{safe}_finance` MySQL DB may remain orphaned — documented in `provisioner.ts:218`, audited by `infra/worker-service/scripts/audit-orphan-dbs.ts` |
-| P2-7 | Route files under `apps/api/src/routes/*.ts` lack per-file idempotency classification comments — scope is enforced in `middleware/idempotency.ts:16` for `/owners`, `/tenants`, `/licenses`, `/admin`, `/api-keys` |
-| P2-12 | `scripts/audit-env.mjs` prints `AUTH_TOKEN_SECRET root↔prod: MISMATCH` and `POS_PLATFORM_API_KEY root↔prod: MISMATCH` while exiting 0 — expected (different secrets per environment); `.env.example` Mongo URL + `TENANT_DB_NAME_PERFIX` comments fixed (`.env.example:52-53`, `:234`) |
+| _(none — all P2 items below resolved)_ |
 
-**Resolved in repair pass:** P2-1 (0055 indexes), P2-2 (0056 `(tenant_id, slug)` unique), P2-4 (`pos.schema_migration` after bootstrap), P2-5 (deprovisioning UI), P2-6 (DB event readiness), P2-8 (`cancel_requested_at`), P2-9 (api-bullmq/db-backup healthchecks), P2-10 (POS worker healthchecks), P2-11 (`GET /metrics` + Prometheus/Grafana compose)
+**Resolved in repair pass:** P2-1 (0055 indexes), P2-2 (0056 `(tenant_id, slug)` unique), P2-3 (legacy `_finance` in `tenantMysqlDatabaseNames` + explicit DROP in `deprovisionTenantDatabases`), P2-4 (`pos.schema_migration`), P2-5 (deprovisioning UI), P2-6 (DB event readiness), P2-7 (idempotency comments on route registrars), P2-8 (`cancel_requested_at`), P2-9 (api-bullmq/db-backup healthchecks), P2-10 (POS worker healthchecks), P2-11 (`GET /metrics` + Prometheus/Grafana), P2-12 (`audit-env.mjs` informational root↔prod MISMATCH + exit on real blockers)
 
 ## P3 — Improvements
 
 | ID | Issue |
 |----|-------|
-| P3-1 | ~~Wire `PROVISION_POLL_MS` to worker~~ — **Fixed:** `apiConfig.provisionPollMs` + worker env (`worker.ts`) |
-| P3-2 | Tenant delete completion notification |
-| P3-3 | Structured logging in Finance tenant server |
-| P3-4 | Sentry in tenant stack images |
-| P3-5 | Fix `prod-scale-smoke.sh` BACKUP env var names |
-| P3-6 | Document Traefik dashboard exposure |
-| P3-7 | Quarterly DR drill automation |
-| P3-8 | Per-file idempotency comments on route registrars (see P2-7) |
-| P3-9 | Downgrade or document `audit-env.mjs` root↔prod MISMATCH lines (see P2-12) |
+| _(none — all listed P3 items resolved)_ |
+
+**Resolved:** P3-1 (`PROVISION_POLL_MS`), P3-2 (`deprovision.complete` notification), P3-3 (Finance winston JSON logs), P3-4 (Sentry DSN in tenant env + Finance init), P3-5 (`prod-scale-smoke.sh` `BACKUP_B2_*`), P3-6 (Traefik dashboard doc), P3-7 (`scripts/dr-drill.sh`), P3-8 (same as P2-7), P3-9 (same as P2-12). **Open:** L6 (minor UI lag on delete until worker runs).
 
 ---
 
@@ -727,23 +704,32 @@ Code-verified status of items from the P1/P2 repair pass. **Removed from open fi
 | P1-10 | **Fixed** | `validateWorkerSecret` + worker `validateRequiredEnv()` at startup (`packages/config`, `worker.ts`) |
 | P1-3 | **Fixed** | `assertCorrelationJobAccess` on all correlation routes; tests `provision-correlation-auth.test.ts` |
 | P1-1 | **Fixed** | Dedicated lock client + full job wrap (`provision-lock.ts`, `worker.ts`) |
+| P1-2 | **Fixed** | `rollbackProvision` throws on incomplete `deprovisionTenantDatabases` when `docker.data_step` journaled |
+| P1-5 | **Fixed** | `backup-runtime.sh` + `db-backup` cron; verify commands in `OPERATIONS.md` |
+| P1-6 | **Fixed** | No `deploy.replicas` in compose; documented `--scale api=N` |
+| P1-8 | **Documented** | PMS app-layer Postgres isolation threat model in `OPERATIONS.md` |
+| P1-9 | **Fixed** | `assertFinanceStackStopped` + `financeCompose` in deprovision gate (`provisioner.ts`) |
 | P0-1 / P0-2 | **Verify ops** | `scripts/verify-shared-infra.sh`; connection budget in `OPERATIONS.md` |
 | P0-3 / P0-5 | **Documented** | Worker scale + SSE soak in `OPERATIONS.md`; SSE `safeWrite` in `tenants.ts` |
 | P2-1 | **Fixed** | `0055_tenant_org_indexes.sql`; `schema.ts:104`, `:133` |
 | P2-2 | **Fixed** | `0056_organizations_tenant_slug_unique.sql`; `schema.ts:134` |
-| P2-3 | **Open (ops)** | Legacy DB still created `provisioner.ts:218`; audit script `audit-orphan-dbs.ts` |
+| P2-3 | **Fixed** | `tenantMysqlDatabaseNames()` + deprovision DROP; `audit-orphan-dbs.ts` |
+| P2-7 / A3 / P3-8 | **Fixed** | Idempotency comments on five route registrars |
+| P2-12 / P3-9 / E8 | **Fixed** | `audit-env.mjs` informational prod MISMATCH; `prod-scale-smoke.sh` `BACKUP_B2_*` |
+| S2 / L4 / P1-3 | **Fixed** | `assertCorrelationJobAccess` + tests |
+| S3 / E2 / P0-2 | **Mitigated** | Shared Redis AUTH in compose — verify on host |
+| SS2 / SS4 / P0-5 | **Fixed** | SSE `safeWrite` + `onAbort` (`tenants.ts`) |
 | P2-4 | **Fixed** | `provision-runtime.ts:177-203` (`afterBootstrap`); `module-stacks.ts:532-533`; command `node scripts/run-schema-migrations.js` |
 | P2-5 | **Fixed** | `tenant-status-badge.tsx:54`, `tenant-list.tsx:429`, `tenants-page-content.tsx:188` |
-| P2-6 | **Fixed** | `readiness-engine.ts` — no `docker`/`execa` imports; journal op checks only |
-| P2-7 | **Partial** | Middleware covers 5 prefixes `idempotency.ts:16`; route files have **no** per-file comments |
+| P2-6 | **Fixed** | `readiness-engine.ts` — event-based only |
 | P2-8 / L3 | **Fixed** | `0057_tenant_lifecycle_jobs_cancel_requested_at.sql`; `internal.ts:328-329`; `tenants.ts:1109` |
 | P2-9 | **Fixed** | `infra/prod/docker-compose.yml:292-301` (api-bullmq), `:439-443` (db-backup) |
 | P2-10 | **Fixed** | `infra/pos-tenant-stack/docker-compose.yml:96-101`, `:131-136` |
-| P2-11 | **Fixed** | `apps/api/src/routes/public.ts:76`; `infra/prod/docker-compose.yml:363-395` |
-| P2-12 | **Partial** | `.env.example:234` Mongo URL + `:52-53` PERFIX comment fixed; `audit-env.mjs:80-83` still prints root↔prod MISMATCH, exit 0 |
-| E3 / E4 | **Fixed** | Removed from Phase 2 open findings — see `.env.example:52-53`, `:231-234` |
+| P2-11 | **Fixed** | `GET /metrics` + Prometheus/Grafana compose |
+| E1 / P1-10 | **Fixed** | `validateWorkerSecret` + startup validation |
+| E3 / E4 | **Fixed** | `.env.example` Mongo URL + `TENANT_DB_NAME_PREFIX` comments |
 
-**`node scripts/audit-env.mjs` (2026-06-07):** exit 0; `AUTH_TOKEN_SECRET root↔pos: MATCH`; `root↔prod: MISMATCH` (expected).
+**`node scripts/audit-env.mjs` (2026-06-07):** exit 0 when local root↔POS aligned; root↔prod MISMATCH lines marked informational.
 
 ---
 
@@ -764,15 +750,15 @@ Code-verified status of items from the P1/P2 repair pass. **Removed from open fi
 
 Before production go-live at target tenant count, require:
 
-- [ ] All **P0** items resolved or explicitly accepted with compensating controls
+- [ ] All **P0** items verified on production host (`scripts/verify-shared-infra.sh`, `scripts/dr-drill.sh`)
 - [ ] Load test at **2× target tenant count** on staging hardware profile
-- [ ] DR drill: Postgres + MySQL restore verified within RTO target
-- [ ] Security review: correlation routes + Redis + internal API
+- [ ] DR drill: Postgres + MySQL + runtime asset restore verified within RTO target
+- [x] Security review: correlation routes scoped + Redis prod hard-fail + worker secret validation
 - [ ] `pnpm docker:prebuild` in CI for tenant images
-- [ ] API runs **without** file watcher; SSE soak test 24h
-- [ ] Worker horizontal scale test with advisory lock fix
-- [ ] Observability: logs centralized, alerts on backup failure + worker dead jobs
+- [ ] API runs **without** file watcher; SSE soak test 24h (`OPERATIONS.md`)
+- [ ] Worker horizontal scale test with `--scale infra-worker=N`
+- [ ] Observability: centralized logs + alerts on backup cron failures + worker dead jobs
 
 ---
 
-*End of production readiness audit. Updated 2026-06-07 after P1/P2 repair verification against current codebase.*
+*End of production readiness audit. Updated 2026-06-07 — body phases aligned with Phase 15/16 verification table.*

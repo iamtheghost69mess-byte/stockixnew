@@ -134,6 +134,28 @@ export function notifyProvisionOutcome(
   });
 }
 
+export function notifyDeprovisionComplete(
+  db: Db,
+  opts: {
+    ownerId: string;
+    tenantName: string;
+    slug: string;
+    correlationId?: string | null;
+  },
+): void {
+  safeCreateNotification(db, {
+    ownerId: opts.ownerId,
+    type: "deprovision.complete",
+    severity: "success",
+    title: `${opts.tenantName} removed`,
+    body: `Tenant "${opts.tenantName}" (${opts.slug}) was fully deprovisioned. Shared databases and runtime artifacts were cleaned up.`,
+    correlationId: opts.correlationId ?? undefined,
+    actionUrl: "/tenants",
+    actionLabel: "View tenants",
+    meta: { slug: opts.slug, tenantName: opts.tenantName },
+  });
+}
+
 export function notifyJobLifecycle(
   db: Db,
   opts: {

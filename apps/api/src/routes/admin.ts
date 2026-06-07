@@ -33,7 +33,10 @@ import { generateApiKeyMaterial } from "../services/api-keys.js";
 
 type Db = ReturnType<typeof createDb>;
 
-
+/**
+ * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
+ * GET routes (audit log, email logs, orphan-check) are naturally idempotent.
+ */
 export function registerAdminRoutes(app: Hono<ControlPlaneAuthEnv>, db: Db | null): void {
 app.get("/admin/orphan-check", async (c) => {
   if (!db) {

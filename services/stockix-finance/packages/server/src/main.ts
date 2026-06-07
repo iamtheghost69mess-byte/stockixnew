@@ -1,5 +1,6 @@
 import './bootstrap-decrypt-env';
 import './before';
+import * as Sentry from '@sentry/node';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ClsMiddleware } from 'nestjs-cls';
@@ -35,6 +36,15 @@ process.on('uncaughtException', (error) => {
   );
   process.exit(1);
 });
+
+const sentryDsn = process.env.SENTRY_DSN?.trim();
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'production',
+    tracesSampleRate: 0.1,
+  });
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {

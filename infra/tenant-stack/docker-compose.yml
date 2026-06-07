@@ -39,6 +39,8 @@ services:
       - NODE_ENV=production
       - NEW_RELIC_ENABLED=false
       - NEW_RELIC_APP_NAME=stockix-tenant
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-tenant}
       # Mail — copied from platform env at provision time
       - MAIL_HOST=${MAIL_HOST:-}
       - MAIL_USERNAME=${MAIL_USERNAME:-}

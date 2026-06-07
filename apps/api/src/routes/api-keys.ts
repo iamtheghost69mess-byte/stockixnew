@@ -13,6 +13,10 @@ const apiKeyCreateBody = z.object({
   name: z.string().min(1).max(255),
 });
 
+/**
+ * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
+ * GET `/api-keys` is naturally idempotent.
+ */
 export function registerApiKeyRoutes(app: Hono<ControlPlaneAuthEnv>, db: Db | null): void {
   app.get("/api-keys", async (c) => {
   if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);

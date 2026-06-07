@@ -344,6 +344,10 @@ export function canViewFinanceAdminPassword(actorRole: string): boolean {
 
 const stockixModuleZod = z.enum(["accounting", "pos", "pms", "chat"]);
 
+/**
+ * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
+ * GET routes are naturally idempotent. Provision stream/status use correlation auth, not idempotency keys.
+ */
 export function registerTenantRoutes(app: Hono<ApiEnv>, db: Db | null): void {
 app.get("/tenants", async (c) => {
   if (!db) {
@@ -714,6 +718,8 @@ app.delete("/tenants/:tenantId", async (c) => {
     .select({
       id: tenants.id,
       slug: tenants.slug,
+      name: tenants.name,
+      ownerId: tenants.ownerId,
       tenantStatus: tenants.status,
       deploymentStatus: tenantDeployments.status,
     })
@@ -748,7 +754,12 @@ app.delete("/tenants/:tenantId", async (c) => {
   const childTenantRows =
     childSlugs.length > 0
       ? await db
-          .select({ id: tenants.id, slug: tenants.slug })
+          .select({
+            id: tenants.id,
+            slug: tenants.slug,
+            name: tenants.name,
+            ownerId: tenants.ownerId,
+          })
           .from(tenants)
           .where(inArray(tenants.slug, childSlugs))
       : [];
@@ -791,6 +802,9 @@ app.delete("/tenants/:tenantId", async (c) => {
         tenantId: childTenant.id,
         removeVolumes: true,
         removeImages: false,
+        ownerId: childTenant.ownerId,
+        tenantName: childTenant.name,
+        slug: childTenant.slug,
       },
     });
 
@@ -829,6 +843,9 @@ app.delete("/tenants/:tenantId", async (c) => {
       tenantId: parsed.data,
       removeVolumes,
       removeImages: removeVolumes,
+      ownerId: target.ownerId,
+      tenantName: target.name,
+      slug: target.slug,
     },
   });
   await logAudit(db, {
@@ -2042,7 +2059,12 @@ app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
   }
 
   const [childTenant] = await db
-    .select({ id: tenants.id, slug: tenants.slug })
+    .select({
+      id: tenants.id,
+      slug: tenants.slug,
+      name: tenants.name,
+      ownerId: tenants.ownerId,
+    })
     .from(tenants)
     .where(eq(tenants.slug, org.slug))
     .limit(1);
@@ -2077,6 +2099,9 @@ app.delete("/tenants/:tenantId/organizations/:orgId", async (c) => {
         tenantId: childTenant.id,
         removeVolumes,
         removeImages: false,
+        ownerId: childTenant.ownerId,
+        tenantName: childTenant.name,
+        slug: childTenant.slug,
       },
     });
   }
