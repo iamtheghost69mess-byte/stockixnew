@@ -16,13 +16,13 @@
  *        STOCKIX_DEV_SKIP_POS=1 pnpm dev   — skip POS if low on RAM
  */
 import { execSync, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
 import { findFreePort, isPortFree, waitForPortFree } from "./find-free-port.mjs";
-import { waitForHttp } from "./wait-for-http.mjs";
+import { waitForControlPlaneReady } from "./wait-for-http.mjs";
 import { killListenersOnPorts, runDevKillStale } from "./dev-kill-stale.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -211,14 +211,27 @@ async function upSharedInfra(env) {
 
 async function ensureBuildArtifacts(env) {
   const force = process.env.STOCKIX_DEV_FORCE_BUILD === "1";
+  const workerSrc = path.join(repoRoot, "infra", "worker-service", "src", "worker.ts");
+  let workerStale = false;
+  if (existsSync(WORKER_BUNDLE) && existsSync(workerSrc)) {
+    try {
+      workerStale = statSync(workerSrc).mtimeMs > statSync(WORKER_BUNDLE).mtimeMs;
+    } catch {
+      workerStale = false;
+    }
+  }
   if (force || !existsSync(AUTH_DIST)) {
     console.log("[dev] Building @repo/auth…");
     await run("pnpm", ["--filter", "@repo/auth", "build"], { env });
   } else {
     console.log("[dev] @repo/auth dist present — skip build (STOCKIX_DEV_FORCE_BUILD=1 to rebuild)");
   }
-  if (force || !existsSync(WORKER_BUNDLE)) {
-    console.log("[dev] Building worker bundle…");
+  if (force || !existsSync(WORKER_BUNDLE) || workerStale) {
+    if (workerStale && !force) {
+      console.log("[dev] Worker source changed — rebuilding worker bundle…");
+    } else {
+      console.log("[dev] Building worker bundle…");
+    }
     await run("pnpm", ["infra:worker:build"], { env });
   } else {
     console.log("[dev] Worker bundle present — skip build (STOCKIX_DEV_FORCE_BUILD=1 to rebuild)");
@@ -230,10 +243,10 @@ const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
 const pick = (preferred) => (strict ? Promise.resolve(preferred) : findFreePort(preferred));
 
 /** @param {number} port */
-async function isApiHealthy(port) {
+async function isApiReady(port) {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      signal: AbortSignal.timeout(2_000),
+    const res = await fetch(`http://127.0.0.1:${port}/ready`, {
+      signal: AbortSignal.timeout(3_000),
     });
     return res.ok;
   } catch {
@@ -252,7 +265,7 @@ try {
 const preferredApiPort = parseInt(process.env.PORT || "4000", 10);
 const allowReuseApi = process.env.STOCKIX_DEV_REUSE_API === "1";
 const existingApiPort =
-  allowReuseApi && !strict && (await isApiHealthy(preferredApiPort))
+  allowReuseApi && !strict && (await isApiReady(preferredApiPort))
     ? preferredApiPort
     : null;
 
@@ -281,6 +294,7 @@ const sharedEnv = {
   NEXT_PUBLIC_PMS_API_URL: pmsOrigin,
   NEXT_PUBLIC_PMS_TENANT_APP_URL: `http://localhost:${pmsUiPort}`,
   STOCKIX_API_URL: apiOrigin,
+  STOCKIX_SERVER_API_URL: apiOrigin,
   NEXT_PUBLIC_STOCKIX_API_URL: apiOrigin,
   WORKER_HEALTH_PORT: String(workerHealthPort),
   STOCKIX_DEV_LOCKED_PORT: "1",
@@ -363,7 +377,7 @@ if (!reuseExistingApi) {
   });
 
   try {
-    await waitForHttp(`${apiOrigin}/health`, {
+    await waitForControlPlaneReady(apiOrigin, {
       timeoutMs: apiWaitMs,
       label: `API (${apiOrigin})`,
     });
@@ -381,7 +395,7 @@ const concurrentlyArgs = [
   "-c",
   "cyan,magenta,green,yellow,blue",
   "node scripts/dev-next.mjs",
-  "node infra/worker-service/.runtime/worker.js",
+  "node scripts/dev-worker.mjs",
   posCmd,
   "node scripts/dev-pms.mjs",
   "node scripts/dev-pms-frontend.mjs",

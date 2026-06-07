@@ -78,6 +78,20 @@ function isEditorOrMcpProcess(cmdLine) {
 }
 
 /** @param {string} cmdLine */
+function isOrphanedWorker(cmdLine) {
+  if (!cmdLine || isEditorOrMcpProcess(cmdLine)) return false;
+  if (/dev-worker\.mjs/i.test(cmdLine)) return true;
+  if (/worker-service[\\/]+\.runtime[\\/]+worker\.js/i.test(cmdLine)) return true;
+  if (/infra[\\/]+worker-service[\\/]+.*worker\.js/i.test(cmdLine)) return true;
+  return false;
+}
+
+/** Kill orphaned infra worker processes. */
+function killOrphanedWorkers() {
+  killOrphanedWatchers(isOrphanedWorker, "infra worker");
+}
+
+/** @param {string} cmdLine */
 function isOrphanedApiWatcher(cmdLine) {
   if (!cmdLine || isEditorOrMcpProcess(cmdLine)) return false;
   if (/dev-api\.mjs/i.test(cmdLine)) return true;
@@ -262,6 +276,9 @@ export async function runDevKillStale() {
 
   console.log("\n[dev:kill] Scanning for orphaned PMS watchers…");
   killOrphanedPmsWatchers();
+
+  console.log("\n[dev:kill] Scanning for orphaned infra workers…");
+  killOrphanedWorkers();
 
   for (const lockPath of NEXT_LOCKS) {
     if (!existsSync(lockPath)) continue;

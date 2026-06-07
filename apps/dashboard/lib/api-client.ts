@@ -7,8 +7,8 @@ import { isApiConnectionError } from "@/lib/api-connection";
 // Client-side bundle still uses NEXT_PUBLIC_STOCKIX_API_URL baked in at build time.
 const apiBase = dashboardConfig.serverApiUrl;
 
-const MAX_ATTEMPTS = dashboardConfig.nodeEnv === "production" ? 3 : 1;
-const TIMEOUT_MS = dashboardConfig.nodeEnv === "production" ? 10_000 : 3_000;
+const MAX_ATTEMPTS = dashboardConfig.nodeEnv === "production" ? 3 : 5;
+const TIMEOUT_MS = dashboardConfig.nodeEnv === "production" ? 10_000 : 15_000;
 
 /** Long-running control-plane mutations (tenant delete, provision, etc.). */
 export const LIFECYCLE_TIMEOUT_MS = 30_000;
