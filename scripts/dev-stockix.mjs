@@ -21,8 +21,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
-import { findFreePort, waitForPortFree } from "./find-free-port.mjs";
+import { findFreePort, isPortFree, waitForPortFree } from "./find-free-port.mjs";
 import { waitForHttp } from "./wait-for-http.mjs";
+import { killListenersOnPorts, runDevKillStale } from "./dev-kill-stale.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const concurrentlyBin = path.join(
@@ -242,9 +243,10 @@ async function isApiHealthy(port) {
 
 console.log("[dev] Clearing stale dev port listeners…");
 try {
-  await run("node", ["scripts/dev-kill-stale.mjs"], { env: process.env, stdio: "pipe" });
-} catch {
-  /* non-fatal */
+  await runDevKillStale();
+} catch (error) {
+  console.error(`[dev] ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
 }
 
 const preferredApiPort = parseInt(process.env.PORT || "4000", 10);
@@ -336,6 +338,9 @@ const apiWaitMs = parseInt(process.env.STOCKIX_DEV_API_WAIT_MS || "180000", 10);
 
 if (!reuseExistingApi) {
   console.log(`[dev] Phase 1: boot API on ${apiOrigin} before dashboard/worker/POS/PMS…`);
+  // Docker/migrate can take 30s+ — reclaim ports again (orphan API often appears after first failed boot).
+  console.log("[dev] Reclaiming dev ports before API boot…");
+  await runDevKillStale();
   try {
     await waitForPortFree(apiPort);
   } catch (error) {
@@ -382,7 +387,10 @@ const concurrentlyArgs = [
   "node scripts/dev-pms-frontend.mjs",
 ];
 
-console.log("[dev] Phase 2: starting dashboard, worker, POS, PMS…\n");
+console.log("[dev] Phase 2: starting dashboard, worker, POS, PMS…");
+console.log("[dev] Reclaiming phase-2 ports (keeping API on %s)…", apiPort);
+await killListenersOnPorts([dashPort, 3001, pmsPort, pmsUiPort, workerHealthPort, 8010]);
+console.log("");
 
 stackChild = spawn(process.execPath, [concurrentlyBin, ...concurrentlyArgs], {
   cwd: repoRoot,

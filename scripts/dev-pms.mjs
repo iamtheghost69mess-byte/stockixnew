@@ -8,7 +8,8 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
-import { findFreePort } from "./find-free-port.mjs";
+import { findFreePort, waitForPortFree } from "./find-free-port.mjs";
+import { killListenersOnPorts } from "./dev-kill-stale.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pmsDir = path.join(repoRoot, "services", "pms");
@@ -16,11 +17,21 @@ const pmsDir = path.join(repoRoot, "services", "pms");
 loadEnvFilesAtRoot(repoRoot);
 
 const preferred = parseInt(process.env.PMS_PORT || "3003", 10);
-const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1";
+const locked = process.env.STOCKIX_DEV_LOCKED_PORT === "1";
+const strict = process.env.STOCKIX_DEV_STRICT_PORT === "1" || locked;
 const port = strict ? preferred : await findFreePort(preferred);
 
 if (port !== preferred) {
   console.warn(`[pms] Port ${preferred} is in use — using http://127.0.0.1:${port}`);
+}
+
+await killListenersOnPorts([port]);
+
+try {
+  await waitForPortFree(port);
+} catch (error) {
+  console.error(`[pms] ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
 }
 
 const pmsOrigin = `http://127.0.0.1:${port}`;
