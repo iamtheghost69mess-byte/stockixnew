@@ -134,6 +134,63 @@ function ensureDockerNetwork(name) {
   }
 }
 
+function sharedDevPortsStatus() {
+  const inspect = (service) => {
+    try {
+      return execSync(
+        `docker inspect stockix-shared-${service}-1 --format "{{json .NetworkSettings.Ports}}"`,
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      ).trim();
+    } catch {
+      return "";
+    }
+  };
+  const mongoPorts = inspect("stockix-mongo");
+  const proxyPorts = inspect("stockix-mysql-proxy");
+  return {
+    mongoOk: mongoPorts.includes("127.0.0.1") && mongoPorts.includes("27017"),
+    proxyOk: proxyPorts.includes("127.0.0.1") && proxyPorts.includes("6032"),
+    mongoPorts,
+    proxyPorts,
+  };
+}
+
+/** @param {NodeJS.ProcessEnv} env @param {string[]} envFiles */
+async function assertSharedDevPortsPublished(env, envFiles) {
+  if (!existsSync(SHARED_COMPOSE_DEV_PORTS)) return;
+
+  let status = sharedDevPortsStatus();
+  if (status.mongoOk && status.proxyOk) return;
+
+  console.warn("[dev] ⚠ Shared dev ports missing for host-run worker — re-applying dev-ports overlay…");
+  if (!status.mongoOk) {
+    console.warn("[dev]   Mongo not on 127.0.0.1:27017");
+  }
+  if (!status.proxyOk) {
+    console.warn("[dev]   ProxySQL admin not on 127.0.0.1:6032");
+  }
+
+  const args = sharedComposeArgs(envFiles);
+  args.push("up", "-d", "--wait", "stockix-mongo", "stockix-mysql-proxy");
+  await run("docker", args, { env });
+
+  status = sharedDevPortsStatus();
+  if (!status.mongoOk || !status.proxyOk) {
+    console.error("[dev] Shared dev ports still missing after reconcile.");
+    if (!status.mongoOk) {
+      console.error("[dev]   Mongo ports:", status.mongoPorts || "(container not found)");
+    }
+    if (!status.proxyOk) {
+      console.error("[dev]   ProxySQL ports:", status.proxyPorts || "(container not found)");
+    }
+    console.error(
+      "[dev]   Fix manually: docker compose -f infra/shared/docker-compose.yml -f infra/shared/docker-compose.dev-ports.yml --env-file .env up -d --wait stockix-mongo stockix-mysql-proxy",
+    );
+    process.exit(1);
+  }
+  console.log("[dev] ✓ Shared dev ports reconciled (127.0.0.1:27017, 127.0.0.1:6032)\n");
+}
+
 async function upSharedInfra(env) {
   if (!existsSync(SHARED_COMPOSE)) {
     throw new Error(`Missing ${SHARED_COMPOSE}`);
@@ -147,6 +204,7 @@ async function upSharedInfra(env) {
   console.log("[dev] Shared tenant infra (stockix-shared: MySQL, Mongo, Redis)…");
   await run("docker", args, { env });
   await ensureMongoReplicaSet(env, envFiles);
+  await assertSharedDevPortsPublished(env, envFiles);
   console.log("[dev] ✓ stockix-shared is up (Mongo rs0 ready)\n");
 }
 

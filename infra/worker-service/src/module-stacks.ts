@@ -17,6 +17,10 @@ import * as dbSchema from "@repo/db/schema";
 import { tenantDeployments } from "@repo/db/schema";
 
 import { defaultTenantEnvRoot } from "../domain/env-paths.js";
+import {
+  readTenantEnvFile,
+  writeTenantEnvFileAtomic,
+} from "../domain/provisioning/tenant-env.js";
 import { composeProjectName } from "../domain/provisioning/compose-project-name.js";
 import { ExecaDockerComposeRunner } from "../domain/provisioning/adapters/execa-docker-compose-runner.js";
 
@@ -37,7 +41,6 @@ import {
 } from "../domain/provisioning/adapters/bootstrap-pos-org.js";
 
 import { buildFinanceInternalUrlForPos } from "../domain/provisioning/build-finance-internal-url.js";
-import { readTenantEnvFile } from "../domain/provisioning/tenant-env.js";
 
 import {
 
@@ -75,7 +78,7 @@ export function resolvePosJwtEnv(): {
   FIELD_ENCRYPTION_KEY: string;
 } {
   const jwtSecret = apiConfig.authTokenSecret;
-  const platformFromEnv = process.env.PLATFORM_JWT_SECRET?.trim();
+  const platformFromEnv = process.env.PLATFORM_JWT_SECRET?.trim() || apiConfig.platformJwtSecret?.trim();
   const platformJwtSecret =
     platformFromEnv
     || (apiConfig.nodeEnv !== "production" && jwtSecret
@@ -83,7 +86,7 @@ export function resolvePosJwtEnv(): {
       : "");
   if (!platformJwtSecret) {
     throw new Error(
-      "[provision][pos] PLATFORM_JWT_SECRET is required when provisioning POS in production",
+      "[provision][pos] PLATFORM_JWT_SECRET (or AUTH_TOKEN_SECRET for dev fallback) is required for POS provision",
     );
   }
   return {
@@ -92,6 +95,17 @@ export function resolvePosJwtEnv(): {
     LICENSE_SIGNING_SECRET: apiConfig.licenseSigningSecret,
     FIELD_ENCRYPTION_KEY: process.env.FIELD_ENCRYPTION_KEY?.trim() ?? "",
   };
+}
+
+/** Persist POS compose secrets into tenant `.env` so `docker compose --env-file` can interpolate them. */
+export async function persistPosSecretsToTenantEnv(slug: string): Promise<void> {
+  const posJwtEnv = resolvePosJwtEnv();
+  const existing = await readTenantEnvFile(slug).catch(() => ({}));
+  await writeTenantEnvFileAtomic(join(defaultTenantEnvRoot(), slug), {
+    ...existing,
+    AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
+    ...posJwtEnv,
+  });
 }
 
 /** Require explicit Resend API key for POS email (no SMTP password fallback). */
@@ -400,6 +414,7 @@ export async function provisionPosStack(
   const resendApiKey = resolvePosResendApiKey();
   const resendFromEmail =
     process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
+  await persistPosSecretsToTenantEnv(opts.slug);
   const posJwtEnv = resolvePosJwtEnv();
 
   const tenantEnv = await readTenantEnvFile(opts.slug);

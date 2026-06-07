@@ -50,6 +50,11 @@ export function tenantMysqlNames(slug) {
   };
 }
 
+/** Escape `_` / `%` for MySQL LIKE (slug underscores are not wildcards). */
+export function mysqlLikePatternEscape(value) {
+  return value.replace(/\\/g, "\\\\").replace(/_/g, "\\_").replace(/%/g, "\\%");
+}
+
 export function bootstrapAdminPassword(slug) {
   const raw = process.env.DEPLOYMENT_SECRET_KEY?.trim();
   if (!raw || raw.length < 32) throw new SuiteError("DEPLOYMENT_SECRET_KEY missing or too short in .env");
@@ -314,11 +319,14 @@ export function moduleGatingEnabled() {
   return moduleGatingConfig.enabled;
 }
 
-export async function preflight(authHeadersRef) {
+export async function preflight(authHeadersRef, infraChecks) {
   const health = await fetch(`${API}/health`);
   if (!health.ok) throw new SuiteError(`API unhealthy at ${API}`);
   await resolveAuth(authHeadersRef);
   await execa("docker", ["info"], { stdio: "pipe" });
+  if (infraChecks?.assertHostInfraReachable) {
+    await infraChecks.assertHostInfraReachable();
+  }
   if (!process.env.SHARED_MYSQL_ROOT_PASSWORD) {
     throw new SuiteError("SHARED_MYSQL_ROOT_PASSWORD required for E2E infra checks");
   }

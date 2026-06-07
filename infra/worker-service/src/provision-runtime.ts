@@ -715,33 +715,40 @@ async function resolveServerInternalUrl(params: {
   fallbackHost: string;
   fallbackPort: number;
   log?: (message: string) => void;
+  preferPublishedPort?: boolean;
 }): Promise<string> {
+  const preferPublishedPort =
+    params.preferPublishedPort
+    ?? (process.platform === "win32" || process.env.NODE_ENV !== "production");
+
   // Connect the tenant server container to the worker's internal network so the
   // worker can reach it directly (host-published port forwarding is blocked by
   // Docker isolation between different bridge networks on Linux).
   const workerNetwork = process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
   const containerName = `${params.project}-server-1`;
-  try {
-    await execa("docker", ["network", "connect", workerNetwork, containerName], {
-      stdio: "pipe",
-      reject: false,
-    });
-    const { stdout: inspectOut } = await execa(
-      "docker",
-      [
-        "inspect",
-        "--format",
-        `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
-        containerName,
-      ],
-      { stdio: "pipe" },
-    );
-    const ip = inspectOut.trim();
-    if (ip && ip !== "<no value>" && ip !== "") {
-      return `http://${ip}:3000`;
+  if (!preferPublishedPort) {
+    try {
+      await execa("docker", ["network", "connect", workerNetwork, containerName], {
+        stdio: "pipe",
+        reject: false,
+      });
+      const { stdout: inspectOut } = await execa(
+        "docker",
+        [
+          "inspect",
+          "--format",
+          `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
+          containerName,
+        ],
+        { stdio: "pipe" },
+      );
+      const ip = inspectOut.trim();
+      if (ip && ip !== "<no value>" && ip !== "") {
+        return `http://${ip}:3000`;
+      }
+    } catch {
+      // Fall through to host-port approach.
     }
-  } catch {
-    // Fall through to host-port approach.
   }
 
   const publishedPort = await resolvePublishedServerHostPort(containerName);
@@ -1724,17 +1731,23 @@ export async function executeProvisionRuntime(
     // REPAIRED: local dev Finance URL when stockix_internal missing 2026-06-05
     // Use docker compose port lookup — PUBLIC_PROXY_PORT (internal_port) is nginx routing,
     // not the dynamic host port published by tenant-stack server (0.0.0.0::3000).
-    const internalUrl = tenantServerInternalIp
+    // Host-run worker (Windows / local dev) cannot reach docker bridge IPs — use published port.
+    const preferHostPublishedPort =
+      localDevFallback
+      || process.platform === "win32"
+      || process.env.NODE_ENV !== "production";
+
+    const internalUrl = tenantServerInternalIp && !preferHostPublishedPort
       ? `http://${tenantServerInternalIp}:3000`
       : await resolveServerInternalUrl({
           composeFile,
           project,
           envPath: composeCtx.envPath,
           composeEnv: composeCtx.composeEnv,
-          // Host-run worker (pnpm dev) reaches published ports via TENANT_INTERNAL_HOST (127.0.0.1).
           fallbackHost: apiConfig.tenantInternalHost,
           fallbackPort: port,
           log,
+          preferPublishedPort: preferHostPublishedPort,
         });
     if (!hasOp("tenant.health_check")) {
       log("[provision] step start: tenant.health_check");

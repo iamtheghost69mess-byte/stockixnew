@@ -1,6 +1,8 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('queue', () => ({
-  host: process.env.QUEUE_HOST || 'localhost',
-  port: parseInt(process.env.QUEUE_PORT, 10) || 6379,
+  host: process.env.QUEUE_HOST || process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.QUEUE_PORT ?? process.env.REDIS_PORT ?? '', 10) || 6379,
+  password: process.env.REDIS_PASSWORD || undefined,
+  db: parseInt(process.env.REDIS_DB ?? '', 10) || 0,
 }));

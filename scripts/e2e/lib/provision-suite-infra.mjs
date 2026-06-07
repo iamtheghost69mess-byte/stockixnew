@@ -3,8 +3,10 @@
  */
 
 import { execSync } from "node:child_process";
+import { createConnection } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { execa } from "execa";
 import {
@@ -14,6 +16,7 @@ import {
   readJson,
   sleep,
   tenantMysqlNames,
+  mysqlLikePatternEscape,
 } from "./provision-suite-core.mjs";
 
 export const MYSQL_CONTAINER =
@@ -28,6 +31,53 @@ export const TRAEFIK_DIR = (process.env.TRAEFIK_DYNAMIC_DIR ?? "/opt/stockix/tra
   "",
 );
 export const POS_API_KEY = (process.env.POS_PLATFORM_API_KEY ?? "").trim();
+
+const E2E_REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const SHARED_COMPOSE = join(E2E_REPO_ROOT, "infra", "shared", "docker-compose.yml");
+const SHARED_COMPOSE_DEV_PORTS = join(E2E_REPO_ROOT, "infra", "shared", "docker-compose.dev-ports.yml");
+
+function sharedDevPortsPublished() {
+  const inspect = (service) => {
+    try {
+      return execSync(
+        `docker inspect stockix-shared-${service}-1 --format "{{json .NetworkSettings.Ports}}"`,
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      ).trim();
+    } catch {
+      return "";
+    }
+  };
+  const mongoPorts = inspect("stockix-mongo");
+  const proxyPorts = inspect("stockix-mysql-proxy");
+  return {
+    mongoOk: mongoPorts.includes("127.0.0.1") && mongoPorts.includes("27017"),
+    proxyOk: proxyPorts.includes("127.0.0.1") && proxyPorts.includes("6032"),
+  };
+}
+
+function reconcileSharedDevPorts() {
+  if (!existsSync(SHARED_COMPOSE_DEV_PORTS)) return;
+  const envFile = join(E2E_REPO_ROOT, ".env");
+  const args = [
+    "compose",
+    "-f",
+    SHARED_COMPOSE,
+    "-f",
+    SHARED_COMPOSE_DEV_PORTS,
+    "--env-file",
+    envFile,
+    "up",
+    "-d",
+    "--wait",
+    "stockix-mongo",
+    "stockix-mysql-proxy",
+  ];
+  execSync(`docker ${args.map((a) => `"${a}"`).join(" ")}`, {
+    cwd: E2E_REPO_ROOT,
+    stdio: "inherit",
+    shell: true,
+  });
+}
 
 function runShell(cmd) {
   try {
@@ -127,8 +177,9 @@ export async function financeSwitchTenant(port, accessToken, organizationId) {
 export function listMysqlDatabases(slug) {
   if (!MYSQL_ROOT) return { ok: false, dbs: [], out: "SHARED_MYSQL_ROOT_PASSWORD unset" };
   const { orgDbPattern, systemDb } = tenantMysqlNames(slug);
+  const likePattern = mysqlLikePatternEscape(orgDbPattern);
   const q = runShell(
-    `docker exec ${MYSQL_CONTAINER} mysql -uroot -p"${MYSQL_ROOT.replace(/"/g, '\\"')}" -N -e "SHOW DATABASES LIKE '${orgDbPattern}';" 2>&1`,
+    `docker exec ${MYSQL_CONTAINER} mysql -uroot -p"${MYSQL_ROOT.replace(/"/g, '\\"')}" -N -e "SHOW DATABASES LIKE '${likePattern}' ESCAPE '\\\\';" 2>&1`,
   );
   return { ok: q.ok, dbs: q.out.split("\n").map((s) => s.trim()).filter(Boolean), systemDb, out: q.out };
 }
@@ -271,7 +322,7 @@ export async function assertOrgSlugAllowedAcrossTenants(_tenantIdA, tenantIdB, s
   }
 }
 
-export async function setOwnerPasswordForE2e(email, password) {
+export async function setOwnerPasswordForE2e(email, password, role) {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new SuiteError("DATABASE_URL required to set test owner password");
   const bcrypt = (await import("bcryptjs")).default;
@@ -279,12 +330,74 @@ export async function setOwnerPasswordForE2e(email, password) {
   const sql = (await import("postgres")).default;
   const pg = sql(dbUrl, { max: 1 });
   try {
-    const rows = await pg`
-      UPDATE owners SET password_hash = ${hash}, status = 'active', updated_at = NOW()
-      WHERE email = ${email} RETURNING id
-    `;
+    const rows = role
+      ? await pg`
+          UPDATE owners SET password_hash = ${hash}, status = 'active', role = ${role}
+          WHERE email = ${email} RETURNING id
+        `
+      : await pg`
+          UPDATE owners SET password_hash = ${hash}, status = 'active'
+          WHERE email = ${email} RETURNING id
+        `;
     if (!rows.length) throw new SuiteError(`Owner not found for email ${email}`);
   } finally {
     await pg.end({ timeout: 5 });
+  }
+}
+
+/** @param {string} host @param {number} port @param {number} timeoutMs */
+function probeHostTcp(host, port, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host, port });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+    socket.once("connect", () => {
+      clearTimeout(timer);
+      socket.end();
+      resolve(undefined);
+    });
+    socket.once("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+/** TCP probe for host-run worker shared infra (requires docker-compose.dev-ports.yml). */
+export async function assertHostInfraReachable() {
+  if (existsSync(SHARED_COMPOSE_DEV_PORTS)) {
+    let ports = sharedDevPortsPublished();
+    if (!ports.mongoOk || !ports.proxyOk) {
+      console.warn("[e2e] Shared dev ports missing — re-applying dev-ports overlay…");
+      reconcileSharedDevPorts();
+      ports = sharedDevPortsPublished();
+      if (!ports.mongoOk || !ports.proxyOk) {
+        throw new SuiteError(
+          "Shared dev ports still missing after reconcile (127.0.0.1:27017, 127.0.0.1:6032).",
+        );
+      }
+    }
+  }
+
+  const mongoHost = process.env.WORKER_SHARED_MONGO_HOST ?? "127.0.0.1";
+  const mysqlHost = process.env.WORKER_SHARED_MYSQL_HOST ?? "127.0.0.1";
+  const checks = [
+    { host: mongoHost, port: 27017, label: "Mongo (stockix-mongo)" },
+    { host: mysqlHost, port: 3306, label: "MySQL (stockix-mysql)" },
+    { host: mysqlHost, port: 6032, label: "ProxySQL admin" },
+  ];
+  for (const { host, port, label } of checks) {
+    try {
+      await probeHostTcp(host, port);
+    } catch (err) {
+      throw new SuiteError(
+        `${label} not reachable at ${host}:${port} from the host. ` +
+          "Run shared infra with dev-ports: " +
+          "docker compose -f infra/shared/docker-compose.yml -f infra/shared/docker-compose.dev-ports.yml --env-file .env up -d --wait",
+        { cause: err instanceof Error ? err.message : String(err) },
+      );
+    }
   }
 }

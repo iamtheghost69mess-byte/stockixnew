@@ -60,22 +60,25 @@ try {
 
 
 
-console.log(`[api] starting on http://127.0.0.1:${port} (node --watch + tsx) …`);
-console.warn(
-  "⚠️  API running with --watch. SSE connections will drop on file change. Use a stable API process for SSE testing.",
-);
+const stableApi =
+  process.env.STOCKIX_DEV_STABLE_API === "1" || process.env.STOCKIX_E2E === "1";
 
+if (stableApi) {
+  console.log(`[api] starting on http://127.0.0.1:${port} (stable — no file watch; use for E2E/SSE) …`);
+} else {
+  console.log(`[api] starting on http://127.0.0.1:${port} (node --watch + tsx) …`);
+  console.warn(
+    "⚠️  API running with --watch. SSE connections will drop on file change. " +
+      "Use STOCKIX_DEV_STABLE_API=1 pnpm dev (or run pnpm test:e2e after a stable boot) for E2E.",
+  );
+}
 
+const nodeArgs = stableApi
+  ? ["--import", "tsx", "src/index.ts"]
+  : ["--watch", "--watch-path=src", "--import", "tsx", "src/index.ts"];
 
 // Limit watch restarts to apps/api/src so worker/dashboard builds do not restart the API.
-
-const child = spawn(
-
-  process.execPath,
-
-  ["--watch", "--watch-path=src", "--import", "tsx", "src/index.ts"],
-
-  {
+const child = spawn(process.execPath, nodeArgs, {
 
     cwd: apiDir,
 
