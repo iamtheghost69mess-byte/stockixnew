@@ -72,6 +72,9 @@ pnpm dev
 | `pnpm dev:pos:frontend` | POS UI only (`studio-admin`) |
 | `pnpm build:pos` | Production Next.js build for POS UI |
 | `pnpm test:pos` | POS backend unit tests |
+| `pnpm test:e2e:preflight` | Provision E2E preflight (API + Docker + auth) |
+| `pnpm test:e2e` | Full provision E2E suite (see below) |
+| `pnpm audit:e2e` | Platform audit runner (20 scenarios) |
 | `pnpm db:seed:pms-demo` | Demo tenant with PMS license for `/pms` dropdown |
 
 Control-plane + PMS, no POS: `STOCKIX_DEV_SKIP_POS=1 pnpm dev`
@@ -237,6 +240,59 @@ pnpm exec turbo run build --filter=dashboard --filter=api
 pnpm run lint
 pnpm run check-types
 ```
+
+## End-to-end provisioning tests
+
+Integration tests against the **real** local stack (API, worker, Docker, shared MySQL/Mongo/Redis). No mocks for Docker or the provision worker.
+
+| Script | Purpose |
+|--------|---------|
+| `pnpm test:e2e:preflight` | Fast smoke: API health, auth, Docker, required env |
+| `pnpm test:e2e` | Full provision E2E suite (long — real tenant provisions) |
+| `pnpm audit:e2e` | Broader platform audit (S01–S20: auth, plans, provision, deprovision) |
+| `pnpm provision:modules` | Module matrix only (accounting / POS / both) |
+| `pnpm provision:smoke` | Single quick provision smoke |
+| `pnpm provision:diagnose` | Hang diagnosis with live event/docker snapshots |
+
+### Prerequisites
+
+```sh
+pnpm dev                    # API + worker + shared infra (stockix-shared)
+pnpm docker:prebuild        # Finance tenant images
+pnpm pos:images:build       # POS tenant images (for POS/combined scenarios)
+```
+
+Required env (root `.env`): `SHARED_MYSQL_ROOT_PASSWORD`, `DEPLOYMENT_SECRET_KEY`, `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` (or `PLATFORM_API_SECRET`), `POS_PLATFORM_API_KEY` (POS scenarios), `PROVISION_MODULE_GATING=1` (POS-only path).
+
+After changing worker failure-injection code: `pnpm infra:worker:build` and restart the worker.
+
+### `pnpm test:e2e` scenarios
+
+| Scenario | `--only` flag | What it verifies |
+|----------|---------------|------------------|
+| Finance-only | `finance` | Journal through `edge.publish`, Finance health + sign-in, MySQL system DB, Traefik YAML, teardown |
+| POS-only | `pos` | 4 POS containers healthy, `pos.schema_migration`, POS health/login, Mongo `{slug}_pos`, Traefik POS route |
+| Finance + POS | `combined` | All of the above plus `wire_pos_integration`, BullMQ `bigcapital_sync` on shared Redis |
+| Multi-org isolation | `multi-org` | Second org, `/auth/switch-tenant`, per-org MySQL DBs, slug uniqueness constraints |
+| Failure injection | `failure` | Simulated crash after `docker.data_step`; rollback cleans MySQL/Mongo/Redis; tenant → `failed` |
+| Correlation auth | `correlation` | Foreign owner gets **403** on `provision-status` and `provision-stream` |
+
+Run a subset:
+
+```sh
+pnpm test:e2e -- --only finance
+pnpm test:e2e -- --only pos
+pnpm test:e2e -- --only combined
+pnpm test:e2e -- --only multi-org
+pnpm test:e2e -- --only failure
+pnpm test:e2e -- --only correlation
+```
+
+Each scenario provisions with a unique slug, asserts journal `operationKey` order and SSE `provision`/`done` events, then **deprovisions** and verifies MySQL/Mongo/Redis/Traefik/Postgres cleanup. On failure, the last 40 provision events are logged.
+
+Suite entrypoint: [`scripts/e2e/provision-suite.mjs`](scripts/e2e/provision-suite.mjs) · helpers: [`scripts/e2e/lib/`](scripts/e2e/lib/)
+
+Tune timeouts with `PROVISION_MAX_MS` and `PROVISION_POLL_MS` in root `.env`.
 
 ## Contributing
 
