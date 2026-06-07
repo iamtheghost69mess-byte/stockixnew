@@ -766,6 +766,7 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
     deprovisionTenant(db, job.tenantId!, {
       removeVolumes,
       removeImages,
+      lifecycleJobId: job.id,
       log: (m) => logger.info(`[worker][${job.id}] ${m}`),
     }),
   );
@@ -893,10 +894,15 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
         provisionComplete = await withExecutionTimeout(runProvisionJob(db, job), jobExecutionTimeoutMs);
       } else if (job.type === "add_module") {
         provisionComplete = await withExecutionTimeout(runAddModuleJob(db, job), jobExecutionTimeoutMs);
+      } else if (job.type === "tenant.deprovision") {
+        await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
+        // Job row is completed in deprovisionTenant before tenant delete (FK cascade).
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
       }
-      await markJobComplete(job.id, provisionComplete);
+      if (job.type !== "tenant.deprovision") {
+        await markJobComplete(job.id, provisionComplete);
+      }
       const jobOutcome =
         provisionComplete?.completionOutcome
         ?? (job.type === "tenant.provision" || job.type === "add_module" ? "success" : "success");

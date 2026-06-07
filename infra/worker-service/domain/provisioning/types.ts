@@ -73,6 +73,8 @@ export type ProvisionResult =
 export type DeprovisionOptions = {
   removeVolumes?: boolean;
   removeImages?: boolean;
+  /** Mark the lifecycle job completed before tenant row delete (FK cascade). */
+  lifecycleJobId?: string;
   log?: (message: string) => void;
 };
 

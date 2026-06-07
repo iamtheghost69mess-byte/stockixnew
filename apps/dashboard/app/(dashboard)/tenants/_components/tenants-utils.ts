@@ -65,6 +65,16 @@ export async function readJson(res: Response): Promise<unknown> {
 export const DELETE_POLL_MS = 3000;
 export const DELETE_MAX_WAIT_MS = 5 * 60 * 1000;
 
+/** Tick elapsed seconds every second until stopped (e.g. during DELETE fetch). */
+export function startElapsedTimer(onTick: (elapsedSec: number) => void): () => void {
+  const startedAt = Date.now();
+  onTick(0);
+  const id = setInterval(() => {
+    onTick(Math.floor((Date.now() - startedAt) / 1000));
+  }, 1000);
+  return () => clearInterval(id);
+}
+
 const DELETE_PROGRESS_STEPS = [
   "Queuing removal job…",
   "Stopping Docker containers…",

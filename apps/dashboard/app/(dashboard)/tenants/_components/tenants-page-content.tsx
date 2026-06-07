@@ -25,6 +25,7 @@ import {
   MAX_WAIT_MS,
   mergeProvisionEvents,
   pollUntilTenantRemoved,
+  startElapsedTimer,
   POLL_MS,
   readJson,
   type ProvisionPollComplete,
@@ -187,9 +188,17 @@ export function TenantsPageContent() {
         setDeleteProgress((p) =>
           p ? { ...p, message: "Submitting removal request…" } : p,
         );
-        const res = await fetch(`/api/tenants/${tenantId}${q}`, {
-          method: "DELETE",
+        const stopElapsed = startElapsedTimer((elapsedSec) => {
+          setDeleteProgress((p) => (p ? { ...p, elapsedSec } : p));
         });
+        let res: Response;
+        try {
+          res = await fetch(`/api/tenants/${tenantId}${q}`, {
+            method: "DELETE",
+          });
+        } finally {
+          stopElapsed();
+        }
         const data = (await readJson(res)) as {
           error?: string;
           message?: string;
@@ -261,9 +270,17 @@ export function TenantsPageContent() {
           index: i + 1,
           total: targets.length,
         });
-        const res = await fetch(`/api/tenants/${tenantId}?volumes=true`, {
-          method: "DELETE",
+        const stopElapsed = startElapsedTimer((elapsedSec) => {
+          setDeleteProgress((p) => (p ? { ...p, elapsedSec } : p));
         });
+        let res: Response;
+        try {
+          res = await fetch(`/api/tenants/${tenantId}?volumes=true`, {
+            method: "DELETE",
+          });
+        } finally {
+          stopElapsed();
+        }
         const data = (await readJson(res)) as { error?: string; message?: string };
         if (!res.ok && res.status !== 202) {
           throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
@@ -289,7 +306,17 @@ export function TenantsPageContent() {
           return next;
         });
       } catch (e) {
-        failed.push(`${slug}: ${String(e)}`);
+        const message = String(e);
+        if (message.includes("tenant_not_found")) {
+          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+          setSelectedTenantIds((prev) => {
+            const next = new Set(prev);
+            next.delete(tenantId);
+            return next;
+          });
+          continue;
+        }
+        failed.push(`${slug}: ${message}`);
       }
     }
 
@@ -940,20 +967,4 @@ export function TenantsPageContent() {
         deleteVolumesOpen={deleteVolumesOpen}
         setDeleteVolumesOpen={setDeleteVolumesOpen}
         deleteTarget={deleteTarget}
-        setDeleteTarget={setDeleteTarget}
-        deleteSlugInput={deleteSlugInput}
-        setDeleteSlugInput={setDeleteSlugInput}
-        isDeletingTenant={isDeletingTenant}
-        deleteProgress={deleteProgress}
-        executeTenantDelete={executeTenantDelete}
-        bulkDeleteOpen={bulkDeleteOpen}
-        setBulkDeleteOpen={setBulkDeleteOpen}
-        bulkDeleteTargets={bulkDeleteTargets}
-        bulkDeleteConfirmInput={bulkDeleteConfirmInput}
-        setBulkDeleteConfirmInput={setBulkDeleteConfirmInput}
-        isBulkDeleting={isBulkDeleting}
-        executeBulkDelete={executeBulkDelete}
-      />
-    </div>
-  );
-}
+        setDeleteTarget={setDeleteTarge
