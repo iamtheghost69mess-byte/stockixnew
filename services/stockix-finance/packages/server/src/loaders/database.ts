@@ -1,12 +1,8 @@
 import Knex from 'knex';
-import { knexSnakeCaseMappers } from 'objection';
 import { systemKnexConfig } from '@/config/knexConfig';
 
 export default async () => {
-  const knexInstance = Knex({
-    ...systemKnexConfig,
-    ...knexSnakeCaseMappers({ upperCase: true }),
-  });
+  const knexInstance = Knex(systemKnexConfig);
 
   try {
     // Verify connection with a timeout
