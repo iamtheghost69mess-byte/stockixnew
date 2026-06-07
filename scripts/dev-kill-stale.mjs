@@ -5,9 +5,10 @@
  */
 import { execSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
-import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { isPortFree } from "./find-free-port.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -95,6 +96,15 @@ function isOrphanedApiWatcher(cmdLine) {
   return false;
 }
 
+/** @param {string} cmdLine */
+function isOrphanedPmsWatcher(cmdLine) {
+  if (!cmdLine || isEditorOrMcpProcess(cmdLine)) return false;
+  if (/dev-pms\.mjs/i.test(cmdLine)) return false;
+  if (/services[\\/]+pms/i.test(cmdLine) && /tsx/i.test(cmdLine)) return true;
+  if (/services[\\/]+pms/i.test(cmdLine) && /src[\\/]index\.ts/i.test(cmdLine)) return true;
+  return false;
+}
+
 /** @returns {{ pid: number; cmdLine: string }[]} */
 function listNodeProcessesWindows() {
   /** @type {{ pid: number; cmdLine: string }[]} */
@@ -143,13 +153,16 @@ function listNodeProcessesUnix() {
   return rows;
 }
 
-/** Kill orphaned API watcher processes (including non-listening node --watch). */
-function killOrphanedApiWatchers() {
+/**
+ * @param {(cmdLine: string) => boolean} matcher
+ * @param {string} label
+ */
+function killOrphanedWatchers(matcher, label) {
   const processes = isWin ? listNodeProcessesWindows() : listNodeProcessesUnix();
   let orphanKills = 0;
 
   for (const { pid, cmdLine } of processes) {
-    if (killed.has(pid) || !isOrphanedApiWatcher(cmdLine)) continue;
+    if (killed.has(pid) || !matcher(cmdLine)) continue;
     try {
       if (isWin) {
         execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" });
@@ -158,31 +171,61 @@ function killOrphanedApiWatchers() {
       }
       killed.add(pid);
       orphanKills++;
-      console.log(`  → Killed orphaned API watcher PID ${pid}`);
+      console.log(`  → Killed orphaned ${label} PID ${pid}`);
     } catch {
-      console.warn(`  → Could not kill orphaned API watcher PID ${pid}`);
+      console.warn(`  → Could not kill orphaned ${label} PID ${pid}`);
     }
   }
 
   if (orphanKills === 0) {
-    console.log("  → No orphaned API watchers found");
+    console.log(`  → No orphaned ${label} found`);
   }
 }
 
-/** @returns {Promise<boolean>} true when something is listening on port 4000 */
-function isPort4000InUse() {
-  return new Promise((resolve) => {
-    const socket = net.connect({ port: 4000, host: "127.0.0.1" });
-    const done = (inUse) => {
-      socket.removeAllListeners();
-      socket.destroy();
-      resolve(inUse);
-    };
-    socket.setTimeout(500);
-    socket.once("connect", () => done(true));
-    socket.once("timeout", () => done(false));
-    socket.once("error", () => done(false));
-  });
+/** Kill orphaned API watcher processes (including non-listening node --watch). */
+function killOrphanedApiWatchers() {
+  killOrphanedWatchers(isOrphanedApiWatcher, "API watcher");
+}
+
+/** Kill orphaned PMS tsx watch processes (often survive Ctrl+C on Windows). */
+function killOrphanedPmsWatchers() {
+  killOrphanedWatchers(isOrphanedPmsWatcher, "PMS watcher");
+}
+
+/**
+ * Stop processes listening on the given ports (does not verify port 4000).
+ * @param {number[]} ports
+ * @returns {Promise<number>} count of processes stopped
+ */
+export async function killListenersOnPorts(ports) {
+  let stopped = 0;
+  for (const port of ports) {
+    const pids = isWin ? pidsOnPortWindows(port) : pidsOnPortUnix(port);
+    for (const pid of pids) {
+      if (killed.has(pid)) continue;
+      try {
+        if (isWin) {
+          execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" });
+        } else {
+          execSync(`kill -9 ${pid}`, { stdio: "ignore" });
+        }
+        killed.add(pid);
+        stopped++;
+        console.log(`  port ${port} → stopped PID ${pid}`);
+      } catch {
+        console.warn(`  port ${port} → could not stop PID ${pid}`);
+      }
+    }
+  }
+  if (stopped > 0) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return stopped;
+}
+
+/** @returns {Promise<boolean>} true when bind probes report port 4000 is free */
+async function isPort4000BindFree() {
+  return isPortFree(4000);
 }
 
 /** @param {number} port @returns {number | null} */
@@ -197,7 +240,7 @@ async function verifyPort4000Free() {
   await new Promise((r) => setTimeout(r, 500));
   const deadline = Date.now() + 2000;
   while (Date.now() < deadline) {
-    if (!(await isPort4000InUse())) return;
+    if (await isPort4000BindFree()) return;
     await new Promise((r) => setTimeout(r, 200));
   }
   const pid = pidListeningOnPort(4000);
@@ -212,26 +255,13 @@ async function verifyPort4000Free() {
 export async function runDevKillStale() {
   console.log("[dev:kill] Stopping listeners on dev ports…\n");
 
-  for (const port of DEV_PORTS) {
-    const pids = isWin ? pidsOnPortWindows(port) : pidsOnPortUnix(port);
-    for (const pid of pids) {
-      if (killed.has(pid)) continue;
-      try {
-        if (isWin) {
-          execSync(`taskkill /PID ${pid} /F`, { stdio: "ignore" });
-        } else {
-          execSync(`kill -9 ${pid}`, { stdio: "ignore" });
-        }
-        killed.add(pid);
-        console.log(`  port ${port} → stopped PID ${pid}`);
-      } catch {
-        console.warn(`  port ${port} → could not stop PID ${pid}`);
-      }
-    }
-  }
+  await killListenersOnPorts(DEV_PORTS);
 
   console.log("\n[dev:kill] Scanning for orphaned API watchers…");
   killOrphanedApiWatchers();
+
+  console.log("\n[dev:kill] Scanning for orphaned PMS watchers…");
+  killOrphanedPmsWatchers();
 
   for (const lockPath of NEXT_LOCKS) {
     if (!existsSync(lockPath)) continue;
