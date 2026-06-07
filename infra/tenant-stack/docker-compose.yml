@@ -5,7 +5,7 @@
 # AFTER  (new): server only = 1 container per tenant.
 #
 # All database connections point to the shared infrastructure network (stockix-shared):
-#   MySQL  → stockix-mysql:3306   DB: stockix_{slug}_finance  user: tenant_{slug}
+#   MySQL  → stockix-mysql-proxy:6033   DB: stockix_{slug}_finance  user: tenant_{slug}
 #   MongoDB → stockix-mongo:27017  DB: {slug}_pos
 #   Redis  → stockix-redis:6379   key prefix: tenant:{slug}:
 #
@@ -47,20 +47,22 @@ services:
       - MAIL_SECURE=${MAIL_SECURE:-}
       - MAIL_FROM_NAME=${MAIL_FROM_NAME:-}
       - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-}
-      # ── Database (stockix-mysql) ──────────────────────────────
+      # ── Database (via ProxySQL → stockix-mysql) ─────────────────
       - DB_CLIENT=mysql
-      - DB_HOST=stockix-mysql
+      - DB_HOST=${DB_HOST:-stockix-mysql-proxy}
+      - DB_PORT=${DB_PORT:-6033}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET:-utf8mb4}
       - SYSTEM_DB_CLIENT=mysql
-      - SYSTEM_DB_HOST=stockix-mysql
+      - SYSTEM_DB_HOST=${SYSTEM_DB_HOST:-${DB_HOST:-stockix-mysql-proxy}}
+      - SYSTEM_DB_PORT=${SYSTEM_DB_PORT:-${DB_PORT:-6033}}
       - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
       - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}
       - TENANT_DB_CLIENT=mysql
-      - TENANT_DB_HOST=stockix-mysql
-      - TENANT_DB_USER=${TENANT_DB_USER:-${DB_USER}}
+      - TENANT_DB_HOST=${TENANT_DB_HOST:-${DB_HOST:-stockix-mysql-proxy}}
+      - TENANT_DB_PORT=${TENANT_DB_PORT:-${DB_PORT:-6033}}
       - TENANT_DB_PASSWORD=${TENANT_DB_PASSWORD:-${DB_PASSWORD}}
       - TENANT_DB_NAME_PREFIX=${TENANT_DB_NAME_PREFIX:-stockix_tenant_}
       - TENANT_DB_NAME_PERFIX=${TENANT_DB_NAME_PREFIX:-stockix_tenant_}
@@ -120,13 +122,15 @@ services:
     image: stockix-database-migration:local
     environment:
       - DB_CLIENT=mysql
-      - DB_HOST=stockix-mysql
+      - DB_HOST=${DB_HOST:-stockix-mysql-proxy}
+      - DB_PORT=${DB_PORT:-6033}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CHARSET=${DB_CHARSET:-utf8mb4}
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
       - SYSTEM_DB_CLIENT=mysql
-      - SYSTEM_DB_HOST=stockix-mysql
+      - SYSTEM_DB_HOST=${SYSTEM_DB_HOST:-${DB_HOST:-stockix-mysql-proxy}}
+      - SYSTEM_DB_PORT=${SYSTEM_DB_PORT:-${DB_PORT:-6033}}
       - SYSTEM_DB_USER=${SYSTEM_DB_USER:-${DB_USER}}
       - SYSTEM_DB_PASSWORD=${SYSTEM_DB_PASSWORD:-${DB_PASSWORD}}
       - SYSTEM_DB_NAME=${SYSTEM_DB_NAME}

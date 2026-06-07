@@ -61,6 +61,9 @@ try {
 
 
 console.log(`[api] starting on http://127.0.0.1:${port} (node --watch + tsx) …`);
+console.warn(
+  "⚠️  API running with --watch. SSE connections will drop on file change. Use a stable API process for SSE testing.",
+);
 
 
 

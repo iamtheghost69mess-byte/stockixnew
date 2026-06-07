@@ -65,8 +65,14 @@ function maybeEncryptEnvValue(value: string): string {
  * All tenant containers join the `stockix-shared` Docker network and resolve
  * these hostnames via Docker DNS.
  */
-function sharedMysqlHost(): string {
-  return process.env.SHARED_MYSQL_HOST ?? "stockix-mysql";
+/** Tenant app MySQL connections go through ProxySQL, not direct MySQL. */
+function tenantMysqlProxyHost(): string {
+  return process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
+}
+
+function tenantMysqlProxyPort(): string {
+  const raw = process.env.MYSQL_PROXY_PORT ?? "6033";
+  return String(raw);
 }
 
 function sharedMongoHost(): string {
@@ -101,6 +107,10 @@ export function buildTenantMongoUrl(slug: string): string {
  */
 function buildTenantRedisUrl(slug: string): string {
   const host = tenantRedisHost();
+  const password = process.env.TENANT_REDIS_PASSWORD?.trim();
+  if (password && password !== "__MUST_OVERRIDE__") {
+    return `redis://:${encodeURIComponent(password)}@${host}:6379/0`;
+  }
   return `redis://${host}:6379/0`;
 }
 
@@ -124,20 +134,23 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
   const s3AccessKeyId = params.s3AccessKeyId;
   const s3SecretAccessKey = params.s3SecretAccessKey;
 
-  const mysqlHost = sharedMysqlHost();
+  const mysqlHost = tenantMysqlProxyHost();
+  const mysqlPort = tenantMysqlProxyPort();
   const mysqlSafe = slugToMysqlSafe(slug);
   const tenantDbUser = buildTenantMysqlUser(slug);
   const mongoUrl = buildTenantMongoUrl(slug);
   const redisUrl = buildTenantRedisUrl(slug);
   const redisKeyPrefix = buildTenantRedisKeyPrefix(slug);
+  const redisPassword = process.env.TENANT_REDIS_PASSWORD?.trim() ?? "";
 
   return {
     STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
     BASE_URL: params.baseUrl,
 
-    // ── MySQL (stockix-mysql) ───────────────────────────────────────────
+    // ── MySQL (stockix-mysql-proxy:6033 → stockix-mysql) ───────────────
     DB_CLIENT: "mysql",
     DB_HOST: mysqlHost,
+    DB_PORT: mysqlPort,
     DB_USER: tenantDbUser,
     DB_PASSWORD: params.dbPassword,
     DB_ROOT_PASSWORD: params.dbRootPassword,
@@ -145,6 +158,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
 
     SYSTEM_DB_CLIENT: "mysql",
     SYSTEM_DB_HOST: mysqlHost,
+    SYSTEM_DB_PORT: mysqlPort,
     SYSTEM_DB_USER: tenantDbUser,
     SYSTEM_DB_PASSWORD: params.dbPassword,
     SYSTEM_DB_NAME: `stockix_${mysqlSafe}_system`,
@@ -152,6 +166,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
 
     TENANT_DB_CLIENT: "mysql",
     TENANT_DB_HOST: mysqlHost,
+    TENANT_DB_PORT: mysqlPort,
     TENANT_DB_USER: tenantDbUser,
     TENANT_DB_PASSWORD: params.dbPassword,
     TENANT_DB_NAME_PREFIX: `stockix_${mysqlSafe}_`,
@@ -167,7 +182,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     // ── Redis (stockix-redis) — shared with key prefix isolation ────────
     REDIS_HOST: tenantRedisHost(),
     REDIS_PORT: "6379",
-    REDIS_PASSWORD: "",
+    REDIS_PASSWORD: redisPassword,
     REDIS_DB: "0",
     REDIS_URL: redisUrl,
     REDIS_KEY_PREFIX: redisKeyPrefix,

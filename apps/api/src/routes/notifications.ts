@@ -131,12 +131,15 @@ export function registerNotificationsApi(app: Hono<ApiEnv>, db: Db | null): void
       const streamStartedAt = new Date(Date.now() - 1000);
 
       const emitIfNew = async (payload: unknown) => {
+        if (closed) return;
         if (!isSerializedNotification(payload)) return;
         if (sent.has(payload.id)) return;
         sent.add(payload.id);
         await stream.writeSSE({
           event: "notification",
           data: JSON.stringify(payload),
+        }).catch(() => {
+          closed = true;
         });
       };
 

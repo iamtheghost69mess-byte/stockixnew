@@ -217,6 +217,12 @@ export const env = {
   MONOREPO_VERSION: readOptionalString("MONOREPO_VERSION"),
   PUBLIC_URL: readOptionalString("PUBLIC_URL"),
   WORKER_SECRET: readString("WORKER_SECRET", "dev-worker-secret"),
+  WORKER_CONCURRENCY: readNumber("WORKER_CONCURRENCY", 1),
+  MYSQL_PROXY_HOST: readString("MYSQL_PROXY_HOST", "stockix-mysql-proxy"),
+  MYSQL_PROXY_PORT: readNumber("MYSQL_PROXY_PORT", 6033),
+  TENANT_REDIS_PASSWORD: readOptionalString("TENANT_REDIS_PASSWORD"),
+  PROXYSQL_ADMIN_USER: readString("PROXYSQL_ADMIN_USER", "admin"),
+  PROXYSQL_ADMIN_PASSWORD: readString("PROXYSQL_ADMIN_PASSWORD", "admin"),
   WORKER_INTERNAL_NETWORK: readString("WORKER_INTERNAL_NETWORK", "stockix_internal"),
   RUN_BULLMQ_CONSUMERS: readOptionalString("RUN_BULLMQ_CONSUMERS"),
   /** Shared with stockix-finance for POST /api/internal/* (provisioning attach-user). */
@@ -335,6 +341,19 @@ export const apiConfig = {
   },
   get workerSecret() {
     return env.WORKER_SECRET;
+  },
+  get workerConcurrency() {
+    return env.WORKER_CONCURRENCY;
+  },
+  get mysqlProxyHost() {
+    return env.MYSQL_PROXY_HOST;
+  },
+  get mysqlProxyPort() {
+    return env.MYSQL_PROXY_PORT;
+  },
+  get tenantRedisPassword(): string | undefined {
+    const raw = env.TENANT_REDIS_PASSWORD?.trim();
+    return raw && raw.length > 0 ? raw : undefined;
   },
   get workerInternalNetwork() {
     return env.WORKER_INTERNAL_NETWORK;
@@ -509,6 +528,15 @@ export const apiConfig = {
   },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);
+    if (env.NODE_ENV === "production") {
+      if (!env.WORKER_SECRET || env.WORKER_SECRET === "dev-worker-secret") {
+        throw new Error("[config] WORKER_SECRET must be set in production");
+      }
+      const redisPassword = env.TENANT_REDIS_PASSWORD?.trim();
+      if (!redisPassword || redisPassword === "__MUST_OVERRIDE__") {
+        throw new Error("[config] TENANT_REDIS_PASSWORD must be set in production");
+      }
+    }
   },
   /** Missing recommended vars for the current NODE_ENV (non-fatal). */
   getMissingRecommendedEnv(): string[] {
@@ -584,6 +612,16 @@ export const infraConfig = {
   /** Redis URL for control-plane queues (BullMQ). Optional — queues disabled when unset. */
   get controlPlaneRedisUrl() {
     return env.CONTROL_PLANE_REDIS_URL;
+  },
+  get mysqlProxyHost() {
+    return env.MYSQL_PROXY_HOST;
+  },
+  get mysqlProxyPort() {
+    return env.MYSQL_PROXY_PORT;
+  },
+  get tenantRedisPassword(): string | undefined {
+    const raw = env.TENANT_REDIS_PASSWORD?.trim();
+    return raw && raw.length > 0 ? raw : undefined;
   },
   /** How often the stuck-provisioning reconciler runs in ms (default: 60 000). */
   get provisionReconcileIntervalMs() {

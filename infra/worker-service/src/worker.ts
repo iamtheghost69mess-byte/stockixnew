@@ -53,6 +53,7 @@ import {
   deprovisionTenant,
   provisionTenant,
 } from "../domain/provisioner.js";
+import { scrubTenantRuntimeArtifacts } from "../domain/scrub-tenant-artifacts.js";
 import { executeOrgProvisionRuntime } from "./org-provision-runtime.js";
 import { executeAddModuleRuntime } from "./provision-runtime.js";
 import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
@@ -60,6 +61,10 @@ import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = 1500;
 const POLL_INTERVAL_MS = pollMs;
+const workerConcurrency = Math.max(
+  1,
+  parseInt(process.env.WORKER_CONCURRENCY ?? String(apiConfig.workerConcurrency), 10) || 1,
+);
 let lastSuccessfulPollAt = Date.now();
 
 const healthServer = http.createServer((req, res) => {
@@ -467,6 +472,7 @@ const provisionPayloadSchema = z.object({
   retryModules: z
     .array(z.enum(["accounting", "pos", "pms", "chat", "wire"]))
     .optional(),
+  needsScrub: z.boolean().optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({
@@ -525,8 +531,21 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   const guard = async () => {
     await assertProvisionNotCancelled(job.id);
   };
-  await guard();
   const payload = provisionPayloadSchema.parse(job.payload);
+  if (payload.needsScrub) {
+    await scrubTenantRuntimeArtifacts(payload.slug);
+    if (job.correlationId) {
+      await db.insert(tenantProvisionEvents).values({
+        correlationId: job.correlationId,
+        phase: "preflight",
+        level: "info",
+        message: "Runtime artifacts scrubbed before provision",
+        meta: { operationKey: "preflight.scrub", slug: payload.slug, jobId: job.id },
+      });
+    }
+    logger.info(`[worker][${job.id}] preflight.scrub completed for slug=${payload.slug}`);
+  }
+  await guard();
   if (job.tenantId) {
     // Concurrent provision guard — prevents duplicate compose/DB ops
     // for same tenant. See provision-lock.ts for implementation.
@@ -781,49 +800,7 @@ function isPermanentProvisionError(message: string): boolean {
   );
 }
 
-async function loop() {
-  const databaseUrl = apiConfig.databaseUrl;
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required for infra worker");
-  }
-  const db = createDb(databaseUrl);
-  initEmailLogging(db);
-  logger.info("Email logging initialized in worker", { event: "worker_email_logging_init" });
-  logger.info(
-    JSON.stringify({
-      level: "info",
-      type: "worker_start",
-      jobExecutionTimeoutMs,
-      apiBaseUrl,
-      ...runtimeFingerprint,
-    }),
-  );
-  await waitForApiReady().catch((error) => {
-    logger.error(
-      `[worker] ${error instanceof Error ? error.message : String(error)} — start the API (pnpm dev apps) then restart the worker.`,
-    );
-    process.exit(1);
-  });
-  logger.info(
-    JSON.stringify({
-      level: "info",
-      type: "worker_startup_grace",
-      graceMs: startupGraceMs,
-    }),
-  );
-  await new Promise((r) => setTimeout(r, startupGraceMs));
-  logger.info(
-    JSON.stringify({
-      level: "info",
-      type: "worker_claiming_jobs",
-      apiBaseUrl,
-    }),
-  );
-  await checkRequiredTenantImages().catch((error) => {
-    logger.warn(
-      `[worker] image pre-check failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  });
+async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): Promise<void> {
   while (!shuttingDown) {
     const job = await claimNextJob().catch((error) => {
       if (isApiConnectionError(error)) {
@@ -840,7 +817,10 @@ async function loop() {
     lastSuccessfulPollAt = Date.now();
     if (!job) {
       const nowMs = Date.now();
-      if (nowMs - lastLicenseExpireScanMs >= LICENSE_EXPIRE_SCAN_INTERVAL_MS) {
+      if (
+        loopId === 0
+        && nowMs - lastLicenseExpireScanMs >= LICENSE_EXPIRE_SCAN_INTERVAL_MS
+      ) {
         lastLicenseExpireScanMs = nowMs;
         await expireDueLicenses(db).catch((error) => {
           logger.error(
@@ -901,6 +881,7 @@ async function loop() {
           jobId: job.id,
           jobType: job.type,
           outcome: jobOutcome,
+          loopId,
         }),
       );
     } catch (error) {
@@ -927,6 +908,7 @@ async function loop() {
             jobType: job.type,
             outcome: "failed",
             error: message,
+            loopId,
           }),
         );
       } catch (reportError) {
@@ -996,6 +978,55 @@ async function loop() {
       activeClaimToken = null;
     }
   }
+}
+
+async function loop() {
+  const databaseUrl = apiConfig.databaseUrl;
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required for infra worker");
+  }
+  const db = createDb(databaseUrl);
+  initEmailLogging(db);
+  logger.info("Email logging initialized in worker", { event: "worker_email_logging_init" });
+  logger.info(
+    JSON.stringify({
+      level: "info",
+      type: "worker_start",
+      jobExecutionTimeoutMs,
+      apiBaseUrl,
+      ...runtimeFingerprint,
+    }),
+  );
+  await waitForApiReady().catch((error) => {
+    logger.error(
+      `[worker] ${error instanceof Error ? error.message : String(error)} — start the API (pnpm dev apps) then restart the worker.`,
+    );
+    process.exit(1);
+  });
+  logger.info(
+    JSON.stringify({
+      level: "info",
+      type: "worker_startup_grace",
+      graceMs: startupGraceMs,
+    }),
+  );
+  await new Promise((r) => setTimeout(r, startupGraceMs));
+  logger.info(
+    JSON.stringify({
+      level: "info",
+      type: "worker_claiming_jobs",
+      apiBaseUrl,
+      workerConcurrency,
+    }),
+  );
+  await checkRequiredTenantImages().catch((error) => {
+    logger.warn(
+      `[worker] image pre-check failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+  await Promise.all(
+    Array.from({ length: workerConcurrency }, (_, loopId) => workerPollLoop(db, loopId)),
+  );
 }
 
 process.on("SIGTERM", () => {

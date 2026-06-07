@@ -5,12 +5,15 @@
 #
 # All tenant app containers join the `stockix-shared` external network.
 # Tenant containers reference databases by hostname:
-#   MySQL   → stockix-mysql:3306   database: stockix_{slug}_finance  user: tenant_{slug}
+#   MySQL   → stockix-mysql-proxy:6033 (ProxySQL) → stockix-mysql:3306
+#             database: stockix_{slug}_finance  user: tenant_{slug}
 #   MongoDB → stockix-mongo:27017  database: {slug}_pos
 #   Redis   → stockix-redis:6379   key prefix: tenant:{slug}:
 #
 # Env vars that drive hostnames (set in infra/prod/.env):
-#   SHARED_MYSQL_HOST=stockix-mysql
+#   SHARED_MYSQL_HOST=stockix-mysql          (worker root DDL only)
+#   MYSQL_PROXY_HOST=stockix-mysql-proxy     (tenant app connections)
+#   MYSQL_PROXY_PORT=6033
 #   SHARED_MONGO_HOST=stockix-mongo
 #   TENANT_REDIS_HOST=stockix-redis
 #
@@ -38,7 +41,10 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
-      - --max_connections=500
+      - --max_connections=1000
+      - --wait_timeout=60
+      - --interactive_timeout=60
+      - --connect_timeout=10
       - --innodb-buffer-pool-size=256M
       - --innodb-log-file-size=64M
       - --slow-query-log=ON
@@ -61,6 +67,45 @@ services:
     cpus: "0.5"
     mem_swappiness: 0
     oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+
+  # ─────────────────────────────────────────────────────────────
+  # ProxySQL — connection pooler for tenant Finance/POS MySQL traffic.
+  # Tenant apps connect on :6033; worker root DDL uses stockix-mysql:3306 directly.
+  # Admin interface :6032 on stockix_internal only.
+  # ─────────────────────────────────────────────────────────────
+  stockix-mysql-proxy:
+    image: proxysql/proxysql:2.6.2
+    restart: unless-stopped
+    hostname: stockix-mysql-proxy
+    depends_on:
+      stockix-mysql:
+        condition: service_healthy
+    environment:
+      SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./proxysql.cnf.template:/etc/proxysql.cnf.template:ro
+      - ./proxysql-entrypoint.sh:/usr/local/bin/proxysql-entrypoint.sh:ro
+      - shared_proxysql_data:/var/lib/proxysql
+    entrypoint: ["/bin/sh", "/usr/local/bin/proxysql-entrypoint.sh"]
+    networks:
+      stockix-shared:
+        aliases:
+          - stockix-mysql-proxy
+          - mysql-proxy
+      stockix_internal:
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysql -h127.0.0.1 -P6033 -uroot -p"$$SHARED_MYSQL_ROOT_PASSWORD" -e "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 256m
+    cpus: "0.25"
+    mem_swappiness: 0
     security_opt:
       - no-new-privileges:true
 
@@ -131,12 +176,16 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     hostname: stockix-redis
+    environment:
+      TENANT_REDIS_PASSWORD: ${TENANT_REDIS_PASSWORD}
     command:
       - redis-server
+      - --requirepass
+      - ${TENANT_REDIS_PASSWORD}
       - --maxmemory
-      - 128mb
+      - 512mb
       - --maxmemory-policy
-      - allkeys-lru
+      - noeviction
       - --save
       - "900 1"
       - --save
@@ -155,12 +204,12 @@ services:
           - tenant-redis
           - stockix-redis
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$TENANT_REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 5s
-    mem_limit: 192m
+    mem_limit: 576m
     cpus: "0.25"
     mem_swappiness: 0
     oom_kill_disable: false
@@ -174,6 +223,8 @@ volumes:
     name: stockix_shared_mongo
   shared_tenant_redis_data:
     name: stockix_shared_tenant_redis
+  shared_proxysql_data:
+    name: stockix_shared_proxysql
 
 networks:
   stockix-shared:
@@ -182,3 +233,6 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+  stockix_internal:
+    name: stockix_internal
+    external: true
