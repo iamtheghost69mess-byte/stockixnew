@@ -17,6 +17,17 @@ export async function resolveOwnerPermissions(
   db: Db,
   owner: { role: string; roleId?: string | null },
 ): Promise<ResolvedOwnerAuth> {
+  const legacySlug = owner.role.trim();
+  // Legacy owners.role slug always wins for built-in super_admin — never downgrade via roleId.
+  if (legacySlug === "super_admin") {
+    return {
+      roleSlug: "super_admin",
+      roleId: owner.roleId ?? null,
+      roleName: "super admin",
+      permissions: ["*"],
+    };
+  }
+
   if (owner.roleId) {
     const [row] = await db
       .select({

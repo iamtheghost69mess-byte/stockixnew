@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -87,6 +88,12 @@ type Props = {
   reactivatingId: string | null;
   stoppingId: string | null;
   onAddTenant?: () => void;
+  canManageTenants?: boolean;
+  selectedTenantIds?: Set<string>;
+  onSelectedTenantIdsChange?: (ids: Set<string>) => void;
+  selectableTenantIds?: Set<string>;
+  onBulkDelete?: () => void;
+  bulkDeleteDisabled?: boolean;
 };
 
 export function TenantList(props: Props) {
@@ -109,6 +116,12 @@ export function TenantList(props: Props) {
     reactivatingId,
     stoppingId,
     onAddTenant,
+    canManageTenants = false,
+    selectedTenantIds,
+    onSelectedTenantIdsChange,
+    selectableTenantIds,
+    onBulkDelete,
+    bulkDeleteDisabled = false,
   } = props;
   const router = useRouter();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -132,6 +145,36 @@ export function TenantList(props: Props) {
     }
     return { total: 0, active: 0, suspended: 0 };
   }, [directoryTotals]);
+
+  const selectionEnabled =
+    canManageTenants &&
+    selectedTenantIds != null &&
+    onSelectedTenantIdsChange != null &&
+    onBulkDelete != null;
+  const selectedCount = selectedTenantIds?.size ?? 0;
+  const selectableOnPage = tenants.filter((t) => selectableTenantIds?.has(t.tenantId) ?? true);
+  const allPageSelected =
+    selectionEnabled &&
+    selectableOnPage.length > 0 &&
+    selectableOnPage.every((t) => selectedTenantIds!.has(t.tenantId));
+
+  const toggleTenantSelection = (tenantId: string, checked: boolean) => {
+    if (!onSelectedTenantIdsChange || !selectedTenantIds) return;
+    const next = new Set(selectedTenantIds);
+    if (checked) next.add(tenantId);
+    else next.delete(tenantId);
+    onSelectedTenantIdsChange(next);
+  };
+
+  const toggleSelectAllOnPage = (checked: boolean) => {
+    if (!onSelectedTenantIdsChange || !selectedTenantIds) return;
+    const next = new Set(selectedTenantIds);
+    for (const t of selectableOnPage) {
+      if (checked) next.add(t.tenantId);
+      else next.delete(t.tenantId);
+    }
+    onSelectedTenantIdsChange(next);
+  };
 
   const clearFilters = () => {
     onSearchQueryChange("");
@@ -320,6 +363,12 @@ export function TenantList(props: Props) {
           <span className="font-medium text-foreground">{counts.total}</span> organizations ·{" "}
           <span className="font-medium text-foreground">{counts.active}</span> active ·{" "}
           <span className="font-medium text-foreground">{counts.suspended}</span> suspended
+          {directoryTotals && directoryTotals.failed > 0 ? (
+            <>
+              {" · "}
+              <span className="font-medium text-destructive">{directoryTotals.failed}</span> failed
+            </>
+          ) : null}
         </p>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
@@ -360,10 +409,50 @@ export function TenantList(props: Props) {
         ))}
       </div>
 
+      {selectionEnabled && selectedCount > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <p className="text-sm text-foreground">
+            <span className="font-medium">{selectedCount}</span> tenant{selectedCount === 1 ? "" : "s"}{" "}
+            selected
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={bulkDeleteDisabled}
+              onClick={() => onSelectedTenantIdsChange!(new Set())}
+            >
+              Clear selection
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={bulkDeleteDisabled}
+              onClick={() => onBulkDelete?.()}
+            >
+              <Trash2Icon className="mr-2 h-4 w-4" />
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
+              {selectionEnabled ? (
+                <TableHead className="w-10 pl-4">
+                  <Checkbox
+                    checked={allPageSelected}
+                    onCheckedChange={(checked) => toggleSelectAllOnPage(checked === true)}
+                    aria-label="Select all tenants on this page"
+                    disabled={selectableOnPage.length === 0 || bulkDeleteDisabled}
+                  />
+                </TableHead>
+              ) : null}
               <TableHead className="min-w-[200px] pl-4 whitespace-normal">Organization</TableHead>
               <TableHead className="whitespace-normal">Admin</TableHead>
               <TableHead title="Deployment status (Docker stack) and tenant record status (e.g. partial bundle)">
@@ -392,7 +481,7 @@ export function TenantList(props: Props) {
             {listLoading && tenants.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
-                  colSpan={9}
+                  colSpan={selectionEnabled ? 10 : 9}
                   className="py-12 text-center text-sm text-muted-foreground"
                 >
                   Loading tenants…
@@ -404,7 +493,7 @@ export function TenantList(props: Props) {
                 {tenants.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell
-                      colSpan={9}
+                      colSpan={selectionEnabled ? 10 : 9}
                       className="h-[min(50vh,22rem)] align-top whitespace-normal px-4 py-10 md:py-14"
                     >
                       <div className="flex max-w-lg flex-col gap-3 text-left">
@@ -431,8 +520,10 @@ export function TenantList(props: Props) {
                   isDeprovisioning
                     ? "deprovisioning"
                     : tenantStatus === "partial"
-                    ? "partial"
-                    : deploymentStatus;
+                      ? "partial"
+                      : tenantStatus === "failed"
+                        ? "failed"
+                        : deploymentStatus;
                 const canSuspend =
                   !isDeprovisioning &&
                   (tenantStatus === "active" || tenantStatus === "partial")
@@ -446,6 +537,7 @@ export function TenantList(props: Props) {
                   suspendingId === t.tenantId ||
                   reactivatingId === t.tenantId ||
                   stoppingId === t.tenantId;
+                const isSelectable = selectableTenantIds?.has(t.tenantId) ?? !isDeprovisioning;
 
                 return (
                   <TableRow
@@ -453,8 +545,21 @@ export function TenantList(props: Props) {
                     className={cn(
                       "group",
                       deletingId === t.tenantId && "bg-muted/40 opacity-60",
+                      selectedTenantIds?.has(t.tenantId) && "bg-muted/20",
                     )}
                   >
+                    {selectionEnabled ? (
+                      <TableCell className="w-10 pl-4 align-top">
+                        <Checkbox
+                          checked={selectedTenantIds?.has(t.tenantId) ?? false}
+                          onCheckedChange={(checked) =>
+                            toggleTenantSelection(t.tenantId, checked === true)
+                          }
+                          aria-label={`Select ${t.name}`}
+                          disabled={!isSelectable || bulkDeleteDisabled}
+                        />
+                      </TableCell>
+                    ) : null}
                     <TableCell className="max-w-[260px] pl-4 align-top whitespace-normal">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-wrap items-center gap-2">

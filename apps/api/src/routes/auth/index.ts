@@ -315,6 +315,9 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
     } catch {
       // Tests may use a minimal db mock — fall back to built-in role permissions.
     }
+    if (session.role === "super_admin") {
+      permissions = ["*"];
+    }
     const capabilities = capabilitiesFromPermissions(permissions);
     return c.json({
       success: true,

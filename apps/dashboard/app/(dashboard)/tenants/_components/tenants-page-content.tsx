@@ -24,6 +24,7 @@ import { TenantProvisionBanner } from "./tenant-provision-banner";
 import {
   MAX_WAIT_MS,
   mergeProvisionEvents,
+  pollUntilTenantRemoved,
   POLL_MS,
   readJson,
   type ProvisionPollComplete,
@@ -71,7 +72,17 @@ export function TenantsPageContent() {
   const [stoppingProvision, setStoppingProvision] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteProgressMessage, setDeleteProgressMessage] = useState<string | null>(null);
+  const [deleteProgress, setDeleteProgress] = useState<{
+    message: string;
+    elapsedSec: number;
+    slug: string;
+    index?: number;
+    total?: number;
+  } | null>(null);
+  const [selectedTenantIds, setSelectedTenantIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteConfirmInput, setBulkDeleteConfirmInput] = useState("");
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -136,6 +147,7 @@ export function TenantsPageContent() {
   useEffect(() => {
     const next =
       statusParam === "active" ||
+      statusParam === "partial" ||
       statusParam === "suspended" ||
       statusParam === "provisioning" ||
       statusParam === "failed"
@@ -162,15 +174,19 @@ export function TenantsPageContent() {
   const executeTenantDelete = useCallback(
     async (tenantId: string, slug: string, wipeVolumes: boolean) => {
       setDeletingId(tenantId);
-      setDeleteProgressMessage(
-        wipeVolumes
-          ? "Stopping stack and deleting volumes…"
-          : "Stopping stack and removing tenant…",
-      );
+      setDeleteProgress({
+        message: wipeVolumes
+          ? "Stopping stacks and removing volumes and images…"
+          : "Stopping stacks and removing tenant…",
+        elapsedSec: 0,
+        slug,
+      });
       setError(null);
       try {
         const q = wipeVolumes ? "?volumes=true" : "";
-        setDeleteProgressMessage("Queuing removal (Docker compose down)…");
+        setDeleteProgress((p) =>
+          p ? { ...p, message: "Submitting removal request…" } : p,
+        );
         const res = await fetch(`/api/tenants/${tenantId}${q}`, {
           method: "DELETE",
         });
@@ -178,11 +194,11 @@ export function TenantsPageContent() {
           error?: string;
           message?: string;
           hardDeleted?: boolean;
+          alreadyQueued?: boolean;
         };
-        if (!res.ok) {
+        if (!res.ok && res.status !== 202) {
           throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
         }
-        setDeleteProgressMessage("Removal queued. Finishing up…");
         setTenants((prev) =>
           prev.map((t) =>
             t.tenantId === tenantId ? { ...t, tenantStatus: "deprovisioning" } : t,
@@ -190,7 +206,16 @@ export function TenantsPageContent() {
         );
         setTenantAccess(null);
         setOneTimePassword(null);
-        toast.success(`Tenant "${slug}" removal started. Cleanup may take up to a minute.`);
+        await pollUntilTenantRemoved(tenantId, (message, elapsedSec) => {
+          setDeleteProgress({ message, elapsedSec, slug });
+        });
+        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+        setSelectedTenantIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tenantId);
+          return next;
+        });
+        toast.success(`Tenant "${slug}" removed completely.`);
         void load().catch(() => {});
       } catch (e) {
         const message = String(e);
@@ -204,7 +229,7 @@ export function TenantsPageContent() {
         setError(message);
       } finally {
         setDeletingId(null);
-        setDeleteProgressMessage(null);
+        setDeleteProgress(null);
         setDeleteConfirmOpen(false);
         setDeleteVolumesOpen(false);
         setDeleteTarget(null);
@@ -213,6 +238,78 @@ export function TenantsPageContent() {
     },
     [load],
   );
+
+  const executeBulkDelete = useCallback(async () => {
+    if (bulkDeleteConfirmInput !== "DELETE") return;
+    const targets = tenants
+      .filter((t) => selectedTenantIds.has(t.tenantId))
+      .map((t) => ({ tenantId: t.tenantId, slug: t.slug }));
+    if (targets.length === 0) return;
+
+    setIsBulkDeleting(true);
+    setError(null);
+    const failed: string[] = [];
+
+    for (let i = 0; i < targets.length; i++) {
+      const { tenantId, slug } = targets[i]!;
+      setDeletingId(tenantId);
+      try {
+        setDeleteProgress({
+          message: "Submitting removal request…",
+          elapsedSec: 0,
+          slug,
+          index: i + 1,
+          total: targets.length,
+        });
+        const res = await fetch(`/api/tenants/${tenantId}?volumes=true`, {
+          method: "DELETE",
+        });
+        const data = (await readJson(res)) as { error?: string; message?: string };
+        if (!res.ok && res.status !== 202) {
+          throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
+        }
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.tenantId === tenantId ? { ...t, tenantStatus: "deprovisioning" } : t,
+          ),
+        );
+        await pollUntilTenantRemoved(tenantId, (message, elapsedSec) => {
+          setDeleteProgress({
+            message,
+            elapsedSec,
+            slug,
+            index: i + 1,
+            total: targets.length,
+          });
+        });
+        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+        setSelectedTenantIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tenantId);
+          return next;
+        });
+      } catch (e) {
+        failed.push(`${slug}: ${String(e)}`);
+      }
+    }
+
+    setDeletingId(null);
+    setDeleteProgress(null);
+    setIsBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    setBulkDeleteConfirmInput("");
+    void load().catch(() => {});
+
+    if (failed.length === 0) {
+      toast.success(`Removed ${targets.length} tenant${targets.length === 1 ? "" : "s"} completely.`);
+    } else if (failed.length < targets.length) {
+      toast.error(`Some deletions failed:\n${failed.join("\n")}`);
+      setError(failed.join("\n"));
+    } else {
+      toast.error(`Bulk delete failed:\n${failed.join("\n")}`);
+      setError(failed.join("\n"));
+    }
+  }, [bulkDeleteConfirmInput, load, selectedTenantIds, tenants]);
 
   const isDeletingTenant =
     deleteTarget != null && deletingId === deleteTarget.tenantId;
@@ -324,6 +421,32 @@ export function TenantsPageContent() {
   useEffect(() => {
     load().catch((e) => setError(String(e)));
   }, [load]);
+
+  useEffect(() => {
+    setSelectedTenantIds((prev) => {
+      const visible = new Set(tenants.map((t) => t.tenantId));
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [tenants]);
+
+  const selectableTenants = useMemo(
+    () =>
+      tenants.filter(
+        (t) =>
+          (t.tenantStatus ?? "").toLowerCase() !== "deprovisioning" &&
+          deletingId !== t.tenantId,
+      ),
+    [tenants, deletingId],
+  );
+
+  const bulkDeleteTargets = useMemo(
+    () =>
+      tenants
+        .filter((t) => selectedTenantIds.has(t.tenantId))
+        .map((t) => ({ tenantId: t.tenantId, slug: t.slug })),
+    [selectedTenantIds, tenants],
+  );
 
   useEffect(() => {
     const hasDeprovisioning = tenants.some(
@@ -621,6 +744,8 @@ export function TenantsPageContent() {
     }
   };
 
+  const canManageTenants = Boolean(me?.capabilities.canManageTenants);
+
   const from = listTotal === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, listTotal);
 
@@ -721,7 +846,7 @@ export function TenantsPageContent() {
             >
               Refresh
             </Button>
-            {me?.capabilities.canManageTenants ? (
+            {canManageTenants ? (
               <Button type="button" size="sm" className="h-9" onClick={() => setAddTenantOpen(true)}>
                 Add tenant
               </Button>
@@ -759,6 +884,21 @@ export function TenantsPageContent() {
           reactivatingId={reactivatingId}
           stoppingId={stoppingId}
           onAddTenant={() => setAddTenantOpen(true)}
+          canManageTenants={canManageTenants}
+          selectedTenantIds={canManageTenants ? selectedTenantIds : undefined}
+          onSelectedTenantIdsChange={canManageTenants ? setSelectedTenantIds : undefined}
+          selectableTenantIds={
+            canManageTenants ? new Set(selectableTenants.map((t) => t.tenantId)) : undefined
+          }
+          onBulkDelete={
+            canManageTenants
+              ? () => {
+                  setBulkDeleteConfirmInput("");
+                  setBulkDeleteOpen(true);
+                }
+              : undefined
+          }
+          bulkDeleteDisabled={isBulkDeleting || deletingId != null}
         />
         {directoryTotals && directoryTotals.total > 0 ? (
           <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -804,8 +944,15 @@ export function TenantsPageContent() {
         deleteSlugInput={deleteSlugInput}
         setDeleteSlugInput={setDeleteSlugInput}
         isDeletingTenant={isDeletingTenant}
-        deleteProgressMessage={deleteProgressMessage}
+        deleteProgress={deleteProgress}
         executeTenantDelete={executeTenantDelete}
+        bulkDeleteOpen={bulkDeleteOpen}
+        setBulkDeleteOpen={setBulkDeleteOpen}
+        bulkDeleteTargets={bulkDeleteTargets}
+        bulkDeleteConfirmInput={bulkDeleteConfirmInput}
+        setBulkDeleteConfirmInput={setBulkDeleteConfirmInput}
+        isBulkDeleting={isBulkDeleting}
+        executeBulkDelete={executeBulkDelete}
       />
     </div>
   );

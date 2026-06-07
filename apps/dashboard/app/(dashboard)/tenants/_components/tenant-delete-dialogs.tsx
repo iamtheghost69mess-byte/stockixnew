@@ -10,7 +10,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { TenantSlugConfirmField } from "./tenant-slug-confirm-field";
+
+type DeleteProgress = {
+  message: string;
+  elapsedSec: number;
+  slug: string;
+  index?: number;
+  total?: number;
+};
 
 type TenantDeleteDialogsProps = {
   deleteConfirmOpen: boolean;
@@ -22,13 +31,41 @@ type TenantDeleteDialogsProps = {
   deleteSlugInput: string;
   setDeleteSlugInput: (value: string) => void;
   isDeletingTenant: boolean;
-  deleteProgressMessage: string | null;
+  deleteProgress: DeleteProgress | null;
   executeTenantDelete: (
     tenantId: string,
     slug: string,
     wipeVolumes: boolean,
   ) => void | Promise<void>;
+  bulkDeleteOpen: boolean;
+  setBulkDeleteOpen: (open: boolean) => void;
+  bulkDeleteTargets: { tenantId: string; slug: string }[];
+  bulkDeleteConfirmInput: string;
+  setBulkDeleteConfirmInput: (value: string) => void;
+  isBulkDeleting: boolean;
+  executeBulkDelete: () => void | Promise<void>;
 };
+
+function DeleteProgressPanel({ progress }: { progress: DeleteProgress }) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-4 text-center">
+      <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
+      <DialogHeader className="space-y-2 text-center sm:text-center">
+        <DialogTitle>
+          {progress.total != null && progress.total > 1
+            ? `Deleting tenant ${progress.index ?? 1} of ${progress.total}`
+            : "Deleting tenant"}
+        </DialogTitle>
+      </DialogHeader>
+      <p className="font-mono text-sm text-foreground">{progress.slug}</p>
+      <p className="max-w-sm text-sm text-muted-foreground">{progress.message}</p>
+      <p className="text-xs text-muted-foreground">
+        Elapsed {progress.elapsedSec}s — Docker cleanup runs in the worker; this dialog stays open until
+        the tenant is fully removed.
+      </p>
+    </div>
+  );
+}
 
 export function TenantDeleteDialogs({
   deleteConfirmOpen,
@@ -40,9 +77,18 @@ export function TenantDeleteDialogs({
   deleteSlugInput,
   setDeleteSlugInput,
   isDeletingTenant,
-  deleteProgressMessage,
+  deleteProgress,
   executeTenantDelete,
+  bulkDeleteOpen,
+  setBulkDeleteOpen,
+  bulkDeleteTargets,
+  bulkDeleteConfirmInput,
+  setBulkDeleteConfirmInput,
+  isBulkDeleting,
+  executeBulkDelete,
 }: TenantDeleteDialogsProps) {
+  const bulkConfirmOk = bulkDeleteConfirmInput === "DELETE";
+
   return (
     <>
       <Dialog
@@ -60,8 +106,8 @@ export function TenantDeleteDialogs({
             <DialogTitle>Delete tenant</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This runs docker compose down, removes the tenant from Stockix, and deletes provision logs. This cannot be
-            undone. Copy the tenant slug below and paste it into the confirmation field to continue.
+            This stops all Docker stacks, removes volumes and local images, deletes shared databases, and
+            removes the tenant from Stockix. This cannot be undone. Paste the tenant slug below to confirm.
           </p>
           {deleteTarget ? (
             <TenantSlugConfirmField
@@ -109,33 +155,18 @@ export function TenantDeleteDialogs({
         }}
       >
         <DialogContent showCloseButton={!isDeletingTenant}>
-          {isDeletingTenant ? (
-            <div className="flex flex-col items-center gap-4 py-6 text-center">
-              <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
-              <DialogHeader className="space-y-2 text-center sm:text-center">
-                <DialogTitle>Deleting tenant</DialogTitle>
-              </DialogHeader>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                {deleteProgressMessage ?? "Removing deployment…"}
-              </p>
-              {deleteTarget ? (
-                <p className="font-mono text-xs text-muted-foreground">{deleteTarget.slug}</p>
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                The stack is stopped and removal is queued. This dialog closes when the request is accepted;
-                Docker cleanup may continue for up to a minute in the background.
-              </p>
-            </div>
+          {isDeletingTenant && deleteProgress ? (
+            <DeleteProgressPanel progress={deleteProgress} />
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>Also delete Docker volumes?</DialogTitle>
+                <DialogTitle>Remove completely?</DialogTitle>
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
-                Delete volumes removes MySQL / Mongo / Redis data for this stack. Keep volumes if you may need the data
-                later (containers are still removed).
+                Remove completely stops containers, deletes Docker volumes and local images, and wipes MySQL /
+                Mongo / Redis data for this tenant.
               </p>
-              <DialogFooter className="gap-2 sm:gap-0">
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0">
                 <Button
                   variant="outline"
                   disabled={!deleteTarget}
@@ -144,7 +175,7 @@ export function TenantDeleteDialogs({
                     void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, false);
                   }}
                 >
-                  Keep volumes
+                  Containers only
                 </Button>
                 <Button
                   variant="destructive"
@@ -154,7 +185,57 @@ export function TenantDeleteDialogs({
                     void executeTenantDelete(deleteTarget.tenantId, deleteTarget.slug, true);
                   }}
                 >
-                  Delete volumes
+                  Remove completely
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => {
+          if (!open && isBulkDeleting) return;
+          setBulkDeleteOpen(open);
+          if (!open) setBulkDeleteConfirmInput("");
+        }}
+      >
+        <DialogContent showCloseButton={!isBulkDeleting}>
+          {isBulkDeleting && deleteProgress ? (
+            <DeleteProgressPanel progress={deleteProgress} />
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Delete {bulkDeleteTargets.length} tenants</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Each tenant will be removed completely (Docker stacks, volumes, images, and databases).
+                Type <span className="font-mono font-medium text-foreground">DELETE</span> to confirm.
+              </p>
+              <ul className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-left font-mono text-xs">
+                {bulkDeleteTargets.map((t) => (
+                  <li key={t.tenantId} className="py-0.5">
+                    {t.slug}
+                  </li>
+                ))}
+              </ul>
+              <Input
+                placeholder="Type DELETE"
+                value={bulkDeleteConfirmInput}
+                onChange={(e) => setBulkDeleteConfirmInput(e.target.value)}
+                autoComplete="off"
+              />
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setBulkDeleteOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!bulkConfirmOk || bulkDeleteTargets.length === 0}
+                  onClick={() => void executeBulkDelete()}
+                >
+                  Delete {bulkDeleteTargets.length} tenant{bulkDeleteTargets.length === 1 ? "" : "s"}
                 </Button>
               </DialogFooter>
             </>
