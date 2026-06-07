@@ -5,8 +5,15 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import * as nodePath from 'path';
+import {
+  FINANCE_WEBAPP_INDEX,
+  isFinanceWebappApiPath,
+  isFinanceWebappBuilt,
+} from '@/modules/App/finance-webapp.constants';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -15,7 +22,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
     const isProduction = process.env.NODE_ENV === 'production';
+
+    if (
+      exception instanceof NotFoundException
+      && isFinanceWebappBuilt()
+      && (request.method === 'GET' || request.method === 'HEAD')
+      && !isFinanceWebappApiPath(request.path)
+      && !nodePath.extname(request.path)
+    ) {
+      response.sendFile(FINANCE_WEBAPP_INDEX);
+      return;
+    }
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();

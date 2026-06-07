@@ -113,8 +113,6 @@ import {
   isFinanceWebappBuilt,
   FINANCE_WEBAPP_DIST,
 } from './finance-webapp.constants';
-import { FinanceWebappSpaController } from './finance-webapp-spa.controller';
-
 const financeWebappImports = isFinanceWebappBuilt()
   ? [
       ServeStaticModule.forRoot({
@@ -290,9 +288,7 @@ const financeWebappImports = isFinanceWebappBuilt()
     SocketModule,
     ExchangeRatesModule,
   ],
-  controllers: isFinanceWebappBuilt()
-    ? [AppController, FinanceWebappSpaController]
-    : [AppController],
+  controllers: [AppController],
   providers: [
     {
       provide: APP_PIPE,
