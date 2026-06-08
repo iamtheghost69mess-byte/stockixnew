@@ -88,7 +88,7 @@
     "multer": "^2.1.1",
     "node-cron": "^3.0.3",
     "node-thermal-printer": "^4.6.0",
-    "pdfkit": "^0.18.0",
+    "pdfkit": "^0.19.0",
     "qrcode": "^1.5.4",
     "rate-limit-redis": "^4.3.1",
     "razorpay": "^2.9.5",
