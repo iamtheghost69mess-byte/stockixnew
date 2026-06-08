@@ -294,7 +294,7 @@ jobs:
     # Self-hosted runner on the VPS — connects outbound to GitHub (port 443),
     # eliminates all inbound SSH from GitHub Actions which Hostinger blocks.
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: read
@@ -406,7 +406,7 @@ jobs:
             exit 1
           fi
           cd "${REPO_ROOT}"
-          echo "=== Building tenant images (background) ==="
+          echo "=== Building tenant images ==="
           IMAGES_NEEDED=("stockix-webapp:local" "stockix-server:local" "stockix-database-migration:local" "stockix-nginx:local")
           ALL_BUILT=true
           for img in "${IMAGES_NEEDED[@]}"; do
@@ -415,11 +415,19 @@ jobs:
           if [ "$ALL_BUILT" = "true" ]; then
             echo "All tenant images already built — skipping prebuild."
           else
+            # Kill any stale prebuild from a previous deploy before starting.
             pkill -f "prebuild-tenant-images" 2>/dev/null || true
             pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
             sleep 2
-            nohup nice -n 19 node scripts/prebuild-tenant-images.mjs > /tmp/prebuild.log 2>&1 &
-            echo "Tenant prebuild started in background (PID $!). Logs: /tmp/prebuild.log"
+            # Run synchronously: background nohup caused OOM on the runner process after
+            # the step exited, losing GitHub communication. Prebuild failure is non-fatal
+            # — services are running; provisioning is blocked until images exist.
+            if node scripts/prebuild-tenant-images.mjs 2>&1; then
+              echo "Tenant images built successfully."
+            else
+              echo "WARNING: Tenant prebuild failed — new tenants cannot be provisioned."
+              echo "Fix on server: pnpm docker:prebuild:force"
+            fi
           fi
           echo "=== Post-deploy cleanup ==="
           # Remove old GHCR images from previous deploys (not the current SHA or :local tenant images).
