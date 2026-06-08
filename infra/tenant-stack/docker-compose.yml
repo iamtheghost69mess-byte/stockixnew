@@ -29,7 +29,8 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null 2>&1 || exit 1"]
+      # nginx:alpine has no wget/curl — check the master process PID file instead.
+      test: ["CMD-SHELL", "kill -0 \"$(cat /run/nginx.pid 2>/dev/null)\" 2>/dev/null || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -240,6 +241,7 @@ services:
     # Official image (same as former docker/mongo/Dockerfile). Avoids a custom build context
     # so provisioning still works if docker/mongo is missing from a shallow clone.
     image: mongo:5.0
+    init: true
     restart: unless-stopped
     command: ["mongod", "--auth"]
     environment:
