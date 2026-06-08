@@ -179,6 +179,9 @@ const composeEnv = {
   DB_CHARSET: "utf8mb4",
   DB_ROOT_PASSWORD: "stockix_root",
   MYSQL_VOLUME_NAME: "stockix_prebuild_mysql",
+  // Dummy values prevent "variable is not set" warnings when compose parses the file during build.
+  REDIS_PASSWORD: "prebuild-placeholder",
+  MONGO_ROOT_PASSWORD: "prebuild-placeholder",
 };
 
 run(
