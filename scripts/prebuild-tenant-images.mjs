@@ -128,6 +128,7 @@ run(
   "pnpm install (stockix-finance lockfile)",
   "pnpm install --ignore-scripts --config.engine-strict=false",
   FINANCE_ROOT,
+  { CI: "true" },
 );
 
 if (!FORCE && imageExists("stockix-webapp:local")) {
