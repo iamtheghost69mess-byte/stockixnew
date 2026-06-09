@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   Inject,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { Reflector } from '@nestjs/core';
@@ -51,6 +52,12 @@ export class AuthorizationGuard implements CanActivate {
       .query()
       .findOne('systemUserId', userId)
       .withGraphFetched('role.permissions');
+
+    if (!tenantUser?.role) {
+      throw new ForbiddenException(
+        'User has no role assigned for this organization.',
+      );
+    }
 
     return getAbilityForRole(tenantUser.role);
   }

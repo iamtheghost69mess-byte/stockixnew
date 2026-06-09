@@ -79,6 +79,10 @@ const reducerInstance = createReducer(initialState, {
     state.userId = payload.action.userId;
   },
 
+  [t.SET_LOCALE]: (state, payload: PayloadAction<{ locale: string }>) => {
+    state.locale = payload.action.locale;
+  },
+
   [t.RESET]: (state) => {
     purgeStoredState(CONFIG);
   },

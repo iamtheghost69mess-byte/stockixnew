@@ -85,7 +85,8 @@ export const useAuthLogin = (props) => {
         return;
       }
 
-      props?.onSuccess?.(res);
+      // Hard-navigate so cookies and Redux are stable before boot queries fire.
+      window.location.href = '/';
     },
     ...props,
   });
@@ -160,6 +161,7 @@ export const useAuthMetadata = (props = {}) => {
     {
       select: (res) => res.data,
       defaultData: {},
+      requiresAuth: false,
       ...props,
     },
   );

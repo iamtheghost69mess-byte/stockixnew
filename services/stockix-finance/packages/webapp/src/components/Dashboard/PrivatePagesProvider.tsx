@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { useApplicationBoot } from '@/components';
+import DashboardLoadingIndicator from '@/components/Dashboard/DashboardLoadingIndicator';
 import { useAuthMetadata } from '@/hooks/query/authentication';
 
 /**
@@ -15,5 +16,9 @@ export function PrivatePagesProvider({
 
   const isLoading = isAppBootLoading || isAuthMetaLoading;
 
-  return <React.Fragment>{!isLoading ? children : null}</React.Fragment>;
+  return (
+    <DashboardLoadingIndicator isLoading={isLoading}>
+      {children}
+    </DashboardLoadingIndicator>
+  );
 }

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useQuery } from 'react-query';
 import { castArray, defaultTo } from 'lodash';
-import { useAuthOrganizationId } from './state';
+import { useAuthOrganizationId, useAuthToken } from './state';
 import useApiRequest from './useRequest';
 import { normalizeApiPath } from '../utils';
 import { useRef } from 'react';
@@ -17,15 +17,23 @@ export function useQueryTenant(query, callback, props) {
 
 export function useRequestQuery(query, axios, props) {
   const apiRequest = useApiRequest();
+  const organizationId = useAuthOrganizationId();
+  const token = useAuthToken();
+  const requiresAuth = props?.requiresAuth !== false;
 
   const states = useQuery(
-    query,
+    [...castArray(query), organizationId, token],
     () =>
       apiRequest.http({
         ...axios,
         url: `/api/${normalizeApiPath(axios.url)}`,
       }),
-    props,
+    {
+      enabled:
+        (props?.enabled ?? true)
+        && (!requiresAuth || (!!token && !!organizationId)),
+      ...props,
+    },
   );
   // Momerize the default data.
   const defaultData = useRef(props.defaultData || undefined);

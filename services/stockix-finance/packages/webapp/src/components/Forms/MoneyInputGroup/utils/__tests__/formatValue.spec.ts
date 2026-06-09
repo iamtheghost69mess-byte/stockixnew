@@ -161,7 +161,7 @@ describe('formatValue', () => {
     ).toEqual('-£12-34');
   });
 
-  it('should handle negative value and "-" as groupSeparator', () => {
+  it('should handle negative value with groupSeparator and prefix', () => {
     expect(
       formatValue({
         value: '-123456',
