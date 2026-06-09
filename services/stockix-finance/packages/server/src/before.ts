@@ -2,9 +2,14 @@ import path from 'path';
 import moment from 'moment';
 
 // Migration files have a .ts extension but contain plain CommonJS JS (no TS syntax).
-// Register .ts as an alias for .js so Node can require() them without a TS compiler.
-if (!require.extensions['.ts']) {
-  require.extensions['.ts'] = require.extensions['.js'];
+// Register .ts as an alias for .js via Node's native Module._extensions so Knex
+// can require() them. We use require('module')._extensions rather than
+// require.extensions because webpack replaces require with its own shim that
+// lacks an .extensions property.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const NativeModule = require('module');
+if (!NativeModule._extensions['.ts']) {
+  NativeModule._extensions['.ts'] = NativeModule._extensions['.js'];
 }
 
 global.__root_dir = path.join(__dirname, '..');
