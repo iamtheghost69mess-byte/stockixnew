@@ -12,7 +12,7 @@ import {
   setLocale,
 } from '@/store/authentication/authentication.actions';
 import { useQueryClient } from 'react-query';
-import { removeCookie } from '@/utils';
+import { clearMustChangePasswordCookie, removeCookie } from '@/utils';
 
 /**
  * Removes the authentication cookies.
@@ -32,15 +32,17 @@ export const useAuthActions = () => {
   return {
     setLogin: useCallback((login) => dispatch(setLogin(login)), [dispatch]),
     setLogout: useCallback(() => {
-      // Resets store state.
-      // dispatch(setStoreReset());
-
-      // Remove all cached queries.
-      queryClient.removeQueries();
-
+      queryClient.clear();
       removeAuthenticationCookies();
-
-      window.location.reload();
+      clearMustChangePasswordCookie();
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch {
+        // ignore private mode / blocked storage
+      }
+      // Hard-navigate to login — reload on `/` left a blank shell behind intl/guards.
+      window.location.replace('/auth/login');
     }, [queryClient]),
   };
 };

@@ -92,12 +92,11 @@ export class ARAgingSummaryRepository {
    */
   async initCustomers() {
     // Retrieve all customers from the storage.
-    const customers =
-      this.filter.customersIds.length > 0
-        ? await this.customerModel()
-            .query()
-            .whereIn('id', this.filter.customersIds)
-        : await this.customerModel().query();
+    const customers = !isEmpty(this.filter.customersIds)
+      ? await this.customerModel()
+          .query()
+          .whereIn('id', this.filter.customersIds)
+      : await this.customerModel().query();
 
     this.customers = customers;
   }

@@ -10,11 +10,17 @@ export default class TenantModel extends BaseModel {
     const Logger = Container.get('logger') as any;
 
     return super.query(...args).onBuildKnex((knexQueryBuilder) => {
-      const { userParams: { tenantId } } = (knexQueryBuilder.client.config as any);
+      const userParams = (knexQueryBuilder.client.config as { userParams?: { tenantId?: number } })
+        ?.userParams;
 
-      knexQueryBuilder.on('query', (queryData: any) => {
+      if (!userParams?.tenantId) {
+        return;
+      }
+
+      knexQueryBuilder.on('query', (queryData: { sql: string; bindings: unknown[] }) => {
         Logger.info(`[query][tenant] ${queryData.sql}`, {
-          bindings: queryData.bindings, tenantId
+          bindings: queryData.bindings,
+          tenantId: userParams.tenantId,
         });
       });
     });

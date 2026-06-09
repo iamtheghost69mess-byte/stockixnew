@@ -171,12 +171,12 @@ export abstract class AgingSummaryTable extends R.pipe(
    * Retrieves the table rows.
    * @returns {ITableRow[]}
    */
-  public tableRows = (): ITableRow[] => {
+  public tableRows(): ITableRow[] {
     return R.compose(
       R.unless(R.isEmpty, R.append(this.totalRow)),
       R.concat(this.contactsRows),
     )([]);
-  };
+  }
 
   // -------------------------
   // # Columns.
@@ -208,12 +208,12 @@ export abstract class AgingSummaryTable extends R.pipe(
    * Retrieves the report columns.
    * @returns {ITableColumn}
    */
-  public tableColumns = (): ITableColumn[] => {
+  public tableColumns(): ITableColumn[] {
     return R.compose(this.tableColumnsCellIndexing)([
       this.contactNameTableColumn(),
       { label: 'Current', key: 'current' },
       ...this.agingTableColumns(),
       { label: 'Total', key: 'total' },
     ]);
-  };
+  }
 }

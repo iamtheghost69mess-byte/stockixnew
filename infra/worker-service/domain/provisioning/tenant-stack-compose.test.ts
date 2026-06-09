@@ -38,4 +38,10 @@ describe("tenant-stack docker-compose.yml", () => {
     expect(composeText).toContain("REACT_APP_STOCKIX_API_URL=${REACT_APP_STOCKIX_API_URL:-}");
     expect(composeText).toContain("REACT_APP_STOCKIX_PRIMARY_COLOR=${REACT_APP_STOCKIX_PRIMARY_COLOR:-}");
   });
+
+  it("passes socket and public URL vars from tenant env (no per-tenant hardcoding)", () => {
+    expect(composeText).toContain("PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-${BASE_URL}}");
+    expect(composeText).toContain("PUBLIC_PROXY_PORT=${PUBLIC_PROXY_PORT}");
+    expect(composeText).toContain("SOCKET_ALLOWED_ORIGINS=${SOCKET_ALLOWED_ORIGINS:-}");
+  });
 });

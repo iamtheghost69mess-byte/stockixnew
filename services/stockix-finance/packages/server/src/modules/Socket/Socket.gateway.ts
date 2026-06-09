@@ -7,6 +7,10 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import {
+  isSocketOriginAllowed,
+  resolveSocketAllowedOrigins,
+} from './socket-allowed-origins';
 
 @WebSocketGateway({
   namespace: '/',
@@ -16,25 +20,17 @@ import { Logger } from '@nestjs/common';
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      const rawOrigins = process.env.SOCKET_ALLOWED_ORIGINS;
+      const allowed = resolveSocketAllowedOrigins();
 
-      const defaultOrigins =
-        process.env.NODE_ENV !== 'production'
-          ? 'http://localhost:3000,http://localhost:3001'
-          : '';
-
-      if (!rawOrigins && process.env.NODE_ENV === 'production') {
+      if (allowed.length === 0 && process.env.NODE_ENV === 'production') {
         return callback(
-          new Error('SOCKET_ALLOWED_ORIGINS must be set in production'),
+          new Error(
+            'SOCKET_ALLOWED_ORIGINS or PUBLIC_BASE_URL/PUBLIC_PROXY_PORT must be set in production',
+          ),
         );
       }
 
-      const allowed = (rawOrigins || defaultOrigins)
-        .split(',')
-        .map((o: string) => o.trim())
-        .filter(Boolean);
-
-      if (!origin || allowed.some((a: string) => origin.startsWith(a))) {
+      if (isSocketOriginAllowed(origin, allowed)) {
         callback(null, true);
       } else {
         callback(new Error(`WebSocket CORS: origin ${origin} not allowed`));

@@ -126,6 +126,33 @@ function buildTenantMysqlUser(slug: string): string {
   return tenantMysqlUsername(slug);
 }
 
+/** Browser origins permitted for Finance Socket.IO (subdomain + direct local port). */
+export function buildSocketAllowedOrigins(
+  baseUrl: string,
+  publicProxyPort: number,
+): string {
+  const origins = new Set<string>();
+  const trimmed = baseUrl.trim();
+  if (trimmed) {
+    origins.add(trimmed);
+  }
+  origins.add(`http://127.0.0.1:${publicProxyPort}`);
+  origins.add(`http://localhost:${publicProxyPort}`);
+  if (trimmed) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.port) {
+        origins.add(`${parsed.protocol}//${parsed.hostname}:${parsed.port}`);
+      } else if (parsed.hostname.endsWith(".localhost") || parsed.hostname === "localhost") {
+        origins.add(`${parsed.protocol}//${parsed.hostname}:${publicProxyPort}`);
+      }
+    } catch {
+      // ignore invalid baseUrl
+    }
+  }
+  return [...origins].join(",");
+}
+
 /** Single source of truth for per-tenant .env file and docker compose `--env-file` substitution. */
 export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, string> {
   const { slug } = params;
@@ -232,7 +259,9 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     REACT_APP_STOCKIX_PRIMARY_COLOR: params.stockixPrimaryColor ?? "",
 
     PUBLIC_BASE_URL: params.baseUrl,
-    SOCKET_ALLOWED_ORIGINS: params.socketAllowedOrigins ?? params.baseUrl,
+    SOCKET_ALLOWED_ORIGINS:
+      params.socketAllowedOrigins
+      ?? buildSocketAllowedOrigins(params.baseUrl, params.publicProxyPort),
 
     THROTTLE_GLOBAL_TTL: String(env.THROTTLE_GLOBAL_TTL),
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),

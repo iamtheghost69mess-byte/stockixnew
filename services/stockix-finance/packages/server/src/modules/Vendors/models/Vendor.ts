@@ -17,7 +17,7 @@ export class VendorQueryBuilder<
 
     this.onBuild((builder) => {
       if (builder.isFind() || builder.isDelete() || builder.isUpdate()) {
-        builder.where('contact_service', 'vendor');
+        builder.where('contactService', 'vendor');
       }
     });
   }
