@@ -1,12 +1,10 @@
 import path from 'path';
 import moment from 'moment';
 
-// Register ts-node so Knex can require() TypeScript migration files at runtime.
-// This must happen before any Knex connection is created.
-try {
-  require('ts-node').register({ transpileOnly: true, skipProject: true });
-} catch {
-  // ts-node not available (e.g. stripped from image) — migrations must be pre-compiled
+// Migration files have a .ts extension but contain plain CommonJS JS (no TS syntax).
+// Register .ts as an alias for .js so Node can require() them without a TS compiler.
+if (!require.extensions['.ts']) {
+  require.extensions['.ts'] = require.extensions['.js'];
 }
 
 global.__root_dir = path.join(__dirname, '..');
