@@ -27,6 +27,11 @@ export class OrganizationBuildProcessor extends WorkerHost {
       this.clsService.set('organizationId', job.data.organizationId);
       this.clsService.set('userId', job.data.userId);
 
+      // Populate CLS proxy providers (e.g. TENANCY_DB_CONNECTION) for this
+      // non-HTTP context. Without this, the CLS store lacks the Knex factory
+      // and the proxy apply trap throws "getProvider(...).apply is not a function".
+      await this.clsService.resolveProxyProviders();
+
       try {
         await this.organizationBuildService.build(job.data.buildDto);
       } catch (e) {
