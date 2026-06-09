@@ -160,9 +160,7 @@ services:
       - /scripts/rs-init.sh
     volumes:
       - ./mongo/rs-init.sh:/scripts/rs-init.sh:ro
-    mem_limit: 128m
-    cpus: "0.1"
-    mem_swappiness: 0
+    # No mem/cpu cap: one-shot job; mongosh 2.x needs >128m and image requirements can change.
 
   # ─────────────────────────────────────────────────────────────
   # Tenant Redis — BullMQ + Finance Agenda jobs for ALL tenants.
