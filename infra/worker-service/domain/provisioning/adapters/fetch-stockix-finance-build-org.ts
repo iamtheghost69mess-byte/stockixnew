@@ -100,7 +100,7 @@ async function signin(
       "x-correlation-id": correlationId,
     },
     body: JSON.stringify({ credential: email, password }),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(30_000),
   });
   let json: unknown;
   try {
@@ -127,7 +127,7 @@ async function currentHasBuiltAt(
       "x-request-id": correlationId,
       "x-correlation-id": correlationId,
     },
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) return false;
   let json: unknown;
@@ -182,7 +182,7 @@ export async function fetchBuildOrganization(
     method: "POST",
     headers: authHeaders,
     body: JSON.stringify(buildBody),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(30_000),
   });
 
   const buildText = await buildRes.text();
@@ -211,7 +211,7 @@ export async function fetchBuildOrganization(
       const jobRes = await fetch(`${base}/api/organization/build/${encodeURIComponent(jobId)}`, {
         method: "GET",
         headers: authHeaders,
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(30_000),
       });
       let jobJson: unknown;
       try {
