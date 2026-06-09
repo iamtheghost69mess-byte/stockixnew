@@ -247,7 +247,7 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-    mem_limit: 512m
+    mem_limit: 1g
     cpus: "0.5"
     mem_swappiness: 0
     oom_kill_disable: false
@@ -256,10 +256,14 @@ services:
     volumes:
       - mongo:/data/db
     healthcheck:
+      # mongosh is Node.js-based and reserves ~1.8GB virtual memory. With 10s interval
+      # and 30s timeout up to 3 mongosh processes overlap, pushing RSS past 512m and
+      # triggering OOM. Raised mem_limit to 1g and interval to 30s so at most 1
+      # healthcheck runs at a time inside the cgroup budget.
       test: ["CMD-SHELL", "mongosh -u root -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 })' || exit 1"]
-      interval: 10s
-      timeout: 30s
-      retries: 30
+      interval: 30s
+      timeout: 60s
+      retries: 15
       start_period: 60s
     security_opt:
       - no-new-privileges:true
