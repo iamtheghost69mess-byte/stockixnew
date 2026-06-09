@@ -4,15 +4,45 @@ import { Global, Module } from '@nestjs/common';
 import { knexSnakeCaseMappers } from 'objection';
 import { ClsModule, ClsService } from 'nestjs-cls';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as path from 'path';
 import { TENANCY_DB_CONNECTION } from './TenancyDB.constants';
 import { UnitOfWork } from './UnitOfWork.service';
 
 const lruCache = new LRUCache();
 
+// webpack replaces require() with a synthetic module system that only contains
+// statically-analyzed modules. When Knex calls importFile(absolutePath) at runtime
+// for each migration file, webpack throws webpackEmptyContext. We bypass this by
+// using Node's native createRequire, which webpack cannot intercept because
+// require('module') passes through to Node's built-in module loader.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const NativeModule = require('module');
+const nativeRequire: NodeRequire = NativeModule.createRequire(__filename);
+
+class NativeMigrationSource {
+  constructor(private readonly migrationsDir: string) {}
+
+  async getMigrations(_loadExtensions: string[]): Promise<string[]> {
+    return fs
+      .readdirSync(this.migrationsDir)
+      .filter((f) => ['.js', '.ts'].includes(path.extname(f)))
+      .sort();
+  }
+
+  getMigrationName(migration: string): string {
+    return migration;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getMigration(migration: string): Promise<any> {
+    return nativeRequire(path.join(this.migrationsDir, migration));
+  }
+}
+
 export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
   provide: TENANCY_DB_CONNECTION,
   global: true,
-  strict: true,
   inject: [ConfigService, ClsService],
   useFactory: async (configService: ConfigService, cls: ClsService) => () => {
     const organizationId = cls.get('organizationId');
@@ -35,8 +65,12 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
         charset: 'utf8',
       },
       migrations: {
-        directory: configService.get('tenantDatabase.migrationsDir'),
-        loadExtensions: ['.js', '.ts'],
+        // Providing only migrationSource — no FS options (directory, loadExtensions).
+        // Knex resets migrationSource to FsMigrations if any FS-related option is present.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        migrationSource: new NativeMigrationSource(
+          configService.get('tenantDatabase.migrationsDir'),
+        ) as any,
       },
       seeds: {
         directory: configService.get('tenantDatabase.seedsDir'),
@@ -48,7 +82,6 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
 
     return knexInstance;
   },
-  type: 'function',
 });
 
 @Global()
