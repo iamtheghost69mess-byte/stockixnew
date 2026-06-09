@@ -1,16 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { I18nService } from 'nestjs-i18n';
 import { IAPAgingSummaryTable } from './APAgingSummary.types';
 import { APAgingSummaryService } from './APAgingSummaryService';
-import { APAgingSummaryTable } from './APAgingSummaryTable';
 import { APAgingSummaryQueryDto } from './APAgingSummaryQuery.dto';
+import { buildAgingSummaryTable } from '../AgingSummary/build-aging-summary-table';
 
 @Injectable()
 export class APAgingSummaryTableInjectable {
-  constructor(
-    private readonly APAgingSummarySheet: APAgingSummaryService,
-    private readonly i18nService: I18nService,
-  ) {}
+  constructor(private readonly APAgingSummarySheet: APAgingSummaryService) {}
 
   /**
    * Retrieves A/P aging summary in table format.
@@ -21,13 +17,14 @@ export class APAgingSummaryTableInjectable {
     query: APAgingSummaryQueryDto,
   ): Promise<IAPAgingSummaryTable> {
     const report = await this.APAgingSummarySheet.APAgingSummary(query);
-    const table = new APAgingSummaryTable(report.data, query, this.i18nService);
+    const table = buildAgingSummaryTable(report.data, report.columns, {
+      contactNameLabel: 'Vendor name',
+      contactNameKey: 'vendor_name',
+      contactNameAccessor: 'vendorName',
+    });
 
     return {
-      table: {
-        columns: table.tableColumns(),
-        rows: table.tableRows(),
-      },
+      table,
       meta: report.meta,
       query: report.query,
     };

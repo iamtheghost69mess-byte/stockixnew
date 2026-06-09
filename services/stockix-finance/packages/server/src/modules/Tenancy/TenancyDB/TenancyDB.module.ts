@@ -28,8 +28,8 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
       return cachedInstance;
     }
     const migrationsDir = configService.get<string>('tenantDatabase.migrationsDir');
-    const knexInstance = knex(
-      buildTenantKnexOptionsFromConfig(configService, database, {
+    const knexInstance = knex({
+      ...buildTenantKnexOptionsFromConfig(configService, database, {
         pool: { min: 0, max: 7 },
         migrations: {
           migrationSource: new NativeFsMigrations(migrationsDir, false, ['.js']),
@@ -38,7 +38,11 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
           directory: configService.get('tenantDatabase.seedsDir'),
         },
       }),
-    );
+      userParams: {
+        organizationId,
+        tenantId: cls.get('tenantId'),
+      },
+    });
     lruCache.set(database, knexInstance);
 
     return knexInstance;

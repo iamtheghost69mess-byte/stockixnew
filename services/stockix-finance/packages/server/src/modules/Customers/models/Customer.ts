@@ -17,7 +17,7 @@ export class CustomerQueryBuilder<
 
     this.onBuild((builder) => {
       if (builder.isFind() || builder.isDelete() || builder.isUpdate()) {
-        builder.where('contact_service', 'customer');
+        builder.where('contactService', 'customer');
       }
     });
   }

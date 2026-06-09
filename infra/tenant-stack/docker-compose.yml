@@ -82,6 +82,9 @@ services:
       # ── Auth + identity ──────────────────────────────────────
       - JWT_SECRET=${JWT_SECRET}
       - BASE_URL=${BASE_URL}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-${BASE_URL}}
+      - PUBLIC_PROXY_PORT=${PUBLIC_PROXY_PORT}
+      - SOCKET_ALLOWED_ORIGINS=${SOCKET_ALLOWED_ORIGINS:-}
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
       - DEPLOYMENT_SECRET_KEY=${DEPLOYMENT_SECRET_KEY}
       # ── S3 / Backblaze ───────────────────────────────────────

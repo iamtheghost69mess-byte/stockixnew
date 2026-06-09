@@ -1,8 +1,8 @@
-import { ARAgingSummaryTable } from './ARAgingSummaryTable';
 import { ARAgingSummaryService } from './ARAgingSummaryService';
 import { Injectable } from '@nestjs/common';
 import { IARAgingSummaryTable } from './ARAgingSummary.types';
 import { ARAgingSummaryQueryDto } from './ARAgingSummaryQuery.dto';
+import { buildAgingSummaryTable } from '../AgingSummary/build-aging-summary-table';
 
 @Injectable()
 export class ARAgingSummaryTableInjectable {
@@ -17,13 +17,14 @@ export class ARAgingSummaryTableInjectable {
     query: ARAgingSummaryQueryDto,
   ): Promise<IARAgingSummaryTable> {
     const report = await this.ARAgingSummarySheet.ARAgingSummary(query);
-    const table = new ARAgingSummaryTable(report.data, query, {});
+    const table = buildAgingSummaryTable(report.data, report.columns, {
+      contactNameLabel: 'Customer name',
+      contactNameKey: 'customer_name',
+      contactNameAccessor: 'customerName',
+    });
 
     return {
-      table: {
-        columns: table.tableColumns(),
-        rows: table.tableRows(),
-      },
+      table,
       meta: report.meta,
       query,
     };
