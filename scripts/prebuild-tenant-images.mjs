@@ -63,6 +63,51 @@ function run(label, cmd, cwd = ROOT, extraEnv = {}) {
   }
 }
 
+/** Docker BuildKit on Windows can drop with rpc error: Unavailable EOF under memory pressure. */
+function runDockerBuild(label, tag, target, cwd) {
+  const baseCmd =
+    `docker build --progress=plain -t ${tag} -f packages/server/Dockerfile --target ${target} .`;
+  const attempts = [
+    { label: `${label} (BuildKit)`, cmd: baseCmd, env: { DOCKER_BUILDKIT: "1" } },
+    {
+      label: `${label} (legacy builder retry)`,
+      cmd: baseCmd,
+      env: { DOCKER_BUILDKIT: "0" },
+    },
+  ];
+
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    console.log(`\n[prebuild] ▶ ${attempt.label}`);
+    console.log(`[prebuild]   ${attempt.cmd}`);
+    const start = Date.now();
+    try {
+      execSync(attempt.cmd, {
+        cwd,
+        stdio: "inherit",
+        shell: true,
+        env: { ...process.env, ...attempt.env },
+      });
+      const sec = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(`[prebuild] ✅ ${attempt.label} — done in ${sec}s`);
+      return;
+    } catch (err) {
+      const sec = ((Date.now() - start) / 1000).toFixed(1);
+      console.error(`[prebuild] ❌ ${attempt.label} FAILED after ${sec}s`);
+      if (i < attempts.length - 1) {
+        console.warn(
+          "[prebuild] Retrying with legacy Docker builder (common fix for rpc error: Unavailable EOF on Windows).",
+        );
+        continue;
+      }
+      console.error(
+        "[prebuild] Tip: increase Docker Desktop memory (Settings → Resources) if builds keep failing.",
+      );
+      process.exit(1);
+    }
+  }
+}
+
 function imageExists(tag) {
   try {
     execSync(`docker image inspect ${tag}`, { stdio: "pipe", shell: true });
@@ -105,11 +150,38 @@ if (!existsSync(FINANCE_ROOT)) {
   process.exit(1);
 }
 
+function dockerDaemonHealthy() {
+  try {
+    execSync("docker version", { stdio: "pipe", shell: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function pullBaseImage(label, tag) {
+  if (imageExists(tag)) {
+    console.log(`[prebuild] ${tag} already present locally — skipping pull`);
+    return;
+  }
+  run(label, `docker pull ${tag}`);
+}
+
 // ── 1. Pull base images ─────────────────────────────────────────────────────
 console.log("\n[prebuild] Phase 1: Pull base images");
 
-run("Pull node:22-bookworm-slim", "docker pull node:22-bookworm-slim");
-run("Pull node:22-alpine", "docker pull node:22-alpine");
+if (!dockerDaemonHealthy()) {
+  console.error(
+    "[prebuild] Docker daemon is not responding (Internal Server Error / rpc error).",
+  );
+  console.error(
+    "[prebuild] Restart Docker Desktop, wait until it is running, then re-run: pnpm docker:prebuild:force",
+  );
+  process.exit(1);
+}
+
+pullBaseImage("Pull node:22-bookworm-slim", "node:22-bookworm-slim");
+pullBaseImage("Pull node:22-alpine", "node:22-alpine");
 
 // ── 2. Build Finance images ───────────────────────────────────────────────────
 console.log("\n[prebuild] Phase 2: Build Finance images");
@@ -128,19 +200,16 @@ run(
 if (!FORCE && imageExists("stockix-server:local")) {
   console.log("[prebuild] stockix-server:local already exists — skipping");
 } else {
-  run(
-    "Build stockix-server",
-    "docker build -t stockix-server:local -f packages/server/Dockerfile --target app .",
-    FINANCE_ROOT,
-  );
+  runDockerBuild("Build stockix-server", "stockix-server:local", "app", FINANCE_ROOT);
 }
 
 if (!FORCE && imageExists("stockix-database-migration:local")) {
   console.log("[prebuild] stockix-database-migration:local already exists — skipping");
 } else {
-  run(
+  runDockerBuild(
     "Build stockix-database-migration",
-    "docker build -t stockix-database-migration:local -f packages/server/Dockerfile --target migration .",
+    "stockix-database-migration:local",
+    "migration",
     FINANCE_ROOT,
   );
 }

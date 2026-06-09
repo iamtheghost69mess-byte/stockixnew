@@ -5,7 +5,7 @@ import {
   useCurrentOrganization,
   useDashboardMeta,
 } from '@/hooks/query';
-import { useSplashLoading } from '@/hooks/state';
+import { useSetLocale, useSplashLoading } from '@/hooks/state';
 import { useWatch, useWatchImmediate, useWhen } from '@/hooks';
 import { setCookie, getCookie } from '@/utils';
 
@@ -56,6 +56,7 @@ export function useApplicationBoot() {
 
   // Is the dashboard booted.
   const isBooted = React.useRef(false);
+  const setLocale = useSetLocale();
 
   const orgLanguage = organization?.metadata?.language;
 
@@ -64,7 +65,7 @@ export function useApplicationBoot() {
     return raw.split('-')[0] || 'en';
   };
 
-  // Sync locale cookie with organization language (reload at most once per mismatch).
+  // Sync locale cookie and Redux with organization language (no full-page reload).
   React.useEffect(() => {
     if (!orgLanguage) {
       return;
@@ -75,10 +76,8 @@ export function useApplicationBoot() {
       return;
     }
     setCookie('locale', desiredLocale);
-    if (!isBooted.current) {
-      window.location.reload();
-    }
-  }, [orgLanguage]);
+    setLocale(desiredLocale);
+  }, [orgLanguage, setLocale]);
 
   const [startLoading, stopLoading] = useSplashLoading();
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from 'react';
+import { useSelector } from 'react-redux';
 import moment from 'moment';
 import { setLocale } from 'yup';
 import intl from 'react-intl-universal';
@@ -19,7 +20,19 @@ const SUPPORTED_LOCALES = [
 ];
 
 /**
- * Retrieve the current local.
+ * Normalize locale to a supported value.
+ */
+function normalizeLocale(value) {
+  const raw = String(value || 'en').trim().toLowerCase();
+  const locale = raw.split('-')[0] || 'en';
+  if (!find(SUPPORTED_LOCALES, { value: locale })) {
+    return 'en';
+  }
+  return locale;
+}
+
+/**
+ * Retrieve the current locale from cookie/intl defaults.
  */
 function getCurrentLocal() {
   let currentLocale = intl.determineLocale({
@@ -27,10 +40,7 @@ function getCurrentLocal() {
     cookieLocaleKey: 'locale',
     localStorageLocaleKey: 'lang',
   });
-  if (!find(SUPPORTED_LOCALES, { value: currentLocale })) {
-    currentLocale = 'en';
-  }
-  return currentLocale;
+  return normalizeLocale(currentLocale);
 }
 
 /**
@@ -132,8 +142,8 @@ function useAppYupLoadLocales(currentLocale) {
  * Application Intl loader.
  */
 function AppIntlLoader({ children }) {
-  // Retrieve the current locale.
-  const currentLocale = getCurrentLocal();
+  const reduxLocale = useSelector((state) => state.authentication.locale);
+  const currentLocale = normalizeLocale(reduxLocale || getCurrentLocal());
 
   // Detarmines the document direction based on the given locale.
   const isRTL = rtlDetect.isRtlLang(currentLocale);

@@ -8,6 +8,8 @@ import { DynamicListFilterRoles } from './DynamicListFilterRoles.service';
 import { DynamicFilter } from './DynamicFilter';
 import { MetableModel } from './types/DynamicList.types';
 import { IFilterMeta } from '@/interfaces/Model';
+import { ServiceError } from '../Items/ServiceError';
+import { ERRORS } from './constants';
 
 @Injectable()
 export class DynamicListService {
@@ -32,7 +34,7 @@ export class DynamicListService {
       ...(model.defaultSort
         ? {
           sortOrder: model.defaultSort.sortOrder,
-          columnSortBy: model.defaultSort.sortOrder,
+          columnSortBy: model.defaultSort.sortField,
         }
         : {}),
       ...filterDTO,
@@ -96,11 +98,19 @@ export class DynamicListService {
   public parseStringifiedFilter<T extends { stringifiedFilterRoles?: string }>(
     filterRoles: T,
   ): T {
+    let parsedFilterRoles = [];
+    if (filterRoles.stringifiedFilterRoles) {
+      try {
+        parsedFilterRoles = castArray(
+          JSON.parse(filterRoles.stringifiedFilterRoles),
+        );
+      } catch {
+        throw new ServiceError(ERRORS.STRINGIFIED_FILTER_ROLES_INVALID);
+      }
+    }
     return {
       ...filterRoles,
-      filterRoles: filterRoles.stringifiedFilterRoles
-        ? castArray(JSON.parse(filterRoles.stringifiedFilterRoles))
-        : [],
+      filterRoles: parsedFilterRoles,
     };
   }
 }

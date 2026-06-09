@@ -3,7 +3,7 @@
 # All credentials injected at runtime via --env-file.
 # See infra/worker-service/domain/provisioning/tenant-env.ts
 
-FROM node:22-alpine as deps
+FROM node:22-alpine AS deps
 
 USER root
 
@@ -12,6 +12,8 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && chown node:node /
 
 ENV PUPPETEER_SKIP_DOWNLOAD=1
+# Webpack + Vite builds are memory-heavy; serialize stages below to avoid BuildKit RPC EOF on Docker Desktop.
+ENV NODE_OPTIONS="--max-old-space-size=6144"
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json .npmrc ./
 COPY --chown=node:node packages/server/package.json ./packages/server/
@@ -47,8 +49,10 @@ CMD ["node", "./scripts/run-system-migrate.mjs"]
 
 # -----------------------------------------------------------------------------
 # Full API server image: resources + app + CLI bundles.
+# Chained after build-webapp so Docker does not compile webapp + server in parallel
+# (parallel webpack on Windows often kills BuildKit with "rpc error: Unavailable EOF").
 # -----------------------------------------------------------------------------
-FROM deps AS build-app
+FROM build-webapp AS build-app
 COPY --chown=node:node ./packages/server ./packages/server
 RUN pnpm run build:server --skip-nx-cache \
   && mkdir -p packages/i18n \

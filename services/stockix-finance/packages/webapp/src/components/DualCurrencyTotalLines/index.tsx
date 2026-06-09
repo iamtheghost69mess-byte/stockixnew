@@ -97,9 +97,10 @@ export function DualCurrencyDetailTotalLine({
 export function DualCurrencyTotalLines({ total }) {
   const { values } = useFormikContext();
   const org = useCurrentOrganization();
+  const formCurrency = values.currency_code;
+  const displayToShow = useDisplayCurrencies().filter((c) => c !== formCurrency);
 
   const baseCurrency = org?.base_currency;
-  const formCurrency = values.currency_code;
   const date = useFormTransactionDate();
   const formExchangeRate = values.exchange_rate ?? 1;
 
@@ -111,7 +112,6 @@ export function DualCurrencyTotalLines({ total }) {
       : total / formExchangeRate;
 
   const showBase = !!(formCurrency && baseCurrency && formCurrency !== baseCurrency);
-  const displayToShow = useDisplayCurrencies().filter((c) => c !== formCurrency);
 
   if (!showBase && !displayToShow.length) return null;
 

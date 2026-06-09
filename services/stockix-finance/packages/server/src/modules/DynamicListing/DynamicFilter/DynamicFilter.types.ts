@@ -1,4 +1,4 @@
-import { IModel } from "./Model";
+import { IModel } from '@/interfaces/Model';
 
 export interface IDynamicFilter {
   setModel(model: IModel): void;
@@ -17,7 +17,7 @@ export interface IDynamicListFilter {
   customViewId?: number;
   filterRoles?: IFilterRole[];
   columnSortBy: string;
-  sortOrder: string;
+  sortOrder: ISortOrder;
   stringifiedFilterRoles?: string;
   searchKeyword?: string;
   viewSlug?: string;

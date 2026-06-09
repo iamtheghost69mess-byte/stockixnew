@@ -89,20 +89,31 @@ export class AccountTransformer extends Transformer {
   };
 
   /**
+   * Translates a label when it is an i18n key; otherwise returns as-is.
+   */
+  private translateLabel(value: string | undefined): string {
+    if (!value) {
+      return '';
+    }
+    if (!value.includes('.')) {
+      return value;
+    }
+    return this.context.i18n.t(value);
+  }
+
+  /**
    * Retrieves formatted account type label.
    * @returns {string}
    */
-  protected accountTypeLabel = (account: Account): string => {
-    return this.context.i18n.t(account.accountTypeLabel);
-  };
+  protected accountTypeLabel = (account: Account): string =>
+    this.translateLabel(account.accountTypeLabel);
 
   /**
    * Retrieves formatted account normal.
    * @returns {string}
    */
-  protected accountNormalFormatted = (account: Account): string => {
-    return this.context.i18n.t(account.accountNormalFormatted);
-  };
+  protected accountNormalFormatted = (account: Account): string =>
+    this.translateLabel(account.accountNormalFormatted);
 
   /**
    * Transformes the accounts collection to flat or nested array.

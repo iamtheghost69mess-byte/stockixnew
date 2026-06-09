@@ -1,7 +1,7 @@
 // @ts-nocheck
 import axios from 'axios';
 import { store } from '@/store/createStore';
-import { removeCookie } from '@/utils';
+import { getCookie, removeCookie } from '@/utils';
 import { setGlobalErrors } from '@/store/globalErrors/globalErrors.actions';
 import { getAppQueryClient } from '@/services/queryClientHolder';
 
@@ -59,8 +59,8 @@ function setRequestHeader(request, key, value) {
 
 http.interceptors.request.use((request) => {
   const state = store.getState();
-  const { token, organizationId } = state.authentication;
-  const locale = 'en';
+  const { token, organizationId, locale: storeLocale } = state.authentication;
+  const locale = getCookie('locale', storeLocale || 'en');
 
   if (token) {
     setRequestHeader(request, 'x-access-token', token);

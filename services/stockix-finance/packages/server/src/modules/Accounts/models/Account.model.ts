@@ -15,6 +15,7 @@ import {
 import CustomViewBaseModel from '@/models/CustomViewBaseModel';
 import { DEFAULT_VIEWS } from '@/services/Accounts/constants';
 import ModelSearchable from '@/models/ModelSearchable';
+import { PlaidItem } from '@/modules/BankingPlaid/models/PlaidItem';
 
 export class Account extends mixin(TenantModel,
   ModelSettings as any,
@@ -29,6 +30,11 @@ export class Account extends mixin(TenantModel,
   active: boolean;
   seededAt?: Date | null;
   currencyCode?: string;
+  amount?: number;
+  bankBalance?: number;
+  lastFeedsUpdatedAt?: Date | string | null;
+  plaidItemId?: string | null;
+  plaidItem?: PlaidItem;
 
   /**
    * Table name.
