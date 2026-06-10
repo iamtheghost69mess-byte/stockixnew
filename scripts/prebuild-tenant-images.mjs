@@ -58,7 +58,10 @@ function syncFinanceSharedPackage() {
     process.exit(1);
   }
   rmSync(FINANCE_SHARED_LINK, { recursive: true, force: true });
-  cpSync(MONOREPO_SHARED, FINANCE_SHARED_LINK, { recursive: true });
+  cpSync(MONOREPO_SHARED, FINANCE_SHARED_LINK, {
+    recursive: true,
+    filter: (src) => !src.split(path.sep).includes("node_modules"),
+  });
   console.log(`[prebuild] Synced packages/shared → services/stockix-finance/packages/shared`);
 }
 

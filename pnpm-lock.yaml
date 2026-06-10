@@ -46,6 +46,8 @@ overrides:
   request: npm:@cypress/request@^3.0.8
   tmp: '>=0.2.6'
 
+packageExtensionsChecksum: 14beea9d16c644abcc31a9db067ad25d
+
 importers:
 
   .:
@@ -61,7 +63,7 @@ importers:
         version: link:packages/platform-worker-shared
       '@repo/shared':
         specifier: workspace:*
-        version: link:packages/shared
+        version: link:services/stockix-finance/packages/shared
       '@sentry/node':
         specifier: ^8.40.0
         version: 8.55.2
@@ -137,7 +139,7 @@ importers:
         version: link:../../packages/db
       '@repo/shared':
         specifier: workspace:*
-        version: link:../../packages/shared
+        version: link:../../services/stockix-finance/packages/shared
       '@sentry/node':
         specifier: ^8.40.0
         version: 8.55.2
@@ -243,7 +245,7 @@ importers:
         version: link:../../packages/config
       '@repo/shared':
         specifier: workspace:*
-        version: link:../../packages/shared
+        version: link:../../services/stockix-finance/packages/shared
       '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -484,7 +486,7 @@ importers:
         version: link:../db
       '@repo/shared':
         specifier: workspace:*
-        version: link:../shared
+        version: link:../../services/stockix-finance/packages/shared
       api:
         specifier: workspace:*
         version: link:../../apps/api
@@ -1076,7 +1078,7 @@ importers:
         version: 9.4.3(@nestjs/common@9.4.3(cache-manager@5.7.6)(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.13)(rxjs@7.8.2))(@nestjs/core@9.4.3)(@nestjs/platform-socket.io@9.4.3)(reflect-metadata@0.1.13)(rxjs@7.8.2)
       '@repo/shared':
         specifier: workspace:*
-        version: link:../../../../packages/shared
+        version: link:../shared
       '@sentry/node':
         specifier: ^8.40.0
         version: 8.55.2
@@ -1362,6 +1364,9 @@ importers:
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@babel/core':
         specifier: ^7.29.0
@@ -1558,6 +1563,15 @@ importers:
       webpack-watch-changed:
         specifier: 1.0.0
         version: 1.0.0
+
+  services/stockix-finance/packages/shared:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(msw@2.14.2(@types/node@22.19.17)(typescript@5.9.3))(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(less@4.6.4)(sass@1.100.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0))
 
   services/stockix-finance/packages/webapp:
     dependencies:
@@ -34221,8 +34235,8 @@ snapshots:
       '@next/eslint-plugin-next': 16.2.4
       eslint: 9.39.4(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
-      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-react: 7.37.5(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-react-hooks: 7.1.1(eslint@9.39.4(jiti@2.6.1))
@@ -34284,7 +34298,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)):
+  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
       debug: 4.4.3(supports-color@10.2.2)
@@ -34295,7 +34309,7 @@ snapshots:
       tinyglobby: 0.2.16
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
@@ -34352,13 +34366,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)):
+  eslint-module-utils@2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
       debug: 3.2.7(supports-color@5.5.0)
     optionalDependencies:
       eslint: 9.39.4(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.10
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
@@ -34395,7 +34409,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)):
+  eslint-plugin-import@2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -34406,7 +34420,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.4(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
+      eslint-module-utils: 2.12.1(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
       hasown: 2.0.3
       is-core-module: 2.16.1
       is-glob: 4.0.3

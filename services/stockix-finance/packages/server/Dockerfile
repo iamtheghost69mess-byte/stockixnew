@@ -25,6 +25,7 @@ FROM deps AS build-webapp
 COPY packages/webapp ./packages/webapp
 COPY packages/shared ./packages/shared
 RUN pnpm --filter @stockix/utils run build \
+  && pnpm --filter @stockix/email-components run build \
   && pnpm --filter @stockix/webapp run build
 
 FROM build-webapp AS build-app
