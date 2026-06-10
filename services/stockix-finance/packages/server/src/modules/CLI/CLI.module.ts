@@ -12,7 +12,7 @@ import { TenantsMigrateMakeCommand } from './commands/TenantsMigrateMake.command
 import { TenantsListCommand } from './commands/TenantsList.command';
 import { SystemSeedLatestCommand } from './commands/SystemSeedLatest.command';
 import { TenantsSeedLatestCommand } from './commands/TenantsSeedLatest.command';
-import { OpenApiExportCommand } from './commands/OpenApiExport.command';
+// ORIGINAL: import { OpenApiExportCommand } from './commands/OpenApiExport.command';
 
 @Module({
   imports: [
@@ -33,7 +33,7 @@ import { OpenApiExportCommand } from './commands/OpenApiExport.command';
     TenantsListCommand,
     SystemSeedLatestCommand,
     TenantsSeedLatestCommand,
-    OpenApiExportCommand,
+    // ORIGINAL: OpenApiExportCommand,
   ],
 })
 export class CLIModule { }

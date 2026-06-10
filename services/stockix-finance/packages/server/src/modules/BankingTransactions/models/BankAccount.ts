@@ -74,7 +74,10 @@ export class BankAccount extends TenantBaseModel {
    * Relationship mapping.
    */
   static get relationMappings() {
-    const AccountTransaction = require('models/AccountTransaction');
+    // ORIGINAL: const AccountTransaction = require('models/AccountTransaction');
+    const {
+      AccountTransaction,
+    } = require('@/modules/Accounts/models/AccountTransaction.model');
 
     return {
       /**
@@ -82,7 +85,7 @@ export class BankAccount extends TenantBaseModel {
        */
       transactions: {
         relation: Model.HasManyRelation,
-        modelClass: AccountTransaction.default,
+        modelClass: AccountTransaction,
         join: {
           from: 'accounts.id',
           to: 'accounts_transactions.accountId',

@@ -3,6 +3,20 @@ import { Reflector } from '@nestjs/core';
 import { TenancyGlobalGuard } from '@/modules/Tenancy/TenancyGlobal.guard';
 import { AuthSigninService } from '@/modules/Auth/commands/AuthSignin.service';
 import { SwitchTenantService } from '@/modules/Auth/commands/SwitchTenant.service';
+import UserTenant from '@/modules/System/models/UserTenant';
+import { TenantModel } from '@/modules/System/models/TenantModel';
+import { SystemUser } from '@/modules/System/models/SystemUser';
+import { Customer } from '@/modules/Customers/models/Customer';
+import {
+  createSystemSqliteKnex,
+  createTenantSqliteKnex,
+  createTenancyKnexProxy,
+  destroyKnexInstances,
+  migrateSystemSchema,
+  migrateTenantSchema,
+  seedSystemDb,
+  seedTenantContact,
+} from './tenancy-db.harness';
 
 function mockExecutionContext(headers: Record<string, string> = {}) {
   return {
@@ -15,6 +29,25 @@ function mockExecutionContext(headers: Record<string, string> = {}) {
 }
 
 describe('cross-tenant isolation', () => {
+  let systemKnex: ReturnType<typeof createSystemSqliteKnex>;
+  let userTenantModel: typeof UserTenant;
+  let tenantModel: typeof TenantModel;
+  let systemUserModel: typeof SystemUser;
+
+  beforeAll(async () => {
+    systemKnex = createSystemSqliteKnex();
+    await migrateSystemSchema(systemKnex);
+    await seedSystemDb(systemKnex);
+
+    userTenantModel = UserTenant.bindKnex(systemKnex);
+    tenantModel = TenantModel.bindKnex(systemKnex);
+    systemUserModel = SystemUser.bindKnex(systemKnex);
+  });
+
+  afterAll(async () => {
+    await destroyKnexInstances(systemKnex);
+  });
+
   describe('TenancyGlobalGuard', () => {
     const reflector = {
       getAllAndOverride: jest.fn(() => false),
@@ -22,29 +55,15 @@ describe('cross-tenant isolation', () => {
 
     const clsSet = jest.fn();
     const clsGet = jest.fn();
-
-    const userTenantModel = {
-      query: jest.fn(() => ({
-        findOne: jest.fn().mockReturnThis(),
-        first: jest.fn(),
-      })),
-    };
-
-    const tenantModel = {
-      query: jest.fn(() => ({
-        findOne: jest.fn().mockReturnThis(),
-        first: jest.fn(),
-      })),
-    };
-
-    const guard = new TenancyGlobalGuard(
-      reflector,
-      { get: clsGet, set: clsSet } as any,
-      userTenantModel as any,
-      tenantModel as any,
-    );
+    let guard: TenancyGlobalGuard;
 
     beforeEach(() => {
+      guard = new TenancyGlobalGuard(
+        reflector,
+        { get: clsGet, set: clsSet } as any,
+        userTenantModel,
+        tenantModel,
+      );
       jest.clearAllMocks();
       clsGet.mockImplementation((key: string) => {
         if (key === 'userId') return 42;
@@ -54,40 +73,19 @@ describe('cross-tenant isolation', () => {
     });
 
     it('sets tenantId in CLS after membership check', async () => {
-      const findMembership = jest.fn().mockReturnThis();
-      const firstMembership = jest.fn().mockResolvedValue({ userId: 42, organizationId: 'org-a' });
-      userTenantModel.query.mockReturnValue({
-        findOne: findMembership,
-        first: firstMembership,
-      });
-
-      const findTenant = jest.fn().mockReturnThis();
-      const firstTenant = jest.fn().mockResolvedValue({ id: 7, organizationId: 'org-a' });
-      tenantModel.query.mockReturnValue({
-        findOne: findTenant,
-        first: firstTenant,
-      });
-
       const ok = await guard.canActivate(
         mockExecutionContext({ 'organization-id': 'org-a', authorization: 'Bearer token' }),
       );
 
       expect(ok).toBe(true);
-      expect(findMembership).toHaveBeenCalledWith({ userId: 42, organizationId: 'org-a' });
-      expect(findTenant).toHaveBeenCalledWith({ organizationId: 'org-a' });
       expect(clsSet).toHaveBeenCalledWith('tenantId', 7);
       expect(clsSet).toHaveBeenCalledWith('organizationId', 'org-a');
     });
 
     it('rejects when user is not a member of the organization', async () => {
-      userTenantModel.query.mockReturnValue({
-        findOne: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(undefined),
-      });
-
       await expect(
         guard.canActivate(
-          mockExecutionContext({ 'organization-id': 'org-b', authorization: 'Bearer token' }),
+          mockExecutionContext({ 'organization-id': 'org-unknown', authorization: 'Bearer token' }),
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
@@ -102,33 +100,11 @@ describe('cross-tenant isolation', () => {
   describe('AuthSigninService.verifyPayload', () => {
     it('resolves tenantId from JWT organizationId, not user.tenantId', async () => {
       const clsSet = jest.fn();
-      const systemUserModel = {
-        query: jest.fn(() => ({
-          findOne: jest.fn().mockReturnThis(),
-          throwIfNotFound: jest.fn().mockResolvedValue({
-            id: 42,
-            email: 'user@example.com',
-            tenantId: 99,
-          }),
-        })),
-      };
-      const userTenantModel = {
-        query: jest.fn(() => ({
-          findOne: jest.fn().mockReturnThis(),
-          throwIfNotFound: jest.fn().mockResolvedValue({ userId: 42, organizationId: 'org-b' }),
-        })),
-      };
-      const tenantModel = {
-        query: jest.fn(() => ({
-          findOne: jest.fn().mockReturnThis(),
-          throwIfNotFound: jest.fn().mockResolvedValue({ id: 5, organizationId: 'org-b' }),
-        })),
-      };
 
       const service = new AuthSigninService(
-        systemUserModel as any,
-        userTenantModel as any,
-        tenantModel as any,
+        systemUserModel,
+        userTenantModel,
+        tenantModel,
         { sign: jest.fn() } as any,
         { set: clsSet } as any,
       );
@@ -147,24 +123,6 @@ describe('cross-tenant isolation', () => {
       const clsGet = jest.fn((key: string) => (key === 'userId' ? 42 : undefined));
       const clsSet = jest.fn();
 
-      const userTenantModel = {
-        query: jest.fn(() => ({
-          findOne: jest.fn().mockReturnThis(),
-          throwIfNotFound: jest.fn().mockResolvedValue({ userId: 42, organizationId: 'org-c' }),
-        })),
-      };
-      const systemUserModel = {
-        query: jest.fn(() => ({
-          findById: jest.fn().mockReturnThis(),
-          throwIfNotFound: jest.fn().mockResolvedValue({ id: 42, email: 'user@example.com' }),
-        })),
-      };
-      const tenantModel = {
-        query: jest.fn(() => ({
-          findOne: jest.fn().mockReturnThis(),
-          throwIfNotFound: jest.fn().mockResolvedValue({ id: 12, organizationId: 'org-c' }),
-        })),
-      };
       const authSigninService = {
         signToken: jest.fn().mockResolvedValue('new-token'),
       };
@@ -172,9 +130,9 @@ describe('cross-tenant isolation', () => {
       const service = new SwitchTenantService(
         { get: clsGet, set: clsSet } as any,
         authSigninService as any,
-        userTenantModel as any,
-        systemUserModel as any,
-        tenantModel as any,
+        userTenantModel,
+        systemUserModel,
+        tenantModel,
       );
 
       const result = await service.switchTenant('org-c');
@@ -187,6 +145,57 @@ describe('cross-tenant isolation', () => {
         tenantId: 12,
         userId: 42,
       });
+    });
+  });
+
+  describe('TenancyDB database-per-tenant', () => {
+    let tenantKnexA: ReturnType<typeof createTenantSqliteKnex>;
+    let tenantKnexB: ReturnType<typeof createTenantSqliteKnex>;
+    let clsOrgId: string | undefined;
+    let tenantKnexProxy: ReturnType<typeof createTenancyKnexProxy>;
+
+    beforeAll(async () => {
+      tenantKnexA = createTenantSqliteKnex();
+      tenantKnexB = createTenantSqliteKnex();
+      await migrateTenantSchema(tenantKnexA);
+      await migrateTenantSchema(tenantKnexB);
+      await seedTenantContact(tenantKnexA, 'A Corp');
+      await seedTenantContact(tenantKnexB, 'B Corp');
+
+      const dbsByOrg = new Map([
+        ['org-a', tenantKnexA],
+        ['org-b', tenantKnexB],
+      ]);
+      clsOrgId = 'org-a';
+      tenantKnexProxy = createTenancyKnexProxy(dbsByOrg, () => clsOrgId);
+    });
+
+    afterAll(async () => {
+      await destroyKnexInstances(tenantKnexA, tenantKnexB);
+    });
+
+    it('returns org-a customer when CLS organizationId is org-a', async () => {
+      clsOrgId = 'org-a';
+      const CustomerModel = Customer.bindKnex(tenantKnexProxy());
+      const row = await CustomerModel.query().findById(1);
+
+      expect(row?.displayName).toBe('A Corp');
+    });
+
+    it('returns org-b customer when CLS organizationId is org-b', async () => {
+      clsOrgId = 'org-b';
+      const CustomerModel = Customer.bindKnex(tenantKnexProxy());
+      const row = await CustomerModel.query().findById(1);
+
+      expect(row?.displayName).toBe('B Corp');
+    });
+
+    it('does not leak org-b data when querying under org-a context', async () => {
+      clsOrgId = 'org-a';
+      const CustomerModel = Customer.bindKnex(tenantKnexProxy());
+      const rows = await CustomerModel.query().where('displayName', 'B Corp');
+
+      expect(rows).toHaveLength(0);
     });
   });
 });

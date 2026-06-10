@@ -84,6 +84,20 @@
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
+      "bson": "1.1.6",
+      "mongodb": "3.6.11",
+      "@stockix/webapp>react": "^18.2.0",
+      "@stockix/webapp>react-dom": "^18.2.0",
+      "@stockix/webapp>@types/react": "18.2.79",
+      "@stockix/webapp>@types/react-dom": "18.2.25",
+      "@stockix/webapp>@tiptap/core": "2.1.13",
+      "@stockix/webapp>@tiptap/pm": "2.1.13",
+      "@stockix/webapp>@tiptap/starter-kit": "2.1.13",
+      "@stockix/webapp>@tiptap/react": "2.1.13",
+      "@stockix/webapp>@tiptap/extension-horizontal-rule": "2.1.13",
+      "@stockix/webapp>@tiptap/extension-color": "2.1.13",
+      "@stockix/webapp>@tiptap/extension-list-item": "2.1.13",
+      "@stockix/webapp>@tiptap/extension-text-style": "2.1.13",
       "@types/react": "19.2.14",
       "@types/react-dom": "19.2.3",
       "react": "19.2.4",
@@ -110,6 +124,12 @@
       "qs@>=6.11.1 <=6.15.1": ">=6.15.2",
       "request": "npm:@cypress/request@^3.0.8",
       "tmp": ">=0.2.6"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@types/react": "18|19",
+        "@types/react-dom": "18|19"
+      }
     }
   },
   "dependencies": {

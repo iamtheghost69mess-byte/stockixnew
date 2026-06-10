@@ -32,6 +32,7 @@ import { LoggerMiddleware } from '@/middleware/logger.middleware';
 import { ExcludeNullInterceptor } from '@/interceptors/ExcludeNull.interceptor';
 import { UserIpInterceptor } from '@/interceptors/user-ip.interceptor';
 import { RequestContextInterceptor } from '@/common/interceptors/request-context.interceptor';
+import { StructuredNestLogger } from '@/common/logging/structured-nest-logger.service';
 import { MigrationModeMiddleware } from '@/common/middleware/migration-mode.middleware';
 import { TransformerModule } from '../Transformer/Transformer.module';
 import { AccountsModule } from '../Accounts/Accounts.module';
@@ -293,6 +294,7 @@ const financeWebappImports = isFinanceWebappBuilt()
   ],
   controllers: [AppController, FinanceWebappSpaController],
   providers: [
+    StructuredNestLogger,
     {
       provide: APP_PIPE,
       useClass: ValidationPipe,
