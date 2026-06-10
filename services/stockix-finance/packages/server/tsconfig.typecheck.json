@@ -18,6 +18,9 @@
       "@repo/shared/deployment-secrets": [
         "./stubs/typecheck/deployment-secrets"
       ],
+      "@repo/shared/structured-logger": [
+        "./stubs/typecheck/structured-logger"
+      ],
       "@/libs/chromiumly/_types": ["./stubs/typecheck/chromiumly/index"],
       "@/libs/chromiumly/UrlConvert": ["./stubs/typecheck/chromiumly/index"],
       "@/libs/chromiumly/Chromiumly": ["./stubs/typecheck/chromiumly/index"]

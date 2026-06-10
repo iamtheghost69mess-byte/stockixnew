@@ -77,12 +77,12 @@ const config = {
   },
 
   /**
-   * Agendash.
+   * Agendash (legacy — npm package removed).
    */
-  agendash: {
-    user: process.env.AGENDASH_AUTH_USER,
-    password: process.env.AGENDASH_AUTH_PASSWORD,
-  },
+  // ORIGINAL: agendash: {
+  // ORIGINAL:   user: process.env.AGENDASH_AUTH_USER,
+  // ORIGINAL:   password: process.env.AGENDASH_AUTH_PASSWORD,
+  // ORIGINAL: },
 
   /**
    * Easy SMS gateway.

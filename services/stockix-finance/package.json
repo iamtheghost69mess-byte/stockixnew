@@ -39,28 +39,5 @@
   "_moduleAliases": {
     "@": "packages/server/build"
   },
-  "pnpm": {
-    "overrides": {
-      "bson": "1.1.6",
-      "mongodb": "3.6.11",
-      "@tiptap/core": "2.1.13",
-      "@tiptap/pm": "2.1.13",
-      "@tiptap/starter-kit": "2.1.13",
-      "@tiptap/react": "2.1.13",
-      "@tiptap/extension-horizontal-rule": "2.1.13",
-      "@tiptap/extension-color": "2.1.13",
-      "@tiptap/extension-list-item": "2.1.13",
-      "@tiptap/extension-text-style": "2.1.13",
-      "react": "^18.2.0",
-      "react-dom": "^18.2.0",
-      "@types/react": "18.2.79",
-      "@types/react-dom": "18.2.25"
-    },
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "@types/react": "18",
-        "@types/react-dom": "18"
-      }
-    }
-  }
+  "_pnpmOverridesMovedToRoot": "pnpm.overrides and peerDependencyRules moved to repo root package.json (stockixnew/package.json) — pnpm only applies overrides at workspace root."
 }

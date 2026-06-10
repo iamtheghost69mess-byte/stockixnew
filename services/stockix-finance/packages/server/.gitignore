@@ -46,6 +46,11 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Typecheck debug artifacts
+tsc-*.txt
+typecheck-out.txt
+typecheck-errors.txt
+
 # Runtime data
 pids
 *.pid

@@ -13,6 +13,8 @@ import {
   isHttpOriginAllowed,
   resolveHttpAllowedOrigins,
 } from './common/http/http-allowed-origins';
+import { StructuredNestLogger } from './common/logging/structured-nest-logger.service';
+import { logger } from '@repo/shared/structured-logger';
 
 global.__public_dirname = path.join(__dirname, '..', 'public');
 global.__static_dirname = path.join(__dirname, '../static');
@@ -20,25 +22,21 @@ global.__views_dirname = path.join(global.__static_dirname, '/views');
 global.__images_dirname = path.join(global.__static_dirname, '/images');
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      type: 'unhandled_rejection',
-      reason: reason instanceof Error ? reason.message : String(reason),
-      promise: String(promise),
-    }),
-  );
+  // ORIGINAL: console.error(JSON.stringify({ level: 'error', type: 'unhandled_rejection', ... }));
+  logger.error('unhandled_rejection', reason instanceof Error ? reason : undefined, {
+    type: 'unhandled_rejection',
+    reason: reason instanceof Error ? reason.message : String(reason),
+    promise: String(promise),
+  });
 });
 
 process.on('uncaughtException', (error) => {
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      type: 'uncaught_exception',
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    }),
-  );
+  // ORIGINAL: console.error(JSON.stringify({ level: 'error', type: 'uncaught_exception', ... }));
+  logger.error('uncaught_exception', error, {
+    type: 'uncaught_exception',
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
   process.exit(1);
 });
 
@@ -52,9 +50,12 @@ if (sentryDsn) {
 }
 
 async function bootstrap() {
+  // ORIGINAL: const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
+    bufferLogs: true,
   });
+  app.useLogger(app.get(StructuredNestLogger));
   app.set('query parser', 'extended');
   app.setGlobalPrefix('/api');
 
@@ -90,12 +91,23 @@ async function bootstrap() {
     ],
   });
 
-  // helmet@3 is CJS; namespace import breaks under webpack production bundle.
+  // Helmet: permissive CSP starter — tighten after SPA asset audit (remove unsafe-eval, enable COEP).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const helmet = require('helmet') as typeof import('helmet');
   app.use(
     helmet({
-      contentSecurityPolicy: false,
+      // ORIGINAL: contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'", 'data:'],
+        },
+      },
+      // ORIGINAL: crossOriginEmbedderPolicy: false,
       crossOriginEmbedderPolicy: false,
     }),
   );

@@ -36,27 +36,25 @@ export class RequestContextInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: () => {
-          this.logger.log(
-            JSON.stringify({
-              ...baseContext,
-              statusCode: response.statusCode,
-              durationMs: Date.now() - started,
-              level: 'info',
-              type: 'http_request',
-            }),
-          );
+          this.logger.log({
+            ...baseContext,
+            statusCode: response.statusCode,
+            durationMs: Date.now() - started,
+            level: 'info',
+            type: 'http_request',
+          });
+          // ORIGINAL: this.logger.log(JSON.stringify({ ...baseContext, statusCode: response.statusCode, durationMs: Date.now() - started, level: 'info', type: 'http_request' }));
         },
         error: (err: unknown) => {
-          this.logger.warn(
-            JSON.stringify({
-              ...baseContext,
-              statusCode: response.statusCode,
-              durationMs: Date.now() - started,
-              level: 'warn',
-              type: 'http_request_error',
-              message: err instanceof Error ? err.message : String(err),
-            }),
-          );
+          this.logger.warn({
+            ...baseContext,
+            statusCode: response.statusCode,
+            durationMs: Date.now() - started,
+            level: 'warn',
+            type: 'http_request_error',
+            message: err instanceof Error ? err.message : String(err),
+          });
+          // ORIGINAL: this.logger.warn(JSON.stringify({ ...baseContext, statusCode: response.statusCode, durationMs: Date.now() - started, level: 'warn', type: 'http_request_error', message: err instanceof Error ? err.message : String(err) }));
         },
       }),
     );
