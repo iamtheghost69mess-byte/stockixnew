@@ -409,6 +409,9 @@ importers:
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@babel/core':
         specifier: ^7.29.0
@@ -16810,6 +16813,9 @@ packages:
 
   yup@0.28.1:
     resolution: {integrity: sha512-xSHMZA7UyecSG/CCTDCtnYZMjBrYDR/C7hu0fMsZ6UcS/ngko4qCVFbw+CAmNtHlbItKkvQ3YXITODeTj/dUkw==}
+
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zoom-level@1.2.4:
     resolution: {integrity: sha512-nGFUhyU3Y4jWh6l+hYCVVUxu3vrD0i/RkumJRzYGU0COMWMs2Szs84mltacd64R9zJcxwKckWQN/KKbfB1btVA==}
@@ -37400,5 +37406,7 @@ snapshots:
       property-expr: 1.5.1
       synchronous-promise: 2.0.17
       toposort: 2.0.2
+
+  zod@3.25.76: {}
 
   zoom-level@1.2.4: {}
