@@ -2,6 +2,7 @@ import { Knex } from 'knex';
 import { IDynamicListFilterDTO } from './DynamicFilter';
 import { ISystemUser } from './User';
 import { IAccount } from './Account';
+import { IFilterMeta, IPaginationMeta } from './Model';
 
 export interface IManualJournal {
   id?: number;

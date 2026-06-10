@@ -1,18 +1,24 @@
-import { Model, raw, mixin } from 'objection';
+import { Model, raw } from 'objection';
+import type { Knex } from 'knex';
 import { castArray, difference } from 'lodash';
 import moment from 'moment';
-import TenantModel from '@/models/TenantModel';
-import BillSettings from '@/models/Bill.Settings';
-import ModelSetting from '@/models/ModelSetting';
-import CustomViewBaseModel from '@/models/CustomViewBaseModel';
-import { DEFAULT_VIEWS } from '@/services/Purchases/constants';
-import ModelSearchable from '@/models/ModelSearchable';
+import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
+import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
+import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
+import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.decorator';
+import { DEFAULT_VIEWS } from '@/constants/Purchases/constants';
+import { BillMeta } from './Bill.meta';
+import { Vendor } from '@/modules/Vendors/models/Vendor';
+import { ItemEntry } from '@/modules/TransactionItemEntry/models/ItemEntry';
+import { BillLandedCost } from '@/modules/BillLandedCosts/models/BillLandedCost';
+import { Branch } from '@/modules/Branches/models/Branch.model';
+import { Document } from '@/modules/ChromiumlyTenancy/models/Document';
+import { DiscountType } from '@/common/types/Discount';
 
-export class Bill extends mixin(TenantModel,
-  ModelSetting as any,
-  CustomViewBaseModel as any,
-  ModelSearchable as any
-) {
+@ExportableModel()
+@InjectModelMeta(BillMeta)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
+export class Bill extends TenantBaseModel {
   id: number;
   vendorId: number;
   amount: number;
@@ -26,11 +32,25 @@ export class Bill extends mixin(TenantModel,
   creditedAmount: number;
   dueDate: Date | string;
   branchId?: number;
+  projectId?: number;
+  warehouseId?: number;
   userId: number;
   createdAt: Date;
   landedCostAmount: number;
   allocatedCostAmount: number;
   invoicedAmount: number;
+  currencyCode: string;
+  discount: number;
+  discountType: DiscountType;
+  adjustment: number;
+  isInclusiveTax?: boolean;
+  taxAmountWithheld?: number;
+
+  entries?: ItemEntry[];
+  locatedLandedCosts?: BillLandedCost[];
+  attachments?: Document[];
+  vendor?: Vendor;
+  branch?: Branch;
 
   /**
    * Table name
@@ -203,7 +223,63 @@ export class Bill extends mixin(TenantModel,
       'localDueAmount',
       'localAllocatedCostAmount',
       'billableAmount',
+      'subtotal',
+      'subtotalLocal',
+      'subtotalExcludingTax',
+      'taxAmountWithheldLocal',
+      'discountAmount',
+      'discountAmountLocal',
+      'discountPercentage',
+      'total',
+      'totalLocal',
+      'adjustmentLocal',
     ];
+  }
+
+  get subtotal() {
+    return this.amount;
+  }
+
+  get subtotalLocal() {
+    return this.subtotal * this.exchangeRate;
+  }
+
+  get subtotalExcludingTax() {
+    return this.isInclusiveTax
+      ? this.subtotal - (this.taxAmountWithheld || 0)
+      : this.subtotal;
+  }
+
+  get taxAmountWithheldLocal() {
+    return this.taxAmountWithheld
+      ? this.taxAmountWithheld * this.exchangeRate
+      : null;
+  }
+
+  get discountAmount() {
+    return this.discountType === DiscountType.Amount
+      ? this.discount
+      : this.subtotal * (this.discount / 100);
+  }
+
+  get discountAmountLocal() {
+    return this.discountAmount ? this.discountAmount * this.exchangeRate : null;
+  }
+
+  get discountPercentage(): number | null {
+    return this.discountType === DiscountType.Percentage ? this.discount : null;
+  }
+
+  get adjustmentLocal() {
+    return this.adjustment ? this.adjustment * this.exchangeRate : null;
+  }
+
+  get total() {
+    return this.subtotal - this.discountAmount + this.adjustment;
+  }
+
+  get totalLocal() {
+    return this.total * this.exchangeRate;
   }
 
   /**
@@ -345,25 +421,13 @@ export class Bill extends mixin(TenantModel,
   }
 
   /**
-   * Bill model settings.
-   */
-  static get meta() {
-    return BillSettings;
-  }
-
-  /**
    * Relationship mapping.
    */
   static get relationMappings() {
-    const Vendor = require('models/Vendor');
-    const ItemEntry = require('models/ItemEntry');
-    const BillLandedCost = require('models/BillLandedCost');
-    const Branch = require('models/Branch');
-
     return {
       vendor: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Vendor.default,
+        modelClass: Vendor,
         join: {
           from: 'bills.vendorId',
           to: 'contacts.id',
@@ -375,7 +439,7 @@ export class Bill extends mixin(TenantModel,
 
       entries: {
         relation: Model.HasManyRelation,
-        modelClass: ItemEntry.default,
+        modelClass: ItemEntry,
         join: {
           from: 'bills.id',
           to: 'items_entries.referenceId',
@@ -388,7 +452,7 @@ export class Bill extends mixin(TenantModel,
 
       locatedLandedCosts: {
         relation: Model.HasManyRelation,
-        modelClass: BillLandedCost.default,
+        modelClass: BillLandedCost,
         join: {
           from: 'bills.id',
           to: 'bill_located_costs.billId',
@@ -400,7 +464,7 @@ export class Bill extends mixin(TenantModel,
        */
       branch: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Branch.default,
+        modelClass: Branch,
         join: {
           from: 'bills.branchId',
           to: 'branches.id',
@@ -430,18 +494,15 @@ export class Bill extends mixin(TenantModel,
     return notFoundBillsIds;
   }
 
-  static changePaymentAmount(billId, amount) {
+  static changePaymentAmount(billId: number, amount: number, trx?: Knex.Transaction) {
     const changeMethod = amount > 0 ? 'increment' : 'decrement';
-    return this.query()
+    const query = this.query();
+    if (trx) {
+      query.transacting(trx);
+    }
+    return query
       .where('id', billId)
       [changeMethod]('payment_amount', Math.abs(amount));
-  }
-
-  /**
-   * Retrieve the default custom views, roles and columns.
-   */
-  static get defaultViews() {
-    return DEFAULT_VIEWS;
   }
 
   /**

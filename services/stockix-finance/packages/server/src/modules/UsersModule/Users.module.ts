@@ -37,7 +37,7 @@ const models = [InjectSystemModel(UserInvite)];
     BullModule.registerQueue({ name: SendInviteUserMailQueue }),
     BullBoardModule.forFeature({
       name: SendInviteUserMailQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
   ],
   exports: [...models],

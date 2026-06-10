@@ -5,7 +5,6 @@ import DynamicFilterRoleAbstructor from './DynamicFilterRoleAbstructor';
 export default class DynamicFilterViews extends DynamicFilterRoleAbstructor {
   private viewSlug: string;
   private logicExpression: string;
-  private filterRoles: IViewRole[];
   private viewColumns = [];
 
   /**
@@ -16,7 +15,7 @@ export default class DynamicFilterViews extends DynamicFilterRoleAbstructor {
     super();
 
     this.viewSlug = view.slug;
-    this.filterRoles = view.roles;
+    this.filterRoles = view.roles as IViewRole[];
     this.viewColumns = view.columns;
     this.logicExpression = view.rolesLogicExpression
       .replace('AND', '&&')

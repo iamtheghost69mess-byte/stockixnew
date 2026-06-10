@@ -24,6 +24,7 @@ import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
 import { findFreePort, isPortFree, waitForPortFree } from "./find-free-port.mjs";
 import { waitForControlPlaneReady } from "./wait-for-http.mjs";
 import { killListenersOnPorts, runDevKillStale } from "./dev-kill-stale.mjs";
+import { resolveMysqlProxyHostPort } from "./resolve-mysql-proxy-port.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const concurrentlyBin = path.join(
@@ -150,7 +151,9 @@ function sharedDevPortsStatus() {
   const proxyPorts = inspect("stockix-mysql-proxy");
   return {
     mongoOk: mongoPorts.includes("127.0.0.1") && mongoPorts.includes("27017"),
-    proxyOk: proxyPorts.includes("127.0.0.1") && proxyPorts.includes("6032"),
+    proxyOk:
+      proxyPorts.includes("127.0.0.1") &&
+      (proxyPorts.includes("6033") || proxyPorts.includes("16033")),
     mongoPorts,
     proxyPorts,
   };
@@ -168,7 +171,7 @@ async function assertSharedDevPortsPublished(env, envFiles) {
     console.warn("[dev]   Mongo not on 127.0.0.1:27017");
   }
   if (!status.proxyOk) {
-    console.warn("[dev]   ProxySQL admin not on 127.0.0.1:6032");
+    console.warn("[dev]   ProxySQL tenant port not published to host (6033 or 16033)");
   }
 
   const args = sharedComposeArgs(envFiles);
@@ -189,7 +192,7 @@ async function assertSharedDevPortsPublished(env, envFiles) {
     );
     process.exit(1);
   }
-  console.log("[dev] ✓ Shared dev ports reconciled (127.0.0.1:27017, 127.0.0.1:6032)\n");
+  console.log("[dev] ✓ Shared dev ports reconciled (127.0.0.1:27017, ProxySQL host publish)\n");
 }
 
 async function upSharedInfra(env) {
@@ -298,6 +301,7 @@ const sharedEnv = {
   NEXT_PUBLIC_STOCKIX_API_URL: apiOrigin,
   WORKER_HEALTH_PORT: String(workerHealthPort),
   STOCKIX_DEV_LOCKED_PORT: "1",
+  MYSQL_PROXY_PORT: resolveMysqlProxyHostPort(),
 };
 
 if (reuseExistingApi) {

@@ -278,6 +278,8 @@ export const events = {
    * Bills service.
    */
   bill: {
+    onPdfViewed: 'onBillPdfViewed',
+
     onCreating: 'onBillCreating',
     onCreated: 'onBillCreated',
 

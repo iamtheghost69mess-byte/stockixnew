@@ -11,14 +11,14 @@ import { Document } from '@/modules/ChromiumlyTenancy/models/Document';
 import { Customer } from '@/modules/Customers/models/Customer';
 import { DiscountType } from '@/common/types/Discount';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { SaleEstimateDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/Sales/Estimates/constants';
 import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
 
 @InjectAttachable()
 @ExportableModel()
 @ImportableModel()
 @InjectModelMeta(SaleEstimateMeta)
-@InjectModelDefaultViews(SaleEstimateDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class SaleEstimate extends TenantBaseModel {
   exchangeRate!: number;
   amount!: number;

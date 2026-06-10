@@ -1,8 +1,8 @@
-import BalanceSheetTable from '@/services/FinancialStatements/BalanceSheet/BalanceSheetTable';
-import { ProfitLossSheetTable } from '@/services/FinancialStatements/ProfitLossSheet/ProfitLossSheetTable';
-import CashFlowTable from '@/services/FinancialStatements/CashFlow/CashFlowTable';
+import { getBalanceSheetTableClass } from '@/modules/FinancialStatements/modules/BalanceSheet/BalanceSheetTable';
+import { ProfitLossSheetTable } from '@/modules/FinancialStatements/modules/ProfitLossSheet/ProfitLossSheetTable';
+import CashFlowTable from '@/modules/FinancialStatements/modules/CashFlowStatement/CashFlowTable';
 
-const i18n = { __: (k: string) => k };
+const i18n = { __: (k: string) => k, t: (k: string) => k };
 
 // ───────────────────────────────── helpers ──────────────────────────────────
 
@@ -26,6 +26,8 @@ function findColumn(columns: any[], key: string): any {
 }
 
 // ─────────────────────────── BalanceSheetTable ──────────────────────────────
+
+const BalanceSheetTable = getBalanceSheetTableClass();
 
 describe('BalanceSheetTable — secondary currency column', () => {
   it('does NOT include secondary_total column when no secondary currency set', () => {

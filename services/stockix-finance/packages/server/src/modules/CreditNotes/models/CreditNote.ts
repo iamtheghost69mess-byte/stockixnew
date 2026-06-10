@@ -10,14 +10,14 @@ import { ItemEntry } from '@/modules/TransactionItemEntry/models/ItemEntry';
 import { Warehouse } from '@/modules/Warehouses/models/Warehouse.model';
 import { CreditNoteMeta } from './CreditNote.meta';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { CreditNoteDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/CreditNotes/constants';
 import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
 
 @InjectAttachable()
 @ExportableModel()
 @ImportableModel()
 @InjectModelMeta(CreditNoteMeta)
-@InjectModelDefaultViews(CreditNoteDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class CreditNote extends TenantBaseModel {
   public amount: number;
   public exchangeRate: number;

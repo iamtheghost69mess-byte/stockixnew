@@ -6,8 +6,8 @@ import { TenantUser } from '@/modules/Tenancy/TenancyModels/models/TenantUser.mo
 import { Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ERRORS } from '../Users.constants';
-import { ModelObject } from 'objection';
 import { SystemUser } from '@/modules/System/models/SystemUser';
+import { ModelObject } from 'objection';
 import { ITenantUserActivatedPayload } from '../Users.types';
 
 @Injectable()
@@ -67,7 +67,7 @@ export class ActivateUserService {
    */
   private throwErrorIfUserSameAuthorizedUser(
     userId: number,
-    authorizedUser: ModelObject<SystemUser>,
+    authorizedUser: SystemUser,
   ) {
     if (userId === authorizedUser.id) {
       throw new ServiceError(ERRORS.USER_SAME_THE_AUTHORIZED_USER);

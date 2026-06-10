@@ -25,7 +25,7 @@ export class ExportPdf {
   ) {
     const rows = mapPdfRows(columns, data);
 
-    const htmlContent = renderExportResourceTableTemplateHtml({
+    const htmlContent = await renderExportResourceTableTemplateHtml({
       table: { rows, columns },
       sheetTitle,
       sheetDescription,

@@ -4,7 +4,7 @@ import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.serv
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
 import { BalanceSheetInjectable } from './BalanceSheetInjectable';
-import { BalanceSheetTable } from './BalanceSheetTable';
+import { buildBalanceSheetTable } from './build-balance-sheet-table';
 import { IBalanceSheetQuery, IBalanceSheetTable } from './BalanceSheet.types';
 
 @Injectable()
@@ -33,7 +33,7 @@ export class BalanceSheetTableInjectable {
       query.toDate ?? new Date(),
     );
 
-    const table = new BalanceSheetTable(
+    const table = buildBalanceSheetTable(
       data,
       query,
       this.i18nService,
@@ -44,8 +44,8 @@ export class BalanceSheetTableInjectable {
 
     return {
       table: {
-        columns: table.tableColumns(),
-        rows: table.tableRows(),
+        columns: table.columns,
+        rows: table.rows,
       },
       query,
       meta,

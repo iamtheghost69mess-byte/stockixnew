@@ -1,27 +1,33 @@
 /* eslint-disable global-require */
-import { mixin, Model } from 'objection';
+import { Model } from 'objection';
 import { castArray } from 'lodash';
-import TenantModel from '@/models/TenantModel';
 import { buildFilterQuery, buildSortColumnQuery } from '@/lib/ViewRolesBuilder';
 import { flatToNestedArray } from 'utils';
 import DependencyGraph from '@/lib/DependencyGraph';
 import AccountTypesUtils from '@/lib/AccountTypes';
-import AccountSettings from '@/models/Account.Settings';
-import ModelSettings from '@/models/ModelSetting';
 import {
   ACCOUNT_TYPES,
   getAccountsSupportsMultiCurrency,
 } from '@/data/AccountTypes';
-import CustomViewBaseModel from '@/models/CustomViewBaseModel';
-import { DEFAULT_VIEWS } from '@/services/Accounts/constants';
-import ModelSearchable from '@/models/ModelSearchable';
+import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
+import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
+import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
+import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.decorator';
+import { DEFAULT_VIEWS } from '@/constants/Accounts/constants';
+import { AccountMeta } from './Account.meta';
 import { PlaidItem } from '@/modules/BankingPlaid/models/PlaidItem';
+import { AccountTransaction } from '@/modules/Accounts/models/AccountTransaction.model';
+import { Item } from '@/modules/Items/models/Item';
+import { InventoryAdjustment } from '@/modules/InventoryAdjutments/models/InventoryAdjustment';
+import { ManualJournalEntry } from '@/modules/ManualJournals/models/ManualJournalEntry';
+import { Expense } from '@/modules/Expenses/models/Expense.model';
+import { ExpenseCategory } from '@/modules/Expenses/models/ExpenseCategory.model';
+import { ItemEntry } from '@/modules/TransactionItemEntry/models/ItemEntry';
 
-export class Account extends mixin(TenantModel,
-  ModelSettings as any,
-  CustomViewBaseModel as any,
-  ModelSearchable as any,
-) {
+@ExportableModel()
+@InjectModelMeta(AccountMeta)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
+export class Account extends TenantBaseModel {
   id: number;
   name: string;
   code: string;
@@ -34,6 +40,10 @@ export class Account extends mixin(TenantModel,
   bankBalance?: number;
   lastFeedsUpdatedAt?: Date | string | null;
   plaidItemId?: string | null;
+  plaidAccountId?: string | null;
+  isFeedsActive?: boolean;
+  isSyncingOwner?: boolean;
+  slug?: string;
   plaidItem?: PlaidItem;
 
   /**
@@ -204,21 +214,13 @@ export class Account extends mixin(TenantModel,
    * Relationship mapping.
    */
   static get relationMappings() {
-    const AccountTransaction = require('models/AccountTransaction');
-    const Item = require('models/Item');
-    const InventoryAdjustment = require('models/InventoryAdjustment');
-    const ManualJournalEntry = require('models/ManualJournalEntry');
-    const Expense = require('models/Expense');
-    const ExpenseEntry = require('models/ExpenseCategory');
-    const ItemEntry = require('models/ItemEntry');
-
     return {
       /**
        * Account model may has many transactions.
        */
       transactions: {
         relation: Model.HasManyRelation,
-        modelClass: AccountTransaction.default,
+        modelClass: AccountTransaction,
         join: {
           from: 'accounts.id',
           to: 'accounts_transactions.accountId',
@@ -230,7 +232,7 @@ export class Account extends mixin(TenantModel,
        */
       itemsCostAccount: {
         relation: Model.HasManyRelation,
-        modelClass: Item.default,
+        modelClass: Item,
         join: {
           from: 'accounts.id',
           to: 'items.costAccountId',
@@ -242,7 +244,7 @@ export class Account extends mixin(TenantModel,
        */
       itemsSellAccount: {
         relation: Model.HasManyRelation,
-        modelClass: Item.default,
+        modelClass: Item,
         join: {
           from: 'accounts.id',
           to: 'items.sellAccountId',
@@ -254,7 +256,7 @@ export class Account extends mixin(TenantModel,
        */
       inventoryAdjustments: {
         relation: Model.HasManyRelation,
-        modelClass: InventoryAdjustment.default,
+        modelClass: InventoryAdjustment,
         join: {
           from: 'accounts.id',
           to: 'inventory_adjustments.adjustmentAccountId',
@@ -266,7 +268,7 @@ export class Account extends mixin(TenantModel,
        */
       manualJournalEntries: {
         relation: Model.HasManyRelation,
-        modelClass: ManualJournalEntry.default,
+        modelClass: ManualJournalEntry,
         join: {
           from: 'accounts.id',
           to: 'manual_journals_entries.accountId',
@@ -278,7 +280,7 @@ export class Account extends mixin(TenantModel,
        */
       expensePayments: {
         relation: Model.HasManyRelation,
-        modelClass: Expense.default,
+        modelClass: Expense,
         join: {
           from: 'accounts.id',
           to: 'expenses_transactions.paymentAccountId',
@@ -290,7 +292,7 @@ export class Account extends mixin(TenantModel,
        */
       expenseEntries: {
         relation: Model.HasManyRelation,
-        modelClass: ExpenseEntry.default,
+        modelClass: ExpenseCategory,
         join: {
           from: 'accounts.id',
           to: 'expense_transaction_categories.expenseAccountId',
@@ -302,7 +304,7 @@ export class Account extends mixin(TenantModel,
        */
       entriesCostAccount: {
         relation: Model.HasManyRelation,
-        modelClass: ItemEntry.default,
+        modelClass: ItemEntry,
         join: {
           from: 'accounts.id',
           to: 'items_entries.costAccountId',
@@ -314,7 +316,7 @@ export class Account extends mixin(TenantModel,
        */
       entriesSellAccount: {
         relation: Model.HasManyRelation,
-        modelClass: ItemEntry.default,
+        modelClass: ItemEntry,
         join: {
           from: 'accounts.id',
           to: 'items_entries.sellAccountId',
@@ -399,20 +401,6 @@ export class Account extends mixin(TenantModel,
       itemId: 'id',
       parentItemId: 'parentAccountId',
     });
-  }
-
-  /**
-   * Model settings.
-   */
-  static get meta() {
-    return AccountSettings;
-  }
-
-  /**
-   * Retrieve the default custom views, roles and columns.
-   */
-  static get defaultViews() {
-    return DEFAULT_VIEWS;
   }
 
   /**

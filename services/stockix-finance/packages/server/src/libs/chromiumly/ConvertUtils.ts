@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as FormData from 'form-data';
 import { GotenbergUtils } from './GotenbergUtils';
 import { PageProperties } from './_types';

@@ -1,6 +1,6 @@
 import { ISystemUser } from '@/interfaces';
 import { Knex } from 'knex';
-import { IFilterRole } from './DynamicFilter';
+import { IDynamicListFilter, IFilterRole } from './DynamicFilter';
 
 export enum ContactService {
   Customer = 'customer',

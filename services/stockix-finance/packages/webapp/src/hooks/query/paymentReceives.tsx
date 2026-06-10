@@ -3,6 +3,8 @@ import {
   useMutation,
   useQueryClient,
   useQuery,
+  UseMutationResult,
+  UseQueryResult,
 } from 'react-query';
 import useApiRequest from '../useRequest';
 import { useRequestQuery } from '../useQueryRequest';
@@ -269,11 +271,38 @@ export function usePdfPaymentReceive(paymentReceiveId) {
   return useRequestPdf({ url: `payments-received/${paymentReceiveId}` });
 }
 
-export function useSendPaymentReceiveMail(props) {
+export interface GetPaymentReceivedMailStateResponse {
+  attachPdf?: boolean;
+  companyName?: string;
+  customerName?: string;
+  companyLogoUri?: string | null;
+  primaryColor?: string | null;
+  formatArgs?: Record<string, string>;
+  from?: string[];
+  message?: string;
+  subject?: string;
+  to?: string[];
+  totalFormatted?: string;
+  subtotalFormatted?: string;
+  paymentNumber?: string;
+  paymentDateFormatted?: string;
+  entries?: Array<{
+    paidAmount: string;
+    invoiceNumber: string;
+  }>;
+}
+
+export interface GetPaymentReceiveHtmlResponse {
+  htmlContent: string;
+}
+
+export function useSendPaymentReceiveMail(
+  props = {},
+): UseMutationResult<void, unknown, [number, Record<string, unknown>]> {
   const queryClient = useQueryClient();
   const apiRequest = useApiRequest();
 
-  return useMutation(
+  return useMutation<void, unknown, [number, Record<string, unknown>]>(
     ([id, values]) =>
       apiRequest.post(`payments-received/${id}/mail`, values),
     {
@@ -285,10 +314,13 @@ export function useSendPaymentReceiveMail(props) {
   );
 }
 
-export function usePaymentReceivedMailState(paymentReceiveId, props) {
+export function usePaymentReceivedMailState(
+  paymentReceiveId,
+  props = {},
+): UseQueryResult<GetPaymentReceivedMailStateResponse> {
   const apiRequest = useApiRequest();
 
-  return useQuery(
+  return useQuery<GetPaymentReceivedMailStateResponse>(
     [t.PAYMENT_RECEIVE_MAIL_OPTIONS, paymentReceiveId],
     () =>
       apiRequest
@@ -313,10 +345,13 @@ export function usePaymentReceivedState(options) {
   );
 }
 
-export function useGetPaymentReceiveHtml(paymentReceivedId, options) {
+export function useGetPaymentReceiveHtml(
+  paymentReceivedId,
+  options = {},
+): UseQueryResult<GetPaymentReceiveHtmlResponse> {
   const apiRequest = useApiRequest();
 
-  return useQuery(
+  return useQuery<GetPaymentReceiveHtmlResponse>(
     ['PAYMENT_RECEIVED_HTML', paymentReceivedId],
     () =>
       apiRequest

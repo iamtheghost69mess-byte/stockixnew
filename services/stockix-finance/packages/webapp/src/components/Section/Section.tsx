@@ -126,8 +126,8 @@ export const Section: React.FC<SectionProps> = React.forwardRef(
       className,
       collapseProps,
       collapsible,
-      compact,
-      elevation,
+      compact = false,
+      elevation = Elevation.ZERO,
       icon,
       rightElement,
       subtitle,
@@ -241,8 +241,4 @@ export const Section: React.FC<SectionProps> = React.forwardRef(
     );
   },
 );
-Section.defaultProps = {
-  compact: false,
-  elevation: Elevation.ZERO,
-};
 Section.displayName = `${DISPLAYNAME_PREFIX}.Section`;

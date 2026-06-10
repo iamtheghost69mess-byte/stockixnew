@@ -36,7 +36,9 @@ export class GetAttachmentPresignedUrl {
       Key: key,
       ResponseContentDisposition,
     });
-    const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 300 });
+    const signedUrl = await (getSignedUrl as any)(this.s3Client, command, {
+      expiresIn: 300,
+    });
 
     return signedUrl;
   }

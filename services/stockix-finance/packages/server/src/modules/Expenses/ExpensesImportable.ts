@@ -1,7 +1,7 @@
 import { Knex } from 'knex';
 import { Injectable } from '@nestjs/common';
 import { Importable } from '../Import/Importable';
-import { ExpensesSampleData } from './constants';
+import { ExpensesSampleData } from '@/constants/Expenses/constants';
 import { CreateExpense } from './commands/CreateExpense.service';
 import { CreateExpenseDto } from './dtos/Expense.dto';
 import { ImportableService } from '../Import/decorators/Import.decorator';

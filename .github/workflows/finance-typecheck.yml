@@ -1,0 +1,51 @@
+name: Finance TypeCheck
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'services/stockix-finance/**'
+      - '.github/workflows/finance-typecheck.yml'
+  pull_request:
+    paths:
+      - 'services/stockix-finance/**'
+      - '.github/workflows/finance-typecheck.yml'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  typecheck:
+    name: Finance TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: services/stockix-finance/pnpm-lock.yaml
+
+      - name: Install Finance dependencies
+        working-directory: services/stockix-finance
+        run: pnpm install --frozen-lockfile --ignore-scripts
+        env:
+          HUSKY: "0"
+
+      - name: Type check — Finance server
+        working-directory: services/stockix-finance
+        run: pnpm --filter @stockix/server typecheck
+
+      - name: Type check — Finance webapp
+        working-directory: services/stockix-finance
+        run: pnpm --filter @stockix/webapp typecheck

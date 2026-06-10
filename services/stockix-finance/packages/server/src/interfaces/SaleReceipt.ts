@@ -1,5 +1,6 @@
 import { Knex } from 'knex';
 import { IItemEntry } from './ItemEntry';
+import { IFilterMeta, IPaginationMeta } from './Model';
 
 export interface ISaleReceipt {
   id?: number;

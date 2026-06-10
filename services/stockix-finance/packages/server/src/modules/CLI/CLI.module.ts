@@ -4,6 +4,7 @@ import { config } from '../../common/config';
 import { CommandRunnerModule } from 'nest-commander';
 import { SystemMigrateLatestCommand } from './commands/SystemMigrateLatest.command';
 import { SystemMigrateRollbackCommand } from './commands/SystemMigrateRollback.command';
+import { SystemMigrateUnlockCommand } from './commands/SystemMigrateUnlock.command';
 import { SystemMigrateMakeCommand } from './commands/SystemMigrateMake.command';
 import { TenantsMigrateLatestCommand } from './commands/TenantsMigrateLatest.command';
 import { TenantsMigrateRollbackCommand } from './commands/TenantsMigrateRollback.command';
@@ -24,6 +25,7 @@ import { OpenApiExportCommand } from './commands/OpenApiExport.command';
   providers: [
     SystemMigrateLatestCommand,
     SystemMigrateRollbackCommand,
+    SystemMigrateUnlockCommand,
     SystemMigrateMakeCommand,
     TenantsMigrateLatestCommand,
     TenantsMigrateRollbackCommand,

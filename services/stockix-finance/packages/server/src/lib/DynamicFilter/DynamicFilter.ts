@@ -3,9 +3,7 @@ import DynamicFilterAbstructor from './DynamicFilterAbstructor';
 import { IDynamicFilter, IFilterRole, IModel } from '@/interfaces';
 
 export default class DynamicFilter extends DynamicFilterAbstructor{
-  private model: IModel;
   private tableName: string;
-  private dynamicFilters: IDynamicFilter[];
 
   /**
    * Constructor.
@@ -37,7 +35,7 @@ export default class DynamicFilter extends DynamicFilterAbstructor{
    */
   private dynamicFiltersBuildQuery = () => {
     return this.dynamicFilters.map((filter) => {
-      return filter.buildQuery()
+      return filter.buildQuery?.() ?? (() => {});
     });
   }
 

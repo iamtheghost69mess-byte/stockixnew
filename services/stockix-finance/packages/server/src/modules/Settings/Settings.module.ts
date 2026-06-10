@@ -25,7 +25,7 @@ import { ClsModule } from 'nestjs-cls';
       global: true,
       strict: true,
       type: 'function',
-    }),
+    } as any),
   ],
   providers: [
     SettingRepository,

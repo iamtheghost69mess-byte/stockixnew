@@ -43,11 +43,11 @@ const models = [
     }),
     BullBoardModule.forFeature({
       name: ComputeItemCostQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
     BullBoardModule.forFeature({
       name: WriteInventoryTransactionsGLEntriesQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
     forwardRef(() => SaleInvoicesModule),
     ImportModule,

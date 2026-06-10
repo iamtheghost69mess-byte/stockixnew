@@ -11,6 +11,7 @@ export default class Tenant extends BaseModel {
   initializedAt: string | null;
   buildJobId: string | null;
   upgradeJobId: string | null;
+  builtAt?: string | null;
 
   // Populated by withGraphFetched('metadata')
   metadata?: TenantMetadata & Record<string, any>;

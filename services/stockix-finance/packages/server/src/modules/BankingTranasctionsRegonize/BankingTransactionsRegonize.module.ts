@@ -29,7 +29,7 @@ const models = [RegisterTenancyModel(RecognizedBankTransaction)];
     }),
     BullBoardModule.forFeature({
       name: RecognizeUncategorizedTransactionsQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
     ...models,
   ],

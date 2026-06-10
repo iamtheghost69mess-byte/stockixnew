@@ -164,7 +164,7 @@ export class Transformer {
    * @returns
    */
   protected formatNumber(number) {
-    return formatNumber(number, { money: false });
+    return formatNumber(number, { money: false, currencyCode: undefined });
   }
 
   /**

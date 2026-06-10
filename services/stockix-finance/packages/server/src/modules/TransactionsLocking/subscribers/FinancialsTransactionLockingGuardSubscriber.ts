@@ -130,7 +130,7 @@ export class FinancialTransactionLockingGuardSubscriber {
     if (!oldExpense.isPublished) return;
 
     await this.financialTransactionsLocking.transactionLockingGuard(
-      oldExpense.paymentDate,
+      oldExpense.paymentDate as Date,
     );
   }
 
@@ -148,11 +148,11 @@ export class FinancialTransactionLockingGuardSubscriber {
 
     // Validate the old expense date.
     await this.financialTransactionsLocking.transactionLockingGuard(
-      oldExpense.paymentDate,
+      oldExpense.paymentDate as Date,
     );
     // Validate the new expense date.
     await this.financialTransactionsLocking.transactionLockingGuard(
-      expenseDTO.paymentDate,
+      expenseDTO.paymentDate as Date,
     );
   }
 
@@ -165,7 +165,7 @@ export class FinancialTransactionLockingGuardSubscriber {
     oldExpense,
   }: IExpensePublishingPayload) {
     await this.financialTransactionsLocking.transactionLockingGuard(
-      oldExpense.paymentDate,
+      oldExpense.paymentDate as Date,
     );
   }
 

@@ -11,7 +11,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,20 +25,6 @@ const VERIFY_ONLY = process.argv.includes("--verify");
 const FINANCE_ROOT =
   process.env.STOCKIX_TENANT_APP_ROOT?.trim() ||
   path.join(ROOT, "services", "stockix-finance");
-const REPO_SHARED_PKG = path.join(ROOT, "packages", "shared");
-/** Copied into Finance tree for Docker context (@repo/shared workspace dep). */
-const FINANCE_SHARED_PKG = path.join(FINANCE_ROOT, "packages", "shared");
-
-function syncRepoSharedIntoFinanceTree() {
-  if (!existsSync(REPO_SHARED_PKG)) {
-    console.error(`[prebuild] ERROR: @repo/shared not found: ${REPO_SHARED_PKG}`);
-    process.exit(1);
-  }
-  rmSync(FINANCE_SHARED_PKG, { recursive: true, force: true });
-  cpSync(REPO_SHARED_PKG, FINANCE_SHARED_PKG, { recursive: true });
-  console.log("[prebuild] Synced packages/shared → services/stockix-finance/packages/shared");
-}
-
 const REQUIRED_FINANCE_IMAGES = [
   "stockix-server:local",
   "stockix-database-migration:local",
@@ -64,14 +50,17 @@ function run(label, cmd, cwd = ROOT, extraEnv = {}) {
 }
 
 /** Docker BuildKit on Windows can drop with rpc error: Unavailable EOF under memory pressure. */
-function runDockerBuild(label, tag, target, cwd) {
-  const baseCmd =
-    `docker build --progress=plain -t ${tag} -f packages/server/Dockerfile --target ${target} .`;
+function runDockerBuild(label, tag, target) {
+  const dockerfile = "services/stockix-finance/packages/server/Dockerfile";
+  const buildkitCmd =
+    `docker build --progress=plain -t ${tag} -f ${dockerfile} --target ${target} .`;
+  const legacyCmd =
+    `docker build -t ${tag} -f ${dockerfile} --target ${target} .`;
   const attempts = [
-    { label: `${label} (BuildKit)`, cmd: baseCmd, env: { DOCKER_BUILDKIT: "1" } },
+    { label: `${label} (BuildKit)`, cmd: buildkitCmd, env: { DOCKER_BUILDKIT: "1" } },
     {
       label: `${label} (legacy builder retry)`,
-      cmd: baseCmd,
+      cmd: legacyCmd,
       env: { DOCKER_BUILDKIT: "0" },
     },
   ];
@@ -83,7 +72,7 @@ function runDockerBuild(label, tag, target, cwd) {
     const start = Date.now();
     try {
       execSync(attempt.cmd, {
-        cwd,
+        cwd: ROOT,
         stdio: "inherit",
         shell: true,
         env: { ...process.env, ...attempt.env },
@@ -117,6 +106,53 @@ function imageExists(tag) {
   }
 }
 
+function verifyRuntimeImageTruth(tag) {
+  const checks = [
+    {
+      label: "webapp-dist/index.html",
+      cmd: `docker run --rm --entrypoint sh ${tag} -c "test -f /app/packages/server/webapp-dist/index.html"`,
+    },
+    {
+      label: "build/index.js",
+      cmd: `docker run --rm --entrypoint sh ${tag} -c "test -f /app/packages/server/build/index.js"`,
+    },
+    {
+      label: "no packages/server/src in image",
+      cmd: `docker run --rm --entrypoint sh ${tag} -c "! test -d /app/packages/server/src"`,
+    },
+    {
+      label: "no babel-loader in prod node_modules",
+      cmd: `docker run --rm --entrypoint sh ${tag} -c "! test -d /app/node_modules/babel-loader && ! test -d /app/packages/server/node_modules/babel-loader"`,
+    },
+    {
+      label: "no gulp in prod node_modules",
+      cmd: `docker run --rm --entrypoint sh ${tag} -c "! test -d /app/node_modules/gulp && ! test -d /app/packages/server/node_modules/gulp"`,
+    },
+    {
+      label: "CMD uses build/index.js",
+      cmd: `docker image inspect --format "{{json .Config.Cmd}}" ${tag}`,
+      expectIncludes: "build/index.js",
+    },
+  ];
+
+  let ok = true;
+  for (const check of checks) {
+    try {
+      const out = execSync(check.cmd, { stdio: "pipe", shell: true }).toString();
+      if (check.expectIncludes && !out.includes(check.expectIncludes)) {
+        console.error(`[prebuild] ❌ ${tag}: ${check.label} — CMD mismatch`);
+        ok = false;
+        continue;
+      }
+      console.log(`[prebuild] ✅ ${tag}: ${check.label}`);
+    } catch {
+      console.error(`[prebuild] ❌ ${tag}: ${check.label}`);
+      ok = false;
+    }
+  }
+  return ok;
+}
+
 function verifyImages() {
   console.log("\n[prebuild] Verify images");
   let allGood = true;
@@ -131,7 +167,15 @@ function verifyImages() {
   if (!allGood) {
     process.exit(1);
   }
-  console.log("\n[prebuild] All required Finance images are present.");
+
+  if (imageExists("stockix-server:local")) {
+    console.log("\n[prebuild] Docker runtime truth validation");
+    if (!verifyRuntimeImageTruth("stockix-server:local")) {
+      process.exit(1);
+    }
+  }
+
+  console.log("\n[prebuild] All required Finance images are present and runtime-valid.");
 }
 
 if (VERIFY_ONLY) {
@@ -186,21 +230,18 @@ pullBaseImage("Pull node:22-alpine", "node:22-alpine");
 // ── 2. Build Finance images ───────────────────────────────────────────────────
 console.log("\n[prebuild] Phase 2: Build Finance images");
 
-syncRepoSharedIntoFinanceTree();
 // Finance has legacy deps (e.g. objection-filter@4.0.1) with stale
 // engines.node declarations (<=12.x.x) that run fine on Node 22.
-// services/stockix-finance/.npmrc sets engine-strict=false for this step.
-// Docker builds inside the container are unaffected.
 run(
-  "pnpm install (stockix-finance lockfile)",
+  "pnpm install (monorepo workspace — @repo/shared from packages/shared)",
   "pnpm install --ignore-scripts --config.engine-strict=false",
-  FINANCE_ROOT,
+  ROOT,
 );
 
 if (!FORCE && imageExists("stockix-server:local")) {
   console.log("[prebuild] stockix-server:local already exists — skipping");
 } else {
-  runDockerBuild("Build stockix-server", "stockix-server:local", "app", FINANCE_ROOT);
+  runDockerBuild("Build stockix-server", "stockix-server:local", "runtime");
 }
 
 if (!FORCE && imageExists("stockix-database-migration:local")) {
@@ -209,8 +250,7 @@ if (!FORCE && imageExists("stockix-database-migration:local")) {
   runDockerBuild(
     "Build stockix-database-migration",
     "stockix-database-migration:local",
-    "migration",
-    FINANCE_ROOT,
+    "migration-runtime",
   );
 }
 

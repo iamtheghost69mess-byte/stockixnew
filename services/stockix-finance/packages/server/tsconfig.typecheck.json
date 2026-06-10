@@ -1,0 +1,62 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "@/modules/FinancialStatements/FinancialStatements.module": [
+        "./stubs/typecheck/FinancialStatementsModule.stub"
+      ],
+      "@/modules/FinancialStatements/common/FinancialSheet": [
+        "./stubs/typecheck/FinancialSheet.stub"
+      ],
+      "@/modules/FinancialStatements/types/Report.types": [
+        "./interfaces/FinancialStatements"
+      ],
+      "@/modules/FinancialStatements/types/Table.types": [
+        "./stubs/typecheck/FinancialStatementsTable.types.stub"
+      ],
+      "@repo/shared/deployment-secrets": [
+        "./stubs/typecheck/deployment-secrets"
+      ],
+      "@/libs/chromiumly/_types": ["./stubs/typecheck/chromiumly/index"],
+      "@/libs/chromiumly/UrlConvert": ["./stubs/typecheck/chromiumly/index"],
+      "@/libs/chromiumly/Chromiumly": ["./stubs/typecheck/chromiumly/index"]
+    }
+  },
+  "include": [
+    "./src/main.ts",
+    "./src/bootstrap-decrypt-env.ts",
+    "./src/before.ts",
+    "./src/modules/**/*",
+    "./src/common/**/*",
+    "./src/constants/**/*",
+    "./src/interfaces/**/*",
+    "./src/database/**/*",
+    "./src/system/**/*",
+    "./src/models/Model.ts",
+    "./src/models/TenantModel.ts",
+    "./src/models/withDateSessionMixin.ts",
+    "./src/models/Media.ts",
+    "./src/models/MediaLink.ts",
+    "./src/models/*.Settings.ts",
+    "./src/utils/**/*",
+    "./src/lib/**/*",
+    "./src/middleware/**/*",
+    "./src/data/**/*",
+    "./src/types/**/*",
+    "./src/stubs/typecheck/**/*"
+  ],
+  "exclude": [
+    "./node_modules",
+    "./src/cli.ts",
+    "./src/commands/**/*",
+    "./src/collection/**/*",
+    "./src/factories/**/*",
+    "./src/modules/CLI/**/*",
+    "./src/modules/FinancialStatements/**/*",
+    "./src/system/models/SystemUser.ts",
+    "./src/lib/Metable/**/*",
+    "./src/lib/Seeder/**/*",
+    "./src/libs/chromiumly/**/*"
+  ]
+}

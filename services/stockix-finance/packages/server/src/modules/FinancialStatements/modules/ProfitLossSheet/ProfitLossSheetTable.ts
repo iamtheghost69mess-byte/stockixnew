@@ -261,16 +261,15 @@ export class ProfitLossSheetTable extends R.compose(
    * @returns {ITableColumn[]}
    */
   public tableColumns = (): ITableColumn[] => {
-    return R.compose(
-      this.tableColumnsCellIndexing,
-      R.concat([
-        { key: 'name', label: this.i18n.__('profit_loss_sheet.account_name') },
-      ]),
-      R.ifElse(
-        this.query.isDatePeriodsColumnsType,
-        R.concat(this.datePeriodsColumns()),
-        R.concat(this.totalColumn())
-      )
-    )([]);
+    const nameColumn = [
+      { key: 'name', label: this.i18n.__('profit_loss_sheet.account_name') },
+    ];
+    const dataColumns = this.query.isDatePeriodsColumnsType()
+      ? this.datePeriodsColumns()
+      : this.totalColumn();
+
+    return this.tableColumnsCellIndexing(
+      R.concat(nameColumn, dataColumns),
+    );
   };
 }

@@ -105,7 +105,7 @@ export class CreateAccountService {
       isSyncingOwner: Boolean(
         createAccountDTO.plaidAccountId || createAccountDTO.plaidItemId,
       ),
-    };
+    } as PartialModelObject<Account>;
   };
 
   /**

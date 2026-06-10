@@ -9,13 +9,22 @@ import {
 import { useElementCustomizeContext } from './ElementCustomizeProvider';
 import styles from './ElementCustomizeTabs.module.scss';
 
+interface ElementCustomizeTabItem {
+  id: string;
+  label: string;
+  tabProps?: TabProps;
+}
+
 export function ElementCustomizeTabs() {
   const { setCurrentTabId } = useElementCustomizeTabsController();
   const { CustomizeTabs } = useElementCustomizeContext();
 
-  const tabItems = React.Children.map(CustomizeTabs, (node) => ({
-    ...(React.isValidElement(node) ? node.props : {}),
-  }));
+  const tabItems = React.Children.map(CustomizeTabs, (node) => {
+    if (!React.isValidElement(node)) {
+      return null;
+    }
+    return node.props as ElementCustomizeTabItem;
+  })?.filter((item): item is ElementCustomizeTabItem => item != null);
   const handleChange = (value: ElementCustomizeTabsEnum) => {
     setCurrentTabId(value);
   };
@@ -31,19 +40,9 @@ export function ElementCustomizeTabs() {
           onChange={handleChange}
           className={styles.tabsList}
         >
-          {tabItems?.map(
-            ({
-              id,
-              label,
-              tabProps,
-            }: {
-              id: string;
-              label: string;
-              tabProps?: TabProps;
-            }) => (
-              <Tab id={id} key={id} title={label} {...tabProps} />
-            ),
-          )}
+          {tabItems?.map(({ id, label, tabProps }) => (
+            <Tab id={id} key={id} title={label} {...tabProps} />
+          ))}
         </Tabs>
       </Box>
     </Stack>

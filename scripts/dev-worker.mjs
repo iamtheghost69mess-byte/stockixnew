@@ -6,10 +6,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadEnvFilesAtRoot } from "./load-root-env.mjs";
+import { resolveMysqlProxyHostPort } from "./resolve-mysql-proxy-port.mjs";
 import { waitForControlPlaneReady } from "./wait-for-http.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
+process.env.MYSQL_PROXY_PORT = resolveMysqlProxyHostPort();
 
 const apiBase =
   process.env.STOCKIX_API_URL?.replace(/\/$/, "") ??

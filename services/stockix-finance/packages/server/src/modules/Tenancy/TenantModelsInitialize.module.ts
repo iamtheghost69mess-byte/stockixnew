@@ -44,7 +44,7 @@ const provider = ClsModule.forFeatureAsync({
   },
   strict: true,
   type: 'function',
-});
+} as any);
 
 @Module({
   imports: [provider],

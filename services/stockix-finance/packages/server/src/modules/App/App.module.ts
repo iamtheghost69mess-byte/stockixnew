@@ -31,6 +31,8 @@ import { TenancyModelsModule } from '../Tenancy/TenancyModels/Tenancy.module';
 import { LoggerMiddleware } from '@/middleware/logger.middleware';
 import { ExcludeNullInterceptor } from '@/interceptors/ExcludeNull.interceptor';
 import { UserIpInterceptor } from '@/interceptors/user-ip.interceptor';
+import { RequestContextInterceptor } from '@/common/interceptors/request-context.interceptor';
+import { MigrationModeMiddleware } from '@/common/middleware/migration-mode.middleware';
 import { TransformerModule } from '../Transformer/Transformer.module';
 import { AccountsModule } from '../Accounts/Accounts.module';
 import { ExpensesModule } from '../Expenses/Expenses.module';
@@ -73,7 +75,7 @@ import { InventoryAdjustmentsModule } from '../InventoryAdjutments/InventoryAdju
 import { PostHogModule } from '../EventsTracker/postHog.module';
 import { EventTrackerModule } from '../EventsTracker/EventTracker.module';
 import { MailModule } from '../Mail/Mail.module';
-import { FinancialStatementsModule } from '../FinancialStatements/FinancialStatements.module';
+import { FinancialStatementsModule } from '@/modules/FinancialStatements/FinancialStatements.module';
 import { StripePaymentModule } from '../StripePayment/StripePayment.module';
 import { FeaturesModule } from '../Features/Features.module';
 import { InventoryCostModule } from '../InventoryCost/InventoryCost.module';
@@ -313,6 +315,10 @@ const financeWebappImports = isFinanceWebappBuilt()
     },
     {
       provide: APP_INTERCEPTOR,
+      useClass: RequestContextInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
       useClass: ExcludeNullInterceptor,
     },
     {
@@ -332,6 +338,10 @@ const financeWebappImports = isFinanceWebappBuilt()
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(MigrationModeMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+
     consumer
       .apply(LoggerMiddleware)
       .forRoutes({ path: '*', method: RequestMethod.ALL });

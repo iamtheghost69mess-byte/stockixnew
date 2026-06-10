@@ -9,6 +9,7 @@
     "build:webapp": "lerna run build --scope \"@stockix/webapp\"",
     "dev:server": "lerna run dev --scope \"@stockix/server\"",
     "build:server": "lerna run build --scope \"@stockix/server\"",
+    "typecheck": "pnpm --filter @stockix/server typecheck && pnpm --filter @stockix/webapp typecheck",
     "serve:server": "lerna run serve --scope \"@stockix/server\"",
     "test:e2e": "playwright test",
     "prepare": "husky install"
@@ -51,7 +52,15 @@
       "@tiptap/extension-list-item": "2.1.13",
       "@tiptap/extension-text-style": "2.1.13",
       "react": "^18.2.0",
-      "react-dom": "^18.2.0"
+      "react-dom": "^18.2.0",
+      "@types/react": "18.2.79",
+      "@types/react-dom": "18.2.25"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@types/react": "18",
+        "@types/react-dom": "18"
+      }
     }
   }
 }

@@ -32,15 +32,25 @@ import { GetBillPaymentTransactionsService } from './queries/GetBillPayments';
 import { BulkDeleteBillsService } from './BulkDeleteBills.service';
 import { ValidateBulkDeleteBillsService } from './ValidateBulkDeleteBills.service';
 import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
+import { PdfTemplatesModule } from '../PdfTemplate/PdfTemplates.module';
+import { PdfModule } from '../Pdf/Pdf.module';
+import { ChromiumlyTenancyModule } from '../ChromiumlyTenancy/ChromiumlyTenancy.module';
+import { TenancyModule } from '../Tenancy/Tenancy.module';
+import { BillPdf } from './queries/BillPdf.service';
+import { BillPdfTemplate } from './queries/BillPdfTemplate.service';
 
 @Module({
   imports: [
+    TenancyModule,
     CurrenciesModule,
     BillLandedCostsModule,
     LedgerModule,
     AccountsModule,
     DynamicListModule,
     InventoryCostModule,
+    PdfTemplatesModule,
+    PdfModule,
+    ChromiumlyTenancyModule,
   ],
   providers: [
     TenancyContext,
@@ -69,8 +79,16 @@ import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
     GetBillPaymentTransactionsService,
     BulkDeleteBillsService,
     ValidateBulkDeleteBillsService,
+    BillPdf,
+    BillPdfTemplate,
   ],
   controllers: [BillsController],
-  exports: [BillsApplication, BillsExportable, BillsImportable],
+  exports: [
+    BillsApplication,
+    BillsExportable,
+    BillsImportable,
+    BillPdf,
+    BillPdfTemplate,
+  ],
 })
 export class BillsModule { }

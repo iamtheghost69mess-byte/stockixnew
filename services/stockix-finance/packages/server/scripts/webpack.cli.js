@@ -1,8 +1,8 @@
 const { getCommonWebpackOptions } = require('./webpack.common');
 
-const inputEntry = './src/commands/index.ts';
+const inputEntry = './src/cli.ts';
 const outputDir = '../build';
-const outputFilename = 'commands.js';
+const outputFilename = 'cli.js';
 
 module.exports = getCommonWebpackOptions({
   inputEntry,

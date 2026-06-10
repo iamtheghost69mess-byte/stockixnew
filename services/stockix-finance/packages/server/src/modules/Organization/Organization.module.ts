@@ -45,7 +45,7 @@ import { TransformerModule } from '../Transformer/Transformer.module';
     BullModule.registerQueue({ name: OrganizationBuildQueue }),
     BullBoardModule.forFeature({
       name: OrganizationBuildQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
     TenantDBManagerModule,
     AttachmentsModule,

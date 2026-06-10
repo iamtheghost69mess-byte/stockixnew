@@ -1,5 +1,5 @@
 import { Knex } from 'knex';
-import { ProjectTaskChargeType } from '@/services/Projects/Tasks/constants';
+import { ProjectTaskChargeType } from '@/constants/Projects/Tasks/constants';
 
 export interface IProjectTask {
   id?: number;

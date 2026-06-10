@@ -37,7 +37,7 @@ const models = [RegisterTenancyModel(PlaidItem)];
     BullModule.registerQueue({ name: UpdateBankingPlaidTransitionsQueueJob }),
     BullBoardModule.forFeature({
       name: UpdateBankingPlaidTransitionsQueueJob,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
     ...models,
   ],

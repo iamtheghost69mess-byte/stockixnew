@@ -34,6 +34,7 @@ export interface ILedgerEntry {
 
   transactionType: string;
   transactionId: number;
+  transactionSubType?: string;
 
   transactionNumber?: string;
 
@@ -49,8 +50,11 @@ export interface ILedgerEntry {
   projectId?: number;
 
   entryId?: number;
-  createdAt?: Date;
+  id?: number;
+  createdAt?: Date | string;
 
+  taxRateId?: number;
+  taxRate?: number;
   costable?: boolean;
 }
 

@@ -1,5 +1,5 @@
 import { sumBy, difference } from 'lodash';
-import { ERRORS, SUPPORTED_EXPENSE_PAYMENT_ACCOUNT_TYPES } from '../constants';
+import { ERRORS, SUPPORTED_EXPENSE_PAYMENT_ACCOUNT_TYPES } from '@/constants/Expenses/constants';
 import { ACCOUNT_ROOT_TYPE } from '@/constants/accounts';
 import { Account } from '@/modules/Accounts/models/Account.model';
 import { Injectable } from '@nestjs/common';

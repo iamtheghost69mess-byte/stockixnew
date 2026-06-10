@@ -1,9 +1,15 @@
-import { IModel, ISortOrder } from "./Model";
+import { IModel, ISearchRole, ISortOrder } from "./Model";
+
+export type { ISearchRole };
 
 export interface IDynamicFilter {
   setModel(model: IModel): void;
-  buildQuery(): void;
-  getResponseMeta();
+  onInitialize?(): void;
+  buildQuery?(): (builder: any) => void;
+  getResponseMeta?(): { [key: string]: any };
+  filterRoles?: IFilterRole | IFilterRole[];
+  responseMeta?: { [key: string]: any };
+  relationFields?: string[];
 }
 
 export interface IFilterRole {
@@ -16,11 +22,14 @@ export interface IFilterRole {
 export interface IDynamicListFilter {
   customViewId?: number;
   filterRoles?: IFilterRole[];
-  columnSortBy: ISortOrder;
-  sortOrder: string;
-  stringifiedFilterRoles: string;
+  columnSortBy: string;
+  sortOrder: ISortOrder | string;
+  stringifiedFilterRoles?: string;
   searchKeyword?: string;
+  viewSlug?: string;
 }
+
+export interface IDynamicListFilterDTO extends IDynamicListFilter {}
 
 export interface IDynamicListService {
   dynamicList(
@@ -29,10 +38,4 @@ export interface IDynamicListService {
     filter: IDynamicListFilter
   ): Promise<any>;
   handlerErrorsToResponse(error, req, res, next): void;
-}
-
-// Search role.
-export interface ISearchRole {
-  fieldKey: string;
-  comparator: string;
 }

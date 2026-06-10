@@ -13,9 +13,11 @@ infra/worker-service/.tmp-dist/
 .env
 .env.*
 !.env.example
-# Finance service has its own pnpm workspace — never needed in control-plane builds.
-# Infra-worker accesses it via host volume mount at runtime.
+# Finance service — excluded from control-plane builds by default.
+# Negated for monorepo-root Finance image builds (see prebuild-tenant-images.mjs).
 services/stockix-finance/
+!services/stockix-finance/
+!packages/shared/
 
 # Chatwoot (Ruby/Rails) — not in pnpm workspace, never part of any Docker build.
 services/chatlive/

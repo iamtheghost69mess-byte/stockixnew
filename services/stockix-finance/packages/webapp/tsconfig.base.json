@@ -1,9 +1,16 @@
 {
   "compilerOptions": {
     "baseUrl": "./src",
+    "typeRoots": [
+      "../node_modules/@types"
+    ],
     "paths": {
       "@/*": ["./*"],
       "@public/*": ["../public/*"],
+      "react": ["../node_modules/@types/react"],
+      "react-dom": ["../node_modules/@types/react-dom"],
+      "react/jsx-runtime": ["../node_modules/@types/react/jsx-runtime"],
+      "react/jsx-dev-runtime": ["../node_modules/@types/react/jsx-dev-runtime"]
     }
   }
 }

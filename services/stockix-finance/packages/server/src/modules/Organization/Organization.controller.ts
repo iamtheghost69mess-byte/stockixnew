@@ -100,7 +100,7 @@ export class OrganizationController {
   }
 
   @Get('build/:buildJobId')
-  @Throttle({ default: { limit: 300, ttl: 60000 } }) // 300 req/min
+  @Throttle({ default: { limit: 300, ttl: 60000 } } as any) // 300 req/min
   @ApiParam({
     name: 'buildJobId',
     required: true,

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as FormData from 'form-data';
 import { Axios } from 'axios';
 

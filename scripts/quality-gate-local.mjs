@@ -69,6 +69,22 @@ function financeDepsReady() {
   return existsSync(path.join(financeServer, "node_modules/jest"));
 }
 
+function dockerAvailable() {
+  const r = spawnSync("docker", ["version"], {
+    stdio: "pipe",
+    shell: isWin,
+  });
+  return r.status === 0;
+}
+
+function dockerImageExists(tag) {
+  const r = spawnSync("docker", ["image", "inspect", tag], {
+    stdio: "pipe",
+    shell: isWin,
+  });
+  return r.status === 0;
+}
+
 function ensureFinanceDeps() {
   const env = { ...testEnv, HUSKY: "0" };
   const maxAttempts = isWin ? 3 : 1;
@@ -165,6 +181,14 @@ sh(
   "pnpm --filter @repo/auth exec tsc --noEmit && pnpm --filter @repo/config exec tsc --noEmit && pnpm --filter @repo/db exec tsc --noEmit && pnpm --filter @repo/shared exec tsc --noEmit",
 );
 run("Type check PMS", "pnpm", ["--filter", "@stockix/pms", "exec", "tsc", "--noEmit"]);
+run("Type check Finance server", "pnpm", ["--filter", "@stockix/server", "typecheck"], {
+  cwd: financeRoot,
+  env: { ...testEnv, HUSKY: "0" },
+});
+run("Type check Finance webapp", "pnpm", ["--filter", "@stockix/webapp", "typecheck"], {
+  cwd: financeRoot,
+  env: { ...testEnv, HUSKY: "0" },
+});
 
 run("Tenant scope", "pnpm", ["--filter", "api", "check:tenant-scope"]);
 sh(
@@ -210,6 +234,24 @@ if (!existsSync(path.join(root, "apps/dashboard/.next/static"))) {
 
 run("Architecture boundaries", "pnpm", ["lint:boundaries"]);
 run("Architecture validate", "pnpm", ["architecture:validate"]);
+run("Finance architecture guard", "pnpm", ["finance:architecture-guard"]);
+run("Finance phase safety", "pnpm", ["finance:phase-safety"]);
+run("Finance dependency audit", "pnpm", ["finance:dependency-audit"]);
+
+if (dockerAvailable()) {
+  if (dockerImageExists("stockix-server:local")) {
+    run("Finance Docker check", "pnpm", ["docker:check"]);
+    run("Finance perf baseline", "pnpm", ["finance:perf-baseline", "--check"]);
+  } else {
+    console.warn(
+      "\nSKIP: Finance Docker check / perf-baseline — stockix-server:local missing (run pnpm docker:prebuild)",
+    );
+  }
+} else {
+  console.warn(
+    "\nSKIP: Finance Docker check / perf-baseline — Docker daemon not available",
+  );
+}
 
 console.log("\n========================================");
 console.log("QUALITY GATE PASSED (local CI mirror)");

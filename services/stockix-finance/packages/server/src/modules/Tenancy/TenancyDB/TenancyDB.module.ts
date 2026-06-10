@@ -1,4 +1,4 @@
-import knex from 'knex';
+import knex, { Knex } from 'knex';
 import LRUCache from 'lru-cache';
 import { Global, Module } from '@nestjs/common';
 import { ClsModule, ClsService } from 'nestjs-cls';
@@ -29,26 +29,26 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
     }
     const migrationsDir = configService.get<string>('tenantDatabase.migrationsDir');
     const knexInstance = knex({
-      ...buildTenantKnexOptionsFromConfig(configService, database, {
+      ...(buildTenantKnexOptionsFromConfig(configService, database, {
         pool: { min: 0, max: 7 },
         migrations: {
-          migrationSource: new NativeFsMigrations(migrationsDir, false, ['.js']),
+          migrationSource: new NativeFsMigrations(migrationsDir, false, ['.js']) as any,
         },
         seeds: {
           directory: configService.get('tenantDatabase.seedsDir'),
         },
-      }),
+      }) as Knex.Config),
       userParams: {
         organizationId,
         tenantId: cls.get('tenantId'),
       },
-    });
+    } as Knex.Config);
     lruCache.set(database, knexInstance);
 
     return knexInstance;
   },
   type: 'function',
-});
+} as any);
 
 @Global()
 @Module({

@@ -99,7 +99,7 @@ export class EditManualJournal {
 
       await this.manualJournalModel().query(trx).upsertGraph({
         ...manualJournalObj,
-      });
+      } as any);
 
       const manualJournal = await this.manualJournalModel()
         .query(trx)

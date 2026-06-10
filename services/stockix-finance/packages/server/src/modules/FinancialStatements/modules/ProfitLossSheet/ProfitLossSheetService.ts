@@ -3,7 +3,7 @@ import {
   IProfitLossSheetMeta,
   IProfitLossSheetNode,
 } from './ProfitLossSheet.types';
-import ProfitLossSheet from './ProfitLossSheet';
+import { buildProfitLossSheetReport } from './build-profit-loss-sheet';
 import { mergeQueryWithDefaults } from './utils';
 import { ProfitLossSheetRepository } from './ProfitLossSheetRepository';
 import { ProfitLossSheetMeta } from './ProfitLossSheetMeta';
@@ -43,15 +43,12 @@ export class ProfitLossSheetService {
     // Retrieve the profit/loss sheet meta first to get date format.
     const meta = await this.profitLossSheetMeta.meta(filter);
 
-    // Profit/Loss report instance.
-    const profitLossInstance = new ProfitLossSheet(
+    const data = buildProfitLossSheetReport(
       this.profitLossRepository,
       filter,
       this.i18nService,
       { baseCurrency: meta.baseCurrency, dateFormat: meta.dateFormat },
     );
-    // Profit/loss report data and columns.
-    const data = profitLossInstance.reportData();
 
     // Triggers `onProfitLossSheetViewed` event.
     await this.eventPublisher.emitAsync(

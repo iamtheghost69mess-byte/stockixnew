@@ -1,4 +1,4 @@
-import Knex from 'knex';
+import { Knex } from 'knex';
 import { IDynamicListFilterDTO } from './DynamicFilter';
 import { ISystemUser } from './User';
 

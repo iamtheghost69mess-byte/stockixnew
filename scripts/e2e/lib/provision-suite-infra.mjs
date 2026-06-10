@@ -3,6 +3,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { resolveMysqlProxyHostPort } from "../../resolve-mysql-proxy-port.mjs";
 import { createConnection } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -41,7 +42,7 @@ function sharedDevPortsPublished() {
     try {
       return execSync(
         `docker inspect stockix-shared-${service}-1 --format "{{json .NetworkSettings.Ports}}"`,
-        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], shell: true },
       ).trim();
     } catch {
       return "";
@@ -51,7 +52,9 @@ function sharedDevPortsPublished() {
   const proxyPorts = inspect("stockix-mysql-proxy");
   return {
     mongoOk: mongoPorts.includes("127.0.0.1") && mongoPorts.includes("27017"),
-    proxyOk: proxyPorts.includes("127.0.0.1") && proxyPorts.includes("6032"),
+    proxyOk:
+      proxyPorts.includes("127.0.0.1") &&
+      (proxyPorts.includes("6033") || proxyPorts.includes("16033")),
   };
 }
 
@@ -437,6 +440,8 @@ function probeHostTcp(host, port, timeoutMs = 4000) {
 
 /** TCP probe for host-run worker shared infra (requires docker-compose.dev-ports.yml). */
 export async function assertHostInfraReachable() {
+  process.env.MYSQL_PROXY_PORT = resolveMysqlProxyHostPort();
+
   if (existsSync(SHARED_COMPOSE_DEV_PORTS)) {
     let ports = sharedDevPortsPublished();
     if (!ports.mongoOk || !ports.proxyOk) {
@@ -445,7 +450,7 @@ export async function assertHostInfraReachable() {
       ports = sharedDevPortsPublished();
       if (!ports.mongoOk || !ports.proxyOk) {
         throw new SuiteError(
-          "Shared dev ports still missing after reconcile (127.0.0.1:27017, 127.0.0.1:6032).",
+          "Shared dev ports still missing after reconcile (127.0.0.1:27017, ProxySQL tenant port on host).",
         );
       }
     }
@@ -453,10 +458,11 @@ export async function assertHostInfraReachable() {
 
   const mongoHost = process.env.WORKER_SHARED_MONGO_HOST ?? "127.0.0.1";
   const mysqlHost = process.env.WORKER_SHARED_MYSQL_HOST ?? "127.0.0.1";
+  const proxyPort = parseInt(process.env.MYSQL_PROXY_PORT ?? "6033", 10);
   const checks = [
     { host: mongoHost, port: 27017, label: "Mongo (stockix-mongo)" },
     { host: mysqlHost, port: 3306, label: "MySQL (stockix-mysql)" },
-    { host: mysqlHost, port: 6032, label: "ProxySQL admin" },
+    { host: mysqlHost, port: proxyPort, label: "ProxySQL tenant (MYSQL_PROXY_PORT)" },
   ];
   for (const { host, port, label } of checks) {
     try {
