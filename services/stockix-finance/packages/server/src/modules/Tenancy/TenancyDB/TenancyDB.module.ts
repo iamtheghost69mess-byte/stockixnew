@@ -78,32 +78,42 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
       pool: { min: 0, max: 7 },
       ...knexSnakeCaseMappers({ upperCase: true }),
     });
-    // Patch the seed runner to bypass webpack's synthetic require (webpackEmptyContext).
-    // Knex 0.95.x's Seeder._waterfallBatch calls require(filepath) at runtime via
-    // importFile(), which webpack can't resolve for dynamic paths. We replace the method
-    // on the instance with one that uses nativeRequire.
+    // Knex 0.95.x exposes `seed` as a getter (`get() { return new Seeder(this); }`),
+    // so patching the returned instance is useless — every access creates a fresh Seeder.
+    // We redefine the getter on the instance itself via Object.defineProperty so that
+    // every new Seeder is immediately patched to use nativeRequire instead of webpack's
+    // synthetic require() (webpackEmptyContext) in _waterfallBatch.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const seeder = (knexInstance as any).seed;
-    seeder._validateSeedStructure = async (filepath: string) => filepath;
-    seeder._waterfallBatch = async (seeds: string[]) => {
-      const log: string[] = [];
-      for (const seedPath of seeds) {
+    const SeederCtor = ((knexInstance as any).seed as any).constructor;
+    Object.defineProperty(knexInstance, 'seed', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      get: function (): any {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mod: any = nativeRequire(seedPath);
-        const seedFn =
-          typeof mod?.seed === 'function'
-            ? mod.seed
-            : mod?.default?.seed;
-        if (typeof seedFn !== 'function') {
-          throw new Error(
-            `Invalid seed file: ${seedPath} must have a seed function`,
-          );
-        }
-        await seedFn(knexInstance);
-        log.push(seedPath);
-      }
-      return [log];
-    };
+        const seeder: any = new SeederCtor(knexInstance);
+        seeder._validateSeedStructure = async (filepath: string) => filepath;
+        seeder._waterfallBatch = async (seeds: string[]) => {
+          const log: string[] = [];
+          for (const seedPath of seeds) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mod: any = nativeRequire(seedPath);
+            const seedFn =
+              typeof mod?.seed === 'function'
+                ? mod.seed
+                : mod?.default?.seed;
+            if (typeof seedFn !== 'function') {
+              throw new Error(
+                `Invalid seed file: ${seedPath} must have a seed function`,
+              );
+            }
+            await seedFn(knexInstance);
+            log.push(seedPath);
+          }
+          return [log];
+        };
+        return seeder;
+      },
+      configurable: true,
+    });
 
     lruCache.set(database, knexInstance);
 
