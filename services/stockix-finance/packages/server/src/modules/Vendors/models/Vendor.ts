@@ -5,7 +5,7 @@ import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.dec
 import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
 import { VendorMeta } from './Vendor.meta';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { VendorDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/Contacts/Vendors/constants';
 
 export class VendorQueryBuilder<
   M extends Model,
@@ -25,7 +25,7 @@ export class VendorQueryBuilder<
 
 @ExportableModel()
 @InjectModelMeta(VendorMeta)
-@InjectModelDefaultViews(VendorDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class Vendor extends TenantBaseModel {
   contactService: string;
   contactType: string;

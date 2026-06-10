@@ -36,8 +36,11 @@ export interface IInventoryDetailsOpening {
   value: IInventoryDetailsNumber;
 }
 
-export interface IInventoryDetailsClosing extends IInventoryDetailsOpening {
+export interface IInventoryDetailsClosing {
   nodeType: 'CLOSING_ENTRY';
+  date: IInventoryDetailsDate;
+  quantity: IInventoryDetailsNumber;
+  value: IInventoryDetailsNumber;
 }
 
 export interface IInventoryDetailsItem {

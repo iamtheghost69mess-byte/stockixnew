@@ -62,7 +62,7 @@ import { CurrenciesModule } from '@/modules/Currencies/Currencies.module';
     BullModule.registerQueue({ name: SendSaleEstimateMailQueue }),
     BullBoardModule.forFeature({
       name: SendSaleEstimateMailQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
   ],
   controllers: [SaleEstimatesController],

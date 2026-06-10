@@ -1,4 +1,3 @@
-import { Container } from 'typedi';
 import { EventEmitter2 } from 'eventemitter2';
 
 interface IEventPublisherArgs {
@@ -41,7 +40,7 @@ export class EventPublisher {
       },
     };
     for (const Subscriber of subscribers) {
-      const subscriberInstance = Container.get(Subscriber);
+      const subscriberInstance = new (Subscriber as unknown as new () => EventSubscriber)();
       subscriberInstance.attach(bus);
     }
   }

@@ -10,14 +10,14 @@ import { ImportableModel } from '@/modules/Import/decorators/Import.decorator';
 import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
 import { VendorCreditMeta } from './VendorCredit.meta';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { VendorCreditDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/Purchases/VendorCredits/constants';
 import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
 
 @InjectAttachable()
 @ExportableModel()
 @ImportableModel()
 @InjectModelMeta(VendorCreditMeta)
-@InjectModelDefaultViews(VendorCreditDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class VendorCredit extends TenantBaseModel {
   vendorId: number;
   amount: number;

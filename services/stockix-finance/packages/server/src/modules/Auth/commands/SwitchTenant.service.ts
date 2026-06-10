@@ -40,6 +40,9 @@ export class SwitchTenantService {
       organizationId,
     );
 
+    this.clsService.set('tenantId', tenant.id);
+    this.clsService.set('organizationId', tenant.organizationId);
+
     return {
       accessToken,
       organizationId: tenant.organizationId,

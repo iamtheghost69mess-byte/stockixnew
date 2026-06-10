@@ -93,7 +93,7 @@ export class EditUserService {
   validateMutateRoleNotAuthorizedUser(
     oldTenantUser: ModelObject<TenantUser>,
     editUserDTO: EditUserDto,
-    authorizedUser: ModelObject<SystemUser>,
+    authorizedUser: SystemUser,
   ) {
     if (
       authorizedUser.id === oldTenantUser.systemUserId &&

@@ -43,7 +43,10 @@ export function PaymentReceivedSendMailForm({
     { setSubmitting }: FormikHelpers<PaymentReceivedSendMailFormValues>,
   ) => {
     setSubmitting(true);
-    sendPaymentMail([paymentReceivedId, values])
+    sendPaymentMail([
+      paymentReceivedId,
+      values as unknown as Record<string, unknown>,
+    ])
       .then(() => {
         AppToaster.show({
           message: 'The invoice mail has been sent to the customer.',

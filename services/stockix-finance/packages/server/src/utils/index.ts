@@ -1,6 +1,18 @@
 import bcrypt from 'bcryptjs';
-import moment from 'moment';
+import moment, { unitOfTime } from 'moment';
 import _ from 'lodash';
+
+type DateRangeUnit = 'day' | 'month' | 'quarter' | 'year';
+
+const toMomentUnit = (addType: DateRangeUnit): unitOfTime.StartOf =>
+  addType === 'quarter' ? 'quarter' : addType;
+
+const toDurationUnit = (
+  addType: DateRangeUnit
+): unitOfTime.DurationConstructor =>
+  addType === 'quarter'
+    ? 'quarters'
+    : (`${addType}s` as unitOfTime.DurationConstructor);
 import path from 'path';
 import * as R from 'ramda';
 
@@ -25,11 +37,13 @@ const origin = (request) => `${request.protocol}://${request.hostname}`;
 const dateRangeCollection = (
   fromDate,
   toDate,
-  addType = 'day',
+  addType: DateRangeUnit = 'day',
   increment = 1
 ) => {
   const collection = [];
   const momentFromDate = moment(fromDate);
+  const momentUnit = toMomentUnit(addType);
+  const durationUnit = toDurationUnit(addType);
   let dateFormat = '';
 
   switch (addType) {
@@ -47,10 +61,10 @@ const dateRangeCollection = (
   }
   for (
     let i = momentFromDate;
-    i.isBefore(toDate, addType) || i.isSame(toDate, addType);
-    i.add(increment, `${addType}s`)
+    i.isBefore(toDate, momentUnit) || i.isSame(toDate, momentUnit);
+    i.add(increment, durationUnit)
   ) {
-    collection.push(i.endOf(addType).format(dateFormat));
+    collection.push(i.endOf(momentUnit).format(dateFormat));
   }
   return collection;
 };
@@ -58,21 +72,23 @@ const dateRangeCollection = (
 const dateRangeFromToCollection = (
   fromDate,
   toDate,
-  addType = 'day',
+  addType: DateRangeUnit = 'day',
   increment = 1
 ) => {
   const collection = [];
   const momentFromDate = moment(fromDate);
+  const momentUnit = toMomentUnit(addType);
+  const durationUnit = toDurationUnit(addType);
   const dateFormat = 'YYYY-MM-DD';
 
   for (
     let i = momentFromDate;
-    i.isBefore(toDate, addType) || i.isSame(toDate, addType);
-    i.add(increment, `${addType}s`)
+    i.isBefore(toDate, momentUnit) || i.isSame(toDate, momentUnit);
+    i.add(increment, durationUnit)
   ) {
     collection.push({
-      fromDate: i.startOf(addType).format(dateFormat),
-      toDate: i.endOf(addType).format(dateFormat),
+      fromDate: i.startOf(momentUnit).format(dateFormat),
+      toDate: i.endOf(momentUnit).format(dateFormat),
     });
   }
   return collection;
@@ -227,14 +243,15 @@ const entriesAmountDiff = (
     })
     .value();
 
-  return _.chain(newEntriesTable)
-    .mapValues((value, key) => ({
-      [idAttribute]: key,
-      [amountAttribute]: value,
-    }))
-    .filter((entry) => entry[amountAttribute] != 0)
-    .values()
-    .value();
+  return Object.values(
+    _.pickBy(
+      _.mapValues(newEntriesTable, (value, key) => ({
+        [idAttribute]: key,
+        [amountAttribute]: value,
+      })),
+      (entry) => entry[amountAttribute] != 0
+    )
+  );
 };
 
 const convertEmptyStringToNull = (value) => {
@@ -435,7 +452,7 @@ const nestedArrayToFlatten = (
 
   return collection.reduce((items, currentValue, index) => {
     let localItems = [...items];
-    const parsedItem = parseObject(currentValue, level);
+    const parsedItem = parseObject(currentValue);
     localItems.push(parsedItem);
 
     if (Array.isArray(currentValue[property])) {

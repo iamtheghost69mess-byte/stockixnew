@@ -1,8 +1,7 @@
 import './bootstrap-decrypt-env';
 import './before';
-import { Container } from 'typedi';
-import LoggerInstance from '@/loaders/logger';
 import * as Sentry from '@sentry/node';
+import { json, urlencoded } from 'express';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ClsMiddleware } from 'nestjs-cls';
@@ -10,16 +9,15 @@ import * as path from 'path';
 import './utils/moment-mysql';
 import { AppModule } from './modules/App/App.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import {
+  isHttpOriginAllowed,
+  resolveHttpAllowedOrigins,
+} from './common/http/http-allowed-origins';
 
 global.__public_dirname = path.join(__dirname, '..', 'public');
 global.__static_dirname = path.join(__dirname, '../static');
 global.__views_dirname = path.join(global.__static_dirname, '/views');
 global.__images_dirname = path.join(global.__static_dirname, '/images');
-
-// Legacy typedi subscribers still resolve `logger` during Nest event emission.
-if (!Container.has('logger')) {
-  Container.set('logger', LoggerInstance);
-}
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error(
@@ -59,6 +57,52 @@ async function bootstrap() {
   });
   app.set('query parser', 'extended');
   app.setGlobalPrefix('/api');
+
+  const corsOrigins = resolveHttpAllowedOrigins();
+  if (corsOrigins.length === 0 && process.env.NODE_ENV === 'production') {
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        type: 'cors_config',
+        message:
+          'No HTTP CORS origins configured — set CORS_ALLOWED_ORIGINS or PUBLIC_BASE_URL',
+      }),
+    );
+  }
+  app.enableCors({
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin || isHttpOriginAllowed(origin, corsOrigins)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'organization-id',
+      'Accept-Language',
+    ],
+  });
+
+  // helmet@3 is CJS; namespace import breaks under webpack production bundle.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const helmet = require('helmet') as typeof import('helmet');
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+  app.use(json({ limit: process.env.REQUEST_BODY_LIMIT ?? '2mb' }));
+  app.use(
+    urlencoded({ extended: true, limit: process.env.REQUEST_BODY_LIMIT ?? '2mb' }),
+  );
 
   // create and mount the middleware manually here
   app.use(new ClsMiddleware({}).use);

@@ -66,6 +66,12 @@ function workerProxySqlAdminHost(): string {
   return process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
 }
 
+function workerProxySqlTenantPort(): number {
+  const raw = process.env.MYSQL_PROXY_PORT ?? "6033";
+  const port = parseInt(String(raw), 10);
+  return Number.isFinite(port) ? port : 6033;
+}
+
 function proxySqlAdminCredentials(): { user: string; password: string } {
   return {
     user: process.env.PROXYSQL_ADMIN_USER ?? "admin",
@@ -145,17 +151,18 @@ async function verifyProxySqlTenantLogin(
   log: (m: string) => void,
 ): Promise<void> {
   const host = workerProxySqlAdminHost();
+  const port = workerProxySqlTenantPort();
   const mysql2 = await import("mysql2/promise");
   const conn = await mysql2.createConnection({
     host,
-    port: 6033,
+    port,
     user: username,
     password,
     connectTimeout: 10_000,
   });
   try {
     await conn.query("SELECT 1");
-    log(`[db-provision] ProxySQL tenant login verified: ${username}@${host}:6033`);
+    log(`[db-provision] ProxySQL tenant login verified: ${username}@${host}:${port}`);
   } finally {
     await conn.end();
   }

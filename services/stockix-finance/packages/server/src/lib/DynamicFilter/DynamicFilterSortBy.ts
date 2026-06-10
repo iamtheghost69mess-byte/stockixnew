@@ -7,7 +7,7 @@ interface ISortRole {
 }
 
 export default class DynamicFilterSortBy extends DynamicFilterRoleAbstructor {
-  private sortRole: ISortRole = {};
+  private sortRole: ISortRole;
 
   /**
    * Constructor method.
@@ -36,7 +36,7 @@ export default class DynamicFilterSortBy extends DynamicFilterRoleAbstructor {
    * @param field 
    * @returns {string}
    */
-  private getFieldComparatorRelationColumn = (field): string => {
+  private getSortFieldComparatorRelationColumn = (field): string => {
     const relation = this.model.relationMappings[field.relationKey];
 
     if (relation) {
@@ -53,9 +53,9 @@ export default class DynamicFilterSortBy extends DynamicFilterRoleAbstructor {
    * @param {IModel} field
    * @returns {string}
    */
-  private getFieldComparatorColumn = (field): string => {
+  private getSortFieldComparatorColumn = (field): string => {
     return field.fieldType === FIELD_TYPE.RELATION
-      ? this.getFieldComparatorRelationColumn(field)
+      ? this.getSortFieldComparatorRelationColumn(field)
       : `${this.tableName}.${field.column}`;
   };
 
@@ -64,7 +64,7 @@ export default class DynamicFilterSortBy extends DynamicFilterRoleAbstructor {
    */
   public buildQuery = () => {
     const field = this.model.getField(this.sortRole.fieldKey);
-    const comparatorColumn = this.getFieldComparatorColumn(field);
+    const comparatorColumn = this.getSortFieldComparatorColumn(field);
 
     // Sort custom query.
     if (typeof field.sortCustomQuery !== 'undefined') {

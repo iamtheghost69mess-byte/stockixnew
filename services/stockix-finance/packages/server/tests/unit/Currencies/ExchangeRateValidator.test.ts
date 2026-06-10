@@ -1,8 +1,8 @@
 import {
   validateForeignCurrencyExchangeRate,
   EXCHANGE_RATE_ERRORS,
-} from '@/services/Currencies/ExchangeRateValidator';
-import { ServiceError } from '@/exceptions';
+} from '@/modules/Currencies/ExchangeRateValidator';
+import { ServiceError } from '@/modules/Items/ServiceError';
 
 describe('validateForeignCurrencyExchangeRate', () => {
   const BASE = 'USD';

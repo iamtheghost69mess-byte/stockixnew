@@ -1,6 +1,5 @@
 import fs from 'fs';
 import Mustache from 'mustache';
-import { Container } from 'typedi';
 import path from 'path';
 import { IMailable } from '@/interfaces';
 
@@ -37,17 +36,9 @@ export default class Mail {
    * Sends the given mail to the target address.
    */
   public send() {
-    return new Promise((resolve, reject) => {
-      const Mail = Container.get('mail');
-
-      Mail.sendMail(this.mailOptions, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(true);
-      });
-    });
+    return Promise.reject(
+      new Error('Legacy Mail.send() is deprecated — use Nest MailModule instead'),
+    );
   }
 
   /**

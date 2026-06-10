@@ -1,6 +1,10 @@
 import { OPERATION } from '../LogicEvaluation/Parser';
 
 export default class QueryParser {
+  private tree: any;
+  private queries: Record<string, any>;
+  private query: any;
+
   constructor(tree, queries) {
     this.tree = tree;
     this.queries = queries;

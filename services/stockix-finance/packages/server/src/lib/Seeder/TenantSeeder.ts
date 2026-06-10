@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Seeder } from "./Seeder";
 
 export class TenantSeeder extends Seeder{

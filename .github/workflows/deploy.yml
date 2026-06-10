@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       skip_quality_gate:
-        description: Emergency deploy — skip quality gate (infra/hotfix only; use with caution)
+        description: Emergency deploy — skip quality gate (ignored on main branch; infra/hotfix only elsewhere)
         type: boolean
         default: false
   workflow_call:
@@ -33,8 +33,9 @@ env:
 jobs:
   quality-gate:
     name: Quality gate
+    # skip_quality_gate is ignored on main — production deploys always run the gate.
     if: |
-      (github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_call' || inputs.skip_quality_gate != true) &&
+      (github.ref == 'refs/heads/main' || github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_call' || inputs.skip_quality_gate != true) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -112,8 +113,37 @@ jobs:
       - name: Type check — PMS
         run: pnpm --filter @stockix/pms exec tsc --noEmit
 
+      - name: Type check — Finance server
+        working-directory: services/stockix-finance
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter @stockix/server typecheck
+        env:
+          HUSKY: "0"
+
+      - name: Type check — Finance webapp
+        working-directory: services/stockix-finance
+        run: pnpm --filter @stockix/webapp typecheck
+        env:
+          HUSKY: "0"
+
+      - name: Type check — @stockix/sdk-ts
+        if: ${{ hashFiles('services/stockix-finance/shared/sdk-ts/package.json') != '' }}
+        working-directory: services/stockix-finance
+        run: pnpm --filter @stockix/sdk-ts typecheck
+        env:
+          HUSKY: "0"
+
       - name: Tenant scope audit
         run: pnpm --filter api check:tenant-scope
+
+      - name: Finance tenant scope audit
+        working-directory: services/stockix-finance
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter @stockix/server check:tenant-scope
+        env:
+          HUSKY: "0"
 
       - name: API route registry checks
         run: |
@@ -212,6 +242,30 @@ jobs:
 
       - name: Enforce architecture phases
         run: pnpm architecture:validate
+
+      - name: Finance architecture guard
+        run: pnpm finance:architecture-guard
+
+      - name: Finance phase safety
+        run: pnpm finance:phase-safety
+
+      - name: Finance dependency audit
+        run: pnpm finance:dependency-audit
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Finance Docker — build runtime & migration images
+        run: pnpm docker:prebuild:force
+        timeout-minutes: 45
+        env:
+          DOCKER_BUILDKIT: "1"
+
+      - name: Finance Docker — runtime image verify
+        run: pnpm docker:check
+
+      - name: Finance performance baseline
+        run: pnpm finance:perf-baseline --check
 
   build-images:
     name: Build images
@@ -410,6 +464,9 @@ jobs:
           docker image prune -af || true
           docker volume prune -f || true
           echo "=== Building tenant images ==="
+          # Finance tenant DB migrations: set MIGRATION_MODE=true on each tenant server
+          # before running database_migration, then clear after server is healthy.
+          # See services/stockix-finance/MIGRATION.md
           pkill -f "prebuild-tenant-images" 2>/dev/null || true
           pkill -f "pnpm install.*stockix-finance" 2>/dev/null || true
           sleep 2

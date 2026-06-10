@@ -19,7 +19,7 @@ import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/Inje
 import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
 import { SaleReceiptMeta } from './SaleReceipt.meta';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { SaleReceiptDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/Sales/Receipts/constants';
 
 const ExtendedModel = R.pipe(
   CustomViewBaseModelMixin,
@@ -32,7 +32,7 @@ const ExtendedModel = R.pipe(
 @ExportableModel()
 @ImportableModel()
 @InjectModelMeta(SaleReceiptMeta)
-@InjectModelDefaultViews(SaleReceiptDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class SaleReceipt extends ExtendedModel {
   public amount!: number;
   public exchangeRate!: number;

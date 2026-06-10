@@ -17,12 +17,12 @@ import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.dec
 import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
 import { SaleInvoiceMeta } from './SaleInvoice.meta';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { SaleInvoiceDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/Sales/constants';
 
 @InjectAttachable()
 @ExportableModel()
 @InjectModelMeta(SaleInvoiceMeta)
-@InjectModelDefaultViews(SaleInvoiceDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class SaleInvoice extends TenantBaseModel {
   public taxAmountWithheld: number;
   public balance: number;

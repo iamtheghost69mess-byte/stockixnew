@@ -1,5 +1,9 @@
+import { IDynamicFilter, IModel } from '@/interfaces';
 
 export default class DynamicFilterAbstructor {
+  protected model: IModel;
+  protected dynamicFilters: IDynamicFilter[] = [];
+
   /**
    * Extract relation table name from relation.
    * @param {String} column -

@@ -1,22 +1,29 @@
-import { Model, mixin, raw } from 'objection';
-import TenantModel from '@/models/TenantModel';
+import { Model, raw } from 'objection';
 import { buildFilterQuery } from '@/lib/ViewRolesBuilder';
-import ModelSetting from '@/models/ModelSetting';
-import ExpenseSettings from '@/models/Expense.Settings';
-import CustomViewBaseModel from '@/models/CustomViewBaseModel';
-import { DEFAULT_VIEWS } from '@/services/Expenses/constants';
-import ModelSearchable from '@/models/ModelSearchable';
 import moment from 'moment';
+import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
+import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
+import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
+import { ExportableModel } from '@/modules/Export/decorators/ExportableModel.decorator';
+import { DEFAULT_VIEWS } from '@/constants/Expenses/constants';
+import { ExpenseMeta } from './Expense.meta';
+import { Account } from '@/modules/Accounts/models/Account.model';
+import { ExpenseCategory } from '@/modules/Expenses/models/ExpenseCategory.model';
+import { Branch } from '@/modules/Branches/models/Branch.model';
+import { Media } from '@/models/Media';
+import { Document } from '@/modules/ChromiumlyTenancy/models/Document';
 
-export class Expense extends mixin(TenantModel,
-  ModelSetting as any,
-  CustomViewBaseModel as any,
-  ModelSearchable as any
-) {
+@ExportableModel()
+@InjectModelMeta(ExpenseMeta)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
+export class Expense extends TenantBaseModel {
   id: number;
   totalAmount: number;
   exchangeRate: number;
+  currencyCode: string;
   date: Date | string;
+  paymentDate: Date | string;
+  paymentAccountId: number;
   referenceNo?: string;
   description?: string;
   publishedAt: Date | string | null;
@@ -26,6 +33,10 @@ export class Expense extends mixin(TenantModel,
   branchId?: number;
   userId: number;
   createdAt: Date;
+
+  paymentAccount?: Account;
+  categories?: ExpenseCategory[];
+  attachments?: Document[];
 
   /**
    * Table name
@@ -192,15 +203,10 @@ export class Expense extends mixin(TenantModel,
    * Relationship mapping.
    */
   static get relationMappings() {
-    const Account = require('models/Account');
-    const ExpenseCategory = require('models/ExpenseCategory');
-    const Media = require('models/Media');
-    const Branch = require('models/Branch');
-
     return {
       paymentAccount: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Account.default,
+        modelClass: Account,
         join: {
           from: 'expenses_transactions.paymentAccountId',
           to: 'accounts.id',
@@ -208,7 +214,7 @@ export class Expense extends mixin(TenantModel,
       },
       categories: {
         relation: Model.HasManyRelation,
-        modelClass: ExpenseCategory.default,
+        modelClass: ExpenseCategory,
         join: {
           from: 'expenses_transactions.id',
           to: 'expense_transaction_categories.expenseId',
@@ -223,7 +229,7 @@ export class Expense extends mixin(TenantModel,
        */
       branch: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Branch.default,
+        modelClass: Branch,
         join: {
           from: 'expenses_transactions.branchId',
           to: 'branches.id',
@@ -231,7 +237,7 @@ export class Expense extends mixin(TenantModel,
       },
       media: {
         relation: Model.ManyToManyRelation,
-        modelClass: Media.default,
+        modelClass: Media,
         join: {
           from: 'expenses_transactions.id',
           through: {
@@ -245,17 +251,6 @@ export class Expense extends mixin(TenantModel,
         },
       },
     };
-  }
-
-  static get meta() {
-    return ExpenseSettings;
-  }
-
-  /**
-   * Retrieve the default custom views, roles and columns.
-   */
-  static get defaultViews() {
-    return DEFAULT_VIEWS;
   }
 
   /**

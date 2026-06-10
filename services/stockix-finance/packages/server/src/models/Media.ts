@@ -1,36 +1,11 @@
-import { Model } from 'objection';
-import TenantModel from '@/models/TenantModel';
+import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
 
-export default class Media extends TenantModel {
-  /**
-   * Table name
-   */
+export class Media extends TenantBaseModel {
   static get tableName() {
     return 'media';
   }
 
-  /**
-   * Model timestamps.
-   */
   get timestamps() {
     return ['createdAt', 'updatedAt'];
-  }
-
-  /**
-   * Relationship mapping.
-   */
-  static get relationMappings() {
-    const MediaLink = require('models/MediaLink');
-
-    return {
-      links: {
-        relation: Model.HasManyRelation,
-        modelClass: MediaLink.default,
-        join: {
-          from: 'media.id',
-          to: 'media_links.media_id',
-        },
-      },
-    };
   }
 }

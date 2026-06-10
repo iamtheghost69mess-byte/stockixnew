@@ -3,7 +3,7 @@ import { TenantBaseModel } from '@/modules/System/models/TenantBaseModel';
 import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/InjectModelMeta.decorator';
 import { CustomerMeta } from './Customer.meta';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { CustomerDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/Contacts/Customers/constants';
 import { BaseQueryBuilder } from '@/models/Model';
 import { Knex } from 'knex';
 
@@ -24,7 +24,7 @@ export class CustomerQueryBuilder<
 }
 
 @InjectModelMeta(CustomerMeta)
-@InjectModelDefaultViews(CustomerDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class Customer extends TenantBaseModel {
   contactService: string;
   contactType: string;

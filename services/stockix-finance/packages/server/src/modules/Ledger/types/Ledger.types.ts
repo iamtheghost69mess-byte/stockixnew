@@ -28,16 +28,20 @@ export interface ICommonLedgerEntry {
   exchangeRate: number;
   transactionType: string;
   transactionId: number;
+  transactionSubType?: string;
   date: Date | string;
   userId?: number;
   branchId?: number;
   transactionNumber?: string;
   referenceNumber?: string;
-  createdAt?: Date;
+  createdAt?: Date | string;
   indexGroup?: number;
+  taxRateId?: number;
+  taxRate?: number;
 }
 
 export interface ILedgerEntry extends ICommonLedgerEntry {
+  id?: number;
   accountId?: number;
   accountNormal: string;
   contactId?: number;

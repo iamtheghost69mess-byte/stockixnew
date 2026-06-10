@@ -9,3 +9,6 @@ packages:
   - "services/posnew/packages/ui"
   - "services/posnew/packages/domain-access"
   - "services/posnew/packages/platform-api"
+  - "services/stockix-finance"
+  - "services/stockix-finance/packages/*"
+  - "services/stockix-finance/shared/*"

@@ -1,3 +1,4 @@
+import { Response } from 'express';
 import {
   ApiExtraModels,
   ApiOperation,
@@ -19,6 +20,8 @@ import {
   Query,
   HttpCode,
   UseGuards,
+  Headers,
+  Res,
 } from '@nestjs/common';
 import { BillsApplication } from './Bills.application';
 import { CreateBillDto, EditBillDto } from './dtos/Bill.dto';
@@ -35,6 +38,7 @@ import { PermissionGuard } from '@/modules/Roles/Permission.guard';
 import { AuthorizationGuard } from '@/modules/Roles/Authorization.guard';
 import { AbilitySubject } from '@/modules/Roles/Roles.types';
 import { BillAction } from './Bills.types';
+import { AcceptType } from '@/constants/accept-type';
 
 @Controller('bills')
 @ApiTags('Bills')
@@ -180,8 +184,24 @@ export class BillsController {
     type: Number,
     description: 'The bill id',
   })
-  getBill(@Param('id') billId: number) {
-    return this.billsApplication.getBill(billId);
+  async getBill(
+    @Param('id') billId: number,
+    @Headers('accept') acceptHeader: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (acceptHeader?.includes(AcceptType.ApplicationPdf)) {
+      const [pdfContent, filename] =
+        await this.billsApplication.getBillPdf(billId);
+
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Length': pdfContent.length,
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      });
+      res.status(200).send(pdfContent);
+    } else {
+      return this.billsApplication.getBill(billId);
+    }
   }
 
   @Patch(':id/open')

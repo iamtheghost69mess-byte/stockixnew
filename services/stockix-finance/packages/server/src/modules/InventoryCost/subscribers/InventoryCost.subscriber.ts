@@ -32,7 +32,7 @@ export class InventoryCostSubscriber {
     trx,
   }: IInventoryTransactionsCreatedPayload) {
     const itemsQuantityChanges = this.itemsQuantitySync.getItemsQuantityChanges(
-      inventoryTransactions,
+      inventoryTransactions as any,
     );
     await this.itemsQuantitySync.changeItemsQuantity(itemsQuantityChanges, trx);
   }
@@ -52,7 +52,7 @@ export class InventoryCostSubscriber {
     if (inImportPreviewScope) return;
 
     await this.saleInvoicesCost.computeItemsCostByInventoryTransactions(
-      inventoryTransactions,
+      inventoryTransactions as any,
     );
   }
 

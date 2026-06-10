@@ -1,4 +1,3 @@
-import { isEmpty } from 'lodash';
 import {
   Injectable,
   CanActivate,
@@ -13,6 +12,7 @@ import { ClsService } from 'nestjs-cls';
 import { IS_PUBLIC_ROUTE } from '../Auth/Auth.constants';
 import { getAuthApiKey } from '../Auth/Auth.utils';
 import UserTenant from '@/modules/System/models/UserTenant';
+import { TenantModel } from '@/modules/System/models/TenantModel';
 
 export const IS_TENANT_AGNOSTIC = 'IS_TENANT_AGNOSTIC';
 
@@ -25,6 +25,8 @@ export class TenancyGlobalGuard implements CanActivate {
     private readonly clsService: ClsService,
     @Inject(UserTenant.name)
     private readonly userTenantModel: typeof UserTenant,
+    @Inject(TenantModel.name)
+    private readonly tenantModel: typeof TenantModel,
   ) {}
 
   /**
@@ -85,6 +87,18 @@ export class TenancyGlobalGuard implements CanActivate {
           'Call /auth/switch-tenant to change organization.',
       );
     }
+
+    const tenant = await this.tenantModel
+      .query()
+      .findOne({ organizationId })
+      .first();
+
+    if (!tenant) {
+      throw new ForbiddenException('Organization not found.');
+    }
+
+    this.clsService.set('tenantId', tenant.id);
+    this.clsService.set('organizationId', organizationId);
 
     return true;
   }

@@ -2,6 +2,7 @@ import { Knex } from 'knex';
 import { ISystemUser } from './User';
 import { IFilterRole } from './DynamicFilter';
 import { IAccount } from './Account';
+import { IFilterMeta } from './Model';
 
 export interface IPaginationMeta {
   total: number;
@@ -85,6 +86,8 @@ export interface IExpenseCommonDTO {
 
 export interface IExpenseCreateDTO extends IExpenseCommonDTO {}
 export interface IExpenseEditDTO extends IExpenseCommonDTO {}
+
+type IExpenseDTO = IExpenseCreateDTO | IExpenseEditDTO;
 
 export interface IExpenseCategoryDTO {
   id?: number;

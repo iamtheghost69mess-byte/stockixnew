@@ -96,7 +96,7 @@ export function RegisterTenancyModel(model: typeof Model) {
     },
     strict: true,
     type: 'function',
-  });
+  } as any);
 }
 
 // Register all models using the decorator

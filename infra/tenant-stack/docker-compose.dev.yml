@@ -5,9 +5,9 @@ services:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
-      target: app
+      target: runtime
   database_migration:
     build:
       context: ${STOCKIX_TENANT_APP_ROOT}
       dockerfile: packages/server/Dockerfile
-      target: migration
+      target: migration-runtime

@@ -1,6 +1,7 @@
 export * from './components/PaperTemplate';
 export * from './components/InvoicePaperTemplate';
 export * from './components/CreditNotePaperTemplate';
+export * from './components/BillPaperTemplate';
 export * from './components/EstimatePaperTemplate';
 export * from './components/ReceiptPaperTemplate';
 export * from './components/PaymentReceivedPaperTemplate';
@@ -9,6 +10,7 @@ export * from './components/ExportResourceTableTemplate';
 
 export * from './renders/render-invoice-paper-template';
 export * from './renders/render-credit-note-paper-template';
+export * from './renders/render-bill-paper-template';
 export * from './renders/render-estimate-paper-template';
 export * from './renders/render-receipt-paper-template';
 export * from './renders/render-payment-received-paper-template';

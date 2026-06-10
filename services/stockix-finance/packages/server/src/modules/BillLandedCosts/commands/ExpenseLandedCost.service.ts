@@ -1,7 +1,6 @@
 import { Expense } from '@/modules/Expenses/models/Expense.model';
 import { Injectable } from '@nestjs/common';
 import { isEmpty } from 'lodash';
-import { ModelObject } from 'objection';
 import {
   ILandedCostTransaction,
   ILandedCostTransactionEntry,
@@ -17,7 +16,7 @@ export class ExpenseLandedCost {
    * @returns {ILandedCostTransaction}
    */
   public transformToLandedCost = (
-    expense: ModelObject<Expense>,
+    expense: Expense,
   ): ILandedCostTransaction => {
     const name = 'EXP-100';
 

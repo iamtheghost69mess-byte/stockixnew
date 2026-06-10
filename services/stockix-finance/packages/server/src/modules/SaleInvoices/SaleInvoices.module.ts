@@ -89,7 +89,7 @@ import { ValidateBulkDeleteSaleInvoicesService } from './ValidateBulkDeleteSaleI
     BullModule.registerQueue({ name: SendSaleInvoiceQueue }),
     BullBoardModule.forFeature({
       name: SendSaleInvoiceQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
   ],
   controllers: [SaleInvoicesController],

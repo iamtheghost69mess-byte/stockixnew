@@ -250,5 +250,5 @@ export function useBillPaymentTransactions(id, props) {
 }
 
 export function usePdfBill(billId) {
-  return useRequestPdf(`purchases/bills/${billId}`);
+  return useRequestPdf({ url: `bills/${billId}` });
 }

@@ -1,4 +1,5 @@
 import { forwardRef, Module } from '@nestjs/common';
+import { TenancyModule } from '../Tenancy/Tenancy.module';
 import { TransactionLandedCostEntriesService } from './TransactionLandedCostEntries.service';
 import { AllocateLandedCostService } from './commands/AllocateLandedCost.service';
 import { LandedCostGLEntriesSubscriber } from './commands/LandedCostGLEntries.subscriber';
@@ -18,7 +19,7 @@ import { ExpenseLandedCost } from './commands/ExpenseLandedCost.service';
 import { BillLandedCost } from './commands/BillLandedCost.service';
 
 @Module({
-  imports: [forwardRef(() => InventoryCostModule), LedgerModule],
+  imports: [forwardRef(() => InventoryCostModule), LedgerModule, TenancyModule],
   providers: [
     AllocateLandedCostService,
     TransactionLandedCostEntriesService,

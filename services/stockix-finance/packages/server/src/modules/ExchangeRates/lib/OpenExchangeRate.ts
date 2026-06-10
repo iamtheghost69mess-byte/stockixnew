@@ -1,4 +1,4 @@
-import Axios from 'axios';
+import axios from 'axios';
 import {
   EchangeRateErrors,
   IExchangeRateService,
@@ -27,7 +27,7 @@ export class OpenExchangeRate implements IExchangeRateService {
     this.validateApiIdExistance();
 
     try {
-      const result = await Axios.get(OPEN_EXCHANGE_RATE_LATEST_URL, {
+      const result = await axios.get(OPEN_EXCHANGE_RATE_LATEST_URL, {
         params: {
           app_id: this.appId,
           base: baseCurrency,

@@ -9,10 +9,10 @@ import { COMPARATOR_TYPE, FIELD_TYPE } from './constants';
 export default abstract class DynamicFilterAbstructor
   implements IDynamicFilter
 {
-  protected filterRoles: IFilterRole[] = [];
+  public filterRoles: IFilterRole[] = [];
   protected tableName: string;
   protected model: IModel;
-  protected responseMeta: { [key: string]: any } = {};
+  public responseMeta: { [key: string]: any } = {};
   public relationFields = [];
 
   /**
@@ -384,4 +384,18 @@ export default abstract class DynamicFilterAbstructor
    * On initialize the registered dynamic filter.
    */
   onInitialize() {}
+
+  /**
+   * Builds database query of filter roles.
+   */
+  buildQuery(): (builder: any) => void {
+    return () => {};
+  }
+
+  /**
+   * Retrieve response metadata.
+   */
+  getResponseMeta(): { [key: string]: any } {
+    return this.responseMeta;
+  }
 }

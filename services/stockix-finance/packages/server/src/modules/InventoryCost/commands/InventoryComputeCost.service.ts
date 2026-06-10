@@ -44,7 +44,7 @@ export class InventoryComputeCostService {
     @Inject(SETTINGS_PROVIDER)
     private readonly settingsStore: () => SettingsStore,
   ) {
-    this.redisClient = this.redisService.getClient();
+    this.redisClient = this.redisService.getClient() as any;
   }
 
   /**

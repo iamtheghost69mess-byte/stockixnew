@@ -115,7 +115,7 @@ export class PlaidSyncDb {
       cashflowAccount.id,
     );
     const uncategorizedTransDTOs =
-      R.map(transformTransaction)(plaidTranasctions);
+      R.map(transformTransaction)(plaidTranasctions as any);
 
     // Creating account transaction queue.
     await bluebird.map(

@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { ClsService } from 'nestjs-cls';
 import * as nodePath from 'path';
 import {
   FINANCE_WEBAPP_INDEX,
@@ -19,11 +20,26 @@ import {
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
+  constructor(private readonly cls: ClsService) {}
+
+  private traceContext(request: Request) {
+    return {
+      requestId: this.cls.get('requestId') ?? this.cls.getId(),
+      organizationId:
+        this.cls.get('organizationId') ?? request.headers['organization-id'],
+      tenantId: this.cls.get('tenantId'),
+      userId: this.cls.get('userId'),
+      method: request.method,
+      path: request.originalUrl ?? request.url,
+    };
+  }
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
     const isProduction = process.env.NODE_ENV === 'production';
+    const trace = this.traceContext(request);
 
     if (
       exception instanceof NotFoundException
@@ -46,10 +62,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             ? (body as { message: string | string[] }).message
             : exception.message;
 
+      this.logger.warn(
+        JSON.stringify({
+          level: 'warn',
+          type: 'http_exception',
+          ...trace,
+          statusCode: status,
+          message: Array.isArray(message) ? message.join(', ') : message,
+        }),
+      );
+
       response.status(status).json({
         error: HttpStatus[status] ?? 'ERROR',
         message: Array.isArray(message) ? message.join(', ') : message,
         statusCode: status,
+        requestId: trace.requestId,
         ...(isProduction
           ? {}
           : { details: typeof body === 'object' ? body : undefined }),
@@ -58,7 +85,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     this.logger.error(
-      exception instanceof Error ? exception.stack : String(exception),
+      JSON.stringify({
+        level: 'error',
+        type: 'unhandled_exception',
+        ...trace,
+        message: exception instanceof Error ? exception.message : String(exception),
+        stack: exception instanceof Error ? exception.stack : undefined,
+      }),
     );
 
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
@@ -69,6 +102,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           ? exception.message
           : 'Unknown error',
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      requestId: trace.requestId,
       ...(isProduction
         ? {}
         : {

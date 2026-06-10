@@ -106,3 +106,61 @@ export interface IBillOpenedPayload {
   trx?: Knex.Transaction;
   // tenantId: number;
 }
+
+export interface BillPdfTemplateAttributes {
+  primaryColor: string;
+  secondaryColor: string;
+
+  showCompanyLogo: boolean;
+  companyLogo: string;
+
+  companyName: string;
+
+  showVendorAddress: boolean;
+  vendorAddress: string;
+
+  showCompanyAddress: boolean;
+  companyAddress: string;
+  billedFromLabel: string;
+
+  total: string;
+  totalLabel: string;
+  showTotal: boolean;
+
+  subtotal: string;
+  subtotalLabel: string;
+  showSubtotal: boolean;
+
+  showBillNote: boolean;
+  billNote: string;
+  billNoteLabel: string;
+
+  showTermsConditions: boolean;
+  termsConditions: string;
+  termsConditionsLabel: string;
+
+  lines: Array<{
+    item: string;
+    description: string;
+    rate: string;
+    quantity: string;
+    total: string;
+  }>;
+
+  showBillNumber: boolean;
+  billNumberLabel: string;
+  billNumber: string;
+
+  billDate: string;
+  showBillDate: boolean;
+  billDateLabel: string;
+
+  dueDate: string;
+  showDueDate: boolean;
+  dueDateLabel: string;
+
+  displayTotals?: Array<{
+    label: string;
+    amount: string;
+  }>;
+}

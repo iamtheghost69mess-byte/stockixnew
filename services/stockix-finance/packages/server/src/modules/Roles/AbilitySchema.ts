@@ -1,5 +1,5 @@
 import { ItemAction } from "@/interfaces/Item";
-import { ReportsAction } from "../FinancialStatements/types/Report.types";
+import { ReportsAction } from '@/modules/FinancialStatements/types/Report.types';
 import { InventoryAdjustmentAction } from "../InventoryAdjutments/types/InventoryAdjustments.types";
 import { CashflowAction } from "../BankingTransactions/types/BankingTransactions.types";
 import { ManualJournalAction } from "../ManualJournals/types/ManualJournals.types";

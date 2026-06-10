@@ -1,5 +1,6 @@
 import { ISystemUser } from '@/interfaces';
 import { Knex } from 'knex';
+import { IDynamicListFilterDTO } from './DynamicFilter';
 import { pick } from 'lodash';
 import { ILedgerEntry } from './Ledger';
 import { ISaleInvoice } from './SaleInvoice';

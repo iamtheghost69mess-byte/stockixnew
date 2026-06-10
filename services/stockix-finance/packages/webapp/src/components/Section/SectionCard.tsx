@@ -22,7 +22,7 @@ export interface SectionCardProps
  */
 export const SectionCard: React.FC<SectionCardProps> = React.forwardRef(
   (props, ref) => {
-    const { className, children, padded, ...htmlProps } = props;
+    const { className, children, padded = true, ...htmlProps } = props;
     const classes = classNames(
       CLASSES.SECTION_CARD,
       { [CLASSES.PADDED]: padded },
@@ -35,7 +35,4 @@ export const SectionCard: React.FC<SectionCardProps> = React.forwardRef(
     );
   },
 );
-SectionCard.defaultProps = {
-  padded: true,
-};
 SectionCard.displayName = `${DISPLAYNAME_PREFIX}.SectionCard`;

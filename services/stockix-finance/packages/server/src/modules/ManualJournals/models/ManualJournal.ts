@@ -7,14 +7,14 @@ import { InjectModelMeta } from '@/modules/Tenancy/TenancyModels/decorators/Inje
 import { ManualJournalMeta } from './ManualJournal.meta';
 import { ImportableModel } from '@/modules/Import/decorators/Import.decorator';
 import { InjectModelDefaultViews } from '@/modules/Views/decorators/InjectModelDefaultViews.decorator';
-import { ManualJournalDefaultViews } from '../constants';
+import { DEFAULT_VIEWS } from '@/constants/ManualJournals/constants';
 import { InjectAttachable } from '@/modules/Attachments/decorators/InjectAttachable.decorator';
 
 @InjectAttachable()
 @ExportableModel()
 @ImportableModel()
 @InjectModelMeta(ManualJournalMeta)
-@InjectModelDefaultViews(ManualJournalDefaultViews)
+@InjectModelDefaultViews(DEFAULT_VIEWS)
 export class ManualJournal extends TenantBaseModel {
   date: Date;
   journalNumber: string;

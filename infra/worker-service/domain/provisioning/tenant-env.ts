@@ -70,9 +70,9 @@ function tenantMysqlProxyHost(): string {
   return process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
 }
 
+/** Tenant containers reach ProxySQL on the Docker network (always 6033). */
 function tenantMysqlProxyPort(): string {
-  const raw = process.env.MYSQL_PROXY_PORT ?? "6033";
-  return String(raw);
+  return "6033";
 }
 
 function sharedMongoHost(): string {

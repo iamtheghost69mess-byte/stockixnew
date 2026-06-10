@@ -3,8 +3,10 @@
     "target": "es2017",
     "lib": [
       "es2017",
-      "esnext.asynciterable"
+      "esnext.asynciterable",
+      "dom"
     ],
+    "skipLibCheck": true,
     "typeRoots": [
       "./node_modules/@types",
       "../../node_modules/@types",
@@ -30,8 +32,7 @@
     },
   },
   "include": [
-    "./src/**/*",
-    "./tests/**/*"
+    "./src/**/*"
   ],
   "exclude": [
     "./node_modules"

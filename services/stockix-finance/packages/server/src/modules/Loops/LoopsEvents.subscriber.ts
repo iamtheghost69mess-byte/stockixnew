@@ -51,6 +51,6 @@ export class LoopsEventsSubscriber {
         mailingLists: {},
       },
     };
-    await axios(options);
+    await axios.request(options as any);
   }
 }

@@ -12,6 +12,7 @@ import { CreateBillDto, EditBillDto } from './dtos/Bill.dto';
 import { GetBillPaymentTransactionsService } from './queries/GetBillPayments';
 import { BulkDeleteBillsService } from './BulkDeleteBills.service';
 import { ValidateBulkDeleteBillsService } from './ValidateBulkDeleteBills.service';
+import { BillPdf } from './queries/BillPdf.service';
 // import { GetBillPayments } from './queries/GetBillPayments';
 // import { GetBills } from './queries/GetBills';
 
@@ -28,6 +29,7 @@ export class BillsApplication {
     private getBillPaymentTransactionsService: GetBillPaymentTransactionsService,
     private bulkDeleteBillsService: BulkDeleteBillsService,
     private validateBulkDeleteBillsService: ValidateBulkDeleteBillsService,
+    private billPdfService: BillPdf,
   ) { }
 
   /**
@@ -92,6 +94,15 @@ export class BillsApplication {
    */
   public getBill(billId: number) {
     return this.getBillService.getBill(billId);
+  }
+
+  /**
+   * Retrieves the PDF for a bill.
+   * @param {number} billId
+   * @returns {Promise<[Buffer, string]>}
+   */
+  public getBillPdf(billId: number) {
+    return this.billPdfService.getBillPdf(billId);
   }
 
   /**

@@ -1,7 +1,15 @@
+export interface ISearchRole {
+  fieldKey: string;
+  comparator: string;
+}
+
 export interface IModel {
   name: string;
   tableName: string;
   fields: { [key: string]: any };
+  relationMappings?: { [key: string]: any };
+  searchRoles?: ISearchRole[];
+  getField(fieldKey: string, attr?: string): any;
 }
 
 export interface IFilterMeta {

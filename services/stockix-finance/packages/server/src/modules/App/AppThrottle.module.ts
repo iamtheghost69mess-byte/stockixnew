@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 
 @Module({
   imports: [
@@ -8,24 +9,16 @@ import { ThrottlerModule } from '@nestjs/throttler';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        // Use in-memory storage with very high limits for test environment
-        const isTest = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+        const isTest =
+          process.env.NODE_ENV === 'test' ||
+          process.env.JEST_WORKER_ID !== undefined;
 
         if (isTest) {
           return {
             throttlers: [
-              {
-                name: 'default',
-                ttl: 60000,
-                limit: 1000000, // Effectively disable throttling in tests
-              },
-              {
-                name: 'auth',
-                ttl: 60000,
-                limit: 1000000, // Effectively disable throttling in tests
-              },
+              { name: 'default', ttl: 60000, limit: 1000000 },
+              { name: 'auth', ttl: 60000, limit: 1000000 },
             ],
-            // No storage specified = uses in-memory storage
           };
         }
 
@@ -33,6 +26,15 @@ import { ThrottlerModule } from '@nestjs/throttler';
         const globalLimit = configService.get<number>('throttle.global.limit');
         const authTtl = configService.get<number>('throttle.auth.ttl');
         const authLimit = configService.get<number>('throttle.auth.limit');
+
+        const redisPrefix = process.env.REDIS_KEY_PREFIX ?? '';
+        const redisOptions = {
+          host: configService.get<string>('redis.host'),
+          port: configService.get<number>('redis.port'),
+          password: configService.get<string>('redis.password') || undefined,
+          db: configService.get<number>('redis.db'),
+          keyPrefix: redisPrefix ? `${redisPrefix}throttle:` : 'throttle:',
+        };
 
         return {
           throttlers: [
@@ -47,14 +49,10 @@ import { ThrottlerModule } from '@nestjs/throttler';
               limit: authLimit ?? 200,
             },
           ],
-          // @nest-lab/throttler-storage-redis@1.x is incompatible with @nestjs/throttler@4.x
-          // (storage interface changed). Using in-memory storage until the package is upgraded.
-          // storage: new ThrottlerStorageRedisService({ host, port, password, db }),
+          storage: new ThrottlerStorageRedisService(redisOptions),
         };
       },
     }),
   ],
 })
-export class AppThrottleModule { }
-
-
+export class AppThrottleModule {}

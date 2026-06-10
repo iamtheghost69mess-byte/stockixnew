@@ -2,8 +2,6 @@ import DynamicFilterRoleAbstructor from './DynamicFilterRoleAbstructor';
 import { IFilterRole } from '@/interfaces';
 
 export default class FilterRoles extends DynamicFilterRoleAbstructor {
-  private filterRoles: IFilterRole[];
-
   /**
    * On initialize filter roles.
    */
@@ -29,7 +27,7 @@ export default class FilterRoles extends DynamicFilterRoleAbstructor {
   /**
    * Builds database query of view roles.
    */
-  protected buildQuery() {
+  public buildQuery() {
     const logicExpression = this.buildLogicExpression();
 
     return (builder) => {

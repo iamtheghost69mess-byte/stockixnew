@@ -70,11 +70,11 @@ const models = [
     BullModule.registerQueue({ name: SendSignupVerificationMailQueue }),
     BullBoardModule.forFeature({
       name: SendResetPasswordMailQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
     BullBoardModule.forFeature({
       name: SendSignupVerificationMailQueue,
-      adapter: BullMQAdapter,
+      adapter: BullMQAdapter as any,
     }),
   ],
   exports: [...models, ListMyTenantsService, SwitchTenantService],

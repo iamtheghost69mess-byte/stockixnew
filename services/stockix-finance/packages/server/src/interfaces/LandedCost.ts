@@ -1,5 +1,5 @@
 import { IBill } from '@/interfaces';
-import Knex from 'knex';
+import { Knex } from 'knex';
 import { IItemEntry } from './ItemEntry';
 
 export interface IBillLandedCost {
