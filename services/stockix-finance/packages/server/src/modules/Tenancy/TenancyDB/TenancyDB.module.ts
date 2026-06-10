@@ -78,6 +78,33 @@ export const TenancyDatabaseProxyProvider = ClsModule.forFeatureAsync({
       pool: { min: 0, max: 7 },
       ...knexSnakeCaseMappers({ upperCase: true }),
     });
+    // Patch the seed runner to bypass webpack's synthetic require (webpackEmptyContext).
+    // Knex 0.95.x's Seeder._waterfallBatch calls require(filepath) at runtime via
+    // importFile(), which webpack can't resolve for dynamic paths. We replace the method
+    // on the instance with one that uses nativeRequire.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seeder = (knexInstance as any).seed;
+    seeder._validateSeedStructure = async (filepath: string) => filepath;
+    seeder._waterfallBatch = async (seeds: string[]) => {
+      const log: string[] = [];
+      for (const seedPath of seeds) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mod: any = nativeRequire(seedPath);
+        const seedFn =
+          typeof mod?.seed === 'function'
+            ? mod.seed
+            : mod?.default?.seed;
+        if (typeof seedFn !== 'function') {
+          throw new Error(
+            `Invalid seed file: ${seedPath} must have a seed function`,
+          );
+        }
+        await seedFn(knexInstance);
+        log.push(seedPath);
+      }
+      return [log];
+    };
+
     lruCache.set(database, knexInstance);
 
     return knexInstance;

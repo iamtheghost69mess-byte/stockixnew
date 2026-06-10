@@ -28,7 +28,7 @@ export interface BuildOrgResult {
 const INITIAL_POLL_DELAY_MS = 5000;
 /** Paced to stay under Finance `API_RATE_LIMIT` (~120 req/min). */
 const POLL_INTERVAL_MS = 8000;
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 600_000;
 
 function financeApiBase(internalBaseUrl: string): string {
   return internalBaseUrl.replace(/\/+$/, "");
