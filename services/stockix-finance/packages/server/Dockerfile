@@ -1,5 +1,5 @@
-# Build context: monorepo root (see scripts/prebuild-tenant-images.mjs).
-# @repo/shared is copied from packages/shared at repo root.
+# Build context: services/stockix-finance (see scripts/prebuild-tenant-images.mjs).
+# packages/shared is synced from monorepo root before docker build.
 # Targets: runtime | migration-runtime
 
 FROM node:22-alpine AS deps
@@ -13,22 +13,22 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && chown node:nod
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
-COPY services/stockix-finance/package.json services/stockix-finance/pnpm-lock.yaml services/stockix-finance/pnpm-workspace.yaml services/stockix-finance/lerna.json services/stockix-finance/.npmrc ./
-COPY services/stockix-finance/packages/server/package.json ./packages/server/
-COPY services/stockix-finance/packages/webapp/package.json ./packages/webapp/
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json .npmrc ./
+COPY packages/server/package.json ./packages/server/
+COPY packages/webapp/package.json ./packages/webapp/
 COPY packages/shared/package.json ./packages/shared/
-COPY services/stockix-finance/shared ./shared
+COPY shared ./shared
 
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build-webapp
-COPY services/stockix-finance/packages/webapp ./packages/webapp
+COPY packages/webapp ./packages/webapp
 COPY packages/shared ./packages/shared
 RUN pnpm --filter @stockix/utils run build \
   && pnpm --filter @stockix/webapp run build
 
 FROM build-webapp AS build-app
-COPY services/stockix-finance/packages/server ./packages/server
+COPY packages/server ./packages/server
 COPY packages/shared ./packages/shared
 RUN pnpm --filter @stockix/server run build:app:strict \
   && mkdir -p packages/i18n \
@@ -42,8 +42,8 @@ FROM build-app AS prod-deps
 RUN pnpm prune --prod
 
 FROM deps AS migration-source
-COPY services/stockix-finance/packages/server/scripts ./packages/server/scripts
-COPY services/stockix-finance/packages/server/src/database/system ./packages/server/src/database/system
+COPY packages/server/scripts ./packages/server/scripts
+COPY packages/server/src/database/system ./packages/server/src/database/system
 
 FROM migration-source AS migration-prod-deps
 RUN pnpm prune --prod

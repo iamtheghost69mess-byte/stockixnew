@@ -13,11 +13,12 @@ infra/worker-service/.tmp-dist/
 .env
 .env.*
 !.env.example
-# Finance service — excluded from control-plane builds by default.
-# Negated for monorepo-root Finance image builds (see prebuild-tenant-images.mjs).
-services/stockix-finance/
-!services/stockix-finance/
-!packages/shared/
+# Exclude all services from control-plane image context except Finance (needed for
+# monorepo-root Finance Docker builds — see prebuild-tenant-images.mjs).
+# Note: excluding a directory then negating it does NOT re-include children in Docker;
+# use services/* + !services/stockix-finance instead.
+services/*
+!services/stockix-finance
 
 # Chatwoot (Ruby/Rails) — not in pnpm workspace, never part of any Docker build.
 services/chatlive/

@@ -11,7 +11,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,9 +49,22 @@ function run(label, cmd, cwd = ROOT, extraEnv = {}) {
   }
 }
 
+const FINANCE_SHARED_LINK = path.join(FINANCE_ROOT, "packages", "shared");
+const MONOREPO_SHARED = path.join(ROOT, "packages", "shared");
+
+function syncFinanceSharedPackage() {
+  if (!existsSync(MONOREPO_SHARED)) {
+    console.error(`[prebuild] ERROR: monorepo shared package not found: ${MONOREPO_SHARED}`);
+    process.exit(1);
+  }
+  rmSync(FINANCE_SHARED_LINK, { recursive: true, force: true });
+  cpSync(MONOREPO_SHARED, FINANCE_SHARED_LINK, { recursive: true });
+  console.log(`[prebuild] Synced packages/shared → services/stockix-finance/packages/shared`);
+}
+
 /** Docker BuildKit on Windows can drop with rpc error: Unavailable EOF under memory pressure. */
 function runDockerBuild(label, tag, target) {
-  const dockerfile = "services/stockix-finance/packages/server/Dockerfile";
+  const dockerfile = "packages/server/Dockerfile";
   const buildkitCmd =
     `docker build --progress=plain -t ${tag} -f ${dockerfile} --target ${target} .`;
   const legacyCmd =
@@ -72,7 +85,7 @@ function runDockerBuild(label, tag, target) {
     const start = Date.now();
     try {
       execSync(attempt.cmd, {
-        cwd: ROOT,
+        cwd: FINANCE_ROOT,
         stdio: "inherit",
         shell: true,
         env: { ...process.env, ...attempt.env },
@@ -230,12 +243,14 @@ pullBaseImage("Pull node:22-alpine", "node:22-alpine");
 // ── 2. Build Finance images ───────────────────────────────────────────────────
 console.log("\n[prebuild] Phase 2: Build Finance images");
 
+syncFinanceSharedPackage();
+
 // Finance has legacy deps (e.g. objection-filter@4.0.1) with stale
 // engines.node declarations (<=12.x.x) that run fine on Node 22.
 run(
-  "pnpm install (monorepo workspace — @repo/shared from packages/shared)",
+  "pnpm install (stockix-finance workspace)",
   "pnpm install --ignore-scripts --config.engine-strict=false",
-  ROOT,
+  FINANCE_ROOT,
 );
 
 if (!FORCE && imageExists("stockix-server:local")) {
