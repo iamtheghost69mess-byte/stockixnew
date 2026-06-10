@@ -32,6 +32,8 @@ exports.getCommonWebpackOptions = ({
         '@stockix/email-components': path.resolve(__dirname, '../../../shared/email-components/src/lib/main.ts'),
         '@stockix/pdf-templates': path.resolve(__dirname, '../../../shared/pdf-templates/src/index.ts'),
         '@stockix/utils': path.resolve(__dirname, '../../../shared/bigcapital-utils/src/index.ts'),
+        // md-to-react-email expects CJS marked exports (webpack ESM interop).
+        marked: require.resolve('marked'),
       },
       extensions: ['.ts', '.tsx', '.js'],
       extensionAlias: {
