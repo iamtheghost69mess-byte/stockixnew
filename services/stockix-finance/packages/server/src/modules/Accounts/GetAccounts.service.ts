@@ -9,6 +9,7 @@ import { AccountRepository } from './repositories/Account.repository';
 import { IFilterMeta } from '@/interfaces/Model';
 import { TenantModelProxy } from '../System/models/TenantBaseModel';
 import { GetAccountsQueryDto } from './dtos/GetAccountsQuery.dto';
+import { MetableModel } from '../DynamicListing/types/DynamicList.types';
 
 @Injectable()
 export class GetAccountsService {
@@ -41,7 +42,7 @@ export class GetAccountsService {
 
     // Dynamic list service.
     const dynamicList = await this.dynamicListService.dynamicList(
-      this.accountModel(),
+      this.accountModel() as unknown as MetableModel,
       filter,
     );
     // Retrieve accounts model based on the given query.

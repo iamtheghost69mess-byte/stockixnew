@@ -8,6 +8,7 @@ import { TransformerInjectable } from '@/modules/Transformer/TransformerInjectab
 import { DynamicListService } from '@/modules/DynamicListing/DynamicList.service';
 import { BankAccountsQueryDto } from '../dtos/BankAccountsQuery.dto';
 import { IDynamicListFilter } from '@/modules/DynamicListing/DynamicFilter/DynamicFilter.types';
+import { MetableModel } from '@/modules/DynamicListing/types/DynamicList.types';
 
 @Injectable()
 export class GetBankAccountsService {
@@ -38,7 +39,7 @@ export class GetBankAccountsService {
 
     // Dynamic list service.
     const dynamicList = await this.dynamicListService.dynamicList(
-      this.accountModel(),
+      this.accountModel() as unknown as MetableModel,
       filter as IDynamicListFilter,
     );
     // Retrieve accounts model based on the given query.

@@ -71,7 +71,17 @@
       "Bash(\"/c/Users/Jad/Desktop/stokcix/stockixnew/services/stockix-finance/node_modules/.bin/tsc\" --noEmit -p tsconfig.typecheck.json --traceResolution)",
       "Bash(echo \"exit: $?\")",
       "Bash(node C:\\\\Users\\\\Jad\\\\Desktop\\\\stokcix\\\\stockixnew\\\\services\\\\stockix-finance\\\\node_modules\\\\typescript\\\\bin\\\\tsc *)",
-      "Bash(node \"../../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.typecheck.json --traceResolution)"
+      "Bash(node \"../../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.typecheck.json --traceResolution)",
+      "Bash(echo \"result: $?\")",
+      "Bash(xargs '-I{}' sh -c 'target=$\\(readlink \"{}\"\\); echo \"{}: $target\"')",
+      "Bash(node \"../../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.typecheck.json)",
+      "Bash(node \"/c/Users/Jad/Desktop/stokcix/stockixnew/services/stockix-finance/node_modules/typescript/bin/tsc\" --version)",
+      "Bash(node \"/c/Users/Jad/Desktop/stokcix/stockixnew/services/stockix-finance/node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.typecheck.json)",
+      "Bash(node \"/c/Users/Jad/Desktop/stokcix/stockixnew/services/stockix-finance/node_modules/typescript/bin/tsc\" --noEmit)",
+      "Bash(node \"../../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.json)",
+      "Bash(node \"../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.typecheck.json)",
+      "Bash(node \"C:\\\\Users\\\\Jad\\\\Desktop\\\\stokcix\\\\stockixnew\\\\services\\\\stockix-finance\\\\node_modules\\\\typescript\\\\bin\\\\tsc\" --noEmit -p tsconfig.typecheck.json)",
+      "Bash(node *)"
     ]
   },
   "enableAllProjectMcpServers": true,

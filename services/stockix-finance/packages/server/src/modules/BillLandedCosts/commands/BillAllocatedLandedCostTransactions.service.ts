@@ -54,7 +54,7 @@ export class BillAllocatedLandedCostTransactions {
     });
 
     return this.transformBillLandedCostTransactions(
-      transactionsJson as IBillLandedCostTransaction[],
+      transactionsJson as unknown as IBillLandedCostTransaction[],
       tenantMeta?.baseCurrency ?? '',
     ) as IBillLandedCostTransaction[];
   };
