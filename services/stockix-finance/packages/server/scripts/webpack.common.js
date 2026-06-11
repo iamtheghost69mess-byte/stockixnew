@@ -70,8 +70,10 @@ exports.getCommonWebpackOptions = ({
         // Use package-local node_modules so knex/mysql2 stay externalized.
         // This preserves knex runtime migration file loading from filesystem.
         modulesDir: path.resolve(__dirname, '../node_modules'),
-        // Bundle @/ path aliases and @stockix workspace packages into the output.
-        allowlist: [/^@\//, /^@stockix\//],
+        // Bundle @/ path aliases, @stockix workspace packages, and @repo/* shared
+        // packages. @repo/shared exports raw .ts source with no compiled dist —
+        // it must be bundled, not externalized, to avoid CJS/ESM runtime crash.
+        allowlist: [/^@\//, /^@stockix\//, /^@repo\//],
       }),
       'aws-sdk',
       'prettier',
@@ -89,8 +91,8 @@ exports.getCommonWebpackOptions = ({
               },
             },
           ],
-          // Compile @stockix/* workspace packages from source — they have no pre-built dist.
-          exclude: /node_modules\/(?!@stockix\/)/,
+          // Compile @stockix/* and @repo/* workspace packages from source — no pre-built dist.
+          exclude: /node_modules\/(?!@stockix\/|@repo\/)/,
         },
       ],
     },

@@ -3,7 +3,7 @@ WORKDIR /app
 
 FROM base AS build
 COPY package.json pnpm-lock.yaml* ./
-RUN corepack enable pnpm && pnpm install --frozen-lockfile 2>/dev/null || npm install
+RUN corepack enable pnpm && pnpm install --frozen-lockfile
 COPY . .
 RUN npm run build
 

@@ -5,10 +5,22 @@ RUN apk add --no-cache libc6-compat \
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=3072
 
-COPY . .
+# ── Phase 1: manifests only — install cache survives source changes ──
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/api/package.json                            ./apps/api/
+COPY packages/auth/package.json                       ./packages/auth/
+COPY packages/config/package.json                     ./packages/config/
+COPY packages/db/package.json                         ./packages/db/
+COPY packages/shared/package.json                     ./packages/shared/
+COPY packages/platform-worker-shared/package.json     ./packages/platform-worker-shared/
+COPY packages/eslint-config/package.json              ./packages/eslint-config/
 
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter api...
+
+# ── Phase 2: source — only busts install layer when manifests change ──
+COPY . .
+
 # @repo/auth ships dist/; other @repo/* are bundled from TypeScript source via tsup.
 RUN pnpm --filter @repo/auth build
 RUN pnpm --filter api build

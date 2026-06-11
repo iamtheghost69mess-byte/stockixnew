@@ -67,7 +67,6 @@ services:
       - TENANT_DB_PORT=${TENANT_DB_PORT:-${DB_PORT:-6033}}
       - TENANT_DB_PASSWORD=${TENANT_DB_PASSWORD:-${DB_PASSWORD}}
       - TENANT_DB_NAME_PREFIX=${TENANT_DB_NAME_PREFIX:-stockix_tenant_}
-      - TENANT_DB_NAME_PERFIX=${TENANT_DB_NAME_PREFIX:-stockix_tenant_}
       - TENANT_DB_CHARSET=${TENANT_DB_CHARSET:-utf8mb4}
       # ── MongoDB (stockix-mongo) ───────────────────────────────
       - MONGODB_DATABASE_URL=${MONGODB_DATABASE_URL}

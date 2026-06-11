@@ -40,7 +40,12 @@ RUN pnpm --filter @stockix/server run build:app:strict \
   && find build/database/tenant/migrations -name '*.ts' -delete
 
 FROM build-app AS prod-deps
-RUN pnpm prune --prod
+RUN pnpm prune --prod && \
+    rm -rf /app/node_modules/babel-loader \
+    /app/node_modules/gulp \
+    /app/node_modules/gulp-postcss \
+    /app/node_modules/gulp-rename \
+    /app/node_modules/gulp-sass
 
 FROM deps AS migration-source
 COPY packages/server/scripts ./packages/server/scripts
