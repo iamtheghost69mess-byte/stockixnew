@@ -76,7 +76,7 @@ export const getCustomizeDrawerNameFromResource = (resource: string) => {
     CreditNote: DRAWERS.CREDIT_NOTE_CUSTOMIZE,
     PaymentReceive: DRAWERS.PAYMENT_RECEIVED_CUSTOMIZE,
   };
-  return R.prop(resource, pairs) || DRAWERS.INVOICE_CUSTOMIZE;
+  return R.prop(resource as keyof typeof pairs, pairs) || DRAWERS.INVOICE_CUSTOMIZE;
 };
 
 export const getButtonLabelFromResource = (resource: string) => {
@@ -87,5 +87,5 @@ export const getButtonLabelFromResource = (resource: string) => {
     CreditNote: 'Create Credit Note Branding',
     PaymentReceive: 'Create Payment Branding',
   };
-  return R.prop(resource, pairs) || 'Create Branding Template';
+  return R.prop(resource as keyof typeof pairs, pairs) || 'Create Branding Template';
 };
