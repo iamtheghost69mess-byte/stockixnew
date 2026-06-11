@@ -2,10 +2,10 @@
 
 ## Node.js Version
 
-Always use Node.js 18.16.1 for this project. Before running any npm/pnpm/node commands:
+Always use Node.js 22.x for this project (matches Dockerfile and `engines: ">=22.0.0"`). Before running any npm/pnpm/node commands:
 
 ```bash
-nvm use 18.16.1
+nvm use 22
 ```
 
 ## Package Manager

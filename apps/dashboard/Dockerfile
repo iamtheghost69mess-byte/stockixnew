@@ -5,10 +5,20 @@ WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=3072
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY . .
+# ── Phase 1: manifests only — install cache survives source changes ──
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/dashboard/package.json              ./apps/dashboard/
+COPY packages/config/package.json             ./packages/config/
+COPY packages/shared/package.json             ./packages/shared/
+COPY packages/ui/package.json                 ./packages/ui/
+COPY packages/eslint-config/package.json      ./packages/eslint-config/
+COPY packages/typescript-config/package.json  ./packages/typescript-config/
 
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter dashboard...
+
+# ── Phase 2: source — only busts install layer when manifests change ──
+COPY . .
 
 ARG NEXT_PUBLIC_STOCKIX_API_URL=https://api.stockix.cloud
 ENV NEXT_PUBLIC_STOCKIX_API_URL=${NEXT_PUBLIC_STOCKIX_API_URL}

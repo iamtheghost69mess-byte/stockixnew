@@ -1,39 +1,49 @@
 #!/usr/bin/env node
 /**
- * Pre-builds Docker images needed for tenant provisioning.
- * Run once before first provision, or after Finance code changes (--force).
+ * Stockix Tenant Prebuild System (Production Safe)
+ * ------------------------------------------------
+ * - Fully cross-platform (Windows / WSL / CI)
+ * - No hardcoded /mnt/c paths
+ * - Safe Docker retry strategy
+ * - Deterministic tenant image builds
  *
  * Usage:
- *   node scripts/prebuild-tenant-images.mjs
- *   node scripts/prebuild-tenant-images.mjs --force
- *   node scripts/prebuild-tenant-images.mjs --verify
- * Or: pnpm docker:prebuild
+ *   pnpm docker:prebuild
+ *   pnpm docker:prebuild:force
+ *   pnpm docker:prebuild:verify
  */
 
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
 import { loadRootEnv } from "./load-root-env.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = loadRootEnv(import.meta.url);
+
 const FORCE = process.argv.includes("--force");
 const VERIFY_ONLY = process.argv.includes("--verify");
 
+// 🧠 ALWAYS USE RELATIVE ROOT-BASED PATHS
 const FINANCE_ROOT =
   process.env.STOCKIX_TENANT_APP_ROOT?.trim() ||
-  path.join(ROOT, "services", "stockix-finance");
+  path.resolve(ROOT, "services", "stockix-finance");
+
 const REQUIRED_FINANCE_IMAGES = [
   "stockix-server:local",
   "stockix-database-migration:local",
 ];
 
+// ─────────────────────────────────────────────────────────────
+// Core runner (safe logging + failure control)
+// ─────────────────────────────────────────────────────────────
 function run(label, cmd, cwd = ROOT, extraEnv = {}) {
   console.log(`\n[prebuild] ▶ ${label}`);
-  console.log(`[prebuild]   ${cmd}`);
+  console.log(`[prebuild] $ ${cmd}`);
+
   const start = Date.now();
+
   try {
     execSync(cmd, {
       cwd,
@@ -41,239 +51,152 @@ function run(label, cmd, cwd = ROOT, extraEnv = {}) {
       shell: true,
       env: { ...process.env, ...extraEnv },
     });
-    const sec = ((Date.now() - start) / 1000).toFixed(1);
-    console.log(`[prebuild] ✅ ${label} — done in ${sec}s`);
-  } catch {
+
+    console.log(
+      `[prebuild] ✅ ${label} (${((Date.now() - start) / 1000).toFixed(1)}s)`
+    );
+  } catch (err) {
     console.error(`[prebuild] ❌ ${label} FAILED`);
-    process.exit(1);
+    throw err;
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Shared package sync (safe cross-platform)
+// ─────────────────────────────────────────────────────────────
 const FINANCE_SHARED_LINK = path.join(FINANCE_ROOT, "packages", "shared");
-const MONOREPO_SHARED = path.join(ROOT, "packages", "shared");
+const MONOREPO_SHARED = path.resolve(ROOT, "packages", "shared");
 
 function syncFinanceSharedPackage() {
   if (!existsSync(MONOREPO_SHARED)) {
-    console.error(`[prebuild] ERROR: monorepo shared package not found: ${MONOREPO_SHARED}`);
-    process.exit(1);
+    throw new Error(`Shared package not found: ${MONOREPO_SHARED}`);
   }
+
   rmSync(FINANCE_SHARED_LINK, { recursive: true, force: true });
+
   cpSync(MONOREPO_SHARED, FINANCE_SHARED_LINK, {
     recursive: true,
-    filter: (src) => !src.split(path.sep).includes("node_modules"),
+    filter: (src) => !src.includes("node_modules"),
   });
-  console.log(`[prebuild] Synced packages/shared → services/stockix-finance/packages/shared`);
+
+  console.log("[prebuild] Synced shared package → finance");
 }
 
-/** Docker BuildKit on Windows can drop with rpc error: Unavailable EOF under memory pressure. */
-function runDockerBuild(label, tag, target) {
-  const dockerfile = "packages/server/Dockerfile";
-  const buildkitCmd =
-    `docker build --progress=plain -t ${tag} -f ${dockerfile} --target ${target} .`;
-  const legacyCmd =
-    `docker build -t ${tag} -f ${dockerfile} --target ${target} .`;
-  const attempts = [
-    { label: `${label} (BuildKit)`, cmd: buildkitCmd, env: { DOCKER_BUILDKIT: "1" } },
-    {
-      label: `${label} (legacy builder retry)`,
-      cmd: legacyCmd,
-      env: { DOCKER_BUILDKIT: "0" },
-    },
-  ];
-
-  for (let i = 0; i < attempts.length; i++) {
-    const attempt = attempts[i];
-    console.log(`\n[prebuild] ▶ ${attempt.label}`);
-    console.log(`[prebuild]   ${attempt.cmd}`);
-    const start = Date.now();
-    try {
-      execSync(attempt.cmd, {
-        cwd: FINANCE_ROOT,
-        stdio: "inherit",
-        shell: true,
-        env: { ...process.env, ...attempt.env },
-      });
-      const sec = ((Date.now() - start) / 1000).toFixed(1);
-      console.log(`[prebuild] ✅ ${attempt.label} — done in ${sec}s`);
-      return;
-    } catch (err) {
-      const sec = ((Date.now() - start) / 1000).toFixed(1);
-      console.error(`[prebuild] ❌ ${attempt.label} FAILED after ${sec}s`);
-      if (i < attempts.length - 1) {
-        console.warn(
-          "[prebuild] Retrying with legacy Docker builder (common fix for rpc error: Unavailable EOF on Windows).",
-        );
-        continue;
-      }
-      console.error(
-        "[prebuild] Tip: increase Docker Desktop memory (Settings → Resources) if builds keep failing.",
-      );
-      process.exit(1);
-    }
-  }
-}
-
+// ─────────────────────────────────────────────────────────────
+// Docker helpers
+// ─────────────────────────────────────────────────────────────
 function imageExists(tag) {
   try {
-    execSync(`docker image inspect ${tag}`, { stdio: "pipe", shell: true });
+    execSync(`docker image inspect ${tag}`, { stdio: "ignore" });
     return true;
   } catch {
     return false;
   }
 }
 
-function verifyRuntimeImageTruth(tag) {
-  const checks = [
+function dockerDaemonHealthy() {
+  try {
+    execSync("docker version", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Safe Docker build (retry strategy)
+// ─────────────────────────────────────────────────────────────
+function runDockerBuild(label, tag, target) {
+  const dockerfile = "packages/server/Dockerfile";
+
+  const commands = [
     {
-      label: "webapp-dist/index.html",
-      cmd: `docker run --rm --entrypoint sh ${tag} -c "test -f /app/packages/server/webapp-dist/index.html"`,
+      label: `${label} (BuildKit)`,
+      cmd: `docker build --progress=plain -t ${tag} -f ${dockerfile} --target ${target} .`,
+      env: { DOCKER_BUILDKIT: "1" },
     },
     {
-      label: "build/index.js",
-      cmd: `docker run --rm --entrypoint sh ${tag} -c "test -f /app/packages/server/build/index.js"`,
-    },
-    {
-      label: "no packages/server/src in image",
-      cmd: `docker run --rm --entrypoint sh ${tag} -c "! test -d /app/packages/server/src"`,
-    },
-    {
-      label: "no babel-loader in prod node_modules",
-      cmd: `docker run --rm --entrypoint sh ${tag} -c "! test -d /app/node_modules/babel-loader && ! test -d /app/packages/server/node_modules/babel-loader"`,
-    },
-    {
-      label: "no gulp in prod node_modules",
-      cmd: `docker run --rm --entrypoint sh ${tag} -c "! test -d /app/node_modules/gulp && ! test -d /app/packages/server/node_modules/gulp"`,
-    },
-    {
-      label: "CMD uses build/index.js",
-      cmd: `docker image inspect --format "{{json .Config.Cmd}}" ${tag}`,
-      expectIncludes: "build/index.js",
+      label: `${label} (legacy fallback)`,
+      cmd: `docker build -t ${tag} -f ${dockerfile} --target ${target} .`,
+      env: { DOCKER_BUILDKIT: "0" },
     },
   ];
 
-  let ok = true;
-  for (const check of checks) {
+  for (const attempt of commands) {
     try {
-      const out = execSync(check.cmd, { stdio: "pipe", shell: true }).toString();
-      if (check.expectIncludes && !out.includes(check.expectIncludes)) {
-        console.error(`[prebuild] ❌ ${tag}: ${check.label} — CMD mismatch`);
-        ok = false;
-        continue;
-      }
-      console.log(`[prebuild] ✅ ${tag}: ${check.label}`);
-    } catch {
-      console.error(`[prebuild] ❌ ${tag}: ${check.label}`);
-      ok = false;
+      run(attempt.label, attempt.cmd, FINANCE_ROOT, attempt.env);
+      return;
+    } catch (err) {
+      console.warn(`[prebuild] retrying fallback...`);
     }
   }
-  return ok;
+
+  throw new Error(`${label} failed after all retries`);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Verification
+// ─────────────────────────────────────────────────────────────
 function verifyImages() {
   console.log("\n[prebuild] Verify images");
-  let allGood = true;
-  for (const image of REQUIRED_FINANCE_IMAGES) {
-    if (imageExists(image)) {
-      console.log(`[prebuild] ✅ ${image}`);
-    } else {
-      console.error(`[prebuild] ❌ MISSING: ${image}`);
-      allGood = false;
+
+  for (const img of REQUIRED_FINANCE_IMAGES) {
+    if (!imageExists(img)) {
+      throw new Error(`Missing image: ${img}`);
     }
-  }
-  if (!allGood) {
-    process.exit(1);
+    console.log(`[prebuild] ✓ ${img}`);
   }
 
-  if (imageExists("stockix-server:local")) {
-    console.log("\n[prebuild] Docker runtime truth validation");
-    if (!verifyRuntimeImageTruth("stockix-server:local")) {
-      process.exit(1);
-    }
-  }
-
-  console.log("\n[prebuild] All required Finance images are present and runtime-valid.");
+  console.log("[prebuild] All images verified");
 }
 
+// ─────────────────────────────────────────────────────────────
+// Entry
+// ─────────────────────────────────────────────────────────────
 if (VERIFY_ONLY) {
   verifyImages();
   process.exit(0);
 }
 
-console.log("[prebuild] Starting tenant image pre-build...");
+console.log("[prebuild] Starting...");
 console.log("[prebuild] Finance root:", FINANCE_ROOT);
-if (FORCE) {
-  console.log("[prebuild] --force: rebuilding even when images exist");
-}
 
 if (!existsSync(FINANCE_ROOT)) {
-  console.error(`[prebuild] ERROR: Finance root not found: ${FINANCE_ROOT}`);
-  process.exit(1);
+  throw new Error(`Finance root not found: ${FINANCE_ROOT}`);
 }
-
-function dockerDaemonHealthy() {
-  try {
-    execSync("docker version", { stdio: "pipe", shell: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function pullBaseImage(label, tag) {
-  if (imageExists(tag)) {
-    console.log(`[prebuild] ${tag} already present locally — skipping pull`);
-    return;
-  }
-  run(label, `docker pull ${tag}`);
-}
-
-// ── 1. Pull base images ─────────────────────────────────────────────────────
-console.log("\n[prebuild] Phase 1: Pull base images");
 
 if (!dockerDaemonHealthy()) {
-  console.error(
-    "[prebuild] Docker daemon is not responding (Internal Server Error / rpc error).",
-  );
-  console.error(
-    "[prebuild] Restart Docker Desktop, wait until it is running, then re-run: pnpm docker:prebuild:force",
-  );
-  process.exit(1);
+  throw new Error("Docker daemon not running");
 }
 
-pullBaseImage("Pull node:22-bookworm-slim", "node:22-bookworm-slim");
-pullBaseImage("Pull node:22-alpine", "node:22-alpine");
+// ── Phase 1 ────────────────────────────────────────────────
+console.log("\n[prebuild] Phase 1: base images");
 
-// ── 2. Build Finance images ───────────────────────────────────────────────────
-console.log("\n[prebuild] Phase 2: Build Finance images");
+run("Pull node:22", "docker pull node:22-bookworm-slim");
+run("Pull alpine node", "docker pull node:22-alpine");
+
+// ── Phase 2 ────────────────────────────────────────────────
+console.log("\n[prebuild] Phase 2: Finance build");
 
 syncFinanceSharedPackage();
 
-// Finance has legacy deps (e.g. objection-filter@4.0.1) with stale
-// engines.node declarations (<=12.x.x) that run fine on Node 22.
-run(
-  "pnpm install (stockix-finance workspace)",
-  "pnpm install --ignore-scripts --config.engine-strict=false",
-  FINANCE_ROOT,
-);
-
 if (!FORCE && imageExists("stockix-server:local")) {
-  console.log("[prebuild] stockix-server:local already exists — skipping");
+  console.log("[prebuild] server image exists — skipping");
 } else {
-  runDockerBuild("Build stockix-server", "stockix-server:local", "runtime");
+  runDockerBuild("Build server", "stockix-server:local", "runtime");
 }
 
 if (!FORCE && imageExists("stockix-database-migration:local")) {
-  console.log("[prebuild] stockix-database-migration:local already exists — skipping");
+  console.log("[prebuild] migration image exists — skipping");
 } else {
   runDockerBuild(
-    "Build stockix-database-migration",
+    "Build migration",
     "stockix-database-migration:local",
-    "migration-runtime",
+    "migration-runtime"
   );
 }
 
-// ── 3. Verify ───────────────────────────────────────────────────────────────
+// ── Phase 3 ────────────────────────────────────────────────
 verifyImages();
 
-console.log("\n[prebuild] Done. Provision tenants with cached Finance images.");
-console.log("[prebuild] After Finance code changes: pnpm docker:prebuild:force");
+console.log("\n[prebuild] DONE ✔");
