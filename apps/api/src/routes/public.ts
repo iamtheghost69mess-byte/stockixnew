@@ -24,10 +24,12 @@ type ApiEnv = {
 export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
   app.get("/ready", async (c) => {
     const checks: Record<string, "ok" | "fail"> = {};
+    const reasons: Record<string, string> = {};
     let isReady = true;
 
     if (!db) {
       checks.database = "fail";
+      reasons.database = "DATABASE_URL is not configured";
       isReady = false;
     } else {
       try {
@@ -35,6 +37,7 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
         checks.database = "ok";
       } catch (err) {
         checks.database = "fail";
+        reasons.database = err instanceof Error ? err.message : String(err);
         isReady = false;
         logger.error("Readiness check: database failed", err);
       }
@@ -45,14 +48,19 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
     if (redisUrl) {
       if (!redisClient) {
         checks.redis = "fail";
+        reasons.redis = "Redis client is not initialized";
         isReady = false;
       } else {
         try {
           const pong = await redisClient.ping();
           checks.redis = pong === "PONG" ? "ok" : "fail";
-          if (checks.redis === "fail") isReady = false;
+          if (checks.redis === "fail") {
+            reasons.redis = "Ping response was not PONG";
+            isReady = false;
+          }
         } catch (err) {
           checks.redis = "fail";
+          reasons.redis = err instanceof Error ? err.message : String(err);
           isReady = false;
           logger.error("Readiness check: redis failed", err);
         }
@@ -61,7 +69,7 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
 
     const status = isReady ? 200 : 503;
     return c.json(
-      { ready: isReady, checks, timestamp: new Date().toISOString() },
+      { ready: isReady, checks, reasons, timestamp: new Date().toISOString() },
       status,
     );
   });

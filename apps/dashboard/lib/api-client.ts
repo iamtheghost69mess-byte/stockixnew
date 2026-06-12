@@ -48,12 +48,14 @@ export async function apiFetch(
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return await fetch(url, {
         ...init,
         headers,
         cache: "no-store",
-        signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+        signal: init.signal ?? controller.signal,
       });
     } catch (error) {
       lastError = error;
@@ -63,6 +65,8 @@ export async function apiFetch(
         continue;
       }
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

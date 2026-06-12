@@ -15,6 +15,7 @@
  * Usage: pnpm dev
  *        STOCKIX_DEV_SKIP_POS=1 pnpm dev   — skip POS if low on RAM
  */
+import net from "node:net";
 import { execSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
@@ -66,6 +67,34 @@ function loadSharedInfraEnv(root) {
   // Host-run worker uses published ports (docker-compose.dev-ports.yml).
   process.env.WORKER_SHARED_MYSQL_HOST ??= "127.0.0.1";
   process.env.WORKER_SHARED_MONGO_HOST ??= "127.0.0.1";
+}
+
+function waitForTcpPort(port, host = "127.0.0.1", timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const probe = () => {
+      if (Date.now() > deadline) {
+        reject(new Error(`Timeout waiting for TCP port ${host}:${port}`));
+        return;
+      }
+      const socket = new net.Socket();
+      socket.setTimeout(2000);
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.once("error", () => {
+        socket.destroy();
+        setTimeout(probe, 500);
+      });
+      socket.once("timeout", () => {
+        socket.destroy();
+        setTimeout(probe, 500);
+      });
+      socket.connect(port, host);
+    };
+    probe();
+  });
 }
 
 /** @param {string} cmd @param {string[]} args @param {import('node:child_process').SpawnOptions} [opts] */
@@ -330,6 +359,9 @@ console.log("[dev] Control-plane Postgres + Redis…");
 await run("pnpm", ["db:up"], { env: sharedEnv });
 await upSharedInfra(sharedEnv);
 warnMissingTenantImages();
+
+console.log("[dev] Waiting for control-plane Redis (127.0.0.1:6379)…");
+await waitForTcpPort(6379, "127.0.0.1");
 
 console.log("[dev] Migrations + platform admin…");
 await run("pnpm", ["db:wait"], { env: sharedEnv });

@@ -41,7 +41,7 @@ if (!existsSync(nextBin)) {
   console.error("[pms-ui] next not found. Run `pnpm install` from the repo root.");
   process.exit(1);
 }
-const nextArgs = ["dev", "--hostname", "127.0.0.1", "--port", String(port)];
+const nextArgs = ["dev", "--hostname", "0.0.0.0", "--port", String(port)];
 
 const child = spawn(process.execPath, [nextBin, ...nextArgs], {
   cwd: frontendDir,
