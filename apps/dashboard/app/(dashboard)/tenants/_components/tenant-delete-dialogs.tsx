@@ -46,6 +46,7 @@ type TenantDeleteDialogsProps = {
   isBulkDeleting: boolean;
   executeBulkDelete: () => void | Promise<void>;
   onCancelBulkDelete?: () => void;
+  onCancelSingleDelete?: () => void;
 };
 
 function DeleteProgressPanel({
@@ -107,7 +108,7 @@ function DeleteProgressPanel({
           onClick={onCancel}
           className="mt-2 text-destructive hover:bg-destructive/10"
         >
-          Stop remaining deletions
+          {progress.total != null && progress.total > 1 ? "Stop remaining deletions" : "Stop monitoring"}
         </Button>
       )}
     </div>
@@ -134,6 +135,7 @@ export function TenantDeleteDialogs({
   isBulkDeleting,
   executeBulkDelete,
   onCancelBulkDelete,
+  onCancelSingleDelete,
 }: TenantDeleteDialogsProps) {
   const bulkConfirmOk = bulkDeleteConfirmInput === "DELETE";
 
@@ -204,7 +206,10 @@ export function TenantDeleteDialogs({
       >
         <DialogContent showCloseButton={!isDeletingTenant}>
           {isDeletingTenant && deleteProgress ? (
-            <DeleteProgressPanel progress={deleteProgress} />
+            <DeleteProgressPanel
+              progress={deleteProgress}
+              onCancel={onCancelSingleDelete}
+            />
           ) : (
             <>
               <DialogHeader>

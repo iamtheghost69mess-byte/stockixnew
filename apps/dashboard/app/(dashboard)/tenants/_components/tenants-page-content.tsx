@@ -90,6 +90,7 @@ export function TenantsPageContent() {
   const [bulkDeleteConfirmInput, setBulkDeleteConfirmInput] = useState("");
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const bulkDeleteCancelledRef = useRef(false);
+  const singleDeleteCancelledRef = useRef(false);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -178,9 +179,17 @@ export function TenantsPageContent() {
     setDeleteConfirmOpen(true);
   }, []);
 
+  const handleCancelSingleDelete = useCallback(() => {
+    singleDeleteCancelledRef.current = true;
+    setDeleteProgress((p) =>
+      p ? { ...p, message: "Stopping deletion monitoring..." } : p,
+    );
+  }, []);
+
   const executeTenantDelete = useCallback(
     async (tenantId: string, slug: string, wipeVolumes: boolean) => {
       setDeletingId(tenantId);
+      singleDeleteCancelledRef.current = false;
       setDeleteProgress({
         message: wipeVolumes
           ? "Stopping stacks and removing volumes and images…"
@@ -222,6 +231,9 @@ export function TenantsPageContent() {
         setTenantAccess(null);
         setOneTimePassword(null);
         await pollUntilTenantRemoved(tenantId, (message, elapsedSec) => {
+          if (singleDeleteCancelledRef.current) {
+            throw new Error("cancelled_by_user");
+          }
           setDeleteProgress({ message, elapsedSec, slug });
         });
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
@@ -234,6 +246,10 @@ export function TenantsPageContent() {
         void load().catch(() => {});
       } catch (e) {
         const message = String(e);
+        if (message.includes("cancelled_by_user")) {
+          toast.warning(`Deprovisioning monitoring stopped. Tenant "${slug}" cleanup runs in background.`);
+          return;
+        }
         if (message.includes("tenant_not_found")) {
           setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
           toast.success(`Tenant "${slug}" was already removed.`);
@@ -1114,6 +1130,7 @@ export function TenantsPageContent() {
         isBulkDeleting={isBulkDeleting}
         executeBulkDelete={executeBulkDelete}
         onCancelBulkDelete={handleCancelBulkDelete}
+        onCancelSingleDelete={handleCancelSingleDelete}
       />
     </div>
   );

@@ -267,7 +267,7 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
   );
   if (!redisContainer) {
     log(`[db-deprovision] shared redis container not found — skipping Redis flush for "${slug}"`);
-    return false;
+    return true;
   }
 
   const patterns = [`tenant:${slug}:*`, `bull:tenant:${slug}:*`];
@@ -556,6 +556,7 @@ export async function deprovisionTenantDatabases(
     );
     if (!mongoContainer) {
       log(`[db-deprovision] shared mongo container not found — skipping Mongo cleanup for "${slug}"`);
+      result.mongoDb = true;
     } else {
       const mongoHost = sharedMongoHost();
       // Mongo DB name uses raw slug (not slugToMysqlSafe) intentionally.
