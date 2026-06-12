@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { TenantSlugConfirmField } from "./tenant-slug-confirm-field";
+import { TenantIdConfirmField } from "./tenant-id-confirm-field";
 
 type DeleteProgress = {
   message: string;
@@ -44,11 +45,20 @@ type TenantDeleteDialogsProps = {
   setBulkDeleteConfirmInput: (value: string) => void;
   isBulkDeleting: boolean;
   executeBulkDelete: () => void | Promise<void>;
+  onCancelBulkDelete?: () => void;
 };
 
-function DeleteProgressPanel({ progress }: { progress: DeleteProgress }) {
+function DeleteProgressPanel({
+  progress,
+  targets = [],
+  onCancel,
+}: {
+  progress: DeleteProgress;
+  targets?: { tenantId: string; slug: string }[];
+  onCancel?: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center gap-4 py-4 text-center">
+    <div className="flex flex-col items-center gap-4 py-4 text-center w-full">
       <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
       <DialogHeader className="space-y-2 text-center sm:text-center">
         <DialogTitle>
@@ -59,10 +69,47 @@ function DeleteProgressPanel({ progress }: { progress: DeleteProgress }) {
       </DialogHeader>
       <p className="font-mono text-sm text-foreground">{progress.slug}</p>
       <p className="max-w-sm text-sm text-muted-foreground">{progress.message}</p>
+      
+      {targets.length > 0 && (
+        <ul className="w-full max-h-40 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-left font-mono text-xs space-y-1">
+          {targets.map((t, idx) => {
+            const currentIdx = (progress.index ?? 1) - 1;
+            const isCompleted = idx < currentIdx;
+            const isCurrent = idx === currentIdx;
+            return (
+              <li
+                key={t.tenantId}
+                className={cn(
+                  "flex items-center justify-between py-0.5",
+                  isCompleted && "text-muted-foreground/60 line-through",
+                  isCurrent && "font-bold text-primary animate-pulse",
+                )}
+              >
+                <span>{t.slug}</span>
+                <span>
+                  {isCompleted ? "✓ Removed" : isCurrent ? "⚡ Removing..." : "Pending"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
       <p className="text-xs text-muted-foreground">
         Elapsed {progress.elapsedSec}s — Docker cleanup runs in the worker; this dialog stays open until
         the tenant is fully removed.
       </p>
+
+      {onCancel && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          className="mt-2 text-destructive hover:bg-destructive/10"
+        >
+          Stop remaining deletions
+        </Button>
+      )}
     </div>
   );
 }
@@ -86,6 +133,7 @@ export function TenantDeleteDialogs({
   setBulkDeleteConfirmInput,
   isBulkDeleting,
   executeBulkDelete,
+  onCancelBulkDelete,
 }: TenantDeleteDialogsProps) {
   const bulkConfirmOk = bulkDeleteConfirmInput === "DELETE";
 
@@ -106,15 +154,15 @@ export function TenantDeleteDialogs({
             <DialogTitle>Delete tenant</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This stops all Docker stacks, removes volumes and local images, deletes shared databases, and
-            removes the tenant from Stockix. This cannot be undone. Paste the tenant slug below to confirm.
+            This stops all Docker stacks, removes persistent volumes and local images, deletes databases, and
+            removes the tenant from Stockix. This operation is high-risk and irreversible. Type the exact Tenant ID (UUID) below to confirm.
           </p>
           {deleteTarget ? (
-            <TenantSlugConfirmField
-              slug={deleteTarget.slug}
+            <TenantIdConfirmField
+              tenantId={deleteTarget.tenantId}
               value={deleteSlugInput}
               onChange={setDeleteSlugInput}
-              inputId="delete-tenant-slug-confirm"
+              inputId="delete-tenant-id-confirm"
             />
           ) : null}
           <DialogFooter>
@@ -130,9 +178,9 @@ export function TenantDeleteDialogs({
             </Button>
             <Button
               variant="destructive"
-              disabled={!deleteTarget || deleteSlugInput !== deleteTarget.slug}
+              disabled={!deleteTarget || deleteSlugInput !== deleteTarget.tenantId}
               onClick={() => {
-                if (!deleteTarget || deleteSlugInput !== deleteTarget.slug) return;
+                if (!deleteTarget || deleteSlugInput !== deleteTarget.tenantId) return;
                 setDeleteConfirmOpen(false);
                 setDeleteVolumesOpen(true);
               }}
@@ -203,7 +251,11 @@ export function TenantDeleteDialogs({
       >
         <DialogContent showCloseButton={!isBulkDeleting}>
           {isBulkDeleting && deleteProgress ? (
-            <DeleteProgressPanel progress={deleteProgress} />
+            <DeleteProgressPanel
+              progress={deleteProgress}
+              targets={bulkDeleteTargets}
+              onCancel={onCancelBulkDelete}
+            />
           ) : (
             <>
               <DialogHeader>
@@ -226,6 +278,11 @@ export function TenantDeleteDialogs({
                 onChange={(e) => setBulkDeleteConfirmInput(e.target.value)}
                 autoComplete="off"
               />
+              {bulkDeleteConfirmInput.length > 0 && bulkDeleteConfirmInput !== "DELETE" && (
+                <p className="text-xs font-semibold text-destructive mt-1">
+                  You must type DELETE exactly to confirm
+                </p>
+              )}
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setBulkDeleteOpen(false)}>
                   Cancel

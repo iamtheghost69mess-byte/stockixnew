@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
@@ -89,6 +89,7 @@ export function TenantsPageContent() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteConfirmInput, setBulkDeleteConfirmInput] = useState("");
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const bulkDeleteCancelledRef = useRef(false);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -189,7 +190,7 @@ export function TenantsPageContent() {
       });
       setError(null);
       try {
-        const q = wipeVolumes ? "?volumes=true" : "";
+        const q = `${wipeVolumes ? "?volumes=true&" : "?"}confirm=${encodeURIComponent(tenantId)}&mode=single`;
         setDeleteProgress((p) =>
           p ? { ...p, message: "Submitting removal request…" } : p,
         );
@@ -253,6 +254,13 @@ export function TenantsPageContent() {
     [load],
   );
 
+  const handleCancelBulkDelete = useCallback(() => {
+    bulkDeleteCancelledRef.current = true;
+    setDeleteProgress((p) =>
+      p ? { ...p, message: "Stopping remaining deletions..." } : p,
+    );
+  }, []);
+
   const executeBulkDelete = useCallback(async () => {
     if (bulkDeleteConfirmInput !== "DELETE") return;
     const targets = tenants
@@ -261,10 +269,18 @@ export function TenantsPageContent() {
     if (targets.length === 0) return;
 
     setIsBulkDeleting(true);
+    bulkDeleteCancelledRef.current = false;
     setError(null);
     const failed: string[] = [];
+    let stoppedEarly = false;
 
     for (let i = 0; i < targets.length; i++) {
+      if (bulkDeleteCancelledRef.current) {
+        stoppedEarly = true;
+        const skippedCount = targets.length - i;
+        toast.warning(`Stopped remaining deletions. ${skippedCount} tenant${skippedCount === 1 ? "" : "s"} skipped.`);
+        break;
+      }
       const { tenantId, slug } = targets[i]!;
       setDeletingId(tenantId);
       try {
@@ -280,7 +296,7 @@ export function TenantsPageContent() {
         });
         let res: Response;
         try {
-          res = await fetch(`/api/tenants/${tenantId}?volumes=true`, {
+          res = await fetch(`/api/tenants/${tenantId}?volumes=true&confirm=DELETE&mode=bulk`, {
             method: "DELETE",
           });
         } finally {
@@ -333,7 +349,9 @@ export function TenantsPageContent() {
     void load().catch(() => {});
 
     if (failed.length === 0) {
-      toast.success(`Removed ${targets.length} tenant${targets.length === 1 ? "" : "s"} completely.`);
+      if (!stoppedEarly) {
+        toast.success(`Removed ${targets.length} tenant${targets.length === 1 ? "" : "s"} completely.`);
+      }
     } else if (failed.length < targets.length) {
       toast.error(`Some deletions failed:\n${failed.join("\n")}`);
       setError(failed.join("\n"));
@@ -1095,6 +1113,7 @@ export function TenantsPageContent() {
         setBulkDeleteConfirmInput={setBulkDeleteConfirmInput}
         isBulkDeleting={isBulkDeleting}
         executeBulkDelete={executeBulkDelete}
+        onCancelBulkDelete={handleCancelBulkDelete}
       />
     </div>
   );

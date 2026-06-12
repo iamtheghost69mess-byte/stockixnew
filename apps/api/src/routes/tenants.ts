@@ -697,6 +697,24 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
   }
+  const confirm = c.req.query("confirm");
+  const mode = c.req.query("mode");
+
+  if (!confirm || !mode) {
+    return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+  }
+
+  if (mode === "single") {
+    if (confirm !== parsed.data) {
+      return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+    }
+  } else if (mode === "bulk") {
+    if (confirm !== "DELETE") {
+      return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+    }
+  } else {
+    return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+  }
   if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
     return c.json({ error: "tenant_not_found" }, 404);
   }
@@ -916,6 +934,9 @@ app.delete("/tenants/:tenantId", async (c) => {
       removeVolumes,
       previousTenantStatus: target.tenantStatus,
       previousDeploymentStatus: target.deploymentStatus,
+      confirmationType: mode,
+      confirmationValue: confirm,
+      validatedByBackend: true,
     },
   });
   return c.json({
