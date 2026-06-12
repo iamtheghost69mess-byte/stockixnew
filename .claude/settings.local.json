@@ -81,7 +81,10 @@
       "Bash(node \"../../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.json)",
       "Bash(node \"../node_modules/typescript/bin/tsc\" --noEmit -p tsconfig.typecheck.json)",
       "Bash(node \"C:\\\\Users\\\\Jad\\\\Desktop\\\\stokcix\\\\stockixnew\\\\services\\\\stockix-finance\\\\node_modules\\\\typescript\\\\bin\\\\tsc\" --noEmit -p tsconfig.typecheck.json)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "PowerShell($path = \"C:\\\\Users\\\\Jad\\\\Desktop\\\\stokcix\\\\stockixnew\\\\node_modules\\\\.pnpm\\\\msgpackr-extract@3.0.3\\\\node_modules\\\\@msgpackr-extract\"; icacls $path /grant \"${env:USERNAME}:\\(OI\\)\\(CI\\)F\" /T /Q 2>&1; Write-Host \"Permissions fixed\")",
+      "PowerShell(icacls \"C:\\\\Users\\\\Jad\\\\Desktop\\\\stokcix\\\\stockixnew\\\\node_modules\\\\.pnpm\" /grant \"${env:USERNAME}:\\(OI\\)\\(CI\\)F\" /T /Q 2>&1 | Select-Object -Last 3)",
+      "PowerShell(\\(Get-ChildItem \"C:\\\\Users\\\\Jad\\\\Desktop\\\\stokcix\\\\stockixnew\\\\node_modules\" -ErrorAction SilentlyContinue | Measure-Object\\).Count)"
     ]
   },
   "enableAllProjectMcpServers": true,

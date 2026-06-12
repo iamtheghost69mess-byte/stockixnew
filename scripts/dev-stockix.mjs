@@ -203,7 +203,9 @@ async function upSharedInfra(env) {
   ensureDockerNetwork("stockix_public");
   const envFiles = sharedComposeEnvFiles();
   const args = sharedComposeArgs(envFiles);
-  args.push("up", "-d", "--wait");
+  // Explicitly name only long-running services — stockix-mongo-rs-init is a one-shot job
+  // that exits with 0, which causes `--wait` to return 1. It is handled below via compose run.
+  args.push("up", "-d", "--wait", "stockix-mysql", "stockix-mysql-proxy", "stockix-mongo", "stockix-redis");
 
   console.log("[dev] Shared tenant infra (stockix-shared: MySQL, Mongo, Redis)…");
   await run("docker", args, { env });
