@@ -18,6 +18,12 @@ const lruCache = new LRUCache();
 // require('module') passes through to Node's built-in module loader.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const NativeModule = require('module');
+// Seed/migration files use a .ts extension but are plain CommonJS JS with no TypeScript
+// syntax. Register .ts on the real Node module loader (Module._extensions) so nativeRequire
+// can load them — webpack's synthetic require.extensions is not the same object.
+if (!NativeModule._extensions['.ts']) {
+  NativeModule._extensions['.ts'] = NativeModule._extensions['.js'];
+}
 const nativeRequire: NodeRequire = NativeModule.createRequire(__filename);
 
 class NativeMigrationSource {
