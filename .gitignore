@@ -105,3 +105,4 @@ CLAUDE.local.md
 # Worker local compile artifacts (stale URLs; excluded from Docker image via .dockerignore)
 infra/worker-service/.tmp-dist/
 tree.txt
+tree.txt
