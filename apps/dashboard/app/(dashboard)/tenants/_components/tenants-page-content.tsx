@@ -778,7 +778,15 @@ export function TenantsPageContent() {
         }),
         signal: submitController.signal,
       });
-
+// In provision(), right before the fetch call
+console.log('[PROVISION] full body:', JSON.stringify({
+  slug: nextSlug,
+  name: nextName,
+  owner_id: nextOwnerId,
+  admin_email: nextAdminEmail,
+  admin_first_name: nextAdminFirstName,
+  admin_last_name: nextAdminLastName,
+}));
       const data = (await readJson(res)) as {
         error?: string;
         correlationId?: string;
@@ -793,6 +801,7 @@ export function TenantsPageContent() {
         console.log('[PROVISION] setProvisionPhase("provisioning") called, correlationId:', data.correlationId);
         setStreamCorrelationId(data.correlationId);
         sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY, data.correlationId);
+        sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY + "_ts", String(Date.now()));
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         const ok = await pollUntilDone(data.correlationId, setProvisionPhase);
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
@@ -864,13 +873,20 @@ export function TenantsPageContent() {
     const saved = sessionStorage.getItem(PROVISION_CORRELATION_SESSION_KEY);
     if (!saved) return;
     if (sessionStorage.getItem(PROVISION_RESUME_ATTEMPTED_KEY) === saved) return;
+    const savedAt = Number(sessionStorage.getItem(PROVISION_CORRELATION_SESSION_KEY + "_ts") ?? 0);
+    if (savedAt && Date.now() - savedAt > 30 * 60 * 1000) {
+      sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+      sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
+      sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY + "_ts");
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
   const sr = await fetch(`/api/tenants/provision-status/${saved}`);
       if (cancelled) return;
       const sj = (await readJson(sr)) as { status?: string; error?: string };
-      const terminalStates = ["complete", "failed", "dead", "cancelled", "done"];
+      const terminalStates = ["complete", "failed", "dead", "cancelled", "done", "pending", "unknown"];
       if (
         sr.status === 404
         || !sr.ok
@@ -906,10 +922,8 @@ export function TenantsPageContent() {
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
       } finally {
-        if (!cancelled) {
-          setStreamCorrelationId(null);
-          setLoading(false);
-        }
+        setStreamCorrelationId(null);
+        setLoading(false);
       }
     })();
 
@@ -966,6 +980,12 @@ export function TenantsPageContent() {
   open: addTenantOpen,
   onOpenChange: (open) => {
     if (!open && loading) return;
+    if (open) {
+      setLoading(false);
+      setStreamCorrelationId(null);
+      setProvisionLog([]);
+      setProvisionPhase("submitting");
+    }
     setAddTenantOpen(open);
   },
 }}

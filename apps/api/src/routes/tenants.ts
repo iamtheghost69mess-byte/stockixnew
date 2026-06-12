@@ -964,14 +964,18 @@ const provisionBody = z.object({
 });
 
 app.post("/tenants", async (c) => {
+  console.log('[API-POST] POST /tenants received — actor:', c.get('actorId'), 'role:', c.get('actorRole'));
   if (!db) {
+    console.error('[API-POST] no db — DATABASE_URL not configured');
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
 
   let body: z.infer<typeof provisionBody>;
   try {
     body = provisionBody.parse(await c.req.json());
+    console.log('[API-POST] parsed body — slug:', body.slug, 'owner_id:', body.owner_id, 'plan_slug:', body.plan_slug);
   } catch (e) {
+    console.error('[API-POST] body parse failed:', e);
     return c.json(
       { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
       400,
@@ -1089,6 +1093,7 @@ app.post("/tenants", async (c) => {
     "HTTP 202 — provisioning accepted; background worker will start",
   );
 
+  console.log('[API-POST] dispatching provision job — slug:', body.slug, 'correlationId:', correlationId);
   const job = await insertTenantJob(db, {
     type: "tenant.provision",
     correlationId,
@@ -1107,6 +1112,7 @@ app.post("/tenants", async (c) => {
     },
   });
 
+  console.log('[API-POST] returning 202 — jobId:', job?.id, 'correlationId:', correlationId);
   return c.json(
     {
       accepted: true,
