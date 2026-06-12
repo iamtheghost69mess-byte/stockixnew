@@ -1,14 +1,12 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import Redis from 'ioredis';
 
 @Module({
   imports: [
     ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
+      useFactory: () => {
         const isTest =
           process.env.NODE_ENV === 'test' ||
           process.env.JEST_WORKER_ID !== undefined;
@@ -22,34 +20,30 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
           };
         }
 
-        const globalTtl = configService.get<number>('throttle.global.ttl');
-        const globalLimit = configService.get<number>('throttle.global.limit');
-        const authTtl = configService.get<number>('throttle.auth.ttl');
-        const authLimit = configService.get<number>('throttle.auth.limit');
-
         const redisPrefix = process.env.REDIS_KEY_PREFIX ?? '';
-        const redisOptions = {
-          host: configService.get<string>('redis.host'),
-          port: configService.get<number>('redis.port'),
-          password: configService.get<string>('redis.password') || undefined,
-          db: configService.get<number>('redis.db'),
+
+        const redisClient = new Redis({
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379', 10),
+          password: process.env.REDIS_PASSWORD || undefined,
+          db: parseInt(process.env.REDIS_DB || '0', 10),
           keyPrefix: redisPrefix ? `${redisPrefix}throttle:` : 'throttle:',
-        };
+          lazyConnect: true,
+          enableOfflineQueue: false,
+          maxRetriesPerRequest: 0,
+        });
+
+        // Connect in background — do not await, do not block app boot.
+        // If Redis is unavailable at boot, throttler fails open (no throttling).
+        // The app still boots and /api/ping returns 200.
+        redisClient.connect().catch(() => {});
 
         return {
           throttlers: [
-            {
-              name: 'default',
-              ttl: globalTtl ?? 60000,
-              limit: globalLimit ?? 2000,
-            },
-            {
-              name: 'auth',
-              ttl: authTtl ?? 60000,
-              limit: authLimit ?? 200,
-            },
+            { name: 'default', ttl: 60000, limit: 2000 },
+            { name: 'auth', ttl: 60000, limit: 200 },
           ],
-          storage: new ThrottlerStorageRedisService(redisOptions),
+          storage: new ThrottlerStorageRedisService(redisClient as any),
         };
       },
     }),
