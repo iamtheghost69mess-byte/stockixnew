@@ -16,7 +16,7 @@ import { defaultTenantEnvRoot } from "../domain/env-paths.js";
 import { provisionTenant } from "../domain/provisioner.js";
 import { getTenantStackPaths } from "../domain/provision-paths.js";
 import { createProvisionTracer } from "../domain/provision-trace.js";
-import { composeProjectName, tenantMysqlVolumeName } from "../domain/provisioning/compose-project-name.js";
+import { composeProjectName, tenantMysqlVolumeName, tenantMongoVolumeName } from "../domain/provisioning/compose-project-name.js";
 import {
   COMPOSE_DOWN_TIMEOUT_MS,
   resolveComposeStepTimeoutMs,
@@ -636,6 +636,7 @@ export async function executeProvisionRuntime(
   const tenantEnvRoot = defaultTenantEnvRoot();
   const project = composeProjectName(input.slug);
   const mysqlVolumeName = tenantMysqlVolumeName(input.slug);
+  const mongoVolumeName = tenantMongoVolumeName(input.slug);
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
   const requestId = correlationId;
   let port: number | undefined;
@@ -1382,6 +1383,10 @@ export async function executeProvisionRuntime(
     // Explicitly delete the MySQL named volume — compose down -v may not remove
     // explicitly named volumes (name: ${MYSQL_VOLUME_NAME}) in all Compose versions.
     await execa("docker", ["volume", "rm", mysqlVolumeName], { stdio: "pipe", reject: false });
+    // Explicitly delete the Mongo auto-named volume — stale SCRAM credentials survive compose
+    // down -v when the container was previously stopped (not running) because Compose skips
+    // volume removal for stopped containers in some versions.
+    await execa("docker", ["volume", "rm", mongoVolumeName], { stdio: "pipe", reject: false });
     await trace.event("preflight.cleanup", "completed", {
       meta: { composeProjectName: project },
     });

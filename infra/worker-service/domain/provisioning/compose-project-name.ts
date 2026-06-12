@@ -6,3 +6,8 @@ export function composeProjectName(slug: string): string {
 export function tenantMysqlVolumeName(slug: string): string {
   return `${composeProjectName(slug)}-mysql`;
 }
+
+/** Docker auto-named volume for MongoDB; Compose generates <project>_mongo since no explicit name: is set. */
+export function tenantMongoVolumeName(slug: string): string {
+  return `${composeProjectName(slug)}_mongo`;
+}
