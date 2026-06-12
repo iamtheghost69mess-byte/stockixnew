@@ -104,6 +104,12 @@ app.post("/internal/jobs/claim", async (c) => {
   if (!workerId) {
     return c.json({ error: "worker_id_required" }, 400);
   }
+
+  const pendingCount = await db
+    .select({ c: sql`count(*)` })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.status, "pending"));
+  console.log(`[api-debug] Job claim requested by worker: ${workerId}. Total pending jobs in DB: ${pendingCount[0]?.c ?? 0}`);
   const heartbeatStaleMs = apiConfig.workerHeartbeatStaleMs;
   const staleLeaseMs = apiConfig.workerStaleLeaseThresholdMs;
   // effectiveStaleMs = min(heartbeat, lease) — intentional conservative bound.
@@ -258,6 +264,9 @@ app.post("/internal/jobs/claim", async (c) => {
         ),
       )
       .returning();
+    if (updated) {
+      console.log(`[api-debug] Worker ${workerId} claimed job ID: ${updated.id}, Type: ${updated.type}`);
+    }
     return updated ?? null;
   });
 

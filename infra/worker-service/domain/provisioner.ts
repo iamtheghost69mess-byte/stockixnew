@@ -243,7 +243,9 @@ async function getComposeContainerName(
       ["compose", "-f", composeFile, "-p", project, "ps", "-q", service],
       { stdio: "pipe" },
     );
-    const id = stdout.trim().split("\n").find((line) => line.trim())?.trim();
+    const id = stdout.trim().split("\n")
+      .map((line) => line.trim())
+      .find((line) => /^[a-f0-9]{12,64}$/i.test(line));
     if (!id) return null;
     const { stdout: nameOut } = await execa(
       "docker",
@@ -252,7 +254,8 @@ async function getComposeContainerName(
     );
     const name = nameOut.trim().replace(/^\//, "");
     return name || null;
-  } catch {
+  } catch (err) {
+    console.error("[getComposeContainerName-debug] Error resolving container name:", err);
     return null;
   }
 }

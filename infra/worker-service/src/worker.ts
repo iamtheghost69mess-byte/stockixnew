@@ -830,8 +830,11 @@ function isPermanentProvisionError(message: string): boolean {
 }
 
 async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): Promise<void> {
+  console.log(`[worker-debug] Loop ${loopId} polling cycle started.`);
   while (!shuttingDown) {
+    console.log(`[worker-debug] Loop ${loopId} attempting to claim next job...`);
     const job = await claimNextJob().catch((error) => {
+      console.error(`[worker-debug] Loop ${loopId} claimNextJob error:`, error);
       if (isApiConnectionError(error)) {
         logApiUnreachable();
         return null;
@@ -841,7 +844,10 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       return null;
     });
     if (job) {
+      console.log(`[worker-debug] Loop ${loopId} successfully claimed job:`, { id: job.id, type: job.type });
       apiUnreachableCount = 0;
+    } else {
+      console.log(`[worker-debug] Loop ${loopId} no job claimed.`);
     }
     lastSuccessfulPollAt = Date.now();
     if (!job) {
