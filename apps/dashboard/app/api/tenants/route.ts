@@ -32,8 +32,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  console.log("[BFF] POST /api/tenants - Started, method:", req.method, "url:", req.url);
   const body = await req.text();
+  console.log("[BFF] POST /api/tenants - Request Body:", body);
   try {
+    console.log("[BFF] POST /api/tenants - Calling apiFetch");
     const res = await apiFetch(
       "/tenants",
       {
@@ -45,13 +48,20 @@ export async function POST(req: Request) {
       PROVISION_BFF_RETRIES,
       LIFECYCLE_TIMEOUT_MS,
     );
+    console.log("[BFF] POST /api/tenants - apiFetch returned status:", res.status);
+    console.log('[BFF] POST /api/tenants handler entered', await req.text());
     const responseBody = await res.text();
+    console.log("[BFF] POST /api/tenants - Response Body:", responseBody);
     return new NextResponse(responseBody, {
       status: res.status,
       headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
     });
   } catch (err) {
-    if (isApiConnectionError(err)) return apiUnreachableResponse();
+    console.error("[BFF] POST /api/tenants - Error during apiFetch:", err);
+    if (isApiConnectionError(err)) {
+      console.error("[BFF] POST /api/tenants - Detected API Connection Error, returning unreachable response");
+      return apiUnreachableResponse();
+    }
     throw err;
   }
 }

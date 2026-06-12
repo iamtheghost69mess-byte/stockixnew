@@ -258,8 +258,12 @@ export default function TenantCreateWizard(props: Props) {
     (licenseMode === "auto" || (licenseMode === "existing" && existingLicenseId.length > 0));
 
   const submit = async () => {
+      console.log('[WIZARD] submit() called, step:', step, 'loading:', loading);
+
     setFormError(null);
     try {
+          console.log('[WIZARD] calling onProvision with:', { slug, name, adminEmail, planSlug });
+
       await onProvision({
         slug: slug.trim(),
         name: name.trim(),
@@ -271,6 +275,7 @@ export default function TenantCreateWizard(props: Props) {
         assignExistingLicenseId: licenseMode === "existing" ? existingLicenseId : null,
       });
     } catch (e) {
+      console.error('[WIZARD] onProvision threw:', e);
       setFormError(String(e));
     }
   };

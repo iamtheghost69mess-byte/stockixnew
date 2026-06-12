@@ -52,7 +52,11 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
         isReady = false;
       } else {
         try {
-          const pong = await redisClient.ping();
+          const pingPromise = redisClient.ping();
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Redis ping timeout")), 2000)
+          );
+          const pong = await Promise.race([pingPromise, timeoutPromise]);
           checks.redis = pong === "PONG" ? "ok" : "fail";
           if (checks.redis === "fail") {
             reasons.redis = "Ping response was not PONG";

@@ -137,7 +137,8 @@ try {
 
 console.log("\n[dev:clean] Step 5 — Starting all apps…\n");
 
-const apiOrigin = "http://127.0.0.1:4000";
+const apiOrigin = "http://localhost:4000";
+const apiServerOrigin = "http://[::1]:4000";
 /** @type {NodeJS.ProcessEnv} */
 const sharedEnv = {
   ...process.env,
@@ -148,8 +149,10 @@ const sharedEnv = {
   PMS_FRONTEND_PORT: process.env.PMS_FRONTEND_PORT || "3004",
   NEXT_PUBLIC_PMS_API_URL: `http://127.0.0.1:${process.env.PMS_PORT || "3003"}`,
   NEXT_PUBLIC_PMS_TENANT_APP_URL: `http://localhost:${process.env.PMS_FRONTEND_PORT || "3004"}`,
-  STOCKIX_API_URL: apiOrigin,
+  STOCKIX_API_URL: apiServerOrigin,
+  STOCKIX_SERVER_API_URL: apiServerOrigin,
   NEXT_PUBLIC_STOCKIX_API_URL: apiOrigin,
+  API_HOST: "[::1]",
   WORKER_HEALTH_PORT: process.env.WORKER_HEALTH_PORT || "9090",
   STOCKIX_DEV_LOCKED_PORT: "1",
   STOCKIX_DEV_REUSE_API: "1",

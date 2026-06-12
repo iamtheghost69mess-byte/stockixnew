@@ -19,7 +19,7 @@ COPY packages/webapp/package.json ./packages/webapp/
 COPY packages/shared/package.json ./packages/shared/
 COPY shared ./shared
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 FROM deps AS build-webapp
 COPY packages/webapp ./packages/webapp

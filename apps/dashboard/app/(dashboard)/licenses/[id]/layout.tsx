@@ -13,7 +13,7 @@ export async function generateMetadata({
   const cookie = headerStore.get("cookie") ?? "";
 
   try {
-    const res = await fetch(`${dashboardConfig.nextPublicApiUrl}/licenses/${id}`, {
+    const res = await fetch(`${dashboardConfig.serverApiUrl}/licenses/${id}`, {
       headers: {
         Authorization: `Bearer ${dashboardConfig.platformApiSecret}`,
         ...(cookie ? { Cookie: cookie } : {}),

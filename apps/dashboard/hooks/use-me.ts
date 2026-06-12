@@ -48,22 +48,27 @@ function isValidMe(raw: Me | undefined): raw is Me {
 }
 
 async function fetchMe(): Promise<Me | null> {
-  if (inFlight) return inFlight;
+  if (inFlight) { console.log('[USE-ME] fetchMe — already in-flight, reusing'); return inFlight; }
+  console.log('[USE-ME] fetchMe — starting fetch to /api/me');
   inFlight = fetch("/api/me", { credentials: "same-origin" })
     .then(async (r) => {
       if (!r.ok) {
+        console.log('[USE-ME] fetchMe — /api/me not-ok, status:', r.status);
         cachedMe = null;
         return null;
       }
       const payload = (await r.json()) as { me?: Me };
       if (!isValidMe(payload.me)) {
+        console.log('[USE-ME] fetchMe — payload invalid, me field:', payload.me);
         cachedMe = null;
         return null;
       }
       cachedMe = normalizeMe(payload.me);
+      console.log('[USE-ME] fetchMe — resolved me:', cachedMe?.id, '| role:', cachedMe?.role);
       return cachedMe;
     })
-    .catch(() => {
+    .catch((err) => {
+      console.error('[USE-ME] fetchMe — fetch threw:', err);
       cachedMe = null;
       return null;
     })
@@ -80,6 +85,7 @@ export function useMe(): { me: Me | null; loading: boolean } {
     seeded ? normalizeMe(seeded) : null,
   );
   const [loading, setLoading] = useState(seeded == null);
+  console.log('[USE-ME] useMe render — me.id:', me?.id ?? 'null', '| loading:', loading, '| seeded:', seeded?.id ?? 'null');
 
   useEffect(() => {
     let mounted = true;

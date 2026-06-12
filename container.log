@@ -1,0 +1,790 @@
+(node:1) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":"error","msg":"unhandled_rejection","ts":"2026-06-12T12:55:38.006Z","error":{"message":"fsevents.watch is not a function","stack":"TypeError: fsevents.watch is not a function\n    at createFSEventsInstance (/app/packages/server/build/index.js:223885:25)\n    at setFSEventsListener (/app/packages/server/build/index.js:223941:16)\n    at FsEventsHandler._watchWithFsEvents (/app/packages/server/build/index.js:224144:18)\n    at FsEventsHandler.initWatch (/app/packages/server/build/index.js:224220:23)\n    at FsEventsHandler._addToFsEvents (/app/packages/server/build/index.js:224309:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)"},"type":"unhandled_rejection","reason":"fsevents.watch is not a function","promise":"[object Promise]"}
+{"level":"info","msg":"Starting Nest application...","ts":"2026-06-12T12:55:40.605Z","context":"NestFactory"}
+{"level":"info","msg":"PassportModule dependencies initialized","ts":"2026-06-12T12:55:40.605Z","context":"InstanceLoader"}
+{"level":"info","msg":"AppThrottleModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"TenancyModelsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"TenantModelsInitializeModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"PassportModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"SocketModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"FinancialStatementsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ConfigHostModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"DynamicListModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"MiscellaneousModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ConfigModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ConfigModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"S3Module dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"PlaidModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ThrottlerModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"MailModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"JwtModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"TenancyDatabaseModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"SystemDatabaseModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"SystemModelsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"DiscoveryModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardRootModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.606Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.607Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.673Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"LoopsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"ClsModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"RedisModule dependencies initialized","ts":"2026-06-12T12:55:40.674Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullBoardFeatureModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"ChromiumlyTenancyModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"LicenseModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"ServeStaticModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"ServeStaticModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"TenancyModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"MailTenancyModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"PostHogModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"ScheduleModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"EventEmitterModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"PdfModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"AutoIncrementOrdersModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"ExchangeRatesModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"BullModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"MailNotificationModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"EventTrackerModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"FeaturesModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"FinancialSheetCommonModule dependencies initialized","ts":"2026-06-12T12:55:40.675Z","context":"InstanceLoader"}
+{"level":"info","msg":"LedgerModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"TransactionsByReferenceModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"AgingSummaryModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"DashboardModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"InventoryCostModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"AppModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankingCategorizeModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"AttachmentsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"SalesByItemsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"InventoryValuationSheetModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"SalesTaxLiabilityModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"PurchasesByItemsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"RealizedGainLossModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"UnrealizedGainLossModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"SettingsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"APAgingSummaryModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"ARAgingSummaryModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"TemplateInjectableModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"TransformerModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"TenantDBManagerModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"I18nModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"ItemCategoryModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"ResourceModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BillLandedCostsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BranchesModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"TransactionsLockingModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"ViewsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"CustomerBalanceSummaryModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"VendorBalanceSummaryModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"WarehousesModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"PdfTemplatesModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankRulesModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankingTransactionsExcludeModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"PaymentServicesModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"CurrenciesModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"UsersModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"WarehousesTransfersModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankingTransactionsRegonizeModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankAccountsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankingTransactionsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"OrganizationModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"ExportModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"InventoryItemDetailsModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"SubscriptionModule dependencies initialized","ts":"2026-06-12T12:55:40.676Z","context":"InstanceLoader"}
+{"level":"info","msg":"TransactionsByVendorModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"TransactionsByCustomerModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"PaymentLinksModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"TrialBalanceSheetModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankingPlaidModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"ContactsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"RolesModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"StripePaymentModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"CreditNoteRefundsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"VendorCreditsRefundModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"InventoryAdjustmentsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"VendorCreditApplyBillsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"CreditNotesApplyInvoiceModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"TaxRatesModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"ItemsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"ProfitLossSheetModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"VendorsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"CustomersModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"ExpensesModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"ManualJournalsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"BillPaymentsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"BankingMatchingModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"CashflowStatementModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"VendorCreditsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"BalanceSheetModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"ImportModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"AccountsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"JournalSheetModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"GeneralLedgerModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"BillsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"CreditNotesModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"PaymentsReceivedModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"SaleInvoicesModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"SaleEstimatesModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"SaleReceiptsModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"InternalModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"AuthModule dependencies initialized","ts":"2026-06-12T12:55:40.677Z","context":"InstanceLoader"}
+{"level":"info","msg":"Socket.IO Gateway initialized","ts":"2026-06-12T12:55:40.677Z","context":"SocketGateway"}
+{"level":"info","msg":"AppController {/api}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"FinanceWebappSpaController {/api}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/*, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"SystemDatabaseController {/api/system_db}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/system_db, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"PingController {/api/ping}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/ping, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"AuthController {/api/auth}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/auth/signin, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/signup, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/register, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/signup/verify, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/send_reset_password, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/reset_password/:token, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/meta, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/impersonate, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/impersonate, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"AuthedController {/api/auth}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/auth/signup/verify/resend, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/account, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/my-tenants, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/switch-tenant, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/auth/change_password, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"AuthApiKeysController {/api/api-keys}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/api-keys/generate, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/api-keys/:id/revoke, PUT} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/api-keys, GET} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalController {/api/internal}:","ts":"2026-06-12T12:55:40.678Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/attach-user-to-tenant, POST} route","ts":"2026-06-12T12:55:40.678Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalProvisionController {/api/internal}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/provision-user, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/organization/setup/complete, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalLicenseController {/api/internal}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/license/sync, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalUsersController {/api/internal/tenants}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users/invite, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users, GET} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users/:userId, PATCH} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users/:userId, DELETE} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users/:userId/reset-password, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users/:userId/suspend, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/users/:userId/activate, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalOrgController {/api/internal/tenants}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/activate-warehouses, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/seed-pos-defaults, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/copy-from/:parentTenantId, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/export-chart-of-accounts, GET} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/import-chart-of-accounts, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/tenants/:tenantId/set-parent, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalOrganizationController {/api/internal/organization}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/organization/branding/sync, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalResolveController {/api/internal}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/resolve-tenant, GET} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"InternalPosController {/api/internal/pos}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/internal/pos/receipts, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/pos/receipts/check-duplicate, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/pos/receipts/by-reference/:referenceNo, DELETE} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/pos/receipts/by-reference/:referenceNo/partial-refund, PATCH} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/pos/inventory/grn-bill, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/internal/pos/inventory/variance-journal, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"UsersController {/api/users}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/users/:id, PUT} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/users/:id, DELETE} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/users/:id, GET} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/users, GET} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/users/:id/activate, PUT} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/users/:id/inactivate, PUT} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"UsersInviteController {/api/invite}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/invite, PATCH} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/invite/users/:id/resend, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"UsersInvitePublicController {/api/invite}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/invite/accept/:token, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/invite/check/:token, GET} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"SaleReceiptsController {/api/sale-receipts}:","ts":"2026-06-12T12:55:40.679Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.679Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/:id/mail, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/state, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/:id/mail, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/:id, PUT} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/:id, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/:id, DELETE} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-receipts/:id/close, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"CurrenciesController {/api/currencies}:","ts":"2026-06-12T12:55:40.680Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/currencies, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/currencies/:id, PUT} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/currencies/:code, DELETE} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/currencies, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/currencies/:currencyCode, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"ExchangeRatesController {/api/exchange-rates}:","ts":"2026-06-12T12:55:40.680Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/exchange-rates/latest, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/exchange-rates/by-date, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"ItemsController {/api/items}:","ts":"2026-06-12T12:55:40.680Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/items, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id, PUT} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items, POST} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id, DELETE} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id/inactivate, PATCH} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id/activate, PATCH} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id, GET} route","ts":"2026-06-12T12:55:40.680Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id/invoices, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id/bills, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id/estimates, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/items/:id/receipts, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"InventoryAdjustmentsController {/api/inventory-adjustments}:","ts":"2026-06-12T12:55:40.681Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/inventory-adjustments/quick, POST} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/inventory-adjustments/:id, DELETE} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/inventory-adjustments, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/inventory-adjustments/:id, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/inventory-adjustments/:id/publish, PUT} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"BranchesController {/api/branches}:","ts":"2026-06-12T12:55:40.681Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/branches, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/branches/:id, GET} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/branches, POST} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/branches/:id, PUT} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/branches/:id, DELETE} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/branches/activate, POST} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/branches/:id/mark-as-primary, PUT} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"WarehousesController {/api/warehouses}:","ts":"2026-06-12T12:55:40.681Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/warehouses, POST} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouses/:id, PUT} route","ts":"2026-06-12T12:55:40.681Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouses/:id, DELETE} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouses/:id, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouses, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouses/activate, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouses/:id/mark-primary, PUT} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"WarehouseItemsController {/api/items}:","ts":"2026-06-12T12:55:40.682Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/items/:id/warehouses, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"AccountsController {/api/accounts}:","ts":"2026-06-12T12:55:40.682Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/accounts/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/:id, PUT} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/:id, DELETE} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/:id/activate, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/:id/inactivate, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/types, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/transactions, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts/:id, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/accounts, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"InventoryCostController {/api/inventory-cost}:","ts":"2026-06-12T12:55:40.682Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/inventory-cost/items, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"SaleInvoicesController {/api/sale-invoices}:","ts":"2026-06-12T12:55:40.682Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/mail, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id, PUT} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id, DELETE} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/receivable, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/state, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices, GET} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/deliver, PUT} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/writeoff, POST} route","ts":"2026-06-12T12:55:40.682Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/cancel-writeoff, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/payments, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/html, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/mail, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-invoices/:id/generate-link, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"PdfTemplatesController {/api/pdf-templates}:","ts":"2026-06-12T12:55:40.683Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/pdf-templates, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/pdf-templates/:id, DELETE} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/pdf-templates/state, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/pdf-templates/:id, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/pdf-templates, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/pdf-templates/:id, PUT} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/pdf-templates/:id/assign-default, PUT} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"AttachmentsController {/api/attachments}:","ts":"2026-06-12T12:55:40.683Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/attachments, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/attachments/:id, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/attachments/:id, DELETE} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/attachments/:id/link, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/attachments/:id/unlink, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/attachments/:id/presigned-url, GET} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"TaxRatesController {/api/tax-rates}:","ts":"2026-06-12T12:55:40.683Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/tax-rates, POST} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/tax-rates/:id, PUT} route","ts":"2026-06-12T12:55:40.683Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/tax-rates/:id, DELETE} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/tax-rates/:id, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/tax-rates, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/tax-rates/:id/activate, PUT} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/tax-rates/:id/inactivate, PUT} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"PaymentReceivesController {/api/payments-received}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id/mail, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id/edit-page, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id/mail, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id, PUT} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id, DELETE} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/state, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id/invoices, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payments-received/:id, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"ImportController {/api/import}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/import/file, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/import/:import_id/mapping, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/import/:import_id/preview, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/import/:import_id/import, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/import/sample, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/import/:import_id, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"ResourceController {/api/resources}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/resources/:resourceModel/meta, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"PaymentLinksController {/api/payment-links}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/payment-links/:paymentLinkId/invoice, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payment-links/:paymentLinkId/stripe_checkout_session, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payment-links/:paymentLinkId/invoice/pdf, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"StripeIntegrationController {/api/stripe}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/stripe/link, GET} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/stripe/callback, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/stripe/account, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/stripe/account_session, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/stripe/account_link, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"StripePaymentWebhooksController {/api/webhooks/stripe}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/webhooks/stripe, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"CreditNotesController {/api/credit-notes}:","ts":"2026-06-12T12:55:40.684Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/credit-notes, POST} route","ts":"2026-06-12T12:55:40.684Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/state, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:id, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:id, PUT} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:id/open, PUT} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:id, DELETE} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"CreditNoteRefundsController {/api/credit-notes}:","ts":"2026-06-12T12:55:40.685Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:creditNoteId/refunds, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/refunds/:refundCreditId, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:creditNoteId/refunds, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/refunds/:refundCreditId, DELETE} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"CreditNotesApplyInvoiceController {/api/credit-notes}:","ts":"2026-06-12T12:55:40.685Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:creditNoteId/applied-invoices, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:creditNoteId/apply-invoices, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/:creditNoteId/apply-invoices, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/credit-notes/applied-invoices/:applyCreditToInvoicesId, DELETE} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"ManualJournalsController {/api/manual-journals}:","ts":"2026-06-12T12:55:40.685Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/manual-journals/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals/:id, PUT} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals/:id, DELETE} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals/:id/publish, PATCH} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals/:id, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/manual-journals, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"BillsController {/api/bills}:","ts":"2026-06-12T12:55:40.685Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/bills/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills, POST} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/:id, PUT} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/:id, DELETE} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/:id/payment-transactions, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/:id, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/:id/open, PATCH} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bills/due, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"BillAllocateLandedCostController {/api/landed-cost}:","ts":"2026-06-12T12:55:40.685Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/landed-cost/transactions, GET} route","ts":"2026-06-12T12:55:40.685Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/landed-cost/bills/:billId/allocate, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/landed-cost/:allocatedLandedCostId, DELETE} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/landed-cost/bills/:billId/transactions, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"VendorsController {/api/vendors}:","ts":"2026-06-12T12:55:40.686Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/vendors, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors/:id, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors/:id, PUT} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors/:id, DELETE} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors/:id/opening-balance, PUT} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendors/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"CustomersController {/api/customers}:","ts":"2026-06-12T12:55:40.686Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/customers/:id, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers/:id, PUT} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers/:id, DELETE} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers/:id/opening-balance, PUT} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/customers/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"ItemCategoryController {/api/item-categories}:","ts":"2026-06-12T12:55:40.686Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/item-categories, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/item-categories, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/item-categories/:id, PUT} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/item-categories/:id, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/item-categories/:id, DELETE} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"ExpensesController {/api/expenses}:","ts":"2026-06-12T12:55:40.686Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/expenses/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses/:id, PUT} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses/:id, DELETE} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses/:id/publish, POST} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses, GET} route","ts":"2026-06-12T12:55:40.686Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/expenses/:id, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"WarehouseTransfersController {/api/warehouse-transfers}:","ts":"2026-06-12T12:55:40.687Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers/:id, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers/:id/initiate, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers/:id/transferred, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers/:id, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/warehouse-transfers/:id, DELETE} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"SaleEstimatesController {/api/sale-estimates}:","ts":"2026-06-12T12:55:40.687Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id, DELETE} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/state, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/deliver, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/approve, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/reject, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/notify-sms, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/sms-details, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/mail, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id/mail, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/sale-estimates/:id, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"VendorCreditsController {/api/vendor-credits}:","ts":"2026-06-12T12:55:40.687Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/validate-bulk-delete, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/bulk-delete, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits, POST} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:id/open, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:id, PUT} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:id, DELETE} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:id, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"VendorCreditApplyBillsController {/api/vendor-credits}:","ts":"2026-06-12T12:55:40.687Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:vendorCreditId/bills-to-apply, GET} route","ts":"2026-06-12T12:55:40.687Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:vendorCreditId/apply-to-bills, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/applied-bills/:vendorCreditAppliedBillId, DELETE} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:vendorCreditId/applied-bills, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BillPaymentsController {/api/bill-payments}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/bill-payments, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments/:billPaymentId, DELETE} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments/:billPaymentId, PUT} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments/new-page/entries, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments/:billPaymentId/bills, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments/:billPaymentId/edit-page, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments/:billPaymentId, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/bill-payments, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"VendorCreditsRefundController {/api/vendor-credits}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/refunds/:refundCreditId, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:vendorCreditId/refund, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/:vendorCreditId/refund, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/vendor-credits/refunds/:refundCreditId, DELETE} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankAccountsController {/api/banking/accounts}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/accounts, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/accounts/:bankAccountId/summary, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/accounts/:id/disconnect, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/accounts/:id/refresh, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/accounts/:id/pause, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/accounts/:id/resume, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingPlaidController {/api/banking/plaid}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/plaid/link-token, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/plaid/exchange-token, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingPlaidWebhooksController {/api/banking/plaid}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/plaid/webhooks, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingCategorizeController {/api/banking/categorize}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/categorize, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/categorize/bulk, DELETE} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/categorize/:id, DELETE} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingTransactionsController {/api/banking/transactions}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/transactions, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/transactions, POST} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/transactions/:id, DELETE} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/transactions/:id, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingUncategorizedTransactionsController {/api/banking/uncategorized}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/uncategorized/autofill, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/uncategorized/accounts/:accountId, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/uncategorized/:uncategorizedTransactionId, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingPendingTransactionsController {/api/banking/pending}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/pending, GET} route","ts":"2026-06-12T12:55:40.688Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankRulesController {/api/banking/rules}:","ts":"2026-06-12T12:55:40.688Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/rules, POST} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/rules/:id, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/rules/:id, DELETE} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/rules/:id, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/rules, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingRecognizedTransactionsController {/api/banking/recognized}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/recognized/:recognizedTransactionId, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/recognized, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingTransactionsExcludeController {/api/banking/exclude}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/exclude/bulk, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/exclude/bulk, DELETE} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/exclude, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/exclude/:id, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/exclude/:id, DELETE} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"BankingMatchingController {/api/banking/matching}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/banking/matching/matched, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/matching/match, POST} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/banking/matching/unmatch/:uncategorizedTransactionId, PATCH} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"TransactionsLockingController {/api/transactions-locking}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/transactions-locking/lock, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/transactions-locking/cancel-lock, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/transactions-locking/unlock-partial, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/transactions-locking/cancel-unlock-partial, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/transactions-locking, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/transactions-locking/:module, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"SettingsController {/api/settings}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/settings, PUT} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/settings, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"BalanceSheetStatementController {/api/reports/balance-sheet}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/balance-sheet, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"RealizedGainLossController {/api/reports/realized-gain-loss}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/realized-gain-loss, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"UnrealizedGainLossController {/api/reports/unrealized-gain-loss}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/unrealized-gain-loss, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"PurchasesByItemReportController {/api/reports/purchases-by-items}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/purchases-by-items, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"CustomerBalanceSummaryController {/api/reports/customer-balance-summary}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/customer-balance-summary, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"VendorBalanceSummaryController {/api/reports/vendor-balance-summary}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/vendor-balance-summary, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"SalesByItemsController {/api/reports/sales-by-items}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/sales-by-items, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"GeneralLedgerController {/api/reports/general-ledger}:","ts":"2026-06-12T12:55:40.689Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/general-ledger, GET} route","ts":"2026-06-12T12:55:40.689Z","context":"RouterExplorer"}
+{"level":"info","msg":"TrialBalanceSheetController {/api/reports/trial-balance-sheet}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/trial-balance-sheet, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"TransactionsByVendorController {/api/reports/transactions-by-vendors}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/transactions-by-vendors, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"TransactionsByCustomerController {/api/reports/transactions-by-customers}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/transactions-by-customers, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"TransactionsByReferenceController {/api/reports/transactions-by-reference}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/transactions-by-reference, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"ARAgingSummaryController {/api/reports/receivable-aging-summary}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/receivable-aging-summary, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"APAgingSummaryController {/api/reports/payable-aging-summary}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/payable-aging-summary, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"InventoryItemDetailsController {/api/reports/inventory-item-details}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/inventory-item-details, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"InventoryValuationController {/api/reports/inventory-valuation}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/inventory-valuation, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"SalesTaxLiabilitySummaryController {/api/reports/sales-tax-liability-summary}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/sales-tax-liability-summary, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"JournalSheetController {/api/reports/journal}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/journal, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"ProfitLossSheetController {/api/reports/profit-loss-sheet}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/profit-loss-sheet, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"CashflowController {/api/reports/cashflow-statement}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/reports/cashflow-statement, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"DashboardController {/api/dashboard}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/dashboard/boot, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"RolesController {/api/roles}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/roles, POST} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/roles/:id, PUT} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/roles/:id, DELETE} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/roles/permissions/schema, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/roles, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/roles/:id, GET} route","ts":"2026-06-12T12:55:40.690Z","context":"RouterExplorer"}
+{"level":"info","msg":"SubscriptionsController {/api/subscription}:","ts":"2026-06-12T12:55:40.690Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/subscription, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/subscription/lemon/checkout_url, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/subscription/cancel, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/subscription/resume, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/subscription/change, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"SubscriptionsLemonWebhook {/api/webhooks/lemon}:","ts":"2026-06-12T12:55:40.691Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/webhooks/lemon, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"OrganizationController {/api/organization}:","ts":"2026-06-12T12:55:40.691Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/organization/all, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization/build, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization/build/:buildJobId, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization/current, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization/base-currency-mutate, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization/setup/complete, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/organization, PUT} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"PaymentServicesController {/api/payment-services}:","ts":"2026-06-12T12:55:40.691Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/payment-services, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payment-services/state, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payment-services/:paymentServiceId, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payment-services/:paymentMethodId, POST} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/payment-services/:paymentMethodId, DELETE} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"ExportController {/api/export}:","ts":"2026-06-12T12:55:40.691Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/export, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"ViewsController {/api/views}:","ts":"2026-06-12T12:55:40.691Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/views/resource/:resourceModel, GET} route","ts":"2026-06-12T12:55:40.691Z","context":"RouterExplorer"}
+{"level":"info","msg":"MiscellaneousController {/api}:","ts":"2026-06-12T12:55:40.691Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/date-formats, GET} route","ts":"2026-06-12T12:55:40.693Z","context":"RouterExplorer"}
+{"level":"info","msg":"ContactsController {/api/contacts}:","ts":"2026-06-12T12:55:40.693Z","context":"RoutesResolver"}
+{"level":"info","msg":"Mapped {/api/contacts/auto-complete, GET} route","ts":"2026-06-12T12:55:40.693Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/contacts/:id, GET} route","ts":"2026-06-12T12:55:40.693Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/contacts/:id/activate, PATCH} route","ts":"2026-06-12T12:55:40.693Z","context":"RouterExplorer"}
+{"level":"info","msg":"Mapped {/api/contacts/:id/inactivate, PATCH} route","ts":"2026-06-12T12:55:40.693Z","context":"RouterExplorer"}
+{"level":"info","msg":"Nest application successfully started","ts":"2026-06-12T12:55:40.693Z","context":"NestApplication"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:42.150Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:42.173Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:44.194Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:46.214Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:47.200Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:48.476Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:50.498Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:52.240Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:52.508Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:54.523Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:56.495Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:55:58.514Z","context":"GlobalExceptionFilter"}
+Delete expired import files has started.
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:00.522Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:02.531Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:04.539Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:06.556Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:08.562Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:10.568Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:12.281Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:12.578Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:14.596Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:16.607Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:18.626Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:20.637Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:22.693Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:24.376Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:24.701Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:26.677Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:28.695Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:30.714Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:32.394Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:32.730Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:34.752Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:36.761Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:38.767Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:40.781Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:42.791Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:44.804Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:46.822Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:48.830Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:50.842Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:52.479Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:52.850Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:54.827Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:56.836Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:56:58.843Z","context":"GlobalExceptionFilter"}
+Delete expired import files has started.
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:00.852Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:02.860Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:04.868Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:06.874Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:08.879Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:10.887Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:12.506Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:12.897Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:14.903Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:16.911Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:18.918Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:20.927Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:22.934Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:24.911Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:26.918Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:28.923Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:30.931Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:32.523Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:32.937Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:34.944Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:36.950Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:38.959Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:40.965Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:42.972Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:44.979Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:46.995Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:49.002Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:51.008Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:52.566Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:53.024Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:54.998Z","context":"GlobalExceptionFilter"}
+{"level":"error","msg":"[object Object]","ts":"2026-06-12T12:57:57.008Z","context":"GlobalExceptionFilter"}

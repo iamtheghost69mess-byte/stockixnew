@@ -245,7 +245,7 @@ async function getComposeContainerName(
     );
     const id = stdout.trim().split("\n")
       .map((line) => line.trim())
-      .find((line) => /^[a-f0-9]{12,64}$/i.test(line));
+      .find((line) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{11,63}$/.test(line));
     if (!id) return null;
     const { stdout: nameOut } = await execa(
       "docker",

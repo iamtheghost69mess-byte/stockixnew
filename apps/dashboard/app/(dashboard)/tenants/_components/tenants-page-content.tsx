@@ -571,6 +571,7 @@ export function TenantsPageContent() {
       } catch {
         /* ignore malformed chunks */
       }
+      console.log('[UI] Submitting provision, posting to:', url);
     };
     es.addEventListener("provision", onProvision);
     es.addEventListener("done", () => {
@@ -741,6 +742,7 @@ export function TenantsPageContent() {
     modules: ("accounting" | "pos" | "pms" | "chat")[];
     assignExistingLicenseId: string | null;
   }) => {
+    console.log('[PROVISION] function entered, payload:', payload);
     const nextSlug = payload?.slug ?? slug;
     const nextName = payload?.name ?? name;
     const nextOwnerId = payload?.ownerId ?? "";
@@ -755,9 +757,11 @@ export function TenantsPageContent() {
     setStreamCorrelationId(null);
     setProvisionPhase("submitting");
     setLoading(true);
+    console.log('[PROVISION] state reset done — loading:true, phase:submitting, slug:', nextSlug);
     const submitController = new AbortController();
     const submitTimeoutId = window.setTimeout(() => submitController.abort(), 90_000);
     try {
+      console.log('[PROVISION] about to POST /api/tenants with:', { nextSlug, nextAdminEmail });
       const res = await fetch("/api/tenants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -783,8 +787,10 @@ export function TenantsPageContent() {
         detail?: unknown;
       };
 
+      console.log('[PROVISION] fetch /api/tenants returned — status:', res.status, '| accepted:', (data as {accepted?: boolean}).accepted, '| correlationId:', (data as {correlationId?: string}).correlationId);
       if (res.status === 202 && data.accepted && data.correlationId) {
         setProvisionPhase("provisioning");
+        console.log('[PROVISION] setProvisionPhase("provisioning") called, correlationId:', data.correlationId);
         setStreamCorrelationId(data.correlationId);
         sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY, data.correlationId);
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
@@ -836,6 +842,7 @@ export function TenantsPageContent() {
 
       setError("Unexpected response (expected 202 Accepted).");
     } catch (e) {
+      console.error('[PROVISION] caught error in provision():', e);
       const message =
         e instanceof DOMException && e.name === "AbortError"
           ? "Provision request timed out after 90s. The control-plane API may be hung — run `pnpm dev:kill` then `pnpm dev`, wait for API ready, and retry."
@@ -848,6 +855,7 @@ export function TenantsPageContent() {
       setStreamCorrelationId(null);
       setProvisionPhase("submitting");
       setLoading(false);
+      console.log('[PROVISION] finally — phase reset to submitting, loading:false');
     }
   };
 
@@ -859,19 +867,19 @@ export function TenantsPageContent() {
 
     let cancelled = false;
     void (async () => {
-      const sr = await fetch(`/api/tenants/provision-status/${saved}`);
+  const sr = await fetch(`/api/tenants/provision-status/${saved}`);
       if (cancelled) return;
       const sj = (await readJson(sr)) as { status?: string; error?: string };
+      const terminalStates = ["complete", "failed", "dead", "cancelled", "done"];
       if (
         sr.status === 404
-        || sj.status === "complete"
-        || sj.status === "failed"
+        || !sr.ok
+        || terminalStates.includes(sj.status ?? "")
       ) {
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         return;
       }
-      if (!sr.ok) return;
 
       sessionStorage.setItem(PROVISION_RESUME_ATTEMPTED_KEY, saved);
       setLoading(true);
@@ -913,6 +921,7 @@ export function TenantsPageContent() {
   }, []);
 
   const canManageTenants = Boolean(me?.capabilities.canManageTenants);
+  console.log('[PAGE] render — me.id:', me?.id ?? 'null', '| loading:', loading, '| addTenantOpen:', addTenantOpen, '| canManageTenants:', canManageTenants);
 
   const from = listTotal === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, listTotal);
@@ -953,38 +962,41 @@ export function TenantsPageContent() {
       <TenantPosBootstrapBanner posDefaultCredentials={posDefaultCredentials} />
 
       <TenantCreateWizard
-        dialog={{
-          open: addTenantOpen,
-          onOpenChange: (open) => {
-            if (!open && loading) return;
-            setAddTenantOpen(open);
-          },
-        }}
-        loading={loading}
-        provisionLog={provisionLog}
-        elapsedSec={elapsedSec}
-        provisionPhase={provisionPhase}
-        oneTimePassword={oneTimePassword}
-        posDefaultCredentials={posDefaultCredentials}
-        tenantAccess={tenantAccess}
-        onProvision={async (data) => {
-          if (!me?.id) {
-            setError("Unable to resolve current user. Please refresh and try again.");
-            return;
-          }
-          setSlug(data.slug);
-          setName(data.name);
-          setAdminEmail(data.adminEmail);
-          setAdminFirstName(data.adminFirstName);
-          setAdminLastName(data.adminLastName);
-          await provision({ ...data, ownerId: me.id });
-        }}
-        onReset={() => {
-          setOneTimePassword(null);
-          setPosDefaultCredentials(null);
-          setTenantAccess(null);
-          setProvisionLog([]);
-        }}
+       dialog={{
+  open: addTenantOpen,
+  onOpenChange: (open) => {
+    if (!open && loading) return;
+    setAddTenantOpen(open);
+  },
+}}
+loading={loading}
+provisionLog={provisionLog}
+elapsedSec={elapsedSec}
+provisionPhase={provisionPhase}
+oneTimePassword={oneTimePassword}
+posDefaultCredentials={posDefaultCredentials}
+tenantAccess={tenantAccess}
+onProvision={async (data) => {
+  console.log('[PAGE] onProvision fired — me.id:', me?.id, '| data:', data);
+  if (!me?.id) {
+    console.error('[PAGE] me.id missing — aborting before provision()');
+    toast.error("Unable to resolve current user. Please refresh and try again.");
+    return;
+  }
+  console.log('[PAGE] calling provision()');
+  setSlug(data.slug);
+  setName(data.name);
+  setAdminEmail(data.adminEmail);
+  setAdminFirstName(data.adminFirstName);
+  setAdminLastName(data.adminLastName);
+  await provision({ ...data, ownerId: me.id });
+}}
+onReset={() => {
+  setOneTimePassword(null);
+  setPosDefaultCredentials(null);
+  setTenantAccess(null);
+  setProvisionLog([]);
+}}
       />
 
       <div className="space-y-4">

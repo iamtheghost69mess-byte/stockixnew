@@ -8,7 +8,7 @@ services:
     mem_swappiness: 0
     oom_kill_disable: false
     ports:
-      - "6379:6379"
+      - "63790:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s

@@ -10,11 +10,11 @@ function trim(value: string | undefined, fallback: string): string {
 }
 
 export const publicConfig = {
-  stockixApiUrl: trim(process.env.NEXT_PUBLIC_STOCKIX_API_URL, "http://localhost:4000"),
-  stockixRootDomain: trim(process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN, "localhost"),
-  stockixPublicScheme: trim(process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME, "http"),
-  stockixLocalTenantHost: trim(process.env.NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST, "127.0.0.1"),
-  nodeEnv: trim(process.env.NODE_ENV, "development"),
+  stockixApiUrl: trim(typeof process !== "undefined" ? process.env.NEXT_PUBLIC_STOCKIX_API_URL : undefined, "http://localhost:4000"),
+  stockixRootDomain: trim(typeof process !== "undefined" ? process.env.NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN : undefined, "localhost"),
+  stockixPublicScheme: trim(typeof process !== "undefined" ? process.env.NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME : undefined, "http"),
+  stockixLocalTenantHost: trim(typeof process !== "undefined" ? process.env.NEXT_PUBLIC_STOCKIX_LOCAL_TENANT_HOST : undefined, "127.0.0.1"),
+  nodeEnv: trim(typeof process !== "undefined" ? process.env.NODE_ENV : undefined, "development"),
   publicUrl: trim(typeof process !== "undefined" ? process.env.PUBLIC_URL : undefined, ""),
   monorepoVersion: trim(typeof process !== "undefined" ? process.env.MONOREPO_VERSION : undefined, ""),
 };

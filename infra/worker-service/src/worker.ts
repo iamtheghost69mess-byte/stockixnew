@@ -131,7 +131,7 @@ async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void>
     log: (message) => logger.info(message),
   });
 }
-/** Prefer 127.0.0.1 on Windows to avoid localhost → ::1 while API listens on IPv4. */
+/** API_HOST must be [::1] when WSL2 relay only exposes IPv6 (wslrelay.exe → [::1]:port). */
 const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
 const apiBaseUrl = `http://${apiHost}:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
