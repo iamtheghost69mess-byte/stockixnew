@@ -717,10 +717,6 @@ app.delete("/tenants/:tenantId", async (c) => {
   } else {
     return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
   }
-  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
-    return c.json({ error: "tenant_not_found" }, 404);
-  }
-  const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
   const existing = await db
     .select({
       id: tenants.id,
@@ -744,6 +740,10 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Tenant already deleted.",
     }, 200);
   }
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
+  const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
   if (target.tenantStatus === "deprovisioning") {
     const [existingJob] = await db
       .select({ id: tenantLifecycleJobs.id })

@@ -186,7 +186,7 @@ app.post("/internal/jobs/claim", async (c) => {
                 claimToken: null,
                 completedAt: new Date(),
                 updatedAt: new Date(),
-                payload: staleJob.type === "tenant.provision" ? sql`jsonb_set(${tenantLifecycleJobs.payload}, '{needsScrub}', 'true'::jsonb)` : undefined,
+                payload: (staleJob.type === "tenant.provision" || staleJob.type === "tenant.deprovision") ? sql`jsonb_set(${tenantLifecycleJobs.payload}, '{needsScrub}', 'true'::jsonb)` : undefined,
               }
             : {
                 status: nextStatus,
@@ -198,7 +198,7 @@ app.post("/internal/jobs/claim", async (c) => {
                 runAt: new Date(),
                 completedAt: null,
                 updatedAt: new Date(),
-                payload: staleJob.type === "tenant.provision" ? sql`jsonb_set(${tenantLifecycleJobs.payload}, '{needsScrub}', 'true'::jsonb)` : undefined,
+                payload: (staleJob.type === "tenant.provision" || staleJob.type === "tenant.deprovision") ? sql`jsonb_set(${tenantLifecycleJobs.payload}, '{needsScrub}', 'true'::jsonb)` : undefined,
               },
         )
         .where(eq(tenantLifecycleJobs.id, staleJob.id));

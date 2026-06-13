@@ -800,6 +800,15 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
 }) {
   if (!job.tenantId) throw new Error("tenantId is required");
   await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
+  
+  if (job.payload.needsScrub) {
+    const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
+    if (rows[0]) {
+      logger.info(`[worker][${job.id}] deprovision needsScrub flag is set. Scrubbing...`);
+      await scrubTenantRuntimeArtifacts(rows[0].slug);
+    }
+  }
+
   const removeVolumes = job.payload.removeVolumes === true;
   const removeImages = job.payload.removeImages === true;
   const result = await withTenantLifecycleAdvisoryLock(db, job.tenantId, () =>
@@ -942,7 +951,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       } else if (job.type === "add_module") {
         provisionComplete = await withExecutionTimeout(runAddModuleJob(db, job), jobExecutionTimeoutMs);
       } else if (job.type === "tenant.deprovision") {
-        await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
+        await withExecutionTimeout(handler(db, job), 10 * 60 * 1000);
         // Job row is completed in deprovisionTenant before tenant delete (FK cascade).
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
@@ -969,6 +978,17 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       Sentry.captureException(error);
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[worker][${job.id}] failed: ${message}`);
+
+      if (job.type === "tenant.deprovision" && job.tenantId) {
+        try {
+          logger.error(`[worker][${job.id}] deprovision timeout guard triggered. Scrubbing...`);
+          const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
+          if (rows[0]) await scrubTenantRuntimeArtifacts(rows[0].slug);
+        } catch (scrubErr) {
+          logger.error(`[worker][${job.id}] deprovision fallback scrub failed: ${scrubErr instanceof Error ? scrubErr.message : String(scrubErr)}`);
+        }
+      }
+
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
         // Provisioning should fail fast and never retry automatically.

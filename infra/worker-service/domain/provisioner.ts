@@ -548,6 +548,12 @@ export async function deprovisionTenantDatabases(
     log(`[db-deprovision] MySQL cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  try {
+    await removeMysqlUserFromProxySql(tenantUser, log);
+  } catch (err) {
+    log(`[db-deprovision] ProxySQL user removal failed for ${tenantUser} (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // ── MongoDB cleanup via mongosh CLI (no mongodb npm package needed) ────────
   log(`[db-deprovision] dropping MongoDB database "${slug}_pos"`);
   try {
@@ -978,4 +984,71 @@ export async function deprovisionTenant(
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }
 
-export { escapeProxySqlLiteral, registerMysqlUserInProxySql };
+async function removeMysqlUserFromProxySql(username: string, log: (m: string) => void): Promise<void> {
+  const proxyHost = workerProxySqlAdminHost();
+  const { user: adminUser, password: adminPassword } = proxySqlAdminCredentials();
+
+  log(`[db-deprovision] Removing ProxySQL user: ${username}`);
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await mysql2.createConnection({
+      host: proxyHost,
+      port: 6032,
+      user: adminUser,
+      password: adminPassword,
+      connectTimeout: 15_000,
+    });
+    try {
+      await conn.query("DELETE FROM mysql_users WHERE username = ?", [username]);
+      await conn.query("LOAD MYSQL USERS TO RUNTIME");
+      await conn.query("SAVE MYSQL USERS TO DISK");
+      log(`[db-deprovision] ProxySQL user removed: ${username}`);
+      return;
+    } finally {
+      await conn.end();
+    }
+  } catch (directError) {
+    log(`[db-deprovision] ProxySQL admin connect failed (${proxyHost}:6032), trying docker exec fallback…`);
+  }
+
+  // Fallback to docker exec
+  try {
+    const repoRoot = getRepoRoot();
+    const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+    const container = await getComposeContainerName(
+      "stockix-shared",
+      sharedComposeFile,
+      "stockix-mysql-proxy",
+    );
+    if (!container) {
+      throw new Error("[db-deprovision] ProxySQL container not found for admin sync fallback");
+    }
+    const safeUser = escapeProxySqlLiteral(username);
+    const sql = `DELETE FROM mysql_users WHERE username='${safeUser}'; LOAD MYSQL USERS TO RUNTIME; SAVE MYSQL USERS TO DISK;`;
+    
+    await execa(
+      "docker",
+      [
+        "exec",
+        container,
+        "mysql",
+        "-h127.0.0.1",
+        "-P6032",
+        `-u${adminUser}`,
+        `-p${adminPassword}`,
+        "-e",
+        sql,
+      ],
+      { stdio: "pipe" },
+    );
+    log(`[db-deprovision] ProxySQL user removed via docker exec: ${username}`);
+  } catch (execError) {
+    const directMsg = "ECONNREFUSED"; // Usually the cause
+    const execMsg = execError instanceof Error ? execError.message : String(execError);
+    throw new Error(
+      `[db-deprovision] ProxySQL user sync failed for ${username} (direct: ${directMsg}; docker exec: ${execMsg})`,
+    );
+  }
+}
+
+export { escapeProxySqlLiteral, registerMysqlUserInProxySql, removeMysqlUserFromProxySql };
