@@ -92,6 +92,8 @@ import {
 } from "../finance-tenant-resolve.js";
 import { syncFinanceLicenseForStockixTenant } from "../finance-license.client.js";
 import { mailSendSucceeded } from "../mail/mailer.js";
+import { getGlobalHealthStatus } from "../lib/health-cache.js";
+import { getControlPlaneRedisClient } from "../lib/redis.js";
 
 type Db = ReturnType<typeof createDb>;
 type DbClient = NonNullable<Db>;
@@ -961,6 +963,7 @@ const provisionBody = z.object({
   plan_slug: z.string().default("starter"),
   modules: z.array(stockixModuleZod).default(["accounting"]),
   assign_existing_license_id: z.string().uuid().optional(),
+  debug: z.boolean().optional(),
 });
 
 app.post("/tenants", async (c) => {
@@ -968,6 +971,31 @@ app.post("/tenants", async (c) => {
   if (!db) {
     console.error('[API-POST] no db — DATABASE_URL not configured');
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+
+  // 1. Enforce Idempotency-Key header presence
+  const idempotencyKey = c.req.header("idempotency-key");
+  if (!idempotencyKey || idempotencyKey.trim().length === 0) {
+    return c.json(
+      { error: "idempotency_key_required", message: "Idempotency-Key header is required for creating tenants." },
+      400
+    );
+  }
+
+  // 2. Perform Preflight Health Checks
+  const health = getGlobalHealthStatus();
+  if (!health.ready) {
+    const failedChecks = [];
+    if (health.checks.database.status !== "ok") failedChecks.push("database");
+    if (health.checks.redis.status !== "ok") failedChecks.push("redis");
+    if (health.checks.docker.status !== "ok") failedChecks.push("docker");
+    if (health.checks.provisioning.status !== "ok") failedChecks.push("provisioning_circuit_breaker");
+
+    return c.json({
+      error: "preflight_health_check_failed",
+      message: `Preflight checks failed: ${failedChecks.join(", ")}. Provisioning cannot start.`,
+      checks: health.checks
+    }, 503);
   }
 
   let body: z.infer<typeof provisionBody>;
@@ -1109,6 +1137,7 @@ app.post("/tenants", async (c) => {
       assignExistingLicenseId: body.assign_existing_license_id ?? null,
       provisionRequestedById: c.get("actorId") as string,
       needsScrub,
+      debug: body.debug ?? false,
     },
   });
 
@@ -1203,6 +1232,10 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
   }
 
   if (job.status === "running") {
+    const redis = getControlPlaneRedisClient();
+    if (redis) {
+      await redis.set(`tenant:provision:cancel:${correlationId}`, "1", "EX", 3600).catch(() => {});
+    }
     await db
       .update(tenantLifecycleJobs)
       .set({
@@ -1342,6 +1375,10 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
   }
 
   if (job.status === "running") {
+    const redis = getControlPlaneRedisClient();
+    if (redis) {
+      await redis.set(`tenant:provision:cancel:${correlationId}`, "1", "EX", 3600).catch(() => {});
+    }
     await db
       .update(tenantLifecycleJobs)
       .set({
@@ -3404,5 +3441,157 @@ app.get("/search", async (c) => {
       role: o.role,
     })),
   });
+});
+
+app.post("/provisioning/:id/cancel", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const id = c.req.param("id");
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+
+  let job = await db
+    .select({
+      id: tenantLifecycleJobs.id,
+      type: tenantLifecycleJobs.type,
+      status: tenantLifecycleJobs.status,
+      tenantId: tenantLifecycleJobs.tenantId,
+      correlationId: tenantLifecycleJobs.correlationId,
+      payload: tenantLifecycleJobs.payload,
+      attempts: tenantLifecycleJobs.attempts,
+      maxAttempts: tenantLifecycleJobs.maxAttempts,
+      cancelRequestedAt: tenantLifecycleJobs.cancelRequestedAt,
+    })
+    .from(tenantLifecycleJobs)
+    .where(or(eq(tenantLifecycleJobs.id, id), eq(tenantLifecycleJobs.correlationId, id)))
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  if (!job) {
+    return c.json({ error: "provision_job_not_found" }, 404);
+  }
+
+  const isSuperAdmin = actorRole === "super_admin";
+  const payloadOwnerId = job.payload?.ownerId;
+  const isOwner = (payloadOwnerId && payloadOwnerId === actorId) || (job.tenantId && (await tenantWithinOwnerScope(db, c, job.tenantId)));
+
+  if (!isSuperAdmin && !isOwner) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const correlationId = job.correlationId ?? id;
+
+  if (job.status === "completed") {
+    return c.json({ error: "job_already_completed", correlationId }, 409);
+  }
+
+  if (job.status === "dead") {
+    return c.json({ ok: true, status: "already_stopped", correlationId });
+  }
+
+  const redis = getControlPlaneRedisClient();
+  if (redis) {
+    try {
+      await redis.set(`tenant:provision:cancel:${correlationId}`, "1", "EX", 3600);
+      logger.info(`Redis cancel flag set for correlationId=${correlationId}`);
+    } catch (err) {
+      logger.warn(`Failed to set Redis cancel flag for correlationId=${correlationId}`, { err: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  if (job.status === "pending") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        lastError: sql`'cancelled_by_user'`,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantLifecycleJobs.id, job.id));
+    return c.json({ ok: true, status: "cancelled", correlationId });
+  }
+
+  if (job.status === "running") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        cancelRequestedAt: new Date(),
+        lastError: sql`'cancelled_by_user'`,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantLifecycleJobs.id, job.id));
+    return c.json({ ok: true, status: "cancelling", correlationId });
+  }
+
+  return c.json({ ok: true, status: job.status, correlationId });
+});
+
+app.get("/provisioning/:id/logs", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const id = c.req.param("id");
+  const actorRole = String(c.get("actorRole") ?? "");
+
+  const events = await db
+    .select({
+      tenantId: tenantProvisionEvents.tenantId,
+      correlationId: tenantProvisionEvents.correlationId,
+      phase: tenantProvisionEvents.phase,
+      level: tenantProvisionEvents.level,
+      message: tenantProvisionEvents.message,
+      meta: tenantProvisionEvents.meta,
+      createdAt: tenantProvisionEvents.createdAt,
+    })
+    .from(tenantProvisionEvents)
+    .where(or(
+      eq(tenantProvisionEvents.correlationId, id),
+      eq(tenantProvisionEvents.tenantId, id)
+    ))
+    .orderBy(asc(tenantProvisionEvents.createdAt));
+
+  if (events.length === 0) {
+    return c.json({ error: "no_provisioning_logs_found" }, 404);
+  }
+
+  const firstEvent = events[0]!;
+  const isSuperAdmin = actorRole === "super_admin" || actorRole === "support_agent";
+  const isOwner = firstEvent.tenantId ? (await tenantWithinOwnerScope(db, c, firstEvent.tenantId)) : true;
+
+  if (!isSuperAdmin && !isOwner) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const logs = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]!;
+    const prev = events[i - 1];
+
+    let duration = 0;
+    if (e.meta && typeof e.meta === "object" && typeof e.meta.duration === "number") {
+      const currentElapsed = e.meta.duration;
+      const prevElapsed = (prev && prev.meta && typeof prev.meta === "object" && typeof prev.meta.duration === "number")
+        ? prev.meta.duration
+        : 0;
+      duration = Math.max(0, currentElapsed - prevElapsed);
+    } else {
+      duration = prev ? e.createdAt.getTime() - prev.createdAt.getTime() : 0;
+    }
+
+    const step_id = (e.meta?.operationKey as string) ?? e.phase;
+    const error = e.level === "error" ? (e.meta?.error as string ?? e.message) : null;
+
+    logs.push({
+      step_id,
+      tenant_id: e.tenantId ?? null,
+      timestamp: e.createdAt.toISOString(),
+      duration,
+      status: e.level === "error" ? "failed" : "complete",
+      error,
+    });
+  }
+
+  return c.json(logs);
 });
 }

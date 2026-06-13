@@ -9,6 +9,10 @@ import {
   stopReadinessReconciler,
 } from "./provisioning/readiness-reconciler.js";
 import {
+  startHealthBackgroundPoller,
+  stopHealthBackgroundPoller,
+} from "./lib/health-cache.js";
+import {
   startStuckProvisioningReconciler,
   stopStuckProvisioningReconciler,
 } from "./provisioning/stuck-reconciler.js";
@@ -61,7 +65,10 @@ process.on("uncaughtException", (error) => {
 });
 
 startReadinessReconciler(db);
-if (db) startStuckProvisioningReconciler(db);
+if (db) {
+  startStuckProvisioningReconciler(db);
+  startHealthBackgroundPoller(db);
+}
 
 let server: ReturnType<typeof serve>;
 
@@ -100,6 +107,7 @@ function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down`);
   stopReadinessReconciler();
   stopStuckProvisioningReconciler();
+  stopHealthBackgroundPoller();
   server.close(() => {
     process.exit(0);
   });

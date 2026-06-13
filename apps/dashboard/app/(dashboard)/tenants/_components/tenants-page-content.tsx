@@ -464,6 +464,13 @@ export function TenantsPageContent() {
     async (tenantId: string, slug: string): Promise<boolean> => {
       setStoppingId(tenantId);
       setError(null);
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.tenantId === tenantId
+            ? { ...t, tenantStatus: "failed", deploymentStatus: "failed" }
+            : t,
+        ),
+      );
       try {
         const res = await fetch(`/api/tenants/${tenantId}/provision-stop`, {
           method: "POST",

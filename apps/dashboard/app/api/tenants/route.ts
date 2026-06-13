@@ -49,7 +49,6 @@ export async function POST(req: Request) {
       LIFECYCLE_TIMEOUT_MS,
     );
     console.log("[BFF] POST /api/tenants - apiFetch returned status:", res.status);
-    console.log('[BFF] POST /api/tenants handler entered', await req.text());
     const responseBody = await res.text();
     console.log("[BFF] POST /api/tenants - Response Body:", responseBody);
     return new NextResponse(responseBody, {

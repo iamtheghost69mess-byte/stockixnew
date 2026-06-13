@@ -9,6 +9,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { applyOrphanMigrations } from "./apply-orphan-migrations.js";
 import { postMigrateBootstrap } from "./post-migrate-bootstrap.js";
 
@@ -77,6 +78,27 @@ async function reconcileOrphanedMigrations(
 }
 
 async function main(): Promise<void> {
+  const lockPath = join(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "..",
+    "..",
+    "..",
+    "provisioning.lock",
+  );
+  if (existsSync(lockPath)) {
+    const isBump =
+      process.env.PROVISIONING_VERSION_BUMP === "1" ||
+      process.env.PROVISIONING_VERSION_BUMP === "true";
+    const isAllowed =
+      process.env.ALLOW_LOCKED_MIGRATION === "1" ||
+      process.env.ALLOW_LOCKED_MIGRATION === "true";
+    if (!isBump && !isAllowed) {
+      throw new Error(
+        "migration is locked because provisioning.lock exists at the workspace root. Set PROVISIONING_VERSION_BUMP=1 or ALLOW_LOCKED_MIGRATION=1 to run migrations.",
+      );
+    }
+  }
+
   const journal = readMigrationFiles({ migrationsFolder });
   const appliedBefore = await appliedHashes();
   const pendingBefore = journal.filter((f) => !appliedBefore.has(f.hash));

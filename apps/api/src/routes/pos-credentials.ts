@@ -1,6 +1,6 @@
 import { tenantDeployments, tenantLifecycleJobs, tenants } from "@repo/db/schema";
 import { desc, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { createDb } from "@repo/db";
 import type { Context } from "hono";
 import type { Hono } from "hono";
 import { z } from "zod";
@@ -19,7 +19,7 @@ import {
   provisionPosCredentialsCache,
 } from "../lib/provision-caches.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = ReturnType<typeof createDb>;
 
 const stockixTenantIdParam = z.string().uuid();
 

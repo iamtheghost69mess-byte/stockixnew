@@ -1,7 +1,28 @@
 import * as Sentry from "@sentry/node";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
+import Redis from "ioredis";
 import { logger } from "./lib/logger.js";
+
+let workerControlPlaneRedis: Redis | null = null;
+
+function getWorkerRedisClient(): Redis | null {
+  const url = apiConfig.controlPlaneRedisUrl;
+  if (!url) return null;
+  if (!workerControlPlaneRedis) {
+    workerControlPlaneRedis = new Redis(url, {
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      lazyConnect: true,
+      connectTimeout: 3000,
+      commandTimeout: 2000,
+    });
+    workerControlPlaneRedis.on("error", (err: Error) => {
+      logger.warn("Worker control plane Redis connection error", { err: err.message });
+    });
+  }
+  return workerControlPlaneRedis;
+}
 
 if (process.env.SENTRY_DSN?.trim()) {
   Sentry.init({
@@ -457,6 +478,23 @@ function startJobHeartbeatLoop(jobId: string): () => void {
 async function assertProvisionNotCancelled(
   jobId: string,
 ): Promise<void> {
+  // 1. Check Redis fast cancel flag first
+  const redis = getWorkerRedisClient();
+  if (redis) {
+    try {
+      const isCancelled = await redis.get(`tenant:provision:cancel:${jobId}`);
+      if (isCancelled === "1") {
+        throw new Error("cancelled_by_user: cancel flag matched in Redis");
+      }
+    } catch (redisErr) {
+      if (redisErr instanceof Error && redisErr.message.startsWith("cancelled_by_user")) {
+        throw redisErr;
+      }
+      logger.warn(`Worker Redis cancel check error: ${redisErr instanceof Error ? redisErr.message : String(redisErr)}`);
+    }
+  }
+
+  // 2. Fallback to API status endpoint cancel check
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
@@ -500,6 +538,7 @@ const provisionPayloadSchema = z.object({
     .array(z.enum(["accounting", "pos", "pms", "chat", "wire"]))
     .optional(),
   needsScrub: z.boolean().optional(),
+  debug: z.boolean().optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({
@@ -595,6 +634,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
         mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
         controlPlaneOrgId: payload.organizationId ?? undefined,
         retryModules: payload.retryModules,
+        debug: payload.debug ?? false,
       },
       (m) => logger.info(`[worker][${job.id}] ${m}`),
       job.correlationId ?? randomUUID(),

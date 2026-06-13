@@ -7,6 +7,8 @@ import type { Hono } from "hono";
 import { isValidPublicDiscoverySlug } from "../lib/tenant-discovery-slug.js";
 import { logger } from "../lib/logger.js";
 
+import { getGlobalHealthStatus, getHealthStatus } from "../lib/health-cache.js";
+
 type Db = ReturnType<typeof createDb>;
 
 type ApiEnv = {
@@ -22,68 +24,40 @@ type ApiEnv = {
 };
 
 export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
-  app.get("/ready", async (c) => {
-    const checks: Record<string, "ok" | "fail"> = {};
-    const reasons: Record<string, string> = {};
-    let isReady = true;
-
-    if (!db) {
-      checks.database = "fail";
-      reasons.database = "DATABASE_URL is not configured";
-      isReady = false;
-    } else {
-      try {
-        await db.execute(sql`SELECT 1`);
-        checks.database = "ok";
-      } catch (err) {
-        checks.database = "fail";
-        reasons.database = err instanceof Error ? err.message : String(err);
-        isReady = false;
-        logger.error("Readiness check: database failed", err);
-      }
-    }
-
-    const redisUrl = apiConfig.controlPlaneRedisUrl;
-    const redisClient = (await import("../lib/redis.js")).getControlPlaneRedisClient();
-    if (redisUrl) {
-      if (!redisClient) {
-        checks.redis = "fail";
-        reasons.redis = "Redis client is not initialized";
-        isReady = false;
-      } else {
-        try {
-          const pingPromise = redisClient.ping();
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Redis ping timeout")), 2000)
-          );
-          const pong = await Promise.race([pingPromise, timeoutPromise]);
-          checks.redis = pong === "PONG" ? "ok" : "fail";
-          if (checks.redis === "fail") {
-            reasons.redis = "Ping response was not PONG";
-            isReady = false;
-          }
-        } catch (err) {
-          checks.redis = "fail";
-          reasons.redis = err instanceof Error ? err.message : String(err);
-          isReady = false;
-          logger.error("Readiness check: redis failed", err);
-        }
-      }
-    }
-
-    const status = isReady ? 200 : 503;
-    return c.json(
-      { ready: isReady, checks, reasons, timestamp: new Date().toISOString() },
-      status,
-    );
+  app.get("/ready", (c) => {
+    const globalStatus = getGlobalHealthStatus();
+    const status = globalStatus.ready ? 200 : 503;
+    return c.json(globalStatus, status);
   });
 
-  app.get("/health", (c) =>
-    c.json({
-      status: "ok",
+  app.get("/health", (c) => {
+    const globalStatus = getGlobalHealthStatus();
+    return c.json({
+      status: globalStatus.ready ? "ok" : "fail",
+      checks: globalStatus.checks,
       mail: getMailHealthStatus(),
-    }),
-  );
+    });
+  });
+
+  app.get("/health/redis", (c) => {
+    const s = getHealthStatus("redis");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
+
+  app.get("/health/db", (c) => {
+    const s = getHealthStatus("database");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
+
+  app.get("/health/docker", (c) => {
+    const s = getHealthStatus("docker");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
+
+  app.get("/health/provisioning", (c) => {
+    const s = getHealthStatus("provisioning");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
 
   app.get("/metrics", async (c) => {
     const { renderPrometheusMetrics } = await import("../lib/prometheus.js");
