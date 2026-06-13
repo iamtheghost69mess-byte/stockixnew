@@ -2483,6 +2483,21 @@ app.get("/tenants/:tenantId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
+  const isPollDelete = c.req.query("poll_delete") === "true";
+
+  const existenceCheck = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+
+  if (existenceCheck.length === 0) {
+    if (isPollDelete) {
+      return c.json({ deleted: true }, 200);
+    }
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
+
   if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
     return c.json({ error: "tenant_not_found" }, 404);
   }
