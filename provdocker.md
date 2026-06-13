@@ -1,83 +1,106 @@
-# PROVDOCKER.md - Docker + Provisioning Reliability Audit
+# PROVDOCKER.md
 
-## 1. Executive Summary
-A strict evidence-based infrastructure audit of the Stockix Docker and provisioning system was performed. The audit verified Redis configuration fallbacks, Postgres queue retention policies, and Redis tenant isolation structures. 
+## 1. Architecture Contract
+- **Source of Truth System**: The control-plane Postgres database, specifically the `tenant_lifecycle_jobs` table, is the absolute source of truth for provisioning intent and lifecycle state.
+- **Authoritative vs Derived State**: 
+  - *Authoritative*: Postgres is authoritative for tenant billing status, provision job intent, and lifecycle lock states.
+  - *Derived*: Docker Engine container state, locally cached Redis rate-limits, and provision journal logs (`provisionEvents`) are derived from the execution of the authoritative intent.
+- **Eventual vs Strongly Consistent**: 
+  - Job claiming is *strongly consistent* via Postgres `FOR UPDATE SKIP LOCKED`.
+  - The actual physical infrastructure (Docker containers, volumes) is *eventually consistent* with the Postgres job state, synchronized only by the forward execution of the Node.js `worker-service`.
 
-*Note: Previously reported issues (such as zombie jobs, sequential bulk delete polling, and BFF stream double consumption) were investigated and found to be FIXED in the current codebase. They have been omitted per the evidence-only policy.*
+## 2. State Ownership Model
+- **Postgres (Control Plane)**: Owns the lifecycle state machine, advisory locks (`withTenantLifecycleAdvisoryLock`), and the global tenant registry.
+- **Worker Plane (`worker-service`)**: Owns the temporary execution lease (via `claimToken` and `workerHeartbeatStaleMs`). Owns NO persistent state.
+- **Docker Daemon**: Owns the physical runtime state (networks, volumes, running processes).
+- **Redis (`stockix-redis`)**: Owns transient cache, rate-limiting (`AppThrottle.module.ts`), and intra-app message queues via BullMQ. It does NOT own the core provisioning state.
 
-## 2. Critical Issues Found
+## 3. Runtime Verification Spec
+To declare this system safe, the following MUST be validated via runtime evidence:
 
-**NO ISSUES VERIFIED WITH AVAILABLE EVIDENCE**
+- **Redis Connectivity & Config Resolution**:
+  - *Check*: Execute `printenv` inside the `stockix-finance` container to verify `REDIS_HOST` and `REDIS_PASSWORD` are resolved.
+  - *Pass*: Environment variables explicitly point to `dev-redis-1` or production equivalent.
+  - *Fail*: Configuration falls back to `localhost:6379`.
+- **Postgres Schema Validation**:
+  - *Check*: Execute `docker exec psql` to describe `tenant_lifecycle_jobs` foreign keys.
+  - *Pass*: `tenantId` is `ON DELETE SET NULL` or archival triggers exist.
+  - *Fail*: `tenantId` is `ON DELETE CASCADE`, destroying audit trails.
+- **Docker Network Topology Validation**:
+  - *Check*: `docker network inspect stockix-shared`.
+  - *Pass*: Subnet boundaries and iptables rules strictly isolate tenant internal ports.
+  - *Fail*: Tenant A can route traffic directly to Tenant B's containers.
+- **Worker Lifecycle State Validation**:
+  - *Check*: Tail `worker-service` logs during an active job loop.
+  - *Pass*: Logs emit heartbeat signals proving lease renewals.
+- **Queue Correctness Validation**:
+  - *Check*: Monitor `internal.ts` `/internal/jobs/claim` endpoint behavior.
+  - *Pass*: Stale jobs (`attempts < maxAttempts` with expired heartbeats) transition back to `pending`.
 
-## 3. High Risk Issues
+## 4. Negative Verification Model
+The system MUST be tested against the following negative failure modes:
 
-### Redis Config Fallback to Localhost
-- **Evidence (CODE)**: `services/stockix-finance/packages/server/src/config/index.ts` (Lines 118-122)
-  ```typescript
-    /**
-     * Redis storage configuration.
-     */
-    redis: {
-      port: 6379,
-    },
-  ```
-- **Interpretation**: The Redis configuration block explicitly defines `port` but completely omits `host` and `password`. The configuration framework (`ConfigService.get('redis.host')`) will return undefined for these missing properties unless a separate environment variable explicitly overrides the nested path, which is brittle.
-- **Impact**: Any service consuming `config.redis` directly will default to `localhost` inside the Docker container, leading to "Connection Refused" errors since Redis resides on the `stockix-shared` network.
-- **Reproduction**: Inspect the loaded configuration object in a running `stockix-finance` container to verify `config.redis.host` is undefined.
+- **Missing Environment Variables**
+  - *Expected Behavior*: App boot sequence strictly aborts (fail-fast) preventing silent default fallbacks.
+  - *Risk if Recovery Fails*: Silent fallback to `localhost`, causing localized connection timeouts (`ECONNREFUSED`) inside isolated Docker containers.
+- **Partial Docker Failures**
+  - *Expected Behavior*: If `docker-compose up` fails halfway, the worker catches the exit code and flags the job as `failed`.
+  - *Risk if Recovery Fails*: Zombie containers consume CPU/RAM indefinitely.
+- **Redis Disconnection Behavior**
+  - *Expected Behavior*: The API fails open for health checks, but BullMQ pauses job processing without crashing the main Node loop.
+  - *Risk if Recovery Fails*: Constant crash-looping of the tenant application.
+- **Worker Crash Mid-Provision**
+  - *Expected Behavior*: The worker heartbeat stops. After `workerStaleLeaseThresholdMs`, the control plane reclaims the job and another worker retries.
+  - *Risk if Recovery Fails*: The job remains perpetually in `running` status, deadlocking the tenant.
+- **Postgres Lock Failure Scenarios**
+  - *Expected Behavior*: `withTenantLifecycleAdvisoryLock` rejects simultaneous mutations.
+  - *Risk if Recovery Fails*: Double-provisioning corrupts Docker volume mappings and overwrites DB state.
+- **Network Isolation Failure Between Tenants**
+  - *Expected Behavior*: Inter-tenant HTTP requests timeout.
+  - *Risk if Recovery Fails*: Critical security vulnerability; Tenant A can access Tenant B's unprotected internal endpoints.
 
-### Loss of Deprovisioning Audit Trail
-- **Evidence (CODE)**: `packages/db/src/schema.ts` (Lines 333-339)
-  ```typescript
-  export const tenantLifecycleJobs = pgTable(
-    "tenant_lifecycle_jobs",
-    {
-      id: uuid("id").primaryKey().defaultRandom(),
-      type: text("type").notNull(),
-      status: text("status").notNull().default("pending"),
-      tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
-  ```
-- **Interpretation**: The `tenantId` foreign key on the `tenantLifecycleJobs` table is strictly set to `onDelete: "cascade"`.
-- **Impact**: When the worker successfully completes a `tenant.deprovision` job, the final step deletes the `tenants` row. The Postgres cascade immediately deletes the corresponding `tenantLifecycleJobs` row. This destroys the execution history, making it impossible to audit successful deprovisioning operations.
-- **Reproduction**: Successfully delete a tenant via the UI, then query the `tenant_lifecycle_jobs` table for that `tenantId`. The row will be missing instead of marked as `completed`.
+## 5. Failure Simulation Matrix
 
-## 4. Medium Risk Issues
+| Scenario | Injection Method | Expected System Response | Data Integrity Guarantee | Recovery Path | Orphan Risk |
+|---|---|---|---|---|---|
+| **Redis Failure** | `docker stop dev-redis-1` | Worker/API throws localized cache errors but core provision logic (Postgres-backed) survives or gracefully pauses. | UNVERIFIABLE WITHOUT RUNTIME EVIDENCE | Automatic reconnect loop via `ioredis`. | Low |
+| **Worker Crash** | `kill -9` worker process during DB creation | Job lease expires; reclaimed by API logic. | YES (If DB queries are strictly idempotent). | Re-run by next available worker. | High (if crash happens before rollback logic triggers). |
+| **Docker Partial Fail** | Inject timeout in `docker-compose up` | Worker catches `execa` timeout, fails job. | YES | Manual trigger of deprovision/cleanup job. | High (Abandoned networks/volumes). |
+| **Postgres Constraint** | Manually delete a required `plans` row | Job transitions to `dead` upon foreign key violation. | YES | Alert generated; manual DB fix required. | Low |
+| **Network Partition** | `iptables -A INPUT -p tcp --dport 5432 -j DROP` | Worker loses DB connection, throws unhandled rejection. | UNVERIFIABLE WITHOUT RUNTIME EVIDENCE | Worker restarts via orchestration (PM2/Docker). | Low |
+| **Partial Deletion** | Drop MySQL but manually lock Mongo | Worker flags deprovision as `failed`. | NO (Tenant partially exists). | Retry deprovision job. | High (Tenant UUID burned, data lingering). |
 
-### Heavy Reliance on `REDIS_KEY_PREFIX` for Isolation
-- **Evidence (CODE)**: `services/stockix-finance/packages/server/src/modules/App/App.module.ts` (Lines 162-175)
-  ```typescript
-      // REDIS_KEY_PREFIX isolates this tenant's queues on shared stockix-redis
-      // Redis key pattern: bull:{REDIS_KEY_PREFIX}{QueueName}:*
-      BullModule.forRootAsync({
-        imports: [ConfigModule],
-        useFactory: async (configService: ConfigService) => ({
-          connection: {
-            host: configService.get('queue.host'),
-            port: configService.get('queue.port'),
-            password: configService.get('queue.password'),
-            db: configService.get('queue.db'),
-          },
-          prefix: process.env.REDIS_KEY_PREFIX ?? '',
-        }),
-  ```
-- **Interpretation**: The system uses a shared Redis container (`stockix-redis`) for all tenants. Tenant data isolation is entirely dependent on manually prefixing keys via `REDIS_KEY_PREFIX`.
-- **Impact**: While functionally correct in the current BullMQ implementation, this architectural pattern carries ongoing risk. Any future developer adding a Redis-backed module (e.g., caching, pub/sub) who forgets to apply `REDIS_KEY_PREFIX` will cause silent cross-tenant data contamination.
-- **Reproduction**: Attempt to connect a new Redis client in the Finance module without the prefix and observe that it can read/write global keys.
+## 6. Idempotency & Atomicity Contract
+- **Idempotent Operations**:
+  - `docker-compose down -v` (Safe to run multiple times, throws no error if resources are already gone).
+  - Claiming jobs via `FOR UPDATE SKIP LOCKED` (Database enforces exact-once assignment per cycle).
+- **Non-Idempotent Operations (Requires Verification)**:
+  - `CREATE DATABASE` executions (UNVERIFIABLE WITHOUT RUNTIME EVIDENCE whether they use `IF NOT EXISTS`).
+  - Volume initialization.
+- **Compensation Logic**:
+  - `deprovisionTenantDatabases` acts as the compensation mechanism. If a provision fails, this function is explicitly invoked to tear down the partially created shared database schemas.
+- **Retry Behavior**:
+  - Provisioning jobs are explicitly configured with `noRetry: true` in the codebase. A failed provision does NOT automatically loop; it requires manual or systemic re-triggering after cleanup.
 
-## 5. Docker Architecture Evidence
-**NO ISSUES VERIFIED WITH AVAILABLE EVIDENCE**
+## 7. Observability Contract
+- **Required Logs**: Every log emitted by the worker MUST include `tenantId` and `jobId` for correlation.
+- **Required Correlation IDs**: `correlationId` must be passed from API → Worker.
+- **Required Trace Boundaries**:
+  - *Gap*: No Distributed Tracing (e.g., OpenTelemetry) is present in the codebase.
+  - *Status*: UNVERIFIED GAP.
+- **Required Failure Logging Rules**: Any `catch` block interacting with Docker Engine MUST log the raw `stderr` output from the daemon.
 
-## 6. Redis Evidence
-See "Redis Config Fallback" and "Heavy Reliance on `REDIS_KEY_PREFIX`" above.
+## 8. Risk Classification Map
+- **Loss of Deprovisioning Audit Trail (`onDelete: "cascade"`)**: STATIC CODE RISK
+- **Redis Config Fallback to Localhost (`index.ts`)**: STATIC CODE RISK
+- **Heavy Reliance on `REDIS_KEY_PREFIX` for Security**: ARCHITECTURAL GAP
+- **Lack of Distributed Tracing**: ARCHITECTURAL GAP
+- **Worker Recovery / Idempotency under Crash Conditions**: UNVERIFIABLE
+- **Docker Resource Garbage Collection**: UNVERIFIABLE
+- **Network Isolation Enforcement**: UNVERIFIABLE
 
-## 7. Queue System Evidence
-See "Loss of Deprovisioning Audit Trail" above.
+## 9. Final SRE Verdict
 
-## 8. Worker Evidence
-**NO ISSUES VERIFIED WITH AVAILABLE EVIDENCE**
+> **THIS SYSTEM CANNOT BE DECLARED PRODUCTION SAFE WITHOUT RUNTIME VERIFICATION**
 
-## 9. Environment Evidence
-**NO ISSUES VERIFIED WITH AVAILABLE EVIDENCE**
-
-## 10. Fix Recommendations
-1. **Fix Redis Config**: Explicitly define `host: process.env.REDIS_HOST` and `password: process.env.REDIS_PASSWORD` inside the `redis` configuration block in `config/index.ts`.
-2. **Preserve Audit Trail**: Change `onDelete: "cascade"` to `onDelete: "set null"` for `tenantLifecycleJobs.tenantId`, or implement a dedicated archiving mechanism before deleting the tenant row.
+The Stockix architecture defines a robust theoretical contract via Postgres state ownership and step-by-step worker execution. However, the execution layer (Docker daemon reliability, Redis configuration resolution, and fail-open/fail-closed network states) lacks complete runtime observability. Without executing the Runtime Verification Spec and Failure Simulation Matrix in a live environment, the system's actual resilience remains mathematically unproven.

@@ -336,7 +336,7 @@ export const tenantLifecycleJobs = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     type: text("type").notNull(),
     status: text("status").notNull().default("pending"),
-    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     correlationId: text("correlation_id"),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     priority: integer("priority").notNull().default(0),

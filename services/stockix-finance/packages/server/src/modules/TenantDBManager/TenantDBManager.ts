@@ -60,10 +60,10 @@ export class TenantDBManager {
     const tenant = await this.tenancyContext.getTenant();
     const databaseName = this.getDatabaseName(tenant);
 
-    await this.throwErrorIfTenantDBExists(tenant);
+    // Removed throwErrorIfTenantDBExists to allow idempotent retries
 
     await this.systemKnex.raw(
-      `CREATE DATABASE ${databaseName} DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci`,
+      `CREATE DATABASE IF NOT EXISTS ${databaseName} DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci`,
     );
   }
 

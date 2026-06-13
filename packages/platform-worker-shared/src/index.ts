@@ -7,3 +7,5 @@ export {
   sendPosWelcomeEmail,
   initEmailLogging,
 } from "api/worker-public";
+
+export * from "./tracing.js";

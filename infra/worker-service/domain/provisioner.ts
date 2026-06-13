@@ -462,7 +462,7 @@ export async function resetSystemDatabaseForMigration(
     log(`[db-provision] resetting system database ${systemDb} for migration`);
     await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
     await conn.execute(
-      `CREATE DATABASE \`${systemDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE DATABASE IF NOT EXISTS \`${systemDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
     await conn.execute(
       `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
