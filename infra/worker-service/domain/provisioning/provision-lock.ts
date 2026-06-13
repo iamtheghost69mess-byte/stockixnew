@@ -66,7 +66,8 @@ export async function withTenantLifecycleAdvisoryLock<T>(
   const client = await getLockClient();
 
   if (process.env.PROVISION_LOCK_DEBUG === "1") {
-    const [{ pid }] = await client<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+    const rows = await client<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+    const pid = rows[0]?.pid;
     console.info(
       JSON.stringify({
         level: "info",
@@ -84,7 +85,8 @@ export async function withTenantLifecycleAdvisoryLock<T>(
   } finally {
     await client`SELECT pg_advisory_unlock(${lockId})`;
     if (process.env.PROVISION_LOCK_DEBUG === "1") {
-      const [{ pid }] = await client<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+      const rows = await client<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+      const pid = rows[0]?.pid;
       console.info(
         JSON.stringify({
           level: "info",

@@ -859,13 +859,14 @@ const handlers = {
 
 type JobHandler = (db: ReturnType<typeof createDb>, job: ClaimedJob) => Promise<void>;
 
-function isPermanentProvisionError(message: string): boolean {
+function isPermanentWorkerError(message: string): boolean {
   const lowered = message.toLowerCase();
   return (
     message.startsWith("tenant_slug_exists:") ||
     lowered.includes("tenants_slug_unique") ||
     lowered.includes("duplicate key value violates unique constraint") ||
-    message.includes("POS_FRONTEND_STUB_IMAGE")
+    message.includes("POS_FRONTEND_STUB_IMAGE") ||
+    lowered.includes("tenant_not_found")
   );
 }
 
@@ -976,7 +977,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
           || job.type === "tenant.provision"
           || job.type === "organization.provision"
           || job.type === "add_module"
-          || isPermanentProvisionError(message);
+          || isPermanentWorkerError(message);
         await markJobFailure(job.id, message, noRetry, cancelledByUser);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         logger.info(
@@ -999,7 +1000,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
           job.type === "tenant.provision"
           || job.type === "organization.provision"
           || job.type === "add_module"
-          || isPermanentProvisionError(message);
+          || isPermanentWorkerError(message);
         const status = fallbackNoRetry ? "dead" : "pending";
         const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 30_000);
         await db.transaction(async (tx) => {
@@ -1031,6 +1032,13 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
                 updatedAt: new Date(),
               })
               .where(eq(tenantDeployments.tenantId, job.tenantId));
+          } else if (job.type === "tenant.deprovision" && job.tenantId) {
+            if (fallbackNoRetry) {
+              await tx
+                .update(tenants)
+                .set({ status: "failed" })
+                .where(eq(tenants.id, job.tenantId));
+            }
           } else if (job.type === "add_module" && job.tenantId) {
             await tx
               .update(tenants)

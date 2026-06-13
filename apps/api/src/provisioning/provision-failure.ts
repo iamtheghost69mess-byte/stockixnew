@@ -109,7 +109,7 @@ export async function handleTerminalProvisionJobFailure(
   job: TerminalProvisionJob,
   lastError: string,
 ): Promise<"tenant_failed" | "add_module_reverted" | "organization_failed" | "none"> {
-  if (job.type === "tenant.provision" && job.tenantId) {
+  if ((job.type === "tenant.provision" || job.type === "tenant.deprovision") && job.tenantId) {
     await markTenantProvisionFailed(db, {
       tenantId: job.tenantId,
       lastError,

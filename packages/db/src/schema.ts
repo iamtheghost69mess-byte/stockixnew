@@ -359,6 +359,24 @@ export const tenantLifecycleJobs = pgTable(
   ],
 );
 
+export const tenantDeletionLogs = pgTable(
+  "tenant_deletion_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** NOT a foreign key so it persists after tenant is deleted */
+    tenantId: uuid("tenant_id"),
+    slug: text("slug"),
+    status: text("status").notNull(),
+    message: text("message"),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tenant_deletion_logs_tenant_idx").on(t.tenantId),
+    index("tenant_deletion_logs_created_idx").on(t.createdAt),
+  ],
+);
+
 export const plans = pgTable(
   "plans",
   {

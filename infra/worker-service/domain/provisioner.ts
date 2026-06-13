@@ -9,6 +9,7 @@ import {
   tenantLifecycleJobs,
   tenantProvisionEvents,
   tenants,
+  tenantDeletionLogs,
 } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -904,6 +905,21 @@ export async function deprovisionTenant(
           !ok && ["financeCompose", "mysqlDbs", "mongoDb", "redisKeys"].includes(key),
       )
       .map(([key]) => key);
+
+    await db.insert(tenantDeletionLogs).values({
+      tenantId,
+      slug: row.slug,
+      status: "partial_failure",
+      message: `Data plane cleanup incomplete: ${failed.join(", ")}`,
+      meta: {
+        composeProject: project,
+        removeVolumes: options.removeVolumes,
+        removeImages: options.removeImages,
+        cleanupResults,
+      },
+    }).catch((err) => {
+      log(`[deprovision] failed to insert tenantDeletionLogs for ${row.slug}: ${err instanceof Error ? err.message : String(err)}`);
+    });
     throw new Error(
       `[deprovision] Data plane cleanup incomplete: ${failed.join(", ")}. ` +
         "Postgres rows NOT deleted. Fix issues and retry deprovision.",
@@ -940,6 +956,22 @@ export async function deprovisionTenant(
   await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
   await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, tenantId));
   await db.delete(tenants).where(eq(tenants.id, tenantId));
+  
+  await db.insert(tenantDeletionLogs).values({
+    tenantId,
+    slug: row.slug,
+    status: "success",
+    message: "Tenant deprovisioned successfully",
+    meta: {
+      composeProject: project,
+      removeVolumes: options.removeVolumes,
+      removeImages: options.removeImages,
+      cleanupResults,
+    },
+  }).catch((err) => {
+    log(`[deprovision] failed to insert tenantDeletionLogs for ${row.slug}: ${err instanceof Error ? err.message : String(err)}`);
+  });
+
   cleanupResults.postgresRows = true;
 
   log(`deprovision done for ${project}`);

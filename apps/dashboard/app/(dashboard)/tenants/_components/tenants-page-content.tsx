@@ -278,11 +278,12 @@ export function TenantsPageContent() {
   }, []);
 
   const executeBulkDelete = useCallback(async () => {
-    if (bulkDeleteConfirmInput !== "DELETE") return;
     const targets = tenants
       .filter((t) => selectedTenantIds.has(t.tenantId))
       .map((t) => ({ tenantId: t.tenantId, slug: t.slug }));
     if (targets.length === 0) return;
+    const requiredPhrase = `DELETE ${targets.length} TENANTS`;
+    if (bulkDeleteConfirmInput !== requiredPhrase) return;
 
     setIsBulkDeleting(true);
     bulkDeleteCancelledRef.current = false;
@@ -290,70 +291,84 @@ export function TenantsPageContent() {
     const failed: string[] = [];
     let stoppedEarly = false;
 
-    for (let i = 0; i < targets.length; i++) {
-      if (bulkDeleteCancelledRef.current) {
-        stoppedEarly = true;
-        const skippedCount = targets.length - i;
-        toast.warning(`Stopped remaining deletions. ${skippedCount} tenant${skippedCount === 1 ? "" : "s"} skipped.`);
-        break;
-      }
-      const { tenantId, slug } = targets[i]!;
-      setDeletingId(tenantId);
-      try {
-        setDeleteProgress({
-          message: "Submitting removal request…",
-          elapsedSec: 0,
-          slug,
-          index: i + 1,
-          total: targets.length,
-        });
-        const stopElapsed = startElapsedTimer((elapsedSec) => {
-          setDeleteProgress((p) => (p ? { ...p, elapsedSec } : p));
-        });
-        let res: Response;
+    setDeleteProgress({
+      message: "Queuing removal requests...",
+      elapsedSec: 0,
+      slug: `Bulk deleting ${targets.length} tenants`,
+      index: 1,
+      total: targets.length,
+    });
+
+    const queuedTargets: typeof targets = [];
+    await Promise.all(
+      targets.map(async (t) => {
         try {
-          res = await fetch(`/api/tenants/${tenantId}?volumes=true&confirm=DELETE&mode=bulk`, {
+          const res = await fetch(`/api/tenants/${t.tenantId}?volumes=true&confirm=DELETE&mode=bulk`, {
             method: "DELETE",
           });
-        } finally {
-          stopElapsed();
+          const data = (await readJson(res)) as { error?: string; message?: string };
+          if (!res.ok && res.status !== 202) {
+            throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
+          }
+          queuedTargets.push(t);
+        } catch (e) {
+          failed.push(`${t.slug}: ${String(e)}`);
         }
-        const data = (await readJson(res)) as { error?: string; message?: string };
-        if (!res.ok && res.status !== 202) {
-          throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
-        }
-        setTenants((prev) =>
-          prev.map((t) =>
-            t.tenantId === tenantId ? { ...t, tenantStatus: "deprovisioning" } : t,
-          ),
+      })
+    );
+
+    if (queuedTargets.length > 0) {
+      setTenants((prev) =>
+        prev.map((t) =>
+          queuedTargets.some(qt => qt.tenantId === t.tenantId) ? { ...t, tenantStatus: "deprovisioning" } : t,
+        ),
+      );
+
+      let completedCount = 0;
+      setDeleteProgress((p) => (p ? { ...p, message: `Polling removals... (0/${queuedTargets.length} done)` } : p));
+      
+      const stopElapsed = startElapsedTimer((elapsedSec) => {
+        setDeleteProgress((p) => (p ? { ...p, elapsedSec } : p));
+      });
+
+      try {
+        await Promise.allSettled(
+          queuedTargets.map(async (t) => {
+            try {
+              await pollUntilTenantRemoved(t.tenantId, () => {
+                if (bulkDeleteCancelledRef.current) throw new Error("cancelled_by_user");
+              });
+              completedCount++;
+              setDeleteProgress((p) => (p ? { ...p, message: `Polling removals... (${completedCount}/${queuedTargets.length} done)` } : p));
+              setTenants((prev) => prev.filter((pt) => pt.tenantId !== t.tenantId));
+              setSelectedTenantIds((prev) => {
+                const next = new Set(prev);
+                next.delete(t.tenantId);
+                return next;
+              });
+            } catch (e) {
+              const message = String(e);
+              if (message.includes("tenant_not_found")) {
+                completedCount++;
+                setDeleteProgress((p) => (p ? { ...p, message: `Polling removals... (${completedCount}/${queuedTargets.length} done)` } : p));
+                setTenants((prev) => prev.filter((pt) => pt.tenantId !== t.tenantId));
+                setSelectedTenantIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(t.tenantId);
+                  return next;
+                });
+                return;
+              }
+              if (message.includes("cancelled_by_user")) {
+                stoppedEarly = true;
+                return;
+              }
+              failed.push(`${t.slug}: ${message}`);
+            }
+          })
         );
-        await pollUntilTenantRemoved(tenantId, (message, elapsedSec) => {
-          setDeleteProgress({
-            message,
-            elapsedSec,
-            slug,
-            index: i + 1,
-            total: targets.length,
-          });
-        });
-        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-        setSelectedTenantIds((prev) => {
-          const next = new Set(prev);
-          next.delete(tenantId);
-          return next;
-        });
-      } catch (e) {
-        const message = String(e);
-        if (message.includes("tenant_not_found")) {
-          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-          setSelectedTenantIds((prev) => {
-            const next = new Set(prev);
-            next.delete(tenantId);
-            return next;
-          });
-          continue;
-        }
-        failed.push(`${slug}: ${message}`);
+      } finally {
+        stopElapsed();
       }
     }
 
@@ -367,6 +382,8 @@ export function TenantsPageContent() {
     if (failed.length === 0) {
       if (!stoppedEarly) {
         toast.success(`Removed ${targets.length} tenant${targets.length === 1 ? "" : "s"} completely.`);
+      } else {
+        toast.warning(`Stopped remaining polling. Deletions continue in background.`);
       }
     } else if (failed.length < targets.length) {
       toast.error(`Some deletions failed:\n${failed.join("\n")}`);

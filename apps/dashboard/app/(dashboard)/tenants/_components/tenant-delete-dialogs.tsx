@@ -137,7 +137,8 @@ export function TenantDeleteDialogs({
   onCancelBulkDelete,
   onCancelSingleDelete,
 }: TenantDeleteDialogsProps) {
-  const bulkConfirmOk = bulkDeleteConfirmInput === "DELETE";
+  const expectedBulkPhrase = `DELETE ${bulkDeleteTargets.length} TENANTS`;
+  const bulkConfirmOk = bulkDeleteConfirmInput === expectedBulkPhrase;
 
   return (
     <>
@@ -268,7 +269,7 @@ export function TenantDeleteDialogs({
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
                 Each tenant will be removed completely (Docker stacks, volumes, images, and databases).
-                Type <span className="font-mono font-medium text-foreground">DELETE</span> to confirm.
+                Type <span className="font-mono font-medium text-foreground">{expectedBulkPhrase}</span> to confirm.
               </p>
               <ul className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-left font-mono text-xs">
                 {bulkDeleteTargets.map((t) => (
@@ -278,14 +279,14 @@ export function TenantDeleteDialogs({
                 ))}
               </ul>
               <Input
-                placeholder="Type DELETE"
+                placeholder={`Type ${expectedBulkPhrase}`}
                 value={bulkDeleteConfirmInput}
                 onChange={(e) => setBulkDeleteConfirmInput(e.target.value)}
                 autoComplete="off"
               />
-              {bulkDeleteConfirmInput.length > 0 && bulkDeleteConfirmInput !== "DELETE" && (
+              {bulkDeleteConfirmInput.length > 0 && bulkDeleteConfirmInput !== expectedBulkPhrase && (
                 <p className="text-xs font-semibold text-destructive mt-1">
-                  You must type DELETE exactly to confirm
+                  You must type {expectedBulkPhrase} exactly to confirm
                 </p>
               )}
               <DialogFooter>

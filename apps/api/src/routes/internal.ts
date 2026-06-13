@@ -239,6 +239,44 @@ app.post("/internal/jobs/claim", async (c) => {
       }
     }
 
+    const zombiePending = await tx
+      .select({
+        id: tenantLifecycleJobs.id,
+        tenantId: tenantLifecycleJobs.tenantId,
+        type: tenantLifecycleJobs.type,
+      })
+      .from(tenantLifecycleJobs)
+      .where(
+        and(
+          eq(tenantLifecycleJobs.status, "pending"),
+          sql`${tenantLifecycleJobs.attempts} >= ${tenantLifecycleJobs.maxAttempts}`,
+        ),
+      );
+
+    for (const zombie of zombiePending) {
+      await tx
+        .update(tenantLifecycleJobs)
+        .set({
+          status: "dead",
+          lastError: sql`'zombie_job_max_attempts_reached'`,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantLifecycleJobs.id, zombie.id));
+
+      if ((zombie.type === "tenant.deprovision" || zombie.type === "tenant.provision") && zombie.tenantId) {
+        await handleTerminalProvisionJobFailure(
+          tx as unknown as Db,
+          {
+            type: zombie.type,
+            tenantId: zombie.tenantId,
+            correlationId: null,
+            payload: null,
+          },
+          "zombie_job_max_attempts_reached",
+        );
+      }
+    }
+
     const claimToken = randomUUID();
     const [updated] = await tx
       .update(tenantLifecycleJobs)
