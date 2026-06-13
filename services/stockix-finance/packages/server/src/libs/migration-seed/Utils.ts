@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as fs from 'fs';
 import * as path from 'path';
+import { CoreTenantSeeds } from '@/database/tenant/seeds/core';
 
 /**
  * Detarmines the module type of the given file path.
@@ -43,25 +44,12 @@ export async function importWebpackSeedModule(
   moduleName: string,
   seedsDirectory: string,
 ): any {
-  // Convert the seeds directory to a relative path from this file's location
-  const utilsDir = __dirname;
-  const seedsDirAbsolute = path.isAbsolute(seedsDirectory)
-    ? seedsDirectory
-    : path.resolve(process.cwd(), seedsDirectory);
-
-  // Get relative path from Utils.js location to seeds directory
-  const relativePath = path.relative(utilsDir, seedsDirAbsolute);
-
-  // Convert to forward slashes for import (works on all platforms)
-  const importPath = relativePath.split(path.sep).join('/');
-
-  // Construct the import path (add ./ prefix if not already present, or handle empty/current dir)
-  let finalPath = importPath;
-  if (!finalPath || finalPath === '.') {
-    finalPath = './';
-  } else if (!finalPath.startsWith('.')) {
-    finalPath = `./${finalPath}`;
+  // CoreTenantSeeds is a statically-imported map of all tenant seed modules.
+  // Static imports are bundled by webpack at build time — no dynamic require() needed,
+  // which avoids the webpackEmptyContext error caused by dynamic template-literal imports.
+  const name = moduleName.replace(/\.ts$/, '');
+  if (CoreTenantSeeds[name]) {
+    return CoreTenantSeeds[name];
   }
-
-  return import(`${finalPath}/${moduleName}`);
+  throw new Error(`Tenant seed module not found in registry: ${moduleName}`);
 }
