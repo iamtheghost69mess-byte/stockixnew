@@ -35,13 +35,17 @@ export async function POST(req: Request) {
   console.log("[BFF] POST /api/tenants - Started, method:", req.method, "url:", req.url);
   const body = await req.text();
   console.log("[BFF] POST /api/tenants - Request Body:", body);
+  const incomingIdempotencyKey = req.headers.get("Idempotency-Key");
   try {
     console.log("[BFF] POST /api/tenants - Calling apiFetch");
     const res = await apiFetch(
       "/tenants",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(incomingIdempotencyKey ? { "Idempotency-Key": incomingIdempotencyKey } : {}),
+        },
         body,
       },
       req,

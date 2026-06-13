@@ -954,7 +954,8 @@ const provisionBody = z.object({
   // Slug is used raw for Mongo DB ({slug}_pos); MySQL uses slugToMysqlSafe() at provision time.
   slug: z
     .string()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be lowercase DNS-like"),
+    .min(3, "slug must be at least 3 characters")
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be lowercase DNS-like (e.g. acme-corp)"),
   name: z.string().min(1),
   owner_id: z.string().uuid(),
   admin_email: z.string().email(),

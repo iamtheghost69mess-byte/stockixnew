@@ -710,7 +710,7 @@ export function TenantsPageContent() {
       throw new Error(formatApiError(finalJson, finalJson.error));
     }
     throw new Error(
-      `Still provisioning after ${MAX_WAIT_MS / 60000} minutes — check Docker and the API terminal, then refresh this page.`,
+      "Provisioning is taking longer than expected. Check the admin panel for job status.",
     );
   };
 
@@ -770,6 +770,10 @@ export function TenantsPageContent() {
     const nextSlug = payload?.slug ?? slug;
     const nextName = payload?.name ?? name;
     const nextOwnerId = payload?.ownerId ?? "";
+    if (!nextOwnerId) {
+      setError("Owner ID could not be resolved. Please refresh the page and try again.");
+      return;
+    }
     const nextAdminEmail = payload?.adminEmail ?? adminEmail;
     const nextAdminFirstName = payload?.adminFirstName ?? adminFirstName;
     const nextAdminLastName = payload?.adminLastName ?? adminLastName;
@@ -786,9 +790,13 @@ export function TenantsPageContent() {
     const submitTimeoutId = window.setTimeout(() => submitController.abort(), 90_000);
     try {
       console.log('[PROVISION] about to POST /api/tenants with:', { nextSlug, nextAdminEmail });
+      const idempotencyKey = crypto.randomUUID();
       const res = await fetch("/api/tenants", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify({
           slug: nextSlug,
           name: nextName,

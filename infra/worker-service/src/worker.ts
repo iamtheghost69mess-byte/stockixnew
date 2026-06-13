@@ -599,7 +599,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   };
   const payload = provisionPayloadSchema.parse(job.payload);
   if (payload.needsScrub) {
-    await scrubTenantRuntimeArtifacts(payload.slug);
+    // await scrubTenantRuntimeArtifacts(payload.slug);
     if (job.correlationId) {
       await db.insert(tenantProvisionEvents).values({
         correlationId: job.correlationId,
@@ -983,7 +983,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
         try {
           logger.error(`[worker][${job.id}] deprovision timeout guard triggered. Scrubbing...`);
           const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
-          if (rows[0]) await scrubTenantRuntimeArtifacts(rows[0].slug);
+          // if (rows[0]) await scrubTenantRuntimeArtifacts(rows[0].slug);
         } catch (scrubErr) {
           logger.error(`[worker][${job.id}] deprovision fallback scrub failed: ${scrubErr instanceof Error ? scrubErr.message : String(scrubErr)}`);
         }

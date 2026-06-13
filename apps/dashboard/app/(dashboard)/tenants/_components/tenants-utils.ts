@@ -1,7 +1,7 @@
 import type { ProvisionEventRow } from "@/types/tenant";
 
 export const POLL_MS = 2000;
-export const MAX_WAIT_MS = 45 * 60 * 1000;
+export const MAX_WAIT_MS = 3 * 60 * 1000;
 
 export type ProvisionPollRunning = {
   status: "queued" | "running";

@@ -172,7 +172,9 @@ const financeWebappImports = isFinanceWebappBuilt()
           password: configService.get('queue.password'),
           db: configService.get('queue.db'),
         },
-        prefix: process.env.REDIS_KEY_PREFIX ?? '',
+        prefix: process.env.REDIS_KEY_PREFIX 
+          ? `bull:${process.env.REDIS_KEY_PREFIX.replace(/:$/, '')}`
+          : 'bull',
       }),
       inject: [ConfigService],
     }),
