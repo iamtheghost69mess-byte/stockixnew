@@ -332,6 +332,8 @@ jobs:
             if [ -n "${PREV_WORKER:-}" ]; then docker tag "${PREV_WORKER}" stockix-infra-worker:latest 2>/dev/null || true; rolled_back=1; fi
             if [ "$rolled_back" -eq 1 ] && [ -d "${REPO_ROOT}/infra/prod" ]; then
               cd "${REPO_ROOT}/infra/prod"
+              WORKER_PROJECT=$(docker inspect stockix-infra-worker-1 --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+              if [ -z "${WORKER_PROJECT}" ]; then docker rm -f stockix-infra-worker-1 2>/dev/null || true; fi
               docker compose --env-file .env up -d --no-build api api-bullmq dashboard infra-worker || true
               echo "Rolled back to previous images."
             else
@@ -387,6 +389,12 @@ jobs:
           cd infra/prod
           export COMPOSE_FILE=docker-compose.yml
           docker stop stockix-chatwoot-1 stockix-chatwoot-postgres-1 stockix-chatwoot-redis-1 2>/dev/null || true
+          # Remove stale infra-worker container if it was started outside Compose (no project label)
+          WORKER_PROJECT=$(docker inspect stockix-infra-worker-1 --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+          if [ -z "${WORKER_PROJECT}" ]; then
+            echo "Removing stale stockix-infra-worker-1 (not Compose-managed)"
+            docker rm -f stockix-infra-worker-1 2>/dev/null || true
+          fi
           docker compose --env-file .env pull traefik socket-proxy
           docker compose --env-file .env up -d --no-build --wait --wait-timeout 300 \
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
