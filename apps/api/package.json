@@ -33,7 +33,7 @@
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",
-    "@sentry/node": "^8.40.0",
+    "@sentry/node": "^10.57.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.40.2",
     "dotenv": "^16.6.1",
