@@ -15,6 +15,7 @@ export async function GET(req: Request, { params }: Params) {
       "content-type": res.headers.get("content-type") ?? "text/event-stream",
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
+      "x-accel-buffering": "no",
     },
   });
 }

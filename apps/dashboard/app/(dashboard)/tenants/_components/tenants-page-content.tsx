@@ -383,6 +383,19 @@ export function TenantsPageContent() {
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) return;
       es.close();
+      // SSE stream dropped (Cloudflare 100s timeout or network issue).
+      // Provisioning continues in the background — polling will catch completion.
+      setProvisionLog((prev) => [
+        ...prev,
+        {
+          id: `local-sse-drop-${Date.now()}`,
+          phase: "info" as const,
+          level: "warn" as const,
+          message: "Live stream disconnected. Provisioning is still running — polling for status…",
+          meta: null,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
     };
     return () => {
       es.removeEventListener("provision", onProvision);
@@ -594,17 +607,20 @@ export function TenantsPageContent() {
           data.detail && typeof data.detail === "object"
             ? JSON.stringify(data.detail)
             : "";
-        setError(
-          [base, detail, data.correlationId ? `id:${data.correlationId}` : ""]
-            .filter(Boolean)
-            .join(" — "),
-        );
-        return;
+        const msg = [base, detail, data.correlationId ? `id:${data.correlationId}` : ""]
+          .filter(Boolean)
+          .join(" — ");
+        setError(msg);
+        throw new Error(msg);
       }
 
-      setError("Unexpected response (expected 202 Accepted).");
+      const unexpectedMsg = "Unexpected response from server (expected 202 Accepted).";
+      setError(unexpectedMsg);
+      throw new Error(unexpectedMsg);
     } catch (e) {
-      setError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      throw e;
     } finally {
       setStreamCorrelationId(null);
       setLoading(false);
