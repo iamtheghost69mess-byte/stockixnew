@@ -416,17 +416,25 @@ async function assertProvisionNotCancelled(
 ): Promise<void> {
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
-  const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
-    method: "GET",
-    headers: {
-      "x-request-id": requestId,
-      "x-correlation-id": requestId,
-      ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
-    },
-    signal: timeoutSignal(requestTimeoutMs),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
+      method: "GET",
+      headers: {
+        "x-request-id": requestId,
+        "x-correlation-id": requestId,
+        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+      },
+      signal: timeoutSignal(requestTimeoutMs),
+    });
+  } catch {
+    // Network error or timeout — API may be restarting. Treat as not-cancelled
+    // so a deploy restart doesn't abort in-progress provision jobs.
+    return;
+  }
   if (!res.ok) {
-    throw new Error(`cancel_check_failed:${res.status}`);
+    // Non-2xx from API (e.g. 503 during restart) — don't abort the job.
+    return;
   }
   const body = (await res.json()) as { cancelled?: boolean; reason?: string };
   if (body.cancelled) {

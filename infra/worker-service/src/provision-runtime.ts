@@ -2322,6 +2322,7 @@ export async function runAddModuleStep(
         financeCashAccountId: tenantDeployments.financeCashAccountId,
         financeCardAccountId: tenantDeployments.financeCardAccountId,
         posOrganizationId: tenantDeployments.posOrganizationId,
+        financeAdminPassword: tenantDeployments.financeAdminPassword,
       })
       .from(tenants)
       .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -2387,7 +2388,9 @@ export async function runAddModuleStep(
 
       if (!hasOp("add_module.finance_welcome_email")) {
         try {
-          const bootstrapPassword = oneTimeAdminPasswordFromSlug(input.slug);
+          const bootstrapPassword = row.financeAdminPassword
+            ? (decryptDeploymentSecret(row.financeAdminPassword, apiConfig.deploymentSecretKey) ?? oneTimeAdminPasswordFromSlug(input.slug))
+            : oneTimeAdminPasswordFromSlug(input.slug);
           await sendFinanceWelcomeEmail({
             to: input.adminEmail,
             tenantName: input.name,
