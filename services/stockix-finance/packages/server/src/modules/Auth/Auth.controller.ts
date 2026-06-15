@@ -65,7 +65,7 @@ class ImpersonateBodyDto {
 @ApiTags('Auth')
 @ApiExtraModels(AuthSigninResponseDto, AuthMetaResponseDto)
 @PublicRoute()
-@Throttle({ default: { limit: 10, ttl: 60000 } } as any)
+@Throttle(10, 60)
 export class AuthController {
   constructor(
     private readonly authApp: AuthenticationApplication,

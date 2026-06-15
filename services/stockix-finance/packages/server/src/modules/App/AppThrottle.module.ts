@@ -1,7 +1,43 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import Redis from 'ioredis';
+
+export class CustomThrottlerStorageRedis {
+  storage = {};
+
+  constructor(private readonly redis: Redis) {}
+
+  async increment(key: string, ttl: number): Promise<{ totalHits: number; timeToExpire: number }> {
+    // ttl is in seconds in @nestjs/throttler v4 (which gets converted to milliseconds internally by Redis PEXPIRE)
+    const ttlMs = ttl * 1000;
+    const script = `
+      local hitKey = KEYS[1]
+      local ttlMs = tonumber(ARGV[1])
+      local totalHits = redis.call('INCR', hitKey)
+      local timeToExpire = redis.call('PTTL', hitKey)
+      if timeToExpire <= 0 then
+        redis.call('PEXPIRE', hitKey, ttlMs)
+        timeToExpire = ttlMs
+      end
+      return { totalHits, timeToExpire }
+    `;
+
+    const results = (await this.redis.call(
+      'eval',
+      script.trim(),
+      1,
+      key,
+      ttlMs,
+    )) as [number, number];
+
+    const [totalHits, timeToExpire] = results;
+
+    return {
+      totalHits,
+      timeToExpire: Math.ceil(timeToExpire / 1000), // return seconds to the guard
+    };
+  }
+}
 
 @Module({
   imports: [
@@ -13,10 +49,8 @@ import Redis from 'ioredis';
 
         if (isTest) {
           return {
-            throttlers: [
-              { name: 'default', ttl: 60000, limit: 1000000 },
-              { name: 'auth', ttl: 60000, limit: 1000000 },
-            ],
+            ttl: 60,
+            limit: 1000000,
           };
         }
 
@@ -39,14 +73,13 @@ import Redis from 'ioredis';
         redisClient.connect().catch(() => {});
 
         return {
-          throttlers: [
-            { name: 'default', ttl: 60000, limit: 2000 },
-            { name: 'auth', ttl: 60000, limit: 200 },
-          ],
-          storage: new ThrottlerStorageRedisService(redisClient as any),
+          ttl: 60, // 60 seconds
+          limit: 2000, // 2000 requests per minute
+          storage: new CustomThrottlerStorageRedis(redisClient),
         };
       },
     }),
   ],
 })
 export class AppThrottleModule {}
+

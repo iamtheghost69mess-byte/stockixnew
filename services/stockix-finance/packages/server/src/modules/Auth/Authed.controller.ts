@@ -24,7 +24,7 @@ import { IgnoreUserVerifiedRoute } from './guards/EnsureUserVerified.guard';
 @ApiTags('Auth')
 @TenantAgnosticRoute()
 @IgnoreUserVerifiedRoute()
-@Throttle({ default: { limit: 10, ttl: 60000 } } as any)
+@Throttle(10, 60)
 export class AuthedController {
   constructor(
     private readonly getAuthedAccountService: GetAuthenticatedAccount,

@@ -511,6 +511,8 @@ export async function rollbackProvision(
     rollbackSlug = slugRow?.slug;
   }
 
+  log(`[rollback] DEBUG: preserving tenant stack and databases for debugging.`);
+  /*
   if (composeCtx && options.deps) {
     const rolledBack = await composeDownBestEffort(options.deps.docker, composeCtx);
     log(
@@ -544,8 +546,10 @@ export async function rollbackProvision(
       );
     }
   }
+  */
 
   const journalState = await loadProvisionJournalState(db, correlationId);
+  /*
   if (journalState.completedOps.has("pos.schema_migration")) {
     log("[rollback] pos.schema_migration completed — POS compose down + Mongo deprovision will revert schema state");
   }
@@ -595,6 +599,7 @@ export async function rollbackProvision(
       );
     }
   }
+  */
 
   await db
     .insert(tenantProvisionEvents)
