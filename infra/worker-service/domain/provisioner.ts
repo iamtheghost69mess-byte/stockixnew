@@ -403,6 +403,9 @@ export async function provisionTenantDatabases(
       `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
     );
     await conn.execute(
+      `ALTER USER '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
+    );
+    await conn.execute(
       `GRANT ALL PRIVILEGES ON \`${financeDb}\`.* TO '${tenantUser}'@'%'`,
     );
     await conn.execute(
@@ -466,6 +469,9 @@ export async function resetSystemDatabaseForMigration(
     );
     await conn.execute(
       `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
+    );
+    await conn.execute(
+      `ALTER USER '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
     );
     await conn.execute(
       `GRANT ALL PRIVILEGES ON \`${systemDb}\`.* TO '${tenantUser}'@'%'`,

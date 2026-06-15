@@ -11,4 +11,5 @@ packages:
   - "services/posnew/packages/platform-api"
   - "services/stockix-finance"
   - "services/stockix-finance/packages/*"
+  - "!services/stockix-finance/packages/shared"
   - "services/stockix-finance/shared/*"

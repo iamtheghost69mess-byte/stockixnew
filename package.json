@@ -84,8 +84,8 @@
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
-      "bson": "1.1.6",
-      "mongodb": "3.6.11",
+      "@stockix/server>bson": "1.1.6",
+      "@stockix/server>mongodb": "3.6.11",
       "@stockix/webapp>react": "^18.2.0",
       "@stockix/webapp>react-dom": "^18.2.0",
       "@stockix/webapp>@types/react": "18.2.79",

@@ -13,7 +13,7 @@ import { isPortFree } from "./find-free-port.mjs";
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Default ports used by `pnpm dev` (Postgres 15432 is docker — not killed). */
-const DEV_PORTS = [3000, 3001, 3003, 3004, 4000, 8010, 9090];
+const DEV_PORTS = [3000, 3001, 3002, 3003, 3004, 3005, 4000, 8010, 9090];
 
 const NEXT_LOCKS = [
   path.join(repoRoot, "apps", "dashboard", ".next", "dev", "lock"),
@@ -63,6 +63,20 @@ function pidsOnPortUnix(port) {
     }
   } catch {
     /* no listeners */
+  }
+  if (pids.size === 0) {
+    try {
+      const out = execSync(`fuser ${port}/tcp 2>/dev/null`, { encoding: "utf8" });
+      const parts = out.split(":");
+      if (parts.length > 1) {
+        for (const token of parts[1].trim().split(/\s+/)) {
+          const pid = parseInt(token.trim(), 10);
+          if (Number.isFinite(pid) && pid > 0) pids.add(pid);
+        }
+      }
+    } catch {
+      /* no listeners */
+    }
   }
   return pids;
 }
