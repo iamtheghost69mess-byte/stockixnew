@@ -70,6 +70,29 @@ if (db) {
   startHealthBackgroundPoller(db);
 }
 
+// Verify owner_notifications table exists — migration 0041 must be applied.
+if (db) {
+  void (async () => {
+    try {
+      const { sql } = await import("drizzle-orm");
+      const rows = await db.execute(
+        sql`SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'owner_notifications' LIMIT 1`,
+      );
+      if (!(rows as unknown[]).length) {
+        logger.error(
+          "owner_notifications table missing — migration 0041 not applied. Notifications will fail. Run: pnpm db:migrate",
+          undefined,
+          { event: "startup_missing_table_owner_notifications" },
+        );
+      }
+    } catch (err) {
+      logger.error("Could not verify owner_notifications table", err, {
+        event: "startup_table_check_failed",
+      });
+    }
+  })();
+}
+
 let server: ReturnType<typeof serve>;
 
 async function startWithRetry(): Promise<void> {

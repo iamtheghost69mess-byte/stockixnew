@@ -4,6 +4,11 @@
 # Tenant containers still use stockix-mysql / stockix-mongo / stockix-redis on the stockix-shared network.
 
 services:
+  stockix-gotenberg:
+    ports:
+      # Host 9000 → container 3000 (matches upstream bigcapital convention).
+      # Set GOTENBERG_URL=http://localhost:9000 when running Finance server outside Docker.
+      - "127.0.0.1:9000:3000"
   stockix-mysql:
     ports:
       - "127.0.0.1:3306:3306"

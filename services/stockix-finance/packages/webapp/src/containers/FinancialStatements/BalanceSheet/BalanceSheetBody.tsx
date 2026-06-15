@@ -17,11 +17,11 @@ function BalanceSheetBodyJSX({
   // #withCurrentOrganization
   organizationName,
 }) {
-  const { isLoading } = useBalanceSheetContext();
+  const { isLoading, balanceSheet } = useBalanceSheetContext();
 
   return (
     <FinancialReportBody>
-      {isLoading ? (
+      {isLoading || !balanceSheet?.table ? (
         <FinancialSheetSkeleton />
       ) : (
         <BalanceSheetTable companyName={organizationName} />

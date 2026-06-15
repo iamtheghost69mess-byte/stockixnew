@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Put,
 } from '@nestjs/common';
 import { SwitchTenantDto } from './dtos/SwitchTenant.dto';
 import { AuthChangePasswordDto } from './dtos/AuthChangePassword.dto';
@@ -78,5 +79,26 @@ export class AuthedController {
   async changePassword(@Body() body: AuthChangePasswordDto) {
     await this.authApp.changePassword(body.password);
     return { success: true, must_change_password: false };
+  }
+
+  @Put('/profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update first/last name for the authenticated user' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['firstName'],
+      properties: {
+        firstName: { type: 'string', maxLength: 100 },
+        lastName: { type: 'string', maxLength: 100 },
+      },
+    },
+  })
+  async updateProfile(@Body() body: { firstName: string; lastName?: string }) {
+    await this.authApp.updateProfile({
+      firstName: body.firstName,
+      lastName: body.lastName ?? '',
+    });
+    return { success: true };
   }
 }

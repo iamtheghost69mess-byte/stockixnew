@@ -14,6 +14,7 @@ import { FormattedMessage as T } from '@/components';
 import { useAuthActions } from '@/hooks/state';
 
 import { withDialogActions } from '@/containers/Dialog/withDialogActions';
+import { DialogsName } from '@/constants/dialogs';
 
 import { useAuthenticatedAccount } from '@/hooks/query';
 import { firstLettersArgs, compose } from '@/utils';
@@ -58,6 +59,10 @@ function DashboardTopbarUser({
             }
           />
           <MenuDivider />
+          <MenuItem
+            text={<T id={'edit_profile'} />}
+            onClick={() => openDialog(DialogsName.UserProfileForm)}
+          />
           <MenuItem
             text={<T id={'keyboard_shortcuts'} />}
             onClick={onKeyboardShortcut}

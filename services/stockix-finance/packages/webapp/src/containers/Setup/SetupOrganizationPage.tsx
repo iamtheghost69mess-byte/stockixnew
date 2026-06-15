@@ -12,15 +12,43 @@ import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
 import { getSetupOrganizationValidation } from './SetupOrganization.schema';
 import { setCookie, compose, transfromToSnakeCase } from '@/utils';
 
+// Detect browser timezone and locale for sensible defaults.
+function detectBrowserDefaults() {
+  try {
+    const resolved = Intl.DateTimeFormat().resolvedOptions();
+    const timezone = resolved.timeZone ?? '';
+    // Derive country code and currency from locale subtag (e.g. "en-US" → "US" / "USD").
+    const localeParts = (resolved.locale ?? navigator?.language ?? 'en').split('-');
+    const countryCode = localeParts.length >= 2 ? localeParts[localeParts.length - 1].toUpperCase() : '';
+    const COUNTRY_CURRENCY_MAP = {
+      US: 'USD', GB: 'GBP', EU: 'EUR', DE: 'EUR', FR: 'EUR', ES: 'EUR',
+      IT: 'EUR', NL: 'EUR', BE: 'EUR', PT: 'EUR', AT: 'EUR', FI: 'EUR',
+      JP: 'JPY', CN: 'CNY', AU: 'AUD', CA: 'CAD', CH: 'CHF', SE: 'SEK',
+      NO: 'NOK', DK: 'DKK', NZ: 'NZD', SG: 'SGD', HK: 'HKD', IN: 'INR',
+      BR: 'BRL', MX: 'MXN', ZA: 'ZAR', AE: 'AED', SA: 'SAR', LB: 'LBP',
+      EG: 'EGP', KW: 'KWD', QA: 'QAR', OM: 'OMR', JO: 'JOD', MA: 'MAD',
+    };
+    return {
+      timezone,
+      location: countryCode,
+      baseCurrency: COUNTRY_CURRENCY_MAP[countryCode] ?? '',
+    };
+  } catch {
+    return { timezone: '', location: '', baseCurrency: '' };
+  }
+}
+
+const browserDefaults = detectBrowserDefaults();
+
 // Initial values.
 const defaultValues = {
   name: '',
   industry: '',
-  location: '',
-  baseCurrency: '',
+  location: browserDefaults.location,
+  baseCurrency: browserDefaults.baseCurrency,
   language: 'en',
   fiscalYear: '',
-  timezone: '',
+  timezone: browserDefaults.timezone,
   dateFormat: 'DD MMM YYYY',
 };
 

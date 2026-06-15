@@ -56,7 +56,16 @@ export class LicenseService {
    * Uses the synced license row (typically tenant id 1 from Stockix provision).
    */
   async assertCanCreateOrganization(): Promise<void> {
-    const countRow = await this.tenantModel.query().count('id as count').first();
+    // Exclude tenants whose license is revoked or suspended — they should not consume
+    // slots against the org limit after they've been de-licensed.
+    const countRow = await this.tenantModel
+      .query()
+      .leftJoin('tenant_licenses as tl', 'tenants.id', 'tl.tenantId')
+      .where(function () {
+        this.whereNull('tl.tenantId').orWhereNotIn('tl.status', ['revoked', 'suspended']);
+      })
+      .countDistinct('tenants.id as count')
+      .first();
     const orgCount = Number((countRow as { count?: number })?.count ?? 0);
     const license = await this.tenantLicenseModel
       .query()

@@ -120,7 +120,8 @@ export function mapStockixLicenseStatus(
     return "suspended";
   }
   if (!license) {
-    return "active";
+    // No license found for tenant — treat as suspended rather than falsely granting access.
+    return "suspended";
   }
   if (license.status === "revoked") {
     return "revoked";

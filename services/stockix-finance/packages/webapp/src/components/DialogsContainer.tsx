@@ -1,4 +1,5 @@
 import AccountDialog from '@/containers/Dialogs/AccountDialog';
+import UserProfileDialog from '@/containers/Dialogs/UserProfileDialog';
 import InviteUserDialog from '@/containers/Dialogs/InviteUserDialog';
 import UserFormDialog from '@/containers/Dialogs/UserFormDialog';
 import ItemCategoryDialog from '@/containers/Dialogs/ItemCategoryDialog';
@@ -75,6 +76,7 @@ export default function DialogsContainer() {
       <CurrencyFormDialog dialogName={DialogsName.CurrencyForm} />
       <InviteUserDialog dialogName={DialogsName.InviteForm} />
       <UserFormDialog dialogName={DialogsName.UserForm} />
+      <UserProfileDialog dialogName={DialogsName.UserProfileForm} />
       <ItemCategoryDialog dialogName={DialogsName.ItemCategoryForm} />
       <InventoryAdjustmentDialog
         dialogName={DialogsName.InventoryAdjustmentForm}

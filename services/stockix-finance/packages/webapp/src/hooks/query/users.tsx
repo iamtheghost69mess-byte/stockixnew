@@ -29,6 +29,21 @@ export function useCreateInviteUser(props) {
 }
 
 /**
+ * Updates the authenticated user's own first/last name.
+ */
+export function useUpdateProfile(props?) {
+  const queryClient = useQueryClient();
+  const apiRequest = useApiRequest();
+
+  return useMutation((values) => apiRequest.put('auth/profile', values), {
+    onSuccess: () => {
+      queryClient.invalidateQueries(['AuthenticatedAccount']);
+    },
+    ...props,
+  });
+}
+
+/**
  * Edits the given user.
  */
 export function useEditUser(props) {

@@ -66,6 +66,8 @@ export function validateLicenseModulesForTenant(
  * 1. Active perpetual (latest activatedAt)
  * 2. Active non-perpetual, not past expiresAt (latest expiresAt)
  * 3. Most recent expired (grace-period fallback)
+ * 4. Most recent revoked — returned so callers can propagate the revoked status
+ *    rather than treating a missing license as "active".
  */
 export async function getActiveLicenseForTenant(
   db: PlanLimitsDb,
@@ -111,6 +113,17 @@ export async function getActiveLicenseForTenant(
     .limit(1);
 
   if (expired[0]) return expired[0];
+
+  // Return revoked row so mapStockixLicenseStatus can propagate "revoked" to Finance
+  // instead of falling through to null → "active".
+  const revoked = await db
+    .select()
+    .from(licenses)
+    .where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "revoked")))
+    .orderBy(desc(licenses.activatedAt))
+    .limit(1);
+
+  if (revoked[0]) return revoked[0];
 
   return null;
 }

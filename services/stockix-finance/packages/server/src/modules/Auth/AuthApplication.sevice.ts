@@ -12,6 +12,7 @@ import { GetAuthenticatedAccount } from './queries/GetAuthedAccount.service';
 import { ListMyTenantsService } from './queries/ListMyTenants.service';
 import { SwitchTenantService } from './commands/SwitchTenant.service';
 import { AuthChangePasswordService } from './commands/AuthChangePassword.service';
+import { AuthUpdateProfileService, UpdateProfileDto } from './commands/AuthUpdateProfile.service';
 
 @Injectable()
 export class AuthenticationApplication {
@@ -27,6 +28,7 @@ export class AuthenticationApplication {
     private readonly listMyTenantsService: ListMyTenantsService,
     private readonly switchTenantService: SwitchTenantService,
     private readonly authChangePasswordService: AuthChangePasswordService,
+    private readonly authUpdateProfileService: AuthUpdateProfileService,
   ) {}
 
   /**
@@ -109,5 +111,9 @@ export class AuthenticationApplication {
 
   public changePassword(password: string) {
     return this.authChangePasswordService.changePassword(password);
+  }
+
+  public updateProfile(dto: UpdateProfileDto) {
+    return this.authUpdateProfileService.updateProfile(dto);
   }
 }

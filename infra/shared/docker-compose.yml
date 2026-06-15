@@ -214,6 +214,35 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # ─────────────────────────────────────────────────────────────
+  # Gotenberg — shared PDF renderer (Chromium-based).
+  # One instance for ALL tenants: stateless HTML→PDF, no tenant data stored.
+  # Reachable by all tenant Finance servers via stockix-shared network:
+  #   GOTENBERG_URL=http://stockix-gotenberg:3000
+  # Port is NOT published to the host — use dev-ports override for local dev.
+  # ─────────────────────────────────────────────────────────────
+  stockix-gotenberg:
+    image: gotenberg/gotenberg:7
+    restart: unless-stopped
+    hostname: stockix-gotenberg
+    expose:
+      - '3000'
+    networks:
+      stockix-shared:
+        aliases:
+          - stockix-gotenberg
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   shared_mysql_data:
     name: stockix_shared_mysql

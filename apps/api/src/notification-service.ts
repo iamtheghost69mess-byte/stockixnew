@@ -104,12 +104,17 @@ export async function listNotificationsForStream(
     .limit(NOTIFICATION_STREAM_POLL_ROW_LIMIT);
 }
 
-/** Fire-and-forget — never throws to callers. */
+/** Fire-and-forget — never throws to callers, but always logs with full context. */
 export function safeCreateNotification(db: Db, input: CreateNotificationInput): void {
   void createNotification(db, input).catch((err) => {
+    // Log the full error (including stack) and notification context so DB failures
+    // are always visible in logs/Sentry rather than silently disappearing.
     console.error(
-      "[notification] create failed:",
-      err instanceof Error ? err.message : String(err),
+      "[notification] create failed — type=%s correlationId=%s ownerId=%s:",
+      input.type,
+      input.correlationId ?? "none",
+      input.ownerId,
+      err,
     );
   });
 }
