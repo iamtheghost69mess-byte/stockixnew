@@ -24,9 +24,16 @@ export async function waitForHttp(url, opts = {}) {
         }
       } else {
         consecutiveOk = 0;
+        try {
+          const body = await res.text();
+          console.warn(`[wait] ⚠ ${label} returned HTTP ${res.status}: ${body}`);
+        } catch {
+          console.warn(`[wait] ⚠ ${label} returned HTTP ${res.status} (could not read body)`);
+        }
       }
-    } catch {
+    } catch (err) {
       consecutiveOk = 0;
+      console.warn(`[wait] ⚠ Connection to ${label} failed: ${err instanceof Error ? err.message : String(err)}`);
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

@@ -15,8 +15,9 @@
  * Usage: pnpm dev
  *        STOCKIX_DEV_SKIP_POS=1 pnpm dev   — skip POS if low on RAM
  */
+import net from "node:net";
 import { execSync, spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
@@ -64,8 +65,36 @@ function loadSharedInfraEnv(root) {
   process.env.SHARED_MONGO_HOST ??= "stockix-mongo";
   process.env.TENANT_REDIS_HOST ??= "stockix-redis";
   // Host-run worker uses published ports (docker-compose.dev-ports.yml).
-  process.env.WORKER_SHARED_MYSQL_HOST ??= "127.0.0.1";
-  process.env.WORKER_SHARED_MONGO_HOST ??= "127.0.0.1";
+  process.env.WORKER_SHARED_MYSQL_HOST ??= "localhost";
+  process.env.WORKER_SHARED_MONGO_HOST ??= "localhost";
+}
+
+function waitForTcpPort(port, host = "127.0.0.1", timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const probe = () => {
+      if (Date.now() > deadline) {
+        reject(new Error(`Timeout waiting for TCP port ${host}:${port}`));
+        return;
+      }
+      const socket = new net.Socket();
+      socket.setTimeout(2000);
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.once("error", () => {
+        socket.destroy();
+        setTimeout(probe, 500);
+      });
+      socket.once("timeout", () => {
+        socket.destroy();
+        setTimeout(probe, 500);
+      });
+      socket.connect(port, host);
+    };
+    probe();
+  });
 }
 
 /** @param {string} cmd @param {string[]} args @param {import('node:child_process').SpawnOptions} [opts] */
@@ -214,13 +243,38 @@ async function upSharedInfra(env) {
   console.log("[dev] ✓ stockix-shared is up (Mongo rs0 ready)\n");
 }
 
+function getLatestMtime(dir) {
+  let latest = 0;
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".runtime" || entry.name === "dist" || entry.name.startsWith(".")) {
+          continue;
+        }
+        const mtime = getLatestMtime(fullPath);
+        if (mtime > latest) latest = mtime;
+      } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+        const mtime = statSync(fullPath).mtimeMs;
+        if (mtime > latest) latest = mtime;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return latest;
+}
+
 async function ensureBuildArtifacts(env) {
   const force = process.env.STOCKIX_DEV_FORCE_BUILD === "1";
-  const workerSrc = path.join(repoRoot, "infra", "worker-service", "src", "worker.ts");
+  const workerDir = path.join(repoRoot, "infra", "worker-service");
   let workerStale = false;
-  if (existsSync(WORKER_BUNDLE) && existsSync(workerSrc)) {
+  if (existsSync(WORKER_BUNDLE) && existsSync(workerDir)) {
     try {
-      workerStale = statSync(workerSrc).mtimeMs > statSync(WORKER_BUNDLE).mtimeMs;
+      const bundleMtime = statSync(WORKER_BUNDLE).mtimeMs;
+      const latestSrcMtime = getLatestMtime(workerDir);
+      workerStale = latestSrcMtime > bundleMtime;
     } catch {
       workerStale = false;
     }
@@ -250,7 +304,7 @@ const pick = (preferred) => (strict ? Promise.resolve(preferred) : findFreePort(
 /** @param {number} port */
 async function isApiReady(port) {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/ready`, {
+    const res = await fetch(`http://localhost:${port}/ready`, {
       signal: AbortSignal.timeout(3_000),
     });
     return res.ok;
@@ -284,8 +338,11 @@ const [apiPort, dashPort, pmsPort, pmsUiPort, workerHealthPort] = await Promise.
 
 const reuseExistingApi = existingApiPort != null && apiPort === existingApiPort;
 
-const apiOrigin = `http://127.0.0.1:${apiPort}`;
-const pmsOrigin = `http://127.0.0.1:${pmsPort}`;
+const apiOrigin = `http://localhost:${apiPort}`;
+// On Windows with WSL2, wslrelay.exe only binds the forwarded port to [::1] (IPv6 loopback),
+// not 127.0.0.1. Node.js server-side code must use [::1] explicitly; browsers handle localhost fine.
+const apiServerOrigin = `http://[::1]:${apiPort}`;
+const pmsOrigin = `http://localhost:${pmsPort}`;
 const adminEmail = process.env.PLATFORM_ADMIN_EMAIL || "admin@localhost";
 
 /** @type {NodeJS.ProcessEnv} */
@@ -298,9 +355,10 @@ const sharedEnv = {
   PMS_FRONTEND_PORT: String(pmsUiPort),
   NEXT_PUBLIC_PMS_API_URL: pmsOrigin,
   NEXT_PUBLIC_PMS_TENANT_APP_URL: `http://localhost:${pmsUiPort}`,
-  STOCKIX_API_URL: apiOrigin,
-  STOCKIX_SERVER_API_URL: apiOrigin,
+  STOCKIX_API_URL: apiServerOrigin,
+  STOCKIX_SERVER_API_URL: apiServerOrigin,
   NEXT_PUBLIC_STOCKIX_API_URL: apiOrigin,
+  API_HOST: "[::1]",
   WORKER_HEALTH_PORT: String(workerHealthPort),
   STOCKIX_DEV_LOCKED_PORT: "1",
   MYSQL_PROXY_PORT: resolveMysqlProxyHostPort(),
@@ -330,6 +388,9 @@ console.log("[dev] Control-plane Postgres + Redis…");
 await run("pnpm", ["db:up"], { env: sharedEnv });
 await upSharedInfra(sharedEnv);
 warnMissingTenantImages();
+
+console.log("[dev] Waiting for control-plane Redis (127.0.0.1:63790)…");
+await waitForTcpPort(63790, "127.0.0.1");
 
 console.log("[dev] Migrations + platform admin…");
 await run("pnpm", ["db:wait"], { env: sharedEnv });

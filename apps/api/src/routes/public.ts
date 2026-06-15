@@ -7,6 +7,8 @@ import type { Hono } from "hono";
 import { isValidPublicDiscoverySlug } from "../lib/tenant-discovery-slug.js";
 import { logger } from "../lib/logger.js";
 
+import { getGlobalHealthStatus, getHealthStatus } from "../lib/health-cache.js";
+
 type Db = ReturnType<typeof createDb>;
 
 type ApiEnv = {
@@ -22,56 +24,40 @@ type ApiEnv = {
 };
 
 export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
-  app.get("/ready", async (c) => {
-    const checks: Record<string, "ok" | "fail"> = {};
-    let isReady = true;
-
-    if (!db) {
-      checks.database = "fail";
-      isReady = false;
-    } else {
-      try {
-        await db.execute(sql`SELECT 1`);
-        checks.database = "ok";
-      } catch (err) {
-        checks.database = "fail";
-        isReady = false;
-        logger.error("Readiness check: database failed", err);
-      }
-    }
-
-    const redisUrl = apiConfig.controlPlaneRedisUrl;
-    const redisClient = (await import("../lib/redis.js")).getControlPlaneRedisClient();
-    if (redisUrl) {
-      if (!redisClient) {
-        checks.redis = "fail";
-        isReady = false;
-      } else {
-        try {
-          const pong = await redisClient.ping();
-          checks.redis = pong === "PONG" ? "ok" : "fail";
-          if (checks.redis === "fail") isReady = false;
-        } catch (err) {
-          checks.redis = "fail";
-          isReady = false;
-          logger.error("Readiness check: redis failed", err);
-        }
-      }
-    }
-
-    const status = isReady ? 200 : 503;
-    return c.json(
-      { ready: isReady, checks, timestamp: new Date().toISOString() },
-      status,
-    );
+  app.get("/ready", (c) => {
+    const globalStatus = getGlobalHealthStatus();
+    const status = globalStatus.ready ? 200 : 503;
+    return c.json(globalStatus, status);
   });
 
-  app.get("/health", (c) =>
-    c.json({
-      status: "ok",
+  app.get("/health", (c) => {
+    const globalStatus = getGlobalHealthStatus();
+    return c.json({
+      status: globalStatus.ready ? "ok" : "fail",
+      checks: globalStatus.checks,
       mail: getMailHealthStatus(),
-    }),
-  );
+    });
+  });
+
+  app.get("/health/redis", (c) => {
+    const s = getHealthStatus("redis");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
+
+  app.get("/health/db", (c) => {
+    const s = getHealthStatus("database");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
+
+  app.get("/health/docker", (c) => {
+    const s = getHealthStatus("docker");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
+
+  app.get("/health/provisioning", (c) => {
+    const s = getHealthStatus("provisioning");
+    return c.json(s, s.status === "ok" ? 200 : 503);
+  });
 
   app.get("/metrics", async (c) => {
     const { renderPrometheusMetrics } = await import("../lib/prometheus.js");

@@ -104,6 +104,12 @@ app.post("/internal/jobs/claim", async (c) => {
   if (!workerId) {
     return c.json({ error: "worker_id_required" }, 400);
   }
+
+  const pendingCount = await db
+    .select({ c: sql`count(*)` })
+    .from(tenantLifecycleJobs)
+    .where(eq(tenantLifecycleJobs.status, "pending"));
+  console.log(`[api-debug] Job claim requested by worker: ${workerId}. Total pending jobs in DB: ${pendingCount[0]?.c ?? 0}`);
   const heartbeatStaleMs = apiConfig.workerHeartbeatStaleMs;
   const staleLeaseMs = apiConfig.workerStaleLeaseThresholdMs;
   // effectiveStaleMs = min(heartbeat, lease) — intentional conservative bound.
@@ -180,6 +186,7 @@ app.post("/internal/jobs/claim", async (c) => {
                 claimToken: null,
                 completedAt: new Date(),
                 updatedAt: new Date(),
+                payload: (staleJob.type === "tenant.provision" || staleJob.type === "tenant.deprovision") ? sql`jsonb_set(${tenantLifecycleJobs.payload}, '{needsScrub}', 'true'::jsonb)` : undefined,
               }
             : {
                 status: nextStatus,
@@ -191,6 +198,7 @@ app.post("/internal/jobs/claim", async (c) => {
                 runAt: new Date(),
                 completedAt: null,
                 updatedAt: new Date(),
+                payload: (staleJob.type === "tenant.provision" || staleJob.type === "tenant.deprovision") ? sql`jsonb_set(${tenantLifecycleJobs.payload}, '{needsScrub}', 'true'::jsonb)` : undefined,
               },
         )
         .where(eq(tenantLifecycleJobs.id, staleJob.id));
@@ -233,6 +241,44 @@ app.post("/internal/jobs/claim", async (c) => {
       }
     }
 
+    const zombiePending = await tx
+      .select({
+        id: tenantLifecycleJobs.id,
+        tenantId: tenantLifecycleJobs.tenantId,
+        type: tenantLifecycleJobs.type,
+      })
+      .from(tenantLifecycleJobs)
+      .where(
+        and(
+          eq(tenantLifecycleJobs.status, "pending"),
+          sql`${tenantLifecycleJobs.attempts} >= ${tenantLifecycleJobs.maxAttempts}`,
+        ),
+      );
+
+    for (const zombie of zombiePending) {
+      await tx
+        .update(tenantLifecycleJobs)
+        .set({
+          status: "dead",
+          lastError: sql`'zombie_job_max_attempts_reached'`,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantLifecycleJobs.id, zombie.id));
+
+      if ((zombie.type === "tenant.deprovision" || zombie.type === "tenant.provision") && zombie.tenantId) {
+        await handleTerminalProvisionJobFailure(
+          tx as unknown as Db,
+          {
+            type: zombie.type,
+            tenantId: zombie.tenantId,
+            correlationId: null,
+            payload: null,
+          },
+          "zombie_job_max_attempts_reached",
+        );
+      }
+    }
+
     const claimToken = randomUUID();
     const [updated] = await tx
       .update(tenantLifecycleJobs)
@@ -258,6 +304,9 @@ app.post("/internal/jobs/claim", async (c) => {
         ),
       )
       .returning();
+    if (updated) {
+      console.log(`[api-debug] Worker ${workerId} claimed job ID: ${updated.id}, Type: ${updated.type}`);
+    }
     return updated ?? null;
   });
 

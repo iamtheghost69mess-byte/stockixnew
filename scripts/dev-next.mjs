@@ -63,7 +63,7 @@ const nextDevArgs = [
   "dev",
   // Bind all interfaces so both http://localhost and http://127.0.0.1 work on Windows.
   "--hostname",
-  "127.0.0.1",
+  "0.0.0.0",
   "--port",
   String(port),
   ...(useWebpack ? ["--webpack"] : ["--turbopack"]),

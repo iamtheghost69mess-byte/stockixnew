@@ -150,20 +150,22 @@ export function createActorResolver(
 
     if (cookieToken) {
       const session = await verifySessionToken(cookieToken);
-      if (!session) return c.json({ error: "unauthorized_actor" }, 401);
-      const sessionCheck = await validateOwnerSession(db, {
-        ownerId: session.sub,
-        role: session.role,
-        sessionVersion: session.sessionVersion,
-      });
-      if (!sessionCheck.success) {
-        return c.json({ error: "forbidden_actor" }, 403);
+      if (session) {
+        const sessionCheck = await validateOwnerSession(db, {
+          ownerId: session.sub,
+          role: session.role,
+          sessionVersion: session.sessionVersion,
+        });
+        if (!sessionCheck.success) {
+          return c.json({ error: "forbidden_actor" }, 403);
+        }
+        c.set("actorId", session.sub);
+        c.set("actorRole", session.role);
+        c.set("actorPermissions", await attachActorPermissions(db, session.sub));
+        await next();
+        return;
       }
-      c.set("actorId", session.sub);
-      c.set("actorRole", session.role);
-      c.set("actorPermissions", await attachActorPermissions(db, session.sub));
-      await next();
-      return;
+      // Cookie present but expired or invalid — fall through to try other auth methods.
     }
 
     if (headerToken.startsWith("sk_live_")) {

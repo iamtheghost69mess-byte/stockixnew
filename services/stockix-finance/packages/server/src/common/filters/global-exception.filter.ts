@@ -62,14 +62,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             ? (body as { message: string | string[] }).message
             : exception.message;
 
-      this.logger.warn({
-        level: 'warn',
-        type: 'http_exception',
-        ...trace,
-        statusCode: status,
-        message: Array.isArray(message) ? message.join(', ') : message,
-      });
-      // ORIGINAL: this.logger.warn(JSON.stringify({ level: 'warn', type: 'http_exception', ...trace, statusCode: status, message: ... }));
+      this.logger.warn(
+        `Http Exception: ${Array.isArray(message) ? message.join(', ') : message} (Status: ${status})`
+      );
 
       response.status(status).json({
         error: HttpStatus[status] ?? 'ERROR',
@@ -83,14 +78,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    this.logger.error({
-      level: 'error',
-      type: 'unhandled_exception',
-      ...trace,
-      message: exception instanceof Error ? exception.message : String(exception),
-      stack: exception instanceof Error ? exception.stack : undefined,
-    });
-    // ORIGINAL: this.logger.error(JSON.stringify({ level: 'error', type: 'unhandled_exception', ...trace, message: ..., stack: ... }));
+    this.logger.error(
+      `Unhandled exception: ${exception instanceof Error ? exception.message : String(exception)}`,
+      exception instanceof Error ? exception.stack : undefined
+    );
 
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: 'INTERNAL_SERVER_ERROR',

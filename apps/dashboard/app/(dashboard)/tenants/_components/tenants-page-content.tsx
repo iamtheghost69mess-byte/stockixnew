@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
@@ -89,6 +89,8 @@ export function TenantsPageContent() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteConfirmInput, setBulkDeleteConfirmInput] = useState("");
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const bulkDeleteCancelledRef = useRef(false);
+  const singleDeleteCancelledRef = useRef(false);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -177,9 +179,17 @@ export function TenantsPageContent() {
     setDeleteConfirmOpen(true);
   }, []);
 
+  const handleCancelSingleDelete = useCallback(() => {
+    singleDeleteCancelledRef.current = true;
+    setDeleteProgress((p) =>
+      p ? { ...p, message: "Stopping deletion monitoring..." } : p,
+    );
+  }, []);
+
   const executeTenantDelete = useCallback(
     async (tenantId: string, slug: string, wipeVolumes: boolean) => {
       setDeletingId(tenantId);
+      singleDeleteCancelledRef.current = false;
       setDeleteProgress({
         message: wipeVolumes
           ? "Stopping stacks and removing volumes and images…"
@@ -189,7 +199,7 @@ export function TenantsPageContent() {
       });
       setError(null);
       try {
-        const q = wipeVolumes ? "?volumes=true" : "";
+        const q = `${wipeVolumes ? "?volumes=true&" : "?"}confirm=${encodeURIComponent(tenantId)}&mode=single`;
         setDeleteProgress((p) =>
           p ? { ...p, message: "Submitting removal request…" } : p,
         );
@@ -221,6 +231,9 @@ export function TenantsPageContent() {
         setTenantAccess(null);
         setOneTimePassword(null);
         await pollUntilTenantRemoved(tenantId, (message, elapsedSec) => {
+          if (singleDeleteCancelledRef.current) {
+            throw new Error("cancelled_by_user");
+          }
           setDeleteProgress({ message, elapsedSec, slug });
         });
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
@@ -233,6 +246,10 @@ export function TenantsPageContent() {
         void load().catch(() => {});
       } catch (e) {
         const message = String(e);
+        if (message.includes("cancelled_by_user")) {
+          toast.warning(`Deprovisioning monitoring stopped. Tenant "${slug}" cleanup runs in background.`);
+          return;
+        }
         if (message.includes("tenant_not_found")) {
           setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
           toast.success(`Tenant "${slug}" was already removed.`);
@@ -253,75 +270,105 @@ export function TenantsPageContent() {
     [load],
   );
 
+  const handleCancelBulkDelete = useCallback(() => {
+    bulkDeleteCancelledRef.current = true;
+    setDeleteProgress((p) =>
+      p ? { ...p, message: "Stopping remaining deletions..." } : p,
+    );
+  }, []);
+
   const executeBulkDelete = useCallback(async () => {
-    if (bulkDeleteConfirmInput !== "DELETE") return;
     const targets = tenants
       .filter((t) => selectedTenantIds.has(t.tenantId))
       .map((t) => ({ tenantId: t.tenantId, slug: t.slug }));
     if (targets.length === 0) return;
+    const requiredPhrase = `DELETE ${targets.length} TENANTS`;
+    if (bulkDeleteConfirmInput !== requiredPhrase) return;
 
     setIsBulkDeleting(true);
+    bulkDeleteCancelledRef.current = false;
     setError(null);
     const failed: string[] = [];
+    let stoppedEarly = false;
 
-    for (let i = 0; i < targets.length; i++) {
-      const { tenantId, slug } = targets[i]!;
-      setDeletingId(tenantId);
-      try {
-        setDeleteProgress({
-          message: "Submitting removal request…",
-          elapsedSec: 0,
-          slug,
-          index: i + 1,
-          total: targets.length,
-        });
-        const stopElapsed = startElapsedTimer((elapsedSec) => {
-          setDeleteProgress((p) => (p ? { ...p, elapsedSec } : p));
-        });
-        let res: Response;
+    setDeleteProgress({
+      message: "Queuing removal requests...",
+      elapsedSec: 0,
+      slug: `Bulk deleting ${targets.length} tenants`,
+      index: 1,
+      total: targets.length,
+    });
+
+    const queuedTargets: typeof targets = [];
+    await Promise.all(
+      targets.map(async (t) => {
         try {
-          res = await fetch(`/api/tenants/${tenantId}?volumes=true`, {
+          const res = await fetch(`/api/tenants/${t.tenantId}?volumes=true&confirm=DELETE&mode=bulk`, {
             method: "DELETE",
           });
-        } finally {
-          stopElapsed();
+          const data = (await readJson(res)) as { error?: string; message?: string };
+          if (!res.ok && res.status !== 202) {
+            throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
+          }
+          queuedTargets.push(t);
+        } catch (e) {
+          failed.push(`${t.slug}: ${String(e)}`);
         }
-        const data = (await readJson(res)) as { error?: string; message?: string };
-        if (!res.ok && res.status !== 202) {
-          throw new Error(formatApiError(data, data.message ?? data.error ?? `HTTP ${res.status}`));
-        }
-        setTenants((prev) =>
-          prev.map((t) =>
-            t.tenantId === tenantId ? { ...t, tenantStatus: "deprovisioning" } : t,
-          ),
+      })
+    );
+
+    if (queuedTargets.length > 0) {
+      setTenants((prev) =>
+        prev.map((t) =>
+          queuedTargets.some(qt => qt.tenantId === t.tenantId) ? { ...t, tenantStatus: "deprovisioning" } : t,
+        ),
+      );
+
+      let completedCount = 0;
+      setDeleteProgress((p) => (p ? { ...p, message: `Polling removals... (0/${queuedTargets.length} done)` } : p));
+      
+      const stopElapsed = startElapsedTimer((elapsedSec) => {
+        setDeleteProgress((p) => (p ? { ...p, elapsedSec } : p));
+      });
+
+      try {
+        await Promise.allSettled(
+          queuedTargets.map(async (t) => {
+            try {
+              await pollUntilTenantRemoved(t.tenantId, () => {
+                if (bulkDeleteCancelledRef.current) throw new Error("cancelled_by_user");
+              });
+              completedCount++;
+              setDeleteProgress((p) => (p ? { ...p, message: `Polling removals... (${completedCount}/${queuedTargets.length} done)` } : p));
+              setTenants((prev) => prev.filter((pt) => pt.tenantId !== t.tenantId));
+              setSelectedTenantIds((prev) => {
+                const next = new Set(prev);
+                next.delete(t.tenantId);
+                return next;
+              });
+            } catch (e) {
+              const message = String(e);
+              if (message.includes("tenant_not_found")) {
+                completedCount++;
+                setDeleteProgress((p) => (p ? { ...p, message: `Polling removals... (${completedCount}/${queuedTargets.length} done)` } : p));
+                setTenants((prev) => prev.filter((pt) => pt.tenantId !== t.tenantId));
+                setSelectedTenantIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(t.tenantId);
+                  return next;
+                });
+                return;
+              }
+              if (message.includes("cancelled_by_user")) {
+                stoppedEarly = true;
+                return;
+              }
+              failed.push(`${t.slug}: ${message}`);
+            }
+          })
         );
-        await pollUntilTenantRemoved(tenantId, (message, elapsedSec) => {
-          setDeleteProgress({
-            message,
-            elapsedSec,
-            slug,
-            index: i + 1,
-            total: targets.length,
-          });
-        });
-        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-        setSelectedTenantIds((prev) => {
-          const next = new Set(prev);
-          next.delete(tenantId);
-          return next;
-        });
-      } catch (e) {
-        const message = String(e);
-        if (message.includes("tenant_not_found")) {
-          setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-          setSelectedTenantIds((prev) => {
-            const next = new Set(prev);
-            next.delete(tenantId);
-            return next;
-          });
-          continue;
-        }
-        failed.push(`${slug}: ${message}`);
+      } finally {
+        stopElapsed();
       }
     }
 
@@ -333,7 +380,11 @@ export function TenantsPageContent() {
     void load().catch(() => {});
 
     if (failed.length === 0) {
-      toast.success(`Removed ${targets.length} tenant${targets.length === 1 ? "" : "s"} completely.`);
+      if (!stoppedEarly) {
+        toast.success(`Removed ${targets.length} tenant${targets.length === 1 ? "" : "s"} completely.`);
+      } else {
+        toast.warning(`Stopped remaining polling. Deletions continue in background.`);
+      }
     } else if (failed.length < targets.length) {
       toast.error(`Some deletions failed:\n${failed.join("\n")}`);
       setError(failed.join("\n"));
@@ -430,6 +481,13 @@ export function TenantsPageContent() {
     async (tenantId: string, slug: string): Promise<boolean> => {
       setStoppingId(tenantId);
       setError(null);
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.tenantId === tenantId
+            ? { ...t, tenantStatus: "failed", deploymentStatus: "failed" }
+            : t,
+        ),
+      );
       try {
         const res = await fetch(`/api/tenants/${tenantId}/provision-stop`, {
           method: "POST",
@@ -537,6 +595,7 @@ export function TenantsPageContent() {
       } catch {
         /* ignore malformed chunks */
       }
+      console.log('[UI] Submitting provision, posting to:', url);
     };
     es.addEventListener("provision", onProvision);
     es.addEventListener("done", () => {
@@ -651,7 +710,7 @@ export function TenantsPageContent() {
       throw new Error(formatApiError(finalJson, finalJson.error));
     }
     throw new Error(
-      `Still provisioning after ${MAX_WAIT_MS / 60000} minutes — check Docker and the API terminal, then refresh this page.`,
+      "Provisioning is taking longer than expected. Check the admin panel for job status.",
     );
   };
 
@@ -707,9 +766,14 @@ export function TenantsPageContent() {
     modules: ("accounting" | "pos" | "pms" | "chat")[];
     assignExistingLicenseId: string | null;
   }) => {
+    console.log('[PROVISION] function entered, payload:', payload);
     const nextSlug = payload?.slug ?? slug;
     const nextName = payload?.name ?? name;
     const nextOwnerId = payload?.ownerId ?? "";
+    if (!nextOwnerId) {
+      setError("Owner ID could not be resolved. Please refresh the page and try again.");
+      return;
+    }
     const nextAdminEmail = payload?.adminEmail ?? adminEmail;
     const nextAdminFirstName = payload?.adminFirstName ?? adminFirstName;
     const nextAdminLastName = payload?.adminLastName ?? adminLastName;
@@ -721,12 +785,18 @@ export function TenantsPageContent() {
     setStreamCorrelationId(null);
     setProvisionPhase("submitting");
     setLoading(true);
+    console.log('[PROVISION] state reset done — loading:true, phase:submitting, slug:', nextSlug);
     const submitController = new AbortController();
     const submitTimeoutId = window.setTimeout(() => submitController.abort(), 90_000);
     try {
+      console.log('[PROVISION] about to POST /api/tenants with:', { nextSlug, nextAdminEmail });
+      const idempotencyKey = crypto.randomUUID();
       const res = await fetch("/api/tenants", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify({
           slug: nextSlug,
           name: nextName,
@@ -740,7 +810,15 @@ export function TenantsPageContent() {
         }),
         signal: submitController.signal,
       });
-
+// In provision(), right before the fetch call
+console.log('[PROVISION] full body:', JSON.stringify({
+  slug: nextSlug,
+  name: nextName,
+  owner_id: nextOwnerId,
+  admin_email: nextAdminEmail,
+  admin_first_name: nextAdminFirstName,
+  admin_last_name: nextAdminLastName,
+}));
       const data = (await readJson(res)) as {
         error?: string;
         correlationId?: string;
@@ -749,10 +827,13 @@ export function TenantsPageContent() {
         detail?: unknown;
       };
 
+      console.log('[PROVISION] fetch /api/tenants returned — status:', res.status, '| accepted:', (data as {accepted?: boolean}).accepted, '| correlationId:', (data as {correlationId?: string}).correlationId);
       if (res.status === 202 && data.accepted && data.correlationId) {
         setProvisionPhase("provisioning");
+        console.log('[PROVISION] setProvisionPhase("provisioning") called, correlationId:', data.correlationId);
         setStreamCorrelationId(data.correlationId);
         sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY, data.correlationId);
+        sessionStorage.setItem(PROVISION_CORRELATION_SESSION_KEY + "_ts", String(Date.now()));
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         const ok = await pollUntilDone(data.correlationId, setProvisionPhase);
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
@@ -802,6 +883,7 @@ export function TenantsPageContent() {
 
       setError("Unexpected response (expected 202 Accepted).");
     } catch (e) {
+      console.error('[PROVISION] caught error in provision():', e);
       const message =
         e instanceof DOMException && e.name === "AbortError"
           ? "Provision request timed out after 90s. The control-plane API may be hung — run `pnpm dev:kill` then `pnpm dev`, wait for API ready, and retry."
@@ -814,6 +896,7 @@ export function TenantsPageContent() {
       setStreamCorrelationId(null);
       setProvisionPhase("submitting");
       setLoading(false);
+      console.log('[PROVISION] finally — phase reset to submitting, loading:false');
     }
   };
 
@@ -822,22 +905,29 @@ export function TenantsPageContent() {
     const saved = sessionStorage.getItem(PROVISION_CORRELATION_SESSION_KEY);
     if (!saved) return;
     if (sessionStorage.getItem(PROVISION_RESUME_ATTEMPTED_KEY) === saved) return;
+    const savedAt = Number(sessionStorage.getItem(PROVISION_CORRELATION_SESSION_KEY + "_ts") ?? 0);
+    if (savedAt && Date.now() - savedAt > 30 * 60 * 1000) {
+      sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
+      sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
+      sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY + "_ts");
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
-      const sr = await fetch(`/api/tenants/provision-status/${saved}`);
+  const sr = await fetch(`/api/tenants/provision-status/${saved}`);
       if (cancelled) return;
       const sj = (await readJson(sr)) as { status?: string; error?: string };
+      const terminalStates = ["complete", "failed", "dead", "cancelled", "done", "pending", "unknown"];
       if (
         sr.status === 404
-        || sj.status === "complete"
-        || sj.status === "failed"
+        || !sr.ok
+        || terminalStates.includes(sj.status ?? "")
       ) {
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
         return;
       }
-      if (!sr.ok) return;
 
       sessionStorage.setItem(PROVISION_RESUME_ATTEMPTED_KEY, saved);
       setLoading(true);
@@ -864,10 +954,8 @@ export function TenantsPageContent() {
         sessionStorage.removeItem(PROVISION_CORRELATION_SESSION_KEY);
         sessionStorage.removeItem(PROVISION_RESUME_ATTEMPTED_KEY);
       } finally {
-        if (!cancelled) {
-          setStreamCorrelationId(null);
-          setLoading(false);
-        }
+        setStreamCorrelationId(null);
+        setLoading(false);
       }
     })();
 
@@ -879,6 +967,7 @@ export function TenantsPageContent() {
   }, []);
 
   const canManageTenants = Boolean(me?.capabilities.canManageTenants);
+  console.log('[PAGE] render — me.id:', me?.id ?? 'null', '| loading:', loading, '| addTenantOpen:', addTenantOpen, '| canManageTenants:', canManageTenants);
 
   const from = listTotal === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, listTotal);
@@ -919,38 +1008,47 @@ export function TenantsPageContent() {
       <TenantPosBootstrapBanner posDefaultCredentials={posDefaultCredentials} />
 
       <TenantCreateWizard
-        dialog={{
-          open: addTenantOpen,
-          onOpenChange: (open) => {
-            if (!open && loading) return;
-            setAddTenantOpen(open);
-          },
-        }}
-        loading={loading}
-        provisionLog={provisionLog}
-        elapsedSec={elapsedSec}
-        provisionPhase={provisionPhase}
-        oneTimePassword={oneTimePassword}
-        posDefaultCredentials={posDefaultCredentials}
-        tenantAccess={tenantAccess}
-        onProvision={async (data) => {
-          if (!me?.id) {
-            setError("Unable to resolve current user. Please refresh and try again.");
-            return;
-          }
-          setSlug(data.slug);
-          setName(data.name);
-          setAdminEmail(data.adminEmail);
-          setAdminFirstName(data.adminFirstName);
-          setAdminLastName(data.adminLastName);
-          await provision({ ...data, ownerId: me.id });
-        }}
-        onReset={() => {
-          setOneTimePassword(null);
-          setPosDefaultCredentials(null);
-          setTenantAccess(null);
-          setProvisionLog([]);
-        }}
+       dialog={{
+  open: addTenantOpen,
+  onOpenChange: (open) => {
+    if (!open && loading) return;
+    if (open) {
+      setLoading(false);
+      setStreamCorrelationId(null);
+      setProvisionLog([]);
+      setProvisionPhase("submitting");
+    }
+    setAddTenantOpen(open);
+  },
+}}
+loading={loading}
+provisionLog={provisionLog}
+elapsedSec={elapsedSec}
+provisionPhase={provisionPhase}
+oneTimePassword={oneTimePassword}
+posDefaultCredentials={posDefaultCredentials}
+tenantAccess={tenantAccess}
+onProvision={async (data) => {
+  console.log('[PAGE] onProvision fired — me.id:', me?.id, '| data:', data);
+  if (!me?.id) {
+    console.error('[PAGE] me.id missing — aborting before provision()');
+    toast.error("Unable to resolve current user. Please refresh and try again.");
+    return;
+  }
+  console.log('[PAGE] calling provision()');
+  setSlug(data.slug);
+  setName(data.name);
+  setAdminEmail(data.adminEmail);
+  setAdminFirstName(data.adminFirstName);
+  setAdminLastName(data.adminLastName);
+  await provision({ ...data, ownerId: me.id });
+}}
+onReset={() => {
+  setOneTimePassword(null);
+  setPosDefaultCredentials(null);
+  setTenantAccess(null);
+  setProvisionLog([]);
+}}
       />
 
       <div className="space-y-4">
@@ -1095,6 +1193,8 @@ export function TenantsPageContent() {
         setBulkDeleteConfirmInput={setBulkDeleteConfirmInput}
         isBulkDeleting={isBulkDeleting}
         executeBulkDelete={executeBulkDelete}
+        onCancelBulkDelete={handleCancelBulkDelete}
+        onCancelSingleDelete={handleCancelSingleDelete}
       />
     </div>
   );

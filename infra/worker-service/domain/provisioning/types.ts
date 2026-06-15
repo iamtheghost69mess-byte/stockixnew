@@ -37,6 +37,8 @@ export type ProvisionInput = {
   existingTenantId?: string;
   /** When true, preflight compose down removes project volumes (`-v`). Default false. */
   cleanSlate?: boolean;
+  /** When true, run in debug mode with verbose logs and step-by-step pauses. */
+  debug?: boolean;
 };
 
 export type ProvisionResult =

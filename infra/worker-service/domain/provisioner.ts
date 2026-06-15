@@ -9,6 +9,7 @@ import {
   tenantLifecycleJobs,
   tenantProvisionEvents,
   tenants,
+  tenantDeletionLogs,
 } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -243,7 +244,9 @@ async function getComposeContainerName(
       ["compose", "-f", composeFile, "-p", project, "ps", "-q", service],
       { stdio: "pipe" },
     );
-    const id = stdout.trim().split("\n").find((line) => line.trim())?.trim();
+    const id = stdout.trim().split("\n")
+      .map((line) => line.trim())
+      .find((line) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{11,63}$/.test(line));
     if (!id) return null;
     const { stdout: nameOut } = await execa(
       "docker",
@@ -252,7 +255,8 @@ async function getComposeContainerName(
     );
     const name = nameOut.trim().replace(/^\//, "");
     return name || null;
-  } catch {
+  } catch (err) {
+    console.error("[getComposeContainerName-debug] Error resolving container name:", err);
     return null;
   }
 }
@@ -267,7 +271,7 @@ async function flushTenantRedisKeys(slug: string, log: (m: string) => void): Pro
   );
   if (!redisContainer) {
     log(`[db-deprovision] shared redis container not found — skipping Redis flush for "${slug}"`);
-    return false;
+    return true;
   }
 
   const patterns = [`tenant:${slug}:*`, `bull:tenant:${slug}:*`];
@@ -458,7 +462,7 @@ export async function resetSystemDatabaseForMigration(
     log(`[db-provision] resetting system database ${systemDb} for migration`);
     await conn.execute(`DROP DATABASE IF EXISTS \`${systemDb}\``);
     await conn.execute(
-      `CREATE DATABASE \`${systemDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE DATABASE IF NOT EXISTS \`${systemDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
     await conn.execute(
       `CREATE USER IF NOT EXISTS '${tenantUser}'@'%' IDENTIFIED BY ${mysqlEscape(dbPassword)}`,
@@ -544,6 +548,12 @@ export async function deprovisionTenantDatabases(
     log(`[db-deprovision] MySQL cleanup warning: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  try {
+    await removeMysqlUserFromProxySql(tenantUser, log);
+  } catch (err) {
+    log(`[db-deprovision] ProxySQL user removal failed for ${tenantUser} (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // ── MongoDB cleanup via mongosh CLI (no mongodb npm package needed) ────────
   log(`[db-deprovision] dropping MongoDB database "${slug}_pos"`);
   try {
@@ -556,6 +566,7 @@ export async function deprovisionTenantDatabases(
     );
     if (!mongoContainer) {
       log(`[db-deprovision] shared mongo container not found — skipping Mongo cleanup for "${slug}"`);
+      result.mongoDb = true;
     } else {
       const mongoHost = sharedMongoHost();
       // Mongo DB name uses raw slug (not slugToMysqlSafe) intentionally.
@@ -900,6 +911,21 @@ export async function deprovisionTenant(
           !ok && ["financeCompose", "mysqlDbs", "mongoDb", "redisKeys"].includes(key),
       )
       .map(([key]) => key);
+
+    await db.insert(tenantDeletionLogs).values({
+      tenantId,
+      slug: row.slug,
+      status: "partial_failure",
+      message: `Data plane cleanup incomplete: ${failed.join(", ")}`,
+      meta: {
+        composeProject: project,
+        removeVolumes: options.removeVolumes,
+        removeImages: options.removeImages,
+        cleanupResults,
+      },
+    }).catch((err) => {
+      log(`[deprovision] failed to insert tenantDeletionLogs for ${row.slug}: ${err instanceof Error ? err.message : String(err)}`);
+    });
     throw new Error(
       `[deprovision] Data plane cleanup incomplete: ${failed.join(", ")}. ` +
         "Postgres rows NOT deleted. Fix issues and retry deprovision.",
@@ -936,10 +962,93 @@ export async function deprovisionTenant(
   await db.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, tenantId));
   await db.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, tenantId));
   await db.delete(tenants).where(eq(tenants.id, tenantId));
+  
+  await db.insert(tenantDeletionLogs).values({
+    tenantId,
+    slug: row.slug,
+    status: "success",
+    message: "Tenant deprovisioned successfully",
+    meta: {
+      composeProject: project,
+      removeVolumes: options.removeVolumes,
+      removeImages: options.removeImages,
+      cleanupResults,
+    },
+  }).catch((err) => {
+    log(`[deprovision] failed to insert tenantDeletionLogs for ${row.slug}: ${err instanceof Error ? err.message : String(err)}`);
+  });
+
   cleanupResults.postgresRows = true;
 
   log(`deprovision done for ${project}`);
   return { ok: true, slug: row.slug, composeProject: project, docker: dockerStatus };
 }
 
-export { escapeProxySqlLiteral, registerMysqlUserInProxySql };
+async function removeMysqlUserFromProxySql(username: string, log: (m: string) => void): Promise<void> {
+  const proxyHost = workerProxySqlAdminHost();
+  const { user: adminUser, password: adminPassword } = proxySqlAdminCredentials();
+
+  log(`[db-deprovision] Removing ProxySQL user: ${username}`);
+  try {
+    const mysql2 = await import("mysql2/promise");
+    const conn = await mysql2.createConnection({
+      host: proxyHost,
+      port: 6032,
+      user: adminUser,
+      password: adminPassword,
+      connectTimeout: 15_000,
+    });
+    try {
+      await conn.query("DELETE FROM mysql_users WHERE username = ?", [username]);
+      await conn.query("LOAD MYSQL USERS TO RUNTIME");
+      await conn.query("SAVE MYSQL USERS TO DISK");
+      log(`[db-deprovision] ProxySQL user removed: ${username}`);
+      return;
+    } finally {
+      await conn.end();
+    }
+  } catch (directError) {
+    log(`[db-deprovision] ProxySQL admin connect failed (${proxyHost}:6032), trying docker exec fallback…`);
+  }
+
+  // Fallback to docker exec
+  try {
+    const repoRoot = getRepoRoot();
+    const sharedComposeFile = join(repoRoot, "infra", "shared", "docker-compose.yml");
+    const container = await getComposeContainerName(
+      "stockix-shared",
+      sharedComposeFile,
+      "stockix-mysql-proxy",
+    );
+    if (!container) {
+      throw new Error("[db-deprovision] ProxySQL container not found for admin sync fallback");
+    }
+    const safeUser = escapeProxySqlLiteral(username);
+    const sql = `DELETE FROM mysql_users WHERE username='${safeUser}'; LOAD MYSQL USERS TO RUNTIME; SAVE MYSQL USERS TO DISK;`;
+    
+    await execa(
+      "docker",
+      [
+        "exec",
+        container,
+        "mysql",
+        "-h127.0.0.1",
+        "-P6032",
+        `-u${adminUser}`,
+        `-p${adminPassword}`,
+        "-e",
+        sql,
+      ],
+      { stdio: "pipe" },
+    );
+    log(`[db-deprovision] ProxySQL user removed via docker exec: ${username}`);
+  } catch (execError) {
+    const directMsg = "ECONNREFUSED"; // Usually the cause
+    const execMsg = execError instanceof Error ? execError.message : String(execError);
+    throw new Error(
+      `[db-deprovision] ProxySQL user sync failed for ${username} (direct: ${directMsg}; docker exec: ${execMsg})`,
+    );
+  }
+}
+
+export { escapeProxySqlLiteral, registerMysqlUserInProxySql, removeMysqlUserFromProxySql };

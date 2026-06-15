@@ -17,11 +17,15 @@ async function forward(req: Request, params: Params, method: string) {
     init.headers = { "Content-Type": "application/json" };
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
   let res: Response;
   try {
-    res = await fetch(target, { ...init, signal: AbortSignal.timeout(10_000) });
+    res = await fetch(target, { ...init, signal: controller.signal });
   } catch {
     return NextResponse.json({ error: "pms_unreachable" }, { status: 503 });
+  } finally {
+    clearTimeout(timer);
   }
 
   const body = await res.text();

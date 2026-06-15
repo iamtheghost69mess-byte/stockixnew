@@ -47,7 +47,17 @@ export function createIdempotencyMiddleware(
       );
     }
 
-    const requestBody = await c.req.raw.clone().text();
+    let requestBody = "";
+    const hasBody =
+      (c.req.header("content-length") && c.req.header("content-length") !== "0") ||
+      c.req.header("transfer-encoding") === "chunked";
+    if (hasBody && method !== "DELETE") {
+      try {
+        requestBody = await c.req.raw.clone().text();
+      } catch (error) {
+        logger.error("idempotency clone body failed", error);
+      }
+    }
     const requestHash = createHash("sha256")
       .update(`${method}:${path}:${requestBody}`)
       .digest("hex");

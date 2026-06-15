@@ -336,7 +336,7 @@ export const tenantLifecycleJobs = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     type: text("type").notNull(),
     status: text("status").notNull().default("pending"),
-    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     correlationId: text("correlation_id"),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     priority: integer("priority").notNull().default(0),
@@ -356,6 +356,24 @@ export const tenantLifecycleJobs = pgTable(
     index("tenant_lifecycle_jobs_status_run_at_idx").on(t.status, t.runAt, t.priority),
     index("tenant_lifecycle_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
     index("tenant_lifecycle_jobs_correlation_created_idx").on(t.correlationId, t.createdAt),
+  ],
+);
+
+export const tenantDeletionLogs = pgTable(
+  "tenant_deletion_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** NOT a foreign key so it persists after tenant is deleted */
+    tenantId: uuid("tenant_id"),
+    slug: text("slug"),
+    status: text("status").notNull(),
+    message: text("message"),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tenant_deletion_logs_tenant_idx").on(t.tenantId),
+    index("tenant_deletion_logs_created_idx").on(t.createdAt),
   ],
 );
 

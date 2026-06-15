@@ -1,7 +1,7 @@
 import type { ProvisionEventRow } from "@/types/tenant";
 
 export const POLL_MS = 2000;
-export const MAX_WAIT_MS = 45 * 60 * 1000;
+export const MAX_WAIT_MS = 3 * 60 * 1000;
 
 export type ProvisionPollRunning = {
   status: "queued" | "running";
@@ -109,8 +109,13 @@ export async function pollUntilTenantRemoved(
       elapsedSec,
     );
 
-    const res = await fetch(`/api/tenants/${tenantId}`);
+    const res = await fetch(`/api/tenants/${tenantId}?poll_delete=true`);
     if (res.status === 404) {
+      onProgress("Tenant removed completely.", elapsedSec);
+      return;
+    }
+    const data = (await res.json().catch(() => ({}))) as { deleted?: boolean };
+    if (data.deleted) {
       onProgress("Tenant removed completely.", elapsedSec);
       return;
     }

@@ -1,14 +1,10 @@
 declare module '@nestjs/throttler' {
-  import { CanActivate, DynamicModule, ExecutionContext } from '@nestjs/common';
-  import { Reflector } from '@nestjs/core';
+  import { CanActivate, DynamicModule } from '@nestjs/common';
 
   export function Throttle(...args: any[]): MethodDecorator & ClassDecorator;
 
   export class ThrottlerGuard implements CanActivate {
-    protected readonly reflector: Reflector;
-    constructor(options: any, storageService: any, reflector: Reflector);
-    canActivate(context: ExecutionContext): Promise<boolean>;
-    protected handleRequest(context: ExecutionContext, limit: number, ttl: number): Promise<boolean>;
+    canActivate(context: any): boolean | Promise<boolean>;
   }
 
   export class ThrottlerModule {

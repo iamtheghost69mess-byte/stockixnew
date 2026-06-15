@@ -12,6 +12,16 @@ const RedisCtor = require("ioredis") as new (
 ) => Redis;
 
 let controlPlaneRedis: Redis | null = null;
+let consecutiveFailures = 0;
+
+/** Tripped when consecutive failures reach 3 or more. */
+export function isRedisCircuitBreakerTripped(): boolean {
+  return consecutiveFailures >= 3;
+}
+
+export function resetRedisCircuitBreaker(): void {
+  consecutiveFailures = 0;
+}
 
 /** Shared Redis client for rate limiting (CONTROL_PLANE_REDIS_URL). */
 export function getControlPlaneRedisClient(): Redis | null {
@@ -22,9 +32,31 @@ export function getControlPlaneRedisClient(): Redis | null {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
       lazyConnect: true,
+      connectTimeout: 3000,
+      commandTimeout: 2000,
+      retryStrategy(times: number) {
+        if (times > 3) {
+          logger.warn(`Redis connection failed 3 times consecutively. Circuit breaker state: TRIPPED`);
+          return null;
+        }
+        const delay = Math.min(1000, 100 * Math.pow(2, times));
+        logger.warn(`Redis connection retry attempt ${times} in ${delay}ms`);
+        return delay;
+      },
     });
     client.on("error", (err: Error) => {
-      logger.warn("Control plane Redis connection error", { err: err.message });
+      consecutiveFailures++;
+      logger.error(
+        `Control plane Redis connection error (consecutive failure count: ${consecutiveFailures}): ${err.message}`
+      );
+    });
+    client.on("connect", () => {
+      logger.info("Control plane Redis connected");
+      consecutiveFailures = 0;
+    });
+    client.on("ready", () => {
+      logger.info("Control plane Redis ready");
+      consecutiveFailures = 0;
     });
     void client.connect().catch((err: unknown) => {
       logger.warn("Control plane Redis initial connect failed", {
@@ -53,7 +85,11 @@ export async function ensureControlPlaneRedisReady(timeoutMs = 10_000): Promise<
       if (client.status === "wait") {
         await client.connect();
       }
-      const pong = await client.ping();
+      const pingPromise = client.ping();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Redis ping timeout")), 2000)
+      );
+      const pong = await Promise.race([pingPromise, timeoutPromise]);
       if (pong === "PONG") {
         return;
       }

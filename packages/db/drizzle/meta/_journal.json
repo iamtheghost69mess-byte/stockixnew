@@ -407,6 +407,20 @@
       "when": 1781200000000,
       "tag": "0058_tenant_status_deprovisioning",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781336009688,
+      "tag": "0058_sudden_talos",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1781339531962,
+      "tag": "0059_strong_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

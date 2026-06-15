@@ -92,6 +92,8 @@ import {
 } from "../finance-tenant-resolve.js";
 import { syncFinanceLicenseForStockixTenant } from "../finance-license.client.js";
 import { mailSendSucceeded } from "../mail/mailer.js";
+import { getGlobalHealthStatus } from "../lib/health-cache.js";
+import { getControlPlaneRedisClient } from "../lib/redis.js";
 
 type Db = ReturnType<typeof createDb>;
 type DbClient = NonNullable<Db>;
@@ -697,10 +699,24 @@ app.delete("/tenants/:tenantId", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "tenantId must be a UUID" }, 400);
   }
-  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
-    return c.json({ error: "tenant_not_found" }, 404);
+  const confirm = c.req.query("confirm");
+  const mode = c.req.query("mode");
+
+  if (!confirm || !mode) {
+    return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
   }
-  const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
+
+  if (mode === "single") {
+    if (confirm !== parsed.data) {
+      return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+    }
+  } else if (mode === "bulk") {
+    if (confirm !== "DELETE") {
+      return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+    }
+  } else {
+    return c.json({ error: "confirmation_mismatch", message: "Confirmation mismatch. Deletion aborted." }, 400);
+  }
   const existing = await db
     .select({
       id: tenants.id,
@@ -724,6 +740,10 @@ app.delete("/tenants/:tenantId", async (c) => {
       message: "Tenant already deleted.",
     }, 200);
   }
+  if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
+  const removeVolumes = new URL(c.req.url).searchParams.get("volumes") === "true";
   if (target.tenantStatus === "deprovisioning") {
     const [existingJob] = await db
       .select({ id: tenantLifecycleJobs.id })
@@ -916,6 +936,9 @@ app.delete("/tenants/:tenantId", async (c) => {
       removeVolumes,
       previousTenantStatus: target.tenantStatus,
       previousDeploymentStatus: target.deploymentStatus,
+      confirmationType: mode,
+      confirmationValue: confirm,
+      validatedByBackend: true,
     },
   });
   return c.json({
@@ -931,7 +954,8 @@ const provisionBody = z.object({
   // Slug is used raw for Mongo DB ({slug}_pos); MySQL uses slugToMysqlSafe() at provision time.
   slug: z
     .string()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be lowercase DNS-like"),
+    .min(3, "slug must be at least 3 characters")
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be lowercase DNS-like (e.g. acme-corp)"),
   name: z.string().min(1),
   owner_id: z.string().uuid(),
   admin_email: z.string().email(),
@@ -940,17 +964,47 @@ const provisionBody = z.object({
   plan_slug: z.string().default("starter"),
   modules: z.array(stockixModuleZod).default(["accounting"]),
   assign_existing_license_id: z.string().uuid().optional(),
+  debug: z.boolean().optional(),
 });
 
 app.post("/tenants", async (c) => {
+  console.log('[API-POST] POST /tenants received — actor:', c.get('actorId'), 'role:', c.get('actorRole'));
   if (!db) {
+    console.error('[API-POST] no db — DATABASE_URL not configured');
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  }
+
+  // 1. Enforce Idempotency-Key header presence
+  const idempotencyKey = c.req.header("idempotency-key");
+  if (!idempotencyKey || idempotencyKey.trim().length === 0) {
+    return c.json(
+      { error: "idempotency_key_required", message: "Idempotency-Key header is required for creating tenants." },
+      400
+    );
+  }
+
+  // 2. Perform Preflight Health Checks
+  const health = getGlobalHealthStatus();
+  if (!health.ready) {
+    const failedChecks = [];
+    if (health.checks.database.status !== "ok") failedChecks.push("database");
+    if (health.checks.redis.status !== "ok") failedChecks.push("redis");
+    if (health.checks.docker.status !== "ok") failedChecks.push("docker");
+    if (health.checks.provisioning.status !== "ok") failedChecks.push("provisioning_circuit_breaker");
+
+    return c.json({
+      error: "preflight_health_check_failed",
+      message: `Preflight checks failed: ${failedChecks.join(", ")}. Provisioning cannot start.`,
+      checks: health.checks
+    }, 503);
   }
 
   let body: z.infer<typeof provisionBody>;
   try {
     body = provisionBody.parse(await c.req.json());
+    console.log('[API-POST] parsed body — slug:', body.slug, 'owner_id:', body.owner_id, 'plan_slug:', body.plan_slug);
   } catch (e) {
+    console.error('[API-POST] body parse failed:', e);
     return c.json(
       { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
       400,
@@ -1068,6 +1122,7 @@ app.post("/tenants", async (c) => {
     "HTTP 202 — provisioning accepted; background worker will start",
   );
 
+  console.log('[API-POST] dispatching provision job — slug:', body.slug, 'correlationId:', correlationId);
   const job = await insertTenantJob(db, {
     type: "tenant.provision",
     correlationId,
@@ -1083,9 +1138,11 @@ app.post("/tenants", async (c) => {
       assignExistingLicenseId: body.assign_existing_license_id ?? null,
       provisionRequestedById: c.get("actorId") as string,
       needsScrub,
+      debug: body.debug ?? false,
     },
   });
 
+  console.log('[API-POST] returning 202 — jobId:', job?.id, 'correlationId:', correlationId);
   return c.json(
     {
       accepted: true,
@@ -1176,6 +1233,10 @@ app.post("/tenants/provision-stop/:correlationId", async (c) => {
   }
 
   if (job.status === "running") {
+    const redis = getControlPlaneRedisClient();
+    if (redis) {
+      await redis.set(`tenant:provision:cancel:${correlationId}`, "1", "EX", 3600).catch(() => {});
+    }
     await db
       .update(tenantLifecycleJobs)
       .set({
@@ -1315,6 +1376,10 @@ app.post("/tenants/:tenantId/provision-stop", async (c) => {
   }
 
   if (job.status === "running") {
+    const redis = getControlPlaneRedisClient();
+    if (redis) {
+      await redis.set(`tenant:provision:cancel:${correlationId}`, "1", "EX", 3600).catch(() => {});
+    }
     await db
       .update(tenantLifecycleJobs)
       .set({
@@ -2419,6 +2484,21 @@ app.get("/tenants/:tenantId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("tenantId"));
   if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
 
+  const isPollDelete = c.req.query("poll_delete") === "true";
+
+  const existenceCheck = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, parsed.data))
+    .limit(1);
+
+  if (existenceCheck.length === 0) {
+    if (isPollDelete) {
+      return c.json({ deleted: true }, 200);
+    }
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
+
   if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
     return c.json({ error: "tenant_not_found" }, 404);
   }
@@ -3377,5 +3457,157 @@ app.get("/search", async (c) => {
       role: o.role,
     })),
   });
+});
+
+app.post("/provisioning/:id/cancel", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const id = c.req.param("id");
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+
+  let job = await db
+    .select({
+      id: tenantLifecycleJobs.id,
+      type: tenantLifecycleJobs.type,
+      status: tenantLifecycleJobs.status,
+      tenantId: tenantLifecycleJobs.tenantId,
+      correlationId: tenantLifecycleJobs.correlationId,
+      payload: tenantLifecycleJobs.payload,
+      attempts: tenantLifecycleJobs.attempts,
+      maxAttempts: tenantLifecycleJobs.maxAttempts,
+      cancelRequestedAt: tenantLifecycleJobs.cancelRequestedAt,
+    })
+    .from(tenantLifecycleJobs)
+    .where(or(eq(tenantLifecycleJobs.id, id), eq(tenantLifecycleJobs.correlationId, id)))
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  if (!job) {
+    return c.json({ error: "provision_job_not_found" }, 404);
+  }
+
+  const isSuperAdmin = actorRole === "super_admin";
+  const payloadOwnerId = job.payload?.ownerId;
+  const isOwner = (payloadOwnerId && payloadOwnerId === actorId) || (job.tenantId && (await tenantWithinOwnerScope(db, c, job.tenantId)));
+
+  if (!isSuperAdmin && !isOwner) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const correlationId = job.correlationId ?? id;
+
+  if (job.status === "completed") {
+    return c.json({ error: "job_already_completed", correlationId }, 409);
+  }
+
+  if (job.status === "dead") {
+    return c.json({ ok: true, status: "already_stopped", correlationId });
+  }
+
+  const redis = getControlPlaneRedisClient();
+  if (redis) {
+    try {
+      await redis.set(`tenant:provision:cancel:${correlationId}`, "1", "EX", 3600);
+      logger.info(`Redis cancel flag set for correlationId=${correlationId}`);
+    } catch (err) {
+      logger.warn(`Failed to set Redis cancel flag for correlationId=${correlationId}`, { err: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  if (job.status === "pending") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        status: "dead",
+        attempts: job.maxAttempts ?? Math.max(1, job.attempts ?? 0),
+        lastError: sql`'cancelled_by_user'`,
+        claimedAt: null,
+        claimedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantLifecycleJobs.id, job.id));
+    return c.json({ ok: true, status: "cancelled", correlationId });
+  }
+
+  if (job.status === "running") {
+    await db
+      .update(tenantLifecycleJobs)
+      .set({
+        cancelRequestedAt: new Date(),
+        lastError: sql`'cancelled_by_user'`,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenantLifecycleJobs.id, job.id));
+    return c.json({ ok: true, status: "cancelling", correlationId });
+  }
+
+  return c.json({ ok: true, status: job.status, correlationId });
+});
+
+app.get("/provisioning/:id/logs", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const id = c.req.param("id");
+  const actorRole = String(c.get("actorRole") ?? "");
+
+  const events = await db
+    .select({
+      tenantId: tenantProvisionEvents.tenantId,
+      correlationId: tenantProvisionEvents.correlationId,
+      phase: tenantProvisionEvents.phase,
+      level: tenantProvisionEvents.level,
+      message: tenantProvisionEvents.message,
+      meta: tenantProvisionEvents.meta,
+      createdAt: tenantProvisionEvents.createdAt,
+    })
+    .from(tenantProvisionEvents)
+    .where(or(
+      eq(tenantProvisionEvents.correlationId, id),
+      eq(tenantProvisionEvents.tenantId, id)
+    ))
+    .orderBy(asc(tenantProvisionEvents.createdAt));
+
+  if (events.length === 0) {
+    return c.json({ error: "no_provisioning_logs_found" }, 404);
+  }
+
+  const firstEvent = events[0]!;
+  const isSuperAdmin = actorRole === "super_admin" || actorRole === "support_agent";
+  const isOwner = firstEvent.tenantId ? (await tenantWithinOwnerScope(db, c, firstEvent.tenantId)) : true;
+
+  if (!isSuperAdmin && !isOwner) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const logs = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]!;
+    const prev = events[i - 1];
+
+    let duration = 0;
+    if (e.meta && typeof e.meta === "object" && typeof e.meta.duration === "number") {
+      const currentElapsed = e.meta.duration;
+      const prevElapsed = (prev && prev.meta && typeof prev.meta === "object" && typeof prev.meta.duration === "number")
+        ? prev.meta.duration
+        : 0;
+      duration = Math.max(0, currentElapsed - prevElapsed);
+    } else {
+      duration = prev ? e.createdAt.getTime() - prev.createdAt.getTime() : 0;
+    }
+
+    const step_id = (e.meta?.operationKey as string) ?? e.phase;
+    const error = e.level === "error" ? (e.meta?.error as string ?? e.message) : null;
+
+    logs.push({
+      step_id,
+      tenant_id: e.tenantId ?? null,
+      timestamp: e.createdAt.toISOString(),
+      duration,
+      status: e.level === "error" ? "failed" : "complete",
+      error,
+    });
+  }
+
+  return c.json(logs);
 });
 }

@@ -1,7 +1,28 @@
 import * as Sentry from "@sentry/node";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
+import Redis from "ioredis";
 import { logger } from "./lib/logger.js";
+
+let workerControlPlaneRedis: Redis | null = null;
+
+function getWorkerRedisClient(): Redis | null {
+  const url = apiConfig.controlPlaneRedisUrl;
+  if (!url) return null;
+  if (!workerControlPlaneRedis) {
+    workerControlPlaneRedis = new Redis(url, {
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      lazyConnect: true,
+      connectTimeout: 3000,
+      commandTimeout: 2000,
+    });
+    workerControlPlaneRedis.on("error", (err: Error) => {
+      logger.warn("Worker control plane Redis connection error", { err: err.message });
+    });
+  }
+  return workerControlPlaneRedis;
+}
 
 if (process.env.SENTRY_DSN?.trim()) {
   Sentry.init({
@@ -131,7 +152,7 @@ async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void>
     log: (message) => logger.info(message),
   });
 }
-/** Prefer 127.0.0.1 on Windows to avoid localhost → ::1 while API listens on IPv4. */
+/** API_HOST must be [::1] when WSL2 relay only exposes IPv6 (wslrelay.exe → [::1]:port). */
 const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
 const apiBaseUrl = `http://${apiHost}:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
@@ -457,6 +478,23 @@ function startJobHeartbeatLoop(jobId: string): () => void {
 async function assertProvisionNotCancelled(
   jobId: string,
 ): Promise<void> {
+  // 1. Check Redis fast cancel flag first
+  const redis = getWorkerRedisClient();
+  if (redis) {
+    try {
+      const isCancelled = await redis.get(`tenant:provision:cancel:${jobId}`);
+      if (isCancelled === "1") {
+        throw new Error("cancelled_by_user: cancel flag matched in Redis");
+      }
+    } catch (redisErr) {
+      if (redisErr instanceof Error && redisErr.message.startsWith("cancelled_by_user")) {
+        throw redisErr;
+      }
+      logger.warn(`Worker Redis cancel check error: ${redisErr instanceof Error ? redisErr.message : String(redisErr)}`);
+    }
+  }
+
+  // 2. Fallback to API status endpoint cancel check
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
   const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
@@ -500,6 +538,7 @@ const provisionPayloadSchema = z.object({
     .array(z.enum(["accounting", "pos", "pms", "chat", "wire"]))
     .optional(),
   needsScrub: z.boolean().optional(),
+  debug: z.boolean().optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({
@@ -560,7 +599,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   };
   const payload = provisionPayloadSchema.parse(job.payload);
   if (payload.needsScrub) {
-    await scrubTenantRuntimeArtifacts(payload.slug);
+    // await scrubTenantRuntimeArtifacts(payload.slug);
     if (job.correlationId) {
       await db.insert(tenantProvisionEvents).values({
         correlationId: job.correlationId,
@@ -595,6 +634,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
         mainTenantInternalBaseUrl: payload.mainTenantInternalBaseUrl,
         controlPlaneOrgId: payload.organizationId ?? undefined,
         retryModules: payload.retryModules,
+        debug: payload.debug ?? false,
       },
       (m) => logger.info(`[worker][${job.id}] ${m}`),
       job.correlationId ?? randomUUID(),
@@ -760,6 +800,15 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
 }) {
   if (!job.tenantId) throw new Error("tenantId is required");
   await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
+  
+  if (job.payload.needsScrub) {
+    const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
+    if (rows[0]) {
+      logger.info(`[worker][${job.id}] deprovision needsScrub flag is set. Scrubbing...`);
+      await scrubTenantRuntimeArtifacts(rows[0].slug);
+    }
+  }
+
   const removeVolumes = job.payload.removeVolumes === true;
   const removeImages = job.payload.removeImages === true;
   const result = await withTenantLifecycleAdvisoryLock(db, job.tenantId, () =>
@@ -819,19 +868,23 @@ const handlers = {
 
 type JobHandler = (db: ReturnType<typeof createDb>, job: ClaimedJob) => Promise<void>;
 
-function isPermanentProvisionError(message: string): boolean {
+function isPermanentWorkerError(message: string): boolean {
   const lowered = message.toLowerCase();
   return (
     message.startsWith("tenant_slug_exists:") ||
     lowered.includes("tenants_slug_unique") ||
     lowered.includes("duplicate key value violates unique constraint") ||
-    message.includes("POS_FRONTEND_STUB_IMAGE")
+    message.includes("POS_FRONTEND_STUB_IMAGE") ||
+    lowered.includes("tenant_not_found")
   );
 }
 
 async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): Promise<void> {
+  console.log(`[worker-debug] Loop ${loopId} polling cycle started.`);
   while (!shuttingDown) {
+    console.log(`[worker-debug] Loop ${loopId} attempting to claim next job...`);
     const job = await claimNextJob().catch((error) => {
+      console.error(`[worker-debug] Loop ${loopId} claimNextJob error:`, error);
       if (isApiConnectionError(error)) {
         logApiUnreachable();
         return null;
@@ -841,7 +894,10 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       return null;
     });
     if (job) {
+      console.log(`[worker-debug] Loop ${loopId} successfully claimed job:`, { id: job.id, type: job.type });
       apiUnreachableCount = 0;
+    } else {
+      console.log(`[worker-debug] Loop ${loopId} no job claimed.`);
     }
     lastSuccessfulPollAt = Date.now();
     if (!job) {
@@ -895,7 +951,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       } else if (job.type === "add_module") {
         provisionComplete = await withExecutionTimeout(runAddModuleJob(db, job), jobExecutionTimeoutMs);
       } else if (job.type === "tenant.deprovision") {
-        await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
+        await withExecutionTimeout(handler(db, job), 10 * 60 * 1000);
         // Job row is completed in deprovisionTenant before tenant delete (FK cascade).
       } else {
         await withExecutionTimeout(handler(db, job), jobExecutionTimeoutMs);
@@ -922,6 +978,17 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       Sentry.captureException(error);
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[worker][${job.id}] failed: ${message}`);
+
+      if (job.type === "tenant.deprovision" && job.tenantId) {
+        try {
+          logger.error(`[worker][${job.id}] deprovision timeout guard triggered. Scrubbing...`);
+          const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
+          // if (rows[0]) await scrubTenantRuntimeArtifacts(rows[0].slug);
+        } catch (scrubErr) {
+          logger.error(`[worker][${job.id}] deprovision fallback scrub failed: ${scrubErr instanceof Error ? scrubErr.message : String(scrubErr)}`);
+        }
+      }
+
       try {
         const cancelledByUser = message.startsWith("cancelled_by_user:");
         // Provisioning should fail fast and never retry automatically.
@@ -930,7 +997,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
           || job.type === "tenant.provision"
           || job.type === "organization.provision"
           || job.type === "add_module"
-          || isPermanentProvisionError(message);
+          || isPermanentWorkerError(message);
         await markJobFailure(job.id, message, noRetry, cancelledByUser);
         await emitWorkerMetric("worker.job.failure", 1, { jobType: job.type });
         logger.info(
@@ -953,7 +1020,7 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
           job.type === "tenant.provision"
           || job.type === "organization.provision"
           || job.type === "add_module"
-          || isPermanentProvisionError(message);
+          || isPermanentWorkerError(message);
         const status = fallbackNoRetry ? "dead" : "pending";
         const nextRunAt = fallbackNoRetry ? null : new Date(Date.now() + 30_000);
         await db.transaction(async (tx) => {
@@ -985,6 +1052,13 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
                 updatedAt: new Date(),
               })
               .where(eq(tenantDeployments.tenantId, job.tenantId));
+          } else if (job.type === "tenant.deprovision" && job.tenantId) {
+            if (fallbackNoRetry) {
+              await tx
+                .update(tenants)
+                .set({ status: "failed" })
+                .where(eq(tenants.id, job.tenantId));
+            }
           } else if (job.type === "add_module" && job.tenantId) {
             await tx
               .update(tenants)

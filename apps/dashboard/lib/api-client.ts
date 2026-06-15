@@ -45,24 +45,38 @@ export async function apiFetch(
   }
 
   const url = `${apiBase}${input}`;
+  console.log(`[BFF] apiFetch: Calling URL = ${url}, method = ${method}, apiBase = ${apiBase}`);
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    console.log(`[BFF] apiFetch: Attempt ${attempt + 1}/${retries + 1} for ${url}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      console.warn(`[BFF] apiFetch: Timeout reached (${timeoutMs}ms) for ${url}`);
+      controller.abort();
+    }, timeoutMs);
     try {
-      return await fetch(url, {
+      console.log(`[BFF] apiFetch: Initiating fetch to ${url}`);
+      const res = await fetch(url, {
         ...init,
         headers,
         cache: "no-store",
-        signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+        signal: init.signal ?? controller.signal,
       });
+      console.log(`[BFF] apiFetch: Success response from ${url}, status = ${res.status}`);
+      return res;
     } catch (error) {
+      console.error(`[BFF] apiFetch: Error during attempt ${attempt + 1} for ${url}:`, error);
       lastError = error;
       if (isApiConnectionError(error) && attempt < retries) {
         const delayMs = 500 * 2 ** attempt;
+        console.log(`[BFF] apiFetch: Connection error retryable, backing off for ${delayMs}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

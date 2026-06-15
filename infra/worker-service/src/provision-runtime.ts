@@ -957,9 +957,20 @@ export async function executeProvisionRuntime(
     await trace.event("journal", message, {
       meta: {
         operationKey,
+        duration: elapsedMs(),
         ...meta,
       },
     });
+  };
+  const maybePauseForDebug = async (stepName: string) => {
+    if (input.debug) {
+      log(`[debug-mode] Pausing before step: ${stepName}`);
+      await trace.event("debug_pause", `Debug step pause before ${stepName}`, {
+        level: "info",
+        meta: { stepName, elapsedMs: elapsedMs() }
+      });
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
   };
   const recordCleanupError = async (step: string, error: unknown) => {
     const msg = error instanceof Error ? error.message : String(error);
@@ -1380,6 +1391,8 @@ export async function executeProvisionRuntime(
       }
       organizationNumber = await allocateOrganizationNumber(db);
 
+      await maybePauseForDebug("Create tenant record");
+      log("[step-start] Create tenant record");
       await db.transaction(async (tx) => {
         const allocated = await allocateTenantPort(tx, maxPort);
         port = allocated;
@@ -1409,6 +1422,7 @@ export async function executeProvisionRuntime(
         }).returning({ id: tenantDeployments.id });
         deploymentId = dRow!.id;
       });
+      log("[step-end] Create tenant record");
     }
     if (port === undefined) {
       throw new Error("provision_internal: expected allocated port after transaction");
@@ -1618,7 +1632,9 @@ export async function executeProvisionRuntime(
     });
     sideEffectsStarted = true;
     await checkNotCancelled();
-    if (!hasOp("docker.data_step")) {
+     await maybePauseForDebug("Initialize Redis namespace");
+     log("[step-start] Initialize Redis namespace");
+     if (!hasOp("docker.data_step")) {
       log("[provision] step start: docker.data_step");
       const { provisionTenantDatabases } = await import("../domain/provisioner.js");
       await provisionTenantDatabases(input.slug, dbPasswordPlain, log);
@@ -1632,9 +1648,12 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "docker.data_step", composeProjectName: project },
       });
     }
+    log("[step-end] Initialize Redis namespace");
 
 
     await checkNotCancelled();
+    await maybePauseForDebug("Initialize DB schema");
+    log("[step-start] Initialize DB schema");
     if (!hasOp("docker.migration_step")) {
       log("[provision] step start: docker.migration_step");
       const { resetSystemDatabaseForMigration } = await import("../domain/provisioner.js");
@@ -1657,7 +1676,10 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "docker.migration_step", composeProjectName: project },
       });
     }
+    log("[step-end] Initialize DB schema");
     await checkNotCancelled();
+    await maybePauseForDebug("Deploy shared docker services");
+    log("[step-start] Deploy shared docker services");
     if (!hasOp("docker.app_step")) {
       log("[provision] step start: docker.app_step");
       await trace.event("progress", "Starting app compose step", {
@@ -1676,6 +1698,7 @@ export async function executeProvisionRuntime(
         meta: { operationKey: "docker.app_step", composeProjectName: project },
       });
     }
+    log("[step-end] Deploy shared docker services");
     await checkNotCancelled();
 
     // Finance webapp static assets are bundled in stockix-server:local (webapp-dist)
@@ -1751,6 +1774,8 @@ export async function executeProvisionRuntime(
       await trace.event("progress", "Waiting for tenant health endpoint", {
         meta: { operationKey: "tenant.health_check", elapsedMs: elapsedMs(), internalUrl },
       });
+      await maybePauseForDebug("Final health verification");
+      log("[step-start] Final health verification");
       await finance.waitUntilReady(
         internalUrl,
         STOCKIX_FINANCE_HEALTH_TIMEOUT_MS,
@@ -1760,6 +1785,7 @@ export async function executeProvisionRuntime(
       );
       await markOp("tenant.health_check", "Tenant health check completed", { internalUrl, elapsedMs: elapsedMs() });
       log("[provision] step done: tenant.health_check");
+      log("[step-end] Final health verification");
     } else {
       await trace.event("resume", "Skipping health check (already journaled)", {
         meta: { operationKey: "tenant.health_check", internalUrl },
@@ -1772,6 +1798,8 @@ export async function executeProvisionRuntime(
         excludeTenantId: tenantId ?? undefined,
         slug: input.slug,
       });
+      await maybePauseForDebug("Wire API routes/config");
+      log("[step-start] Wire API routes/config");
       try {
         await edge.publish(input.slug, port, rootDomain, project);
       } catch (error) {
@@ -1790,6 +1818,7 @@ export async function executeProvisionRuntime(
         internalPort: port,
       });
       log("[provision] step done: edge.publish");
+      log("[step-end] Wire API routes/config");
     } else {
       await trace.event("resume", "Skipping edge publish (already journaled)", {
         meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
@@ -2385,80 +2414,30 @@ export async function executeProvisionRuntime(
           forceRerun: forceWireRerun,
         });
         if (!wireResult.ok) {
-          const wireError = wireResult.error;
-          if (hasAccountingAndPos(licensedModules) && tenantId) {
-            await markTenantPartial(db, {
-              tenantId,
-              kind: "wire_failed",
-              lastError: wireError,
+          const wireError = wireResult.error ?? "POS wire integration failed";
+          if (tenantId && !input.skipTenantCreation) {
+            await rollbackProvision(db, tenantId, correlationId, wireError, {
+              deps,
+              composeCtx: sideEffectsStarted ? composeCtx : null,
+              log,
             });
-            log(
-              `[provision] Finance+POS active but integration wire failed — tenant partial slug=${input.slug}`,
-            );
-            return {
-              ok: true,
-              tenantId: tenantId!,
-              deploymentId: deploymentId!,
-              composeProjectName: project,
-              internalPort: port,
-              baseUrl,
-              oneTimeAdminPassword: oneTimeAdminPassword!,
-              financeOrganizationId,
-              financeTenantId,
-              financeDefaultWarehouseId,
-              walkInCustomerId,
-              cashAccountId,
-              cardAccountId,
-              posOrganizationId,
-              posUrl,
-              posApiUrl,
-              posDefaultCredentials,
-              posStatus: "ok",
-              posError: wireError,
-              tenantStatus: "partial",
-            };
           }
+          throw new Error(wireError);
         } else {
           integrationWired = true;
         }
       }
     }
-    if (posOutcome.posStatus === "failed" && tenantId) {
+    if (posOutcome.posStatus === "failed") {
       const posError = posOutcome.posError ?? "POS provisioning failed";
-      if (hasAccountingAndPos(licensedModules)) {
-        await markTenantPartial(db, {
-          tenantId,
-          kind: "pos_failed",
-          lastError: posError,
-        });
-        log(`[provision] Finance active, POS failed — tenant marked partial slug=${input.slug}`);
-        return {
-          ok: true,
-          tenantId: tenantId!,
-          deploymentId: deploymentId!,
-          composeProjectName: project,
-          internalPort: port,
-          baseUrl,
-          oneTimeAdminPassword: oneTimeAdminPassword!,
-          financeOrganizationId,
-          financeTenantId,
-          financeDefaultWarehouseId,
-          walkInCustomerId,
-          cashAccountId,
-          cardAccountId,
-          posStatus: "failed",
-          posError,
-          tenantStatus: "partial",
-        };
-      }
-      if (isPosOnlyModules(licensedModules)) {
+      if (tenantId && !input.skipTenantCreation) {
         await rollbackProvision(db, tenantId, correlationId, posError, {
           deps,
           composeCtx: sideEffectsStarted ? composeCtx : null,
           log,
         });
-        throw new Error(posError);
       }
+      throw new Error(posError);
     }
     if (licensedModules.includes("pms") && tenantId) {
       try {

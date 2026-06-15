@@ -243,7 +243,7 @@ export default function TenantCreateWizard(props: Props) {
   };
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail);
-  const slugOk = /^[a-z0-9][a-z0-9-]{1,}[a-z0-9]$/.test(slug);
+  const slugOk = slug.length >= 3 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
   const step1Valid =
     name.trim().length > 0 &&
     adminFirstName.trim().length > 0 &&
@@ -258,8 +258,12 @@ export default function TenantCreateWizard(props: Props) {
     (licenseMode === "auto" || (licenseMode === "existing" && existingLicenseId.length > 0));
 
   const submit = async () => {
+      console.log('[WIZARD] submit() called, step:', step, 'loading:', loading);
+
     setFormError(null);
     try {
+          console.log('[WIZARD] calling onProvision with:', { slug, name, adminEmail, planSlug });
+
       await onProvision({
         slug: slug.trim(),
         name: name.trim(),
@@ -271,6 +275,7 @@ export default function TenantCreateWizard(props: Props) {
         assignExistingLicenseId: licenseMode === "existing" ? existingLicenseId : null,
       });
     } catch (e) {
+      console.error('[WIZARD] onProvision threw:', e);
       setFormError(String(e));
     }
   };
