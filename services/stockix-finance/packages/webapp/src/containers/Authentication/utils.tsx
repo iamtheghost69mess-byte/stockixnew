@@ -47,6 +47,9 @@ export const InviteAcceptSchema = Yup.object().shape({
 
 export const transformSendResetPassErrorsToToasts = (error) => {
   const toastBuilders = [];
+  if (!error) {
+    return toastBuilders;
+  }
 
   if (error.code === ERRORS.EMAIL_NOT_REGISTERED) {
     toastBuilders.push({
@@ -59,6 +62,13 @@ export const transformSendResetPassErrorsToToasts = (error) => {
 
 export const transformLoginErrorsToToasts = (error) => {
   const toastBuilders = [];
+  if (!error) {
+    toastBuilders.push({
+      message: intl.get('ops_something_went_wrong') || 'An unexpected network error occurred. Please try again.',
+      intent: Intent.DANGER,
+    });
+    return toastBuilders;
+  }
 
   if (error.code === LOGIN_ERRORS.INVALID_DETAILS) {
     toastBuilders.push({

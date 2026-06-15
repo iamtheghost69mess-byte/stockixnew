@@ -31,9 +31,9 @@ export default function Login() {
     loginMutate({
       credential: values.crediential,
       password: values.password,
-    }).catch(({ response }) => {
-      const { data: error } = response;
-      const toastMessages = transformLoginErrorsToToasts(error);
+    }).catch((error) => {
+      const errorData = error?.response?.data;
+      const toastMessages = transformLoginErrorsToToasts(errorData);
 
       toastMessages.forEach((toastMessage) => {
         Toaster.show(toastMessage);

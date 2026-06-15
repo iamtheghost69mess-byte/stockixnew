@@ -1,17 +1,9 @@
 // @ts-nocheck
 import { useMutation } from 'react-query';
-import { batch } from 'react-redux';
 import useApiRequest, { useAuthApiRequest } from '../useRequest';
 import { clearMustChangePasswordCookie, removeCookie, setCookie } from '../../utils';
 import { useRequestQuery } from '../useQueryRequest';
 import t from './types';
-import {
-  useSetAuthToken,
-  useSetAuthUserId,
-  useSetLocale,
-  useSetOrganizationId,
-  useSetTenantId,
-} from '../state';
 
 const AuthRoute = {
   Signin: 'auth/signin',
@@ -50,28 +42,10 @@ export function setAuthLoginCookies(data) {
 export const useAuthLogin = (props) => {
   const apiRequest = useAuthApiRequest();
 
-  const setAuthToken = useSetAuthToken();
-  const setOrganizationId = useSetOrganizationId();
-  const setUserId = useSetAuthUserId();
-  const setTenantId = useSetTenantId();
-  const setLocale = useSetLocale();
-
   return useMutation((values) => apiRequest.post(AuthRoute.Signin, values), {
     onSuccess: (res) => {
       // Set authentication cookies.
       setAuthLoginCookies(res.data);
-
-      batch(() => {
-        // Sets the auth metadata to global state.
-        setAuthToken(res.data.access_token);
-        setOrganizationId(res.data.organization_id);
-        setTenantId(res.data.tenant_id);
-        setUserId(res.data.user_id);
-
-        if (res.data?.tenant?.metadata?.language) {
-          setLocale(res.data.tenant.metadata.language);
-        }
-      });
 
       if (res.data?.must_change_password) {
         window.location.href = '/auth/change-password?required=true';
