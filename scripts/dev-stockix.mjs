@@ -361,6 +361,7 @@ const sharedEnv = {
   API_HOST: "[::1]",
   WORKER_HEALTH_PORT: String(workerHealthPort),
   STOCKIX_DEV_LOCKED_PORT: "1",
+  ALLOW_LOCKED_MIGRATION: "1",
   MYSQL_PROXY_PORT: resolveMysqlProxyHostPort(),
 };
 
