@@ -16,7 +16,21 @@ export class LicenseService {
   ) {}
 
   async findByTenantId(tenantId: number): Promise<TenantLicense | undefined> {
-    return this.tenantLicenseModel.query().findOne({ tenantId });
+    let currentTenantId = tenantId;
+    let license = await this.tenantLicenseModel.query().findOne({ tenantId: currentTenantId });
+
+    const visited = new Set<number>();
+    while (!license && currentTenantId) {
+      visited.add(currentTenantId);
+      const tenant = await this.tenantModel.query().findOne({ id: currentTenantId });
+      if (tenant?.parentTenantId && !visited.has(tenant.parentTenantId)) {
+        currentTenantId = tenant.parentTenantId;
+        license = await this.tenantLicenseModel.query().findOne({ tenantId: currentTenantId });
+      } else {
+        break;
+      }
+    }
+    return license;
   }
 
   resolveEffectiveStatus(license: TenantLicense): LicenseStatus | null {

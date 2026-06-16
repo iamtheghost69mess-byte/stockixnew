@@ -241,6 +241,40 @@ export async function executeOrgProvisionRuntime(
     correlationId,
   );
 
+  const parentFinanceTenantId =
+    signinSession.tenantId ??
+    (await resolveParentFinanceTenantId(
+      mainBase,
+      signinSession.organizationId,
+      correlationId,
+    ));
+
+  if (parentFinanceTenantId && apiConfig.internalApiSecret) {
+    try {
+      const parentUrl = `${mainBase}/api/internal/tenants/${newFinanceTenantId}/set-parent`;
+      const setParentRes = await fetch(parentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": apiConfig.internalApiSecret,
+        },
+        body: JSON.stringify({ parentTenantId: parentFinanceTenantId }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!setParentRes.ok) {
+        const setParentText = await setParentRes.text();
+        log(`[org-provision] Warning: set-parent failed during early setup: ${setParentText.slice(0, 200)}`);
+      } else {
+        log(`[org-provision] Early parent tenant relationship established to parent ID ${parentFinanceTenantId}`);
+      }
+    } catch (err) {
+      log(
+        `[org-provision] Warning: early parent tenant resolution error: ${err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
   let inheritedSettings: OrgBuildSettings = {
     ...MENA_DEFAULTS,
     name: input.orgName,
@@ -300,14 +334,6 @@ export async function executeOrgProvisionRuntime(
     });
   }
 
-  const parentFinanceTenantId =
-    signinSession.tenantId ??
-    (await resolveParentFinanceTenantId(
-      mainBase,
-      signinSession.organizationId,
-      correlationId,
-    ));
-
   if (parentFinanceTenantId && apiConfig.internalApiSecret) {
     try {
       const copyUrl = `${mainBase}/api/internal/tenants/${newFinanceTenantId}/copy-from/${parentFinanceTenantId}`;
@@ -332,17 +358,6 @@ export async function executeOrgProvisionRuntime(
           log,
         );
       }
-
-      const parentUrl = `${mainBase}/api/internal/tenants/${newFinanceTenantId}/set-parent`;
-      await fetch(parentUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": apiConfig.internalApiSecret,
-        },
-        body: JSON.stringify({ parentTenantId: parentFinanceTenantId }),
-        signal: AbortSignal.timeout(10_000),
-      });
     } catch (err) {
       log(
         `[org-provision] COA copy error: ${err instanceof Error ? err.message : String(err)
