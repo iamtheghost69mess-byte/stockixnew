@@ -415,17 +415,37 @@ jobs:
           fi
           cd "${REPO_ROOT}"
           echo "=== Checking tenant images ==="
+          # Restore :local alias from known persistent source tags if they were lost.
+          # (Handles daemon restarts or manual cleanup that untagged the alias.)
+          _retag_if_missing() {
+            local target="$1" source="$2"
+            if ! docker image inspect "${target}" >/dev/null 2>&1; then
+              if docker image inspect "${source}" >/dev/null 2>&1; then
+                echo "Retagging ${source} → ${target}"
+                docker tag "${source}" "${target}"
+              fi
+            fi
+          }
+          _retag_if_missing stockix-server:local             stockix-server:patched8
+          _retag_if_missing stockix-database-migration:local stockix-database-migration:patched8
+          _retag_if_missing stockix-webapp:local             stockix-webapp:patched8
+          _retag_if_missing stockix-nginx:local              stockix-nginx:patched8
           IMAGES_NEEDED=("stockix-webapp:local" "stockix-server:local" "stockix-database-migration:local" "stockix-nginx:local")
           ALL_BUILT=true
           for img in "${IMAGES_NEEDED[@]}"; do
-            docker image inspect "$img" >/dev/null 2>&1 || { ALL_BUILT=false; echo "MISSING: $img"; }
+            if docker image inspect "$img" >/dev/null 2>&1; then
+              echo "OK: $img"
+            else
+              ALL_BUILT=false
+              echo "MISSING: $img"
+            fi
           done
           if [ "$ALL_BUILT" = "true" ]; then
             echo "All tenant images present."
           else
-            echo "WARNING: One or more tenant images are missing."
-            echo "Tenant provisioning will fail until images are built."
-            echo "Run on server: pnpm docker:prebuild  (or :force after Finance code changes)"
+            echo "ERROR: One or more tenant images are missing. Tenant provisioning will fail."
+            echo "Run on VPS: pnpm docker:prebuild  (or :force after Finance code changes)"
+            exit 1
           fi
           echo "=== Post-deploy cleanup ==="
           # Remove old GHCR images from previous deploys (not the current SHA or :local tenant images).
