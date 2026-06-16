@@ -102,7 +102,7 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-          imgSrc: ["'self'", 'data:', 'https:'],
+          imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
           connectSrc: ["'self'", "http://*.localhost", "http://127.0.0.1:*", "http://localhost:*"],
           fontSrc: ["'self'", 'data:', "https://fonts.gstatic.com"],
         },

@@ -187,7 +187,7 @@ export function getBalanceSheetTableClass(): BalanceSheetTableCtor {
           R.unless(
             R.isEmpty,
             R.concat([
-              { key: 'total', Label: this.i18n.__('balance_sheet.total') },
+              { key: 'total', Label: this.i18n.t('balance_sheet.total') },
             ]),
           ),
           R.concat(this.percentageColumns()),
@@ -198,8 +198,8 @@ export function getBalanceSheetTableClass(): BalanceSheetTableCtor {
 
       private totalColumn = (): ITableColumn[] => {
         const label = this.baseCurrency
-          ? `${this.i18n.__('balance_sheet.total')} (${this.baseCurrency})`
-          : this.i18n.__('balance_sheet.total');
+          ? `${this.i18n.t('balance_sheet.total')} (${this.baseCurrency})`
+          : this.i18n.t('balance_sheet.total');
         const columns: ITableColumn[] = [
           {
             key: 'total',
@@ -210,7 +210,7 @@ export function getBalanceSheetTableClass(): BalanceSheetTableCtor {
         if (this.secondaryCurrency && this.secondaryRate) {
           columns.push({
             key: 'secondary_total',
-            label: `≈ ${this.secondaryCurrency} ${this.i18n.__('balance_sheet.total')}`,
+            label: `≈ ${this.secondaryCurrency} ${this.i18n.t('balance_sheet.total')}`,
           });
         }
         return columns;
@@ -227,7 +227,7 @@ export function getBalanceSheetTableClass(): BalanceSheetTableCtor {
         return R.compose(
           this.tableColumnsCellIndexing,
           R.concat([
-            { key: 'name', label: this.i18n.__('balance_sheet.account_name') },
+            { key: 'name', label: this.i18n.t('balance_sheet.account_name') },
           ]),
           R.ifElse(
             this.query.isDatePeriodsColumnsType,

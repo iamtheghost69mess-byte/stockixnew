@@ -16,13 +16,18 @@ export class SyncLicenseService {
    *   -H "x-internal-secret: $INTERNAL_API_SECRET" \
    *   -d '{"tenantId":1,"planSlug":"starter","status":"active","validFrom":"2024-01-01T00:00:00.000Z","expiresAt":null,"gracePeriodDays":30,"maxUsers":999,"maxActivations":3,"maxOrganizations":1,"isPerpetual":true,"featureFlags":null}'
    */
+  private toMysqlDatetime(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    return new Date(iso).toISOString().slice(0, 19).replace('T', ' ');
+  }
+
   async sync(dto: SyncLicenseDto): Promise<{ success: true; tenantId: number }> {
     const payload = {
       tenantId: dto.tenantId,
       planSlug: dto.planSlug,
       status: dto.status,
-      validFrom: dto.validFrom,
-      expiresAt: dto.expiresAt,
+      validFrom: this.toMysqlDatetime(dto.validFrom),
+      expiresAt: this.toMysqlDatetime(dto.expiresAt),
       gracePeriodDays: dto.gracePeriodDays,
       maxUsers: dto.maxUsers,
       maxActivations: dto.maxActivations,

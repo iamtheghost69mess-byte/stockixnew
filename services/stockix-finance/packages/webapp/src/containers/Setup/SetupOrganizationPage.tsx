@@ -12,43 +12,26 @@ import { withSettingsActions } from '@/containers/Settings/withSettingsActions';
 import { getSetupOrganizationValidation } from './SetupOrganization.schema';
 import { setCookie, compose, transfromToSnakeCase } from '@/utils';
 
-// Detect browser timezone and locale for sensible defaults.
-function detectBrowserDefaults() {
+// Timezone is reliably detected from the browser. Location and currency are left
+// blank — locale subtags don't reliably map to physical location (e.g. ar-LY
+// for an Arabic UI setting ≠ the user is in Libya).
+function detectBrowserTimezone(): string {
   try {
-    const resolved = Intl.DateTimeFormat().resolvedOptions();
-    const timezone = resolved.timeZone ?? '';
-    // Derive country code and currency from locale subtag (e.g. "en-US" → "US" / "USD").
-    const localeParts = (resolved.locale ?? navigator?.language ?? 'en').split('-');
-    const countryCode = localeParts.length >= 2 ? localeParts[localeParts.length - 1].toUpperCase() : '';
-    const COUNTRY_CURRENCY_MAP = {
-      US: 'USD', GB: 'GBP', EU: 'EUR', DE: 'EUR', FR: 'EUR', ES: 'EUR',
-      IT: 'EUR', NL: 'EUR', BE: 'EUR', PT: 'EUR', AT: 'EUR', FI: 'EUR',
-      JP: 'JPY', CN: 'CNY', AU: 'AUD', CA: 'CAD', CH: 'CHF', SE: 'SEK',
-      NO: 'NOK', DK: 'DKK', NZ: 'NZD', SG: 'SGD', HK: 'HKD', IN: 'INR',
-      BR: 'BRL', MX: 'MXN', ZA: 'ZAR', AE: 'AED', SA: 'SAR', LB: 'LBP',
-      EG: 'EGP', KW: 'KWD', QA: 'QAR', OM: 'OMR', JO: 'JOD', MA: 'MAD',
-    };
-    return {
-      timezone,
-      location: countryCode,
-      baseCurrency: COUNTRY_CURRENCY_MAP[countryCode] ?? '',
-    };
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
   } catch {
-    return { timezone: '', location: '', baseCurrency: '' };
+    return '';
   }
 }
-
-const browserDefaults = detectBrowserDefaults();
 
 // Initial values.
 const defaultValues = {
   name: '',
   industry: '',
-  location: browserDefaults.location,
-  baseCurrency: browserDefaults.baseCurrency,
+  location: '',
+  baseCurrency: '',
   language: 'en',
   fiscalYear: '',
-  timezone: browserDefaults.timezone,
+  timezone: detectBrowserTimezone(),
   dateFormat: 'DD MMM YYYY',
 };
 
