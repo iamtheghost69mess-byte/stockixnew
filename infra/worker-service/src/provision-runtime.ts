@@ -607,6 +607,29 @@ async function resolveServerInternalUrl(params: {
   return `http://${params.fallbackHost}:${params.fallbackPort}`;
 }
 
+async function ensureExternalNetworksExist(
+  log: (m: string) => void,
+): Promise<void> {
+  const traefikNetwork = process.env.TRAEFIK_NETWORK ?? "stockix_public";
+  const internalNetwork = process.env.WORKER_INTERNAL_NETWORK ?? process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
+
+  for (const network of [traefikNetwork, internalNetwork]) {
+    try {
+      // inspect exits 1 and writes "[]" to stdout when network is missing — check exit code.
+      const result = await execa("docker", ["network", "inspect", network], {
+        stdio: "pipe",
+        reject: false,
+      });
+      if (result.exitCode !== 0) {
+        log(`[provision] external network ${network} not found, creating it...`);
+        await execa("docker", ["network", "create", network]);
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
+}
+
 export async function executeProvisionRuntime(
   deps: TenantProvisionServiceDeps,
   db: PostgresJsDatabase<typeof dbSchema>,
@@ -615,6 +638,7 @@ export async function executeProvisionRuntime(
   correlationId: string,
   assertNotCancelled?: () => Promise<void>,
 ): Promise<ProvisionResult> {
+  await ensureExternalNetworksExist(log);
   const runtimeStartedAt = Date.now();
   let tenantId: string | undefined;
   let deploymentId: string | undefined;
@@ -1333,6 +1357,12 @@ export async function executeProvisionRuntime(
       stockixAppName,
       stockixLogoUrl,
       stockixPrimaryColor,
+      // Networking / Traefik — consumed by tenant docker-compose.yml
+      tenantSlug: input.slug,
+      tenantRootDomain: rootDomain,
+      traefikLabelsEnabled: process.env.TRAEFIK_LABELS_ENABLED === "true" ? "true" : "false",
+      traefikNetwork: process.env.TRAEFIK_NETWORK ?? "stockix_public",
+      workerInternalNetwork: process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal",
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
     if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
@@ -1459,14 +1489,20 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
 
-    // Connect the tenant server container to stockix_internal so the infra-worker can
-    // reach it directly (host.docker.internal NAT is blocked by iptables on Linux).
+    // Verify the tenant server container is on stockix_internal so the infra-worker can
+    // reach it directly. The tenant docker-compose.yml declares stockix_internal as an
+    // external network, so server is connected at `docker compose up`. This is a safety-net
+    // for edge-cases (container recreated outside compose, manual disconnect, etc.).
     const serverContainerName = `${project}-server-1`;
-    const internalNetworkName = process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
+    const internalNetworkName = process.env.WORKER_INTERNAL_NETWORK ?? process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
     let tenantServerInternalIp: string | undefined;
     try {
-      await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
-      log(`[provision] connected ${serverContainerName} to ${internalNetworkName}`);
+      // Idempotent: no-op if already connected (which it should be from compose).
+      await execa("docker", ["network", "connect", internalNetworkName, serverContainerName], {
+        stdio: "pipe",
+        reject: false,
+      });
+      log(`[provision] verified ${serverContainerName} on ${internalNetworkName}`);
       // Resolve the IP assigned on the internal network
       const { stdout: inspectOut } = await execa("docker", [
         "inspect",
@@ -1478,7 +1514,7 @@ export async function executeProvisionRuntime(
       log(`[provision] tenant server internal IP: ${tenantServerInternalIp}`);
     } catch (netErr) {
       const msg = netErr instanceof Error ? netErr.message : String(netErr);
-      log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
+      log(`[provision][warn] could not verify tenant server on ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
     }
 
     const internalUrl = tenantServerInternalIp

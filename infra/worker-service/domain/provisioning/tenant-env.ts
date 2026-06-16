@@ -31,6 +31,17 @@ export type TenantEnvFileParams = {
   socketAllowedOrigins?: string;
   redisPassword?: string;
   mongoRootPassword?: string;
+  // --- Networking / Traefik ---
+  /** Tenant slug used for Traefik label host rule and network naming. */
+  tenantSlug?: string;
+  /** Root domain (e.g. stockix.cloud or localhost). */
+  tenantRootDomain?: string;
+  /** Enable Traefik Docker labels ("true" in production, "false" in local dev). */
+  traefikLabelsEnabled?: string;
+  /** Traefik-facing Docker network name (default: stockix_public). */
+  traefikNetwork?: string;
+  /** Worker-facing internal Docker network name (default: stockix_internal). */
+  workerInternalNetwork?: string;
 };
 
 /** Signup policy copied from repo root `.env` into each tenant Finance stack. */
@@ -126,6 +137,12 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     AGENDA_DB_COLLECTION: process.env.AGENDA_DB_COLLECTION ?? "stockix-jobs",
     AGENDA_POOL_TIME: process.env.AGENDA_POOL_TIME ?? "every 1 minute",
     AGENDA_CONCURRENCY: process.env.AGENDA_CONCURRENCY ?? "20",
+    // --- Networking / Traefik (consumed by tenant docker-compose.yml) ---
+    TENANT_SLUG: params.tenantSlug ?? "",
+    TENANT_ROOT_DOMAIN: params.tenantRootDomain ?? "localhost",
+    TRAEFIK_LABELS_ENABLED: params.traefikLabelsEnabled ?? "false",
+    TRAEFIK_NETWORK: params.traefikNetwork ?? "stockix_public",
+    WORKER_INTERNAL_NETWORK: params.workerInternalNetwork ?? "stockix_internal",
   };
 }
 

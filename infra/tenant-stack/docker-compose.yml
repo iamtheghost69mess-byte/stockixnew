@@ -44,6 +44,18 @@ services:
     cpus: "0.1"
     mem_swappiness: 0
     oom_kill_disable: false
+    networks:
+      - default
+      - stockix_public
+    # Traefik auto-discovers this container via Docker labels (no stale-IP YAML files).
+    # Labels are only effective in production (Traefik Docker provider scans the socket).
+    labels:
+      - traefik.enable=${TRAEFIK_LABELS_ENABLED:-false}
+      - traefik.docker.network=${TRAEFIK_NETWORK:-stockix_public}
+      - "traefik.http.routers.tenant-${COMPOSE_PROJECT_NAME}.rule=Host(`${TENANT_SLUG:-local}.${TENANT_ROOT_DOMAIN:-localhost}`)"
+      - traefik.http.routers.tenant-${COMPOSE_PROJECT_NAME}.entrypoints=websecure
+      - traefik.http.routers.tenant-${COMPOSE_PROJECT_NAME}.tls.certresolver=cloudflare
+      - traefik.http.services.tenant-${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=80
 
   webapp:
     image: stockix-webapp:local
@@ -71,6 +83,8 @@ services:
     cpus: "0.25"
     mem_swappiness: 0
     oom_kill_disable: false
+    networks:
+      - default
 
   server:
     image: stockix-server:local
@@ -147,6 +161,9 @@ services:
     ports:
       # Bind on all interfaces so the infra-worker container can reach this via host.docker.internal.
       - "0.0.0.0::3000"
+    networks:
+      - default
+      - stockix_internal
 
   database_migration:
     image: stockix-database-migration:local
@@ -305,3 +322,12 @@ volumes:
 networks:
   default:
     name: ${COMPOSE_PROJECT_NAME:-stockix_tenant}_net
+  # External networks shared with the platform stack. The worker creates these networks
+  # during platform `docker compose up`. They must exist before tenant stacks start.
+  # In local dev without Traefik, set TRAEFIK_LABELS_ENABLED=false (default).
+  stockix_public:
+    external: true
+    name: ${TRAEFIK_NETWORK:-stockix_public}
+  stockix_internal:
+    external: true
+    name: ${WORKER_INTERNAL_NETWORK:-stockix_internal}

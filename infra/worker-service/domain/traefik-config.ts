@@ -11,16 +11,28 @@ function tenantUpstreamHost(): string {
   return apiConfig.traefikTenantUpstreamHost;
 }
 
-/** Connect the nginx container to the Traefik network and return its direct URL.
- *  Falls back to host.docker.internal:port if the network connect/inspect fails.
+/** When true, routing is via Traefik Docker provider labels; no file config is written. */
+function useDockerLabels(): boolean {
+  const flag = process.env.TRAEFIK_LABELS_ENABLED?.trim().toLowerCase();
+  return flag === "true" || flag === "1";
+}
+
+/** Ensure the nginx container is on the Traefik network.
+ *
+ *  This is now a **verify-and-reconnect** rather than the sole connection point:
+ *  the tenant docker-compose.yml declares `stockix_public` as an external network,
+ *  so nginx is connected at `docker compose up`. This function handles edge-cases
+ *  (container recreated outside compose, manual disconnect, etc.).
+ *
+ *  Returns the container's IP on the Traefik network, or null if unavailable.
  */
-async function resolveNginxDirectUrl(
+async function ensureNginxOnTraefikNetwork(
   composeProjectName: string,
-  fallbackPort: number,
-): Promise<string> {
+): Promise<string | null> {
   const traefikNetwork = process.env.TRAEFIK_NETWORK ?? "stockix_public";
   const containerName = `${composeProjectName}-nginx-1`;
   try {
+    // Idempotent: docker network connect is a no-op if already connected.
     await execa("docker", ["network", "connect", traefikNetwork, containerName], {
       stdio: "pipe",
       reject: false,
@@ -37,14 +49,24 @@ async function resolveNginxDirectUrl(
     );
     const ip = stdout.trim();
     if (ip && ip !== "<no value>" && ip !== "") {
-      return `http://${ip}:80`;
+      return ip;
     }
   } catch {
-    // Fall through to host-port fallback.
+    // Fall through — caller will use fallback.
   }
-  return `http://${tenantUpstreamHost()}:${fallbackPort}`;
+  return null;
 }
 
+/**
+ * Write a Traefik dynamic YAML config for a tenant.
+ *
+ * When Docker labels are enabled (`TRAEFIK_LABELS_ENABLED=true`), routing is
+ * handled entirely by Traefik's Docker provider. No file config is written and
+ * any stale file is removed to prevent duplicate-router conflicts.
+ *
+ * When Docker labels are disabled (local dev), the file-based approach is used
+ * with a direct upstream URL resolved from the nginx container's network IP.
+ */
 export async function writeTenantTraefikConfig(
   slug: string,
   port: number,
@@ -53,9 +75,29 @@ export async function writeTenantTraefikConfig(
 ): Promise<void> {
   const dir = traefikDir();
   await mkdir(dir, { recursive: true });
-  const upstreamUrl = composeProjectName
-    ? await resolveNginxDirectUrl(composeProjectName, port)
-    : `http://${tenantUpstreamHost()}:${port}`;
+
+  // When Docker labels are active, Traefik discovers nginx automatically via
+  // the Docker provider. We skip writing a file-based config to avoid conflicts
+  // (duplicate router names between Docker labels and file provider).
+  if (useDockerLabels()) {
+    // Still ensure the nginx container is on the Traefik network as a safety net.
+    if (composeProjectName) {
+      await ensureNginxOnTraefikNetwork(composeProjectName);
+    }
+    // Remove any stale file config that might conflict with Docker labels.
+    await removeTenantTraefikConfig(slug).catch(() => undefined);
+    return;
+  }
+
+  // Fallback: file-based config for environments not using Docker labels.
+  let upstreamUrl: string;
+  if (composeProjectName) {
+    const ip = await ensureNginxOnTraefikNetwork(composeProjectName);
+    upstreamUrl = ip ? `http://${ip}:80` : `http://${tenantUpstreamHost()}:${port}`;
+  } else {
+    upstreamUrl = `http://${tenantUpstreamHost()}:${port}`;
+  }
+
   const config =
     `http:\n` +
     `  routers:\n` +
