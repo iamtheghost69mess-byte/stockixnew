@@ -297,6 +297,23 @@ export async function executeOrgProvisionRuntime(
     );
   }
 
+  // Sync the license to Finance BEFORE the organization build so that
+  // LicenseGuardMiddleware finds a tenant_licenses row when it intercepts
+  // POST /api/organization/build. provision-runtime.ts does the same for
+  // main-tenant flows (lines 1956-2027). The post-build sync below remains as
+  // a refresh that applies final plan limits after build completes.
+  await check();
+  log("[org-provision] Syncing Finance license before organization build");
+  await syncFinanceLicenseForStockixTenant(
+    db,
+    {
+      stockixTenantId: input.stockixTenantId,
+      financeTenantId: newFinanceTenantId,
+      internalBaseUrl: mainBase,
+    },
+    log,
+  );
+
   await check();
   log("[org-provision] Building organization database");
   const buildResult = await fetchBuildOrganization(
