@@ -20,3 +20,13 @@ export class UrlConverter {
     return Promise.resolve(Buffer.from(''));
   }
 }
+
+export class HtmlConverter {
+  convert(_options: {
+    html: string;
+    properties?: PageProperties;
+    pdfFormat?: PdfFormat;
+  }): Promise<Buffer> {
+    return Promise.resolve(Buffer.from(''));
+  }
+}

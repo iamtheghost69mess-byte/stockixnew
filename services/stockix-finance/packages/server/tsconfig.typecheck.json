@@ -23,7 +23,8 @@
       ],
       "@/libs/chromiumly/_types": ["./stubs/typecheck/chromiumly/index"],
       "@/libs/chromiumly/UrlConvert": ["./stubs/typecheck/chromiumly/index"],
-      "@/libs/chromiumly/Chromiumly": ["./stubs/typecheck/chromiumly/index"]
+      "@/libs/chromiumly/Chromiumly": ["./stubs/typecheck/chromiumly/index"],
+      "@/libs/chromiumly/HTMLConvert": ["./stubs/typecheck/chromiumly/index"]
     }
   },
   "include": [
