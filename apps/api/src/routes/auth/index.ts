@@ -6,11 +6,8 @@ import * as schema from "@repo/db/schema";
 import { apiConfig } from "@repo/config";
 import { logger } from "../../lib/logger.js";
 
-import {
-  capabilitiesFromPermissions,
-  permissionsForRoleSlug,
-} from "@repo/shared/permissions";
-import { loadOwnerAuthById } from "../../permissions/resolve-owner-permissions.js";
+import { capabilitiesFromPermissions } from "@repo/shared/permissions";
+import { validateAndResolveOwnerAuth } from "../../permissions/resolve-owner-permissions.js";
 import { validateOwnerSession } from "../../services/auth/session-validation.js";
 import { loginOwner, reconfirmOwnerPassword } from "../../services/auth/login.js";
 import {
@@ -292,43 +289,24 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   auth.get("/me", async (c) => {
     const session = await resolveSessionFromRequest(c);
     if (!session) return c.json({ success: false, error: "unauthorized" }, 401);
-    const result = await validateOwnerSession(db, {
+    const result = await validateAndResolveOwnerAuth(db, {
       ownerId: session.sub,
       role: session.role,
       sessionVersion: session.sessionVersion,
     });
-    if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
-    let permissions: string[] = [...permissionsForRoleSlug(session.role)];
-    let roleSlug = session.role;
-    let roleId: string | null = null;
-    let roleName: string | null = null;
-    try {
-      const auth = await loadOwnerAuthById(db, session.sub);
-      if (auth) {
-        roleSlug = auth.roleSlug;
-        roleId = auth.roleId;
-        roleName = auth.roleName;
-        if (auth.permissions.length > 0) {
-          permissions = auth.permissions;
-        }
-      }
-    } catch {
-      // Tests may use a minimal db mock — fall back to built-in role permissions.
-    }
-    if (session.role === "super_admin") {
-      permissions = ["*"];
-    }
-    const capabilities = capabilitiesFromPermissions(permissions);
+    if (!result.success) return c.json(result, { status: result.status });
+    const { auth } = result;
+    const capabilities = capabilitiesFromPermissions(auth.permissions);
     return c.json({
       success: true,
       me: {
         id: session.sub,
-        role: roleSlug,
-        roleId,
-        roleName,
+        role: auth.roleSlug,
+        roleId: auth.roleId,
+        roleName: auth.roleName,
         email: session.email,
         name: session.name,
-        permissions,
+        permissions: auth.permissions,
         capabilities,
       },
     });

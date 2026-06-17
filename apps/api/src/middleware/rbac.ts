@@ -96,41 +96,35 @@ export function createRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> 
   };
 }
 
-/** Role-rank RBAC used by the control-plane API (legacy path → min role). */
-export function createRoleRankRbacMiddleware(db: Db | null): MiddlewareHandler<RbacEnv> {
+/**
+ * Role-rank RBAC used by the control-plane API (legacy path → min role).
+ *
+ * Uses the actorRole/actorEffectiveRole already set by createActorResolver —
+ * no DB query needed here. The actor resolver already validated the owner's
+ * status and role against the database (or the session cache). Re-querying
+ * the owners table on every request was a redundant DB round-trip.
+ */
+export function createRoleRankRbacMiddleware(_db: Db | null): MiddlewareHandler<RbacEnv> {
   return async (c, next) => {
     const method = c.req.method.toUpperCase();
     const path = c.req.path;
     const minRole = requiredApiRole(path, method);
     if (!minRole) return next();
-    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
 
     const actorId = c.get("actorId") as string | undefined;
     if (!actorId) return c.json({ error: "unauthorized_actor" }, 401);
 
-    const rows = await db
-      .select({
-        id: owners.id,
-        role: owners.role,
-        status: owners.status,
-        sessionVersion: owners.sessionVersion,
-      })
-      .from(owners)
-      .where(eq(owners.id, actorId))
-      .limit(1);
-    const actor = rows[0];
-    if (!actor || actor.status !== "active") {
-      return c.json({ error: "forbidden_actor" }, 403);
-    }
-    if (!(actor.role in ROLE_RANK)) {
+    const actorRole = c.get("actorRole") as string | undefined;
+    if (!actorRole || !(actorRole in ROLE_RANK)) {
       return c.json({ error: "forbidden_role" }, 403);
     }
-    const effectiveRole = (c.get("actorEffectiveRole") as Role | undefined) ?? (actor.role as Role);
+
+    const effectiveRole = (c.get("actorEffectiveRole") as Role | undefined) ?? (actorRole as Role);
     if (!(effectiveRole in ROLE_RANK)) {
       return c.json({ error: "forbidden_role" }, 403);
     }
-    const actorRank = ROLE_RANK[effectiveRole];
-    if (actorRank < ROLE_RANK[minRole]) {
+
+    if (ROLE_RANK[effectiveRole] < ROLE_RANK[minRole]) {
       return c.json({ error: "forbidden_role" }, 403);
     }
     await next();

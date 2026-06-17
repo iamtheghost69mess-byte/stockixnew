@@ -182,7 +182,7 @@ export const env = {
   BOOTSTRAP_ADMIN_PASSWORD: readOptionalString("BOOTSTRAP_ADMIN_PASSWORD"),
   ROOT_DOMAIN: readOptionalString("ROOT_DOMAIN"),
   PUBLIC_BASE_URL_SCHEME: readString("PUBLIC_BASE_URL_SCHEME", "http").toLowerCase(),
-  MAX_TENANT_PORT: readNumber("MAX_TENANT_PORT", 4999),
+  MAX_TENANT_PORT: readNumber("MAX_TENANT_PORT", 49999),
   STOCKIX_TENANT_APP_ROOT: readOptionalString("STOCKIX_TENANT_APP_ROOT"),
   REPO_ROOT: readOptionalString("REPO_ROOT"),
   TENANT_ENV_ROOT: readOptionalString("TENANT_ENV_ROOT"),

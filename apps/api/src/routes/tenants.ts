@@ -2833,6 +2833,11 @@ app.post("/tenants/:tenantId/retry-provision", async (c) => {
       modules: parseTenantModules(row.modules),
       stockixTenantId: row.id,
       provisionRequestedById: c.get("actorId") as string,
+      // Full retries reuse the existing tenant/deployment rows — tell the
+      // runtime to skip creating a new tenant and load the existing one instead.
+      ...(!retryPosOnly && !retryWireOnly
+        ? { skipTenantCreation: true, existingTenantId: row.id }
+        : {}),
       ...(retryPosOnly ? { retryModules: ["pos"] as const } : {}),
       ...(retryWireOnly ? { retryModules: ["wire"] as const } : {}),
     },

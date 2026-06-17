@@ -11,20 +11,11 @@ export default async function DashboardLayout({
 }) {
   const headerStore = await headers();
   const cookie = headerStore.get("cookie") ?? "";
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  let meRes: Response | null = null;
-  try {
-    meRes = await fetch(`${dashboardConfig.serverApiUrl}/auth/me`, {
-      headers: cookie ? { Cookie: cookie } : {},
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } catch {
-    meRes = null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const meRes = await fetch(`${dashboardConfig.serverApiUrl}/auth/me`, {
+    headers: cookie ? { Cookie: cookie } : {},
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null);
   if (!meRes?.ok) {
     redirect("/login");
   }

@@ -24,7 +24,7 @@ async function run() {
     return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, 10);
   const existing = await db
     .select({ id: owners.id })
     .from(owners)

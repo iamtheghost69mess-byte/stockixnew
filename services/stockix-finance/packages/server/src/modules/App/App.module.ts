@@ -169,7 +169,7 @@ const financeWebappImports = isFinanceWebappBuilt()
         connection: {
           host: configService.get('queue.host'),
           port: configService.get('queue.port'),
-          password: configService.get('queue.password'),
+          password: configService.get('queue.password') || undefined,
           db: configService.get('queue.db'),
         },
         prefix: process.env.REDIS_KEY_PREFIX 
@@ -213,7 +213,7 @@ const financeWebappImports = isFinanceWebappBuilt()
         config: {
           host: configService.get('redis.host'),
           port: configService.get('redis.port'),
-          password: configService.get('redis.password'),
+          password: configService.get('redis.password') || undefined,
           db: configService.get('redis.db'),
         },
       }),

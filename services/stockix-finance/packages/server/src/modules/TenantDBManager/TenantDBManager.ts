@@ -10,6 +10,8 @@ import { TenantModel } from '../System/models/TenantModel';
 import { TenancyContext } from '../Tenancy/TenancyContext.service';
 import { TENANCY_DB_CONNECTION } from '../Tenancy/TenancyDB/TenancyDB.constants';
 
+import { tenantSeedConfig } from '@/config/knexConfig';
+
 @Injectable()
 export class TenantDBManager {
   static knexCache: { [key: string]: Knex } = {};
@@ -44,9 +46,8 @@ export class TenantDBManager {
     const databaseName = this.getDatabaseName(tenant);
 
     const results = await this.systemKnex.raw(
-      'SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = "' +
-      databaseName +
-      '"',
+      'SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?',
+      [databaseName],
     );
     return results[0].length > 0;
   }
@@ -62,8 +63,11 @@ export class TenantDBManager {
 
     // Removed throwErrorIfTenantDBExists to allow idempotent retries
 
+    if (!/^[a-z0-9_]+$/.test(databaseName)) {
+      throw new Error(`invalid_database_name: ${databaseName}`);
+    }
     await this.systemKnex.raw(
-      `CREATE DATABASE IF NOT EXISTS ${databaseName} DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci`,
+      `CREATE DATABASE IF NOT EXISTS ${databaseName} DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci`,
     );
   }
 
@@ -104,6 +108,7 @@ export class TenantDBManager {
    * @return {Promise<void>}
    */
   public async seed(): Promise<void> {
+    const tenant = await this.tenancyContext.getTenant();
     await this.tenantKnex().migrate.latest({
       ...tenantSeedConfig(tenant),
       disableMigrationsListValidation: true,

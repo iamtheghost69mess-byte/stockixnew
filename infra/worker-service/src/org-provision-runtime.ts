@@ -94,6 +94,7 @@ async function registerNewFinanceOrg(
   return { organizationId, tenantId };
 }
 
+
 async function switchTenant(
   base: string,
   accessToken: string,

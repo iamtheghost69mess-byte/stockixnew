@@ -19,7 +19,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadRootEnv } from "./load-root-env.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = loadRootEnv(import.meta.url);
 
 const FORCE = process.argv.includes("--force");
@@ -33,6 +32,7 @@ const FINANCE_ROOT =
 const REQUIRED_FINANCE_IMAGES = [
   "stockix-server:local",
   "stockix-database-migration:local",
+
 ];
 
 // ─────────────────────────────────────────────────────────────

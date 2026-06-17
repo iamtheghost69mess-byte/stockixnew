@@ -95,7 +95,7 @@ let lastSuccessfulPollAt = Date.now();
 const healthServer = http.createServer(async (req, res) => {
   if (req.url === "/health" && req.method === "GET") {
     const lastPollAge = Date.now() - lastSuccessfulPollAt;
-    const healthy = lastPollAge < POLL_INTERVAL_MS * 2;
+    const healthy = lastPollAge < heartbeatIntervalMs * 2;
     res.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: healthy ? "ok" : "degraded", lastPollAge }));
     return;
@@ -471,6 +471,7 @@ function startJobHeartbeatLoop(jobId: string): () => void {
         `[worker][${jobId}] heartbeat failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+    lastSuccessfulPollAt = Date.now();
   }, heartbeatIntervalMs);
   return () => clearInterval(timer);
 }
@@ -497,17 +498,25 @@ async function assertProvisionNotCancelled(
   // 2. Fallback to API status endpoint cancel check
   const secret = apiConfig.workerSecret;
   const requestId = randomUUID();
-  const res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
-    method: "GET",
-    headers: {
-      "x-request-id": requestId,
-      "x-correlation-id": requestId,
-      ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
-    },
-    signal: timeoutSignal(requestTimeoutMs),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl}/internal/jobs/${jobId}/cancel-check`, {
+      method: "GET",
+      headers: {
+        "x-request-id": requestId,
+        "x-correlation-id": requestId,
+        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+      },
+      signal: timeoutSignal(requestTimeoutMs),
+    });
+  } catch {
+    // Network error or timeout — API may be restarting. Treat as not-cancelled
+    // so a deploy restart doesn't abort in-progress provision jobs.
+    return;
+  }
   if (!res.ok) {
-    throw new Error(`cancel_check_failed:${res.status}`);
+    // Non-2xx from API (e.g. 503 during restart) — don't abort the job.
+    return;
   }
   const body = (await res.json()) as { cancelled?: boolean; reason?: string };
   if (body.cancelled) {
@@ -595,6 +604,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   completionOutcome?: ProvisionJobOutcome;
 }> {
   const guard = async () => {
+    if (shuttingDown) throw new Error("worker_shutting_down");
     await assertProvisionNotCancelled(job.id);
   };
   const payload = provisionPayloadSchema.parse(job.payload);
@@ -711,6 +721,7 @@ async function runOrgProvisionJob(
   },
 ): Promise<void> {
   const guard = async () => {
+    if (shuttingDown) throw new Error("worker_shutting_down");
     await assertProvisionNotCancelled(job.id);
   };
   await guard();

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ROLES } from "@repo/shared/roles";
 import { and, asc, eq } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
@@ -21,6 +22,56 @@ async function attachActorPermissions(db: Db, actorId: string): Promise<string[]
   if (!auth) return [];
   return [...auth.permissions];
 }
+
+// ---------------------------------------------------------------------------
+// Session validation cache
+// Eliminates redundant DB lookups when the same session fires multiple
+// concurrent requests (e.g. the 7+ parallel fetches on dashboard page load).
+// TTL is short enough that session revocations (sessionVersion bump) take
+// effect within SESSION_CACHE_TTL_MS milliseconds.
+// ---------------------------------------------------------------------------
+const SESSION_CACHE_TTL_MS = 15_000;
+type SessionCacheEntry = { ownerId: string; role: string; permissions: string[]; validUntil: number };
+const _sessionCache = new Map<string, SessionCacheEntry>();
+
+function sessionCacheKey(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function getSessionCache(tokenHash: string): SessionCacheEntry | undefined {
+  const entry = _sessionCache.get(tokenHash);
+  if (!entry) return undefined;
+  if (Date.now() > entry.validUntil) {
+    _sessionCache.delete(tokenHash);
+    return undefined;
+  }
+  return entry;
+}
+
+function setSessionCache(tokenHash: string, ownerId: string, role: string, permissions: string[]): void {
+  // Evict stale entries before inserting to keep memory bounded.
+  if (_sessionCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of _sessionCache) {
+      if (now > v.validUntil) _sessionCache.delete(k);
+    }
+  }
+  _sessionCache.set(tokenHash, { ownerId, role, permissions, validUntil: Date.now() + SESSION_CACHE_TTL_MS });
+}
+
+/** Invalidate a session immediately (call after password change / forced logout). */
+export function invalidateSessionCache(token: string): void {
+  _sessionCache.delete(sessionCacheKey(token));
+}
+
+// ---------------------------------------------------------------------------
+// Platform actor cache
+// The "first active super_admin" almost never changes; cache it to avoid a
+// DB round-trip on every server-to-server request using the platform secret.
+// ---------------------------------------------------------------------------
+const PLATFORM_ACTOR_TTL_MS = 60_000;
+let _platformActor: { id: string } | null = null;
+let _platformActorValidUntil = 0;
 
 export type ControlPlaneAuthEnv = {
   Variables: {
@@ -148,26 +199,39 @@ export function createActorResolver(
     const cookieToken = readCookie(c.req.raw, "stockix-session");
     const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
 
+    // ── Session cookie ─────────────────────────────────────────────────────
     if (cookieToken) {
       const session = await verifySessionToken(cookieToken);
-      if (session) {
-        const sessionCheck = await validateOwnerSession(db, {
-          ownerId: session.sub,
-          role: session.role,
-          sessionVersion: session.sessionVersion,
-        });
-        if (!sessionCheck.success) {
-          return c.json({ error: "forbidden_actor" }, 403);
-        }
-        c.set("actorId", session.sub);
-        c.set("actorRole", session.role);
-        c.set("actorPermissions", await attachActorPermissions(db, session.sub));
+      if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+
+      const tokenHash = sessionCacheKey(cookieToken);
+      const cached = getSessionCache(tokenHash);
+      if (cached) {
+        c.set("actorId", cached.ownerId);
+        c.set("actorRole", cached.role);
+        c.set("actorPermissions", cached.permissions);
         await next();
         return;
       }
-      // Cookie present but expired or invalid — fall through to try other auth methods.
+
+      const sessionCheck = await validateOwnerSession(db, {
+        ownerId: session.sub,
+        role: session.role,
+        sessionVersion: session.sessionVersion,
+      });
+      if (!sessionCheck.success) {
+        return c.json({ error: "forbidden_actor" }, 403);
+      }
+      const permissions = await attachActorPermissions(db, session.sub);
+      setSessionCache(tokenHash, session.sub, session.role, permissions);
+      c.set("actorId", session.sub);
+      c.set("actorRole", session.role);
+      c.set("actorPermissions", permissions);
+      await next();
+      return;
     }
 
+    // ── API key ────────────────────────────────────────────────────────────
     if (headerToken.startsWith("sk_live_")) {
       const resolved = await findActiveApiKeyByRaw(db, headerToken);
       if (!resolved) {
@@ -191,7 +255,17 @@ export function createActorResolver(
       return;
     }
 
+    // ── Platform API secret ────────────────────────────────────────────────
     if (platformApiSecret && headerToken === platformApiSecret) {
+      // Use a cached platform actor to avoid a DB round-trip on every
+      // server-to-server request (dashboard Route Handlers use this path).
+      if (_platformActor && Date.now() < _platformActorValidUntil) {
+        c.set("actorId", _platformActor.id);
+        c.set("actorRole", "super_admin");
+        c.set("actorPermissions", await attachActorPermissions(db, _platformActor.id));
+        await next();
+        return;
+      }
       const [platformActor] = await db
         .select({ id: owners.id })
         .from(owners)
@@ -207,6 +281,8 @@ export function createActorResolver(
           503,
         );
       }
+      _platformActor = platformActor;
+      _platformActorValidUntil = Date.now() + PLATFORM_ACTOR_TTL_MS;
       c.set("actorId", platformActor.id);
       c.set("actorRole", "super_admin");
       c.set("actorPermissions", await attachActorPermissions(db, platformActor.id));
@@ -214,12 +290,24 @@ export function createActorResolver(
       return;
     }
 
+    // ── Bearer token (session in Authorization header) ─────────────────────
     if (!headerToken) {
       return c.json({ error: "unauthorized_actor" }, 401);
     }
 
     const session = await verifySessionToken(headerToken);
     if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+
+    const tokenHash = sessionCacheKey(headerToken);
+    const cached = getSessionCache(tokenHash);
+    if (cached) {
+      c.set("actorId", cached.ownerId);
+      c.set("actorRole", cached.role);
+      c.set("actorPermissions", cached.permissions);
+      await next();
+      return;
+    }
+
     const sessionCheck = await validateOwnerSession(db, {
       ownerId: session.sub,
       role: session.role,
@@ -228,9 +316,11 @@ export function createActorResolver(
     if (!sessionCheck.success) {
       return c.json({ error: "forbidden_actor" }, 403);
     }
+    const permissions = await attachActorPermissions(db, session.sub);
+    setSessionCache(tokenHash, session.sub, session.role, permissions);
     c.set("actorId", session.sub);
     c.set("actorRole", session.role);
-    c.set("actorPermissions", await attachActorPermissions(db, session.sub));
+    c.set("actorPermissions", permissions);
     await next();
   };
 }

@@ -76,14 +76,18 @@ export async function loginOwner(
     return { success: true, data: { requiresMfa: true, ownerId: owner.id } };
   }
 
+  const rehashUpdate: Partial<typeof owners.$inferInsert> = {
+    lastLoginAt: new Date(),
+    failedLoginCount: 0,
+    lastFailedAt: null,
+    lockedUntil: null,
+  };
+  if (bcrypt.getRounds(owner.passwordHash) > 10) {
+    rehashUpdate.passwordHash = await bcrypt.hash(input.password, 10);
+  }
   await db
     .update(owners)
-    .set({
-      lastLoginAt: new Date(),
-      failedLoginCount: 0,
-      lastFailedAt: null,
-      lockedUntil: null,
-    })
+    .set(rehashUpdate)
     .where(eq(owners.id, owner.id));
   await db.insert(adminAuditLog).values({
     actorId: owner.id,

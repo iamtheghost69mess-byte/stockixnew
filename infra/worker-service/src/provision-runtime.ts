@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { execa } from "execa";
 
@@ -601,6 +601,12 @@ export async function rollbackProvision(
   }
   */
 
+  if (composeCtx?.envPath) {
+    await rm(join(composeCtx.envPath, ".."), { recursive: true, force: true }).catch((rmErr) => {
+      log(`[rollback] env dir cleanup failed: ${rmErr instanceof Error ? rmErr.message : String(rmErr)}`);
+    });
+  }
+
   await db
     .insert(tenantProvisionEvents)
     .values({
@@ -822,6 +828,7 @@ export async function executeProvisionRuntime(
   assertNotCancelled?: () => Promise<void>,
   lifecycleJobId?: string,
 ): Promise<ProvisionResult> {
+  await ensureExternalNetworksExist(log);
   const runtimeStartedAt = Date.now();
   let tenantId: string | undefined;
   let deploymentId: string | undefined;
@@ -842,6 +849,7 @@ export async function executeProvisionRuntime(
   const maxPort = apiConfig.maxTenantPort;
   const tenantEnvRoot = defaultTenantEnvRoot();
   const project = composeProjectName(input.slug);
+
   const baseUrl = `${publicScheme}://${input.slug}.${rootDomain}`;
   const requestId = correlationId;
   let port: number | undefined;
@@ -1009,6 +1017,8 @@ export async function executeProvisionRuntime(
     const mongoUrlPersisted = buildTenantMongoUrl(input.slug);
     const agendashUser = "agendash";
     const agendashPassword = secrets.persistSecret(secrets.randomHex(12));
+    const redisPassword = secrets.randomHex(16);
+    const mongoRootPassword = secrets.randomHex(16);
     // S3 (Backblaze B2 / MinIO) is optional — empty values skip object storage; attachments need B2 in tenant .env.
     const optionalEnv = (name: string) => process.env[name]?.trim() ?? "";
     const s3Region = optionalEnv("S3_REGION") || "us-east-1";
@@ -1571,6 +1581,8 @@ export async function executeProvisionRuntime(
       adminEmail: input.adminEmail,
       agendashUser,
       agendashPassword,
+      redisPassword,
+      mongoRootPassword,
       s3Region,
       s3AccessKeyId,
       s3SecretAccessKey,
@@ -1584,6 +1596,12 @@ export async function executeProvisionRuntime(
       stockixAppName,
       stockixLogoUrl,
       stockixPrimaryColor,
+      // Networking / Traefik — consumed by tenant docker-compose.yml
+      tenantSlug: input.slug,
+      tenantRootDomain: rootDomain,
+      traefikLabelsEnabled: process.env.TRAEFIK_LABELS_ENABLED === "true" ? "true" : "false",
+      traefikNetwork: process.env.TRAEFIK_NETWORK ?? "stockix_public",
+      workerInternalNetwork: process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal",
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
     if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
@@ -1632,6 +1650,13 @@ export async function executeProvisionRuntime(
         { timeoutMs: COMPOSE_DOWN_TIMEOUT_MS },
       )
       .catch(() => undefined);
+    // Explicitly delete the MySQL named volume — compose down -v may not remove
+    // explicitly named volumes (name: ${MYSQL_VOLUME_NAME}) in all Compose versions.
+    await execa("docker", ["volume", "rm", mysqlVolumeName], { stdio: "pipe", reject: false });
+    // Explicitly delete the Mongo auto-named volume — stale SCRAM credentials survive compose
+    // down -v when the container was previously stopped (not running) because Compose skips
+    // volume removal for stopped containers in some versions.
+    await execa("docker", ["volume", "rm", mongoVolumeName], { stdio: "pipe", reject: false });
     await trace.event("preflight.cleanup", "completed", {
       meta: { composeProjectName: project },
     });
@@ -1715,7 +1740,7 @@ export async function executeProvisionRuntime(
     // Connect the tenant server container to stockix_internal so the infra-worker can
     // reach it directly (host.docker.internal NAT is blocked by iptables on Linux).
     const serverContainerName = `${project}-server-1`;
-    const internalNetworkName = process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
+    const internalNetworkName = process.env.WORKER_INTERNAL_NETWORK ?? process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
     let tenantServerInternalIp: string | undefined;
     let localDevFallback = false;
     if (!hasOp("docker.network_connect")) {
@@ -2030,7 +2055,7 @@ export async function executeProvisionRuntime(
           {
             internalBaseUrl: internalUrl,
             adminEmail: input.adminEmail,
-            adminPassword: secrets.bootstrapAdminPassword(bootstrapPasswordKey),
+            adminPassword: oneTimeAdminPassword!,
             settings: inheritedSettings,
             correlationId,
             preferRetryAfterBootstrap: true,
@@ -2574,6 +2599,7 @@ export async function runAddModuleStep(
         financeCashAccountId: tenantDeployments.financeCashAccountId,
         financeCardAccountId: tenantDeployments.financeCardAccountId,
         posOrganizationId: tenantDeployments.posOrganizationId,
+        financeAdminPassword: tenantDeployments.financeAdminPassword,
       })
       .from(tenants)
       .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -2639,7 +2665,9 @@ export async function runAddModuleStep(
 
       if (!hasOp("add_module.finance_welcome_email")) {
         try {
-          const bootstrapPassword = oneTimeAdminPasswordFromSlug(input.slug);
+          const bootstrapPassword = row.financeAdminPassword
+            ? (decryptDeploymentSecret(row.financeAdminPassword, apiConfig.deploymentSecretKey) ?? oneTimeAdminPasswordFromSlug(input.slug))
+            : oneTimeAdminPasswordFromSlug(input.slug);
           await sendFinanceWelcomeEmail({
             to: input.adminEmail,
             tenantName: input.name,

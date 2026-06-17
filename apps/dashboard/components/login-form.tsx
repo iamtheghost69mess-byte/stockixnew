@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { OwnerAuthOtpInput } from "@/components/shadcn-studio/input-otp/input-otp-01";
@@ -28,7 +28,6 @@ export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +44,7 @@ export function LoginForm({
     setError("");
   }, [email, password]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -82,8 +81,7 @@ export function LoginForm({
           return;
         }
         resetMeCache();
-        router.push(params.get("from") ?? "/");
-        router.refresh();
+        window.location.replace(params.get("from") ?? "/");
         return;
       }
       setError(

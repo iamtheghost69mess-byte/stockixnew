@@ -3,10 +3,6 @@ import { join } from "node:path";
 import { defaultTenantEnvRoot } from "../env-paths.js";
 import { slugToMysqlSafe, tenantMysqlUsername } from "../provisioner.js";
 import { apiConfig, env } from "@repo/config";
-import {
-  encryptDeploymentSecret,
-  isEncryptedDeploymentSecret,
-} from "@repo/shared/deployment-secrets";
 
 export type TenantEnvFileParams = {
   slug: string;
@@ -35,6 +31,19 @@ export type TenantEnvFileParams = {
   stockixPrimaryColor?: string;
   /** Browser origins allowed for Finance Socket.IO (comma-separated). */
   socketAllowedOrigins?: string;
+  redisPassword?: string;
+  mongoRootPassword?: string;
+  // --- Networking / Traefik ---
+  /** Tenant slug used for Traefik label host rule and network naming. */
+  tenantSlug?: string;
+  /** Root domain (e.g. stockix.cloud or localhost). */
+  tenantRootDomain?: string;
+  /** Enable Traefik Docker labels ("true" in production, "false" in local dev). */
+  traefikLabelsEnabled?: string;
+  /** Traefik-facing Docker network name (default: stockix_public). */
+  traefikNetwork?: string;
+  /** Worker-facing internal Docker network name (default: stockix_internal). */
+  workerInternalNetwork?: string;
 };
 
 /** Signup policy copied from repo root `.env` into each tenant Finance stack. */
@@ -54,11 +63,6 @@ function mailSecureEnvValue(): string {
   return env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
 }
 
-function maybeEncryptEnvValue(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || isEncryptedDeploymentSecret(trimmed)) return trimmed;
-  return encryptDeploymentSecret(trimmed, apiConfig.deploymentSecretKey);
-}
 
 /**
  * Shared infrastructure hostnames — sourced from env set in prod docker-compose.yml.
@@ -190,7 +194,6 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     SYSTEM_DB_PASSWORD: params.dbPassword,
     SYSTEM_DB_NAME: `stockix_${mysqlSafe}_system`,
     SYSTEM_DB_CHARSET: "utf8mb4",
-
     TENANT_DB_CLIENT: "mysql",
     TENANT_DB_HOST: mysqlHost,
     TENANT_DB_PORT: mysqlPort,
@@ -232,16 +235,15 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     // ── Mail ───────────────────────────────────────────────────────────
     MAIL_HOST: env.MAIL_HOST ?? "",
     MAIL_USERNAME: env.MAIL_USERNAME ?? "",
-    MAIL_PASSWORD: mailPassword ? maybeEncryptEnvValue(mailPassword) : "",
+    MAIL_PASSWORD: mailPassword,
     MAIL_PORT: env.MAIL_PORT ?? "",
     MAIL_SECURE: mailSecureEnvValue(),
     MAIL_FROM_NAME: env.MAIL_FROM_NAME ?? "",
     MAIL_FROM_ADDRESS: env.MAIL_FROM_ADDRESS ?? "",
-
     // ── S3 / Backblaze ────────────────────────────────────────────────
     S3_REGION: params.s3Region,
-    S3_ACCESS_KEY_ID: s3AccessKeyId ? maybeEncryptEnvValue(s3AccessKeyId) : "",
-    S3_SECRET_ACCESS_KEY: s3SecretAccessKey ? maybeEncryptEnvValue(s3SecretAccessKey) : "",
+    S3_ACCESS_KEY_ID: s3AccessKeyId,
+    S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
     S3_ENDPOINT: params.s3Endpoint,
     S3_BUCKET: params.s3Bucket,
     S3_FORCE_PATH_STYLE: params.s3ForcePathStyle,
@@ -250,7 +252,7 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     AGENDASH_AUTH_USER: params.agendashUser,
     AGENDASH_AUTH_PASSWORD: params.agendashPassword,
     INTERNAL_API_SECRET: params.internalApiSecret ?? "",
-    DEPLOYMENT_SECRET_KEY: apiConfig.deploymentSecretKey,
+    MONGO_ROOT_PASSWORD: params.mongoRootPassword ?? "",
     BILLING_ENABLED: "false",
 
     // ── Finance webapp branding ────────────────────────────────────────
@@ -270,7 +272,6 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),
     THROTTLE_AUTH_LIMIT: String(env.THROTTLE_AUTH_LIMIT),
-
     // ── Observability (optional — set SENTRY_DSN in platform env) ─────
     SENTRY_DSN: process.env.SENTRY_DSN?.trim() ?? "",
     SENTRY_ENVIRONMENT: `tenant-${slug}`,
