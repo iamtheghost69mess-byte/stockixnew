@@ -34,6 +34,8 @@ export type FinanceLicenseSyncPayload = {
   maxOrganizations: number;
   isPerpetual: boolean;
   featureFlags: Record<string, boolean> | null;
+  /** STKX/STXI key synced so Finance can display it to users (read-only reference). */
+  licenseKey: string | null;
 };
 
 /** Staff user cap in finance when plan/license does not specify maxUsers. */
@@ -233,6 +235,7 @@ export async function syncFinanceLicenseForStockixTenant(
     ...resolveFinanceLicenseLimitFields(license, planLimits),
     isPerpetual: license?.isPerpetual ?? false,
     featureFlags: null,
+    licenseKey: license?.licenseKey ?? null,
   };
 
   const url = `${internalBaseUrl.replace(/\/+$/, "")}/api/internal/license/sync`;

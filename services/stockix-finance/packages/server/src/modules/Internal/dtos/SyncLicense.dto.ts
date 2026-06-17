@@ -64,4 +64,9 @@ export class SyncLicenseDto {
   @IsOptional()
   @IsObject()
   featureFlags: Record<string, boolean> | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'STKX-ABCD-1234-EFGH' })
+  @IsOptional()
+  @IsString()
+  licenseKey?: string | null;
 }

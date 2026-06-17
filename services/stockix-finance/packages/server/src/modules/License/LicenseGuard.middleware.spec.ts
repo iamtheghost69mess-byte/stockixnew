@@ -1,5 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { LicenseGuardMiddleware } from './LicenseGuard.middleware';
+import { LicenseCacheService } from './LicenseCacheService';
 import { licenseCache } from './LicenseGuard.cache';
 
 describe('LicenseGuardMiddleware', () => {
@@ -22,9 +23,12 @@ describe('LicenseGuardMiddleware', () => {
       }),
     };
     const clsService = { get: jest.fn().mockReturnValue('org-1') };
+    // No Redis in unit tests — LicenseCacheService falls back to the in-process Map.
+    const licenseCacheService = new LicenseCacheService();
     return new LicenseGuardMiddleware(
       clsService as never,
       licenseService as never,
+      licenseCacheService,
       tenantModel as never,
     );
   }

@@ -1,7 +1,13 @@
 import { SyncLicenseService } from './SyncLicense.service';
 import { LicenseService } from '@/modules/License/License.service';
+import { LicenseCacheService } from '@/modules/License/LicenseCacheService';
 import { HttpStatus } from '@nestjs/common';
 import { licenseCache } from '@/modules/License/LicenseGuard.cache';
+
+/** Build a LicenseCacheService without Redis — falls back to the in-process Map. */
+function buildCacheService(): LicenseCacheService {
+  return new LicenseCacheService();
+}
 
 describe('SyncLicenseService', () => {
   beforeEach(() => {
@@ -25,7 +31,7 @@ describe('SyncLicenseService', () => {
       }),
     };
 
-    const service = new SyncLicenseService(tenantLicenseModel as never);
+    const service = new SyncLicenseService(tenantLicenseModel as never, buildCacheService());
     await service.sync({
       tenantId: 1,
       planSlug: 'growth',
@@ -51,7 +57,7 @@ describe('SyncLicenseService', () => {
         insert: async () => undefined,
       }),
     };
-    const service = new SyncLicenseService(tenantLicenseModel as never);
+    const service = new SyncLicenseService(tenantLicenseModel as never, buildCacheService());
     await service.sync({
       tenantId: 7,
       planSlug: 'starter',
@@ -71,12 +77,19 @@ describe('SyncLicenseService', () => {
 
 describe('LicenseService.assertCanCreateOrganization after sync', () => {
   const buildService = (orgCount: number, maxOrganizations: number) => {
+    // Fluent mock: supports leftJoin().where().countDistinct().first() chain
+    const makeChainable = (leaf: () => Promise<unknown>) => {
+      const chain: Record<string, unknown> = {};
+      const self = () => chain;
+      chain.leftJoin = self;
+      chain.where = self;
+      chain.countDistinct = self;
+      chain.orderBy = self;
+      chain.first = leaf;
+      return chain;
+    };
     const tenantModel = {
-      query: () => ({
-        count: () => ({
-          first: async () => ({ count: orgCount }),
-        }),
-      }),
+      query: () => makeChainable(async () => ({ count: orgCount })),
     };
     const tenantLicenseModel = {
       query: () => ({

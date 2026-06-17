@@ -61,7 +61,7 @@ export class LicenseService {
       return null;
     }
     return moment(license.expiresAt)
-      .add(license.gracePeriodDays ?? 30, 'days')
+      .add(license.gracePeriodDays ?? 7, 'days')
       .toISOString();
   }
 
@@ -69,7 +69,7 @@ export class LicenseService {
    * Blocks creating another Finance organization when tenant_licenses.maxOrganizations is reached.
    * Uses the synced license row (typically tenant id 1 from Stockix provision).
    */
-  async assertCanCreateOrganization(): Promise<void> {
+  async assertCanCreateOrganization(tenantId?: number): Promise<void> {
     // Exclude tenants whose license is revoked or suspended — they should not consume
     // slots against the org limit after they've been de-licensed.
     const countRow = await this.tenantModel
@@ -81,10 +81,11 @@ export class LicenseService {
       .countDistinct('tenants.id as count')
       .first();
     const orgCount = Number((countRow as { count?: number })?.count ?? 0);
-    const license = await this.tenantLicenseModel
-      .query()
-      .orderBy('tenantId', 'asc')
-      .first();
+    // Use findByTenantId (which walks up to parent) when tenantId is known;
+    // fall back to first row only for backwards-compat (no active caller omits it).
+    const license = tenantId
+      ? await this.findByTenantId(tenantId)
+      : await this.tenantLicenseModel.query().orderBy('tenantId', 'asc').first();
     if (!license) {
       return;
     }

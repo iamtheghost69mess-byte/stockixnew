@@ -36,7 +36,7 @@ export class InternalLicenseController {
           : body.expiresAt || body.expires_at
             ? String(body.expiresAt ?? body.expires_at)
             : null,
-      gracePeriodDays: Number(body.gracePeriodDays ?? body.grace_period_days ?? 30),
+      gracePeriodDays: Number(body.gracePeriodDays ?? body.grace_period_days ?? 7),
       maxUsers: Number(body.maxUsers ?? body.max_users ?? 999),
       maxActivations: Number(body.maxActivations ?? body.max_activations ?? 1),
       maxOrganizations: Number(
@@ -44,6 +44,9 @@ export class InternalLicenseController {
       ),
       isPerpetual: Boolean(body.isPerpetual ?? body.is_perpetual ?? false),
       featureFlags: this.parseFeatureFlags(body.featureFlags ?? body.feature_flags),
+      licenseKey: typeof (body.licenseKey ?? body.license_key) === 'string'
+        ? String(body.licenseKey ?? body.license_key)
+        : null,
     };
 
     return this.syncLicenseService.sync(dto);

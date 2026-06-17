@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { TenantLicense } from '@/modules/System/models/TenantLicense';
 import { SyncLicenseDto } from '../dtos/SyncLicense.dto';
-import { clearLicenseCache } from '@/modules/License/LicenseGuard.cache';
+import { LicenseCacheService } from '@/modules/License/LicenseCacheService';
 
 @Injectable()
 export class SyncLicenseService {
   constructor(
     @Inject(TenantLicense.name)
     private readonly tenantLicenseModel: typeof TenantLicense,
+    private readonly licenseCacheService: LicenseCacheService,
   ) {}
 
   /**
@@ -22,7 +23,7 @@ export class SyncLicenseService {
   }
 
   async sync(dto: SyncLicenseDto): Promise<{ success: true; tenantId: number }> {
-    const payload = {
+    const payload: Record<string, unknown> = {
       tenantId: dto.tenantId,
       planSlug: dto.planSlug,
       status: dto.status,
@@ -35,6 +36,9 @@ export class SyncLicenseService {
       isPerpetual: dto.isPerpetual,
       featureFlags: dto.featureFlags,
     };
+    if (dto.licenseKey !== undefined) {
+      payload.licenseKey = dto.licenseKey ?? null;
+    }
 
     const existing = await this.tenantLicenseModel
       .query()
@@ -49,7 +53,7 @@ export class SyncLicenseService {
       await this.tenantLicenseModel.query().insert(payload);
     }
 
-    clearLicenseCache(dto.tenantId);
+    await this.licenseCacheService.clear(dto.tenantId);
 
     return { success: true, tenantId: dto.tenantId };
   }

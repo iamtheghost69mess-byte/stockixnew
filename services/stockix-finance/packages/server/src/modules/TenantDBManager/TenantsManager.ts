@@ -36,7 +36,8 @@ export class TenantsManagerService {
    * @return {Promise<TenantModel>}
    */
   public async createTenant(): Promise<TenantModel> {
-    await this.licenseService.assertCanCreateOrganization();
+    const currentTenant = await this.tenancyContext.getTenant().catch(() => null);
+    await this.licenseService.assertCanCreateOrganization(currentTenant?.id);
     return this.tenantRepository.createWithUniqueOrgId();
   }
 

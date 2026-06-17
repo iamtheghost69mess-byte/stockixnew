@@ -332,6 +332,69 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       userAgent: c.req.header("user-agent") ?? null,
       metadata: { planId: updated.id, planSlug: updated.slug },
     });
+
+    // When limit fields changed: propagate new limits to all active licenses on
+    // this plan and re-sync Finance for each affected tenant (fire-and-forget).
+    const limitsChanged =
+      parsed.data.maxOrganizations !== undefined ||
+      parsed.data.maxActivations !== undefined ||
+      parsed.data.maxUsers !== undefined;
+    if (limitsChanged) {
+      void (async () => {
+        try {
+          const affectedLicenses = await db
+            .select({ id: licenses.id, tenantId: licenses.tenantId })
+            .from(licenses)
+            .where(
+              and(
+                eq(licenses.planSlug, updated.slug),
+                eq(licenses.status, "active"),
+              ),
+            );
+          if (affectedLicenses.length === 0) return;
+          const limitPatch: { updatedAt: Date; maxOrganizations?: number; maxActivations?: number; maxUsers?: number } = {
+            updatedAt: new Date(),
+          };
+          if (parsed.data.maxOrganizations !== undefined) limitPatch.maxOrganizations = updated.maxOrganizations;
+          if (parsed.data.maxActivations !== undefined) limitPatch.maxActivations = updated.maxActivations;
+          if (parsed.data.maxUsers !== undefined) limitPatch.maxUsers = updated.maxUsers;
+          const licenseIds = affectedLicenses.map((l) => l.id);
+          await db.update(licenses).set(limitPatch).where(
+            and(
+              eq(licenses.planSlug, updated.slug),
+              eq(licenses.status, "active"),
+            ),
+          );
+          await insertLicenseHistory(db, {
+            licenseId: licenseIds[0]!,
+            action: "limits_changed",
+            newValues: {
+              planSlug: updated.slug,
+              maxOrganizations: updated.maxOrganizations,
+              maxActivations: updated.maxActivations,
+              maxUsers: updated.maxUsers,
+              affectedLicenseCount: licenseIds.length,
+            },
+            notes: "Propagated from plan edit",
+          });
+          const tenantIds = [...new Set(affectedLicenses.map((l) => l.tenantId).filter(Boolean))] as string[];
+          for (const tenantId of tenantIds) {
+            void triggerFinanceLicenseSync(db, tenantId).catch((err) => {
+              console.error(
+                "[plan.updated] Finance re-sync failed (non-fatal)",
+                err instanceof Error ? err.message : String(err),
+              );
+            });
+          }
+        } catch (err) {
+          console.error(
+            "[plan.updated] License limit backfill failed (non-fatal)",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      })();
+    }
+
     return c.json({ plan: serializePlanRow(updated) });
   });
 
@@ -1212,6 +1275,149 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       },
       isConsistentWithPlan: isConsistent,
       syncPayloadWouldSend: buildFinanceLicenseLimitFields(license),
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /licenses/:licenseId/change-plan
+  //
+  // Atomically swaps the plan on an active license without any revoke-then-
+  // assign gap. The tenant keeps access throughout; only planSlug + limit
+  // fields are updated in a single UPDATE. Finance is re-synced afterwards.
+  // ---------------------------------------------------------------------------
+  const changePlanBody = z.object({
+    planSlug: z.string().min(1).max(100),
+  });
+
+  app.post("/licenses/:licenseId/change-plan", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+    const idParsed = z.string().uuid().safeParse(c.req.param("licenseId"));
+    if (!idParsed.success) return c.json({ error: "invalid_license_id" }, 400);
+
+    const raw = await c.req.json().catch(() => null);
+    const parsed = changePlanBody.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "VALIDATION_ERROR", detail: parsed.error.flatten() }, 400);
+    }
+    const { planSlug: newPlanSlug } = parsed.data;
+
+    const [lic] = await db
+      .select()
+      .from(licenses)
+      .where(eq(licenses.id, idParsed.data))
+      .limit(1);
+    if (!lic) return c.json({ error: "not_found" }, 404);
+
+    if (lic.status !== "active") {
+      return c.json(
+        {
+          error: "INVALID_LICENSE_STATUS",
+          message: `License must be active to change plan (current: ${lic.status})`,
+        },
+        409,
+      );
+    }
+
+    if (lic.planSlug === newPlanSlug) {
+      return c.json({ error: "SAME_PLAN", message: "License is already on that plan" }, 409);
+    }
+
+    const [newPlan] = await db
+      .select()
+      .from(plans)
+      .where(and(eq(plans.slug, newPlanSlug), eq(plans.isActive, true)))
+      .limit(1);
+    if (!newPlan) {
+      return c.json(
+        { error: "PLAN_NOT_FOUND", message: `Active plan not found: ${newPlanSlug}` },
+        404,
+      );
+    }
+
+    const oldPlanSlug = lic.planSlug;
+    const now = new Date();
+
+    // Single atomic UPDATE — no revoke, no re-assign, no access gap.
+    const [updated] = await db
+      .update(licenses)
+      .set({
+        planSlug: newPlanSlug,
+        maxOrganizations: newPlan.maxOrganizations,
+        maxActivations: newPlan.maxActivations,
+        maxUsers: newPlan.maxUsers,
+        updatedAt: now,
+      })
+      .where(eq(licenses.id, lic.id))
+      .returning();
+    if (!updated) return c.json({ error: "not_found" }, 404);
+
+    // Mirror on the tenant row if assigned
+    if (updated.tenantId) {
+      await db
+        .update(tenants)
+        .set({ planSlug: newPlanSlug })
+        .where(eq(tenants.id, updated.tenantId));
+    }
+
+    const historyActor = await resolveLicenseHistoryActor(db, c);
+    await insertLicenseHistory(db, {
+      licenseId: updated.id,
+      ...historyActor,
+      action: "plan_changed",
+      previousValues: {
+        planSlug: oldPlanSlug,
+        maxOrganizations: lic.maxOrganizations,
+        maxActivations: lic.maxActivations,
+        maxUsers: lic.maxUsers,
+      },
+      newValues: {
+        planSlug: newPlanSlug,
+        maxOrganizations: updated.maxOrganizations,
+        maxActivations: updated.maxActivations,
+        maxUsers: updated.maxUsers,
+      },
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+    });
+
+    await logAudit(db, {
+      actorId: (c.get("actorId") as string | undefined) ?? "",
+      action: "license.plan_changed",
+      targetTenantId: updated.tenantId ?? undefined,
+      ipAddress: clientIp(c),
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: {
+        licenseId: updated.id,
+        licenseKey: updated.licenseKey,
+        oldPlanSlug,
+        newPlanSlug,
+      },
+    });
+
+    // Re-sync Finance async — non-fatal; tenant already has the updated limits.
+    if (updated.tenantId) {
+      void triggerFinanceLicenseSync(db, updated.tenantId).catch((err) => {
+        console.error(
+          "[license.plan_changed] Finance re-sync failed (non-fatal)",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+    }
+
+    return c.json({
+      license: {
+        id: updated.id,
+        licenseKey: updated.licenseKey,
+        planSlug: updated.planSlug,
+        status: updated.status,
+        maxOrganizations: updated.maxOrganizations,
+        maxActivations: updated.maxActivations,
+        maxUsers: updated.maxUsers,
+        isPerpetual: updated.isPerpetual,
+        expiresAt: updated.expiresAt?.toISOString() ?? null,
+        updatedAt: updated.updatedAt.toISOString(),
+      },
     });
   });
 

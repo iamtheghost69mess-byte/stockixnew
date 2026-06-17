@@ -22,6 +22,8 @@ export class TenantLicense extends BaseModel {
   public readonly maxOrganizations!: number;
   public readonly isPerpetual!: boolean;
   public readonly featureFlags!: Record<string, boolean> | null;
+  /** The `STKX-XXXX-XXXX-XXXX` key synced from the control plane (for display only). */
+  public readonly licenseKey!: string | null;
   public readonly createdAt!: string;
   public readonly updatedAt!: string;
 

@@ -3,12 +3,19 @@ import { LicenseService } from './License.service';
 
 describe('LicenseService.assertCanCreateOrganization', () => {
   const buildService = (orgCount: number, maxOrganizations: number) => {
+    // Fluent mock: supports leftJoin().where().countDistinct().first() chain
+    const makeChainable = (leaf: () => Promise<unknown>) => {
+      const chain: Record<string, unknown> = {};
+      const self = () => chain;
+      chain.leftJoin = self;
+      chain.where = self;
+      chain.countDistinct = self;
+      chain.orderBy = self;
+      chain.first = leaf;
+      return chain;
+    };
     const tenantModel = {
-      query: () => ({
-        count: () => ({
-          first: async () => ({ count: orgCount }),
-        }),
-      }),
+      query: () => makeChainable(async () => ({ count: orgCount })),
     };
     const tenantLicenseModel = {
       query: () => ({

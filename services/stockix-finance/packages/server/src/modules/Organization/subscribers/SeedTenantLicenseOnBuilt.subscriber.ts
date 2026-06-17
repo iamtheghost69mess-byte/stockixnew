@@ -43,16 +43,19 @@ export class SeedTenantLicenseOnBuiltSubscriber {
         }
       }
 
+      // Seed as suspended so the tenant cannot access Finance until the control
+      // plane pushes a real license via POST /api/internal/license/sync.
+      // gracePeriodDays matches DEFAULT_GRACE_PERIOD_DAYS on the control plane (7).
       await this.tenantLicenseModel.query().insert({
         tenantId,
         planSlug: 'owner-managed',
-        status: 'active',
+        status: 'suspended',
         validFrom: moment().toMySqlDateTime(),
         expiresAt: null,
-        gracePeriodDays: 30,
+        gracePeriodDays: 7,
         maxUsers,
         maxOrganizations,
-        isPerpetual: true,
+        isPerpetual: false,
         featureFlags: null,
       });
     }

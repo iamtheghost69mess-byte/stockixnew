@@ -6,13 +6,10 @@ import {
 import { Request, Response, NextFunction } from 'express';
 import { ClsService } from 'nestjs-cls';
 import { LicenseService } from './License.service';
+import { LicenseCacheService } from './LicenseCacheService';
 import { TenantModel } from '@/modules/System/models/TenantModel';
 import { Inject } from '@nestjs/common';
 import { LicenseStatus } from './License.types';
-import {
-  getLicenseCacheTtlMs,
-  licenseCache,
-} from './LicenseGuard.cache';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -24,13 +21,12 @@ const PUBLIC_PATH_PREFIXES = [
   '/swagger',
 ];
 
-export { clearLicenseCache } from './LicenseGuard.cache';
-
 @Injectable()
 export class LicenseGuardMiddleware implements NestMiddleware {
   constructor(
     private readonly clsService: ClsService,
     private readonly licenseService: LicenseService,
+    private readonly licenseCacheService: LicenseCacheService,
     @Inject(TenantModel.name)
     private readonly tenantModel: typeof TenantModel,
   ) {}
@@ -38,7 +34,7 @@ export class LicenseGuardMiddleware implements NestMiddleware {
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     const path = req.originalUrl ?? req.url ?? '';
 
-    if (PUBLIC_PATH_PREFIXES.some((prefix) => path.includes(prefix))) {
+    if (PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))) {
       return next();
     }
 
@@ -124,26 +120,19 @@ export class LicenseGuardMiddleware implements NestMiddleware {
   private async resolveEffectiveStatusCached(
     tenantId: number,
   ): Promise<LicenseStatus | null> {
-    const cached = licenseCache.get(tenantId);
-    if (cached && Date.now() - cached.cachedAt < getLicenseCacheTtlMs()) {
-      return cached.effectiveStatus;
+    const cached = await this.licenseCacheService.get(tenantId);
+    if (cached !== undefined) {
+      return cached;
     }
 
     const license = await this.licenseService.findByTenantId(tenantId);
     if (!license) {
-      licenseCache.set(tenantId, {
-        effectiveStatus: null,
-        cachedAt: Date.now(),
-      });
+      await this.licenseCacheService.set(tenantId, null);
       return null;
     }
 
-    const effectiveStatus =
-      this.licenseService.resolveEffectiveStatus(license);
-    licenseCache.set(tenantId, {
-      effectiveStatus,
-      cachedAt: Date.now(),
-    });
+    const effectiveStatus = this.licenseService.resolveEffectiveStatus(license);
+    await this.licenseCacheService.set(tenantId, effectiveStatus);
     return effectiveStatus;
   }
 }
