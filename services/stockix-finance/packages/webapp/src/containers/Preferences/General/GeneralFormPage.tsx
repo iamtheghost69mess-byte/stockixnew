@@ -8,7 +8,7 @@ import { AppToaster } from '@/components';
 import GeneralForm from './GeneralForm';
 import { PreferencesGeneralSchema } from './General.schema';
 import { useGeneralFormContext } from './GeneralFormProvider';
-import { transformToForm } from '@/utils';
+import { transformToForm, transfromToSnakeCase } from '@/utils';
 
 const defaultValues = {
   name: '',
@@ -31,7 +31,7 @@ export default function GeneralFormPage() {
 
   const initialValues = {
     ...defaultValues,
-    ...transformToForm(organization?.metadata, defaultValues),
+    ...transformToForm(transfromToSnakeCase(organization?.metadata), defaultValues),
   };
 
   const handleFormSubmit = (values, { setSubmitting }) => {

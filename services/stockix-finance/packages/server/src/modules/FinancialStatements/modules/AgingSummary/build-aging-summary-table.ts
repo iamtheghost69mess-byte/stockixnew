@@ -7,11 +7,14 @@ import {
 import { AgingSummaryRowType } from './_constants';
 import { tableRowMapper } from '../../utils/Table.utils';
 import { ITableColumn, ITableRow } from '../../types/Table.types';
+import { formatNumber } from '@/utils/format-number';
 
 type BuildAgingSummaryTableOptions = {
   contactNameLabel: string;
   contactNameKey: string;
   contactNameAccessor: string;
+  secondaryCurrency?: string;
+  secondaryRate?: number;
 };
 
 function buildAgingColumns(periods: IAgingPeriod[]): ITableColumn[] {
@@ -21,12 +24,26 @@ function buildAgingColumns(periods: IAgingPeriod[]): ITableColumn[] {
   }));
 }
 
+function formatSecondary(amount: number, currencyCode: string): string {
+  return formatNumber(amount, { money: true, currencyCode, precision: 2 });
+}
+
+function decorateWithSecondary(node: any, amount: number, secondaryCurrency: string, secondaryRate: number): any {
+  return {
+    ...node,
+    secondary: {
+      formattedAmount: formatSecondary(amount * secondaryRate, secondaryCurrency),
+    },
+  };
+}
+
 function contactNodeAccessors(
   node: IAgingSummaryContact,
   contactNameKey: string,
   contactNameAccessor: string,
+  hasSecondary: boolean,
 ) {
-  return [
+  const accessors: any[] = [
     { key: contactNameKey, accessor: contactNameAccessor },
     { key: 'current', accessor: 'current.formattedAmount' },
     ...node.aging.map((_, index) => ({
@@ -35,10 +52,14 @@ function contactNodeAccessors(
     })),
     { key: 'total', accessor: 'total.formattedAmount' },
   ];
+  if (hasSecondary) {
+    accessors.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+  }
+  return accessors;
 }
 
-function totalNodeAccessors(node: IAgingSummaryTotal) {
-  return [
+function totalNodeAccessors(node: IAgingSummaryTotal, hasSecondary: boolean) {
+  const accessors: any[] = [
     { key: 'blank', value: '' },
     { key: 'current', accessor: 'current.formattedAmount' },
     ...node.aging.map((_, index) => ({
@@ -47,6 +68,10 @@ function totalNodeAccessors(node: IAgingSummaryTotal) {
     })),
     { key: 'total', accessor: 'total.formattedAmount' },
   ];
+  if (hasSecondary) {
+    accessors.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+  }
+  return accessors;
 }
 
 function indexColumns(columns: ITableColumn[]): ITableColumn[] {
@@ -60,29 +85,36 @@ export function buildAgingSummaryTable(
 ): { columns: ITableColumn[]; rows: ITableRow[] } {
   const contacts = data.customers ?? data.vendors ?? [];
   const agingColumns = buildAgingColumns(periods);
+  const hasSecondary = !!(options.secondaryCurrency && options.secondaryRate);
 
-  const columns = indexColumns([
+  const columnDefs: ITableColumn[] = [
     { label: options.contactNameLabel, key: options.contactNameKey },
     { label: 'Current', key: 'current' },
     ...agingColumns,
     { label: 'Total', key: 'total' },
-  ]);
+  ];
+  if (hasSecondary) {
+    columnDefs.push({ label: `≈ ${options.secondaryCurrency} Total`, key: 'secondary_total' });
+  }
+  const columns = indexColumns(columnDefs);
 
-  const rows = contacts.map((contact) =>
-    tableRowMapper(
-      contact,
-      contactNodeAccessors(
-        contact,
-        options.contactNameKey,
-        options.contactNameAccessor,
-      ),
+  const rows = contacts.map((contact) => {
+    const decorated = hasSecondary
+      ? decorateWithSecondary(contact, contact.total.amount, options.secondaryCurrency!, options.secondaryRate!)
+      : contact;
+    return tableRowMapper(
+      decorated,
+      contactNodeAccessors(contact, options.contactNameKey, options.contactNameAccessor, hasSecondary),
       { rowTypes: [AgingSummaryRowType.Contact] },
-    ),
-  );
+    );
+  });
 
   if (data.total) {
+    const decoratedTotal = hasSecondary
+      ? decorateWithSecondary(data.total, data.total.total.amount, options.secondaryCurrency!, options.secondaryRate!)
+      : data.total;
     rows.push(
-      tableRowMapper(data.total, totalNodeAccessors(data.total), {
+      tableRowMapper(decoratedTotal, totalNodeAccessors(data.total, hasSecondary), {
         rowTypes: [AgingSummaryRowType.Total],
       }),
     );

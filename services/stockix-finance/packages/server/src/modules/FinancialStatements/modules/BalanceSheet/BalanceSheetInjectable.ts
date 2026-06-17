@@ -35,7 +35,7 @@ export class BalanceSheetInjectable {
       ...getBalanceSheetDefaultQuery(),
       ...query,
     };
-    const tenantMetadata = await this.tenancyContext.getTenantMetadata(true);
+    const tenantMetadata = await this.tenancyContext.getTenantMetadata();
 
     // Loads all resources.
     await this.balanceSheetRepository.asyncInitialize(filter);
@@ -48,7 +48,8 @@ export class BalanceSheetInjectable {
       filter,
       this.balanceSheetRepository,
       this.i18n,
-      { baseCurrency: tenantMetadata.baseCurrency, dateFormat: meta.dateFormat },
+      // ORIGINAL: { baseCurrency: tenantMetadata.baseCurrency, ... } — crashes when metadata is null.
+      { baseCurrency: tenantMetadata?.baseCurrency ?? '', dateFormat: meta.dateFormat },
     );
     // Balance sheet data.
     const data = balanceSheetInstanace.reportData();

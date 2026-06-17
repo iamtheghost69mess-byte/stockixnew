@@ -17,9 +17,11 @@ export class FinancialSheetMeta {
   async meta(): Promise<IFinancialSheetCommonMeta> {
     const tenantMetadata = await this.tenancyContext.getTenantMetadata();
 
-    const organizationName = tenantMetadata.name;
-    const baseCurrency = tenantMetadata.baseCurrency;
-    const dateFormat = tenantMetadata.dateFormat;
+    // ORIGINAL: tenantMetadata.name — crashes with TypeError when tenant has no metadata row
+    // (e.g. freshly provisioned org where organization build hasn't completed yet).
+    const organizationName = tenantMetadata?.name ?? '';
+    const baseCurrency = tenantMetadata?.baseCurrency ?? '';
+    const dateFormat = tenantMetadata?.dateFormat ?? 'YYYY-MM-DD';
 
     const isCostComputeRunning =
       await this.inventoryComputeCostService.isItemsCostComputeRunning();

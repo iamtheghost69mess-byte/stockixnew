@@ -24,11 +24,17 @@ import { getAllCurrenciesOptions } from '@/constants/currencies';
 import { getFiscalYear } from '@/constants/fiscalYearOptions';
 import { getLanguages } from '@/constants/languagesOptions';
 import { useGeneralFormContext } from './GeneralFormProvider';
-import { getAllCountries } from '@/utils/countries';
+import { getAllCountries } from '@stockix/utils';
 
 import { shouldBaseCurrencyUpdate } from './utils';
 
 const Countries = getAllCountries();
+
+const getCurrencyCode = (item) => {
+  if (typeof item === 'string') return item;
+  return item?.currency_code || item?.key || '';
+};
+
 /**
  * Preferences general form.
  */
@@ -40,7 +46,12 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
   const Currencies = getAllCurrenciesOptions();
 
   const { dateFormats, baseCurrencyMutateAbility, currencies } = useGeneralFormContext();
-  const nonBaseCurrencies = (Array.isArray(currencies) ? currencies : []).filter((c) => !c.is_base_currency);
+  
+  // Format global currencies as items compatible with our accessors
+  const globalCurrencies = Currencies.map((c) => ({
+    currency_code: c.key,
+    currency_name: c.name,
+  })).filter((c) => c.currency_code !== values.base_currency);
 
   const baseCurrencyDisabled = (Array.isArray(baseCurrencyMutateAbility) ? baseCurrencyMutateAbility : []).length > 0;
 
@@ -140,7 +151,7 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
           <SecondaryCurrencySelectWrap>
             <FSelect
               name={'secondary_currency'}
-              items={nonBaseCurrencies}
+              items={globalCurrencies}
               valueAccessor={(item) => item?.currency_code}
               labelAccessor={(item) => item?.currency_code}
               textAccessor={(item) =>
@@ -149,7 +160,7 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
               placeholder={<T id={'select_secondary_currency'} />}
               popoverProps={{ minimal: true }}
               filterable={true}
-              disabled={!nonBaseCurrencies.length}
+              disabled={!globalCurrencies.length}
             />
           </SecondaryCurrencySelectWrap>
           {values.secondary_currency ? (
@@ -251,7 +262,7 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
       </FFormGroup>
 
       {/* ---------- Display Currencies ---------- */}
-      {nonBaseCurrencies.length > 0 && Array.isArray(values.display_currencies) && (
+      {globalCurrencies.length > 0 && Array.isArray(values.display_currencies) && (
         <FFormGroup
           name={'display_currencies'}
           label={<T id={'display_currencies'} />}
@@ -261,10 +272,10 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
         >
           <FMultiSelect
             name={'display_currencies'}
-            items={nonBaseCurrencies}
+            items={globalCurrencies}
             valueAccessor={(item) => item.currency_code}
             labelAccessor={(item) => item.currency_code}
-            tagRenderer={(item) => item.currency_code}
+            tagRenderer={getCurrencyCode}
             itemRenderer={(item, { handleClick, modifiers }, { isSelected }) => (
               <MenuItem
                 key={item.currency_code}
@@ -283,7 +294,8 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
               );
             }}
             popoverProps={{ minimal: true }}
-            placeholder={<T id={'select_display_currencies'} />}
+            // ORIGINAL: placeholder={<T id={'select_display_currencies'} />}
+            placeholder={intl.get('select_display_currencies')}
           />
         </FFormGroup>
       )}

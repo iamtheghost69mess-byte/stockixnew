@@ -5,25 +5,31 @@ import {
 import { PurchasesByItemsService } from './PurchasesByItems.service';
 import { PurchasesByItemsTable } from './PurchasesByItemsTable';
 import { Injectable } from '@nestjs/common';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
+import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class PurchasesByItemsTableInjectable {
   constructor(
     private readonly purchasesByItemsSheet: PurchasesByItemsService,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRatesService: ExchangeRatesService,
   ) {}
 
-  /**
-   * Retrieves the purchases by items table format.
-   * @param {IPurchasesByItemsReportQuery} filter - The filter to be used.
-   * @returns {Promise<IPurchasesByItemsTable>} - The purchases by items table.
-   */
   public async table(
     filter: IPurchasesByItemsReportQuery,
   ): Promise<IPurchasesByItemsTable> {
-    const { data, query, meta } =
-      await this.purchasesByItemsSheet.purchasesByItems(filter);
+    const { data, query, meta } = await this.purchasesByItemsSheet.purchasesByItems(filter);
 
-    const table = new PurchasesByItemsTable(data);
+    const tenantMetadata = await this.tenancyContext.getTenantMetadata();
+    const { secondaryCurrency, secondaryRate } = await resolveSecondaryCurrency(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.toDate ?? new Date(),
+    );
+
+    const table = new PurchasesByItemsTable(data, secondaryCurrency, secondaryRate);
 
     return {
       table: {

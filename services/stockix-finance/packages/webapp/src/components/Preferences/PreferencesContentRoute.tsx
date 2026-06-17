@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { Suspense } from 'react';
-import { Route, Switch } from 'react-router-dom';
+import { Route, Switch, Redirect } from 'react-router-dom';
 import { getPreferenceRoutes } from '@/routes/preferences';
 import { Spinner } from '@blueprintjs/core';
 import { Box } from '../Layout';
@@ -9,7 +9,7 @@ export default function DashboardContentRoute() {
   const preferencesRoutes = getPreferenceRoutes();
 
   return (
-    <Route pathname="/preferences">
+    <Route path="/preferences">
       <Suspense
         fallback={
           <Box style={{ padding: 20 }}>
@@ -26,6 +26,7 @@ export default function DashboardContentRoute() {
               component={route.component}
             />
           ))}
+          <Redirect to="/preferences/general" />
         </Switch>
       </Suspense>
     </Route>

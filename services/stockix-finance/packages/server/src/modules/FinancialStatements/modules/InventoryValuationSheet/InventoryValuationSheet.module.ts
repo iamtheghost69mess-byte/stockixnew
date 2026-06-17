@@ -10,9 +10,10 @@ import { InventoryValuationSheetRepository } from './InventoryValuationSheetRepo
 import { InventoryValuationSheetExportable } from './InventoryValuationSheetExportable';
 import { InventoryCostModule } from '@/modules/InventoryCost/InventoryCost.module';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [FinancialSheetCommonModule, InventoryCostModule],
+  imports: [FinancialSheetCommonModule, InventoryCostModule, ExchangeRatesModule],
   providers: [
     InventoryValuationSheetPdf,
     InventoryValuationSheetTableInjectable,

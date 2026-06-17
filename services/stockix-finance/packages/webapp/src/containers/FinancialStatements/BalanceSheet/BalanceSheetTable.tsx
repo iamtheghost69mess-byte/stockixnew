@@ -17,9 +17,9 @@ export default function BalanceSheetTable({
   companyName,
 }) {
   // Balance sheet context.
-  const {
-    balanceSheet: { table, query, meta },
-  } = useBalanceSheetContext();
+  const { balanceSheet } = useBalanceSheetContext();
+  if (!balanceSheet) return null;
+  const { table, query, meta } = balanceSheet;
 
   // Retrieve the database columns.
   const tableColumns = useBalanceSheetColumns();

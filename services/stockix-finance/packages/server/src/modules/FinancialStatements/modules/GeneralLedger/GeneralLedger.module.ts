@@ -10,11 +10,13 @@ import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.mo
 import { GeneralLedgerMeta } from './GeneralLedgerMeta';
 import { AccountsModule } from '@/modules/Accounts/Accounts.module';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
   imports: [
     FinancialSheetCommonModule,
-    AccountsModule
+    AccountsModule,
+    ExchangeRatesModule,
   ],
   providers: [
     GeneralLedgerRepository,

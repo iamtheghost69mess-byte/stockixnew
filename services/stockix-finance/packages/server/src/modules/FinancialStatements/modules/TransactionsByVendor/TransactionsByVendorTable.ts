@@ -1,5 +1,6 @@
 import * as R from 'ramda';
 import { I18nService } from 'nestjs-i18n';
+import { formatNumber } from '@/utils/format-number';
 import { ITransactionsByVendorsVendor } from './TransactionsByVendor.types';
 import { TransactionsByContactsTableRows } from '../TransactionsByContact/TransactionsByContactTableRows';
 import { tableRowMapper } from '../../utils/Table.utils';
@@ -14,40 +15,53 @@ enum ROW_TYPE {
 
 export class TransactionsByVendorsTable extends TransactionsByContactsTableRows {
   private vendorsTransactions: ITransactionsByVendorsVendor[];
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {ITransactionsByVendorsVendor[]} vendorsTransactions -
-   * @param {any} i18n
-   */
   constructor(
     vendorsTransactions: ITransactionsByVendorsVendor[],
     i18n: I18nService,
     dateFormat: string,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     super();
 
     this.vendorsTransactions = vendorsTransactions;
     this.i18n = i18n;
     this.dateFormat = dateFormat;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieve the table row of vendor details.
-   * @param {ITransactionsByVendorsVendor} vendor -
-   * @returns {ITableRow[]}
-   */
+  private secondaryAccessor() {
+    if (!this.secondaryCurrency || !this.secondaryRate) return [];
+    return [{ key: 'secondary_closing_balance', accessor: 'secondary.formattedAmount' }];
+  }
+
+  private decorateSecondary(vendor: ITransactionsByVendorsVendor): any {
+    if (!this.secondaryCurrency || !this.secondaryRate) return vendor;
+    return {
+      ...vendor,
+      secondary: {
+        formattedAmount: formatNumber(vendor.closingBalance.amount * this.secondaryRate, {
+          money: true,
+          currencyCode: this.secondaryCurrency,
+          precision: 2,
+        }),
+      },
+    };
+  }
+
   private vendorDetails = (vendor: ITransactionsByVendorsVendor) => {
     const columns = [
       { key: 'vendorName', accessor: 'vendorName' },
       ...R.repeat({ key: 'empty', value: '' }, 5),
-      {
-        key: 'closingBalanceValue',
-        accessor: 'closingBalance.formattedAmount',
-      },
+      { key: 'closingBalanceValue', accessor: 'closingBalance.formattedAmount' },
+      ...this.secondaryAccessor(),
     ];
     return {
-      ...tableRowMapper(vendor, columns, { rowTypes: [ROW_TYPE.VENDOR] }),
+      ...tableRowMapper(this.decorateSecondary(vendor), columns, { rowTypes: [ROW_TYPE.VENDOR] }),
       children: R.pipe(
         R.when(
           R.always(vendor.transactions.length > 0),
@@ -61,30 +75,16 @@ export class TransactionsByVendorsTable extends TransactionsByContactsTableRows 
     };
   };
 
-  /**
-   * Retrieve the table rows of the vendor section.
-   * @param {ITransactionsByVendorsVendor} vendor
-   * @returns {ITableRow[]}
-   */
   private vendorRowsMapper = (vendor: ITransactionsByVendorsVendor) => {
     return R.pipe(this.vendorDetails)(vendor);
   };
 
-  /**
-   * Retrieve the table rows of transactions by vendors report.
-   * @param {ITransactionsByVendorsVendor[]} vendors
-   * @returns {ITableRow[]}
-   */
   public tableRows = (): ITableRow[] => {
     return R.map(this.vendorRowsMapper)(this.vendorsTransactions);
   };
 
-  /**
-   * Retrieve the table columns of transactions by vendors report.
-   * @returns {ITableColumn[]}
-   */
   public tableColumns = (): ITableColumn[] => {
-    return [
+    const columns: ITableColumn[] = [
       { key: 'vendor_name', label: 'Vendor name' },
       { key: 'account_name', label: 'Account Name' },
       { key: 'ref_type', label: 'Reference Type' },
@@ -93,5 +93,9 @@ export class TransactionsByVendorsTable extends TransactionsByContactsTableRows 
       { key: 'debit', label: 'Debit' },
       { key: 'running_balance', label: 'Running Balance' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_closing_balance', label: `≈ ${this.secondaryCurrency} Closing Balance` });
+    }
+    return columns;
   };
 }

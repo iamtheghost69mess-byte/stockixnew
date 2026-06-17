@@ -8,6 +8,7 @@ import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.mo
 import { SalesByItemsMeta } from './SalesByItemsMeta';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { InventoryCostModule } from '@/modules/InventoryCost/InventoryCost.module';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 import { SalesByItemsController } from './SalesByItems.controller';
 
 @Module({
@@ -23,7 +24,8 @@ import { SalesByItemsController } from './SalesByItems.controller';
   controllers: [SalesByItemsController],
   imports: [
     FinancialSheetCommonModule,
-    InventoryCostModule
+    InventoryCostModule,
+    ExchangeRatesModule,
   ],
 })
 export class SalesByItemsModule {}

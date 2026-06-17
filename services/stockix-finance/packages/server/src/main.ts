@@ -91,12 +91,10 @@ async function bootstrap() {
     ],
   });
 
-  // Helmet: permissive CSP starter — tighten after SPA asset audit (remove unsafe-eval, enable COEP).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const helmet = require('helmet') as typeof import('helmet');
   app.use(
     helmet({
-      // ORIGINAL: contentSecurityPolicy: false,
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
@@ -107,8 +105,6 @@ async function bootstrap() {
           fontSrc: ["'self'", 'data:', "https://fonts.gstatic.com"],
         },
       },
-      // ORIGINAL: crossOriginEmbedderPolicy: false,
-      crossOriginEmbedderPolicy: false,
     }),
   );
   app.use(json({ limit: process.env.REQUEST_BODY_LIMIT ?? '2mb' }));

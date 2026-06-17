@@ -217,7 +217,7 @@ export class ProfitLossSheetTable extends R.compose(
       R.unless(
         R.isEmpty,
         R.concat([
-          { key: 'total', label: this.i18n.__('profit_loss_sheet.total') },
+          { key: 'total', label: this.i18n.t('profit_loss_sheet.total') },
         ])
       ),
       R.concat(this.percentageColumns()),
@@ -238,8 +238,8 @@ export class ProfitLossSheetTable extends R.compose(
    */
   private totalColumn = (): ITableColumn[] => {
     const label = this.baseCurrency
-      ? `${this.i18n.__('profit_loss_sheet.total')} (${this.baseCurrency})`
-      : this.i18n.__('profit_loss_sheet.total');
+      ? `${this.i18n.t('profit_loss_sheet.total')} (${this.baseCurrency})`
+      : this.i18n.t('profit_loss_sheet.total');
     const columns: ITableColumn[] = [
       {
         key: 'total',
@@ -250,7 +250,7 @@ export class ProfitLossSheetTable extends R.compose(
     if (this.secondaryCurrency && this.secondaryRate) {
       columns.push({
         key: 'secondary_total',
-        label: `≈ ${this.secondaryCurrency} ${this.i18n.__('profit_loss_sheet.total')}`,
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('profit_loss_sheet.total')}`,
       });
     }
     return columns;
@@ -262,7 +262,7 @@ export class ProfitLossSheetTable extends R.compose(
    */
   public tableColumns = (): ITableColumn[] => {
     const nameColumn = [
-      { key: 'name', label: this.i18n.__('profit_loss_sheet.account_name') },
+      { key: 'name', label: this.i18n.t('profit_loss_sheet.account_name') },
     ];
     const dataColumns = this.query.isDatePeriodsColumnsType()
       ? this.datePeriodsColumns()

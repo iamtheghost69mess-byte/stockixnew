@@ -85,17 +85,17 @@ function AppInsider({ history }) {
   );
 }
 
+// Browser history.
+const history = createBrowserHistory();
+
+// Query client.
+const queryClient = new QueryClient(queryConfig);
+setAppQueryClient(queryClient);
+
 /**
  * Core application.
  */
 export default function App() {
-  // Browser history.
-  const history = createBrowserHistory();
-
-  // Query client.
-  const queryClient = new QueryClient(queryConfig);
-  setAppQueryClient(queryClient);
-
   return (
     <QueryClientProvider client={queryClient}>
       <SplashScreen />

@@ -1,20 +1,22 @@
+import { Injectable } from '@nestjs/common';
+import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
 import {
   IGeneralLedgerSheetQuery,
   IGeneralLedgerTableData,
 } from './GeneralLedger.types';
 import { GeneralLedgerService } from './GeneralLedgerService';
 import { GeneralLedgerTable } from './GeneralLedgerTable';
-import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class GeneralLedgerTableInjectable {
-  constructor(private readonly GLSheet: GeneralLedgerService) {}
+  constructor(
+    private readonly GLSheet: GeneralLedgerService,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRatesService: ExchangeRatesService,
+  ) {}
 
-  /**
-   * Retrieves the G/L table.
-   * @param {IGeneralLedgerSheetQuery} query - general ledger query.
-   * @returns {Promise<IGeneralLedgerTableData>}
-   */
   public async table(
     query: IGeneralLedgerSheetQuery,
   ): Promise<IGeneralLedgerTableData> {
@@ -24,7 +26,14 @@ export class GeneralLedgerTableInjectable {
       meta: sheetMeta,
     } = await this.GLSheet.generalLedger(query);
 
-    const table = new GeneralLedgerTable(sheetData, sheetQuery, sheetMeta);
+    const tenantMetadata = await this.tenancyContext.getTenantMetadata();
+    const { secondaryCurrency, secondaryRate } = await resolveSecondaryCurrency(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.toDate ?? new Date(),
+    );
+
+    const table = new GeneralLedgerTable(sheetData, sheetQuery, sheetMeta, secondaryCurrency, secondaryRate);
 
     return {
       table: {

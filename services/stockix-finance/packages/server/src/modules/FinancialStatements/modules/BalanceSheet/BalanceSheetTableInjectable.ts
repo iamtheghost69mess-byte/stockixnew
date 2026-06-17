@@ -26,7 +26,8 @@ export class BalanceSheetTableInjectable {
       await this.balanceSheetService.balanceSheet(filter);
 
     const tenantMetadata = await this.tenancyContext.getTenantMetadata();
-    const baseCurrency = tenantMetadata.baseCurrency;
+    // ORIGINAL: tenantMetadata.baseCurrency — crashes when metadata is null.
+    const baseCurrency = tenantMetadata?.baseCurrency ?? '';
     const { secondaryCurrency, secondaryRate } = await resolveSecondaryCurrency(
       tenantMetadata,
       this.exchangeRatesService,

@@ -16,68 +16,57 @@ export class SalesByItemsTable extends R.pipe(
   FinancialSheetStructure,
 )(FinancialSheet) {
   private readonly data: ISalesByItemsSheetData;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {ISalesByItemsSheetStatement} data
-   */
-  constructor(data: ISalesByItemsSheetData) {
+  constructor(data: ISalesByItemsSheetData, secondaryCurrency?: string, secondaryRate?: number) {
     super();
     this.data = data;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieves the common table accessors.
-   * @returns {ITableColumn[]}
-   */
   private commonTableAccessors() {
-    return [
+    const accessors: any[] = [
       { key: 'item_name', accessor: 'name' },
       { key: 'sold_quantity', accessor: 'quantitySoldFormatted' },
       { key: 'sold_amount', accessor: 'soldCostFormatted' },
       { key: 'average_price', accessor: 'averageSellPriceFormatted' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({ key: 'secondary_sold_amount', accessor: 'secondary.formattedAmount' });
+    }
+    return accessors;
   }
 
-  /**
-   * Maps the given item node to table row.
-   * @param {ISalesByItemsItem} item
-   * @returns {ITableRow}
-   */
-  private itemMap = (item: ISalesByItemsItem): ITableRow => {
-    const columns = this.commonTableAccessors();
-    const meta = {
-      rowTypes: [ROW_TYPE.ITEM],
+  private decorateSecondary = (node: ISalesByItemsItem | ISalesByItemsTotal): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate) return node;
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: this.formatTotalNumber(node.soldCost * this.secondaryRate, {
+          currencyCode: this.secondaryCurrency,
+        }),
+      },
     };
-    return tableRowMapper(item, columns, meta);
   };
 
-  /**
-   * Maps the given items nodes to table rows.
-   * @param {ISalesByItemsItem[]} items
-   * @returns {ITableRow[]}
-   */
+  private itemMap = (item: ISalesByItemsItem): ITableRow => {
+    return tableRowMapper(this.decorateSecondary(item), this.commonTableAccessors(), {
+      rowTypes: [ROW_TYPE.ITEM],
+    });
+  };
+
   private itemsMap = (items: ISalesByItemsItem[]): ITableRow[] => {
     return R.map(this.itemMap, items);
   };
 
-  /**
-   * Maps the given total node to table row.
-   * @param {ISalesByItemsTotal} total
-   * @returns {ITableRow[]}
-   */
   private totalMap = (total: ISalesByItemsTotal) => {
-    const columns = this.commonTableAccessors();
-    const meta = {
+    return tableRowMapper(this.decorateSecondary(total), this.commonTableAccessors(), {
       rowTypes: [ROW_TYPE.TOTAL],
-    };
-    return tableRowMapper(total, columns, meta);
+    });
   };
 
-  /**
-   * Retrieves the table rows.
-   * @returns {ITableRow[]}
-   */
   public tableData(): ITableRow[] {
     const itemsRows = this.itemsMap(this.data.items);
     const totalRow = this.totalMap(this.data.total);
@@ -87,17 +76,16 @@ export class SalesByItemsTable extends R.pipe(
     )([...itemsRows]) as ITableRow[];
   }
 
-  /**
-   * Retrieves the table columns.
-   * @returns {ITableColumn[]}
-   */
   public tableColumns(): ITableColumn[] {
-    const columns = [
+    const columns: any[] = [
       { key: 'item_name', label: 'Item name' },
       { key: 'sold_quantity', label: 'Sold quantity' },
       { key: 'sold_amount', label: 'Sold amount' },
       { key: 'average_price', label: 'Average price' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_sold_amount', label: `≈ ${this.secondaryCurrency} Sold Amount` });
+    }
     return R.compose(this.tableColumnsCellIndexing)(columns);
   }
 }

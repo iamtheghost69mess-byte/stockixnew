@@ -27,23 +27,23 @@ export class JournalSheetTable extends R.pipe(
   data: IJournalTableData;
   query: IJournalReportQuery;
   i18n: any;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {IJournalTableData} data -
-   * @param {IJournalReportQuery} query -
-   * @param {I18nService} i18n - I18n service.
-   */
   constructor(
     data: IJournalTableData,
     query: IJournalReportQuery,
     i18n: I18nService,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     super();
 
     this.data = data;
     this.query = query;
     this.i18n = i18n;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
   /**
@@ -80,12 +80,8 @@ export class JournalSheetTable extends R.pipe(
     ];
   };
 
-  /**
-   * Retrieves the total entry column accessors.
-   * @returns {ITableColumnAccessor[]}
-   */
   private totalEntryColumnAccessors = (): ITableColumnAccessor[] => {
-    return [
+    const base: ITableColumnAccessor[] = [
       { key: 'date', accessor: '_empty_' },
       { key: 'transaction_type', accessor: '_empty_' },
       { key: 'transaction_number', accessor: '_empty_' },
@@ -95,6 +91,13 @@ export class JournalSheetTable extends R.pipe(
       { key: 'debit', accessor: 'formattedDebit' },
       { key: 'credit', accessor: 'formattedCredit' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      base.push(
+        { key: 'secondary_debit', accessor: 'secondary.formattedDebit' },
+        { key: 'secondary_credit', accessor: 'secondary.formattedCredit' },
+      );
+    }
+    return base;
   };
 
   /**
@@ -114,12 +117,8 @@ export class JournalSheetTable extends R.pipe(
     ];
   };
 
-  /**
-   * Retrieves the common columns.
-   * @returns {ITableColumn[]}
-   */
   private commonColumns(): ITableColumn[] {
-    return [
+    const cols: ITableColumn[] = [
       { key: 'date', label: 'Date' },
       { key: 'transaction_type', label: 'Transaction Type' },
       { key: 'transaction_number', label: 'Num.' },
@@ -129,6 +128,13 @@ export class JournalSheetTable extends R.pipe(
       { key: 'debit', label: 'Debit' },
       { key: 'credit', label: 'Credit' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      cols.push(
+        { key: 'secondary_debit', label: `≈ ${this.secondaryCurrency} Debit` },
+        { key: 'secondary_credit', label: `≈ ${this.secondaryCurrency} Credit` },
+      );
+    }
+    return cols;
   }
 
   /**
@@ -172,17 +178,24 @@ export class JournalSheetTable extends R.pipe(
     return R.map(this.entryMapper, entries);
   };
 
-  /**
-   * Maps the given group entry to total table row.
-   * @param {IJournalReportEntriesGroup} group
-   * @returns {ITableRow}
-   */
   public totalEntryMapper = (group: IJournalReportEntriesGroup): ITableRow => {
     const total = this.totalEntryColumnAccessors();
-    const meta = {
-      rowTypes: [ROW_TYPE.TOTAL],
-    };
-    return tableRowMapper(group, total, meta);
+    const meta = { rowTypes: [ROW_TYPE.TOTAL] };
+    let decorated: any = group;
+    if (this.secondaryCurrency && this.secondaryRate) {
+      decorated = {
+        ...group,
+        secondary: {
+          formattedDebit: this.formatTotalNumber(group.debit * this.secondaryRate, {
+            currencyCode: this.secondaryCurrency,
+          }),
+          formattedCredit: this.formatTotalNumber(group.credit * this.secondaryRate, {
+            currencyCode: this.secondaryCurrency,
+          }),
+        },
+      };
+    }
+    return tableRowMapper(decorated, total, meta);
   };
 
   /**

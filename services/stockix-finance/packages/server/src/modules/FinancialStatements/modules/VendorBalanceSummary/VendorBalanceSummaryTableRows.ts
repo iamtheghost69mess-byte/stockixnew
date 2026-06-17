@@ -1,5 +1,6 @@
 import * as R from 'ramda';
 import { I18nService } from 'nestjs-i18n';
+import { formatNumber } from '@/utils/format-number';
 import {
   IVendorBalanceSummaryData,
   IVendorBalanceSummaryVendor,
@@ -22,22 +23,38 @@ export class VendorBalanceSummaryTable {
   private readonly i18n: I18nService;
   private readonly report: IVendorBalanceSummaryData;
   private readonly query: IVendorBalanceSummaryQuery;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {IVendorBalanceSummaryData} report - Report.
-   * @param {IVendorBalanceSummaryQuery} query - Query.
-   * @param {I18nService} i18n - I18n service.
-   */
   constructor(
     report: IVendorBalanceSummaryData,
     query: IVendorBalanceSummaryQuery,
-    i18n: I18nService
+    i18n: I18nService,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     this.report = report;
     this.query = query;
     this.i18n = i18n;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
+
+  private decorateSecondary = (node: any): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate || node.total?.amount == null) {
+      return node;
+    }
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: formatNumber(node.total.amount * this.secondaryRate, {
+          money: true,
+          currencyCode: this.secondaryCurrency,
+          precision: 2,
+        }),
+      },
+    };
+  };
 
   /**
    * Retrieve percentage columns accessor.
@@ -52,15 +69,14 @@ export class VendorBalanceSummaryTable {
     ];
   };
 
-  /**
-   * Retrieve vendor node columns accessor.
-   * @returns {IColumnMapperMeta[]}
-   */
   private getVendorColumnsAccessor = (): IColumnMapperMeta[] => {
-    const columns = [
+    const columns: IColumnMapperMeta[] = [
       { key: 'name', accessor: 'vendorName' },
       { key: 'total', accessor: 'total.formattedAmount' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+    }
     return R.compose(
       R.concat(columns),
       R.when(
@@ -70,30 +86,25 @@ export class VendorBalanceSummaryTable {
     )([]);
   };
 
-  /**
-   * Transformes the vendors to table rows.
-   * @param {IVendorBalanceSummaryVendor[]} vendors
-   * @returns {ITableRow[]}
-   */
   private vendorsTransformer = (
     vendors: IVendorBalanceSummaryVendor[]
   ): ITableRow[] => {
     const columns = this.getVendorColumnsAccessor();
+    const decorated = vendors.map(this.decorateSecondary);
 
-    return tableMapper(vendors, columns, {
+    return tableMapper(decorated, columns, {
       rowTypes: [TABLE_ROWS_TYPES.VENDOR],
     });
   };
 
-  /**
-   * Retrieve total node columns accessor.
-   * @returns {IColumnMapperMeta[]}
-   */
   private getTotalColumnsAccessor = (): IColumnMapperMeta[] => {
-    const columns = [
+    const columns: IColumnMapperMeta[] = [
       { key: 'name', value: this.i18n.t('contact_summary_balance.total') },
       { key: 'total', accessor: 'total.formattedAmount' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+    }
     return R.compose(
       R.concat(columns),
       R.when(
@@ -103,15 +114,10 @@ export class VendorBalanceSummaryTable {
     )([]) as IColumnMapperMeta[];
   };
 
-  /**
-   * Transformes the total to table row.
-   * @param   {IVendorBalanceSummaryTotal} total
-   * @returns {ITableRow}
-   */
   private totalTransformer = (total: IVendorBalanceSummaryTotal): ITableRow => {
     const columns = this.getTotalColumnsAccessor();
 
-    return tableRowMapper(total, columns, {
+    return tableRowMapper(this.decorateSecondary(total), columns, {
       rowTypes: [TABLE_ROWS_TYPES.TOTAL],
     });
   };
@@ -128,18 +134,20 @@ export class VendorBalanceSummaryTable {
     return vendors.length > 0 ? [...vendors, total] : [];
   };
 
-  /**
-   * Retrieve the report statement columns
-   * @returns {ITableColumn[]}
-   */
   public tableColumns = (): ITableColumn[] => {
-    const columns = [
+    const columns: ITableColumn[] = [
       {
         key: 'name',
         label: this.i18n.t('contact_summary_balance.account_name'),
       },
       { key: 'total', label: this.i18n.t('contact_summary_balance.total') },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({
+        key: 'secondary_total',
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('contact_summary_balance.total')}`,
+      });
+    }
     return R.compose(
       R.when(
         () => this.query.percentageColumn,

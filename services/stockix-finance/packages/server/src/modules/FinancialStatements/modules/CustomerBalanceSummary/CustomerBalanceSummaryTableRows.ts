@@ -1,5 +1,6 @@
 import * as R from 'ramda';
 import { I18nService } from 'nestjs-i18n';
+import { formatNumber } from '@/utils/format-number';
 import {
   ICustomerBalanceSummaryData,
   ICustomerBalanceSummaryCustomer,
@@ -22,22 +23,38 @@ export class CustomerBalanceSummaryTable {
   public readonly report: ICustomerBalanceSummaryData;
   public readonly query: ICustomerBalanceSummaryQuery;
   public readonly i18n: I18nService;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {ICustomerBalanceSummaryData} report - The report object.
-   * @param {ICustomerBalanceSummaryQuery} query - The query object.
-   * @param {I18nService} i18n - The i18n service.
-   */
   constructor(
     report: ICustomerBalanceSummaryData,
     query: ICustomerBalanceSummaryQuery,
     i18n: I18nService,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     this.report = report;
     this.i18n = i18n;
     this.query = query;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
+
+  private decorateSecondary = (node: any): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate || node.total?.amount == null) {
+      return node;
+    }
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: formatNumber(node.total.amount * this.secondaryRate, {
+          money: true,
+          currencyCode: this.secondaryCurrency,
+          precision: 2,
+        }),
+      },
+    };
+  };
 
   /**
    * Retrieve percentage columns accessor.
@@ -52,15 +69,14 @@ export class CustomerBalanceSummaryTable {
     ];
   };
 
-  /**
-   * Retrieve customer node columns accessor.
-   * @returns {IColumnMapperMeta[]}
-   */
   private getCustomerColumnsAccessor = (): IColumnMapperMeta[] => {
-    const columns = [
+    const columns: IColumnMapperMeta[] = [
       { key: 'name', accessor: 'customerName' },
       { key: 'total', accessor: 'total.formattedAmount' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+    }
     return R.compose(
       R.concat(columns),
       R.when(
@@ -70,30 +86,25 @@ export class CustomerBalanceSummaryTable {
     )([]);
   };
 
-  /**
-   * Transformes the customers to table rows.
-   * @param   {ICustomerBalanceSummaryCustomer[]} customers
-   * @returns {ITableRow[]}
-   */
   private customersTransformer(
     customers: ICustomerBalanceSummaryCustomer[],
   ): ITableRow[] {
     const columns = this.getCustomerColumnsAccessor();
+    const decorated = customers.map(this.decorateSecondary);
 
-    return tableMapper(customers, columns, {
+    return tableMapper(decorated, columns, {
       rowTypes: [TABLE_ROWS_TYPES.CUSTOMER],
     });
   }
 
-  /**
-   * Retrieve total node columns accessor.
-   * @returns {IColumnMapperMeta[]}
-   */
   private getTotalColumnsAccessor = (): IColumnMapperMeta[] => {
-    const columns = [
+    const columns: IColumnMapperMeta[] = [
       { key: 'name', value: this.i18n.t('contact_summary_balance.total') },
       { key: 'total', accessor: 'total.formattedAmount' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_total', accessor: 'secondary.formattedAmount' });
+    }
     // @ts-ignore
     return R.compose(
       R.concat(columns),
@@ -104,17 +115,12 @@ export class CustomerBalanceSummaryTable {
     )([]);
   };
 
-  /**
-   * Transformes the total to table row.
-   * @param {ICustomerBalanceSummaryTotal} total
-   * @returns {ITableRow}
-   */
   private totalTransformer = (
     total: ICustomerBalanceSummaryTotal,
   ): ITableRow => {
     const columns = this.getTotalColumnsAccessor();
 
-    return tableRowMapper(total, columns, {
+    return tableRowMapper(this.decorateSecondary(total), columns, {
       rowTypes: [TABLE_ROWS_TYPES.TOTAL],
     });
   };
@@ -131,18 +137,20 @@ export class CustomerBalanceSummaryTable {
     return customers.length > 0 ? [...customers, total] : [];
   }
 
-  /**
-   * Retrieve the report statement columns
-   * @returns {ITableColumn[]}
-   */
   public tableColumns = (): ITableColumn[] => {
-    const columns = [
+    const columns: ITableColumn[] = [
       {
         key: 'name',
         label: this.i18n.t('contact_summary_balance.account_name'),
       },
       { key: 'total', label: this.i18n.t('contact_summary_balance.total') },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({
+        key: 'secondary_total',
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('contact_summary_balance.total')}`,
+      });
+    }
     // @ts-ignore
     return R.compose(
       R.when(

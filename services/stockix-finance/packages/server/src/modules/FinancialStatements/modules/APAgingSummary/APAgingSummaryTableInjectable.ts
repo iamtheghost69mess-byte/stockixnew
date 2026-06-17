@@ -3,24 +3,36 @@ import { IAPAgingSummaryTable } from './APAgingSummary.types';
 import { APAgingSummaryService } from './APAgingSummaryService';
 import { APAgingSummaryQueryDto } from './APAgingSummaryQuery.dto';
 import { buildAgingSummaryTable } from '../AgingSummary/build-aging-summary-table';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
+import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class APAgingSummaryTableInjectable {
-  constructor(private readonly APAgingSummarySheet: APAgingSummaryService) {}
+  constructor(
+    private readonly APAgingSummarySheet: APAgingSummaryService,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRatesService: ExchangeRatesService,
+  ) {}
 
-  /**
-   * Retrieves A/P aging summary in table format.
-   * @param {APAgingSummaryQueryDto} query -
-   * @returns {Promise<IAPAgingSummaryTable>}
-   */
   public async table(
     query: APAgingSummaryQueryDto,
   ): Promise<IAPAgingSummaryTable> {
     const report = await this.APAgingSummarySheet.APAgingSummary(query);
+
+    const tenantMetadata = await this.tenancyContext.getTenantMetadata();
+    const { secondaryCurrency, secondaryRate } = await resolveSecondaryCurrency(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.asDate ?? new Date(),
+    );
+
     const table = buildAgingSummaryTable(report.data, report.columns, {
       contactNameLabel: 'Vendor name',
       contactNameKey: 'vendor_name',
       contactNameAccessor: 'vendorName',
+      secondaryCurrency,
+      secondaryRate,
     });
 
     return {

@@ -9,10 +9,12 @@ import { CustomerBalanceSummaryController } from './CustomerBalanceSummary.contr
 import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.module';
 import { CustomerBalanceSummaryRepository } from './CustomerBalanceSummaryRepository';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
   imports: [
     FinancialSheetCommonModule,
+    ExchangeRatesModule,
   ],
   controllers: [CustomerBalanceSummaryController],
   providers: [

@@ -1,5 +1,6 @@
 import * as R from 'ramda';
 import { I18nService } from 'nestjs-i18n';
+import { formatNumber } from '@/utils/format-number';
 import { ITransactionsByCustomersCustomer } from './TransactionsByCustomer.types';
 import { ITableRow, ITableColumn } from '../../types/Table.types';
 import { TransactionsByContactsTableRows } from '../TransactionsByContact/TransactionsByContactTableRows';
@@ -14,41 +15,55 @@ enum ROW_TYPE {
 
 export class TransactionsByCustomersTable extends TransactionsByContactsTableRows {
   private customersTransactions: ITransactionsByCustomersCustomer[];
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {ITransactionsByCustomersCustomer[]} customersTransactions - Customers transactions.
-   */
   constructor(
     customersTransactions: ITransactionsByCustomersCustomer[],
     i18n: I18nService,
     dateFormat: string,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     super();
     this.customersTransactions = customersTransactions;
     this.i18n = i18n;
     this.dateFormat = dateFormat;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieve the table row of customer details.
-   * @param {ITransactionsByCustomersCustomer} customer -
-   * @returns {ITableRow[]}
-   */
+  private secondaryAccessor() {
+    if (!this.secondaryCurrency || !this.secondaryRate) return [];
+    return [{ key: 'secondary_closing_balance', accessor: 'secondary.formattedAmount' }];
+  }
+
+  private decorateSecondary(customer: ITransactionsByCustomersCustomer): any {
+    if (!this.secondaryCurrency || !this.secondaryRate) return customer;
+    return {
+      ...customer,
+      secondary: {
+        formattedAmount: formatNumber(customer.closingBalance.amount * this.secondaryRate, {
+          money: true,
+          currencyCode: this.secondaryCurrency,
+          precision: 2,
+        }),
+      },
+    };
+  }
+
   private customerDetails = (
     customer: ITransactionsByCustomersCustomer,
   ): ITableRow => {
     const columns = [
       { key: 'customerName', accessor: 'customerName' },
       ...R.repeat({ key: 'empty', value: '' }, 5),
-      {
-        key: 'closingBalanceValue',
-        accessor: 'closingBalance.formattedAmount',
-      },
+      { key: 'closingBalanceValue', accessor: 'closingBalance.formattedAmount' },
+      ...this.secondaryAccessor(),
     ];
 
     return {
-      ...tableRowMapper(customer, columns, { rowTypes: [ROW_TYPE.CUSTOMER] }),
+      ...tableRowMapper(this.decorateSecondary(customer), columns, { rowTypes: [ROW_TYPE.CUSTOMER] }),
       children: R.pipe(
         R.when(
           R.always(customer.transactions.length > 0),
@@ -62,32 +77,18 @@ export class TransactionsByCustomersTable extends TransactionsByContactsTableRow
     };
   };
 
-  /**
-   * Retrieve the table rows of the customer section.
-   * @param {ITransactionsByCustomersCustomer} customer - Customer object.
-   * @returns {ITableRow[]} - Table rows.
-   */
   private customerRowsMapper = (
     customer: ITransactionsByCustomersCustomer,
   ): ITableRow => {
     return R.pipe(this.customerDetails)(customer);
   };
 
-  /**
-   * Retrieve the table rows of transactions by customers report.
-   * @param {ITransactionsByCustomersCustomer[]} customers - Customer objects.
-   * @returns {ITableRow[]} - Table rows.
-   */
   public tableRows = (): ITableRow[] => {
     return R.map(this.customerRowsMapper)(this.customersTransactions);
   };
 
-  /**
-   * Retrieve the table columns of transactions by customers report.
-   * @returns {ITableColumn[]}
-   */
   public tableColumns = (): ITableColumn[] => {
-    return [
+    const columns: ITableColumn[] = [
       { key: 'customer_name', label: 'Customer name' },
       { key: 'account_name', label: 'Account Name' },
       { key: 'ref_type', label: 'Reference Type' },
@@ -96,5 +97,9 @@ export class TransactionsByCustomersTable extends TransactionsByContactsTableRow
       { key: 'debit', label: 'Debit' },
       { key: 'running_balance', label: 'Running Balance' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_closing_balance', label: `≈ ${this.secondaryCurrency} Closing Balance` });
+    }
+    return columns;
   };
 }

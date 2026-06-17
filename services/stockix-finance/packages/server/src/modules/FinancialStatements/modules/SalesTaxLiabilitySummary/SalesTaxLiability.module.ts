@@ -9,9 +9,10 @@ import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.mo
 import { SalesTaxLiabilitySummaryRepository } from './SalesTaxLiabilitySummaryRepository';
 import { SalesTaxLiabilitySummaryMeta } from './SalesTaxLiabilitySummaryMeta';
 import { TenancyModule } from '@/modules/Tenancy/Tenancy.module';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [FinancialSheetCommonModule, TenancyModule],
+  imports: [FinancialSheetCommonModule, TenancyModule, ExchangeRatesModule],
   providers: [
     SalesTaxLiabiltiySummaryPdf,
     SalesTaxLiabilitySummaryTableInjectable,

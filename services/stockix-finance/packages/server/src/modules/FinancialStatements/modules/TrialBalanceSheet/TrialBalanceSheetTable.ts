@@ -34,42 +34,52 @@ export class TrialBalanceSheetTable extends R.compose(
   public query: ITrialBalanceSheetQuery;
 
   public i18n: I18nService;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {IBalanceSheetStatementData} reportData -
-   * @param {ITrialBalanceSheetQuery} query -
-   */
   constructor(
     data: ITrialBalanceSheetData,
     query: ITrialBalanceSheetQuery,
     i18n: I18nService,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     super();
 
     this.data = data;
     this.query = query;
     this.i18n = i18n;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieve the common columns for all report nodes.
-   * @param {ITableColumnAccessor[]}
-   */
+  private decorateSecondary = (node: any): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate || node.balance == null) {
+      return node;
+    }
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: this.formatTotalNumber(node.balance * this.secondaryRate, {
+          currencyCode: this.secondaryCurrency,
+        }),
+      },
+    };
+  };
+
   private commonColumnsAccessors = (): ITableColumnAccessor[] => {
-    return [
+    const base: ITableColumnAccessor[] = [
       { key: 'account', accessor: 'formattedName' },
       { key: 'debit', accessor: 'formattedDebit' },
       { key: 'credit', accessor: 'formattedCredit' },
       { key: 'total', accessor: 'formattedBalance' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      base.push({ key: 'secondary_balance', accessor: 'secondary.formattedAmount' });
+    }
+    return base;
   };
 
-  /**
-   * Maps the account node to table row.
-   * @param {ITrialBalanceAccount} node -
-   * @returns {ITableRow}
-   */
   private accountNodeTableRowsMapper = (
     node: ITrialBalanceAccount,
   ): ITableRow => {
@@ -78,21 +88,16 @@ export class TrialBalanceSheetTable extends R.compose(
       rowTypes: [IROW_TYPE.ACCOUNT],
       id: node.id,
     };
-    return tableRowMapper(node, columns, meta);
+    return tableRowMapper(this.decorateSecondary(node), columns, meta);
   };
 
-  /**
-   * Maps the total node to table row.
-   * @param {ITrialBalanceTotal} node -
-   * @returns {ITableRow}
-   */
   private totalNodeTableRowsMapper = (node: ITrialBalanceTotal): ITableRow => {
     const columns = this.commonColumnsAccessors();
     const meta = {
       rowTypes: [IROW_TYPE.TOTAL],
       id: 'total',
     };
-    return tableRowMapper(node, columns, meta);
+    return tableRowMapper(this.decorateSecondary(node), columns, meta);
   };
 
   /**
@@ -138,14 +143,18 @@ export class TrialBalanceSheetTable extends R.compose(
    * @returns {ITableColumn[]}
    */
   public tableColumns = (): ITableColumn[] => {
-    return R.compose(
-      this.tableColumnsCellIndexing,
-      R.concat([
-        { key: 'account', label: this.i18n.t('trial_balance_sheet.account') },
-        { key: 'debit', label: this.i18n.t('trial_balance_sheet.debit') },
-        { key: 'credit', label: this.i18n.t('trial_balance_sheet.credit') },
-        { key: 'total', label: this.i18n.t('trial_balance_sheet.total') },
-      ]),
-    )([]);
+    const columns: ITableColumn[] = [
+      { key: 'account', label: this.i18n.t('trial_balance_sheet.account') },
+      { key: 'debit', label: this.i18n.t('trial_balance_sheet.debit') },
+      { key: 'credit', label: this.i18n.t('trial_balance_sheet.credit') },
+      { key: 'total', label: this.i18n.t('trial_balance_sheet.total') },
+    ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({
+        key: 'secondary_balance',
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('trial_balance_sheet.total')}`,
+      });
+    }
+    return R.compose(this.tableColumnsCellIndexing, R.concat(columns))([]);
   };
 }

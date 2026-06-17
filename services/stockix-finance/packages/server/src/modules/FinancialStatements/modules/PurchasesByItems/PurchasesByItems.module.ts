@@ -9,9 +9,10 @@ import { PurchasesByItemsMeta } from './PurchasesByItemsMeta';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { InventoryCostModule } from '@/modules/InventoryCost/InventoryCost.module';
 import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.module';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [InventoryCostModule, FinancialSheetCommonModule],
+  imports: [InventoryCostModule, FinancialSheetCommonModule, ExchangeRatesModule],
   providers: [
     PurchasesByItemsTableInjectable,
     PurchasesByItemsService,

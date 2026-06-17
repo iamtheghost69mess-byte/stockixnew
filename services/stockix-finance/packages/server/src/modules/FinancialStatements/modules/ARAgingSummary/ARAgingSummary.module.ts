@@ -10,9 +10,10 @@ import { ARAgingSummaryController } from './ARAgingSummary.controller';
 import { ARAgingSummaryMeta } from './ARAgingSummaryMeta';
 import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.module';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [AgingSummaryModule, FinancialSheetCommonModule],
+  imports: [AgingSummaryModule, FinancialSheetCommonModule, ExchangeRatesModule],
   controllers: [ARAgingSummaryController],
   providers: [
     ARAgingSummaryTableInjectable,

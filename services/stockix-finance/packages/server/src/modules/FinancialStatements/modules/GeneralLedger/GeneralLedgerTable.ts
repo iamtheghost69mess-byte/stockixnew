@@ -25,28 +25,42 @@ export class GeneralLedgerTable extends R.compose(
   private data: IGeneralLedgerSheetData;
   private query: IGeneralLedgerSheetQuery;
   private meta: IGeneralLedgerMeta;
+  private secondaryCurrency: string;
+  private secondaryRate: number;
 
-  /**
-   * Creates an instance of `GeneralLedgerTable`.
-   * @param {IGeneralLedgerSheetData} data
-   * @param {IGeneralLedgerSheetQuery} query
-   */
   constructor(
     data: IGeneralLedgerSheetData,
     query: IGeneralLedgerSheetQuery,
     meta: IGeneralLedgerMeta,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     super();
 
     this.data = data;
     this.query = query;
     this.meta = meta;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieves the common table accessors.
-   * @returns {ITableColumnAccessor[]}
-   */
+  private formatSecondary(amount: number): string {
+    return this.formatTotalNumber(amount * this.secondaryRate, {
+      currencyCode: this.secondaryCurrency,
+    });
+  }
+
+  private withSecondaryBalance(node: any, amount: number | null | undefined): any {
+    if (!this.secondaryCurrency || !this.secondaryRate || amount == null) return node;
+    return { ...node, secondary: { formattedAmount: this.formatSecondary(amount) } };
+  }
+
+  private secondaryAccessor(): ITableColumnAccessor[] {
+    return this.secondaryCurrency && this.secondaryRate
+      ? [{ key: 'secondary_balance', accessor: 'secondary.formattedAmount' }]
+      : [];
+  }
+
   private accountColumnsAccessors(): ITableColumnAccessor[] {
     return [
       { key: 'date', accessor: 'name' },
@@ -58,13 +72,10 @@ export class GeneralLedgerTable extends R.compose(
       { key: 'debit', accessor: '_empty_' },
       { key: 'amount', accessor: 'amount.formattedAmount' },
       { key: 'running_balance', accessor: 'closingBalance.formattedAmount' },
+      ...this.secondaryAccessor(),
     ];
   }
 
-  /**
-   * Retrieves the transaction column accessors.
-   * @returns {ITableColumnAccessor[]}
-   */
   private transactionColumnAccessors(): ITableColumnAccessor[] {
     return [
       { key: 'date', accessor: 'dateFormatted' },
@@ -76,13 +87,10 @@ export class GeneralLedgerTable extends R.compose(
       { key: 'debit', accessor: 'formattedDebit' },
       { key: 'amount', accessor: 'formattedAmount' },
       { key: 'running_balance', accessor: 'formattedRunningBalance' },
+      ...this.secondaryAccessor(),
     ];
   }
 
-  /**
-   * Retrieves the opening row column accessors.
-   * @returns {ITableRowIColumnMapperMeta[]}
-   */
   private openingBalanceColumnsAccessors(): IColumnMapperMeta[] {
     return [
       { key: 'date', value: 'Opening Balance' },
@@ -94,14 +102,10 @@ export class GeneralLedgerTable extends R.compose(
       { key: 'debit', accessor: '_empty_' },
       { key: 'amount', accessor: 'openingBalance.formattedAmount' },
       { key: 'running_balance', accessor: 'openingBalance.formattedAmount' },
+      ...this.secondaryAccessor(),
     ];
   }
 
-  /**
-   * Closing balance row column accessors.
-   * @param {IGeneralLedgerSheetAccount} account -
-   * @returns {ITableColumnAccessor[]}
-   */
   private closingBalanceColumnAccessors(
     account: IGeneralLedgerSheetAccount,
   ): IColumnMapperMeta[] {
@@ -115,14 +119,10 @@ export class GeneralLedgerTable extends R.compose(
       { key: 'debit', accessor: '_empty_' },
       { key: 'amount', accessor: 'closingBalance.formattedAmount' },
       { key: 'running_balance', accessor: 'closingBalance.formattedAmount' },
+      ...this.secondaryAccessor(),
     ];
   }
 
-  /**
-   * Closing balance row column accessors.
-   * @param {IGeneralLedgerSheetAccount} account -
-   * @returns {ITableColumnAccessor[]}
-   */
   private closingBalanceWithSubaccountsColumnAccessors(
     account: IGeneralLedgerSheetAccount,
   ): IColumnMapperMeta[] {
@@ -145,15 +145,12 @@ export class GeneralLedgerTable extends R.compose(
         key: 'running_balance',
         accessor: 'closingBalanceSubaccounts.formattedAmount',
       },
+      ...this.secondaryAccessor(),
     ];
   }
 
-  /**
-   * Retrieves the common table columns.
-   * @returns {ITableColumn[]}
-   */
   private commonColumns(): ITableColumn[] {
-    return [
+    const cols: ITableColumn[] = [
       { key: 'date', label: 'Date' },
       { key: 'account_name', label: 'Account Name' },
       { key: 'reference_type', label: 'Transaction Type' },
@@ -164,24 +161,23 @@ export class GeneralLedgerTable extends R.compose(
       { key: 'amount', label: 'Amount' },
       { key: 'running_balance', label: 'Running Balance' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      cols.push({ key: 'secondary_balance', label: `≈ ${this.secondaryCurrency} Balance` });
+    }
+    return cols;
   }
 
-  /**
-   * Maps the given transaction node to table row.
-   * @param {IGeneralLedgerSheetAccount} account - Account.
-   * @param {IGeneralLedgerSheetAccountTransaction} transaction - Transaction.
-   * @returns {ITableRow}
-   */
   private transactionMapper = R.curry(
     (
       account: IGeneralLedgerSheetAccount,
       transaction: IGeneralLedgerSheetAccountTransaction,
     ): ITableRow => {
       const columns = this.transactionColumnAccessors();
-      const data = { ...transaction, account };
-      const meta = {
-        rowTypes: [ROW_TYPE.TRANSACTION],
-      };
+      const data = this.withSecondaryBalance(
+        { ...transaction, account },
+        transaction.runningBalance,
+      );
+      const meta = { rowTypes: [ROW_TYPE.TRANSACTION] };
       return tableRowMapper(data, columns, meta);
     },
   );
@@ -200,47 +196,29 @@ export class GeneralLedgerTable extends R.compose(
     return R.map(transactionMapper)(account.transactions);
   };
 
-  /**
-   * Maps the given account node to opening balance table row.
-   * @param {IGeneralLedgerSheetAccount} account
-   * @returns {ITableRow}
-   */
   private openingBalanceMapper = (
     account: IGeneralLedgerSheetAccount,
   ): ITableRow => {
     const columns = this.openingBalanceColumnsAccessors();
-    const meta = {
-      rowTypes: [ROW_TYPE.OPENING_BALANCE],
-    };
-    return tableRowMapper(account, columns, meta);
+    const meta = { rowTypes: [ROW_TYPE.OPENING_BALANCE] };
+    const decorated = this.withSecondaryBalance(account, account.openingBalance?.amount);
+    return tableRowMapper(decorated, columns, meta);
   };
 
-  /**
-   * Maps the given account node to closing balance table row.
-   * @param {IGeneralLedgerSheetAccount} account
-   * @returns {ITableRow}
-   */
   private closingBalanceMapper = (account: IGeneralLedgerSheetAccount) => {
     const columns = this.closingBalanceColumnAccessors(account);
-    const meta = {
-      rowTypes: [ROW_TYPE.CLOSING_BALANCE],
-    };
-    return tableRowMapper(account, columns, meta);
+    const meta = { rowTypes: [ROW_TYPE.CLOSING_BALANCE] };
+    const decorated = this.withSecondaryBalance(account, account.closingBalance?.amount);
+    return tableRowMapper(decorated, columns, meta);
   };
 
-  /**
-   * Maps the given account node to opening balance table row.
-   * @param {IGeneralLedgerSheetAccount} account
-   * @returns {ITableRow}
-   */
   private closingBalanceWithSubaccountsMapper = (
     account: IGeneralLedgerSheetAccount,
   ): ITableRow => {
     const columns = this.closingBalanceWithSubaccountsColumnAccessors(account);
-    const meta = {
-      rowTypes: [ROW_TYPE.CLOSING_BALANCE],
-    };
-    return tableRowMapper(account, columns, meta);
+    const meta = { rowTypes: [ROW_TYPE.CLOSING_BALANCE] };
+    const decorated = this.withSecondaryBalance(account, account.closingBalanceSubaccounts?.amount);
+    return tableRowMapper(decorated, columns, meta);
   };
 
   /**
@@ -261,18 +239,12 @@ export class GeneralLedgerTable extends R.compose(
     )([...transactions, closingBalance]) as ITableRow[];
   };
 
-  /**
-   * Maps the given account node to the table rows.
-   * @param {IGeneralLedgerSheetAccount} account
-   * @returns {ITableRow}
-   */
   private accountMapper = (account: IGeneralLedgerSheetAccount): ITableRow => {
     const columns = this.accountColumnsAccessors();
     const transactions = this.transactionsNode(account);
-    const meta = {
-      rowTypes: [ROW_TYPE.ACCOUNT],
-    };
-    const row = tableRowMapper(account, columns, meta);
+    const meta = { rowTypes: [ROW_TYPE.ACCOUNT] };
+    const decorated = this.withSecondaryBalance(account, account.closingBalance?.amount);
+    const row = tableRowMapper(decorated, columns, meta);
     const closingBalanceWithSubaccounts =
       this.closingBalanceWithSubaccountsMapper(account);
 

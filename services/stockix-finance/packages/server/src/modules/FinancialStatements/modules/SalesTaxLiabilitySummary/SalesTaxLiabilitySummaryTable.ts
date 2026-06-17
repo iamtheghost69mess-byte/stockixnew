@@ -19,110 +19,92 @@ export class SalesTaxLiabilitySummaryTable extends R.pipe(
 )(AgingReport) {
   private data: SalesTaxLiabilitySummaryReportData;
   private query: SalesTaxLiabilitySummaryQuery;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Sales tax liability summary table constructor.
-   * @param {SalesTaxLiabilitySummaryReportData} data
-   * @param {SalesTaxLiabilitySummaryQuery} query
-   */
   constructor(
     data: SalesTaxLiabilitySummaryReportData,
     query: SalesTaxLiabilitySummaryQuery,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
   ) {
     super();
 
     this.data = data;
     this.query = query;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieve the tax rate row accessors.
-   * @returns {ITableColumnAccessor[]}
-   */
   private get taxRateRowAccessor() {
-    return [
+    const accessors: any[] = [
       { key: 'taxName', accessor: 'taxName' },
       { key: 'taxPercentage', accessor: 'taxPercentage.formattedAmount' },
       { key: 'taxableAmount', accessor: 'taxableAmount.formattedAmount' },
       { key: 'collectedTax', accessor: 'collectedTaxAmount.formattedAmount' },
       { key: 'taxAmount', accessor: 'taxAmount.formattedAmount' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({ key: 'secondary_tax_amount', accessor: 'secondary.formattedAmount' });
+    }
+    return accessors;
   }
 
-  /**
-   * Retrieve the tax rate total row accessors.
-   * @returns {ITableColumnAccessor[]}
-   */
   private get taxRateTotalRowAccessors() {
-    return [
+    const accessors: any[] = [
       { key: 'taxName', value: 'Total' },
       { key: 'taxPercentage', value: '' },
       { key: 'taxableAmount', accessor: 'taxableAmount.formattedAmount' },
       { key: 'collectedTax', accessor: 'collectedTaxAmount.formattedAmount' },
       { key: 'taxAmount', accessor: 'taxAmount.formattedAmount' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({ key: 'secondary_tax_amount', accessor: 'secondary.formattedAmount' });
+    }
+    return accessors;
   }
 
-  /**
-   * Maps the tax rate node to table row.
-   * @param {SalesTaxLiabilitySummaryRate} node
-   * @returns {ITableRow}
-   */
+  private decorateSecondary = (node: any): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate) return node;
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: this.formatTotalNumber(node.taxAmount.amount * this.secondaryRate, {
+          currencyCode: this.secondaryCurrency,
+        }),
+      },
+    };
+  };
+
   private taxRateTableRowMapper = (
     node: SalesTaxLiabilitySummaryRate,
   ): ITableRow => {
-    const columns = this.taxRateRowAccessor;
-    const meta = {
+    return tableRowMapper(this.decorateSecondary(node), this.taxRateRowAccessor, {
       rowTypes: [IROW_TYPE.TaxRate],
       id: node.id,
-    };
-    return tableRowMapper(node, columns, meta);
+    });
   };
 
-  /**
-   * Maps the tax rates nodes to table rows.
-   * @param {SalesTaxLiabilitySummaryRate[]} nodes
-   * @returns {ITableRow[]}
-   */
   private taxRatesTableRowsMapper = (
     nodes: SalesTaxLiabilitySummaryRate[],
   ): ITableRow[] => {
     return nodes.map(this.taxRateTableRowMapper);
   };
 
-  /**
-   * Maps the tax rate total node to table row.
-   * @param {SalesTaxLiabilitySummaryTotal} node
-   * @returns {ITableRow}
-   */
   private taxRateTotalRowMapper = (node: SalesTaxLiabilitySummaryTotal) => {
-    const columns = this.taxRateTotalRowAccessors;
-    const meta = {
+    return tableRowMapper(this.decorateSecondary(node), this.taxRateTotalRowAccessors, {
       rowTypes: [IROW_TYPE.Total],
-    };
-    return tableRowMapper(node, columns, meta);
+    });
   };
 
-  /**
-   * Retrieves the tax rate total row.
-   * @returns {ITableRow}
-   */
   private get taxRateTotalRow(): ITableRow {
     return this.taxRateTotalRowMapper(this.data.total);
   }
 
-  /**
-   * Retrieves the tax rates rows.
-   * @returns {ITableRow[]}
-   */
   private get taxRatesRows(): ITableRow[] {
     return this.taxRatesTableRowsMapper(this.data.taxRates);
   }
 
-  /**
-   * Retrieves the table rows.
-   * @returns {ITableRow[]}
-   */
   public tableRows(): ITableRow[] {
     return R.compose(
       R.unless(R.isEmpty, R.append(this.taxRateTotalRow)),
@@ -130,32 +112,17 @@ export class SalesTaxLiabilitySummaryTable extends R.pipe(
     )([]);
   }
 
-  /**
-   * Retrieves the table columns.
-   * @returns {ITableColumn[]}
-   */
   public tableColumns(): ITableColumn[] {
-    return R.compose(this.tableColumnsCellIndexing)([
-      {
-        label: 'Tax Name',
-        key: 'taxName',
-      },
-      {
-        label: 'Tax Percentage',
-        key: 'taxPercentage',
-      },
-      {
-        label: 'Taxable Amount',
-        key: 'taxableAmount',
-      },
-      {
-        label: 'Collected Tax',
-        key: 'collectedTax',
-      },
-      {
-        label: 'Tax Amount',
-        key: 'taxRate',
-      },
-    ]);
+    const columns: any[] = [
+      { label: 'Tax Name', key: 'taxName' },
+      { label: 'Tax Percentage', key: 'taxPercentage' },
+      { label: 'Taxable Amount', key: 'taxableAmount' },
+      { label: 'Collected Tax', key: 'collectedTax' },
+      { label: 'Tax Amount', key: 'taxRate' },
+    ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_tax_amount', label: `≈ ${this.secondaryCurrency} Tax Amount` });
+    }
+    return R.compose(this.tableColumnsCellIndexing)(columns);
   }
 }

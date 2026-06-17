@@ -6,29 +6,38 @@ import {
 } from './TransactionsByCustomer.types';
 import { TransactionsByCustomersSheet } from './TransactionsByCustomersService';
 import { TransactionsByCustomersTable } from './TransactionsByCustomersTable';
+import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
+import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class TransactionsByCustomersTableInjectable {
   constructor(
     private readonly transactionsByCustomerService: TransactionsByCustomersSheet,
     private readonly i18n: I18nService,
+    private readonly tenancyContext: TenancyContext,
+    private readonly exchangeRatesService: ExchangeRatesService,
   ) {}
 
-  /**
-   * Retrieves the transactions by customers sheet in table format.
-   * @param {ITransactionsByCustomersFilter} filter - Filter object.
-   * @returns {Promise<ITransactionsByCustomersFilter>} - Transactions by customers table.
-   */
   public async table(
     filter: ITransactionsByCustomersFilter,
   ): Promise<ITransactionsByCustomersTable> {
     const customersTransactions =
       await this.transactionsByCustomerService.transactionsByCustomers(filter);
 
+    const tenantMetadata = await this.tenancyContext.getTenantMetadata();
+    const { secondaryCurrency, secondaryRate } = await resolveSecondaryCurrency(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.toDate ?? new Date(),
+    );
+
     const table = new TransactionsByCustomersTable(
       customersTransactions.data,
       this.i18n,
       customersTransactions.meta.dateFormat,
+      secondaryCurrency,
+      secondaryRate,
     );
     return {
       table: {

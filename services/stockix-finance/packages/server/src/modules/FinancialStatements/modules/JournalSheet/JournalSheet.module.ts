@@ -10,9 +10,10 @@ import { JournalSheetMeta } from './JournalSheetMeta';
 import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.module';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { AccountsModule } from '@/modules/Accounts/Accounts.module';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [FinancialSheetCommonModule, AccountsModule],
+  imports: [FinancialSheetCommonModule, AccountsModule, ExchangeRatesModule],
   controllers: [JournalSheetController],
   providers: [
     JournalSheetApplication,

@@ -19,6 +19,9 @@ export function useDashboardMetaBoot() {
     data: dashboardMeta,
     isLoading: isDashboardMetaLoading,
     isSuccess: isDashboardMetaSuccess,
+    // ORIGINAL: isError was not tracked; a failed boot (400 from EnsureTenantIsInitialized)
+    // left the splash screen permanently visible because stopLoading was only called on success.
+    isError: isDashboardMetaError,
   } = useDashboardMeta({
     keepPreviousData: true,
   });
@@ -31,6 +34,11 @@ export function useDashboardMetaBoot() {
   useWatchImmediate(() => {
     isDashboardMetaSuccess && stopLoading();
   }, isDashboardMetaSuccess);
+
+  // Stop splash on error so the screen doesn't freeze when boot returns 400/5xx.
+  useWatchImmediate((value) => {
+    value && stopLoading();
+  }, isDashboardMetaError);
 
   return {
     meta: dashboardMeta,

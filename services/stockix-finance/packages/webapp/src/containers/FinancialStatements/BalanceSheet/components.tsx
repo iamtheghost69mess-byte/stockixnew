@@ -44,7 +44,9 @@ export function BalanceSheetAlerts() {
     return null;
   }
   // Can't continue if the cost compute job is not running.
-  if (!balanceSheet.meta.is_cost_compute_running) {
+  // ORIGINAL: if (!balanceSheet.meta.is_cost_compute_running) {
+  // balanceSheet is undefined when the query has no defaultData and the server returns 500.
+  if (!balanceSheet?.meta?.is_cost_compute_running) {
     return null;
   }
   return (
@@ -75,15 +77,12 @@ export function BalanceSheetLoadingBar() {
  * Retrieve balance sheet columns.
  */
 export const useBalanceSheetColumns = () => {
-  // Balance sheet context.
-  const {
-    balanceSheet: { table },
-  } = useBalanceSheetContext();
+  const { balanceSheet } = useBalanceSheetContext();
 
-  return React.useMemo(
-    () => dynamicColumns(table.columns, table.rows),
-    [table],
-  );
+  return React.useMemo(() => {
+    if (!balanceSheet) return [];
+    return dynamicColumns(balanceSheet.table.columns, balanceSheet.table.rows);
+  }, [balanceSheet]);
 };
 
 /**

@@ -20,68 +20,57 @@ export class InventoryValuationSheetTable extends R.pipe(
   FinancialSheetStructure,
 )(FinancialSheet) {
   private readonly data: IInventoryValuationSheetData;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {IInventoryValuationSheetData} data
-   */
-  constructor(data: IInventoryValuationSheetData) {
+  constructor(data: IInventoryValuationSheetData, secondaryCurrency?: string, secondaryRate?: number) {
     super();
     this.data = data;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieves the common columns accessors.
-   * @returns {ITableColumnAccessor}
-   */
   private commonColumnsAccessors(): ITableColumnAccessor[] {
-    return [
+    const accessors: any[] = [
       { key: 'item_name', accessor: 'name' },
       { key: 'quantity', accessor: 'quantityFormatted' },
       { key: 'valuation', accessor: 'valuationFormatted' },
       { key: 'average', accessor: 'averageFormatted' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({ key: 'secondary_valuation', accessor: 'secondary.formattedAmount' });
+    }
+    return accessors;
   }
 
-  /**
-   * Maps the given total node to table row.
-   * @param {IInventoryValuationTotal} total
-   * @returns {ITableRow}
-   */
+  private decorateSecondary = (node: IInventoryValuationItem | IInventoryValuationTotal): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate) return node;
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: this.formatTotalNumber(node.valuation * this.secondaryRate, {
+          currencyCode: this.secondaryCurrency,
+        }),
+      },
+    };
+  };
+
   private totalRowMapper = (total: IInventoryValuationTotal): ITableRow => {
-    const accessors = this.commonColumnsAccessors();
-    const meta = {
+    return tableRowMapper(this.decorateSecondary(total), this.commonColumnsAccessors(), {
       rowTypes: [ROW_TYPE.TOTAL],
-    };
-    return tableRowMapper(total, accessors, meta);
+    });
   };
 
-  /**
-   * Maps the given item node to table row.
-   * @param {IInventoryValuationItem} item
-   * @returns {ITableRow}
-   */
   private itemRowMapper = (item: IInventoryValuationItem): ITableRow => {
-    const accessors = this.commonColumnsAccessors();
-    const meta = {
+    return tableRowMapper(this.decorateSecondary(item), this.commonColumnsAccessors(), {
       rowTypes: [ROW_TYPE.ITEM],
-    };
-    return tableRowMapper(item, accessors, meta);
+    });
   };
 
-  /**
-   * Maps the given items nodes to table rowes.
-   * @param {IInventoryValuationItem[]} items
-   * @returns {ITableRow[]}
-   */
   private itemsRowsMapper = (items: IInventoryValuationItem[]): ITableRow[] => {
     return R.map(this.itemRowMapper)(items);
   };
 
-  /**
-   * Retrieves the table rows.
-   * @returns {ITableRow[]}
-   */
   public tableRows(): ITableRow[] {
     const itemsRows = this.itemsRowsMapper(this.data.items);
     const totalRow = this.totalRowMapper(this.data.total);
@@ -91,17 +80,16 @@ export class InventoryValuationSheetTable extends R.pipe(
     )([...itemsRows]) as ITableRow[];
   }
 
-  /**
-   * Retrieves the table columns.
-   * @returns {ITableColumn[]}
-   */
   public tableColumns(): ITableColumn[] {
-    const columns = [
+    const columns: any[] = [
       { key: 'item_name', label: 'Item Name' },
       { key: 'quantity', label: 'Quantity' },
       { key: 'valuation', label: 'Valuation' },
       { key: 'average', label: 'Average' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_valuation', label: `≈ ${this.secondaryCurrency} Valuation` });
+    }
     return R.compose(this.tableColumnsCellIndexing)(columns);
   }
 }

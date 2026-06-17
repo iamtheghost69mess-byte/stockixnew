@@ -31,7 +31,8 @@ export class ProfitLossSheetTableInjectable {
       await this.profitLossSheet.profitLossSheet(filter);
 
     const tenantMetadata = await this.tenancyContext.getTenantMetadata();
-    const baseCurrency = tenantMetadata.baseCurrency;
+    // ORIGINAL: tenantMetadata.baseCurrency — crashes when metadata is null.
+    const baseCurrency = tenantMetadata?.baseCurrency ?? '';
     const { secondaryCurrency, secondaryRate } = await resolveSecondaryCurrency(
       tenantMetadata,
       this.exchangeRatesService,

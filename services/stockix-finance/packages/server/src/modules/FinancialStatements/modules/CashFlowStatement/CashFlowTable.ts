@@ -267,7 +267,7 @@ export default class CashFlowTable implements ICashFlowTable {
   ): ICashFlowStatementSection => {
     const label = section.footerLabel
       ? section.footerLabel
-      : this.i18n.__('Total {{accountName}}', { accountName: section.label });
+      : this.i18n.t('Total {{accountName}}', { args: { accountName: section.label } });
 
     section.children.push({
       sectionType: ICashFlowStatementSectionType.TOTAL,
@@ -326,13 +326,13 @@ export default class CashFlowTable implements ICashFlowTable {
    */
   private totalColumns = (): ITableColumn[] => {
     const label = this.baseCurrency
-      ? `${this.i18n.__('Total')} (${this.baseCurrency})`
-      : this.i18n.__('Total');
+      ? `${this.i18n.t('Total')} (${this.baseCurrency})`
+      : this.i18n.t('Total');
     const columns: ITableColumn[] = [{ key: 'total', label }];
     if (this.secondaryCurrency && this.secondaryRate) {
       columns.push({
         key: 'secondary_total',
-        label: `≈ ${this.secondaryCurrency} ${this.i18n.__('Total')}`,
+        label: `≈ ${this.secondaryCurrency} ${this.i18n.t('Total')}`,
       });
     }
     return columns;
@@ -400,7 +400,7 @@ export default class CashFlowTable implements ICashFlowTable {
    */
   public tableColumns = (): ITableColumn[] => {
     return R.compose(
-      R.concat([{ key: 'name', label: this.i18n.__('Account name') }]),
+      R.concat([{ key: 'name', label: this.i18n.t('Account name') }]),
       R.when(
         R.always(this.isDisplayColumnsBy(DISPLAY_COLUMNS_BY.DATE_PERIODS)),
         R.concat(this.datePeriodsColumns())

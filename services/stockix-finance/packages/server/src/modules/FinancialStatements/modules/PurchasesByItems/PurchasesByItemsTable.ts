@@ -16,90 +16,70 @@ export class PurchasesByItemsTable extends R.compose(
   FinancialSheetStructure
 )(FinancialSheet) {
   private data: IPurchasesByItemsSheetData;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param data
-   */
-  constructor(data: IPurchasesByItemsSheetData) {
+  constructor(data: IPurchasesByItemsSheetData, secondaryCurrency?: string, secondaryRate?: number) {
     super();
     this.data = data;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
-  /**
-   * Retrieves thge common table accessors.
-   * @returns {ITableColumnAccessor[]}
-   */
   private commonTableAccessors(): ITableColumnAccessor[] {
-    return [
+    const accessors: any[] = [
       { key: 'item_name', accessor: 'name' },
       { key: 'quantity_purchases', accessor: 'quantityPurchasedFormatted' },
       { key: 'purchase_amount', accessor: 'purchaseCostFormatted' },
       { key: 'average_cost', accessor: 'averageCostPriceFormatted' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      accessors.push({ key: 'secondary_purchase_amount', accessor: 'secondary.formattedAmount' });
+    }
+    return accessors;
   }
 
-  /**
-   * Retrieves the common table columns.
-   * @returns {ITableColumn[]}
-   */
-  private commonTableColumns(): ITableColumn[] {
-    return [
+  private decorateSecondary = (node: IPurchasesByItemsItem | IPurchasesByItemsTotal): any => {
+    if (!this.secondaryCurrency || !this.secondaryRate) return node;
+    return {
+      ...node,
+      secondary: {
+        formattedAmount: this.formatTotalNumber(node.purchaseCost * this.secondaryRate, {
+          currencyCode: this.secondaryCurrency,
+        }),
+      },
+    };
+  };
+
+  private itemMap = (item: IPurchasesByItemsItem): ITableRow => {
+    return tableRowMapper(this.decorateSecondary(item), this.commonTableAccessors(), {
+      rowTypes: [ROW_TYPE.ITEM],
+    });
+  };
+
+  private itemsMap = (items: IPurchasesByItemsItem[]): ITableRow[] => {
+    return R.map(this.itemMap)(items);
+  };
+
+  private totalNodeMap = (total: IPurchasesByItemsTotal): ITableRow => {
+    return tableRowMapper(this.decorateSecondary(total), this.commonTableAccessors(), {
+      rowTypes: [ROW_TYPE.TOTAL],
+    });
+  };
+
+  public tableColumns(): ITableColumn[] {
+    const columns: any[] = [
       { label: 'Item name', key: 'item_name' },
       { label: 'Quantity Purchased', key: 'quantity_purchases' },
       { label: 'Purchase Amount', key: 'purchase_amount' },
       { label: 'Average Price', key: 'average_cost' },
     ];
-  }
-
-  /**
-   * Maps the given item node to table row.
-   * @param {IPurchasesByItemsItem} item
-   * @returns {ITableRow}
-   */
-  private itemMap = (item: IPurchasesByItemsItem): ITableRow => {
-    const columns = this.commonTableAccessors();
-    const meta = {
-      rowTypes: [ROW_TYPE.ITEM],
-    };
-    return tableRowMapper(item, columns, meta);
-  };
-
-  /**
-   * Maps the given items nodes to table rows.
-   * @param {IPurchasesByItemsItem[]} items - Items nodes.
-   * @returns {ITableRow[]}
-   */
-  private itemsMap = (items: IPurchasesByItemsItem[]): ITableRow[] => {
-    return R.map(this.itemMap)(items);
-  };
-
-  /**
-   * Maps the given total node to table rows.
-   * @param {IPurchasesByItemsTotal} total
-   * @returns {ITableRow}
-   */
-  private totalNodeMap = (total: IPurchasesByItemsTotal): ITableRow => {
-    const columns = this.commonTableAccessors();
-    const meta = {
-      rowTypes: [ROW_TYPE.TOTAL],
-    };
-    return tableRowMapper(total, columns, meta);
-  };
-
-  /**
-   * Retrieves the table columns.
-   * @returns {ITableColumn[]}
-   */
-  public tableColumns(): ITableColumn[] {
-    const columns = this.commonTableColumns();
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_purchase_amount', label: `≈ ${this.secondaryCurrency} Purchase Amount` });
+    }
     return R.compose(this.tableColumnsCellIndexing)(columns);
   }
 
-  /**
-   * Retrieves the table rows.
-   * @returns {ITableRow[]}
-   */
   public tableData(): ITableRow[] {
     const itemsRows = this.itemsMap(this.data.items);
     const totalRow = this.totalNodeMap(this.data.total);

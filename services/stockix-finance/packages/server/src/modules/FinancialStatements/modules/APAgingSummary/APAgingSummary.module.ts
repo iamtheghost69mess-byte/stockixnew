@@ -10,9 +10,10 @@ import { APAgingSummaryController } from './APAgingSummary.controller';
 import { APAgingSummaryMeta } from './APAgingSummaryMeta';
 import { FinancialSheetCommonModule } from '../../common/FinancialSheetCommon.module';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
+import { ExchangeRatesModule } from '@/modules/ExchangeRates/ExchangeRates.module';
 
 @Module({
-  imports: [AgingSummaryModule, FinancialSheetCommonModule],
+  imports: [AgingSummaryModule, FinancialSheetCommonModule, ExchangeRatesModule],
   providers: [
     APAgingSummaryService,
     APAgingSummaryMeta,
