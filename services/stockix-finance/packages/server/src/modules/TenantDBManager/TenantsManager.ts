@@ -36,7 +36,12 @@ export class TenantsManagerService {
    * @return {Promise<TenantModel>}
    */
   public async createTenant(): Promise<TenantModel> {
-    const currentTenant = await this.tenancyContext.getTenant().catch(() => null);
+    let currentTenant: TenantModel | null = null;
+    try {
+      currentTenant = await this.tenancyContext.getTenant();
+    } catch {
+      currentTenant = null;
+    }
     await this.licenseService.assertCanCreateOrganization(currentTenant?.id);
     return this.tenantRepository.createWithUniqueOrgId();
   }

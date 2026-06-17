@@ -20,6 +20,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Eye, EyeOff } from "lucide-react";
 import { resetMeCache } from "@/hooks/use-me";
 import { cn } from "@/lib/utils";
 
