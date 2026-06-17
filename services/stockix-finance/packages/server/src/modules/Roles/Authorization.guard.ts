@@ -59,6 +59,12 @@ export class AuthorizationGuard implements CanActivate {
       );
     }
 
+    if (!tenantUser.active) {
+      throw new ForbiddenException(
+        'Your account has been deactivated. Contact your administrator.',
+      );
+    }
+
     return getAbilityForRole(tenantUser.role);
   }
 }

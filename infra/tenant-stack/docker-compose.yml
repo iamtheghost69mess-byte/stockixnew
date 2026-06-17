@@ -81,6 +81,7 @@ services:
       - QUEUE_PORT=6379
       # ── Auth + identity ──────────────────────────────────────
       - JWT_SECRET=${JWT_SECRET}
+      - APP_JWT_SECRET=${JWT_SECRET}
       - BASE_URL=${BASE_URL}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-${BASE_URL}}
       - PUBLIC_PROXY_PORT=${PUBLIC_PROXY_PORT}

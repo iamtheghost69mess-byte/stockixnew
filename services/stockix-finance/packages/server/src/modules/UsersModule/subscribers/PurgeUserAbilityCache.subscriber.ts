@@ -24,6 +24,13 @@ export class PurgeUserAbilityCacheSubscriber {
     | ITenantUserActivatedPayload
     | ITenantUserDeletedPayload
     | ITenantUserEditedPayload) {
-    ABILITIES_CACHE.del(tenantUser.systemUserId);
+    // Cache keys are stored as `"${userId}_${organizationId}"` — delete all
+    // entries matching this systemUserId across any organization they belong to.
+    const prefix = `${tenantUser.systemUserId}_`;
+    for (const key of ABILITIES_CACHE.keys()) {
+      if ((key as string).startsWith(prefix)) {
+        ABILITIES_CACHE.del(key);
+      }
+    }
   }
 }

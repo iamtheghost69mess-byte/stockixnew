@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
@@ -70,6 +71,7 @@ export class AuthController {
   constructor(
     private readonly authApp: AuthenticationApplication,
     private readonly authSignin: AuthSigninService,
+    private readonly jwtService: JwtService,
 
     @Inject(TenantModel.name)
     private readonly tenantModel: typeof TenantModel,
@@ -216,9 +218,15 @@ export class AuthController {
       res.status(400).json({ error: 'Invalid token' });
       return;
     }
+    try {
+      this.jwtService.verify(t);
+    } catch {
+      res.status(400).json({ error: 'Invalid or expired token' });
+      return;
+    }
     const maxAge = impersonateCookieMaxAgeMs(t);
     res.cookie('token', t, {
-      httpOnly: false,
+      httpOnly: true,
       sameSite: 'lax',
       maxAge,
       path: '/',
@@ -242,9 +250,15 @@ export class AuthController {
       res.status(400).json({ error: 'Invalid token' });
       return;
     }
+    try {
+      this.jwtService.verify(t);
+    } catch {
+      res.status(400).json({ error: 'Invalid or expired token' });
+      return;
+    }
     const maxAge = impersonateCookieMaxAgeMs(t);
     res.cookie('token', t, {
-      httpOnly: false,
+      httpOnly: true,
       sameSite: 'lax',
       maxAge,
       path: '/',

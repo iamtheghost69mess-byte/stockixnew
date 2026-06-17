@@ -21,6 +21,7 @@ import {
 @Controller('internal')
 @PublicRoute()
 @TenantAgnosticRoute()
+@UseGuards(InternalSecretGuard)
 export class InternalProvisionController {
   constructor(
     private readonly provisionUserService: ProvisionUserService,
@@ -37,7 +38,6 @@ export class InternalProvisionController {
    */
   @Post('/provision-user')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(InternalSecretGuard)
   async provisionUser(@Body() body: Record<string, unknown>) {
     const dto: ProvisionUserDto = {
       email: String(body.email ?? ''),
@@ -65,7 +65,6 @@ export class InternalProvisionController {
 
   @Post('/organization/setup/complete')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(InternalSecretGuard)
   async completeOrganizationSetup(@Body() body: Record<string, unknown>) {
     const tenantIdRaw = body.tenantId ?? body.tenant_id;
     const tenantId = Number(tenantIdRaw);

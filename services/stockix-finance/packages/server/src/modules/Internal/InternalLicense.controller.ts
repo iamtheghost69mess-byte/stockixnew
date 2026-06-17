@@ -18,12 +18,12 @@ import { TenantLicenseStatus } from '@/modules/System/models/TenantLicense';
 @Controller('internal')
 @PublicRoute()
 @TenantAgnosticRoute()
+@UseGuards(InternalSecretGuard)
 export class InternalLicenseController {
   constructor(private readonly syncLicenseService: SyncLicenseService) {}
 
   @Post('/license/sync')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(InternalSecretGuard)
   async syncLicense(@Body() body: Record<string, unknown>) {
     const dto: SyncLicenseDto = {
       tenantId: Number(body.tenantId ?? body.tenant_id),

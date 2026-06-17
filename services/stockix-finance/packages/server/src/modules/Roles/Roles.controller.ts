@@ -8,6 +8,7 @@ import {
   Body,
   HttpStatus,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { CreateRoleDto, EditRoleDto } from './dtos/Role.dto';
 import { RolesApplication } from './Roles.application';
@@ -22,11 +23,16 @@ import {
 } from '@nestjs/swagger';
 import { RoleResponseDto } from './dtos/RoleResponse.dto';
 import { ApiCommonHeaders } from '@/common/decorators/ApiCommonHeaders';
+import { AuthorizationGuard } from './Authorization.guard';
+import { PermissionGuard } from './Permission.guard';
+import { RequirePermission } from './RequirePermission.decorator';
 
 @ApiTags('Roles')
 @Controller('roles')
 @ApiExtraModels(RoleResponseDto)
 @ApiCommonHeaders()
+@UseGuards(AuthorizationGuard, PermissionGuard)
+@RequirePermission('manage', 'Role')
 export class RolesController {
   constructor(private readonly rolesApp: RolesApplication) { }
 

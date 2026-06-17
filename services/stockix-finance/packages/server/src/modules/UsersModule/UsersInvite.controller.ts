@@ -1,10 +1,15 @@
-import { Body, Controller, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsersApplication } from './Users.application';
 import { SendInviteUserDto } from './dtos/InviteUser.dto';
+import { AuthorizationGuard } from '@/modules/Roles/Authorization.guard';
+import { PermissionGuard } from '@/modules/Roles/Permission.guard';
+import { RequirePermission } from '@/modules/Roles/RequirePermission.decorator';
 
 @Controller('invite')
 @ApiTags('Users')
+@UseGuards(AuthorizationGuard, PermissionGuard)
+@RequirePermission('manage', 'User')
 export class UsersInviteController {
   constructor(private readonly usersApplication: UsersApplication) {}
 

@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  UseGuards,
 } from '@nestjs/common';
 import { BranchesApplication } from './BranchesApplication.service';
 import { CreateBranchDto, EditBranchDto } from './dtos/Branch.dto';
@@ -18,11 +19,16 @@ import {
 } from '@nestjs/swagger';
 import { BranchResponseDto } from './dtos/BranchResponse.dto';
 import { ApiCommonHeaders } from '@/common/decorators/ApiCommonHeaders';
+import { AuthorizationGuard } from '@/modules/Roles/Authorization.guard';
+import { PermissionGuard } from '@/modules/Roles/Permission.guard';
+import { RequirePermission } from '@/modules/Roles/RequirePermission.decorator';
 
 @Controller('branches')
 @ApiTags('Branches')
 @ApiExtraModels(BranchResponseDto)
 @ApiCommonHeaders()
+@UseGuards(AuthorizationGuard, PermissionGuard)
+@RequirePermission('manage', 'Preferences')
 export class BranchesController {
   constructor(private readonly branchesApplication: BranchesApplication) {}
 

@@ -43,9 +43,17 @@ export class GenerateApiKey {
    * @returns {Promise<{ id: number; revoked: boolean }>} The id of the revoked API key and a revoked flag.
    */
   async revoke(apiKeyId: number) {
-    // Set the revoked flag to true for the given API key
-    await ApiKeyModel.query()
+    const tenant = await this.tenancyContext.getTenant();
+
+    const apiKey = await this.apiKeyModel
+      .query()
       .findById(apiKeyId)
+      .where({ tenantId: tenant.id })
+      .throwIfNotFound();
+
+    await this.apiKeyModel
+      .query()
+      .findById(apiKey.id)
       .patch({ revokedAt: new Date() });
 
     return { id: apiKeyId, revoked: true };

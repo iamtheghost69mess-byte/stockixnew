@@ -217,6 +217,9 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     QUEUE_PORT: "6379",
 
     // ── Auth ───────────────────────────────────────────────────────────
+    // APP_JWT_SECRET is the preferred name (checked first by common/config/jwt.ts).
+    // JWT_SECRET kept for backward compat with legacy config and existing tenant envs.
+    APP_JWT_SECRET: params.jwtSecret,
     JWT_SECRET: params.jwtSecret,
 
     // ── Proxy port — Traefik upstream + tenant-stack server host bind ──

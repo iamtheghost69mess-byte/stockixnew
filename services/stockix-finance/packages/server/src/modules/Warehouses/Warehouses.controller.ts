@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  UseGuards,
 } from '@nestjs/common';
 import { WarehousesApplication } from './WarehousesApplication.service';
 import {
@@ -18,11 +19,16 @@ import {
 import { CreateWarehouseDto, EditWarehouseDto } from './dtos/Warehouse.dto';
 import { WarehouseResponseDto } from './dtos/WarehouseResponse.dto';
 import { ApiCommonHeaders } from '@/common/decorators/ApiCommonHeaders';
+import { AuthorizationGuard } from '@/modules/Roles/Authorization.guard';
+import { PermissionGuard } from '@/modules/Roles/Permission.guard';
+import { RequirePermission } from '@/modules/Roles/RequirePermission.decorator';
 
 @Controller('warehouses')
 @ApiTags('Warehouses')
 @ApiExtraModels(WarehouseResponseDto)
 @ApiCommonHeaders()
+@UseGuards(AuthorizationGuard, PermissionGuard)
+@RequirePermission('manage', 'Preferences')
 export class WarehousesController {
   constructor(private warehousesApplication: WarehousesApplication) {}
 

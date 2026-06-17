@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import * as crypto from 'crypto';
 
 /**
  * Creates Express middleware for the Bull Board UI:
@@ -18,7 +19,9 @@ export function createBullBoardAuthMiddleware(
     }
 
     if (!username || !password) {
-      return next();
+      res.setHeader('WWW-Authenticate', 'Basic realm="Bull Board"');
+      res.status(401).send('Bull Board credentials are not configured. Access denied.');
+      return;
     }
 
     const authHeader = req.headers.authorization;
@@ -48,7 +51,15 @@ export function createBullBoardAuthMiddleware(
     const reqUsername = decoded.slice(0, colonIndex);
     const reqPassword = decoded.slice(colonIndex + 1);
 
-    if (reqUsername !== username || reqPassword !== password) {
+    const usernameMatch = crypto.timingSafeEqual(
+      Buffer.from(reqUsername),
+      Buffer.from(username),
+    );
+    const passwordMatch = crypto.timingSafeEqual(
+      Buffer.from(reqPassword),
+      Buffer.from(password),
+    );
+    if (!usernameMatch || !passwordMatch) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Bull Board"');
       res.status(401).send('Invalid credentials');
       return;

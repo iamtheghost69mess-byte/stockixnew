@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import uniqid from 'uniqid';
+import * as crypto from 'crypto';
 import {
   IAuthSendedResetPassword,
   IAuthSendingResetPassword,
@@ -37,7 +37,7 @@ export class AuthSendResetPasswordService {
 
     if (!user) return;
 
-    const token: string = uniqid();
+    const token: string = crypto.randomBytes(64).toString('hex');
 
     // Triggers sending reset password event.
     await this.eventPublisher.emitAsync(events.auth.sendingResetPassword, {
