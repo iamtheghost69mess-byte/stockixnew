@@ -18,3 +18,20 @@
     }
   }
 }
+
+//  Time zone picker — keep the selected value visible
+//---------------------------------
+.form-group--time-zone {
+  .bp4-button:not(:disabled) {
+    background: #fff;
+
+    &,
+    .bp4-button-text {
+      color: #1c2127;
+    }
+  }
+
+  .bp4-text-muted {
+    color: #5c7080;
+  }
+}

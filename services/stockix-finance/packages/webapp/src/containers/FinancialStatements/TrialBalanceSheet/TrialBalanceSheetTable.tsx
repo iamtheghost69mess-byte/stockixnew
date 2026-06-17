@@ -15,13 +15,15 @@ import { useTrialBalanceSheetTableColumns } from './hooks';
  */
 export default function TrialBalanceSheetTable({ companyName }) {
   // Trial balance sheet context.
-  const {
-    trialBalanceSheet: { table, query, meta },
-    isLoading,
-  } = useTrialBalanceSheetContext();
+  const { trialBalanceSheet, isLoading } = useTrialBalanceSheetContext();
+  const { table, meta } = trialBalanceSheet ?? {};
 
   // Trial balance sheet table columns.
   const columns = useTrialBalanceSheetTableColumns();
+
+  if (!table) {
+    return null;
+  }
 
   return (
     <FinancialSheet

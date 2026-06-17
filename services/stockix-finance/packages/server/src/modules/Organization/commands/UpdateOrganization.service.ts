@@ -41,7 +41,10 @@ export class UpdateOrganizationService {
     );
     await this.tenantRepository.saveMetadata(tenant.id, metadataPayload);
 
-    if (organizationDTO.baseCurrency !== tenant.metadata?.baseCurrency) {
+    if (
+      organizationDTO.baseCurrency &&
+      organizationDTO.baseCurrency !== tenant.metadata?.baseCurrency
+    ) {
       // Triggers `onOrganizationBaseCurrencyUpdated` event.
       await this.eventEmitter.emitAsync(
         events.organization.baseCurrencyUpdated,

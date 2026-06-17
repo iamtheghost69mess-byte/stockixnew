@@ -150,7 +150,7 @@ export function TrialBalanceSheetLoadingBar() {
  */
 export function TrialBalanceSheetAlerts() {
   const {
-    trialBalanceSheet: { meta },
+    trialBalanceSheet,
     isLoading,
     refetchSheet,
   } = useTrialBalanceSheetContext();
@@ -159,13 +159,13 @@ export function TrialBalanceSheetAlerts() {
   const handleRecalcReport = () => {
     refetchSheet();
   };
-  // Can't display any error if the report is loading.
-  if (isLoading) {
+  // Can't display any error if the report is loading or not yet fetched.
+  if (isLoading || !trialBalanceSheet?.meta) {
     return null;
   }
 
   return (
-    <If condition={meta.is_cost_compute_running}>
+    <If condition={trialBalanceSheet.meta.is_cost_compute_running}>
       <div class="alert-compute-running">
         <Icon icon="info-block" iconSize={12} />
         <T id={'just_a_moment_we_re_calculating_your_cost_transactions'} />

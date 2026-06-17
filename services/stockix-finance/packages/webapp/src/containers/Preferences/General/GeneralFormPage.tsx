@@ -8,7 +8,7 @@ import { AppToaster } from '@/components';
 import GeneralForm from './GeneralForm';
 import { PreferencesGeneralSchema } from './General.schema';
 import { useGeneralFormContext } from './GeneralFormProvider';
-import { transformToForm, transfromToSnakeCase } from '@/utils';
+import { transformToForm, transfromToSnakeCase, transformToCamelCase } from '@/utils';
 
 const defaultValues = {
   name: '',
@@ -51,7 +51,7 @@ export default function GeneralFormPage() {
       setSubmitting(false);
     };
 
-    updateOrganization({ ...values }).then(onSuccess).catch(onError);
+    updateOrganization(transformToCamelCase(values)).then(onSuccess).catch(onError);
   };
 
   return (

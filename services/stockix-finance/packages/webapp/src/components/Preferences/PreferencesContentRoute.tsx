@@ -18,6 +18,7 @@ export default function DashboardContentRoute() {
         }
       >
         <Switch>
+          <Redirect exact from="/preferences" to="/preferences/general" />
           {preferencesRoutes.map((route, index) => (
             <Route
               key={index}

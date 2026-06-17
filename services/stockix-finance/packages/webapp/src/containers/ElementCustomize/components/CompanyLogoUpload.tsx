@@ -71,6 +71,7 @@ export function CompanyLogoUpload({
       accept={[MIME_TYPES.png, MIME_TYPES.jpeg]}
       classNames={{ root: clsx(styles?.root, classNames?.root), content: styles.dropzoneContent }}
       activateOnClick={false}
+      useFsAccessApi={false}
       openRef={openRef}
       {...dropzoneProps}
     >

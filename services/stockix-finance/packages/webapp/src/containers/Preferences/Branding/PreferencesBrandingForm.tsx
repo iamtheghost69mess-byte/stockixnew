@@ -10,7 +10,6 @@ import {
   excludePrivateProps,
   transformToCamelCase,
   transformToForm,
-  transfromToSnakeCase,
 } from '@/utils';
 import { useUpdateOrganization } from '@/hooks/query';
 import { usePreferencesBrandingBoot } from './PreferencesBrandingBoot';
@@ -83,9 +82,7 @@ export const PreferencesBrandingForm = ({
     // Exclude all the private props that starts with _.
     const excludedPrivateValues = excludePrivateProps(_values);
 
-    const __values = transfromToSnakeCase(
-      omit(excludedPrivateValues, ['logoUri']),
-    );
+    const __values = omit(excludedPrivateValues, ['logoUri']);
     // Update organization branding.
     // @ts-expect-error
     await updateOrganization({ ...__values });
