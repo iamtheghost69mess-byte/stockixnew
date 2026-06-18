@@ -29,14 +29,19 @@ const MAP_CONFIG = { childrenPath: 'children', pathFormat: 'array' };
 export class InventoryItemDetailsTable {
   i18n: I18nService;
   report: any;
+  private readonly secondaryCurrency: string;
+  private readonly secondaryRate: number;
 
-  /**
-   * Constructor method.
-   * @param {ICashFlowStatement} report - Report statement.
-   */
-  constructor(reportStatement: IInvetoryItemDetailDOO, i18n: I18nService) {
+  constructor(
+    reportStatement: IInvetoryItemDetailDOO,
+    i18n: I18nService,
+    secondaryCurrency?: string,
+    secondaryRate?: number,
+  ) {
     this.report = reportStatement;
     this.i18n = i18n;
+    this.secondaryCurrency = secondaryCurrency ?? '';
+    this.secondaryRate = secondaryRate ?? 0;
   }
 
   /**
@@ -60,24 +65,22 @@ export class InventoryItemDetailsTable {
   private itemTransactionNodeMapper = (
     transaction: IInventoryDetailsItemTransaction,
   ) => {
-    const columns = [
+    const columns: IColumnMapperMeta[] = [
       { key: 'date', accessor: 'date.formattedDate' },
       { key: 'transaction_type', accessor: 'transactionType' },
       { key: 'transaction_id', accessor: 'transactionNumber' },
-      {
-        key: 'quantity_movement',
-        accessor: 'quantityMovement.formattedNumber',
-      },
+      { key: 'quantity_movement', accessor: 'quantityMovement.formattedNumber' },
       { key: 'rate', accessor: 'rate.formattedNumber' },
       { key: 'total', accessor: 'total.formattedNumber' },
       { key: 'value', accessor: 'valueMovement.formattedNumber' },
       { key: 'profit_margin', accessor: 'profitMargin.formattedNumber' },
       { key: 'running_quantity', accessor: 'runningQuantity.formattedNumber' },
-      {
-        key: 'running_valuation',
-        accessor: 'runningValuation.formattedNumber',
-      },
+      { key: 'running_valuation', accessor: 'runningValuation.formattedNumber' },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      const secondaryValue = (transaction.total?.amount ?? 0) * this.secondaryRate;
+      columns.push({ key: 'secondary_value', value: secondaryValue.toFixed(2) });
+    }
     return tableRowMapper(transaction, columns, {
       rowTypes: [IROW_TYPE.TRANSACTION],
     });
@@ -192,7 +195,7 @@ export class InventoryItemDetailsTable {
    * @returns {ITableColumn[]}
    */
   public tableColumns = (): ITableColumn[] => {
-    return [
+    const columns: ITableColumn[] = [
       { key: 'date', label: this.i18n.t('inventory_item_details.date') },
       { key: 'transaction_type', label: this.i18n.t('inventory_item_details.transaction_type') },
       { key: 'transaction_id', label: this.i18n.t('inventory_item_details.transaction_number') },
@@ -204,5 +207,9 @@ export class InventoryItemDetailsTable {
       { key: 'running_quantity', label: this.i18n.t('inventory_item_details.running_quantity') },
       { key: 'running_value', label: this.i18n.t('inventory_item_details.running_value') },
     ];
+    if (this.secondaryCurrency && this.secondaryRate) {
+      columns.push({ key: 'secondary_value', label: `≈ ${this.secondaryCurrency} Value` });
+    }
+    return columns;
   };
 }

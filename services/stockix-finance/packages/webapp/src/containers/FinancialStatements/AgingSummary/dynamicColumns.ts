@@ -56,11 +56,26 @@ const agingPeriodAccessor = R.curry((data, column) => {
   };
 });
 
+const secondaryTotalAccessor = R.curry((data, column) => {
+  const accessor = getTableCellValueAccessor(column.cell_index);
+
+  return {
+    Header: column.label,
+    id: column.key,
+    accessor,
+    className: column.key,
+    width: getColumnWidth(data, accessor, { minWidth: 120 }),
+    align: Align.Right,
+    money: true,
+  };
+});
+
 const dynamicColumnMapper = R.curry((data, column) => {
   const totalAccessorColumn = totalAccessor(data);
   const currentAccessorColumn = currentAccessor(data);
   const customerNameAccessorColumn = contactNameAccessor(data);
   const agingPeriodAccessorColumn = agingPeriodAccessor(data);
+  const secondaryTotalAccessorColumn = secondaryTotalAccessor(data);
 
   return R.compose(
     R.when(R.pathEq(['key'], 'total'), totalAccessorColumn),
@@ -68,6 +83,7 @@ const dynamicColumnMapper = R.curry((data, column) => {
     R.when(R.pathEq(['key'], 'customer_name'), customerNameAccessorColumn),
     R.when(R.pathEq(['key'], 'vendor_name'), customerNameAccessorColumn),
     R.when(R.pathEq(['key'], 'aging_period'), agingPeriodAccessorColumn),
+    R.when(R.pathEq(['key'], 'secondary_total'), secondaryTotalAccessorColumn),
   )(column);
 });
 

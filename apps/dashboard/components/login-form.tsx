@@ -85,7 +85,17 @@ export function LoginForm({
         // auth cookie before rendering protected routes. A client-side
         // router.push races the cookie commit and can land on a blank/cached
         // RSC payload that requires a manual refresh to recover.
-        window.location.assign(params.get("from") ?? "/");
+        const rawFrom = params.get("from") ?? "";
+        let destination = "/";
+        if (rawFrom) {
+          try {
+            const parsed = new URL(rawFrom, window.location.origin);
+            if (parsed.origin === window.location.origin) destination = rawFrom;
+          } catch {
+            // malformed URL — fall back to "/"
+          }
+        }
+        window.location.assign(destination);
         return;
       }
       setError(

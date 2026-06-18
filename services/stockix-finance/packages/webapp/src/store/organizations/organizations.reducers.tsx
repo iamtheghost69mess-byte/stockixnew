@@ -21,7 +21,12 @@ const reducer = createReducer(initialState, {
         ...organization.metadata,
         ...omit(organization, ['metadata']),
       };
-      _dataByOrganizationId[organization.organization_id] = organization.id;
+      // API uses camelCase (organizationId) but cookies were set with snake_case (organization_id).
+      // Support both so the byOrganizationId lookup works regardless of API field casing.
+      const orgKey = organization.organization_id ?? organization.organizationId;
+      if (orgKey !== undefined) {
+        _dataByOrganizationId[orgKey] = organization.id;
+      }
     });
     state.data = _data;
     state.byOrganizationId = _dataByOrganizationId;

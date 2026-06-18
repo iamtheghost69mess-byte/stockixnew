@@ -131,6 +131,8 @@ const dynamicColumnMapper = R.curry((data, column) => {
     R.when(R.pathEq(['key'], 'account_code'), accountCodeColumnAccessor),
     R.when(R.pathEq(['key'], 'credit'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'debit'), _numericColumnAccessor),
+    R.when(R.pathEq(['key'], 'secondary_debit'), _numericColumnAccessor),
+    R.when(R.pathEq(['key'], 'secondary_credit'), _numericColumnAccessor),
     _commonAccessor,
   )(column);
 });

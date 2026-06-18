@@ -28,11 +28,11 @@ export const useVendorsBalanceColumns = () => {
 };
 
 /**
- * Vendor name accessor.
+ * Vendor name accessor — uses cell_index from server to support secondary currency shifting.
  */
-const vendorColumnAccessor = () => ({
+const vendorColumnAccessor = (column) => ({
   Header: intl.get('vendor_name'),
-  accessor: 'cells[0].value',
+  accessor: `cells[${column.cell_index}].value`,
   className: 'vendor_name',
   width: 240,
   align: 'left',
@@ -42,9 +42,9 @@ const vendorColumnAccessor = () => ({
 /**
  * Percentage column accessor.
  */
-const percentageColumnAccessor = () => ({
+const percentageColumnAccessor = (column) => ({
   Header: intl.get('percentage_of_column'),
-  accessor: 'cells[2].value',
+  accessor: `cells[${column.cell_index}].value`,
   className: 'total',
   width: 140,
   textOverview: true,
@@ -55,14 +55,26 @@ const percentageColumnAccessor = () => ({
 /**
  * Total column accessor.
  */
-const totalColumnAccessor = () => ({
+const totalColumnAccessor = (column) => ({
   Header: intl.get('total'),
-  accessor: 'cells[1].value',
+  accessor: `cells[${column.cell_index}].value`,
   className: 'total',
   width: 140,
   textOverview: true,
   align: Align.Right,
   money: true
+});
+
+/**
+ * Secondary currency total column accessor.
+ */
+const secondaryTotalColumnAccessor = (column) => ({
+  Header: column.label,
+  accessor: `cells[${column.cell_index}].value`,
+  className: 'secondary_total',
+  width: 160,
+  align: Align.Right,
+  money: true,
 });
 
 /**
@@ -73,10 +85,8 @@ const dynamicColumns = (columns) => {
     R.compose(
       R.when(R.pathEq(['key'], 'name'), vendorColumnAccessor),
       R.when(R.pathEq(['key'], 'total'), totalColumnAccessor),
-      R.when(
-        R.pathEq(['key'], 'percentage_of_column'),
-        percentageColumnAccessor,
-      ),
+      R.when(R.pathEq(['key'], 'percentage_of_column'), percentageColumnAccessor),
+      R.when(R.pathEq(['key'], 'secondary_total'), secondaryTotalColumnAccessor),
     ),
   )(columns);
 };

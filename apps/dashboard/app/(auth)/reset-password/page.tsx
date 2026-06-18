@@ -61,7 +61,6 @@ function ResetPasswordForm() {
         return;
       }
       router.push("/login?reset=1");
-      router.refresh();
     } catch {
       setError("Network error — please try again");
     } finally {

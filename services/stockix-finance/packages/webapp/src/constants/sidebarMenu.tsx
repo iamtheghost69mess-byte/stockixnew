@@ -803,7 +803,7 @@ export const SidebarMenu = [
     children: [
       {
         text: <T id={'sidebar.preferences'} />,
-        href: '/preferences',
+        href: '/preferences/general',
         type: ISidebarMenuItemType.Link,
         permission: {
           subject: AbilitySubject.Preferences,

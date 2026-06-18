@@ -648,7 +648,10 @@ export function TenantList(props: Props) {
                           </DropdownMenuItem>
                           {canOpen && loginHref ? (
                             <DropdownMenuItem
-                              onClick={() => window.open(loginHref, "_blank", "noopener,noreferrer")}
+                              onClick={() => {
+                                console.log('[Open tenant login] redirect →', loginHref);
+                                window.open(loginHref, "_blank", "noopener,noreferrer");
+                              }}
                             >
                               <ExternalLink className="size-4" />
                               Open tenant login

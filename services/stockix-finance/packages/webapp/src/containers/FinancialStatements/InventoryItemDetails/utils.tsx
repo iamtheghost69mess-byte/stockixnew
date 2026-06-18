@@ -61,6 +61,7 @@ export const dynamicColumns = (columns, data) => {
         [R.pathEq(['key'], 'rate'), numericColumn(data, index)],
         [R.pathEq(['key'], 'total'), numericColumn(data, index)],
         [R.pathEq(['key'], 'value'), numericColumn(data, index)],
+        [R.pathEq(['key'], 'secondary_value'), numericColumn(data, index)],
         [R.T, columnsMapper(data, index)],
       ]),
     )(column);

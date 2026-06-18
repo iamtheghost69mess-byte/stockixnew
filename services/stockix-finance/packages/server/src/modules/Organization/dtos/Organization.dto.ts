@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Validate,
+  ValidateIf,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
@@ -198,6 +199,7 @@ export class UpdateOrganizationDto {
     phone?: string;
   };
 
+  @ValidateIf((o) => !!o.primaryColor)
   @IsOptional()
   @IsHexColor()
   @ApiPropertyOptional({
@@ -232,6 +234,7 @@ export class UpdateOrganizationDto {
   })
   displayCurrencies?: string[];
 
+  @ValidateIf((o) => !!o.secondaryCurrency)
   @IsOptional()
   @IsISO4217CurrencyCode()
   @Validate(SecondaryCurrencyNotBaseConstraint)

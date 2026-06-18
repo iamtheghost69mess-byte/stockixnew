@@ -43,10 +43,6 @@ export function DashboardRouteGuard({ children }: { children: ReactNode }) {
   const { loading } = useMe();
   const allowed = useHasAnyPermission(required ?? ["*"]);
 
-  if (!required || allowed) {
-    return <>{children}</>;
-  }
-
   if (loading) {
     return (
       <div className="flex flex-col gap-3 py-8">
@@ -55,6 +51,10 @@ export function DashboardRouteGuard({ children }: { children: ReactNode }) {
         <Skeleton className="h-64 w-full" />
       </div>
     );
+  }
+
+  if (!required || allowed) {
+    return <>{children}</>;
   }
 
   return (

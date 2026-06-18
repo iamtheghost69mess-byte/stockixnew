@@ -35,11 +35,11 @@ export const useCustomersSummaryColumns = () => {
 };
 
 /**
- * Account name column accessor.
+ * Account name column accessor — uses cell_index from server to support secondary currency shifting.
  */
-const accountNameColumnAccessor = () => ({
+const accountNameColumnAccessor = (column) => ({
   Header: intl.get('customer_name'),
-  accessor: 'cells[0].value',
+  accessor: `cells[${column.cell_index}].value`,
   className: 'customer_name',
   width: 240,
 });
@@ -47,9 +47,9 @@ const accountNameColumnAccessor = () => ({
 /**
  * Total column accessor.
  */
-const totalColumnAccessor = () => ({
+const totalColumnAccessor = (column) => ({
   Header: intl.get('total'),
-  accessor: 'cells[1].value',
+  accessor: `cells[${column.cell_index}].value`,
   className: 'total',
   width: 140,
   align: Align.Right,
@@ -58,12 +58,24 @@ const totalColumnAccessor = () => ({
 /**
  * Percentage column accessor.
  */
-const percentageColumnAccessor = () => ({
+const percentageColumnAccessor = (column) => ({
   Header: intl.get('percentage_of_column'),
-  accessor: 'cells[2].value',
+  accessor: `cells[${column.cell_index}].value`,
   className: 'total',
   width: 140,
   align: Align.Right,
+});
+
+/**
+ * Secondary currency total column accessor.
+ */
+const secondaryTotalColumnAccessor = (column) => ({
+  Header: column.label,
+  accessor: `cells[${column.cell_index}].value`,
+  className: 'secondary_total',
+  width: 160,
+  align: Align.Right,
+  money: true,
 });
 
 const dynamicColumns = (columns) => {
@@ -71,10 +83,8 @@ const dynamicColumns = (columns) => {
     R.compose(
       R.when(R.pathEq(['key'], 'name'), accountNameColumnAccessor),
       R.when(R.pathEq(['key'], 'total'), totalColumnAccessor),
-      R.when(
-        R.pathEq(['key'], 'percentage_of_column'),
-        percentageColumnAccessor,
-      ),
+      R.when(R.pathEq(['key'], 'percentage_of_column'), percentageColumnAccessor),
+      R.when(R.pathEq(['key'], 'secondary_total'), secondaryTotalColumnAccessor),
     ),
   )(columns);
 };

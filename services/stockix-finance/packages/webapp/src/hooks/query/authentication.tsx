@@ -55,8 +55,12 @@ export const useAuthLogin = (props) => {
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get('redirect');
       if (redirect) {
-        window.location.href = decodeURIComponent(redirect);
-        return;
+        const decoded = decodeURIComponent(redirect);
+        // Only follow same-origin relative paths to prevent open-redirect attacks.
+        if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+          window.location.href = decoded;
+          return;
+        }
       }
 
       // Hard-navigate so cookies and Redux are stable before boot queries fire.

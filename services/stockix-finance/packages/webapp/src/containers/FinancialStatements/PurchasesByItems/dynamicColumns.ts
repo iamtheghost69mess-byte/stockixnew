@@ -64,6 +64,7 @@ const dynamiColumnMapper = R.curry((data, column) => {
     R.when(R.pathEq(['key'], 'quantity_purchases'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'purchase_amount'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'average_cost'), _numericColumnAccessor),
+    R.when(R.pathEq(['key'], 'secondary_purchase_amount'), _numericColumnAccessor),
     commonColumnMapper(data),
   )(column);
 });

@@ -71,6 +71,7 @@ const dynamicColumnMapper = R.curry((data, column) => {
     R.when(R.pathEq(['key'], 'quantity'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'valuation'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'average'), _numericColumnAccessor),
+    R.when(R.pathEq(['key'], 'secondary_valuation'), _numericColumnAccessor),
     _commonAccessor,
   )(column);
 });

@@ -40,6 +40,7 @@ const dynamicColumnMapper = R.curry((data, column) => {
     R.when(R.pathEq(['key'], 'taxRate'), taxableAmountColumn),
     R.when(R.pathEq(['key'], 'taxPercentage'), taxableAmountColumn),
     R.when(R.pathEq(['key'], 'collectedTax'), taxableAmountColumn),
+    R.when(R.pathEq(['key'], 'secondary_tax_amount'), taxableAmountColumn),
   )(column);
 });
 

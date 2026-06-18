@@ -11,17 +11,18 @@ export const getOrganizationByIdFactory = () =>
 
 export const isOrganizationSeededFactory = () =>
   createSelector(organizationSelector, (organization) => {
-    return !!organization?.seeded_at;
+    return !!(organization?.seeded_at ?? organization?.seededAt);
   });
 
 export const isOrganizationBuiltFactory = () =>
   createSelector(organizationSelector, (organization) => {
-    return !!organization?.initialized_at;
+    return !!(organization?.initialized_at ?? organization?.initializedAt);
   });
 
 export const isOrganizationReadyFactory = () =>
   createSelector(organizationSelector, (organization) => {
-    return organization?.is_ready;
+    // Nest.js API returns camelCase (isReady); legacy Knex API used snake_case (is_ready).
+    return organization?.is_ready ?? organization?.isReady;
   });
 
 export const isOrganizationSubscribedFactory = () =>
@@ -38,5 +39,5 @@ export const isOrganizationCongratsFactory = () =>
 
 export const isOrganizationBuildRunningFactory = () =>
   createSelector(organizationSelector, (organization) => {
-    return !!organization?.is_build_running;
+    return !!(organization?.is_build_running ?? organization?.isBuildRunning);
   });

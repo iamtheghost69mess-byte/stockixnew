@@ -21,8 +21,75 @@ import {
 } from '@/hooks/query';
 import { Align } from '@/constants';
 
+const getTableCellValueAccessor = (index) => `cells[${index}].value`;
+
+const staticVendorColumnMap = {
+  vendor_name: (column) => ({
+    Header: intl.get('vendor_name'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    className: 'vendor_name',
+  }),
+  account_name: (column) => ({
+    Header: intl.get('account_name'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    className: 'name',
+    textOverview: true,
+    width: 170,
+  }),
+  reference_type: (column) => ({
+    Header: intl.get('reference_type'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    textOverview: true,
+    width: 120,
+  }),
+  transaction_type: (column) => ({
+    Header: intl.get('transaction_type'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    textOverview: true,
+    width: 120,
+  }),
+  credit: (column, rows) => ({
+    Header: intl.get('credit'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    className: 'credit',
+    width: getColumnWidth(rows, getTableCellValueAccessor(column.cell_index), { minWidth: 100, magicSpacing: 10 }),
+    money: true,
+    align: Align.Right,
+  }),
+  debit: (column, rows) => ({
+    Header: intl.get('debit'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    className: 'debit',
+    width: getColumnWidth(rows, getTableCellValueAccessor(column.cell_index), { minWidth: 100, magicSpacing: 10 }),
+    money: true,
+    align: Align.Right,
+  }),
+  running_balance: (column, rows) => ({
+    Header: intl.get('running_balance'),
+    accessor: getTableCellValueAccessor(column.cell_index),
+    className: 'running_balance',
+    width: getColumnWidth(rows, getTableCellValueAccessor(column.cell_index), { minWidth: 120, magicSpacing: 10 }),
+    money: true,
+    align: Align.Right,
+  }),
+};
+
+const mapVendorTransactionsColumn = (column, rows) => {
+  const builder = staticVendorColumnMap[column.key];
+  if (builder) return builder(column, rows);
+  return {
+    Header: column.label,
+    accessor: getTableCellValueAccessor(column.cell_index),
+    className: column.key,
+    align: Align.Right,
+    money: true,
+    width: getColumnWidth(rows, getTableCellValueAccessor(column.cell_index), { minWidth: 120 }),
+  };
+};
+
 /**
- * Retrieve vendors transactions columns.
+ * Retrieve vendors transactions columns — driven by server-provided column list
+ * so secondary currency columns are rendered automatically when secondaryCurrency is set.
  */
 export const useVendorsTransactionsColumns = () => {
   const {
@@ -30,68 +97,7 @@ export const useVendorsTransactionsColumns = () => {
   } = useVendorsTransactionsContext();
 
   return React.useMemo(
-    () => [
-      {
-        Header: intl.get('vendor_name'),
-        accessor: 'cells[0].value',
-        className: 'vendor_name',
-      },
-      {
-        Header: intl.get('account_name'),
-        accessor: 'cells[1].value',
-        className: 'name',
-        textOverview: true,
-        width: 170,
-      },
-      {
-        Header: intl.get('reference_type'),
-        accessor: 'cells[2].value',
-        textOverview: true,
-        width: 120,
-      },
-      {
-        Header: intl.get('transaction_type'),
-        accessor: 'cells[3].value',
-        textOverview: true,
-        width: 120,
-      },
-      {
-        Header: intl.get('credit'),
-        accessor: 'cells[4].value',
-        className: 'credit',
-        textOverview: true,
-        width: getColumnWidth(table.rows, 'cells[5].value', {
-          minWidth: 100,
-          magicSpacing: 10,
-        }),
-        money: true,
-        align: Align.Right,
-      },
-      {
-        Header: intl.get('debit'),
-        accessor: 'cells[5].value',
-        className: 'debit',
-        textOverview: true,
-        width: getColumnWidth(table.rows, 'cells[6].value', {
-          minWidth: 100,
-          magicSpacing: 10,
-        }),
-        money: true,
-        align: Align.Right,
-      },
-      {
-        Header: intl.get('running_balance'),
-        accessor: 'cells[6].value',
-        className: 'running_balance',
-        textOverview: true,
-        width: getColumnWidth(table.rows, 'cells[7].value', {
-          minWidth: 120,
-          magicSpacing: 10,
-        }),
-        money: true,
-        align: Align.Right,
-      },
-    ],
+    () => (table?.columns || []).map((col) => mapVendorTransactionsColumn(col, table?.rows || [])),
     [table],
   );
 };

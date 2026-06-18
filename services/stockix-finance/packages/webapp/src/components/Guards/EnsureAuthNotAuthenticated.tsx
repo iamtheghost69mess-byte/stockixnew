@@ -34,9 +34,14 @@ export function EnsureAuthNotAuthenticated({
 
   const params = new URLSearchParams(location.search);
   const redirectParam = params.get('redirect');
-  const destination = redirectParam
-    ? decodeURIComponent(redirectParam)
-    : redirectTo;
+  let destination = redirectTo;
+  if (redirectParam) {
+    const decoded = decodeURIComponent(redirectParam);
+    // Only follow same-origin relative paths to prevent open-redirect attacks.
+    if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+      destination = decoded;
+    }
+  }
 
   return <Redirect to={destination} />;
 }
