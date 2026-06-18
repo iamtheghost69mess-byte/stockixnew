@@ -105,7 +105,7 @@
     }
   },
   "dependencies": {
-    "@sentry/node": "^8.40.0",
+    "@sentry/node": "^10.57.0",
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",
