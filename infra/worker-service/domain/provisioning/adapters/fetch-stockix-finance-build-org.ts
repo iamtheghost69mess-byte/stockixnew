@@ -37,7 +37,7 @@ export interface BuildOrgResult {
 const INITIAL_POLL_DELAY_MS = 5000;
 /** Paced to stay under Finance `API_RATE_LIMIT` (~120 req/min). */
 const POLL_INTERVAL_MS = 8000;
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 600_000;
 
 function financeApiBase(internalBaseUrl: string): string {
   return internalBaseUrl.replace(/\/+$/, "");
@@ -136,7 +136,7 @@ async function currentHasBuiltAt(
       "x-request-id": correlationId,
       "x-correlation-id": correlationId,
     },
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) return false;
   let json: unknown;
@@ -191,7 +191,7 @@ export async function fetchBuildOrganization(
     method: "POST",
     headers: authHeaders,
     body: JSON.stringify(buildBody),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(30_000),
   });
 
   const buildText = await buildRes.text();
@@ -220,7 +220,7 @@ export async function fetchBuildOrganization(
       const jobRes = await fetch(`${base}/api/organization/build/${encodeURIComponent(jobId)}`, {
         method: "GET",
         headers: authHeaders,
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(30_000),
       });
       let jobJson: unknown;
       try {

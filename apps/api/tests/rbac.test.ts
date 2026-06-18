@@ -15,7 +15,7 @@ import { requiredApiRole } from "../src/middleware/rbac.js";
 // ---------------------------------------------------------------------------
 
 const verifySessionTokenMock = vi.fn();
-const validateOwnerSessionMock = vi.fn();
+const validateAndResolveOwnerAuthMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/services/auth/tokens.js", () => ({
   signMfaToken: vi.fn(),
@@ -25,7 +25,13 @@ vi.mock("../src/services/auth/tokens.js", () => ({
 }));
 
 vi.mock("../src/services/auth/session-validation.js", () => ({
-  validateOwnerSession: validateOwnerSessionMock,
+  validateOwnerSession: vi.fn(),
+}));
+
+vi.mock("../src/permissions/resolve-owner-permissions.js", () => ({
+  validateAndResolveOwnerAuth: validateAndResolveOwnerAuthMock,
+  loadOwnerAuthById: vi.fn().mockResolvedValue(null),
+  resolveOwnerPermissions: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../src/services/auth/login.js", () => ({
@@ -306,9 +312,14 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Reader",
       sessionVersion: 1,
     });
-    validateOwnerSessionMock.mockResolvedValue({
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
       success: true,
-      data: { id: "owner-1" },
+      auth: {
+        roleSlug: "read_only",
+        roleId: null,
+        roleName: null,
+        permissions: ["tenants.read", "licenses.read", "plans.read"],
+      },
     });
 
     const res = await app.request("http://local/auth/me", {
@@ -332,9 +343,14 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Admin",
       sessionVersion: 2,
     });
-    validateOwnerSessionMock.mockResolvedValue({
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
       success: true,
-      data: { id: "owner-2" },
+      auth: {
+        roleSlug: "super_admin",
+        roleId: null,
+        roleName: null,
+        permissions: ["*"],
+      },
     });
 
     const res = await app.request("http://local/auth/me", {
@@ -357,9 +373,17 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Support",
       sessionVersion: 1,
     });
-    validateOwnerSessionMock.mockResolvedValue({
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
       success: true,
-      data: { id: "owner-3" },
+      auth: {
+        roleSlug: "support_agent",
+        roleId: null,
+        roleName: null,
+        permissions: [
+          "tenants.read", "tenants.write", "tenants.provision", "tenants.org_scope",
+          "licenses.read", "licenses.write", "licenses.extend", "plans.read",
+        ],
+      },
     });
 
     const res = await app.request("http://local/auth/me", {
@@ -382,9 +406,14 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Billing",
       sessionVersion: 1,
     });
-    validateOwnerSessionMock.mockResolvedValue({
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
       success: true,
-      data: { id: "owner-bm" },
+      auth: {
+        roleSlug: "billing_manager",
+        roleId: null,
+        roleName: null,
+        permissions: ["tenants.read", "licenses.read", "licenses.extend", "plans.read"],
+      },
     });
 
     const res = await app.request("http://local/auth/me", {
@@ -409,7 +438,7 @@ describe("session-layer role checks via /auth/me", () => {
     expect(body).toMatchObject({ success: false, error: "unauthorized" });
   });
 
-  it("suspended actor: validateOwnerSession returns forbidden → 401/403", async () => {
+  it("suspended actor: validateAndResolveOwnerAuth returns forbidden → 403", async () => {
     verifySessionTokenMock.mockResolvedValue({
       sub: "owner-4",
       role: "super_admin",
@@ -417,7 +446,7 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Suspended",
       sessionVersion: 1,
     });
-    validateOwnerSessionMock.mockResolvedValue({
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
       success: false,
       error: "forbidden",
       status: 403,
@@ -432,7 +461,7 @@ describe("session-layer role checks via /auth/me", () => {
     expect(body.success).toBe(false);
   });
 
-  it("session version mismatch: validateOwnerSession returns session_stale → 401", async () => {
+  it("session version mismatch: validateAndResolveOwnerAuth returns session_stale → 401", async () => {
     verifySessionTokenMock.mockResolvedValue({
       sub: "owner-5",
       role: "super_admin",
@@ -440,7 +469,7 @@ describe("session-layer role checks via /auth/me", () => {
       name: "Stale",
       sessionVersion: 1,
     });
-    validateOwnerSessionMock.mockResolvedValue({
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
       success: false,
       error: "session_stale",
       status: 401,

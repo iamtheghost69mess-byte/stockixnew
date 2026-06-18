@@ -6,7 +6,7 @@ ENV NODE_OPTIONS=--max-old-space-size=3072
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Phase 1: manifests only — install cache survives source changes ──
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/dashboard/package.json              ./apps/dashboard/
 COPY packages/config/package.json             ./packages/config/
 COPY packages/shared/package.json             ./packages/shared/

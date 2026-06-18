@@ -9,11 +9,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export function MailHealthBanner() {
   const { me } = useMe();
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const isSuperAdmin = me?.role === "super_admin";
 
-  const showBanner =
-    me?.role === "super_admin" && configured === false;
+  const showBanner = isSuperAdmin && configured === false;
 
   useEffect(() => {
+    if (!isSuperAdmin) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -31,7 +32,7 @@ export function MailHealthBanner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isSuperAdmin]);
 
   if (!showBanner) return null;
 

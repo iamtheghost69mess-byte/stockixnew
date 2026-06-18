@@ -435,6 +435,7 @@ export async function provisionPosStack(
     STOCKIX_REPO_ROOT: stockixRepoRoot,
     POS_APP_ROOT: posAppRoot,
     POS_HOST_PORT: String(backendPort),
+    POS_PORT: String(backendPort),
     POS_FRONTEND_HOST_PORT: String(frontendPort),
     TENANT_ID: opts.tenantId,
     AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",

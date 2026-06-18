@@ -1,9 +1,6 @@
-// @ts-nocheck
 import * as fs from 'fs';
 import * as path from 'path';
-import { createRequire } from 'module';
-
-const nativeRequire = createRequire(__filename);
+import { CoreTenantSeeds } from '@/database/tenant/seeds/core';
 
 /**
  * Detarmines the module type of the given file path.
@@ -46,20 +43,12 @@ export async function importWebpackSeedModule(
   moduleName: string,
   seedsDirectory: string,
 ): any {
-  const seedsDirAbsolute = path.isAbsolute(seedsDirectory)
-    ? seedsDirectory
-    : path.resolve(process.cwd(), seedsDirectory);
-
-  const jsPath = path.join(seedsDirAbsolute, `${moduleName}.js`);
-  const tsPath = path.join(seedsDirAbsolute, `${moduleName}.ts`);
-
-  if (fs.existsSync(jsPath)) {
-    return nativeRequire(jsPath);
+  // CoreTenantSeeds is a statically-imported map of all tenant seed modules.
+  // Static imports are bundled by webpack at build time — no dynamic require() needed,
+  // which avoids the webpackEmptyContext error caused by dynamic template-literal imports.
+  const name = moduleName.replace(/\.ts$/, '');
+  if (CoreTenantSeeds[name]) {
+    return CoreTenantSeeds[name];
   }
-  if (fs.existsSync(tsPath)) {
-    return nativeRequire(tsPath);
-  }
-  throw new Error(
-    `Cannot find seed module ${moduleName} in ${seedsDirAbsolute}`,
-  );
+  throw new Error(`Tenant seed module not found in registry: ${moduleName}`);
 }

@@ -55,6 +55,7 @@ export const systemDbManager = {
 
 export const tenantSeedConfig = (tenant: ITenant) => {
   return {
+    tableName: 'stockix_seeds',
     directory: config.tenant.seeds_dir,
   };
 };

@@ -23,6 +23,7 @@ vi.mock("@repo/config", () => ({
 const loginOwnerMock = vi.fn();
 const reconfirmOwnerPasswordMock = vi.fn();
 const validateOwnerSessionMock = vi.fn();
+const validateAndResolveOwnerAuthMock = vi.hoisted(() => vi.fn());
 const beginMfaSetupMock = vi.fn();
 const enableMfaMock = vi.fn();
 const disableMfaMock = vi.fn();
@@ -42,6 +43,12 @@ vi.mock("../src/services/auth/login.js", () => ({
 
 vi.mock("../src/services/auth/session-validation.js", () => ({
   validateOwnerSession: validateOwnerSessionMock,
+}));
+
+vi.mock("../src/permissions/resolve-owner-permissions.js", () => ({
+  validateAndResolveOwnerAuth: validateAndResolveOwnerAuthMock,
+  loadOwnerAuthById: vi.fn().mockResolvedValue(null),
+  resolveOwnerPermissions: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../src/services/mfa/mfa.js", () => ({
@@ -130,7 +137,15 @@ describe("auth route contracts", () => {
       name: "Admin",
       sessionVersion: 2,
     });
-    validateOwnerSessionMock.mockResolvedValue({ success: true, data: { id: "owner-1" } });
+    validateAndResolveOwnerAuthMock.mockResolvedValue({
+      success: true,
+      auth: {
+        roleSlug: "super_admin",
+        roleId: null,
+        roleName: null,
+        permissions: ["*"],
+      },
+    });
 
     const res = await app.request("http://local/auth/me", {
       headers: { cookie: "stockix-session=session-token" },

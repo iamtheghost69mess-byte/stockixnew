@@ -127,12 +127,9 @@ export function useDashboardStats(): DashboardStats {
     }
     setError(null);
     try {
-      const expiringUrl =
-        "/api/licenses?status=active&expiringInDays=30&pageSize=100&page=1";
-      const [tRes, aRes, eRes] = await Promise.all([
+      const [tRes, aRes] = await Promise.all([
         fetch("/api/tenants?page=1&pageSize=1"),
         fetch("/api/licenses/analytics"),
-        fetch(expiringUrl),
       ]);
 
       const tBody: unknown = await tRes.json().catch(() => ({}));
@@ -169,19 +166,13 @@ export function useDashboardStats(): DashboardStats {
         throw new Error("Invalid license analytics response.");
       }
 
-      const eBody: unknown = await eRes.json().catch(() => ({}));
-      let expiringTotal = analytics.expiringIn30Days;
-      if (eRes.ok && isRecord(eBody) && typeof eBody.total === "number") {
-        expiringTotal = eBody.total;
-      }
-
       setLicenses({
         total: analytics.total,
         active: analytics.active,
         unassigned: analytics.unassigned,
         expired: analytics.expired,
         revoked: analytics.revoked,
-        expiringIn30Days: expiringTotal,
+        expiringIn30Days: analytics.expiringIn30Days,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

@@ -13,6 +13,16 @@ export type ResolvedOwnerAuth = {
   permissions: string[];
 };
 
+export type OwnerSessionValidation = {
+  ownerId: string;
+  role: string;
+  sessionVersion: number;
+};
+
+export type ValidateAndResolveResult =
+  | { success: false; error: string; status: 401 | 403 }
+  | { success: true; auth: ResolvedOwnerAuth };
+
 export async function resolveOwnerPermissions(
   db: Db,
   owner: { role: string; roleId?: string | null },
@@ -72,4 +82,36 @@ export async function loadOwnerAuthById(
     .limit(1);
   if (!row) return null;
   return resolveOwnerPermissions(db, row);
+}
+
+/**
+ * Validates a session token payload against the DB and resolves permissions
+ * in a single owners query (+ one optional platformRoles query), replacing
+ * the previous pattern of validateOwnerSession + loadOwnerAuthById which
+ * hit the same owners row twice.
+ */
+export async function validateAndResolveOwnerAuth(
+  db: Db,
+  input: OwnerSessionValidation,
+): Promise<ValidateAndResolveResult> {
+  const [row] = await db
+    .select({
+      id: owners.id,
+      role: owners.role,
+      status: owners.status,
+      sessionVersion: owners.sessionVersion,
+      roleId: owners.roleId,
+    })
+    .from(owners)
+    .where(eq(owners.id, input.ownerId))
+    .limit(1);
+
+  if (!row || row.status !== "active") {
+    return { success: false, error: "forbidden", status: 403 };
+  }
+  if (row.role !== input.role || row.sessionVersion !== input.sessionVersion) {
+    return { success: false, error: "session_stale", status: 401 };
+  }
+
+  return { success: true, auth: await resolveOwnerPermissions(db, row) };
 }

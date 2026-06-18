@@ -13,12 +13,10 @@ infra/worker-service/.tmp-dist/
 .env
 .env.*
 !.env.example
-# Exclude all services from control-plane image context except Finance (needed for
-# monorepo-root Finance Docker builds — see prebuild-tenant-images.mjs).
-# Note: excluding a directory then negating it does NOT re-include children in Docker;
-# use services/* + !services/stockix-finance instead.
-services/*
-!services/stockix-finance
+# Exclude all services — tenant image builds (prebuild-tenant-images.mjs) run with
+# services/stockix-finance as their own build context (cwd=FINANCE_ROOT), so the
+# root .dockerignore has no effect on those builds.
+services/
 
 # Chatwoot (Ruby/Rails) — not in pnpm workspace, never part of any Docker build.
 services/chatlive/

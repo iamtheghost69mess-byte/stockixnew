@@ -44,7 +44,7 @@ export function LoginForm({
     setError("");
   }, [email, password]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     setError("");
     setLoading(true);

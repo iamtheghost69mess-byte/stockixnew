@@ -62,7 +62,8 @@ export function createIdempotencyMiddleware(
       .update(`${method}:${path}:${requestBody}`)
       .digest("hex");
 
-    await db
+    // Fire-and-forget: prune expired keys without blocking the write path.
+    void db
       .delete(apiIdempotencyKeys)
       .where(sql`${apiIdempotencyKeys.expiresAt} < now()`)
       .catch((error) => {

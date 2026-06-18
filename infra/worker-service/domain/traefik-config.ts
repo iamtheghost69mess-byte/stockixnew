@@ -10,6 +10,7 @@ function tenantUpstreamHost(): string {
   return apiConfig.traefikTenantUpstreamHost;
 }
 
+
 export async function writeTenantTraefikConfig(
   slug: string,
   port: number,

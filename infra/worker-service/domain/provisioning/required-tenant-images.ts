@@ -5,6 +5,7 @@ export const POS_FRONTEND_STUB_LABEL = "io.stockix.image";
 export const REQUIRED_STOCKIX_TENANT_IMAGES = [
   "stockix-server:local",
   "stockix-database-migration:local",
+
 ] as const;
 
 /** POS stack images (infra/pos-tenant-stack) — warn if missing when provisioning POS modules */
