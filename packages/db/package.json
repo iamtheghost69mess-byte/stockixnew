@@ -33,7 +33,7 @@
     "@repo/typescript-config": "workspace:*",
     "dotenv": "^16.6.1",
     "drizzle-kit": "^0.31.8",
-    "eslint": "^9.39.1",
+    "eslint": "^10.5.0",
     "tsx": "^4.20.6",
     "typescript": "5.9.2"
   }
