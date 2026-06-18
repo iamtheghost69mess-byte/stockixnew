@@ -95,7 +95,7 @@ export class SyncSystemSendInviteSubscriber {
   }
 
   /**
-   * Syncs resend invite to system user.
+   * Syncs resend invite to system user and triggers the mail notification.
    * @param {IUserInviteResendEventPayload} payload -
    */
   @OnEvent(events.inviteUser.resendInvite)
@@ -115,6 +115,18 @@ export class SyncSystemSendInviteSubscriber {
       userId: user.systemUserId,
       token: inviteToken,
     });
+    // Resolve the user performing the resend so the mail shows a proper "from" name.
+    const authorizedUser = await this.tenancyContext.getSystemUser();
+    const invitingUser = await this.tenantUserModel()
+      .query()
+      .findOne({ systemUserId: authorizedUser.id });
+
+    // Trigger the same mail-queue path used by the initial invite.
+    await this.eventEmitter.emitAsync(events.inviteUser.sendInviteTenantSynced, {
+      invite,
+      user,
+      invitingUser,
+    } as IUserInviteTenantSyncedEventPayload);
   }
 
   /**

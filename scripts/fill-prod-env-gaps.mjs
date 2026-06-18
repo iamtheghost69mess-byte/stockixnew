@@ -20,6 +20,15 @@ const dryRun = process.argv.includes("--dry-run");
 /** Keys safe to copy from local root when prod is empty (operator must rotate for real prod). */
 const FILL_FROM_ROOT = [
   "POS_PLATFORM_API_KEY",
+  // Shared SMTP / Resend credentials — all tenants use the same mail account.
+  "MAIL_HOST",
+  "MAIL_PORT",
+  "MAIL_USERNAME",
+  "MAIL_PASSWORD",
+  "MAIL_SECURE",
+  "MAIL_FROM_NAME",
+  "MAIL_FROM_ADDRESS",
+  "MAIL_TRANSPORT",
 ];
 
 /** Prod defaults when key is absent entirely (Docker-on-host layout). */

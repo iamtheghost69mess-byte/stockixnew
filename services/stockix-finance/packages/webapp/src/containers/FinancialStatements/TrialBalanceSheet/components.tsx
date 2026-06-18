@@ -39,9 +39,9 @@ function SecondaryCurrencyAmountCell({ value, column }) {
  * Retrieve trial balance sheet table columns.
  */
 export const useTrialBalanceTableColumns = () => {
-  const {
-    trialBalanceSheet: { tableRows, query },
-  } = useTrialBalanceSheetContext();
+  const { trialBalanceSheet } = useTrialBalanceSheetContext();
+  const tableRows = trialBalanceSheet?.tableRows;
+  const query = trialBalanceSheet?.query;
 
   const org = useCurrentOrganization();
   const baseCurrency = org?.base_currency ?? '';

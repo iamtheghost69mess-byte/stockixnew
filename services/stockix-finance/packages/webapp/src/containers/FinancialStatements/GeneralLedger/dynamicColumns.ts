@@ -115,6 +115,7 @@ const dynamiColumnMapper = R.curry((data, column) => {
     R.when(R.pathEq(['key'], 'debit'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'amount'), _numericColumnAccessor),
     R.when(R.pathEq(['key'], 'running_balance'), _numericColumnAccessor),
+    R.when(R.pathEq(['key'], 'secondary_balance'), _numericColumnAccessor),
     commonColumnMapper(data),
   )(column);
 });
@@ -132,9 +133,7 @@ export const dynamicColumns = R.curry((data, columns) => {
 export const useGeneralLedgerTableColumns = () => {
   const { generalLedger } = useGeneralLedgerContext();
 
-  if (!generalLedger) {
-    throw new Error('asdfadsf');
-  }
+  if (!generalLedger) return [];
   const { table } = generalLedger;
 
   return dynamicColumns(table.rows, table.columns);

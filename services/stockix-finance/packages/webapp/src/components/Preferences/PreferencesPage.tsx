@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useLocation } from 'react-router-dom';
 import classNames from 'classnames';
 import * as R from 'ramda';
 
@@ -19,13 +20,18 @@ import '@/style/pages/Preferences/Page.scss';
  * Preferences page.
  */
 function PreferencesPage({ toggleSidebarExpand }) {
+  const { pathname } = useLocation();
+
   // Shrink the dashboard sidebar once open application preferences page.
   React.useEffect(() => {
     toggleSidebarExpand(false);
   }, [toggleSidebarExpand]);
 
   return (
-    <ErrorBoundary FallbackComponent={DashboardErrorBoundary}>
+    <ErrorBoundary
+      FallbackComponent={DashboardErrorBoundary}
+      resetKeys={[pathname]}
+    >
       <div
         id={'dashboard'}
         className={classNames(

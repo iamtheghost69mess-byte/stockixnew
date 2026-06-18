@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { OwnerAuthOtpInput } from "@/components/shadcn-studio/input-otp/input-otp-01";
@@ -28,7 +28,6 @@ export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
-  const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -82,8 +81,11 @@ export function LoginForm({
           return;
         }
         resetMeCache();
-        router.push(params.get("from") ?? "/");
-        router.refresh();
+        // Full-page navigation so the server layout re-reads the freshly set
+        // auth cookie before rendering protected routes. A client-side
+        // router.push races the cookie commit and can land on a blank/cached
+        // RSC payload that requires a manual refresh to recover.
+        window.location.assign(params.get("from") ?? "/");
         return;
       }
       setError(

@@ -13,10 +13,11 @@ export const PreferencesMenu = [
     disabled: false,
     href: '/preferences/branding',
   },
-  // {
-  //   text: 'Billing',
-  //   href: '/preferences/billing',
-  // },
+  {
+    text: 'Plan & License',
+    disabled: false,
+    href: '/preferences/license',
+  },
   {
     text: <T id={'users'} />,
     href: '/preferences/users',

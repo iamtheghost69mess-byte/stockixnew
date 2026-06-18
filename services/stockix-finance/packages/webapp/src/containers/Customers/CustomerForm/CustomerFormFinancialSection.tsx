@@ -7,7 +7,7 @@ import {
   FFormGroup,
   FormattedMessage as T,
   InputPrependText,
-  CurrencySelectList,
+  FSelect,
   BranchSelect,
   FeatureCan,
   FMoneyInputGroup,
@@ -44,11 +44,17 @@ export function CustomerFormFinancialSection() {
             inline
             fill
             >
-            <CurrencySelectList
+            <FSelect
               name="currency_code"
               items={currencies}
+              valueAccessor={'currency_code'}
+              textAccessor={'currency_code'}
+              labelAccessor={'currency_code'}
+              popoverProps={{ minimal: true }}
               disabled={customerId}
-              />
+              fastField
+              fill
+            />
           </FFormGroup>
 
           <CustomerOpeningBalanceField />

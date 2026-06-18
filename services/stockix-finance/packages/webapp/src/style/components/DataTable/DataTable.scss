@@ -215,6 +215,10 @@
 
       .tr.is-context-menu-active .td {
         background: #f3fafc;
+
+        body.bp4-dark & {
+          background: var(--color-datatable-cell-hover-background);
+        }
       }
       .tr.no-results {
         .td {

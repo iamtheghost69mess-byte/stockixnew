@@ -12,10 +12,6 @@ export const normalizeOrganizationMetadataForSave = (
 ): Record<string, any> => {
   const payload: Record<string, any> = { ...organizationDTO };
 
-  if (Array.isArray(organizationDTO.displayCurrencies)) {
-    payload.displayCurrencies = JSON.stringify(organizationDTO.displayCurrencies);
-  }
-
   if (Object.prototype.hasOwnProperty.call(organizationDTO, 'secondaryCurrency')) {
     payload.secondaryCurrency = organizationDTO.secondaryCurrency
       ? organizationDTO.secondaryCurrency

@@ -110,6 +110,9 @@ export class LicenseService {
         licenseStatus: null,
         licenseExpiresAt: null,
         licenseGracePeriodEndsAt: null,
+        planSlug: null,
+        licenseKey: null,
+        isPerpetual: false,
       };
     }
 
@@ -119,6 +122,9 @@ export class LicenseService {
       licenseStatus: effective,
       licenseExpiresAt: license.expiresAt ?? null,
       licenseGracePeriodEndsAt: this.getGracePeriodEndsAt(license),
+      planSlug: license.planSlug ?? null,
+      licenseKey: license.licenseKey ?? null,
+      isPerpetual: license.isPerpetual,
     };
   }
 }

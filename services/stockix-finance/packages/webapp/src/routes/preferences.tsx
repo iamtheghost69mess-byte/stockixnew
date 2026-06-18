@@ -126,4 +126,11 @@ export const getPreferenceRoutes = () => [
     component: lazy(() => import('@/containers/Preferences/ApiKeys/ApiKeys')),
     exact: true,
   },
+  {
+    path: `${BASE_URL}/license`,
+    component: lazy(
+      () => import('@/containers/Preferences/License/PreferencesLicense'),
+    ),
+    exact: true,
+  },
 ];

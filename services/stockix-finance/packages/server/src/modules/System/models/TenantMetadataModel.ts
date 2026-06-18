@@ -71,6 +71,17 @@ export class TenantMetadata extends BaseModel {
   }
 
   /**
+   * Serializes display_currencies array into the text column before writing.
+   */
+  $formatDatabaseJson(json: Record<string, any>) {
+    const formatted = super.$formatDatabaseJson(json);
+    if (Array.isArray(formatted.displayCurrencies)) {
+      formatted.displayCurrencies = JSON.stringify(formatted.displayCurrencies);
+    }
+    return formatted;
+  }
+
+  /**
    * Table name.
    */
   static tableName = 'tenants_metadata';

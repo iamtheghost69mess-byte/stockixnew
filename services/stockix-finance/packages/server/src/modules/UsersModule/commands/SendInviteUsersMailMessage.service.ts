@@ -31,8 +31,12 @@ export class SendInviteUsersMailMessage {
     const root = path.join(global.__images_dirname, '/bigcapital.png');
     const baseURL = this.configService.get('app.baseUrl');
 
+    const firstName = fromUser?.firstName ?? 'Your administrator';
+    const lastName = fromUser?.lastName ?? '';
+    const senderEmail = fromUser?.email ?? '';
+
     const mail = new Mail()
-      .setSubject(`${fromUser.firstName} has invited you to join Stockix`)
+      .setSubject(`${firstName} has invited you to join Stockix`)
       .setFrom(formatMailFrom())
       .setView('mail/UserInvite.html')
       .setTo(invite.email)
@@ -46,10 +50,10 @@ export class SendInviteUsersMailMessage {
       .setData({
         root,
         acceptUrl: `${baseURL}/auth/invite/${invite.token}/accept`,
-        fullName: `${fromUser.firstName} ${fromUser.lastName}`,
-        firstName: fromUser.firstName,
-        lastName: fromUser.lastName,
-        email: fromUser.email,
+        fullName: `${firstName} ${lastName}`.trim(),
+        firstName,
+        lastName,
+        email: senderEmail,
         organizationName: tenant.metadata.name,
       });
     mail.setIdempotencyKey(`invite/${invite.email}/${invite.token.substring(0, 8)}`);

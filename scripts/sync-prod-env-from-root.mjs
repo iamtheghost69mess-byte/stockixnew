@@ -27,6 +27,16 @@ const COPY_FROM_ROOT = [
   "BACKUP_B2_ENDPOINT",
   "BACKUP_B2_PREFIX",
   "BACKUP_RETENTION_DAYS",
+  // Shared SMTP / Resend credentials — all tenants use the same mail account.
+  // These must be set in root .env (or infra/prod/.env directly) for emails to work.
+  "MAIL_HOST",
+  "MAIL_PORT",
+  "MAIL_USERNAME",
+  "MAIL_PASSWORD",
+  "MAIL_SECURE",
+  "MAIL_FROM_NAME",
+  "MAIL_FROM_ADDRESS",
+  "MAIL_TRANSPORT",
 ];
 
 const B2_FROM_S3 = [

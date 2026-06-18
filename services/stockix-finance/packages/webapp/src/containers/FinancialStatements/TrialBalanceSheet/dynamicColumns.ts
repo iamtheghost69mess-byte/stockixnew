@@ -38,17 +38,36 @@ const amountAccessor = R.curry((data, column) => {
   };
 });
 
+const secondaryBalanceAccessor = R.curry((data, column) => {
+  const accessor = getTableCellValueAccessor(column.cell_index);
+
+  return {
+    Header: column.label,
+    id: column.key,
+    accessor,
+    className: column.key,
+    width: getColumnWidth(data, accessor, {
+      magicSpacing: AMOUNT_COLUMNS_MAGIC_SPACING,
+      minWidth: AMOUNT_COLUMNS_MIN_WIDTH,
+    }),
+    align: Align.Right,
+    money: true,
+  };
+});
+
 const dynamicColumnMapper = R.curry((data, column) => {
   const accountNameColumn = accountNameAccessor(data);
   const creditColumn = amountAccessor(data);
   const debitColumn = amountAccessor(data);
   const totalColumn = amountAccessor(data);
+  const secondaryColumn = secondaryBalanceAccessor(data);
 
   return R.compose(
     R.when(R.pathEq(['key'], 'account'), accountNameColumn),
     R.when(R.pathEq(['key'], 'credit'), creditColumn),
     R.when(R.pathEq(['key'], 'debit'), debitColumn),
     R.when(R.pathEq(['key'], 'total'), totalColumn),
+    R.when(R.pathEq(['key'], 'secondary_balance'), secondaryColumn),
   )(column);
 });
 

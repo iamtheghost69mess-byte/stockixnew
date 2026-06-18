@@ -117,7 +117,7 @@ export const useAuthResetPassword = (props) => {
   const apiRequest = useAuthApiRequest();
 
   return useMutation(
-    ([token, values]) => apiRequest.post(`auth/reset/${token}`, values),
+    ([token, values]) => apiRequest.post(`auth/reset_password/${token}`, values),
     props,
   );
 };

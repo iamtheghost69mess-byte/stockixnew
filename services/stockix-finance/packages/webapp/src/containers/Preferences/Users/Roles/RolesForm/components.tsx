@@ -422,6 +422,10 @@ const ModulePermissionsTableRoot = styled.table`
       }
       &.full {
         background-color: #fcfcfc;
+
+        .bp4-dark & {
+          background-color: rgba(255, 255, 255, 0.04);
+        }
       }
     }
   }
@@ -460,6 +464,10 @@ const ModulePermissionsTableRoot = styled.table`
 
       &.full-access-permission {
         background-color: #fcfcfc;
+
+        .bp4-dark & {
+          background-color: rgba(255, 255, 255, 0.04);
+        }
       }
 
       &.full-access-permission,

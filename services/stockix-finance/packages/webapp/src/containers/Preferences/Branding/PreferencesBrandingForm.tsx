@@ -41,6 +41,7 @@ export const PreferencesBrandingForm = ({
   const { organization } = usePreferencesBrandingBoot();
 
   const formInitialValues = {
+    ...initialValues,
     ...transformToForm(
       transformToCamelCase(organization?.metadata),
       initialValues,
@@ -95,6 +96,7 @@ export const PreferencesBrandingForm = ({
 
   return (
     <Formik
+      enableReinitialize
       initialValues={formInitialValues}
       validationSchema={validationSchema}
       onSubmit={handleSubmit}

@@ -5,31 +5,29 @@ import { getPreferenceRoutes } from '@/routes/preferences';
 import { Spinner } from '@blueprintjs/core';
 import { Box } from '../Layout';
 
-export default function DashboardContentRoute() {
+export default function PreferencesContentRoute() {
   const preferencesRoutes = getPreferenceRoutes();
 
   return (
-    <Route path="/preferences">
-      <Suspense
-        fallback={
-          <Box style={{ padding: 20 }}>
-            <Spinner size={20} />
-          </Box>
-        }
-      >
-        <Switch>
-          <Redirect exact from="/preferences" to="/preferences/general" />
-          {preferencesRoutes.map((route, index) => (
-            <Route
-              key={index}
-              path={`${route.path}`}
-              exact={route.exact}
-              component={route.component}
-            />
-          ))}
-          <Redirect to="/preferences/general" />
-        </Switch>
-      </Suspense>
-    </Route>
+    <Switch>
+      <Redirect exact from="/preferences" to="/preferences/general" />
+      {preferencesRoutes.map((route, index) => {
+        const Component = route.component;
+        return (
+          <Route key={index} path={`${route.path}`} exact={route.exact}>
+            <Suspense
+              fallback={
+                <Box style={{ padding: 20 }}>
+                  <Spinner size={20} />
+                </Box>
+              }
+            >
+              <Component />
+            </Suspense>
+          </Route>
+        );
+      })}
+      <Redirect to="/preferences/general" />
+    </Switch>
   );
 }

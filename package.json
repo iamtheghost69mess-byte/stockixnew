@@ -38,6 +38,7 @@
     "env:sync-pos": "node scripts/sync-pos-env-from-root.mjs",
     "env:align-local": "node scripts/align-root-env-gaps.mjs && node scripts/sync-pos-env-from-root.mjs",
     "env:fill-prod-gaps": "node scripts/fill-prod-env-gaps.mjs",
+    "env:sync-tenant-mail": "node scripts/sync-tenant-mail-env.mjs",
     "bootstrap:env:force": "node scripts/bootstrap-local-env.mjs --force",
     "debug:db": "node scripts/debug-db.mjs",
     "setup:local": "pnpm bootstrap:env && pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed:local && pnpm db:seed:pms-demo",

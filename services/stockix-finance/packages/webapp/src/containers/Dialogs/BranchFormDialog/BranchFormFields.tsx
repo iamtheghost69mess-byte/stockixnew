@@ -3,12 +3,16 @@ import React from 'react';
 import intl from 'react-intl-universal';
 import styled from 'styled-components';
 import { Classes, ControlGroup } from '@blueprintjs/core';
+import { getAllCountries } from '@stockix/utils';
 import {
   FieldRequiredHint,
   FormattedMessage as T,
   FFormGroup,
   FInputGroup,
+  FSelect,
 } from '@/components';
+
+const countries = getAllCountries();
 
 /**
  * Branch form dialog fields.
@@ -60,9 +64,15 @@ function BranchFormFields() {
               name={'city'}
               placeholder={intl.get('branch.dialog.label.city')}
             />
-            <FInputGroup
+            <FSelect
               name={'country'}
+              items={countries}
+              valueAccessor={'name'}
+              textAccessor={'name'}
+              labelAccessor={'countryCode'}
               placeholder={intl.get('branch.dialog.label.country')}
+              filterable
+              popoverProps={{ minimal: true }}
             />
           </ControlGroup>
         </FFormGroup>
@@ -75,7 +85,7 @@ function BranchFormFields() {
         inline={true}
         className={'form-group--phone_number'}
       >
-        <FInputGroup name={'phone_number'} placeholder={'https://'} />
+        <FInputGroup name={'phone_number'} placeholder={'+1 555 000 0000'} />
       </FFormGroup>
 
       {/*------------ Email -----------*/}

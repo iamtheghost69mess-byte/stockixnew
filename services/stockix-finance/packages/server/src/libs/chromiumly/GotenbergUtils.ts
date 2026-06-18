@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as FormData from 'form-data';
 import { Axios } from 'axios';
 
@@ -10,16 +9,21 @@ export class GotenbergUtils {
   }
 
   public static async fetch(endpoint: string, data: FormData): Promise<Buffer> {
-    try {
-      const response = await new Axios({
-        headers: {
-          ...data.getHeaders(),
-        },
-        responseType: 'arraybuffer', // This ensures you get a Buffer bac
-      }).post(endpoint, data);
-      return response.data;
-    } catch (error) {
-      console.error(error);
+    if (!endpoint || endpoint.startsWith('/')) {
+      throw new Error(
+        'PDF service is not configured. Set the GOTENBERG_URL environment variable.',
+      );
     }
+    const response = await new Axios({
+      headers: { ...data.getHeaders() },
+      responseType: 'arraybuffer',
+    }).post(endpoint, data);
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Gotenberg returned HTTP ${response.status}. Check that the PDF service is running at ${endpoint}.`,
+      );
+    }
+    return response.data;
   }
 }
