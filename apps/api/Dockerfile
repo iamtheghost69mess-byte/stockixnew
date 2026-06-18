@@ -6,7 +6,7 @@ WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=3072
 
 # ── Phase 1: manifests only — install cache survives source changes ──
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/api/package.json                            ./apps/api/
 COPY packages/auth/package.json                       ./packages/auth/
 COPY packages/config/package.json                     ./packages/config/

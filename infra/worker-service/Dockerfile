@@ -25,7 +25,7 @@ FROM base AS build
 WORKDIR /app
 
 # Copy workspace manifests first (layer-cache friendly)
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 
 # Copy only the packages the worker imports at runtime
 COPY packages/config/package.json             ./packages/config/
