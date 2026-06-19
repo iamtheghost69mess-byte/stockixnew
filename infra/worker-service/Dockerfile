@@ -34,9 +34,6 @@ COPY packages/auth/package.json               ./packages/auth/
 COPY packages/shared/package.json             ./packages/shared/
 COPY infra/worker-service/package.json        ./infra/worker-service/
 
-# Copy tsup worker config (needed for build)
-COPY infra/worker-service/tsup.worker.config.ts  ./infra/worker-service/
-
 # Install only the worker dependency chain — not api, dashboard, pms, or finance
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \

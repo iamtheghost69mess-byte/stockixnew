@@ -13,24 +13,23 @@ infra/worker-service/.tmp-dist/
 .env
 .env.*
 !.env.example
-# Exclude all services — tenant image builds (prebuild-tenant-images.mjs) run with
-# services/stockix-finance as their own build context (cwd=FINANCE_ROOT), so the
-# root .dockerignore has no effect on those builds.
-services/
+# Exclude all services from the root build context.
+# Finance builds: prebuild-tenant-images.mjs uses cwd=FINANCE_ROOT as context, so
+#   this file never applies to them.
+# POS builds: build-pos-tenant-images.mjs uses context=STOCKIX_REPO_ROOT (repo root),
+#   so services/posnew MUST be re-included here.
+# IMPORTANT: use services/* (glob), not services/ (directory match). The glob form
+#   makes Docker traverse into services/ so the !services/posnew negation is evaluated.
+#   With services/, Docker stops at the directory and ignores all negations below it.
+services/*
+!services/posnew
 
-# Chatwoot (Ruby/Rails) — not in pnpm workspace, never part of any Docker build.
-services/chatlive/
-
-# PMS source not needed inside control-plane images.
-services/pms/src/
-services/pms/frontend/src/
-services/pms/tests/
-services/pms/e2e/
-# POS backend tests only — app code is plain JS at repo root (no src/).
-services/posnew/apps/pos-backend/tests/
-# POS tenant images (pnpm pos:images:build) need pos-frontend2 + packages/ui sources.
+# Exclude large/unnecessary sub-trees within services/posnew.
+# POS Dockerfiles COPY compiled packages; raw TypeScript source is not needed.
 services/posnew/packages/domain-access/src/
 services/posnew/packages/platform-api/src/
+# POS backend app is plain JS — tests are never needed inside the image.
+services/posnew/apps/pos-backend/tests/
 
 # E2E tests never needed inside Docker images
 e2e/
@@ -49,4 +48,3 @@ scratch/
 *.log
 *.sarif
 docs/
-services/chatlive/config/llm_models.json
