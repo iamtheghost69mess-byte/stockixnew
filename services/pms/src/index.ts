@@ -2,6 +2,7 @@ import { createHonoAuthMiddleware } from "@repo/auth";
 import { apiConfig } from "@repo/config";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { sql } from "drizzle-orm";
 import { ZodError, z } from "zod";
 import { db } from "./db.js";
 import type { PmsEnv } from "./types.js";
@@ -44,11 +45,31 @@ app.use("*", cors({
 app.get("/health", (c) => c.json({ status: "ok", service: "pms", timestamp: new Date().toISOString() }));
 
 // ─── Public routes (no auth) ──────────────────────────────────────────────────
+// All public routes run inside a transaction so that SET LOCAL for the RLS
+// tenant context is guaranteed to apply to every query on the same connection.
+// A SECURITY DEFINER function resolves the tenantId from the token — it runs as
+// the superuser owner and therefore bypasses RLS for that single bootstrap query.
 
 app.get("/api/ical/:token", async (c) => {
   if (!db) return c.json({ error: "database_unavailable" }, 503);
-  const { buildIcalFeed } = await import("./ical/sync.js");
-  const feed = await buildIcalFeed(db, c.req.param("token"));
+  const exportToken = c.req.param("token");
+  let feed: string | null = null;
+
+  await db.transaction(async (tx) => {
+    // Step 1: resolve tenant via SECURITY DEFINER (bypasses RLS for bootstrap)
+    const rows = await tx.execute(
+      sql`SELECT pms_tenant_for_export_token(${exportToken}) AS tenant_id`,
+    );
+    const tenantId = (rows[0] as Record<string, unknown>)?.tenant_id as string | undefined;
+    if (!tenantId) return;
+
+    // Step 2: SET LOCAL scopes the RLS context to this transaction connection
+    await tx.execute(sql`SET LOCAL "app.current_tenant_id" = ${tenantId}`);
+
+    const { buildIcalFeed } = await import("./ical/sync.js");
+    feed = await buildIcalFeed(tx as unknown as NonNullable<typeof db>, exportToken);
+  });
+
   if (!feed) return c.json({ error: "not_found" }, 404);
   return c.text(feed, 200, { "Content-Type": "text/calendar; charset=utf-8" });
 });
@@ -62,28 +83,52 @@ app.get("/public/g/:token", async (c) => {
   if (!token || token.length < 16) return c.json({ error: "invalid_token" }, 400);
 
   try {
-    const [sub] = await db
-      .select()
-      .from(pmsGuestFormSubmissions)
-      .where(eq(pmsGuestFormSubmissions.shareToken, token))
-      .limit(1);
-    if (!sub) return c.json({ error: "not_found" }, 404);
+    type GuestFormPayload = {
+      alreadySubmitted: boolean;
+      submittedAt: Date | null;
+      templateName: string;
+      fields: unknown[];
+      guestName: string;
+      checkIn: string | null | undefined;
+      checkOut: string | null | undefined;
+    };
+    let payload: GuestFormPayload | null = null;
 
-    const [tpl] = await db.select().from(pmsGuestFormTemplates).where(eq(pmsGuestFormTemplates.id, sub.templateId)).limit(1);
-    const [booking] = await db.select().from(pmsBookings).where(eq(pmsBookings.id, sub.bookingId)).limit(1);
-    const guestName = booking
-      ? (await db.select({ name: pmsGuests.name }).from(pmsGuests).where(eq(pmsGuests.id, booking.guestId)).limit(1))[0]?.name ?? ""
-      : "";
+    await db.transaction(async (tx) => {
+      // Bootstrap tenant context via SECURITY DEFINER
+      const rows = await tx.execute(
+        sql`SELECT pms_tenant_for_share_token(${token}) AS tenant_id`,
+      );
+      const tenantId = (rows[0] as Record<string, unknown>)?.tenant_id as string | undefined;
+      if (!tenantId) return;
+      await tx.execute(sql`SET LOCAL "app.current_tenant_id" = ${tenantId}`);
 
-    return c.json({
-      alreadySubmitted: !!sub.submittedAt,
-      submittedAt: sub.submittedAt,
-      templateName: tpl?.name ?? "",
-      fields: JSON.parse(tpl?.fields ?? "[]"),
-      guestName,
-      checkIn: booking?.checkIn,
-      checkOut: booking?.checkOut,
+      const [sub] = await tx
+        .select()
+        .from(pmsGuestFormSubmissions)
+        .where(eq(pmsGuestFormSubmissions.shareToken, token))
+        .limit(1);
+      if (!sub) return;
+
+      const [tpl] = await tx.select().from(pmsGuestFormTemplates).where(eq(pmsGuestFormTemplates.id, sub.templateId)).limit(1);
+      const [booking] = await tx.select().from(pmsBookings).where(eq(pmsBookings.id, sub.bookingId)).limit(1);
+      const guestName = booking
+        ? (await tx.select({ name: pmsGuests.name }).from(pmsGuests).where(eq(pmsGuests.id, booking.guestId)).limit(1))[0]?.name ?? ""
+        : "";
+
+      payload = {
+        alreadySubmitted: !!sub.submittedAt,
+        submittedAt: sub.submittedAt,
+        templateName: tpl?.name ?? "",
+        fields: JSON.parse(tpl?.fields ?? "[]"),
+        guestName,
+        checkIn: booking?.checkIn,
+        checkOut: booking?.checkOut,
+      };
     });
+
+    if (!payload) return c.json({ error: "not_found" }, 404);
+    return c.json(payload);
   } catch {
     return c.json({ error: "internal_error" }, 500);
   }
@@ -96,38 +141,59 @@ app.post("/public/g/:token", async (c) => {
   const token = c.req.param("token");
   if (!token || token.length < 16) return c.json({ error: "invalid_token" }, 400);
 
+  const body = await c.req.json().catch(() => null);
+  const incoming = body?.answers as Record<string, unknown> | undefined;
+  if (!incoming) return c.json({ error: "missing_answers" }, 400);
+
   try {
-    const [sub] = await db
-      .select()
-      .from(pmsGuestFormSubmissions)
-      .where(eq(pmsGuestFormSubmissions.shareToken, token))
-      .limit(1);
-    if (!sub) return c.json({ error: "not_found" }, 404);
-    if (sub.submittedAt) return c.json({ error: "already_submitted" }, 409);
+    let result: { status: "ok" | "not_found" | "already_submitted" | "template_not_found" | "validation_error"; message?: string } = { status: "not_found" };
 
-    const [tpl] = await db.select().from(pmsGuestFormTemplates).where(eq(pmsGuestFormTemplates.id, sub.templateId)).limit(1);
-    if (!tpl) return c.json({ error: "template_not_found" }, 404);
+    await db.transaction(async (tx) => {
+      // Bootstrap tenant context via SECURITY DEFINER
+      const rows = await tx.execute(
+        sql`SELECT pms_tenant_for_share_token(${token}) AS tenant_id`,
+      );
+      const tenantId = (rows[0] as Record<string, unknown>)?.tenant_id as string | undefined;
+      if (!tenantId) return;
+      await tx.execute(sql`SET LOCAL "app.current_tenant_id" = ${tenantId}`);
 
-    const body = await c.req.json().catch(() => null);
-    const incoming = body?.answers as Record<string, unknown> | undefined;
-    if (!incoming) return c.json({ error: "missing_answers" }, 400);
+      const [sub] = await tx
+        .select()
+        .from(pmsGuestFormSubmissions)
+        .where(eq(pmsGuestFormSubmissions.shareToken, token))
+        .limit(1);
+      if (!sub) return;
+      if (sub.submittedAt) { result = { status: "already_submitted" }; return; }
 
-    type FieldDef = { id: string; type: string; label: string; required: boolean };
-    const fields: FieldDef[] = JSON.parse(tpl.fields ?? "[]");
-    const answers: Array<{ fieldId: string; type: string; label: string; value: unknown }> = [];
-    for (const f of fields) {
-      const raw = incoming[f.id];
-      const empty = raw === undefined || raw === null || raw === "" || (Array.isArray(raw) && raw.length === 0);
-      if (f.required && empty) return c.json({ error: `Required field: ${f.label || f.id}` }, 400);
-      answers.push({ fieldId: f.id, type: f.type, label: f.label, value: empty ? null : raw });
-    }
+      const [tpl] = await tx.select().from(pmsGuestFormTemplates).where(eq(pmsGuestFormTemplates.id, sub.templateId)).limit(1);
+      if (!tpl) { result = { status: "template_not_found" }; return; }
 
-    await db
-      .update(pmsGuestFormSubmissions)
-      .set({ answers: JSON.stringify(answers), submittedAt: new Date(), updatedAt: new Date() })
-      .where(eq(pmsGuestFormSubmissions.id, sub.id));
+      type FieldDef = { id: string; type: string; label: string; required: boolean };
+      const fields: FieldDef[] = JSON.parse(tpl.fields ?? "[]");
+      const answers: Array<{ fieldId: string; type: string; label: string; value: unknown }> = [];
+      for (const f of fields) {
+        const raw = incoming[f.id];
+        const empty = raw === undefined || raw === null || raw === "" || (Array.isArray(raw) && raw.length === 0);
+        if (f.required && empty) {
+          result = { status: "validation_error", message: `Required field: ${f.label || f.id}` };
+          return;
+        }
+        answers.push({ fieldId: f.id, type: f.type, label: f.label, value: empty ? null : raw });
+      }
 
-    return c.json({ ok: true });
+      await tx
+        .update(pmsGuestFormSubmissions)
+        .set({ answers: JSON.stringify(answers), submittedAt: new Date(), updatedAt: new Date() })
+        .where(eq(pmsGuestFormSubmissions.id, sub.id));
+
+      result = { status: "ok" };
+    });
+
+    if (result.status === "ok") return c.json({ ok: true });
+    if (result.status === "already_submitted") return c.json({ error: "already_submitted" }, 409);
+    if (result.status === "template_not_found") return c.json({ error: "template_not_found" }, 404);
+    if (result.status === "validation_error") return c.json({ error: result.message }, 400);
+    return c.json({ error: "not_found" }, 404);
   } catch {
     return c.json({ error: "internal_error" }, 500);
   }
@@ -161,6 +227,20 @@ app.use("/api/*", async (c, next) => {
   return productAuth(c, next);
 });
 
+// ─── RLS context middleware ───────────────────────────────────────────────────
+// Sets app.current_tenant_id on the connection so Postgres RLS policies can
+// scope queries to the authenticated tenant. This is a best-effort session
+// variable; for strict enforcement configure the app to connect as
+// stockix_pms_app (no BYPASSRLS) and use pgBouncer in session mode.
+
+app.use("/api/*", async (c, next) => {
+  const tenantId = c.get("stockix")?.tenantId;
+  if (tenantId && db) {
+    await db.execute(sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`);
+  }
+  await next();
+});
+
 // ─── Mount route modules ──────────────────────────────────────────────────────
 
 app.route("/api/properties", propertiesRouter);
@@ -183,7 +263,8 @@ app.onError((err, c) => {
   if (err instanceof ZodError) {
     return c.json({ error: "validation_error", issues: err.issues }, 400);
   }
-  console.error("[PMS] Unhandled error:", err);
+  const message = err instanceof Error ? err.message : String(err);
+  process.stderr.write(JSON.stringify({ level: "error", service: "pms", msg: message, ts: new Date().toISOString() }) + "\n");
   return c.json({ error: "internal_server_error" }, 500);
 });
 

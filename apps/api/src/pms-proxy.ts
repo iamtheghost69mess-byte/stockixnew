@@ -1,5 +1,7 @@
 import { requireEnv } from "./lib/require-env.js";
 
+const PMS_PROXY_TIMEOUT_MS = 15_000;
+
 function getPmsBase(): string {
   return requireEnv("PMS_BASE_URL", "http://localhost:3003");
 }
@@ -11,6 +13,7 @@ export async function pmsProxy(
     body?: unknown;
     headers?: Record<string, string>;
     query?: Record<string, string | undefined>;
+    requestId?: string;
   },
 ): Promise<Response> {
   const url = new URL(`${getPmsBase()}${path.startsWith("/") ? path : `/${path}`}`);
@@ -19,14 +22,29 @@ export async function pmsProxy(
       if (value !== undefined) url.searchParams.set(key, value);
     }
   }
-  return fetch(url.toString(), {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-    body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PMS_PROXY_TIMEOUT_MS);
+
+  try {
+    return await fetch(url.toString(), {
+      method,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options?.requestId ? { "x-request-id": options.requestId } : {}),
+        ...options?.headers,
+      },
+      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`PMS proxy timeout after ${PMS_PROXY_TIMEOUT_MS}ms: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function pmsProxyJson(
@@ -36,6 +54,7 @@ export async function pmsProxyJson(
     body?: unknown;
     headers?: Record<string, string>;
     query?: Record<string, string | undefined>;
+    requestId?: string;
   },
 ): Promise<{ data: unknown; status: number }> {
   const res = await pmsProxy(path, method, options);

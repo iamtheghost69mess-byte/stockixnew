@@ -4,7 +4,7 @@ import {
   pmsProperties,
   pmsSyncLogs,
 } from "@repo/db/schema";
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
 import { parseICal, type ICalEvent } from "./ical.js";
@@ -278,11 +278,23 @@ export async function syncCalendars(
 
 /** Run iCal sync across all active tenants (called by the worker cron). */
 export async function syncAllTenants(db: Db): Promise<void> {
-  const rows = await db
-    .selectDistinct({ tenantId: pmsProperties.tenantId })
-    .from(pmsProperties);
+  // Use SECURITY DEFINER function — runs as superuser, bypasses RLS for this
+  // single cross-tenant bootstrap query (RLS would otherwise block it).
+  const rows = await db.execute(sql`SELECT pms_all_tenant_ids() AS tenant_id`);
+  const tenantIds = rows.map((r) => (r as Record<string, unknown>).tenant_id as string).filter(Boolean);
 
-  for (const { tenantId } of rows) {
-    await syncCalendars(db, { tenantId });
+  for (const tenantId of tenantIds) {
+    try {
+      // Each tenant's sync runs in its own transaction so SET LOCAL is
+      // guaranteed on the same connection as the subsequent queries.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL "app.current_tenant_id" = ${tenantId}`);
+        await syncCalendars(tx as unknown as Db, { tenantId });
+      });
+    } catch (err) {
+      process.stderr.write(
+        JSON.stringify({ level: "error", service: "pms", msg: "ical-sync failed", tenantId, error: err instanceof Error ? err.message : String(err) }) + "\n",
+      );
+    }
   }
 }

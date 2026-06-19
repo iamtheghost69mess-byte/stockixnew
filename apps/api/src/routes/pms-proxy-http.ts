@@ -1,6 +1,7 @@
 import { apiConfig } from "@repo/config";
 import type { Hono } from "hono";
 import type { createDb } from "@repo/db";
+import { z } from "zod";
 
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { requireEnv } from "../lib/require-env.js";
@@ -9,34 +10,21 @@ import {
   assertTenantModuleLicensed,
   respondModuleAccessDenied,
 } from "../lib/tenant-module-access.js";
+import { assertTenantInOwnerScope } from "../org-access-scope.js";
 
 type Db = ReturnType<typeof createDb>;
 
-function proxyHeaders(c: {
-  req: { header: (name: string) => string | undefined; query: (k: string) => string | undefined };
-}): Record<string, string> {
-  const headers: Record<string, string> = {};
+const uuidSchema = z.string().uuid();
+
+function buildInternalHeaders(tenantId: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    "x-stockix-tenant-id": tenantId,
+  };
   const secret = apiConfig.platformApiSecret;
   if (secret) {
     headers["x-stockix-internal-secret"] = secret;
   }
-  const tenantId = c.req.query("tenantId");
-  if (tenantId) {
-    headers["x-stockix-tenant-id"] = tenantId;
-  }
   return headers;
-}
-
-async function enforcePmsModuleAccess(
-  db: Db | null | undefined,
-  c: { req: { query: (k: string) => string | undefined }; json: (body: unknown, status?: number) => Response },
-): Promise<Response | null> {
-  if (!db) return null;
-  const tenantId = c.req.query("tenantId")?.trim();
-  if (!tenantId) return null;
-  const access = await assertTenantModuleLicensed(db, tenantId, "pms");
-  if (!access.ok) return respondModuleAccessDenied(c, access);
-  return null;
 }
 
 export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db | null): void {
@@ -58,8 +46,26 @@ export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
   });
 
   app.all("/pms/api/*", async (c) => {
-    const denied = await enforcePmsModuleAccess(db, c);
-    if (denied) return denied;
+    // Validate tenantId — must be present and a valid UUID
+    const rawTenantId = c.req.query("tenantId")?.trim();
+    if (!rawTenantId || !uuidSchema.safeParse(rawTenantId).success) {
+      return c.json({ error: "bad_request", message: "tenantId query parameter is required and must be a valid UUID" }, 400);
+    }
+
+    if (db) {
+      // Check the tenant has the PMS module licensed
+      const access = await assertTenantModuleLicensed(db, rawTenantId, "pms");
+      if (!access.ok) return respondModuleAccessDenied(c, access);
+
+      // Check the authenticated actor is scoped to this tenant
+      const actorId = c.get("actorId");
+      const actorRole = c.get("actorRole");
+      const actorPermissions = c.get("actorPermissions") ?? [];
+      const hasScope = await assertTenantInOwnerScope(db, actorId, rawTenantId, actorPermissions, actorRole);
+      if (!hasScope) {
+        return c.json({ error: "forbidden", message: "Access to this tenant is not permitted" }, 403);
+      }
+    }
 
     const subPath = c.req.path.replace(/^\/pms/, "");
     const method = c.req.method;
@@ -67,12 +73,14 @@ export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
       method === "GET" || method === "HEAD"
         ? undefined
         : await c.req.json().catch(() => undefined);
+
+    const requestId = c.get("requestId");
+
     const { data, status } = await pmsProxyJson(subPath, method, {
       body,
-      headers: proxyHeaders(c),
-      query: Object.fromEntries(
-        new URL(c.req.url).searchParams.entries(),
-      ),
+      headers: buildInternalHeaders(rawTenantId),
+      query: Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+      requestId,
     });
     return c.json(data, status as 200);
   });
