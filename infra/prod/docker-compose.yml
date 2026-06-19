@@ -257,7 +257,7 @@ services:
       - no-new-privileges:true
 
   pgbouncer:
-    image: pgbouncer/pgbouncer:1.22.1
+    image: pgbouncer/pgbouncer:latest
     restart: unless-stopped
     <<: *logging-limits
     environment:
