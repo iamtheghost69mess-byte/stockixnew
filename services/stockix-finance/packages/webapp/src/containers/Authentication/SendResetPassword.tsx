@@ -19,7 +19,6 @@ import {
   transformSendResetPassErrorsToToasts,
 } from './utils';
 import AuthInsider from '@/containers/Authentication/AuthInsider';
-import { useAuthMetaBoot } from './AuthMetaBoot';
 
 const initialValues = {
   crediential: '',
@@ -65,18 +64,8 @@ export default function SendResetPassword() {
 }
 
 function SendResetPasswordFooterLinks() {
-  const { signupDisabled } = useAuthMetaBoot();
-
   return (
     <AuthFooterLinks>
-      {!signupDisabled && (
-        <AuthFooterLink>
-          <T id={'dont_have_an_account'} />{' '}
-          <Link to={'/auth/register'}>
-            <T id={'sign_up'} />
-          </Link>
-        </AuthFooterLink>
-      )}
       <AuthFooterLink>
         <T id={'return_to'} />{' '}
         <Link to={'/auth/login'}>

@@ -28,12 +28,12 @@ export default function DashboardPrivatePages() {
       <EnsureUserEmailVerified>
         <PrivatePagesProvider>
           <Switch>
-            <Route path={'/setup'} children={<SetupWizardPage />} />
             <Route path={'/setup/complete'}>
               <EnsureOrganizationIsReady requireSetupCompleted={false}>
                 <SetupCompleteProfile />
               </EnsureOrganizationIsReady>
             </Route>
+            <Route path={'/setup'} children={<SetupWizardPage />} />
             <Route path="/">
               <EnsureOrganizationIsReady>
                 <Dashboard />

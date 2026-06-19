@@ -6,7 +6,7 @@ import { RESOURCES_TYPES } from '@/constants/resourcesTypes';
 const SUBSCRIPTION_TYPE = {
   MAIN: 'main',
 };
-export const getDashboardRoutes = () => [
+const _dashboardRoutes = [
   // Accounts.
   {
     path: '/accounts/import',
@@ -1247,3 +1247,5 @@ export const getDashboardRoutes = () => [
     subscriptionActive: [SUBSCRIPTION_TYPE.MAIN],
   },
 ];
+
+export const getDashboardRoutes = () => _dashboardRoutes;

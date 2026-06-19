@@ -86,6 +86,7 @@ COPY --from=build-app /app/packages/server/build ./packages/server/build
 COPY --from=build-webapp /app/packages/webapp/dist ./packages/server/webapp-dist
 COPY --from=build-app /app/packages/i18n ./packages/i18n
 COPY --from=build-app /app/packages/server/public ./packages/server/public
+COPY --from=build-app /app/packages/server/static ./packages/server/static
 
 USER stockix
 CMD ["node", "./packages/server/build/index.js"]

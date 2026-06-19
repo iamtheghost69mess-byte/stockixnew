@@ -5,6 +5,9 @@ const SENSITIVE_ENV_KEYS = [
   'DB_ROOT_PASSWORD',
   'SYSTEM_DB_PASSWORD',
   'TENANT_DB_PASSWORD',
+  // APP_JWT_SECRET must be listed before JWT_SECRET: jwt.ts prefers APP_JWT_SECRET
+  // and it must be decrypted or the server signs tokens with the raw encrypted string.
+  'APP_JWT_SECRET',
   'JWT_SECRET',
   'MAIL_PASSWORD',
   'AGENDASH_AUTH_PASSWORD',
