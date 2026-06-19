@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import { useHistory } from 'react-router';
+import { useHistory } from 'react-router-dom';
 
 import { TABLES } from '@/constants/tables';
 import {

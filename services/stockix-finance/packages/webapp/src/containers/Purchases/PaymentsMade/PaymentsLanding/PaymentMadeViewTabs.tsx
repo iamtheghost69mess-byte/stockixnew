@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import { useHistory } from 'react-router';
+import { useHistory } from 'react-router-dom';
 import { DashboardViewsTabs, FormattedMessage as T } from '@/components';
 import { Alignment, Navbar, NavbarGroup } from '@blueprintjs/core';
 

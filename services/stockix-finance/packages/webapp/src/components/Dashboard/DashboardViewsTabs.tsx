@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { FormattedMessage as T } from '@/components';
 import PropTypes from 'prop-types';
 import { Button, Tabs, Tab, Tooltip, Position } from '@blueprintjs/core';
-import { useHistory } from 'react-router';
+import { useHistory } from 'react-router-dom';
 import { debounce } from 'lodash';
 import { If, Icon } from '@/components';
 import { saveInvoke } from '@/utils';

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useRef, useEffect, useMemo } from 'react';
-import { useLocation, useHistory } from 'react-router';
+import { useLocation, useHistory } from 'react-router-dom';
 import useAutofocus from './useAutofocus';
 import { useLocalStorage } from './utils/useLocalStorage';
 

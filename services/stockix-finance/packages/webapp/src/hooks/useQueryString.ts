@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
 import * as qs from 'qs';
-import { useHistory } from 'react-router';
+import { useHistory } from 'react-router-dom';
 
 export interface QueryStringResult {
   [0]: Record<string, any>;

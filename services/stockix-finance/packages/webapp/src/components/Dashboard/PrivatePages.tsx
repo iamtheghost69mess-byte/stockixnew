@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { lazy } from 'react';
-import { Switch, Route } from 'react-router';
+import { Switch, Route } from 'react-router-dom';
 
 import Dashboard from '@/components/Dashboard/Dashboard';
 
