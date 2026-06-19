@@ -47,7 +47,7 @@ export function ColorInput({
 
   return (
     <Popover
-      content={<HexColorPicker color={_value} onChange={handleChange} />}
+      content={<HexColorPicker color={_value || '#ffffff'} onChange={handleChange} />}
       position={Position.BOTTOM}
       interactionKind={PopoverInteractionKind.CLICK}
       modifiers={{

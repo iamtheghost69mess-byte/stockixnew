@@ -97,16 +97,16 @@ export async function invalidateSessionCache(token: string): Promise<void> {
 }
 
 const PLATFORM_ACTOR_TTL_MS = 60_000;
-let _platformActor: { id: string } | null = null;
+let _platformActor: { id: string; permissions: string[] } | null = null;
 let _platformActorValidUntil = 0;
 
-async function getPlatformActorCached(): Promise<{ id: string } | null> {
+async function getPlatformActorCached(): Promise<{ id: string; permissions: string[] } | null> {
   const redis = getControlPlaneRedisClient();
   if (redis && !isRedisCircuitBreakerTripped()) {
     try {
       const cached = await redis.get("platform:actor");
       if (cached) {
-        return JSON.parse(cached) as { id: string };
+        return JSON.parse(cached) as { id: string; permissions: string[] };
       }
     } catch {}
   }
@@ -116,7 +116,7 @@ async function getPlatformActorCached(): Promise<{ id: string } | null> {
   return null;
 }
 
-async function setPlatformActorCached(actor: { id: string }): Promise<void> {
+async function setPlatformActorCached(actor: { id: string; permissions: string[] }): Promise<void> {
   const redis = getControlPlaneRedisClient();
   if (redis && !isRedisCircuitBreakerTripped()) {
     try {
@@ -256,33 +256,34 @@ export function createActorResolver(
     // ── Session cookie ─────────────────────────────────────────────────────
     if (cookieToken) {
       const session = await verifySessionToken(cookieToken);
-      if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+      if (session) {
+        const tokenHash = sessionCacheKey(cookieToken);
+        const cached = await getSessionCache(tokenHash);
+        if (cached) {
+          c.set("actorId", cached.ownerId);
+          c.set("actorRole", cached.role);
+          c.set("actorPermissions", cached.permissions);
+          await next();
+          return;
+        }
 
-      const tokenHash = sessionCacheKey(cookieToken);
-      const cached = await getSessionCache(tokenHash);
-      if (cached) {
-        c.set("actorId", cached.ownerId);
-        c.set("actorRole", cached.role);
-        c.set("actorPermissions", cached.permissions);
+        const sessionCheck = await validateOwnerSession(db, {
+          ownerId: session.sub,
+          role: session.role,
+          sessionVersion: session.sessionVersion,
+        });
+        if (!sessionCheck.success) {
+          return c.json({ error: "forbidden_actor" }, 403);
+        }
+        const permissions = await attachActorPermissions(db, session.sub);
+        void setSessionCache(tokenHash, session.sub, session.role, permissions);
+        c.set("actorId", session.sub);
+        c.set("actorRole", session.role);
+        c.set("actorPermissions", permissions);
         await next();
         return;
       }
-
-      const sessionCheck = await validateOwnerSession(db, {
-        ownerId: session.sub,
-        role: session.role,
-        sessionVersion: session.sessionVersion,
-      });
-      if (!sessionCheck.success) {
-        return c.json({ error: "forbidden_actor" }, 403);
-      }
-      const permissions = await attachActorPermissions(db, session.sub);
-      await setSessionCache(tokenHash, session.sub, session.role, permissions);
-      c.set("actorId", session.sub);
-      c.set("actorRole", session.role);
-      c.set("actorPermissions", permissions);
-      await next();
-      return;
+      // Invalid/expired cookie — fall through to API key / Bearer token.
     }
 
     // ── API key ────────────────────────────────────────────────────────────
@@ -317,7 +318,7 @@ export function createActorResolver(
       if (cachedActor) {
         c.set("actorId", cachedActor.id);
         c.set("actorRole", "super_admin");
-        c.set("actorPermissions", await attachActorPermissions(db, cachedActor.id));
+        c.set("actorPermissions", cachedActor.permissions);
         await next();
         return;
       }
@@ -336,10 +337,11 @@ export function createActorResolver(
           503,
         );
       }
-      await setPlatformActorCached(platformActor);
+      const platformPermissions = await attachActorPermissions(db, platformActor.id);
+      await setPlatformActorCached({ id: platformActor.id, permissions: platformPermissions });
       c.set("actorId", platformActor.id);
       c.set("actorRole", "super_admin");
-      c.set("actorPermissions", await attachActorPermissions(db, platformActor.id));
+      c.set("actorPermissions", platformPermissions);
       await next();
       return;
     }

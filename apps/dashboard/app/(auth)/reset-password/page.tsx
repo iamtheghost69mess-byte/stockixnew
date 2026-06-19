@@ -60,6 +60,9 @@ function ResetPasswordForm() {
         );
         return;
       }
+      // Purge the RSC cache before navigating so the login page's server
+      // components don't render stale session state from before the reset.
+      router.refresh();
       router.push("/login?reset=1");
     } catch {
       setError("Network error — please try again");
