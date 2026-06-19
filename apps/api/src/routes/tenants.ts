@@ -94,6 +94,7 @@ import { syncFinanceLicenseForStockixTenant } from "../finance-license.client.js
 import { mailSendSucceeded } from "../mail/mailer.js";
 import { getGlobalHealthStatus } from "../lib/health-cache.js";
 import { getControlPlaneRedisClient } from "../lib/redis.js";
+import { reconfirmOwnerPassword } from "../services/auth/login.js";
 
 type Db = ReturnType<typeof createDb>;
 type DbClient = NonNullable<Db>;
@@ -578,6 +579,10 @@ app.get("/tenants/export.csv", async (c) => {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
 
+  const actorId = String(c.get("actorId") ?? "");
+  const actorRole = String(c.get("actorRole") ?? "");
+  const actorPermissions = (c.get("actorPermissions") as string[] | undefined) ?? [];
+
   const search = c.req.query("search")?.trim() ?? "";
   const statusFilter = c.req.query("status")?.trim() ?? "";
   const sortRaw = c.req.query("sort")?.trim() ?? "newest";
@@ -590,6 +595,17 @@ app.get("/tenants/export.csv", async (c) => {
   );
 
   const conditions: SQL[] = [childOrgFilter];
+
+  const scopedTenantIds = await getScopedTenantIdsForOwner(db, actorId, actorPermissions, actorRole);
+  if (scopedTenantIds !== null) {
+    if (scopedTenantIds.length === 0) {
+      return c.text("Name,Slug,Admin Email,Admin First Name,Admin Last Name,Plan,Status,Internal Port,Registration Completed,Created At\n", 200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="tenants-${new Date().toISOString().slice(0, 10)}.csv"`,
+      });
+    }
+    conditions.push(inArray(tenants.id, scopedTenantIds));
+  }
 
   if (search) {
     const pat = `%${search}%`;
@@ -3091,6 +3107,18 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
   }
   if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
     return c.json({ error: "tenant_not_found" }, 404);
+  }
+
+  // Impersonation is a high-privilege action — require password re-confirmation.
+  const body = await c.req.json().catch(() => ({}));
+  const reconfirmParsed = z.string().min(1).safeParse((body as Record<string, unknown>)?.reconfirmPassword);
+  if (!reconfirmParsed.success) {
+    return c.json({ error: "reconfirm_required", message: "Password confirmation is required for impersonation" }, 403);
+  }
+  const actorIdForReconfirm = String(c.get("actorId") ?? "");
+  const reconfirmResult = await reconfirmOwnerPassword(db, { ownerId: actorIdForReconfirm, password: reconfirmParsed.data });
+  if (!reconfirmResult.success) {
+    return c.json({ error: "reconfirm_failed", message: "Incorrect password" }, 403);
   }
 
   const [row] = await db

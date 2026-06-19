@@ -23,6 +23,10 @@ import {
   verifyMfaCode,
 } from "../../services/mfa/mfa.js";
 import { acceptInvite, getInviteByToken } from "../../services/invites/invites.js";
+import { eq, sql } from "drizzle-orm";
+import { RateLimiterMemory, RateLimiterRedis, RateLimiterRes } from "rate-limiter-flexible";
+import { getControlPlaneRedisClient } from "../../lib/redis.js";
+import { invalidateSessionCache } from "../../middleware/auth.js";
 
 function readCookie(req: Request, name: string): string {
   const cookieHeader = req.headers.get("cookie") ?? "";
@@ -34,13 +38,19 @@ function readCookie(req: Request, name: string): string {
 
 export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
   const auth = new HonoApp();
-  const rateLimits = new Map<string, { count: number; resetAt: number }>();
-  const RATE_LIMITS = {
-    "/auth/login": { windowMs: 60_000, max: 10 },
-    "/auth/verify-mfa": { windowMs: 60_000, max: 8 },
-    "/auth/invite/accept": { windowMs: 60_000, max: 6 },
-    "/auth/password/forgot": { windowMs: 60_000, max: 5 },
-    "/auth/password/reset": { windowMs: 60_000, max: 5 },
+  const redisClient = getControlPlaneRedisClient();
+  function makeAuthLimiter(keyPrefix: string, points: number) {
+    if (redisClient) {
+      return new RateLimiterRedis({ storeClient: redisClient, keyPrefix, points, duration: 60 });
+    }
+    return new RateLimiterMemory({ keyPrefix, points, duration: 60 });
+  }
+  const authLimiters = {
+    "/auth/login": makeAuthLimiter("rl_auth_login", 10),
+    "/auth/verify-mfa": makeAuthLimiter("rl_auth_mfa", 8),
+    "/auth/invite/accept": makeAuthLimiter("rl_auth_invite", 6),
+    "/auth/password/forgot": makeAuthLimiter("rl_auth_forgot", 5),
+    "/auth/password/reset": makeAuthLimiter("rl_auth_reset", 5),
   } as const;
   const secureCookie = apiConfig.nodeEnv === "production" || apiConfig.publicBaseUrlScheme === "https";
   const cookieBase = `Path=/; HttpOnly; SameSite=Lax${secureCookie ? "; Secure" : ""}`;
@@ -74,39 +84,33 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
     return fwd.split(",")[0]?.trim() || "unknown";
   }
 
-  function enforceRateLimit(
+  async function enforceRateLimit(
     c: { req: { path: string; method: string; header: (name: string) => string | undefined }; header: (name: string, value: string) => void; json: (body: unknown, status?: number) => Response },
-    routeKey: keyof typeof RATE_LIMITS,
+    routeKey: keyof typeof authLimiters,
     accountHint?: string,
-  ) {
+  ): Promise<Response | null> {
     if (c.req.method.toUpperCase() !== "POST") return null;
     if (c.req.path !== routeKey) return null;
-    const now = Date.now();
     const ip = resolveClientIp(c);
-    const cfg = RATE_LIMITS[routeKey];
-    const key = `${routeKey}:${ip}:${accountHint ?? "anon"}`;
-    const current = rateLimits.get(key);
-    if (!current || current.resetAt <= now) {
-      rateLimits.set(key, { count: 1, resetAt: now + cfg.windowMs });
+    const key = `${ip}:${accountHint ?? "anon"}`;
+    try {
+      await authLimiters[routeKey].consume(key);
       return null;
-    }
-    if (current.count >= cfg.max) {
-      const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
-      c.header("Retry-After", String(retryAfter));
-      console.warn(
-        JSON.stringify({
-          level: "warn",
-          type: "auth_rate_limit",
+    } catch (err) {
+      if (err instanceof RateLimiterRes) {
+        const retryAfter = Math.max(1, Math.ceil(err.msBeforeNext / 1000));
+        c.header("Retry-After", String(retryAfter));
+        logger.warn("auth_rate_limit", {
           route: routeKey,
           ip,
           accountHint: accountHint ?? null,
           retryAfter,
-        }),
-      );
-      return c.json({ success: false, error: "rate_limited", retryAfter }, 429);
+        });
+        return c.json({ success: false, error: "rate_limited", retryAfter }, 429);
+      }
+      // Fail open on Redis errors — don't block login on store unavailability
+      return null;
     }
-    current.count += 1;
-    return null;
   }
 
   async function resolveSessionFromRequest(c: { req: { header: (name: string) => string | undefined; raw: Request } }) {
@@ -143,7 +147,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       })
       .safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
-    const limited = enforceRateLimit(c, "/auth/login", parsed.data.email.toLowerCase());
+    const limited = await enforceRateLimit(c, "/auth/login", parsed.data.email.toLowerCase());
     if (limited) return limited;
     const result = await loginOwner(db, parsed.data);
     if (!result.success) return c.json(result, { status: (result.status ?? 401) as 401 });
@@ -256,7 +260,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
 
   auth.post("/verify-mfa", async (c) => {
     if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
-    const limited = enforceRateLimit(c, "/auth/verify-mfa");
+    const limited = await enforceRateLimit(c, "/auth/verify-mfa");
     if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
@@ -312,8 +316,23 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
     });
   });
 
-  auth.post("/logout", (c) => {
+  auth.post("/logout", async (c) => {
     if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
+    // Bump sessionVersion so all outstanding tokens are invalidated on next use.
+    const cookieToken = readCookie(c.req.raw, "stockix-session");
+    const headerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    const token = cookieToken || headerToken;
+    if (token) {
+      const session = await verifySessionToken(token).catch(() => null);
+      if (session?.sub) {
+        await db
+          .update(schema.owners)
+          .set({ sessionVersion: sql`${schema.owners.sessionVersion} + 1` })
+          .where(eq(schema.owners.id, session.sub))
+          .catch(() => null);
+        invalidateSessionCache(token);
+      }
+    }
     const response = c.json({ success: true, ok: true });
     response.headers.append("Set-Cookie", expiredSessionCookie());
     response.headers.append("Set-Cookie", expiredMfaCookie());
@@ -331,7 +350,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
 
   auth.post("/invite/accept", async (c) => {
     if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
-    const limited = enforceRateLimit(c, "/auth/invite/accept");
+    const limited = await enforceRateLimit(c, "/auth/invite/accept");
     if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z
@@ -366,7 +385,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
     const body = await c.req.json().catch(() => ({}));
     const parsed = z.object({ email: z.string().email() }).safeParse(body);
     if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
-    const limited = enforceRateLimit(c, "/auth/password/forgot", parsed.data.email.toLowerCase());
+    const limited = await enforceRateLimit(c, "/auth/password/forgot", parsed.data.email.toLowerCase());
     if (limited) return limited;
     const result = await requestOwnerPasswordReset(db, {
       email: parsed.data.email,
@@ -388,7 +407,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
 
   auth.post("/password/reset", async (c) => {
     if (csrfViolation(c)) return c.json({ success: false, error: "csrf_violation" }, 403);
-    const limited = enforceRateLimit(c, "/auth/password/reset");
+    const limited = await enforceRateLimit(c, "/auth/password/reset");
     if (limited) return limited;
     const body = await c.req.json().catch(() => ({}));
     const parsed = z

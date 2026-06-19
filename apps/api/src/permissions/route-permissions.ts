@@ -79,6 +79,8 @@ export function requiredPermissionsForRoute(
     return ["tenants.write"];
   }
 
-  if (m === "GET") return ["tenants.read"];
-  return ["tenants.write"];
+  // Deny-by-default: unmapped routes require super_admin wildcard permission.
+  // Previously this returned tenants.write, which silently over-granted access
+  // to any new route that wasn't explicitly listed above.
+  return ["*"];
 }

@@ -1,9 +1,57 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { adminAuditLog, owners } from "@repo/db/schema";
 import { generateSecret, generateURI, verify } from "otplib";
 import type { ApiServiceResult } from "../auth/types.js";
+import { getControlPlaneRedisClient } from "../../lib/redis.js";
+
+// ─── MFA secret encryption (AES-256-GCM) ─────────────────────────────────────
+// Secrets stored with the "enc:v1:" prefix are encrypted; plain values are
+// treated as legacy plaintext (backward compatible with existing rows).
+// Set MFA_ENCRYPTION_KEY to a 64-char hex string (32 bytes) to enable.
+
+function getMfaEncryptionKey(): Buffer | null {
+  const hex = process.env.MFA_ENCRYPTION_KEY?.trim();
+  if (!hex || hex.length !== 64) return null;
+  return Buffer.from(hex, "hex");
+}
+
+export function encryptMfaSecret(plaintext: string): string {
+  const key = getMfaEncryptionKey();
+  if (!key) return plaintext;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${Buffer.concat([iv, tag, encrypted]).toString("base64url")}`;
+}
+
+export function decryptMfaSecret(value: string): string {
+  if (!value.startsWith("enc:v1:")) return value;
+  const key = getMfaEncryptionKey();
+  if (!key) throw new Error("MFA_ENCRYPTION_KEY required to read encrypted MFA secrets");
+  const buf = Buffer.from(value.slice(7), "base64url");
+  const iv = buf.subarray(0, 12);
+  const tag = buf.subarray(12, 28);
+  const encrypted = buf.subarray(28);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(encrypted).toString("utf8") + decipher.final("utf8");
+}
+
+// ─── TOTP replay prevention ───────────────────────────────────────────────────
+// Each code is single-use within the 30-second TOTP window (90s TTL covers
+// the ±1 step tolerance window used by otplib).
+
+export async function assertNoTotpReplay(ownerId: string, code: string): Promise<boolean> {
+  const redis = getControlPlaneRedisClient();
+  if (!redis) return true; // fail open when Redis is not configured
+  const key = `mfa:used:${ownerId}:${code}`;
+  const acquired = await redis.set(key, "1", "EX", 90, "NX");
+  return acquired !== null;
+}
 
 export async function beginMfaSetup(
   db: PostgresJsDatabase<typeof schema>,
@@ -21,7 +69,7 @@ export async function beginMfaSetup(
   const otpauthUri = generateURI({ secret, issuer, label: owner.email });
   await db
     .update(owners)
-    .set({ mfaSecret: secret })
+    .set({ mfaSecret: encryptMfaSecret(secret) })
     .where(eq(owners.id, owner.id));
   return { success: true, data: { ownerId: owner.id, secret, issuer, account: owner.email, otpauthUri } };
 }
@@ -36,8 +84,11 @@ export async function enableMfa(
     .where(eq(owners.id, input.ownerId))
     .limit(1);
   if (!owner?.mfaSecret) return { success: false, error: "setup_expired", status: 401 };
-
-  const verifyResult = await verify({ token: input.code, secret: owner.mfaSecret });
+  if (!await assertNoTotpReplay(input.ownerId, input.code)) {
+    return { success: false, error: "totp_replay", status: 429 };
+  }
+  const plainSecret = decryptMfaSecret(owner.mfaSecret);
+  const verifyResult = await verify({ token: input.code, secret: plainSecret });
   const valid = typeof verifyResult === "boolean" ? verifyResult : Boolean((verifyResult as { valid?: boolean }).valid);
   if (!valid) return { success: false, error: "Invalid MFA code", status: 401 };
   const nextVersion = (owner.sessionVersion ?? 1) + 1;
@@ -71,7 +122,11 @@ export async function disableMfa(
     .where(eq(owners.id, input.ownerId))
     .limit(1);
   if (!owner?.mfaEnabled || !owner.mfaSecret) return { success: false, error: "not_enabled", status: 409 };
-  const verifyResult = await verify({ token: input.code, secret: owner.mfaSecret });
+  if (!await assertNoTotpReplay(input.ownerId, input.code)) {
+    return { success: false, error: "totp_replay", status: 429 };
+  }
+  const plainSecret = decryptMfaSecret(owner.mfaSecret);
+  const verifyResult = await verify({ token: input.code, secret: plainSecret });
   const valid = typeof verifyResult === "boolean" ? verifyResult : Boolean((verifyResult as { valid?: boolean }).valid);
   if (!valid) return { success: false, error: "Invalid MFA code", status: 401 };
   const nextVersion = (owner.sessionVersion ?? 1) + 1;
@@ -132,7 +187,11 @@ export async function verifyMfaCode(
   if (owner.lockedUntil && owner.lockedUntil.getTime() > Date.now()) {
     return { success: false, error: "Account temporarily locked. Try again later.", status: 423 };
   }
-  const verifyResult = await verify({ token: input.code, secret: owner.mfaSecret });
+  if (!await assertNoTotpReplay(input.ownerId, input.code)) {
+    return { success: false, error: "totp_replay", status: 429 };
+  }
+  const plainSecret = decryptMfaSecret(owner.mfaSecret);
+  const verifyResult = await verify({ token: input.code, secret: plainSecret });
   const valid = typeof verifyResult === "boolean" ? verifyResult : Boolean((verifyResult as { valid?: boolean }).valid);
   if (!valid) {
     const nextFailed = (owner.failedLoginCount ?? 0) + 1;

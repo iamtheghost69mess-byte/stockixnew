@@ -30,7 +30,7 @@ async function attachActorPermissions(db: Db, actorId: string): Promise<string[]
 // TTL is short enough that session revocations (sessionVersion bump) take
 // effect within SESSION_CACHE_TTL_MS milliseconds.
 // ---------------------------------------------------------------------------
-const SESSION_CACHE_TTL_MS = 15_000;
+const SESSION_CACHE_TTL_MS = 5_000;
 type SessionCacheEntry = { ownerId: string; role: string; permissions: string[]; validUntil: number };
 const _sessionCache = new Map<string, SessionCacheEntry>();
 
