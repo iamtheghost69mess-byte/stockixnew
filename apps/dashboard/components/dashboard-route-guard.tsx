@@ -43,6 +43,13 @@ export function DashboardRouteGuard({ children }: { children: ReactNode }) {
   const { loading } = useMe();
   const allowed = useHasAnyPermission(required ?? ["*"]);
 
+  // Unrestricted routes never need a permission check — render immediately
+  // without waiting for useMe() to resolve. Moving this before the loading
+  // guard prevents a visible spinner flash on every public/unrestricted page.
+  if (!required) {
+    return <>{children}</>;
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-3 py-8">
@@ -53,7 +60,7 @@ export function DashboardRouteGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!required || allowed) {
+  if (allowed) {
     return <>{children}</>;
   }
 

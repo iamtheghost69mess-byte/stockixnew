@@ -70,7 +70,7 @@ export function invalidateSessionCache(token: string): void {
 // DB round-trip on every server-to-server request using the platform secret.
 // ---------------------------------------------------------------------------
 const PLATFORM_ACTOR_TTL_MS = 60_000;
-let _platformActor: { id: string } | null = null;
+let _platformActor: { id: string; permissions: string[] } | null = null;
 let _platformActorValidUntil = 0;
 
 export type ControlPlaneAuthEnv = {
@@ -202,33 +202,34 @@ export function createActorResolver(
     // ── Session cookie ─────────────────────────────────────────────────────
     if (cookieToken) {
       const session = await verifySessionToken(cookieToken);
-      if (!session) return c.json({ error: "unauthorized_actor" }, 401);
+      if (session) {
+        const tokenHash = sessionCacheKey(cookieToken);
+        const cached = getSessionCache(tokenHash);
+        if (cached) {
+          c.set("actorId", cached.ownerId);
+          c.set("actorRole", cached.role);
+          c.set("actorPermissions", cached.permissions);
+          await next();
+          return;
+        }
 
-      const tokenHash = sessionCacheKey(cookieToken);
-      const cached = getSessionCache(tokenHash);
-      if (cached) {
-        c.set("actorId", cached.ownerId);
-        c.set("actorRole", cached.role);
-        c.set("actorPermissions", cached.permissions);
+        const sessionCheck = await validateOwnerSession(db, {
+          ownerId: session.sub,
+          role: session.role,
+          sessionVersion: session.sessionVersion,
+        });
+        if (!sessionCheck.success) {
+          return c.json({ error: "forbidden_actor" }, 403);
+        }
+        const permissions = await attachActorPermissions(db, session.sub);
+        setSessionCache(tokenHash, session.sub, session.role, permissions);
+        c.set("actorId", session.sub);
+        c.set("actorRole", session.role);
+        c.set("actorPermissions", permissions);
         await next();
         return;
       }
-
-      const sessionCheck = await validateOwnerSession(db, {
-        ownerId: session.sub,
-        role: session.role,
-        sessionVersion: session.sessionVersion,
-      });
-      if (!sessionCheck.success) {
-        return c.json({ error: "forbidden_actor" }, 403);
-      }
-      const permissions = await attachActorPermissions(db, session.sub);
-      setSessionCache(tokenHash, session.sub, session.role, permissions);
-      c.set("actorId", session.sub);
-      c.set("actorRole", session.role);
-      c.set("actorPermissions", permissions);
-      await next();
-      return;
+      // Invalid/expired cookie — fall through to API key / Bearer token.
     }
 
     // ── API key ────────────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ export function createActorResolver(
       if (_platformActor && Date.now() < _platformActorValidUntil) {
         c.set("actorId", _platformActor.id);
         c.set("actorRole", "super_admin");
-        c.set("actorPermissions", await attachActorPermissions(db, _platformActor.id));
+        c.set("actorPermissions", _platformActor.permissions);
         await next();
         return;
       }
@@ -281,11 +282,12 @@ export function createActorResolver(
           503,
         );
       }
-      _platformActor = platformActor;
+      const platformPermissions = await attachActorPermissions(db, platformActor.id);
+      _platformActor = { id: platformActor.id, permissions: platformPermissions };
       _platformActorValidUntil = Date.now() + PLATFORM_ACTOR_TTL_MS;
       c.set("actorId", platformActor.id);
       c.set("actorRole", "super_admin");
-      c.set("actorPermissions", await attachActorPermissions(db, platformActor.id));
+      c.set("actorPermissions", platformPermissions);
       await next();
       return;
     }

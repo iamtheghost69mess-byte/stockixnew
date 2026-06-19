@@ -649,7 +649,6 @@ export function TenantList(props: Props) {
                           {canOpen && loginHref ? (
                             <DropdownMenuItem
                               onClick={() => {
-                                console.log('[Open tenant login] redirect →', loginHref);
                                 window.open(loginHref, "_blank", "noopener,noreferrer");
                               }}
                             >

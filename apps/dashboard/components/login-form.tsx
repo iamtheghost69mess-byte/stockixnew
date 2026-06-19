@@ -95,7 +95,7 @@ export function LoginForm({
             // malformed URL — fall back to "/"
           }
         }
-        window.location.assign(destination);
+        window.location.replace(destination);
         return;
       }
       setError(

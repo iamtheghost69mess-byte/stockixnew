@@ -1,9 +1,8 @@
-// @ts-nocheck
 import React, { useEffect } from 'react';
 import intl from 'react-intl-universal';
 import classNames from 'classnames';
 import styled from 'styled-components';
-import { Tag, Spinner, NonIdealState } from '@blueprintjs/core';
+import { Intent, Tag, Spinner, NonIdealState } from '@blueprintjs/core';
 import { Card } from '@/components';
 import { CLASSES } from '@/constants/classes';
 import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
@@ -12,7 +11,7 @@ import { useIsAuthenticated, useAuthOrganizationId } from '@/hooks/state';
 import { compose } from '@/utils';
 
 /** Status → Blueprint intent mapping. */
-const STATUS_INTENT: Record<string, string> = {
+const STATUS_INTENT: Record<string, Intent> = {
   active: 'success',
   grace: 'warning',
   expired: 'danger',
@@ -48,7 +47,7 @@ function DateField({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function PreferencesLicense({ changePreferencesPageTitle }) {
+function PreferencesLicense({ changePreferencesPageTitle }: { changePreferencesPageTitle: (title: string) => void }) {
   useEffect(() => {
     changePreferencesPageTitle('Plan & License');
   }, [changePreferencesPageTitle]);
@@ -80,12 +79,12 @@ function PreferencesLicense({ changePreferencesPageTitle }) {
   }
 
   const {
-    license_status: licenseStatus,
-    license_expires_at: licenseExpiresAt,
-    license_grace_period_ends_at: licenseGracePeriodEndsAt,
-    plan_slug: planSlug,
-    license_key: licenseKey,
-    is_perpetual: isPerpetual,
+    licenseStatus,
+    licenseExpiresAt,
+    licenseGracePeriodEndsAt,
+    planSlug,
+    licenseKey,
+    isPerpetual,
   } = data;
 
   return (

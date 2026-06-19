@@ -439,6 +439,15 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       userAgent: c.req.header("user-agent"),
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    // completeOwnerPasswordReset already bumps sessionVersion in the DB, which
+    // invalidates all JWTs on the next validateOwnerSession check. Additionally
+    // evict any in-process cache entry so the 5s TTL window is not exploitable
+    // when the request comes from an already-authenticated context (e.g. the
+    // owner resets their own password while logged in via the dashboard).
+    const cookieToken = readCookie(c.req.raw, "stockix-session");
+    const bearerToken = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
+    const sessionToken = cookieToken || bearerToken;
+    if (sessionToken) invalidateSessionCache(sessionToken);
     return c.json({ success: true, ok: true });
   });
 
