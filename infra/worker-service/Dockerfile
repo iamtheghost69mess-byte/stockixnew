@@ -33,11 +33,15 @@ COPY packages/db/package.json                 ./packages/db/
 COPY packages/auth/package.json               ./packages/auth/
 COPY packages/shared/package.json             ./packages/shared/
 COPY infra/worker-service/package.json        ./infra/worker-service/
+# apps/api owns tsup.worker.config.ts and has tsup as a devDep — its manifest
+# must be present so `pnpm --filter api exec tsup` can resolve the package.
+COPY apps/api/package.json                    ./apps/api/
 
-# Install only the worker dependency chain — not api, dashboard, pms, or finance
+# Install deps for api (owns tsup devDep), auth, and shared (built before bundling).
+# infra/worker-service has no package name so cannot be used as a pnpm filter.
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter infra-worker...
+    pnpm install --frozen-lockfile --filter api --filter @repo/auth --filter @repo/shared
 
 # Copy source for packages the worker needs
 COPY packages/config/    ./packages/config/
@@ -45,6 +49,8 @@ COPY packages/db/        ./packages/db/
 COPY packages/auth/      ./packages/auth/
 COPY packages/shared/    ./packages/shared/
 COPY infra/worker-service/ ./infra/worker-service/
+# The worker tsup config lives in apps/api — only this file is needed (not the full app source).
+COPY apps/api/tsup.worker.config.ts ./apps/api/
 
 # Build shared packages then bundle the worker
 RUN pnpm --filter @repo/auth build \
