@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { pmsRooms, pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
@@ -35,7 +35,7 @@ const updateSchema = z.object({
 roomsRouter.get("/", async (c) => {
   if (!db) return errors.dbUnavailable(c);
   const propertyId = c.req.query("propertyId");
-  const conditions = [eq(pmsRooms.tenantId, tenantId(c))];
+  const conditions = [eq(pmsRooms.tenantId, tenantId(c)), isNull(pmsRooms.deletedAt)];
   if (propertyId) conditions.push(eq(pmsRooms.propertyId, propertyId));
   const { page, limit, offset } = parsePagination(c);
   const rows = await db
@@ -83,7 +83,11 @@ roomsRouter.get("/:id", async (c) => {
   const [row] = await db
     .select()
     .from(pmsRooms)
-    .where(and(eq(pmsRooms.id, c.req.param("id")), eq(pmsRooms.tenantId, tenantId(c))))
+    .where(and(
+      eq(pmsRooms.id, c.req.param("id")),
+      eq(pmsRooms.tenantId, tenantId(c)),
+      isNull(pmsRooms.deletedAt),
+    ))
     .limit(1);
   if (!row) return errors.notFound(c, "room");
   return c.json({ room: row });
@@ -98,17 +102,28 @@ roomsRouter.patch("/:id", async (c) => {
   const [row] = await db
     .update(pmsRooms)
     .set(update as typeof pmsRooms.$inferInsert)
-    .where(and(eq(pmsRooms.id, c.req.param("id")), eq(pmsRooms.tenantId, tenantId(c))))
+    .where(and(
+      eq(pmsRooms.id, c.req.param("id")),
+      eq(pmsRooms.tenantId, tenantId(c)),
+      isNull(pmsRooms.deletedAt),
+    ))
     .returning();
   if (!row) return errors.notFound(c, "room");
   return c.json({ room: row });
 });
 
-// DELETE /api/rooms/:id
+// DELETE /api/rooms/:id — soft delete
 roomsRouter.delete("/:id", async (c) => {
   if (!db) return errors.dbUnavailable(c);
-  await db.delete(pmsRooms).where(
-    and(eq(pmsRooms.id, c.req.param("id")), eq(pmsRooms.tenantId, tenantId(c))),
-  );
+  const [row] = await db
+    .update(pmsRooms)
+    .set({ deletedAt: new Date() })
+    .where(and(
+      eq(pmsRooms.id, c.req.param("id")),
+      eq(pmsRooms.tenantId, tenantId(c)),
+      isNull(pmsRooms.deletedAt),
+    ))
+    .returning({ id: pmsRooms.id });
+  if (!row) return errors.notFound(c, "room");
   return c.json({ ok: true });
 });

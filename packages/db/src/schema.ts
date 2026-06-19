@@ -1,6 +1,7 @@
 import {
   AnyPgColumn,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -630,10 +631,12 @@ export const pmsProperties = pgTable(
     feedSlug: text("feed_slug").unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     index("pms_properties_tenant_idx").on(t.tenantId),
     uniqueIndex("pms_properties_feed_slug_unique").on(t.feedSlug),
+    index("pms_properties_deleted_at_idx").on(t.tenantId, t.deletedAt),
   ],
 );
 
@@ -660,10 +663,12 @@ export const pmsRooms = pgTable(
     floor: integer("floor"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     index("pms_rooms_tenant_idx").on(t.tenantId),
     index("pms_rooms_property_idx").on(t.propertyId),
+    index("pms_rooms_deleted_at_idx").on(t.tenantId, t.deletedAt),
   ],
 );
 
@@ -696,8 +701,12 @@ export const pmsGuests = pgTable(
     hasVisa: boolean("has_visa").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("pms_guests_tenant_idx").on(t.tenantId)],
+  (t) => [
+    index("pms_guests_tenant_idx").on(t.tenantId),
+    index("pms_guests_deleted_at_idx").on(t.tenantId, t.deletedAt),
+  ],
 );
 
 export const pmsBookings = pgTable(
@@ -716,8 +725,8 @@ export const pmsBookings = pgTable(
     guestId: uuid("guest_id")
       .notNull()
       .references(() => pmsGuests.id, { onDelete: "cascade" }),
-    checkIn: text("check_in").notNull(),
-    checkOut: text("check_out").notNull(),
+    checkIn: date("check_in").notNull(),
+    checkOut: date("check_out").notNull(),
     totalAmountCents: integer("total_amount_cents").notNull().default(0),
     /** confirmed | checked_in | checked_out | cancelled | no_show */
     bookingStatus: text("booking_status").notNull().default("confirmed"),
@@ -738,12 +747,14 @@ export const pmsBookings = pgTable(
     financeReceiptId: integer("finance_receipt_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     index("pms_bookings_tenant_idx").on(t.tenantId),
     index("pms_bookings_property_idx").on(t.propertyId),
     index("pms_bookings_status_idx").on(t.bookingStatus),
     index("pms_bookings_check_in_idx").on(t.checkIn),
+    index("pms_bookings_deleted_at_idx").on(t.tenantId, t.deletedAt),
   ],
 );
 

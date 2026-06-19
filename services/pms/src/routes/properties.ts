@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { pmsProperties } from "@repo/db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
@@ -45,7 +45,7 @@ propertiesRouter.get("/", async (c) => {
   const rows = await db
     .select()
     .from(pmsProperties)
-    .where(eq(pmsProperties.tenantId, tenantId(c)))
+    .where(and(eq(pmsProperties.tenantId, tenantId(c)), isNull(pmsProperties.deletedAt)))
     .orderBy(desc(pmsProperties.createdAt))
     .limit(limit)
     .offset(offset);
@@ -84,7 +84,11 @@ propertiesRouter.get("/:id", async (c) => {
   const [row] = await db
     .select()
     .from(pmsProperties)
-    .where(and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))))
+    .where(and(
+      eq(pmsProperties.id, c.req.param("id")),
+      eq(pmsProperties.tenantId, tenantId(c)),
+      isNull(pmsProperties.deletedAt),
+    ))
     .limit(1);
   if (!row) return errors.notFound(c, "property");
   return c.json({ property: row });
@@ -103,12 +107,19 @@ propertiesRouter.patch("/:id", async (c) => {
   return c.json({ property: row });
 });
 
-// DELETE /api/properties/:id
+// DELETE /api/properties/:id — soft delete
 propertiesRouter.delete("/:id", async (c) => {
   if (!db) return errors.dbUnavailable(c);
-  await db.delete(pmsProperties).where(
-    and(eq(pmsProperties.id, c.req.param("id")), eq(pmsProperties.tenantId, tenantId(c))),
-  );
+  const [row] = await db
+    .update(pmsProperties)
+    .set({ deletedAt: new Date() })
+    .where(and(
+      eq(pmsProperties.id, c.req.param("id")),
+      eq(pmsProperties.tenantId, tenantId(c)),
+      isNull(pmsProperties.deletedAt),
+    ))
+    .returning({ id: pmsProperties.id });
+  if (!row) return errors.notFound(c, "property");
   return c.json({ ok: true });
 });
 
