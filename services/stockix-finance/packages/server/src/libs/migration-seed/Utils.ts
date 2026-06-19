@@ -7,7 +7,7 @@ import { CoreTenantSeeds } from '@/database/tenant/seeds/core';
  * @param {string} filepath
  * @returns {boolean}
  */
-async function isModuleType(filepath: string): boolean {
+async function isModuleType(filepath: string): Promise<boolean> {
   if (process.env.npm_package_json) {
     const { promisify } = require('util');
     const readFile = promisify(fs.readFile);
@@ -27,7 +27,7 @@ async function isModuleType(filepath: string): boolean {
  * @param {string} filepath
  * @returns
  */
-export async function importFile(filepath: string): any {
+export async function importFile(filepath: string): Promise<any> {
   return (await isModuleType(filepath))
     ? import(require('url').pathToFileURL(filepath))
     : require(filepath);
@@ -42,7 +42,7 @@ export async function importFile(filepath: string): any {
 export async function importWebpackSeedModule(
   moduleName: string,
   seedsDirectory: string,
-): any {
+): Promise<any> {
   // CoreTenantSeeds is a statically-imported map of all tenant seed modules.
   // Static imports are bundled by webpack at build time — no dynamic require() needed,
   // which avoids the webpackEmptyContext error caused by dynamic template-literal imports.

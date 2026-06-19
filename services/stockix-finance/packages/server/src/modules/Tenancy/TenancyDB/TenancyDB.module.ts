@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import knex, { Knex } from 'knex';
 import LRUCache from 'lru-cache';
 import { Global, Module } from '@nestjs/common';

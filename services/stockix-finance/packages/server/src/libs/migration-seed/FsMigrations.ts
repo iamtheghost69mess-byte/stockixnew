@@ -95,7 +95,7 @@ class FsMigrations {
    * @param {MigrateItem} migration
    * @returns {string}
    */
-  public getMigration(migration: MigrateItem): string {
+  public getMigration(migration: MigrateItem): Promise<any> {
     const moduleName = migration.file.replace(/\.(ts|js)$/, '');
     return importWebpackSeedModule(moduleName, this.seedsDirectory);
   }

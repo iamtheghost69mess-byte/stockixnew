@@ -30,7 +30,7 @@ export default function DashboardContentRoute() {
   const routes = getDashboardRoutes();
 
   return (
-    <Route pathname="/">
+    <Route path="/">
       <Switch>
         {routes.map((route, index) => (
           <Route exact={route.exact} key={index} path={`${route.path}`}>

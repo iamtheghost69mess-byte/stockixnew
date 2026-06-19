@@ -30,7 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return <Tag minimal>Unknown</Tag>;
+  if (!status) return <span style={{ color: '#8a9ba8' }}>—</span>;
   return (
     <Tag intent={STATUS_INTENT[status] ?? 'none'} minimal>
       {STATUS_LABEL[status] ?? status}
@@ -80,12 +80,12 @@ function PreferencesLicense({ changePreferencesPageTitle }) {
   }
 
   const {
-    licenseStatus,
-    licenseExpiresAt,
-    licenseGracePeriodEndsAt,
-    planSlug,
-    licenseKey,
-    isPerpetual,
+    license_status: licenseStatus,
+    license_expires_at: licenseExpiresAt,
+    license_grace_period_ends_at: licenseGracePeriodEndsAt,
+    plan_slug: planSlug,
+    license_key: licenseKey,
+    is_perpetual: isPerpetual,
   } = data;
 
   return (
@@ -95,7 +95,9 @@ function PreferencesLicense({ changePreferencesPageTitle }) {
         <InfoTable>
           <InfoRow>
             <InfoLabel>Plan</InfoLabel>
-            <InfoValue>{planSlug ?? '—'}</InfoValue>
+            <InfoValue style={{ color: planSlug ? '#1c2127' : '#8a9ba8' }}>
+              {planSlug ?? '—'}
+            </InfoValue>
           </InfoRow>
 
           <InfoRow>

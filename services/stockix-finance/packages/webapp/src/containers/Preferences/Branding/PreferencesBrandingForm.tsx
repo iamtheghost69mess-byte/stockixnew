@@ -23,7 +23,7 @@ const initialValues = {
 const validationSchema = Yup.object({
   logoKey: Yup.string().optional(),
   logoUri: Yup.string().optional(),
-  primaryColor: Yup.string().required('Primary color is required'),
+  primaryColor: Yup.string().optional(),
 });
 
 interface PreferencesBrandingFormProps {
@@ -83,7 +83,10 @@ export const PreferencesBrandingForm = ({
     // Exclude all the private props that starts with _.
     const excludedPrivateValues = excludePrivateProps(_values);
 
-    const __values = omit(excludedPrivateValues, ['logoUri']);
+    const __values = omit(
+      excludedPrivateValues,
+      ['logoUri', ...(!excludedPrivateValues.primaryColor ? ['primaryColor'] : [])],
+    );
     // Update organization branding.
     // @ts-expect-error
     await updateOrganization({ ...__values });
