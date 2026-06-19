@@ -144,7 +144,9 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
 
       }
 
-      const { data, status } = await getPosOrgByStockixTenantId(tenantId);
+      const requestId = c.get("requestId");
+
+      const { data, status } = await getPosOrgByStockixTenantId(tenantId, requestId);
 
       return c.json(data, status as 200);
 

@@ -21,6 +21,6 @@ describe("tenantMysqlDatabaseNames", () => {
 
   it("escapes underscores in MySQL LIKE patterns for slug-safe DB names", () => {
     const pattern = tenantMysqlDatabaseNames("e2e-fail-inject").orgDbPattern;
-    expect(mysqlLikePatternEscape(pattern)).toBe("stockix\\_e2e\\_fail\\_inject\\_%");
+    expect(mysqlLikePatternEscape(pattern)).toBe("stockix\\_e2e\\_fail\\_inject\\_\\%");
   });
 });

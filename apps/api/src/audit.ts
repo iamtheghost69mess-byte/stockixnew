@@ -13,6 +13,8 @@ type AuditInput = {
   ipAddress?: string | null;
   userAgent?: string | null;
   metadata?: Record<string, unknown>;
+  requestId?: string;
+  diff?: Record<string, unknown>;
 };
 
 export async function logAudit(
@@ -33,6 +35,8 @@ export async function logAudit(
       ipAddress: normalizedIp,
       userAgent: input.userAgent ?? null,
       metadata: input.metadata ?? null,
+      requestId: input.requestId ?? null,
+      diff: input.diff ?? null,
     });
   } catch (error) {
     console.error(

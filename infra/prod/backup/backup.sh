@@ -2,7 +2,10 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="stockix_platform_${TIMESTAMP}.dump.gz"
+BACKUP_FILE="stockix_platform_${TIMESTAMP}.dump.gz.gpg"
+
+# Mandatory encryption key check
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY not set}"
 
 # Backblaze B2 config (S3-compatible)
 B2_BUCKET="${BACKUP_B2_BUCKET:?BACKUP_B2_BUCKET not set}"
@@ -30,7 +33,8 @@ docker exec "$POSTGRES_CONTAINER" pg_dump \
   --no-owner \
   --no-privileges \
   --verbose \
-  | gzip > "/tmp/${BACKUP_FILE}"
+  | gzip \
+  | gpg --symmetric --batch --yes --passphrase "$BACKUP_ENCRYPTION_KEY" --cipher-algo AES256 > "/tmp/${BACKUP_FILE}"
 
 BACKUP_SIZE=$(du -sh "/tmp/${BACKUP_FILE}" | cut -f1)
 echo "[backup] Backup created: ${BACKUP_FILE} (${BACKUP_SIZE})"

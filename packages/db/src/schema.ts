@@ -12,6 +12,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Configurable platform roles (system + custom). */
 export const platformRoles = pgTable(
@@ -273,6 +274,8 @@ export const adminAuditLog = pgTable(
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    requestId: text("request_id"),
+    diff: jsonb("diff").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -281,6 +284,32 @@ export const adminAuditLog = pgTable(
     index("admin_audit_log_actor_created_idx").on(t.actorId, t.createdAt),
     index("admin_audit_log_tenant_created_idx").on(t.targetTenantId, t.createdAt),
     index("admin_audit_log_owner_created_idx").on(t.targetOwnerId, t.createdAt),
+  ],
+);
+
+export const pmsAuditLog = pgTable(
+  "pms_audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => owners.id),
+    action: text("action").notNull(),
+    targetTenantId: uuid("target_tenant_id").references(() => tenants.id),
+    targetOwnerId: uuid("target_owner_id").references(() => owners.id),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    requestId: text("request_id"),
+    diff: jsonb("diff").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("pms_audit_log_actor_created_idx").on(t.actorId, t.createdAt),
+    index("pms_audit_log_tenant_created_idx").on(t.targetTenantId, t.createdAt),
+    index("pms_audit_log_owner_created_idx").on(t.targetOwnerId, t.createdAt),
   ],
 );
 
@@ -349,6 +378,8 @@ export const tenantLifecycleJobs = pgTable(
     claimToken: uuid("claim_token"),
     cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
     lastError: text("last_error"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    maxDuration: integer("max_duration").notNull().default(3600), // Default to 1 hour in seconds
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -357,8 +388,31 @@ export const tenantLifecycleJobs = pgTable(
     index("tenant_lifecycle_jobs_status_run_at_idx").on(t.status, t.runAt, t.priority),
     index("tenant_lifecycle_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
     index("tenant_lifecycle_jobs_correlation_created_idx").on(t.correlationId, t.createdAt),
+    index("tlj_status_type_run_at_idx").on(t.status, t.type, t.runAt),
   ],
 );
+
+export const deadLetterJobs = pgTable(
+  "dead_letter_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id"),
+    type: text("type").notNull(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    correlationId: text("correlation_id"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    lastError: text("last_error"),
+    failedAt: timestamp("failed_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("dead_letter_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
+    index("dead_letter_jobs_correlation_created_idx").on(t.correlationId, t.createdAt),
+  ],
+);
+
 
 export const tenantDeletionLogs = pgTable(
   "tenant_deletion_logs",
@@ -1138,3 +1192,20 @@ export const pmsGuestFormSubmissions = pgTable(
     uniqueIndex("pms_guest_form_submissions_token_unique").on(t.shareToken),
   ],
 );
+
+export const featureFlags = pgTable(
+  "feature_flags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: text("key").notNull(),
+    enabledGlobally: boolean("enabled_globally").notNull().default(false),
+    tenantOverrides: jsonb("tenant_overrides").notNull().default({}),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("feature_flags_key_unique").on(t.key),
+  ],
+);
+

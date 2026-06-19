@@ -1,7 +1,7 @@
 import { apiConfig, getMailHealthStatus } from "@repo/config";
 import { tenantConfig, tenants } from "@repo/db/schema";
 import type { createDb } from "@repo/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 
 import { isValidPublicDiscoverySlug } from "../lib/tenant-discovery-slug.js";
@@ -60,7 +60,36 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
   });
 
   app.get("/metrics", async (c) => {
-    const { renderPrometheusMetrics } = await import("../lib/prometheus.js");
+    const {
+      renderPrometheusMetrics,
+      deadLetterJobsGauge,
+      activeProvisioningJobsGauge,
+      expiredLicensesGauge,
+    } = await import("../lib/prometheus.js");
+    if (db) {
+      const { deadLetterJobs, tenantLifecycleJobs, licenses } = await import("@repo/db/schema");
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(deadLetterJobs);
+      deadLetterJobsGauge.set(Number(row?.count ?? 0));
+
+      const [provRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(tenantLifecycleJobs)
+        .where(
+          and(
+            eq(tenantLifecycleJobs.type, "tenant.provision"),
+            eq(tenantLifecycleJobs.status, "running"),
+          ),
+        );
+      activeProvisioningJobsGauge.set(Number(provRow?.count ?? 0));
+
+      const [licRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(licenses)
+        .where(eq(licenses.status, "expired"));
+      expiredLicensesGauge.set(Number(licRow?.count ?? 0));
+    }
     const body = await renderPrometheusMetrics();
     return c.text(body, 200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
   });

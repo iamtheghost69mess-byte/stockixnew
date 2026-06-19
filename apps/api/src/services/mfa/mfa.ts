@@ -6,6 +6,7 @@ import { adminAuditLog, owners } from "@repo/db/schema";
 import { generateSecret, generateURI, verify } from "otplib";
 import type { ApiServiceResult } from "../auth/types.js";
 import { getControlPlaneRedisClient } from "../../lib/redis.js";
+import { failedLoginsTotal } from "../../lib/prometheus.js";
 
 // ─── MFA secret encryption (AES-256-GCM) ─────────────────────────────────────
 // Secrets stored with the "enc:v1:" prefix are encrypted; plain values are
@@ -194,6 +195,7 @@ export async function verifyMfaCode(
   const verifyResult = await verify({ token: input.code, secret: plainSecret });
   const valid = typeof verifyResult === "boolean" ? verifyResult : Boolean((verifyResult as { valid?: boolean }).valid);
   if (!valid) {
+    failedLoginsTotal.inc();
     const nextFailed = (owner.failedLoginCount ?? 0) + 1;
     await db
       .update(owners)

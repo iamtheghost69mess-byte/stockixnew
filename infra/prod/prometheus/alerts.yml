@@ -1,0 +1,44 @@
+groups:
+  - name: stockix.critical
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels:
+          severity: p0
+        annotations:
+          summary: "Control-plane API is down"
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 5m
+        labels:
+          severity: p1
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 5m
+        labels:
+          severity: p1
+      - alert: ProvisionFailureRate
+        expr: rate(worker_jobs_failed_total[10m]) / rate(worker_jobs_total[10m]) > 0.2
+        for: 10m
+        labels:
+          severity: p1
+      - alert: DeadJobsAccumulating
+        expr: worker_dead_jobs_total > 10
+        labels:
+          severity: p2
+      - alert: DiskUsageHigh
+        expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes > 0.85
+        for: 10m
+        labels:
+          severity: p1
+      - alert: BackupCronNotRunning
+        expr: absent(process_start_time_seconds{job="db-backup"}) == 1
+        for: 15m
+        labels:
+          severity: p1
+      - alert: ApiLatencyHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: p2

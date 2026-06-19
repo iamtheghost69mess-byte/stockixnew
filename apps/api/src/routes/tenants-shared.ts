@@ -323,7 +323,7 @@ const stockixModuleZod = z.enum(["accounting", "pos", "pms", "chat"]);
  * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
  * GET routes are naturally idempotent. Provision stream/status use correlation auth, not idempotency keys.
  */
-export function registerTenantRoutes(app: Hono<ApiEnv>, db: Db | null): void {
+export function registerTenantRoutesLegacy(app: Hono<ApiEnv>, db: Db | null): void {
 app.get("/tenants", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);

@@ -199,8 +199,8 @@ describe("requiredApiRole", () => {
     expect(requiredApiRole("/fingerprints/blacklist", "POST")).toBe("super_admin");
   });
 
-  it("unknown paths default to read_only", () => {
-    expect(requiredApiRole("/unknown-route", "GET")).toBe("read_only");
+  it("unknown paths default to super_admin (deny by default)", () => {
+    expect(requiredApiRole("/unknown-route", "GET")).toBe("super_admin");
   });
 });
 

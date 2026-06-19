@@ -54,6 +54,7 @@ import {
   tenantDeployments,
   tenants,
   licenses,
+  deadLetterJobs,
 } from "@repo/db/schema";
 import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
 import {
@@ -890,12 +891,114 @@ function isPermanentWorkerError(message: string): boolean {
   );
 }
 
+let dockerCircuitBreakerTripped = false;
+let consecutiveDockerFailures = 0;
+let lastDockerHealthCheckAt = 0;
+const DOCKER_HEALTH_CHECK_INTERVAL_MS = 30_000;
+
+async function checkDockerSocketReady(): Promise<boolean> {
+  try {
+    await execa("docker", ["info"], { timeout: 5000 });
+    consecutiveDockerFailures = 0;
+    if (dockerCircuitBreakerTripped) {
+      logger.info("[worker] Docker socket-proxy recovered. Circuit breaker reset.");
+      dockerCircuitBreakerTripped = false;
+    }
+    return true;
+  } catch (err) {
+    consecutiveDockerFailures++;
+    if (consecutiveDockerFailures >= 3 && !dockerCircuitBreakerTripped) {
+      logger.error("[worker] Docker socket-proxy unreachable 3 consecutive times. Tripping circuit breaker!", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      dockerCircuitBreakerTripped = true;
+    }
+    return false;
+  }
+}
+
+const HEARTBEAT_STALE_MS = 600_000; // 10 minutes
+
+async function reclaimStaleJobs(db: ReturnType<typeof createDb>): Promise<void> {
+  const staleTime = new Date(Date.now() - HEARTBEAT_STALE_MS);
+  
+  await db.transaction(async (tx) => {
+    const runningJobs = await tx
+      .select()
+      .from(tenantLifecycleJobs)
+      .where(eq(tenantLifecycleJobs.status, "running"));
+
+    const staleJobs = [];
+    for (const job of runningJobs) {
+      const isHeartbeatStale = job.claimedAt && new Date(job.claimedAt).getTime() <= staleTime.getTime();
+      const maxDurMs = (job.maxDuration ?? 3600) * 1000;
+      const isDurationStale = job.startedAt && (Date.now() - new Date(job.startedAt).getTime() > maxDurMs);
+
+      if (isHeartbeatStale || isDurationStale) {
+        staleJobs.push(job);
+      }
+    }
+
+    for (const job of staleJobs) {
+      const maxDurMs = (job.maxDuration ?? 3600) * 1000;
+      const isDurationStale = job.startedAt && (Date.now() - new Date(job.startedAt).getTime() > maxDurMs);
+      const errorMsg = isDurationStale ? "worker_job_timeout_exceeded" : "worker_stale_lease_reclaimed";
+
+      const nextAttempts = job.attempts + 1;
+      const exhausted = nextAttempts >= job.maxAttempts;
+      const nextStatus = exhausted ? "dead" : "pending";
+
+      await tx
+        .update(tenantLifecycleJobs)
+        .set({
+          status: nextStatus,
+          attempts: nextAttempts,
+          lastError: errorMsg,
+          claimedAt: null,
+          claimedBy: null,
+          claimToken: null,
+          runAt: exhausted ? new Date() : new Date(),
+          completedAt: exhausted ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tenantLifecycleJobs.id, job.id));
+
+      if (exhausted) {
+        await tx.insert(deadLetterJobs).values({
+          jobId: job.id,
+          type: job.type,
+          tenantId: job.tenantId,
+          correlationId: job.correlationId,
+          payload: job.payload,
+          attempts: nextAttempts,
+          maxAttempts: job.maxAttempts,
+          lastError: errorMsg,
+        });
+      }
+      
+      logger.info(`[worker] Reclaimed stale job ID: ${job.id}, type: ${job.type}, reason: ${errorMsg}, next status: ${nextStatus}`);
+    }
+  });
+}
+
 async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): Promise<void> {
-  console.log(`[worker-debug] Loop ${loopId} polling cycle started.`);
+  logger.debug(`[worker] Loop ${loopId} polling cycle started.`);
   while (!shuttingDown) {
-    console.log(`[worker-debug] Loop ${loopId} attempting to claim next job...`);
+    const now = Date.now();
+    // Run Docker health check periodically
+    if (now - lastDockerHealthCheckAt >= DOCKER_HEALTH_CHECK_INTERVAL_MS) {
+      lastDockerHealthCheckAt = now;
+      await checkDockerSocketReady().catch(() => {});
+    }
+
+    if (dockerCircuitBreakerTripped) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      continue;
+    }
+
+    logger.debug(`[worker] Loop ${loopId} attempting to claim next job...`);
     const job = await claimNextJob().catch((error) => {
-      console.error(`[worker-debug] Loop ${loopId} claimNextJob error:`, error);
+      logger.debug(`[worker] Loop ${loopId} claimNextJob error: ${error instanceof Error ? error.message : String(error)}`);
       if (isApiConnectionError(error)) {
         logApiUnreachable();
         return null;
@@ -905,10 +1008,10 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
       return null;
     });
     if (job) {
-      console.log(`[worker-debug] Loop ${loopId} successfully claimed job:`, { id: job.id, type: job.type });
+      logger.info(`[worker] Loop ${loopId} successfully claimed job: ID=${job.id}, Type=${job.type}`);
       apiUnreachableCount = 0;
     } else {
-      console.log(`[worker-debug] Loop ${loopId} no job claimed.`);
+      logger.debug(`[worker] Loop ${loopId} no job claimed.`);
     }
     lastSuccessfulPollAt = Date.now();
     if (!job) {
@@ -921,6 +1024,11 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
         await expireDueLicenses(db).catch((error) => {
           logger.error(
             `[worker] license expire scan failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+        await reclaimStaleJobs(db).catch((error) => {
+          logger.error(
+            `[worker] reclaim stale jobs scan failed: ${error instanceof Error ? error.message : String(error)}`,
           );
         });
       }

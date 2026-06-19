@@ -335,6 +335,36 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache,mode=max
 
+      - name: Security — trivy container scan (API)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ghcr.io/${{ github.repository }}/stockix-api:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Security — trivy container scan (Dashboard)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ghcr.io/${{ github.repository }}/stockix-dashboard:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Security — trivy container scan (Worker)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ghcr.io/${{ github.repository }}/stockix-infra-worker:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
   deploy:
     name: Deploy production
     needs: [quality-gate, build-images]

@@ -1,7 +1,42 @@
 type LogMeta = Record<string, unknown>;
 
+const REDACTED_KEYS = new Set([
+  "password",
+  "passwordhash",
+  "token",
+  "mfasecret",
+  "passportnumber",
+  "visanumber",
+  "sessionsecret",
+  "authtokensecret",
+  "workersecret",
+  "idnumber",
+  "dateofbirth",
+  "nationality",
+]);
+
+function redactObject(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(redactObject);
+  }
+  if (typeof obj === "object") {
+    const res: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (REDACTED_KEYS.has(k.toLowerCase())) {
+        res[k] = "[REDACTED]";
+      } else {
+        res[k] = redactObject(v);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
 function write(stream: NodeJS.WriteStream, payload: Record<string, unknown>): void {
-  stream.write(`${JSON.stringify(payload)}\n`);
+  const redacted = redactObject(payload) as Record<string, unknown>;
+  stream.write(`${JSON.stringify(redacted)}\n`);
 }
 
 const isDev = process.env.NODE_ENV !== "production";

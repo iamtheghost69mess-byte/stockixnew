@@ -16,6 +16,7 @@ export async function posProxy(
   body?: unknown,
   query?: Record<string, string | undefined>,
   baseUrl?: string,
+  requestId?: string,
 ): Promise<Response> {
   const url = new URL(`${getPosPlatformBase(baseUrl)}/api/platform/v1${path}`);
   if (query) {
@@ -26,15 +27,29 @@ export async function posProxy(
     }
   }
   const platformApiKey = posConfig.platformApiKey;
-  return fetch(url.toString(), {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Forwarded-Proto": "https",
-      ...(platformApiKey ? { "X-Api-Key": platformApiKey } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    return await fetch(url.toString(), {
+      method,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-Proto": "https",
+        ...(platformApiKey ? { "X-Api-Key": platformApiKey } : {}),
+        ...(requestId ? { "x-request-id": requestId, "x-correlation-id": requestId } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`POS proxy timeout after 15000ms: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function posProxyJson(
@@ -43,10 +58,11 @@ export async function posProxyJson(
   body?: unknown,
   query?: Record<string, string | undefined>,
   baseUrl?: string,
+  requestId?: string,
 ): Promise<{ data: unknown; status: number }> {
   let res: Response;
   try {
-    res = await posProxy(path, method, body, query, baseUrl);
+    res = await posProxy(path, method, body, query, baseUrl, requestId);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "POS platform unreachable";
@@ -85,10 +101,15 @@ export function getPosPlatformBaseUrl(): string {
 /** Resolve POS organization for a Stockix control-plane tenant UUID. */
 export async function getPosOrgByStockixTenantId(
   stockixTenantId: string,
+  requestId?: string,
 ): Promise<{ data: unknown; status: number }> {
   const id = stockixTenantId.trim();
   return posProxyJson(
     `/organizations/by-stockix-tenant/${encodeURIComponent(id)}`,
     "GET",
+    undefined,
+    undefined,
+    undefined,
+    requestId,
   );
 }

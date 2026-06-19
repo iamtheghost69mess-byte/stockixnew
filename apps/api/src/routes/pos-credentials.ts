@@ -171,12 +171,15 @@ export function registerPosCredentialsRoutes(
       return c.json({ roles, posOrganizationId: loaded.posOrganizationId });
     }
 
+    const requestId = c.get("requestId");
+
     const { data, status } = await posProxyJson(
       `/organizations/${encodeURIComponent(loaded.posOrganizationId)}/credentials`,
       "GET",
       undefined,
       undefined,
       posApiBase,
+      requestId,
     );
 
     if (status < 200 || status >= 300) {
@@ -239,12 +242,14 @@ export function registerPosCredentialsRoutes(
     }
 
     const role = bodyParsed.data.role.toLowerCase().trim();
+    const requestId = c.get("requestId");
     const { data, status } = await posProxyJson(
       `/organizations/${encodeURIComponent(loaded.posOrganizationId)}/reset-pin`,
       "POST",
       { role },
       undefined,
       posApiBase,
+      requestId,
     );
 
     if (status < 200 || status >= 300) {

@@ -21,26 +21,34 @@ vi.mock("../src/lib/tenant-module-access.js", () => ({
   respondModuleAccessDenied: vi.fn(),
 }));
 
+vi.mock("../src/lib/provision-events.js", () => ({
+  loadLatestPosBootstrapCredentials: vi.fn(async () => null),
+  decryptProvisionSecret: (val: string) => val,
+  encryptProvisionSecret: (val: string) => val,
+}));
+
 describe("pos-credentials routes", () => {
   const tenantId = "11111111-1111-1111-1111-111111111111";
   const posOrgId = "aaaaaaaaaaaaaaaaaaaaaaaa";
 
   const db = {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        leftJoin: vi.fn(() => ({
-          where: vi.fn(() => ({
-            limit: vi.fn(async () => [
-              {
-                id: tenantId,
-                slug: "demo",
-                posOrganizationId: posOrgId,
-              },
-            ]),
-          })),
-        })),
-      })),
-    })),
+    select: vi.fn(() => {
+      const queryChain = {
+        from: vi.fn(() => queryChain),
+        leftJoin: vi.fn(() => queryChain),
+        where: vi.fn(() => queryChain),
+        orderBy: vi.fn(() => queryChain),
+        limit: vi.fn(async () => [
+          {
+            id: tenantId,
+            slug: "demo",
+            posOrganizationId: posOrgId,
+            correlationId: "test-correlation-id",
+          },
+        ]),
+      };
+      return queryChain;
+    }),
   };
 
   beforeEach(() => {
@@ -90,6 +98,7 @@ describe("pos-credentials routes", () => {
       undefined,
       undefined,
       "http://127.0.0.1:4140",
+      undefined,
     );
   });
 

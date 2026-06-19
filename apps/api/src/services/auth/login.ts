@@ -4,6 +4,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
 import { adminAuditLog, owners } from "@repo/db/schema";
 import type { ApiServiceResult } from "./types.js";
+import { failedLoginsTotal } from "../../lib/prometheus.js";
 
 type LoginSuccess =
   | { requiresMfa: true; ownerId: string }
@@ -43,6 +44,7 @@ export async function loginOwner(
     return { success: false, error: "Account temporarily locked. Try again later.", status: 423 };
   }
   if (!owner.passwordHash) {
+    failedLoginsTotal.inc();
     await db
       .update(owners)
       .set({ failedLoginCount: (owner.failedLoginCount ?? 0) + 1, lastFailedAt: new Date() })
@@ -52,6 +54,7 @@ export async function loginOwner(
 
   const ok = await bcrypt.compare(input.password, owner.passwordHash);
   if (!ok) {
+    failedLoginsTotal.inc();
     const nextFailed = (owner.failedLoginCount ?? 0) + 1;
     await db
       .update(owners)

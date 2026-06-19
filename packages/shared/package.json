@@ -11,7 +11,13 @@
     "./finance-api": "./src/finance-api.ts",
     "./pos-entitlements-from-modules": "./src/pos-entitlements-from-modules.ts",
     "./deployment-secrets": "./src/deployment-secrets.ts",
-    "./structured-logger": "./src/structured-logger.ts"
+    "./structured-logger": "./src/structured-logger.ts",
+    "./feature-flags": "./src/feature-flags.ts"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

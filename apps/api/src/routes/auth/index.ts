@@ -330,7 +330,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
           .set({ sessionVersion: sql`${schema.owners.sessionVersion} + 1` })
           .where(eq(schema.owners.id, session.sub))
           .catch(() => null);
-        invalidateSessionCache(token);
+        await invalidateSessionCache(token);
       }
     }
     const response = c.json({ success: true, ok: true });

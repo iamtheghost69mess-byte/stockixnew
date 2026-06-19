@@ -6,9 +6,6 @@ import { apiConfig } from "@repo/config";
  */
 export async function securityHeadersMiddleware(c: Context, next: Next) {
   await next();
-  if (apiConfig.nodeEnv !== "production") {
-    return;
-  }
   c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   c.header("X-Frame-Options", "DENY");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
