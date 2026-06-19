@@ -40,9 +40,14 @@ COPY apps/api/package.json                    ./apps/api/
 
 # Install deps for api (owns tsup devDep), auth, and shared (built before bundling).
 # infra/worker-service has no package name so cannot be used as a pnpm filter.
+# @repo/typescript-config is a devDep of auth (needed by tsup to resolve tsconfig
+# extends). Including it in the filter ensures pnpm creates the workspace-root
+# node_modules/@repo/typescript-config symlink so load-tsconfig can resolve it.
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter api --filter @repo/auth --filter @repo/shared
+    pnpm install --frozen-lockfile --filter api --filter @repo/auth --filter @repo/shared --filter @repo/typescript-config \
+ && mkdir -p ./node_modules/@repo \
+ && ln -sf ../../packages/typescript-config ./node_modules/@repo/typescript-config
 
 # Copy source for packages the worker needs
 COPY packages/config/          ./packages/config/
