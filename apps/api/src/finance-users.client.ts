@@ -44,6 +44,7 @@ export class FinanceUsersClient {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify(data),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`inviteUser failed: ${res.status}`);
     return res.json();
@@ -54,6 +55,7 @@ export class FinanceUsersClient {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify(data),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`createUser failed: ${res.status}`);
     return res.json();
@@ -62,6 +64,7 @@ export class FinanceUsersClient {
   async listUsers(tenantId: number) {
     const res = await fetch(`${this.base(tenantId)}/users`, {
       headers: this.headers(),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`listUsers failed: ${res.status}`);
     return res.json();
@@ -72,6 +75,7 @@ export class FinanceUsersClient {
       method: "PATCH",
       headers: this.headers(),
       body: JSON.stringify(data),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`updateUser failed: ${res.status}`);
     return res.json();
@@ -81,6 +85,7 @@ export class FinanceUsersClient {
     const res = await fetch(`${this.base(tenantId)}/users/${userId}`, {
       method: "DELETE",
       headers: this.headers(),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`deleteUser failed: ${res.status}`);
     return res.json();
@@ -91,6 +96,7 @@ export class FinanceUsersClient {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({ newPassword }),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`resetPassword failed: ${res.status}`);
     return res.json();
@@ -100,6 +106,7 @@ export class FinanceUsersClient {
     const res = await fetch(`${this.base(tenantId)}/users/${userId}/suspend`, {
       method: "POST",
       headers: this.headers(),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`suspendUser failed: ${res.status}`);
     return res.json();
@@ -109,6 +116,7 @@ export class FinanceUsersClient {
     const res = await fetch(`${this.base(tenantId)}/users/${userId}/activate`, {
       method: "POST",
       headers: this.headers(),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`activateUser failed: ${res.status}`);
     return res.json();

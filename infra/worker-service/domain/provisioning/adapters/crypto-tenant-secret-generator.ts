@@ -17,8 +17,6 @@ export class CryptoTenantSecretGenerator implements ITenantSecretGenerator {
     if (key.length === 0) {
       throw new Error("bootstrapAdminPassword requires non-empty tenantKey");
     }
-    const secretHex = apiConfig.deploymentSecretKey;
-    const hmacKey = Buffer.from(secretHex, "hex");
-    return createHmac("sha256", hmacKey).update(`bootstrap:${key}`, "utf8").digest("base64url");
+    return randomBytes(24).toString("base64url");
   }
 }

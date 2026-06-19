@@ -14,6 +14,7 @@ import {
 import { validateOwnerSession } from "../services/auth/session-validation.js";
 import { verifySessionToken } from "../services/auth/tokens.js";
 import { loadOwnerAuthById } from "../permissions/resolve-owner-permissions.js";
+import { getControlPlaneRedisClient, isRedisCircuitBreakerTripped } from "../lib/redis.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -30,15 +31,26 @@ async function attachActorPermissions(db: Db, actorId: string): Promise<string[]
 // TTL is short enough that session revocations (sessionVersion bump) take
 // effect within SESSION_CACHE_TTL_MS milliseconds.
 // ---------------------------------------------------------------------------
-const SESSION_CACHE_TTL_MS = 5_000;
-type SessionCacheEntry = { ownerId: string; role: string; permissions: string[]; validUntil: number };
-const _sessionCache = new Map<string, SessionCacheEntry>();
+const SESSION_CACHE_TTL_MS = 15_000;
+type SessionCacheEntry = { ownerId: string; role: string; permissions: string[] };
+const _sessionCache = new Map<string, SessionCacheEntry & { validUntil: number }>();
 
 function sessionCacheKey(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function getSessionCache(tokenHash: string): SessionCacheEntry | undefined {
+async function getSessionCache(tokenHash: string): Promise<SessionCacheEntry | undefined> {
+  const redis = getControlPlaneRedisClient();
+  if (redis && !isRedisCircuitBreakerTripped()) {
+    try {
+      const cached = await redis.get(`session:cache:${tokenHash}`);
+      if (cached) {
+        return JSON.parse(cached) as SessionCacheEntry;
+      }
+    } catch {
+      // fallback
+    }
+  }
   const entry = _sessionCache.get(tokenHash);
   if (!entry) return undefined;
   if (Date.now() > entry.validUntil) {
@@ -48,8 +60,20 @@ function getSessionCache(tokenHash: string): SessionCacheEntry | undefined {
   return entry;
 }
 
-function setSessionCache(tokenHash: string, ownerId: string, role: string, permissions: string[]): void {
-  // Evict stale entries before inserting to keep memory bounded.
+async function setSessionCache(tokenHash: string, ownerId: string, role: string, permissions: string[]): Promise<void> {
+  const redis = getControlPlaneRedisClient();
+  if (redis && !isRedisCircuitBreakerTripped()) {
+    try {
+      await redis.set(
+        `session:cache:${tokenHash}`,
+        JSON.stringify({ ownerId, role, permissions }),
+        "EX",
+        15,
+      );
+    } catch {
+      // fallback
+    }
+  }
   if (_sessionCache.size > 500) {
     const now = Date.now();
     for (const [k, v] of _sessionCache) {
@@ -59,19 +83,49 @@ function setSessionCache(tokenHash: string, ownerId: string, role: string, permi
   _sessionCache.set(tokenHash, { ownerId, role, permissions, validUntil: Date.now() + SESSION_CACHE_TTL_MS });
 }
 
-/** Invalidate a session immediately (call after password change / forced logout). */
-export function invalidateSessionCache(token: string): void {
-  _sessionCache.delete(sessionCacheKey(token));
+export async function invalidateSessionCache(token: string): Promise<void> {
+  const tokenHash = sessionCacheKey(token);
+  const redis = getControlPlaneRedisClient();
+  if (redis && !isRedisCircuitBreakerTripped()) {
+    try {
+      await redis.del(`session:cache:${tokenHash}`);
+    } catch {
+      // fallback
+    }
+  }
+  _sessionCache.delete(tokenHash);
 }
 
-// ---------------------------------------------------------------------------
-// Platform actor cache
-// The "first active super_admin" almost never changes; cache it to avoid a
-// DB round-trip on every server-to-server request using the platform secret.
-// ---------------------------------------------------------------------------
 const PLATFORM_ACTOR_TTL_MS = 60_000;
 let _platformActor: { id: string; permissions: string[] } | null = null;
 let _platformActorValidUntil = 0;
+
+async function getPlatformActorCached(): Promise<{ id: string; permissions: string[] } | null> {
+  const redis = getControlPlaneRedisClient();
+  if (redis && !isRedisCircuitBreakerTripped()) {
+    try {
+      const cached = await redis.get("platform:actor");
+      if (cached) {
+        return JSON.parse(cached) as { id: string; permissions: string[] };
+      }
+    } catch {}
+  }
+  if (_platformActor && Date.now() < _platformActorValidUntil) {
+    return _platformActor;
+  }
+  return null;
+}
+
+async function setPlatformActorCached(actor: { id: string; permissions: string[] }): Promise<void> {
+  const redis = getControlPlaneRedisClient();
+  if (redis && !isRedisCircuitBreakerTripped()) {
+    try {
+      await redis.set("platform:actor", JSON.stringify(actor), "EX", 60);
+    } catch {}
+  }
+  _platformActor = actor;
+  _platformActorValidUntil = Date.now() + PLATFORM_ACTOR_TTL_MS;
+}
 
 export type ControlPlaneAuthEnv = {
   Variables: {
@@ -204,7 +258,7 @@ export function createActorResolver(
       const session = await verifySessionToken(cookieToken);
       if (session) {
         const tokenHash = sessionCacheKey(cookieToken);
-        const cached = getSessionCache(tokenHash);
+        const cached = await getSessionCache(tokenHash);
         if (cached) {
           c.set("actorId", cached.ownerId);
           c.set("actorRole", cached.role);
@@ -222,7 +276,7 @@ export function createActorResolver(
           return c.json({ error: "forbidden_actor" }, 403);
         }
         const permissions = await attachActorPermissions(db, session.sub);
-        setSessionCache(tokenHash, session.sub, session.role, permissions);
+        void setSessionCache(tokenHash, session.sub, session.role, permissions);
         c.set("actorId", session.sub);
         c.set("actorRole", session.role);
         c.set("actorPermissions", permissions);
@@ -260,10 +314,11 @@ export function createActorResolver(
     if (platformApiSecret && headerToken === platformApiSecret) {
       // Use a cached platform actor to avoid a DB round-trip on every
       // server-to-server request (dashboard Route Handlers use this path).
-      if (_platformActor && Date.now() < _platformActorValidUntil) {
-        c.set("actorId", _platformActor.id);
+      const cachedActor = await getPlatformActorCached();
+      if (cachedActor) {
+        c.set("actorId", cachedActor.id);
         c.set("actorRole", "super_admin");
-        c.set("actorPermissions", _platformActor.permissions);
+        c.set("actorPermissions", cachedActor.permissions);
         await next();
         return;
       }
@@ -283,8 +338,7 @@ export function createActorResolver(
         );
       }
       const platformPermissions = await attachActorPermissions(db, platformActor.id);
-      _platformActor = { id: platformActor.id, permissions: platformPermissions };
-      _platformActorValidUntil = Date.now() + PLATFORM_ACTOR_TTL_MS;
+      await setPlatformActorCached({ id: platformActor.id, permissions: platformPermissions });
       c.set("actorId", platformActor.id);
       c.set("actorRole", "super_admin");
       c.set("actorPermissions", platformPermissions);
@@ -301,7 +355,7 @@ export function createActorResolver(
     if (!session) return c.json({ error: "unauthorized_actor" }, 401);
 
     const tokenHash = sessionCacheKey(headerToken);
-    const cached = getSessionCache(tokenHash);
+    const cached = await getSessionCache(tokenHash);
     if (cached) {
       c.set("actorId", cached.ownerId);
       c.set("actorRole", cached.role);
@@ -319,7 +373,7 @@ export function createActorResolver(
       return c.json({ error: "forbidden_actor" }, 403);
     }
     const permissions = await attachActorPermissions(db, session.sub);
-    setSessionCache(tokenHash, session.sub, session.role, permissions);
+    await setSessionCache(tokenHash, session.sub, session.role, permissions);
     c.set("actorId", session.sub);
     c.set("actorRole", session.role);
     c.set("actorPermissions", permissions);

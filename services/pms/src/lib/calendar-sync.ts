@@ -1,3 +1,4 @@
+import { lookup } from "node:dns/promises";
 import {
   pmsCalendarEvents,
   pmsIcalChannels,
@@ -25,11 +26,40 @@ interface SyncSummary {
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
+function isPrivateIp(ip: string): boolean {
+  const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return true; // IPv6 or unrecognized — block to be safe
+  const a = Number(m[1]), b = Number(m[2]);
+  return (
+    a === 127 ||
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    a === 0
+  );
+}
+
 async function fetchICal(
-  url: string,
+  urlString: string,
 ): Promise<{ events: ICalEvent[]; error?: string }> {
   try {
-    const res = await fetch(url, {
+    const url = new URL(urlString);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { events: [], error: "SSRF prevention: Invalid protocol" };
+    }
+    let resolvedIp: string;
+    try {
+      const { address } = await lookup(url.hostname);
+      resolvedIp = address;
+    } catch (err) {
+      return { events: [], error: `DNS resolution failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (isPrivateIp(resolvedIp)) {
+      return { events: [], error: "SSRF prevention: URL resolves to a private IP address" };
+    }
+
+    const res = await fetch(urlString, {
       signal: AbortSignal.timeout(15_000),
       headers: {
         "User-Agent": "Stockix-PMS/1.0",

@@ -1,0 +1,22 @@
+global:
+  slack_api_url: "${SLACK_WEBHOOK_URL}"
+
+route:
+  receiver: slack-critical
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: p0
+      receiver: pagerduty-p0
+
+receivers:
+  - name: pagerduty-p0
+    pagerduty_configs:
+      - service_key: "${PAGERDUTY_KEY}"
+  - name: slack-critical
+    slack_configs:
+      - channel: "#stockix-alerts"
+        text: "{{ .CommonAnnotations.summary }}"

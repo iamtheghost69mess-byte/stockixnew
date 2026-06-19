@@ -11,7 +11,7 @@ describe("tenant-stack docker-compose.dev.yml", () => {
   );
 
   it("adds build targets for local dev", () => {
-    expect(devComposeText).toContain("target: app");
-    expect(devComposeText).toContain("target: migration");
+    expect(devComposeText).toContain("target: runtime");
+    expect(devComposeText).toContain("target: migration-runtime");
   });
 });

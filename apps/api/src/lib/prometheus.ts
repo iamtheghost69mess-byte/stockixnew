@@ -1,7 +1,31 @@
-import { Counter, Histogram, Registry, collectDefaultMetrics } from "prom-client";
+import { Counter, Histogram, Registry, collectDefaultMetrics, Gauge } from "prom-client";
 
 export const prometheusRegistry = new Registry();
 collectDefaultMetrics({ register: prometheusRegistry });
+
+export const deadLetterJobsGauge = new Gauge({
+  name: "stockix_dead_letter_jobs_total",
+  help: "Total number of jobs in the dead letter queue",
+  registers: [prometheusRegistry],
+});
+
+export const failedLoginsTotal = new Counter({
+  name: "stockix_failed_logins_total",
+  help: "Total failed login attempts",
+  registers: [prometheusRegistry],
+});
+
+export const activeProvisioningJobsGauge = new Gauge({
+  name: "stockix_active_provisioning_jobs_total",
+  help: "Total number of currently running tenant provisioning jobs",
+  registers: [prometheusRegistry],
+});
+
+export const expiredLicensesGauge = new Gauge({
+  name: "stockix_expired_licenses_total",
+  help: "Total number of expired licenses in the platform",
+  registers: [prometheusRegistry],
+});
 
 export const apiRequestTotal = new Counter({
   name: "stockix_api_request_total",

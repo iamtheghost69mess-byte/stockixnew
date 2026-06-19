@@ -12,7 +12,8 @@ import { registerProxyRoutes } from "./proxies.js";
 import { registerPublicRoutes } from "./public.js";
 import { registerTenantConfigApi } from "./tenant-config.js";
 import { registerTenantModulesRoutes } from "./tenant-modules.js";
-import { registerTenantRoutes } from "./tenants.js";
+import { registerTenantRoutes } from "./tenants/index.js";
+import { registerFeatureFlagRoutes } from "./feature-flags.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -30,4 +31,5 @@ export function registerControlPlaneRoutes(app: Hono<ControlPlaneAuthEnv>, db: D
   registerNotificationsApi(app, db);
   registerTenantModulesRoutes(app, db);
   registerProxyRoutes(app, db);
+  registerFeatureFlagRoutes(app, db);
 }

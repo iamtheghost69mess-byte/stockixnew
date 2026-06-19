@@ -442,6 +442,41 @@
       "when": 1750416000000,
       "tag": "0061_pms_data_model",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1781866592582,
+      "tag": "0063_great_tombstone",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1781870368898,
+      "tag": "0064_wild_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1781871761389,
+      "tag": "0065_curved_wonder_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1781871970075,
+      "tag": "0066_legal_sabra",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1750502400000,
+      "tag": "0067_audit_log_protection",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { apiConfig } from "@repo/config";
 import type { createDb } from "@repo/db";
 import {
+  deadLetterJobs,
   licenses,
   organizations,
   owners,
@@ -9,7 +10,7 @@ import {
   tenantLifecycleJobs,
   tenants,
 } from "@repo/db/schema";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { z } from "zod";
 
@@ -136,6 +137,7 @@ app.post("/internal/jobs/claim", async (c) => {
         id: tenantLifecycleJobs.id,
         tenantId: tenantLifecycleJobs.tenantId,
         type: tenantLifecycleJobs.type,
+        payload: tenantLifecycleJobs.payload,
         attempts: tenantLifecycleJobs.attempts,
         maxAttempts: tenantLifecycleJobs.maxAttempts,
         correlationId: tenantLifecycleJobs.correlationId,
@@ -202,6 +204,20 @@ app.post("/internal/jobs/claim", async (c) => {
               },
         )
         .where(eq(tenantLifecycleJobs.id, staleJob.id));
+
+      if (exhausted) {
+        await tx.insert(deadLetterJobs).values({
+          jobId: staleJob.id,
+          type: staleJob.type,
+          tenantId: staleJob.tenantId,
+          correlationId: staleJob.correlationId,
+          payload: staleJob.payload,
+          attempts: nextAttempts,
+          maxAttempts: staleJob.maxAttempts,
+          lastError: "worker_stale_lease_reclaimed",
+        });
+      }
+
       if (staleJob.type === "tenant.provision" && staleJob.tenantId) {
         if (exhausted) {
           await handleTerminalProvisionJobFailure(
@@ -246,6 +262,10 @@ app.post("/internal/jobs/claim", async (c) => {
         id: tenantLifecycleJobs.id,
         tenantId: tenantLifecycleJobs.tenantId,
         type: tenantLifecycleJobs.type,
+        payload: tenantLifecycleJobs.payload,
+        correlationId: tenantLifecycleJobs.correlationId,
+        attempts: tenantLifecycleJobs.attempts,
+        maxAttempts: tenantLifecycleJobs.maxAttempts,
       })
       .from(tenantLifecycleJobs)
       .where(
@@ -264,6 +284,17 @@ app.post("/internal/jobs/claim", async (c) => {
           updatedAt: new Date(),
         })
         .where(eq(tenantLifecycleJobs.id, zombie.id));
+
+      await tx.insert(deadLetterJobs).values({
+        jobId: zombie.id,
+        type: zombie.type,
+        tenantId: zombie.tenantId,
+        correlationId: zombie.correlationId,
+        payload: zombie.payload,
+        attempts: zombie.attempts,
+        maxAttempts: zombie.maxAttempts,
+        lastError: "zombie_job_max_attempts_reached",
+      });
 
       if ((zombie.type === "tenant.deprovision" || zombie.type === "tenant.provision") && zombie.tenantId) {
         await handleTerminalProvisionJobFailure(
@@ -285,6 +316,7 @@ app.post("/internal/jobs/claim", async (c) => {
       .set({
         status: "running",
         claimedAt: new Date(),
+        startedAt: new Date(),
         claimedBy: workerId,
         claimToken,
         updatedAt: new Date(),
@@ -1230,6 +1262,10 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
       .select({
         id: tenantLifecycleJobs.id,
         status: tenantLifecycleJobs.status,
+        type: tenantLifecycleJobs.type,
+        tenantId: tenantLifecycleJobs.tenantId,
+        correlationId: tenantLifecycleJobs.correlationId,
+        payload: tenantLifecycleJobs.payload,
         attempts: tenantLifecycleJobs.attempts,
         maxAttempts: tenantLifecycleJobs.maxAttempts,
         claimedBy: tenantLifecycleJobs.claimedBy,
@@ -1248,7 +1284,12 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
     const nextAttempts = (job.attempts ?? 0) + 1;
     const maxAttempts = job.maxAttempts ?? 5;
     const exhausted = cancelled || noRetry || nextAttempts >= maxAttempts;
-    const retryDelayMs = Math.min(60_000, 2 ** Math.max(0, nextAttempts - 1) * 1000);
+    
+    // Exponential backoff with jitter capped at 1h
+    const baseDelay = Math.min(30_000 * Math.pow(2, nextAttempts), 3_600_000);
+    const jitter = Math.random() * baseDelay * 0.3;
+    const retryDelayMs = baseDelay + jitter;
+
     const terminalStatus = cancelled ? "cancelled" : exhausted ? "dead" : "pending";
     const [next] = await tx
       .update(tenantLifecycleJobs)
@@ -1272,6 +1313,20 @@ app.post("/internal/jobs/:jobId/fail", async (c) => {
         ),
       )
       .returning();
+    
+    if (exhausted && terminalStatus === "dead") {
+      await tx.insert(deadLetterJobs).values({
+        jobId: job.id,
+        type: job.type,
+        tenantId: job.tenantId,
+        correlationId: job.correlationId,
+        payload: job.payload,
+        attempts: nextAttempts,
+        maxAttempts,
+        lastError: errorMessage,
+      });
+    }
+
     return next ? [next] : [];
   });
   if (updated) {
@@ -1372,6 +1427,48 @@ app.post("/internal/jobs/:jobId/requeue", async (c) => {
     previousStatus: "dead",
     nextStatus: "pending",
   });
+  return c.json({ ok: true, job: updated });
+});
+
+app.get("/internal/jobs", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const status = c.req.query("status");
+  const type = c.req.query("type");
+  const tenantId = c.req.query("tenantId");
+
+  const conditions = [];
+  if (status) conditions.push(eq(tenantLifecycleJobs.status, status));
+  if (type) conditions.push(eq(tenantLifecycleJobs.type, type));
+  if (tenantId) conditions.push(eq(tenantLifecycleJobs.tenantId, tenantId));
+
+  const rows = await db
+    .select()
+    .from(tenantLifecycleJobs)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(tenantLifecycleJobs.createdAt))
+    .limit(100);
+
+  return c.json({ jobs: rows });
+});
+
+app.post("/internal/jobs/:jobId/cancel", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const jobId = c.req.param("jobId");
+  const [updated] = await db
+    .update(tenantLifecycleJobs)
+    .set({
+      status: "cancelled",
+      cancelRequestedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(tenantLifecycleJobs.id, jobId),
+        inArray(tenantLifecycleJobs.status, ["pending", "claimed", "running"]),
+      ),
+    )
+    .returning();
+  if (!updated) return c.json({ error: "job_not_found_or_not_cancellable" }, 404);
   return c.json({ ok: true, job: updated });
 });
 

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { tenantLifecycleJobs } from "@repo/db/schema";
 import * as schema from "@repo/db/schema";
@@ -23,6 +23,20 @@ export async function insertTenantJob(
     runAt?: Date;
   },
 ) {
+  const countRow = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(tenantLifecycleJobs)
+    .where(
+      or(
+        eq(tenantLifecycleJobs.status, "pending"),
+        eq(tenantLifecycleJobs.status, "running"),
+      ),
+    );
+  const pendingOrRunningCount = Number(countRow[0]?.count ?? 0);
+  if (pendingOrRunningCount >= 100) {
+    throw new Error("queue_depth_limit_exceeded");
+  }
+
   const [row] = await db
     .insert(tenantLifecycleJobs)
     .values({

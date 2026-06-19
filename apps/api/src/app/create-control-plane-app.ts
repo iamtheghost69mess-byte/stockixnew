@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
 import {
   apiConfig,
   getMailHealthStatus,
@@ -53,7 +54,15 @@ export function createControlPlaneApp(): ControlPlaneApp {
     Sentry.init({
       dsn: apiConfig.sentryDsn,
       environment: apiConfig.nodeEnv,
-      tracesSampleRate: 0.1,
+      tracesSampleRate: 1.0,
+      beforeSend(event, hint) {
+        const originalException = hint.originalException as any;
+        const status = originalException?.status || originalException?.statusCode;
+        if (typeof status === "number" && status >= 400 && status < 500) {
+          return null;
+        }
+        return event;
+      },
     });
   }
 
@@ -167,13 +176,23 @@ export function createControlPlaneApp(): ControlPlaneApp {
   );
 
   app.use("/*", securityHeadersMiddleware);
+  app.use(
+    "/*",
+    bodyLimit({
+      maxSize: 2 * 1024 * 1024, // 2MB limit
+      onError: (c) => {
+        return c.json({ error: "payload_too_large", message: "Payload exceeds 2MB limit" }, 413);
+      },
+    }),
+  );
   app.use("/*", globalRateLimitMiddleware());
   app.use("/*", publicTenantDiscoveryRateLimitMiddleware());
   app.use("/*", licenseActivateRateLimitMiddleware());
 
   app.use("/*", async (c, next) => {
+    const generateRequestId = () => `req_${randomUUID().replace(/-/g, "")}`;
     const requestId =
-      c.req.header("x-request-id") ?? c.req.header("x-correlation-id") ?? randomUUID();
+      c.req.header("x-request-id") ?? c.req.header("x-correlation-id") ?? generateRequestId();
     c.set("requestId", requestId);
     c.set("requestStartMs", Date.now());
     c.header("x-request-id", requestId);
@@ -182,6 +201,8 @@ export function createControlPlaneApp(): ControlPlaneApp {
     const latencyMs = Date.now() - startedAt;
     const isClaimPoll = c.req.method === "POST" && c.req.path === "/internal/jobs/claim";
     if (!isClaimPoll) {
+      const actorId = c.get("actorId");
+      const tenantId = c.req.query("tenantId") || c.req.query("stockixTenantId");
       logger.info("http_request", {
         type: "http_request",
         requestId,
@@ -189,6 +210,8 @@ export function createControlPlaneApp(): ControlPlaneApp {
         path: c.req.path,
         status: c.res.status,
         latencyMs,
+        ...(actorId ? { actorId } : {}),
+        ...(tenantId ? { tenantId } : {}),
       });
     }
     await emitMetric("api.request.latency_ms", latencyMs, {
@@ -199,6 +222,16 @@ export function createControlPlaneApp(): ControlPlaneApp {
   });
 
   registerControlPlaneMiddleware(app, { db, platformApiSecret, workerSecret });
+
+  app.use("/*", async (c, next) => {
+    await next();
+    const actorId = c.get("actorId");
+    const tenantId = c.req.query("tenantId") || c.req.query("stockixTenantId");
+    if (actorId || tenantId) {
+      Sentry.setUser({ id: actorId, tenantId });
+    }
+  });
+
   registerControlPlaneRoutes(app, db);
 
   app.notFound((c) => {

@@ -17,9 +17,11 @@ import {
   gte,
   ilike,
   isNotNull,
+  lt,
   lte,
   ne,
   or,
+  sql,
 } from "drizzle-orm";
 import type { Hono } from "hono";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -1036,11 +1038,13 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
         });
       }
       if (existing.activationStatus === "deactivated") {
-        const [licNow] = await db.select().from(licenses).where(eq(licenses.id, lic.id)).limit(1);
-        if (!licNow) return c.json({ error: "not_found" }, 404);
-        if (licNow.activationCount >= licNow.maxActivations) {
-          return c.json({ error: "max_activations_reached" }, 403);
-        }
+        // Atomic increment: succeeds only if activationCount < maxActivations (prevents race condition)
+        const [refreshed] = await db
+          .update(licenses)
+          .set({ activationCount: sql`${licenses.activationCount} + 1`, updatedAt: new Date() })
+          .where(and(eq(licenses.id, lic.id), lt(licenses.activationCount, licenses.maxActivations)))
+          .returning();
+        if (!refreshed) return c.json({ error: "max_activations_reached" }, 403);
         await db
           .update(licenseActivations)
           .set({
@@ -1052,14 +1056,6 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
             activatedAt: new Date(),
           })
           .where(eq(licenseActivations.id, existing.id));
-        await db
-          .update(licenses)
-          .set({
-            activationCount: licNow.activationCount + 1,
-            updatedAt: new Date(),
-          })
-          .where(eq(licenses.id, lic.id));
-        const refreshed = { ...licNow, activationCount: licNow.activationCount + 1 };
         await insertLicenseHistory(db, {
           licenseId: lic.id,
           action: "activated",
@@ -1103,7 +1099,13 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       }
     }
 
-    if (lic.activationCount >= lic.maxActivations) {
+    // Atomic increment: succeeds only if activationCount < maxActivations (prevents race condition)
+    const [licUpdated] = await db
+      .update(licenses)
+      .set({ activationCount: sql`${licenses.activationCount} + 1`, updatedAt: new Date() })
+      .where(and(eq(licenses.id, lic.id), lt(licenses.activationCount, licenses.maxActivations)))
+      .returning({ activationCount: licenses.activationCount });
+    if (!licUpdated) {
       return c.json({ error: "max_activations_reached" }, 403);
     }
 
@@ -1118,15 +1120,7 @@ export function registerLicenseApi(app: Hono<ApiEnv>, db: Db | null): void {
       })
       .returning({ id: licenseActivations.id });
 
-    await db
-      .update(licenses)
-      .set({
-        activationCount: lic.activationCount + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(licenses.id, lic.id));
-
-    const nextCount = lic.activationCount + 1;
+    const nextCount = licUpdated.activationCount;
     await insertLicenseHistory(db, {
       licenseId: lic.id,
       action: "activated",

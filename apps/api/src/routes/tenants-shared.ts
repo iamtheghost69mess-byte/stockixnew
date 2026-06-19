@@ -323,7 +323,7 @@ const stockixModuleZod = z.enum(["accounting", "pos", "pms", "chat"]);
  * Idempotency: POST/PATCH/DELETE require `Idempotency-Key` (middleware/idempotency.ts).
  * GET routes are naturally idempotent. Provision stream/status use correlation auth, not idempotency keys.
  */
-export function registerTenantRoutes(app: Hono<ApiEnv>, db: Db | null): void {
+export function registerTenantRoutesLegacy(app: Hono<ApiEnv>, db: Db | null): void {
 app.get("/tenants", async (c) => {
   if (!db) {
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
@@ -984,9 +984,7 @@ const provisionBody = z.object({
 });
 
 app.post("/tenants", async (c) => {
-  console.log('[API-POST] POST /tenants received — actor:', c.get('actorId'), 'role:', c.get('actorRole'));
   if (!db) {
-    console.error('[API-POST] no db — DATABASE_URL not configured');
     return c.json({ error: "DATABASE_URL is not configured" }, 503);
   }
 
@@ -1018,9 +1016,7 @@ app.post("/tenants", async (c) => {
   let body: z.infer<typeof provisionBody>;
   try {
     body = provisionBody.parse(await c.req.json());
-    console.log('[API-POST] parsed body — slug:', body.slug, 'owner_id:', body.owner_id, 'plan_slug:', body.plan_slug);
   } catch (e) {
-    console.error('[API-POST] body parse failed:', e);
     return c.json(
       { error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) },
       400,
@@ -1094,7 +1090,8 @@ app.post("/tenants", async (c) => {
         .filter((value): value is string => typeof value === "string" && value.length > 0);
       await db.transaction(async (tx) => {
         await tx.delete(tenantProvisionEvents).where(eq(tenantProvisionEvents.tenantId, existing.id));
-        await tx.delete(adminAuditLog).where(eq(adminAuditLog.targetTenantId, existing.id));
+        // Audit logs are NOT deleted — regulatory requirement for immutable audit trail.
+        // The old tenant UUID becomes an orphaned reference; audit history is preserved.
         await tx.delete(tenantDeployments).where(eq(tenantDeployments.tenantId, existing.id));
         await tx.delete(tenantLifecycleJobs).where(eq(tenantLifecycleJobs.tenantId, existing.id));
         await tx.delete(tenants).where(eq(tenants.id, existing.id));
@@ -1138,7 +1135,6 @@ app.post("/tenants", async (c) => {
     "HTTP 202 — provisioning accepted; background worker will start",
   );
 
-  console.log('[API-POST] dispatching provision job — slug:', body.slug, 'correlationId:', correlationId);
   const job = await insertTenantJob(db, {
     type: "tenant.provision",
     correlationId,
@@ -1158,7 +1154,6 @@ app.post("/tenants", async (c) => {
     },
   });
 
-  console.log('[API-POST] returning 202 — jobId:', job?.id, 'correlationId:', correlationId);
   return c.json(
     {
       accepted: true,
@@ -3129,6 +3124,7 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
       tenantStatus: tenants.status,
       internalPort: tenantDeployments.internalPort,
       deploymentStatus: tenantDeployments.status,
+      financeAdminPassword: tenantDeployments.financeAdminPassword,
     })
     .from(tenants)
     .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
@@ -3156,7 +3152,10 @@ app.post("/tenants/:tenantId/impersonate", async (c) => {
 
   let adminPassword: string;
   try {
-    adminPassword = bootstrapAdminPasswordFromTenantSlug(row.slug);
+    // Prefer the stored (randomly generated) Finance admin password over the HMAC derivation.
+    // Falls back to HMAC for tenants provisioned before this fix (backward compat).
+    const stored = await resolveFinanceAdminPasswordForTenant(db, row.id, row.financeAdminPassword);
+    adminPassword = stored ?? bootstrapAdminPasswordFromTenantSlug(row.slug);
   } catch {
     return c.json(
       {

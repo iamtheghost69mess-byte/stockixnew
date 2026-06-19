@@ -130,7 +130,13 @@ function createMockDb(license: LicenseRow | null) {
 
   const update = vi.fn(() => ({
     set: vi.fn(() => ({
-      where: vi.fn().mockResolvedValue(undefined),
+      where: vi.fn(() => ({
+        // Support .returning() for atomic activation count increment
+        returning: vi.fn().mockResolvedValue([{ activationCount: 1 }]),
+        // Support direct await (non-returning updates)
+        then: (resolve: (v: undefined) => void, reject: (e: unknown) => void) =>
+          Promise.resolve(undefined).then(resolve, reject),
+      })),
     })),
   }));
 
