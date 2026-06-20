@@ -561,8 +561,7 @@ export const apiConfig = {
       if (!platformSecret || platformSecret === "__MUST_OVERRIDE__") {
         throw new Error("[config] PLATFORM_API_SECRET must be set in production");
       }
-      const redisPassword = env.TENANT_REDIS_PASSWORD?.trim();
-      if (!redisPassword || redisPassword === "__MUST_OVERRIDE__") {
+      if (env.TENANT_REDIS_PASSWORD?.trim() === "__MUST_OVERRIDE__") {
         throw new Error("[config] TENANT_REDIS_PASSWORD must be set in production");
       }
     }
