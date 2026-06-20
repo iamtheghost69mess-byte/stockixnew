@@ -28,12 +28,13 @@ WORKDIR /app
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 
 # Copy only the packages the worker imports at runtime
-COPY packages/config/package.json             ./packages/config/
-COPY packages/db/package.json                 ./packages/db/
-COPY packages/auth/package.json               ./packages/auth/
-COPY packages/shared/package.json             ./packages/shared/
-COPY packages/typescript-config/package.json  ./packages/typescript-config/
-COPY infra/worker-service/package.json        ./infra/worker-service/
+COPY packages/config/package.json                    ./packages/config/
+COPY packages/db/package.json                        ./packages/db/
+COPY packages/auth/package.json                      ./packages/auth/
+COPY packages/shared/package.json                    ./packages/shared/
+COPY packages/typescript-config/package.json         ./packages/typescript-config/
+COPY packages/platform-worker-shared/package.json    ./packages/platform-worker-shared/
+COPY infra/worker-service/package.json               ./infra/worker-service/
 # apps/api owns tsup.worker.config.ts and has tsup as a devDep — its manifest
 # must be present so `pnpm --filter api exec tsup` can resolve the package.
 COPY apps/api/package.json                    ./apps/api/
@@ -50,12 +51,13 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
  && ln -sf ../../packages/typescript-config ./node_modules/@repo/typescript-config
 
 # Copy source for packages the worker needs
-COPY packages/config/          ./packages/config/
-COPY packages/db/              ./packages/db/
-COPY packages/auth/            ./packages/auth/
-COPY packages/shared/          ./packages/shared/
-COPY packages/typescript-config/ ./packages/typescript-config/
-COPY infra/worker-service/     ./infra/worker-service/
+COPY packages/config/               ./packages/config/
+COPY packages/db/                   ./packages/db/
+COPY packages/auth/                 ./packages/auth/
+COPY packages/shared/               ./packages/shared/
+COPY packages/typescript-config/    ./packages/typescript-config/
+COPY packages/platform-worker-shared/ ./packages/platform-worker-shared/
+COPY infra/worker-service/          ./infra/worker-service/
 # The worker tsup config lives in apps/api — only this file is needed (not the full app source).
 COPY apps/api/tsup.worker.config.ts ./apps/api/
 
