@@ -5,7 +5,7 @@ type Ctx = { params: Promise<{ tenantId: string }> };
 
 export async function GET(req: Request, ctx: Ctx) {
   const { tenantId } = await ctx.params;
-  const res = await apiFetch(`/tenants/${tenantId}/organization-access`, {}, req);
+  const res = await apiFetch(`/v1/tenants/${tenantId}/organization-access`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
@@ -16,7 +16,7 @@ export async function GET(req: Request, ctx: Ctx) {
 export async function POST(req: Request, ctx: Ctx) {
   const { tenantId } = await ctx.params;
   const payload = await req.text();
-  const res = await apiFetch(`/tenants/${tenantId}/organization-access`, {
+  const res = await apiFetch(`/v1/tenants/${tenantId}/organization-access`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: payload,

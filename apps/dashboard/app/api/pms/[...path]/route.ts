@@ -8,7 +8,7 @@ async function forward(req: Request, params: Params, method: string) {
   const segment = path.join("/");
   const url = new URL(req.url);
   const query = url.search;
-  const target = `/pms/api/${segment}${query}`;
+  const target = `/v1/pms/api/${segment}${query}`;
   const init: RequestInit = { method };
   if (method !== "GET" && method !== "HEAD") {
     init.body = await req.text();

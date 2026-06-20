@@ -25,7 +25,7 @@ export async function DELETE(
   ctx: { params: Promise<{ roleId: string }> },
 ) {
   const { roleId } = await ctx.params;
-  const res = await apiFetch(`/admin/roles/${encodeURIComponent(roleId)}`, { method: "DELETE" }, req);
+  const res = await apiFetch(`/v1/admin/roles/${encodeURIComponent(roleId)}`, { method: "DELETE" }, req);
   const out = await res.text();
   return new NextResponse(out, {
     status: res.status,

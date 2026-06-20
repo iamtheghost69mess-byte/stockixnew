@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
 
 export async function GET(req: Request) {
-  const res = await apiFetch("/licenses/analytics", {}, req);
+  const res = await apiFetch("/v1/licenses/analytics", {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

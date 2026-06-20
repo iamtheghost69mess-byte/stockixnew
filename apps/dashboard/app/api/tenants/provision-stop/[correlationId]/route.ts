@@ -5,7 +5,7 @@ type Params = { params: Promise<{ correlationId: string }> };
 
 export async function POST(req: Request, { params }: Params) {
   const { correlationId } = await params;
-  const res = await apiFetch(`/tenants/provision-stop/${correlationId}`, {
+  const res = await apiFetch(`/v1/tenants/provision-stop/${correlationId}`, {
     method: "POST",
   }, req);
   const body = await res.text();

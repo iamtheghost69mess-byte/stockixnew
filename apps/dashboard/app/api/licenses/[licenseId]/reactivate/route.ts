@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api-client";
 
 export async function POST(req: Request, ctx: { params: Promise<{ licenseId: string }> }) {
   const { licenseId } = await ctx.params;
-  const res = await apiFetch(`/licenses/${licenseId}/reactivate`, {
+  const res = await apiFetch(`/v1/licenses/${licenseId}/reactivate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",

@@ -5,7 +5,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function POST(req: Request, { params }: Params) {
   const { id } = await params;
-  const res = await apiFetch(`/provisioning/${id}/cancel`, {
+  const res = await apiFetch(`/v1/provisioning/${id}/cancel`, {
     method: "POST",
   }, req);
   const body = await res.text();

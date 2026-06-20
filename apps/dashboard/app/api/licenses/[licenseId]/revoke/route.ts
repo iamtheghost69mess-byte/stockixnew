@@ -4,7 +4,7 @@ import { apiFetch } from "@/lib/api-client";
 export async function POST(req: Request, ctx: { params: Promise<{ licenseId: string }> }) {
   const { licenseId } = await ctx.params;
   const body = await req.text();
-  const res = await apiFetch(`/licenses/${licenseId}/revoke`, {
+  const res = await apiFetch(`/v1/licenses/${licenseId}/revoke`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,

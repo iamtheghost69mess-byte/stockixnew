@@ -24,7 +24,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 export async function DELETE(req: Request, ctx: Ctx) {
   const { tenantId, userId } = await ctx.params;
-  const res = await apiFetch(`/tenants/${tenantId}/users/${userId}`, { method: "DELETE" }, req);
+  const res = await apiFetch(`/v1/tenants/${tenantId}/users/${userId}`, { method: "DELETE" }, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

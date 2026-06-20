@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api-client";
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const res = await apiFetch("/licenses/activate", {
+  const res = await apiFetch("/v1/licenses/activate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,

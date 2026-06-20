@@ -29,7 +29,7 @@ export async function DELETE(
   { params }: { params: Promise<{ planId: string }> },
 ) {
   const { planId } = await params;
-  const res = await apiFetch(`/plans/${planId}`, { method: "DELETE" }, req);
+  const res = await apiFetch(`/v1/plans/${planId}`, { method: "DELETE" }, req);
   const responseBody = await res.text();
   return new NextResponse(responseBody, {
     status: res.status,

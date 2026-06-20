@@ -19,7 +19,7 @@ function apiUnreachableResponse() {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   try {
-    const res = await apiFetch(`/tenants${url.search}`, {}, req);
+    const res = await apiFetch(`/v1/tenants${url.search}`, {}, req);
     const body = await res.text();
     return new NextResponse(body, {
       status: res.status,

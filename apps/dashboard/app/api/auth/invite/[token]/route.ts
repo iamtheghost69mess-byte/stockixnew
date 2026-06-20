@@ -5,7 +5,7 @@ type Params = { params: Promise<{ token: string }> };
 
 export async function GET(_: Request, { params }: Params) {
   const { token } = await params;
-  const res = await apiFetch(`/auth/invite/${token}`, {}, _);
+  const res = await apiFetch(`/v1/auth/invite/${token}`, {}, _);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

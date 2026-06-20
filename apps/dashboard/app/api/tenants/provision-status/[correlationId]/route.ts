@@ -5,7 +5,7 @@ type Params = { params: Promise<{ correlationId: string }> };
 
 export async function GET(req: Request, { params }: Params) {
   const { correlationId } = await params;
-  const res = await apiFetch(`/tenants/provision-status/${correlationId}`, {}, req);
+  const res = await apiFetch(`/v1/tenants/provision-status/${correlationId}`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

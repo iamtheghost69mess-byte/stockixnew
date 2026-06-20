@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
 
 export async function POST(req: Request) {
-  const res = await apiFetch("/auth/mfa/begin", { method: "POST" }, req);
+  const res = await apiFetch("/v1/auth/mfa/begin", { method: "POST" }, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

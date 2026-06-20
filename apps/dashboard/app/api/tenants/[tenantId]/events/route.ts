@@ -6,7 +6,7 @@ type Params = { params: Promise<{ tenantId: string }> };
 export async function GET(req: Request, { params }: Params) {
   const { tenantId } = await params;
   const query = new URL(req.url).search;
-  const res = await apiFetch(`/tenants/${tenantId}/events${query}`, {}, req);
+  const res = await apiFetch(`/v1/tenants/${tenantId}/events${query}`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

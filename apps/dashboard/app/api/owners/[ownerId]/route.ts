@@ -6,7 +6,7 @@ type Params = { params: Promise<{ ownerId: string }> };
 export async function PATCH(req: Request, { params }: Params) {
   const { ownerId } = await params;
   const body = await req.text();
-  const res = await apiFetch(`/owners/${ownerId}`, {
+  const res = await apiFetch(`/v1/owners/${ownerId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body,
@@ -21,7 +21,7 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(req: Request, { params }: Params) {
   const { ownerId } = await params;
   const query = new URL(req.url).search;
-  const res = await apiFetch(`/owners/${ownerId}${query}`, { method: "DELETE" }, req);
+  const res = await apiFetch(`/v1/owners/${ownerId}${query}`, { method: "DELETE" }, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

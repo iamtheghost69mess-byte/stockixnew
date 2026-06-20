@@ -5,7 +5,7 @@ type Ctx = { params: Promise<{ tenantId: string; accessId: string }> };
 
 export async function DELETE(req: Request, ctx: Ctx) {
   const { tenantId, accessId } = await ctx.params;
-  const res = await apiFetch(`/tenants/${tenantId}/organization-access/${accessId}`, {
+  const res = await apiFetch(`/v1/tenants/${tenantId}/organization-access/${accessId}`, {
     method: "DELETE",
   }, req);
   const body = await res.text();

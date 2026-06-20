@@ -2,7 +2,7 @@ import { apiFetch } from "@/lib/api-client";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const res = await apiFetch(`/tenants/export.csv${url.search}`, {}, req);
+  const res = await apiFetch(`/v1/tenants/export.csv${url.search}`, {}, req);
   const body = await res.arrayBuffer();
   return new Response(body, {
     status: res.status,

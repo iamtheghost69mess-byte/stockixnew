@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api-client";
 
 export async function GET(req: Request) {
   try {
-    const res = await apiFetch("/plans", {}, req);
+    const res = await apiFetch("/v1/plans", {}, req);
     const body = await res.text();
     return new NextResponse(body, {
       status: res.status,

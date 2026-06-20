@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api-client";
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const res = await apiFetch("/owners/invite", {
+  const res = await apiFetch("/v1/owners/invite", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,

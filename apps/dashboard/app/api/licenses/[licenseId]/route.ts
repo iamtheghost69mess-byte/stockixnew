@@ -5,7 +5,7 @@ type Ctx = { params: Promise<{ licenseId: string }> };
 
 export async function GET(req: Request, ctx: Ctx) {
   const { licenseId } = await ctx.params;
-  const res = await apiFetch(`/licenses/${licenseId}`, {}, req);
+  const res = await apiFetch(`/v1/licenses/${licenseId}`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
@@ -16,7 +16,7 @@ export async function GET(req: Request, ctx: Ctx) {
 export async function PATCH(req: Request, ctx: Ctx) {
   const { licenseId } = await ctx.params;
   const body = await req.text();
-  const res = await apiFetch(`/licenses/${licenseId}`, {
+  const res = await apiFetch(`/v1/licenses/${licenseId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body,

@@ -5,7 +5,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(req: Request, { params }: Params) {
   const { id } = await params;
-  const res = await apiFetch(`/provisioning/${id}/logs`, {
+  const res = await apiFetch(`/v1/provisioning/${id}/logs`, {
     method: "GET",
   }, req);
   const body = await res.text();

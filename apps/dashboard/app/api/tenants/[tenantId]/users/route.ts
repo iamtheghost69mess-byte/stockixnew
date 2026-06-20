@@ -5,7 +5,7 @@ type Ctx = { params: Promise<{ tenantId: string }> };
 
 export async function GET(req: Request, ctx: Ctx) {
   const { tenantId } = await ctx.params;
-  const res = await apiFetch(`/tenants/${tenantId}/users`, {}, req);
+  const res = await apiFetch(`/v1/tenants/${tenantId}/users`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

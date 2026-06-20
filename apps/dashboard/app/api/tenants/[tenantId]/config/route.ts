@@ -5,7 +5,7 @@ type Params = { params: Promise<{ tenantId: string }> };
 
 export async function GET(req: Request, { params }: Params) {
   const { tenantId } = await params;
-  const res = await apiFetch(`/tenants/${tenantId}/config`, {}, req);
+  const res = await apiFetch(`/v1/tenants/${tenantId}/config`, {}, req);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: Params) {
 export async function PUT(req: Request, { params }: Params) {
   const { tenantId } = await params;
   const body = await req.text();
-  const res = await apiFetch(`/tenants/${tenantId}/config`, {
+  const res = await apiFetch(`/v1/tenants/${tenantId}/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body,

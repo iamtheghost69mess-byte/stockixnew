@@ -6,7 +6,7 @@ type Params = { params: Promise<{ tenantId: string }> };
 
 export async function GET(_: Request, { params }: Params) {
   const { tenantId } = await params;
-  const res = await apiFetch(`/tenants/${tenantId}`, {}, _);
+  const res = await apiFetch(`/v1/tenants/${tenantId}`, {}, _);
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
@@ -17,7 +17,7 @@ export async function GET(_: Request, { params }: Params) {
 export async function PATCH(req: Request, { params }: Params) {
   const { tenantId } = await params;
   const body = await req.text();
-  const res = await apiFetch(`/tenants/${tenantId}`, {
+  const res = await apiFetch(`/v1/tenants/${tenantId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body,
