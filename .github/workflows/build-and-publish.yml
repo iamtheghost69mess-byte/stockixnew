@@ -66,8 +66,3 @@ jobs:
             ghcr.io/${{ github.repository }}/stockix-infra-worker:latest
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache,mode=max
-
-      - name: Trigger Staging Deployment
-        if: success()
-        run: |
-          echo "Trigger Staging deployment from this commit SHA: ${{ github.sha }}"
