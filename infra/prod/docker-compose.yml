@@ -168,7 +168,9 @@ services:
       - ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}:/etc/traefik/dynamic
     command:
       - --api=true
+      - --api.insecure=true
       - --api.dashboard=true
+      - --ping=true
       - --providers.docker=true
       - --providers.docker.endpoint=tcp://socket-proxy:2375
       - --providers.docker.exposedbydefault=false
