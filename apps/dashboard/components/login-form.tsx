@@ -5,21 +5,21 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { OwnerAuthOtpInput } from "@/components/shadcn-studio/input-otp/input-otp-01";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@repo/ui/card";
 import {
   Field,
   FieldDescription,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+} from "@repo/ui/field";
+import { Input } from "@repo/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import { resetMeCache } from "@/hooks/use-me";
 import { cn } from "@/lib/utils";

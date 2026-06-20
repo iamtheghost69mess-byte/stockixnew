@@ -13,6 +13,7 @@ const { requestCorrelation } = require("./middlewares/requestCorrelation");
 const { extractSubdomainOrg } = require("./middlewares/extractSubdomainOrg");
 const { initSentry } = require("./services/observability");
 const { OrgAccessCache } = require("./services/orgAccessCache");
+const logger = require("./lib/logger");
 const app = express();
 const processErrorHandlersFlag = "__POS_PROCESS_ERROR_HANDLERS__";
 
@@ -20,14 +21,14 @@ const processErrorHandlersFlag = "__POS_PROCESS_ERROR_HANDLERS__";
 const PORT = config.port;
 
 if (!config.accessTokenSecret || !config.refreshTokenSecret) {
-  console.error(
+  logger.error(
     "Set JWT_SECRET in .env (required). JWT_REFRESH_SECRET is optional; it defaults to JWT_SECRET with a suffix."
   );
   process.exit(1);
 }
 
 if (config.nodeEnv === "production" && !process.env.PLATFORM_JWT_SECRET) {
-  console.error("PLATFORM_JWT_SECRET must be set in production.");
+  logger.error("PLATFORM_JWT_SECRET must be set in production.");
   process.exit(1);
 }
 
@@ -38,10 +39,10 @@ OrgAccessCache.startOrgAccessCacheReconciliationJob();
 if (!global[processErrorHandlersFlag]) {
   global[processErrorHandlersFlag] = true;
   process.on("unhandledRejection", (reason) => {
-    console.error("[process] unhandledRejection:", reason);
+    logger.error("[process] unhandledRejection:", reason);
   });
   process.on("uncaughtException", (error) => {
-    console.error("[process] uncaughtException:", error);
+    logger.error("[process] uncaughtException:", error);
   });
 }
 
@@ -122,7 +123,7 @@ if (config.nodeEnv === "production") {
     
     const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
     if (!isHttps) {
-      console.warn("Production requires HTTPS for secure cookie support. Rejecting HTTP request.");
+      logger.warn("Production requires HTTPS for secure cookie support. Rejecting HTTP request.");
       return res.status(400).json({
         success: false,
         message: "Production requires HTTPS for secure cookie support.",
@@ -407,11 +408,9 @@ io.on("connection", (socket) => {
       }
       const room = `printer:${String(printer._id)}`;
       socket.join(room);
-      // eslint-disable-next-line no-console
-      console.log(`Terminal registered for printer ${printer._id}`);
+      logger.info(`Terminal registered for printer ${printer._id}`);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn("[printer:register] failed:", e && e.message ? e.message : e);
+      logger.warn("[printer:register] failed:", e && e.message ? e.message : e);
     }
   });
 
@@ -428,8 +427,7 @@ io.on("connection", (socket) => {
       const alreadyTerminal = job.status === "done" || job.status === "failed";
       if (alreadyTerminal && job.status === status) return;
       if (alreadyTerminal && job.status !== status) {
-        // eslint-disable-next-line no-console
-        console.warn(
+        logger.warn(
           `[print:ack] conflicting ack ignored job=${printJobId} current=${job.status} incoming=${status}`
         );
         return;
@@ -445,8 +443,7 @@ io.on("connection", (socket) => {
       }
       await job.save();
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn("[print:ack] failed:", e && e.message ? e.message : e);
+      logger.warn("[print:ack] failed:", e && e.message ? e.message : e);
     }
   });
 });
@@ -460,8 +457,7 @@ const socketIoReady = (async () => {
     const pack = await createPosSocketRedisAdapter();
     attachPosSocketServer(io, { redisAdapter: pack?.adapter });
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn(
+    logger.warn(
       "[socket] Redis adapter disabled:",
       e && e.message ? e.message : e
     );
@@ -471,13 +467,13 @@ const socketIoReady = (async () => {
 
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.error(
+    logger.error(
       `Port ${PORT} is already in use. Stop the other process or set PORT in .env.\n` +
         `  Example:  lsof -i :${PORT} -t | xargs kill\n` +
         `  Or:       fuser -k ${PORT}/tcp`
     );
   } else {
-    console.error(err);
+    logger.error(err);
   }
   process.exit(1);
 });
@@ -485,7 +481,7 @@ server.on("error", (err) => {
 async function startServer() {
   await socketIoReady;
   server.listen(PORT, () => {
-    console.log(`☑️  POS Server is listening on port ${PORT}`);
+    logger.info(`POS Server is listening on port ${PORT}`);
     try {
       const { startInventoryAlertScheduler } = require("./services/inventoryAlertService");
       startInventoryAlertScheduler();
@@ -494,14 +490,14 @@ async function startServer() {
       const { startReportScheduleService } = require("./services/reportScheduleService");
       startReportScheduleService();
     } catch (e) {
-      console.error("Schedulers failed to start:", e.message);
+      logger.error("Schedulers failed to start:", e.message);
     }
   });
 }
 
 if (require.main === module) {
   startServer().catch((e) => {
-    console.error(e);
+    logger.error(e);
     process.exit(1);
   });
 }

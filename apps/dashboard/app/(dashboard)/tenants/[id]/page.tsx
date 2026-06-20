@@ -7,9 +7,9 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@repo/ui/breadcrumb";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/alert";
+import { Skeleton } from "@repo/ui/skeleton";
 import { OrgSwitcher } from "@/components/org-switcher";
 import TenantOrgAccessPanel from "@/components/tenant-org-access-panel";
 import TenantUsersPanel from "@/components/tenant-users-panel";

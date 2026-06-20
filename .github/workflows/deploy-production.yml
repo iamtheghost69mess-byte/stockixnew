@@ -1,0 +1,20 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'The commit SHA / image tag to deploy to production'
+        required: true
+        type: string
+
+jobs:
+  deploy-production:
+    uses: ./.github/workflows/reusable/deploy-stack.yml
+    with:
+      environment: production
+      release_sha: ${{ inputs.release_sha }}
+    secrets:
+      SSH_HOST: ${{ secrets.EC2_HOST }}
+      SSH_USER: ${{ secrets.EC2_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}

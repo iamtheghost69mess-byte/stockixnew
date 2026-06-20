@@ -11,7 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@repo/ui/table";
 import { posApiFetch } from "@/lib/pos-fetch";
 
 type PosOrg = {

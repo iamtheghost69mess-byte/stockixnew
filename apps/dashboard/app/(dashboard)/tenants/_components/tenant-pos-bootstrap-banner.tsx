@@ -3,7 +3,7 @@
 import { Copy } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 
 export type PosBootstrapCredentialsPayload = {
   adminPin: string;

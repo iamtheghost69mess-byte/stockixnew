@@ -8,7 +8,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@repo/ui/select";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
 import { fetchPmsTenants, type PmsTenantOption } from "@/lib/pms-api";
 

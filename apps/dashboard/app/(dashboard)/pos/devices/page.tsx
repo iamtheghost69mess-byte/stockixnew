@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { PosPageShell } from "@/components/pos-page-shell";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 import {
   Table,
   TableBody,
@@ -11,7 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@repo/ui/table";
 import { posApiFetch } from "@/lib/pos-fetch";
 
 type PosDevice = {

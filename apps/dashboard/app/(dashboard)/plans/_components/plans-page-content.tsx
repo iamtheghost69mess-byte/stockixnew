@@ -11,7 +11,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@repo/ui/alert-dialog";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,9 +19,9 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+} from "@repo/ui/breadcrumb";
+import { Button } from "@repo/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@repo/ui/card";
 
 import { PlanFormDialog } from "./plan-form-dialog";
 import { PlanList } from "./plan-list";

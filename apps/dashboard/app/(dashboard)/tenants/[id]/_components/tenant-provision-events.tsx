@@ -3,11 +3,11 @@
 import { History } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
+import { ScrollArea } from "@repo/ui/scroll-area";
+import { Skeleton } from "@repo/ui/skeleton";
 import { formatTime } from "@/lib/date-format";
 import type { ProvisionEventRow } from "@/types/tenant";
 

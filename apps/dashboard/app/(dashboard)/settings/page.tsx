@@ -12,7 +12,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@repo/ui/alert-dialog";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -20,9 +20,9 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+} from "@repo/ui/breadcrumb";
+import { Button } from "@repo/ui/button";
+import { Input } from "@repo/ui/input";
 import { formatApiError } from "@/lib/api-errors";
 
 type MfaStatus = { enabled: boolean; setupPending: boolean };

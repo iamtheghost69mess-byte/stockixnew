@@ -1,0 +1,73 @@
+name: Build and Publish Images
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-images:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-api:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-api:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-api:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-api:cache,mode=max
+
+      - name: Build & push Dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/dashboard/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-dashboard:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-dashboard:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-dashboard:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-dashboard:cache,mode=max
+
+      - name: Build & push Infra Worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/worker-service/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-infra-worker:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-infra-worker:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache,mode=max
+
+      - name: Trigger Staging Deployment
+        if: success()
+        run: |
+          echo "Trigger Staging deployment from this commit SHA: ${{ github.sha }}"

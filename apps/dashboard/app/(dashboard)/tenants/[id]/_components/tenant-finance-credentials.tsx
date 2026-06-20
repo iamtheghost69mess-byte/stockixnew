@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Copy, Loader2 } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@repo/ui/alert";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/card";
 import { formatApiError } from "@/lib/api-errors";
 import type { TenantDetail } from "@/types/tenant";
 

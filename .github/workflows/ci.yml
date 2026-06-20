@@ -1,0 +1,68 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [main, develop, staging]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: "9.15.9"
+  NODE_VERSION: "22.22.1"
+  TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/stockix_test
+
+jobs:
+  quality-checks:
+    name: Lint, Test, and Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for Turborepo affected checks
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Repository Hygiene
+        run: |
+          tracked_env="$(git ls-files | grep -E '(^|/)\.env($|(\.[^/]+)$)' | grep -Ev '\.env\.example$' || true)"
+          if [ -n "${tracked_env}" ]; then echo "Tracked .env files found!"; exit 1; fi
+          tracked_gen="$(git ls-files | grep -E '(^|/)(\.next/|dist/|build/|coverage/|\.runtime/|\.tmp-worker/)' || true)"
+          if [ -n "${tracked_gen}" ]; then echo "Tracked generated artifacts found!"; exit 1; fi
+
+      # Turbo automatically detects changes since the target branch (origin/main)
+      - name: Turborepo Lint
+        run: pnpm turbo run lint --filter=...[origin/${{ github.base_ref }}]
+
+      - name: Turborepo Typecheck
+        run: pnpm turbo run typecheck --filter=...[origin/${{ github.base_ref }}]
+
+      - name: Turborepo Test
+        run: pnpm turbo run test --filter=...[origin/${{ github.base_ref }}]
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          CI: "true"
+
+      - name: Turborepo Build (Dry Run)
+        run: pnpm turbo run build --filter=...[origin/${{ github.base_ref }}]
+
+      - name: Architecture Guards
+        run: |
+          pnpm lint:boundaries
+          pnpm architecture:validate

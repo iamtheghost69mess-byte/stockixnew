@@ -1,7 +1,7 @@
 import { GlobalSearch } from "@/components/global-search";
 import { NotificationBell } from "@/components/notification-bell";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@repo/ui/separator";
+import { SidebarTrigger } from "@repo/ui/sidebar";
 
 type SiteHeaderProps = {
   title?: string;

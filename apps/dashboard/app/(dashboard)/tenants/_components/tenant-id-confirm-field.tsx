@@ -1,7 +1,7 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@repo/ui/input";
+import { Label } from "@repo/ui/label";
 
 type TenantIdConfirmFieldProps = {
   tenantId: string;

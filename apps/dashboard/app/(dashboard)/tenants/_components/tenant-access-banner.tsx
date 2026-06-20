@@ -2,7 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@repo/ui/button";
 import { cn } from "@/lib/utils";
 
 type TenantAccessBannerProps = {

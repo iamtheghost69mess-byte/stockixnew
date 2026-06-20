@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nodemon app.js",
     "start": "node app.js",
+    "typecheck": "tsc --noEmit",
     "worker:platform": "node workers/platformWorker.js",
     "worker:bigcapital": "node workers/bigcapitalSyncWorker.js",
     "worker:print": "node workers/printWorker.js",

@@ -5,10 +5,10 @@ import { useState } from "react";
 import { Loader2, PauseCircle, PlayCircle, Square, Trash2 } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/dialog";
+import { Input } from "@repo/ui/input";
 import { TenantSlugConfirmField } from "../../_components/tenant-slug-confirm-field";
 import { formatApiError } from "@/lib/api-errors";
 import type { TenantDetail } from "@/types/tenant";

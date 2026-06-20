@@ -4,17 +4,17 @@ import { useState } from "react";
 import { Loader2, Minus, Plus } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/dialog";
+import { Label } from "@repo/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@repo/ui/select";
 import { formatApiError } from "@/lib/api-errors";
 import { moduleLabel } from "@/lib/tenant-modules";
 import type { TenantDetail } from "@/types/tenant";

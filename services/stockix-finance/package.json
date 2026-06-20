@@ -3,14 +3,14 @@
   "private": true,
   "scripts": {
     "bootstrap": "pnpm install",
-    "dev": "lerna run dev",
-    "build": "lerna run build",
-    "dev:webapp": "lerna run dev --scope \"@stockix/webapp\"",
-    "build:webapp": "lerna run build --scope \"@stockix/webapp\"",
-    "dev:server": "lerna run dev --scope \"@stockix/server\"",
-    "build:server": "lerna run build --scope \"@stockix/server\"",
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "dev:webapp": "pnpm --filter @stockix/webapp run dev",
+    "build:webapp": "pnpm --filter @stockix/webapp run build",
+    "dev:server": "pnpm --filter @stockix/server run dev",
+    "build:server": "pnpm --filter @stockix/server run build",
     "typecheck": "pnpm --filter @stockix/server typecheck && pnpm --filter @stockix/webapp typecheck",
-    "serve:server": "lerna run serve --scope \"@stockix/server\"",
+    "serve:server": "pnpm --filter @stockix/server run serve",
     "test:e2e": "playwright test",
     "prepare": "node -e \"const{existsSync}=require('fs');const{execSync}=require('child_process');if(existsSync('.git'))execSync('husky install',{stdio:'inherit'})\""
   },
@@ -21,9 +21,7 @@
   "devDependencies": {
     "postcss": "8.4.31",
     "@commitlint/config-conventional": "17.4.2",
-    "@commitlint/config-lerna-scopes": "17.4.2",
     "husky": "8.0.3",
-    "lerna": "6.4.1",
     "@commitlint/cli": "17.4.2",
     "@playwright/test": "1.32.3"
   },

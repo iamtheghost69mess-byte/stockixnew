@@ -16,15 +16,15 @@ import {
 import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import { useMe } from "@/hooks/use-me";
 import { useHasPermission } from "@/hooks/use-permissions";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/alert";
+import { Button } from "@repo/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@repo/ui/card";
+import { Skeleton } from "@repo/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 function KpiCard(props: {

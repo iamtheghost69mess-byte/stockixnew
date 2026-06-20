@@ -3,16 +3,16 @@
 import { useEffect, useState } from "react";
 
 import { PmsPageShell } from "@/components/pms-page-shell";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@repo/ui/badge";
+import { Input } from "@repo/ui/input";
+import { Label } from "@repo/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@repo/ui/select";
 import {
   Table,
   TableBody,
@@ -20,7 +20,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@repo/ui/table";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
 import { pmsFetch } from "@/lib/pms-fetch";
 

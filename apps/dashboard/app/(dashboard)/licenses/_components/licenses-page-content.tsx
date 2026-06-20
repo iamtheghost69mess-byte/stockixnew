@@ -7,10 +7,10 @@ import { toast } from "@/components/reusabletoast";
 
 import { LicenseAssignDialog } from "@/components/license-assign-dialog";
 import LicenseGenerateDialog from "@/components/license-generate-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
+import { Skeleton } from "@repo/ui/skeleton";
+import { TooltipProvider } from "@repo/ui/tooltip";
 import type { LicenseAnalytics, LicenseRow } from "@/types/license";
 import { useMe } from "@/hooks/use-me";
 

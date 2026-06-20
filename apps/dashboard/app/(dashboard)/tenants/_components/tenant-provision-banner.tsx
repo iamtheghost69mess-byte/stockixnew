@@ -2,7 +2,7 @@
 
 import type { ProvisionEventRow } from "@/types/tenant";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 
 import type { ProvisionPhase } from "./tenants-utils";
 

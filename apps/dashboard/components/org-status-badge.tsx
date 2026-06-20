@@ -8,7 +8,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@repo/ui/badge";
 import { cn } from "@/lib/utils";
 
 export default function OrgStatusBadge({ status }: { status: string }) {

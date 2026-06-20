@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,16 +14,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+} from "@repo/ui/alert-dialog";
+import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@repo/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -31,8 +31,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { TabsContent } from "@/components/ui/tabs";
+} from "@repo/ui/table";
+import { TabsContent } from "@repo/ui/tabs";
 import { formatApiError } from "@/lib/api-errors";
 import type { LicenseActivation, LicenseDetail } from "@/types/license";
 

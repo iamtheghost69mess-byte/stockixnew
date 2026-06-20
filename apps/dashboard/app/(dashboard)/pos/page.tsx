@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { PosPageShell } from "@/components/pos-page-shell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
 import { posApiFetch } from "@/lib/pos-fetch";
 
 export default function PosOverviewPage() {

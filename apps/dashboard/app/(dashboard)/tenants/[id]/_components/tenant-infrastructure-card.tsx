@@ -5,9 +5,9 @@ import { ExternalLink, Loader2, RotateCw, UserCheck } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
 import TenantStatusBadge from "@/components/tenant-status-badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@repo/ui/alert";
+import { Button, buttonVariants } from "@repo/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
 import { formatApiError } from "@/lib/api-errors";
 import { formatDateTime } from "@/lib/date-format";
 import type { TenantDetail } from "@/types/tenant";

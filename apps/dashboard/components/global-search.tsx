@@ -9,7 +9,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 import {
   Command,
   CommandDialog,
@@ -19,7 +19,7 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
+} from "@repo/ui/command";
 import { useGlobalSearch } from "@/hooks/use-global-search";
 
 const MAC_UA = /Mac|iPhone|iPod|iPad/i;

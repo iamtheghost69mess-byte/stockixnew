@@ -2,7 +2,7 @@
 
 import type { UseFormReturn } from "react-hook-form";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@repo/ui/checkbox";
 import {
   FormControl,
   FormDescription,
@@ -10,8 +10,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+} from "@repo/ui/form";
+import { Input } from "@repo/ui/input";
 import type { PlanValues } from "@/lib/schemas";
 
 export function PlanFeatureMatrix({

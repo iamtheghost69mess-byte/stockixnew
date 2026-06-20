@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Copy, Loader2, RotateCw, TriangleAlert } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@repo/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/card";
 import { formatApiError } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
 import type { TenantDetail } from "@/types/tenant";

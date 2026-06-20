@@ -1,0 +1,37 @@
+name: Deploy Stack Reusable Workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'The environment to deploy to (staging or production)'
+      release_sha:
+        required: true
+        type: string
+        description: 'The commit SHA / image tag to deploy'
+    secrets:
+      SSH_HOST:
+        required: true
+      SSH_USER:
+        required: true
+      SSH_PRIVATE_KEY:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            # Run the deployment script on the remote server
+            bash /opt/stockix/stockixnew/infra/deploy/deploy.sh "${{ inputs.environment }}" "${{ inputs.release_sha }}"

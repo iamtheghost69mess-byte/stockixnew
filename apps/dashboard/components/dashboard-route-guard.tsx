@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation";
 
 import { useMe } from "@/hooks/use-me";
 import { useHasAnyPermission } from "@/hooks/use-permissions";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@repo/ui/button";
+import { Skeleton } from "@repo/ui/skeleton";
 
 type RouteRule = {
   prefix: string;

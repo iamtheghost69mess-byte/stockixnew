@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Circle, Clock, PauseCircle, XCircle } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@repo/ui/badge";
 import type { LicenseStatus } from "@/types/license";
 
 function label(s: LicenseStatus): string {

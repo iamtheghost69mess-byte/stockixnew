@@ -2,7 +2,7 @@
 
 import { PosPageShell } from "@/components/pos-page-shell";
 import { PosResourceTable } from "@/components/pos-resource-table";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@repo/ui/badge";
 
 export default function PosWebhooksPage() {
   return (

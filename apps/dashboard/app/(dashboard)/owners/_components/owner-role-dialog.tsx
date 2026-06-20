@@ -3,14 +3,14 @@
 import { Loader2 } from "lucide-react";
 
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, type Role } from "@/lib/roles";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@repo/ui/dialog";
 
 import type { Owner } from "./use-owners-page";
 

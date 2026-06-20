@@ -203,3 +203,11 @@ All domain routes are mounted via `registerControlPlaneRoutes` in [`routes/regis
 Mutating routes under `/owners`, `/tenants`, `/licenses`, `/admin`, and `/api-keys` require an `Idempotency-Key` header (24h TTL, Redis/Postgres-backed via `api_idempotency_keys`). Duplicate keys with the same request hash replay the cached response; hash conflicts return 409.
 
 **Naturally idempotent (no middleware):** all GET routes; `/notifications/read*`; `/internal/*` (worker-only); webhooks (provider signatures); org slug inserts scoped by `(tenant_id, slug)` unique constraint.
+
+## Repo-root files reference
+
+| File | Purpose |
+|------|---------|
+| `provisioning.lock` | Stability marker — signals that the provisioning pipeline logic is frozen. Not an OS lockfile; do not delete. Ignored by git (`.gitignore`). |
+| `scripts/decrypt-tenant-env.mjs` | Decrypts `enc:v1:*` values in a tenant `.env` file. Usage: `node scripts/decrypt-tenant-env.mjs <path>` |
+| `scripts/inspect-monorepo.sh` | Diagnostic script — prints workspace package list, lockfile version, and dependency summary. |

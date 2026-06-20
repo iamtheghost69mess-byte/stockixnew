@@ -23,18 +23,19 @@ const sdk = new NodeSDK({
 process.on("SIGTERM", () => {
   sdk
     .shutdown()
-    .then(() => console.log("Tracing terminated"))
-    .catch((err) => console.log("Error terminating tracing", err))
+    .then(() => {
+      const { logger } = require("./lib/logger.js") as typeof import("./lib/logger.js");
+      logger.info("OpenTelemetry tracing terminated");
+    })
+    .catch(() => {})
     .finally(() => process.exit(0));
 });
 
 export function initTracing() {
-  if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-    try {
-      sdk.start();
-      console.log("OpenTelemetry Tracing initialized");
-    } catch (err) {
-      console.error("Failed to initialize OpenTelemetry Tracing", err);
-    }
+  if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) return;
+  try {
+    sdk.start();
+  } catch {
+    // Tracing is optional — boot must not fail if OTEL is unavailable
   }
 }

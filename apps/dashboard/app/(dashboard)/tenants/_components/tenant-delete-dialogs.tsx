@@ -3,15 +3,15 @@
 import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+} from "@repo/ui/dialog";
+import { Input } from "@repo/ui/input";
 import { TenantIdConfirmField } from "./tenant-id-confirm-field";
 
 type DeleteProgress = {

@@ -5,9 +5,9 @@ import { Loader2 } from "lucide-react";
 import type { UseFormReturn } from "react-hook-form";
 
 import TenantStatusBadge from "@/components/tenant-status-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
 import {
   Form,
   FormControl,
@@ -15,8 +15,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+} from "@repo/ui/form";
+import { Input } from "@repo/ui/input";
 import { formatDateTime } from "@/lib/date-format";
 import type { TenantProfileValues } from "@/lib/schemas";
 import type { TenantDetail } from "@/types/tenant";

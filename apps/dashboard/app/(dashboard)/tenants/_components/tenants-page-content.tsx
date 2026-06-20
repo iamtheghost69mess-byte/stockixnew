@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 
 import TenantCreateWizard from "@/components/tenant-create-wizard";
 import { TenantList, type TenantSortOrder } from "@/components/tenant-list";
-import { Button } from "@/components/ui/button";
+import { Button } from "@repo/ui/button";
 import { toast } from "@/components/reusabletoast";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";

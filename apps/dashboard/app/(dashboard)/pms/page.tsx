@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { PmsPageShell } from "@/components/pms-page-shell";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
 import { PmsTenantSelect } from "@/components/pms-tenant-select";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
 import { pmsJson } from "@/lib/pms-api";

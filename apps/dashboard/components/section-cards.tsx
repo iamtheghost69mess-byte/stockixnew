@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@repo/ui/badge";
 import {
   Card,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
+} from "@repo/ui/card";
+import { buttonVariants } from "@repo/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowRightIcon, Building2Icon, ShieldIcon, UsersIcon } from "lucide-react";
 

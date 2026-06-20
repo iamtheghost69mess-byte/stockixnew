@@ -4,8 +4,8 @@ import { usePathname } from "next/navigation";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { Toaster } from "@/components/ui/sonner";
+import { SidebarInset, SidebarProvider } from "@repo/ui/sidebar";
+import { Toaster } from "@repo/ui/sonner";
 import { DashboardRouteGuard } from "@/components/dashboard-route-guard";
 import { MailHealthBanner } from "@/components/mail-health-banner";
 import { MeProvider } from "@/components/me-provider";

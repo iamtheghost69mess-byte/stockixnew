@@ -19,15 +19,15 @@ import {
   subscribeOwnerNotificationStream,
   type StreamNotification,
 } from "@/lib/notification-stream-client";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+} from "@repo/ui/popover";
+import { ScrollArea } from "@repo/ui/scroll-area";
+import { Separator } from "@repo/ui/separator";
 import { cn } from "@/lib/utils";
 
 type NotificationSeverity = "info" | "success" | "warning" | "error";

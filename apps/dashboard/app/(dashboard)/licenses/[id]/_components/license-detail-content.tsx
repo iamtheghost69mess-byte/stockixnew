@@ -6,7 +6,7 @@ import { toast } from "@/components/reusabletoast";
 
 import { LicenseAssignDialog } from "@/components/license-assign-dialog";
 import { LicenseExtendDialog } from "@/components/license-extend-dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@repo/ui/tabs";
 import { formatApiError } from "@/lib/api-errors";
 import type { LicenseDetail } from "@/types/license";
 

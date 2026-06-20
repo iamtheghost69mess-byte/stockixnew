@@ -244,7 +244,7 @@ The business cannot scale. Every new customer requires a human operator to manua
 
 #### Step-by-Step Implementation Plan
 
-**Phase 1 — Stripe Setup (Infrastructure)**
+**Phase 1 — Stripe Setup (Infrastructure)**(NOT IN SCOPE FOR NOW LEAVE IT AS IT IS!)
 
 1. Add `stripe` npm package to `apps/api`.
 2. Create `stripe-client.ts` that initializes `Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" })` and exports the singleton.
@@ -253,20 +253,20 @@ The business cannot scale. Every new customer requires a human operator to manua
 
 **Phase 2 — Checkout Flow**
 
-5. Create `POST /billing/checkout-session` endpoint (authenticated owner route):
+1. Create `POST /billing/checkout-session` endpoint (authenticated owner route):
    - Accepts `{ tenantId, planSlug, billingInterval: "monthly" | "annually" }`
    - Creates or retrieves Stripe Customer for the tenant (using tenant admin email)
    - Creates Stripe Checkout Session with the appropriate Price ID
    - Returns `{ checkoutUrl }` — redirect the operator/customer to Stripe-hosted checkout
    - Idempotency: use Stripe's built-in idempotency key header
 
-6. Create `GET /billing/portal-session` endpoint:
+2. Create `GET /billing/portal-session` endpoint:
    - Returns a Stripe Customer Portal URL for the tenant to manage their own subscription
    - Requires tenant `stripe_customer_id` to be set
 
 **Phase 3 — Webhook Handler**
 
-7. In `apps/api/src/routes/webhooks.ts`, add a Stripe webhook route (`POST /webhooks/stripe`):
+1. In `apps/api/src/routes/webhooks.ts`, add a Stripe webhook route (`POST /webhooks/stripe`):
    - Verify signature using `stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)`
    - Handle these events:
      - `checkout.session.completed` → activate license (call `activateLicenseFromStripe(tenantId, subscriptionId)`)
@@ -279,19 +279,19 @@ The business cannot scale. Every new customer requires a human operator to manua
 
 **Phase 4 — License Bridge**
 
-8. Create `activateLicenseFromStripe(db, tenantId, stripeSubscriptionId, planSlug)`:
+1. Create `activateLicenseFromStripe(db, tenantId, stripeSubscriptionId, planSlug)`:
    - Calls existing `generateLicenseKey()` for new tenants
    - Sets `licenses.status = "active"`, `validFrom = now()`, `expiresAt` based on billing period
    - Stores `stripe_subscription_id` on the tenant row
    - Calls `syncFinanceLicenseForStockixTenant()` to push to Finance
 
-9. Create `suspendLicenseFromStripe(db, tenantId)`:
+2. Create `suspendLicenseFromStripe(db, tenantId)`:
    - Calls existing `applyTenantLicenseSuspend()`
    - Sends `sendSubscriptionCancelledEmail()`
 
 **Phase 5 — Dunning**
 
-10. On `invoice.payment_failed`:
+1. On `invoice.payment_failed`:
     - Send `sendPaymentFailedEmail()` immediately
     - Insert a `tenant_lifecycle_jobs` record with type `"dunning_retry"` and `runAt = now() + 3 days`
     - Worker processes `dunning_retry` by checking subscription status; if still failed, send escalating email
@@ -299,7 +299,7 @@ The business cannot scale. Every new customer requires a human operator to manua
 
 **Phase 6 — Dashboard UI**
 
-11. Add "Billing" section to the owner dashboard:
+1. Add "Billing" section to the owner dashboard:
     - Shows current plan, subscription status, next renewal date
     - "Manage Billing" button → generates Stripe Customer Portal URL
     - For super_admin: "Create Checkout" button to assign a paid subscription to a tenant
@@ -352,6 +352,7 @@ Additionally, `pms_guests` contains passport numbers, visa numbers, date of birt
    - Document the current connection role and whether RLS is actually `ON` for each table.
 
 2. **If the app uses a superuser role**: create a separate `PMS_DATABASE_URL` environment variable that connects as `stockix_pms_app`. Write migration `0068_pms_rls_grant.sql`:
+
    ```sql
    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO stockix_pms_app;
    GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO stockix_pms_app;
@@ -360,6 +361,7 @@ Additionally, `pms_guests` contains passport numbers, visa numbers, date of birt
 3. **Create a PMS-specific Drizzle connection** in `apps/api/src/db/pms-db.ts` that uses `PMS_DATABASE_URL`. This client must NOT be used for control-plane tables (tenants, owners, licenses, etc.).
 
 4. **Add a startup assertion** in the API bootstrap (`apps/api/src/index.ts`):
+
    ```
    On startup: connect with PMS_DATABASE_URL, run:
      SELECT has_table_privilege('pms_properties', 'SELECT') as can_select
@@ -553,6 +555,7 @@ The provisioning sequence creates the Finance MySQL tenant (step 21 of 52) befor
 #### Step-by-Step Implementation Plan
 
 1. **Create the DB migration**:
+
    ```sql
    CREATE TABLE branch_location_mappings (
      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -611,6 +614,7 @@ The provisioning sequence creates the Finance MySQL tenant (step 21 of 52) befor
 `infra/worker-service/src/worker.ts` — deprovision job handler
 
 When `chat` module is removed, no Chatwoot API call is made. When a tenant is fully deprovisioned, the Chatwoot account is also not deleted. This means:
+
 1. Tenant admin retains live Chatwoot access after paying for a downgraded plan
 2. Orphaned Chatwoot accounts accumulate, consuming Chatwoot resources
 
@@ -689,10 +693,12 @@ When `chat` module is removed, no Chatwoot API call is made. When a tenant is fu
    - Return 403 if validation fails
 
 3. **Add a DB-level constraint** via migration (defense-in-depth):
+
    ```sql
    -- Prevent non-null role assignment with wildcard unless created by known super_admin
    -- This is a belt-and-suspenders check; the API layer is the primary guard
    ```
+
    (Note: A Postgres check constraint on JSONB is complex — document the API-layer guard as primary, DB constraint as optional enhancement)
 
 4. **Write tests** covering:
@@ -1042,6 +1048,7 @@ This is covered by P2-A. Listed here as a dependency reminder.
 With the current port-per-tenant model, each tenant consumes 3–4 ports (Finance internal port, POS backend port, POS frontend port). A standard Linux system allows ~60,000 ports. At ~3 ports/tenant, the platform supports ~20,000 tenants per host before port exhaustion.
 
 **Recommended long-term architecture:**
+
 - Replace port-based Traefik routing with subdomain-based routing using a single Traefik entry point per service type
 - Finance: `{slug}.finance.{rootDomain}` → Traefik rule: `Host(\`{slug}.finance.{domain}\`)` → upstream by container name
 - POS: `{slug}.pos.{rootDomain}` → same pattern
@@ -1059,6 +1066,7 @@ With the current port-per-tenant model, each tenant consumes 3–4 ports (Financ
 Finance, POS, and the control plane each have separate user tables, credentials, and sessions. A tenant company's finance manager must remember three separate passwords.
 
 **Recommended approach:**
+
 1. Integrate an identity provider (Keycloak, Auth0, or custom OIDC server)
 2. Finance and POS both support OIDC/SAML — configure them to trust the IdP
 3. Control plane issues OIDC tokens on login that Finance and POS honor
@@ -1076,6 +1084,7 @@ Finance, POS, and the control plane each have separate user tables, credentials,
 Currently one `DEPLOYMENT_SECRET_KEY` encrypts/decrypts all tenant secrets (MySQL passwords, JWT secrets, Finance admin passwords). Compromise of this key exposes all tenants simultaneously.
 
 **Fix:** Move to per-tenant encryption keys derived from a master key:
+
 - Derive a tenant-specific key: `HKDF(masterKey, tenantId, "tenant-secrets")` → 32-byte key
 - Use this key for all encrypt/decrypt operations for that tenant's secrets
 - Compromise of one tenant's encrypted data does not expose others

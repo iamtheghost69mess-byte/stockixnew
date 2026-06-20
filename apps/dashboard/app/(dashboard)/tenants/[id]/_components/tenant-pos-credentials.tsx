@@ -5,11 +5,11 @@ import { useState } from "react";
 import { Copy, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@repo/ui/alert";
+import { Button, buttonVariants } from "@repo/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@repo/ui/dialog";
+import { ScrollArea } from "@repo/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -17,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@repo/ui/table";
 import { formatApiError } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
 import type { TenantDetail } from "@/types/tenant";

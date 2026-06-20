@@ -12,9 +12,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+} from "@repo/ui/alert-dialog";
+import { Label } from "@repo/ui/label";
+import { Textarea } from "@repo/ui/textarea";
 import type { LicenseRow } from "@/types/license";
 import { formatApiError } from "@/lib/api-errors";
 

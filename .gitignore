@@ -74,6 +74,11 @@ test_antigravity.txt
 .DS_Store
 *.pem
 
+# Root scratch files — never commit these
+provisioning.lock
+*.scratch.sql
+scratch/
+
 # Services — build artifacts (nested repos removed; tracked by root)
 services/posnew/.nx/
 services/posnew/node_modules/

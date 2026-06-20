@@ -2,9 +2,9 @@
 
 import { format } from "date-fns";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@repo/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/card";
+import { TabsContent } from "@repo/ui/tabs";
 
 import {
   formatHistoryAction,

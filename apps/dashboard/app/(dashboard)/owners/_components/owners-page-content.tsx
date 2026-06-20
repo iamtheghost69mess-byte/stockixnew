@@ -2,8 +2,8 @@
 
 import { Copy, Plus } from "lucide-react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@repo/ui/alert";
+import { Button } from "@repo/ui/button";
 
 import { OwnerInviteDialog } from "./owner-invite-dialog";
 import { OwnerRoleDialog } from "./owner-role-dialog";

@@ -6,7 +6,7 @@ import { Copy, Loader2, Pencil } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
 import LicenseStatusBadge from "@/components/license-status-badge";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@repo/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -14,20 +14,20 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+} from "@repo/ui/breadcrumb";
+import { Button } from "@repo/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { TabsContent } from "@/components/ui/tabs";
+} from "@repo/ui/dialog";
+import { Input } from "@repo/ui/input";
+import { Label } from "@repo/ui/label";
+import { Textarea } from "@repo/ui/textarea";
+import { TabsContent } from "@repo/ui/tabs";
 import type { LicenseDetail, LicenseStatus } from "@/types/license";
 
 import { productLabel } from "./license-detail-utils";

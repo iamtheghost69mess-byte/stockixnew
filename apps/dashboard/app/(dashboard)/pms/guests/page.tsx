@@ -6,17 +6,17 @@ import { PlusIcon, SearchIcon, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { PmsPageShell } from "@/components/pms-page-shell";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@repo/ui/badge";
+import { Button } from "@repo/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@repo/ui/dialog";
+import { Input } from "@repo/ui/input";
+import { Label } from "@repo/ui/label";
 import {
   Table,
   TableBody,
@@ -24,7 +24,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@repo/ui/table";
 import { usePmsTenant } from "@/hooks/use-pms-tenant";
 import { pmsFetch } from "@/lib/pms-fetch";
 

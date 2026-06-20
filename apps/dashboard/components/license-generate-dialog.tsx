@@ -6,17 +6,17 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "@/components/reusabletoast";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Alert, AlertDescription } from "@repo/ui/alert";
+import { Button } from "@repo/ui/button";
+import { Calendar } from "@repo/ui/calendar";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+} from "@repo/ui/dialog";
+import { Input } from "@repo/ui/input";
 import {
   Form,
   FormControl,
@@ -25,18 +25,18 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+} from "@repo/ui/form";
+import { Label } from "@repo/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui/popover";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+} from "@repo/ui/select";
+import { Textarea } from "@repo/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@repo/ui/toggle-group";
 import {
   generateLicenseSchema,
   type GenerateLicenseValues,

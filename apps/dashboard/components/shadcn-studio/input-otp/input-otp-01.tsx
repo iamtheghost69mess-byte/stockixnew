@@ -4,8 +4,8 @@ import { useId, useState } from "react";
 
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { Label } from "@/components/ui/label";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@repo/ui/input-otp";
+import { Label } from "@repo/ui/label";
 import { cn } from "@/lib/utils";
 
 export type OwnerAuthOtpInputProps = {

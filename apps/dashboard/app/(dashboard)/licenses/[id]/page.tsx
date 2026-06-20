@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/alert";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,8 +10,8 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@repo/ui/breadcrumb";
+import { Skeleton } from "@repo/ui/skeleton";
 
 import { LicenseDetailContent } from "./_components/license-detail-content";
 import { useLicenseDetailPage } from "./_components/use-license-detail-page";

@@ -4,8 +4,8 @@ import { useState } from "react";
 import { AlertCircle, Loader2, RotateCw, Square } from "lucide-react";
 import { toast } from "@/components/reusabletoast";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@repo/ui/alert";
+import { Button } from "@repo/ui/button";
 import { formatApiError } from "@/lib/api-errors";
 import type { TenantDetail } from "@/types/tenant";
 
