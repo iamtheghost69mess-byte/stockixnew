@@ -156,7 +156,7 @@ docker network create stockix-shared 2>/dev/null || true
 
 cd "${REPO_ROOT}/infra/prod"
 docker compose --env-file .env up -d --no-build --wait --wait-timeout 300 \
-  traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
+  traefik postgres pgbouncer control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
 
 # ── Health checks ─────────────────────────────────────────────────────────────
 
