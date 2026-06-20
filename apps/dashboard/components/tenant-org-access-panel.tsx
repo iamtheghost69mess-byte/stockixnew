@@ -154,8 +154,10 @@ export default function TenantOrgAccessPanel({ tenantId }: { tenantId: string })
           Support agent organization access
         </CardTitle>
         <CardDescription>
-          When a support agent has one or more grants on this tenant, they only see and manage those
-          organizations. With no grants, they retain full access to all organizations (default).
+          Restricts which sub-organizations a support agent can view and manage on this tenant.
+          With no grants they see all organizations by default; add grants to scope them to specific
+          ones. This does not affect Finance app login — manage Finance-level users in the Finance
+          Users panel below.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -169,9 +171,11 @@ export default function TenantOrgAccessPanel({ tenantId }: { tenantId: string })
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Stockix support agent</Label>
-                <Select value={ownerId || undefined} onValueChange={(v) => setOwnerId(v ?? "")}>
+                <Select value={ownerId} onValueChange={(v) => setOwnerId(v ?? "")}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose support agent" />
+                    <SelectValue placeholder="Choose support agent">
+                      {ownerId ? owners.find((o) => o.id === ownerId)?.name : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {owners.map((o) => (
@@ -185,17 +189,18 @@ export default function TenantOrgAccessPanel({ tenantId }: { tenantId: string })
               <div className="space-y-2">
                 <Label>Organization</Label>
                 <Select
-                  value={organizationId || undefined}
+                  value={organizationId}
                   onValueChange={(v) => setOrganizationId(v ?? "")}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose organization" />
+                    <SelectValue placeholder="Choose organization">
+                      {organizationId ? orgs.find((o) => o.id === organizationId)?.name : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {orgs.map((o) => (
                       <SelectItem key={o.id} value={o.id}>
-                        {o.name}{" "}
-                        <span className="text-muted-foreground">({o.slug})</span>
+                        {o.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

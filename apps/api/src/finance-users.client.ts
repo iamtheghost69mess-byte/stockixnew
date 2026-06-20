@@ -46,7 +46,10 @@ export class FinanceUsersClient {
       body: JSON.stringify(data),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) throw new Error(`inviteUser failed: ${res.status}`);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`inviteUser failed: ${res.status} | ${errText}`);
+    }
     return res.json();
   }
 

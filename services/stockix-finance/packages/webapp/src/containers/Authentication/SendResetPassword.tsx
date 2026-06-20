@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import intl from 'react-intl-universal';
 import { Formik } from 'formik';
 import { Link, useHistory } from 'react-router-dom';
-import { Intent } from '@blueprintjs/core';
+import { Intent, Button } from '@blueprintjs/core';
 
 import { AppToaster, FormattedMessage as T } from '@/components';
 import { useAuthSendResetPassword } from '@/hooks/query';
@@ -49,6 +49,15 @@ export default function SendResetPassword() {
 
   return (
     <AuthInsider>
+      <div style={{ marginBottom: '1rem' }}>
+        <Button 
+          icon="arrow-left" 
+          minimal={true} 
+          onClick={() => history.push('/auth/login')}
+        >
+          Back
+        </Button>
+      </div>
       <AuthInsiderCard>
         <Formik
           initialValues={initialValues}

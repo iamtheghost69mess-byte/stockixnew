@@ -44,6 +44,10 @@ import {
   renderProvisionCompleteOwner,
   renderProvisionCompleteOwnerText,
 } from "./templates/provision-complete-owner.js";
+import {
+  renderOrgAdminAccess,
+  renderOrgAdminAccessText,
+} from "./templates/org-admin-access.js";
 
 type MailDb = PostgresJsDatabase<typeof schema>;
 
@@ -619,4 +623,22 @@ export async function sendLicenseExpiringEmailToPlatformOwner(
     console.error("[sendLicenseExpiringEmailToPlatformOwner] Failed", tenantId, error);
     return { status: "failed", error };
   }
+}
+
+export async function sendOrgAdminAccessEmail(opts: {
+  to: string;
+  orgName: string;
+  orgUrl: string;
+  tenantId?: string;
+  organizationId?: string;
+}): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: `New organization ready — ${opts.orgName}`,
+    html: renderOrgAdminAccess({ orgName: opts.orgName, orgUrl: opts.orgUrl }),
+    text: renderOrgAdminAccessText({ orgName: opts.orgName, orgUrl: opts.orgUrl }),
+    idempotencyKey: `org-admin-access/${opts.organizationId ?? opts.orgName}`,
+    templateKey: "org-admin-access",
+    tenantId: opts.tenantId,
+  });
 }

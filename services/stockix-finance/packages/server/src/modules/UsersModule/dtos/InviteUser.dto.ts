@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsOptional } from 'class-validator';
 import { ApiProperty, ApiExtraModels } from '@nestjs/swagger';
 
 @ApiExtraModels()
@@ -45,4 +45,22 @@ export class SendInviteUserDto {
   @IsNumber()
   @IsNotEmpty()
   roleId: number;
+
+  @ApiProperty({
+    description: 'First name of the user to invite (optional)',
+    example: 'John',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  firstName?: string;
+
+  @ApiProperty({
+    description: 'Last name of the user to invite (optional)',
+    example: 'Doe',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  lastName?: string;
 }

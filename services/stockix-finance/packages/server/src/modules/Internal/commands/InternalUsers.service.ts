@@ -131,6 +131,7 @@ export class InternalUsersService {
         'u.first_name as firstName',
         'u.last_name as lastName',
         'r.name as roleName',
+        'r.slug as roleSlug',
         'u.active as isActive',
         'u.system_user_id as systemUserId',
       );
@@ -151,6 +152,7 @@ export class InternalUsersService {
         firstName: row.firstName,
         lastName: row.lastName,
         roleName: row.roleName,
+        roleSlug: (row.roleSlug as string | null) ?? null,
         isActive: membership?.isActive ?? row.isActive,
       };
     });

@@ -39,6 +39,7 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { logAudit } from "../audit.js";
+import { syncOrganizationNameToFinance } from "../finance-branding-sync.js";
 import { decryptDeploymentSecret } from "@repo/shared/deployment-secrets";
 import { ROLE_RANK, type Role } from "@repo/shared/roles";
 import { effectivePosUrl } from "../pos-public-url.js";
@@ -196,7 +197,7 @@ function slugifyOrganizationName(name: string): string {
 export async function pickUniqueOrganizationSlug(dbClient: DbClient, name: string): Promise<string> {
   const base = slugifyOrganizationName(name);
   for (let attempt = 0; attempt < 16; attempt++) {
-    const candidate = `${base}-${orgRandomSuffix4()}`.slice(0, 100);
+    const candidate = attempt === 0 ? base : `${base}-${orgRandomSuffix4()}`.slice(0, 100);
     const clash = await dbClient
       .select({ id: organizations.id })
       .from(organizations)
@@ -2111,6 +2112,26 @@ app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
 
   if (!updated) return c.json({ error: "organization_not_found" }, 404);
 
+  let syncWarning: string | null = null;
+  if (body.name !== undefined) {
+    if (updated.financeOrganizationId == null || updated.financeOrganizationId <= 0) {
+      syncWarning = "Organization has no Finance deployment — name saved but not synced.";
+    } else {
+      const syncResult = await syncOrganizationNameToFinance(
+        db,
+        {
+          stockixTenantId: tenantParsed.data,
+          financeOrganizationId: updated.financeOrganizationId,
+          name: updated.name,
+        },
+        (msg) => logger.info(msg),
+      );
+      if (!syncResult.synced && syncResult.warning) {
+        syncWarning = syncResult.warning;
+      }
+    }
+  }
+
   if (body.status === "suspended") {
     const [childTenant] = await db
       .select({ id: tenants.id, slug: tenants.slug })
@@ -2154,6 +2175,7 @@ app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
       updated,
       portMap.get(dockerComposeProjectForOrgSlug(updated.slug)) ?? null,
     ),
+    syncWarning: syncWarning ?? undefined,
   });
 });
 

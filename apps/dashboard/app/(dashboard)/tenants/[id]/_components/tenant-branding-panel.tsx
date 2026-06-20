@@ -12,6 +12,7 @@ type TenantBrandingConfig = {
   appName: string | null;
   logoUrl: string | null;
   primaryColor: string | null;
+  syncWarning?: string | null;
 };
 
 export function TenantBrandingPanel({ tenantId }: { tenantId: string }) {
@@ -54,12 +55,16 @@ export function TenantBrandingPanel({ tenantId }: { tenantId: string }) {
           primaryColor: primaryColor.trim() || null,
         }),
       });
-      const body = await res.json();
+      const body = (await res.json()) as TenantBrandingConfig & { error?: string };
       if (!res.ok) {
         toast.error(formatApiError(body, "Failed to save branding"));
         return;
       }
-      toast.success("Branding saved. Rebuild the tenant Finance webapp to apply logo/title in the UI.");
+      if (body.syncWarning) {
+        toast.warning(`Branding saved. ${body.syncWarning}`);
+      } else {
+        toast.success("Branding saved and synced to the Finance webapp.");
+      }
     } finally {
       setSaving(false);
     }
@@ -70,7 +75,9 @@ export function TenantBrandingPanel({ tenantId }: { tenantId: string }) {
       <CardHeader>
         <CardTitle>Branding</CardTitle>
         <CardDescription>
-          White-label settings for the tenant Finance webapp (injected via tenant <code>.env</code>).
+          White-label settings for this tenant&apos;s Finance webapp. Changes are synced to the Finance
+          stack in real time — no rebuild required. The logo field expects a publicly accessible URL
+          (CDN, S3, etc.) that the user&apos;s browser can fetch directly.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

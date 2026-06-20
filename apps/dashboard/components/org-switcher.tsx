@@ -64,25 +64,30 @@ async function readJsonBody(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
-function resolveOrgOpenUrl(org: Organization): string {
-  const u = org.publicUrl?.trim();
+function resolveOrgOpenUrl(org: Organization, allOrgs: Organization[]): string {
+  // Always use the primary organization's URL to access the Finance instance,
+  // since all sub-organizations share the same container and domain.
+  const targetOrg = allOrgs.find((o) => o.isPrimary) ?? org;
+  const u = targetOrg.publicUrl?.trim();
   if (u) return u;
-  const isLocal = org.subdomain.includes(".localhost");
-  return `${isLocal ? "http" : "https"}://${org.subdomain}`;
+  const isLocal = targetOrg.subdomain.includes(".localhost");
+  return `${isLocal ? "http" : "https"}://${targetOrg.subdomain}`;
 }
 
 function OrgMenuRow({
   org,
+  allOrgs,
   closeMenu,
   onRenameRequest,
   onSuspendRequest,
 }: {
   org: Organization;
+  allOrgs: Organization[];
   closeMenu: () => void;
   onRenameRequest: (org: Organization) => void;
   onSuspendRequest: (org: Organization) => void;
 }) {
-  const href = resolveOrgOpenUrl(org);
+  const href = resolveOrgOpenUrl(org, allOrgs);
   const isPrimary = org.isPrimary;
 
   if (org.status === "active") {
@@ -272,12 +277,16 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
+      const json = await readJsonBody(res);
       if (!res.ok) {
-        const json = await readJsonBody(res);
         toast.error(formatApiError(json, "Rename failed"));
         return;
       }
-      toast.success("Renamed");
+      if (json.syncWarning) {
+        toast.warning(`Renamed. ${json.syncWarning as string}`);
+      } else {
+        toast.success("Renamed");
+      }
       setRenameOrg(null);
       renameForm.reset({ name: "" });
       await refetch(true);
@@ -330,6 +339,7 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
                   <OrgMenuRow
                     key={org.id}
                     org={org}
+                    allOrgs={organizations}
                     closeMenu={() => setMenuOpen(false)}
                     onRenameRequest={(o) => {
                       setRenameOrg(o);
@@ -402,10 +412,10 @@ export function OrgSwitcher({ tenantId }: OrgSwitcherProps) {
                         COA copy: {org.provisioningError}
                       </span>
                     ) : null}
-                    {org.publicUrl ? (
+                    {org.status === "active" ? (
                       <a
                         className="text-xs font-medium text-primary underline"
-                        href={org.publicUrl}
+                        href={resolveOrgOpenUrl(org, organizations)}
                         target="_blank"
                         rel="noreferrer"
                       >

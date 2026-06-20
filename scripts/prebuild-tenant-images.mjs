@@ -14,7 +14,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadRootEnv } from "./load-root-env.mjs";
@@ -80,6 +80,21 @@ function syncFinanceSharedPackage() {
   });
 
   console.log("[prebuild] Synced shared package → finance");
+
+  // Strip dependencies that stockix-finance doesn't use and which cause workspace resolution errors
+  const pkgPath = path.join(FINANCE_SHARED_LINK, "package.json");
+  if (existsSync(pkgPath)) {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    if (pkg.dependencies) {
+      delete pkg.dependencies["@repo/db"];
+      delete pkg.dependencies["drizzle-orm"];
+      delete pkg.dependencies["ioredis"];
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+    }
+  }
+
+  // Ensure the lockfile is up to date with the newly synced shared package
+  run("Update finance lockfile", "pnpm install --lockfile-only", FINANCE_ROOT);
 }
 
 // ─────────────────────────────────────────────────────────────

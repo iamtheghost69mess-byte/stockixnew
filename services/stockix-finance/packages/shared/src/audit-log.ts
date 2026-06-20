@@ -26,6 +26,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "org.suspended": "Organization suspended",
   "org.deleted": "Organization deleted",
   "org.access_granted": "Org access granted",
+  "org.admin_access_granted": "Org admin access granted",
   "org.access_revoked": "Org access revoked",
   "plan.created": "Plan created",
   "plan.updated": "Plan updated",

@@ -82,6 +82,7 @@ type FinanceUserRow = {
   firstName: string;
   lastName: string;
   roleName: string | null;
+  roleSlug?: string | null;
   isActive: boolean;
 };
 
@@ -259,7 +260,7 @@ export default function TenantUsersPanel({
     editForm.reset({
       firstName: editTarget.firstName,
       lastName: editTarget.lastName,
-      roleId: editTarget.roleName?.toLowerCase().includes("admin") ? 1 : 2,
+      roleId: editTarget.roleSlug === "admin" ? 1 : 2,
     });
   }, [editTarget, editForm]);
 

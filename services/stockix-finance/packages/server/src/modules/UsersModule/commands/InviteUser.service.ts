@@ -62,6 +62,8 @@ export class InviteTenantUserService {
     const user = await this.tenantUserModel().query().insertAndFetch({
       email: sendInviteDTO.email,
       roleId: sendInviteDTO.roleId,
+      ...(sendInviteDTO.firstName && { firstName: sendInviteDTO.firstName }),
+      ...(sendInviteDTO.lastName && { lastName: sendInviteDTO.lastName }),
       active: true,
       invitedAt: new Date(),
     });
@@ -190,6 +192,9 @@ export class InviteTenantUserService {
       .findOne('email', email);
 
     if (foundUser) {
+      if (!foundUser.inviteAcceptedAt) {
+        throw new ServiceError(ERRORS.EMAIL_ALREADY_INVITED);
+      }
       throw new ServiceError(ERRORS.EMAIL_EXISTS);
     }
   }

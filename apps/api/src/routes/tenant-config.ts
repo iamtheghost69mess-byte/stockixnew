@@ -147,20 +147,20 @@ export function registerTenantConfigApi(
         return c.json({ error: "tenant_config_update_failed" }, 500);
       }
 
-      const response = {
+      const syncResult = await syncTenantBrandingToFinance(db, {
+        stockixTenantId: parsedId.data,
+        appName: updated.appName,
+        logoUrl: updated.logoUrl,
+        primaryColor: updated.primaryColor,
+      });
+      return c.json({
         tenantId: updated.tenantId,
         appName: updated.appName,
         logoUrl: updated.logoUrl,
         primaryColor: updated.primaryColor,
         branding: updated.branding ?? null,
-      };
-      void syncTenantBrandingToFinance(db, {
-        stockixTenantId: parsedId.data,
-        appName: response.appName,
-        logoUrl: response.logoUrl,
-        primaryColor: response.primaryColor,
+        syncWarning: syncResult.synced ? null : (syncResult.warning ?? null),
       });
-      return c.json(response);
     }
 
     const [inserted] = await db
@@ -178,19 +178,19 @@ export function registerTenantConfigApi(
       return c.json({ error: "tenant_config_insert_failed" }, 500);
     }
 
-    const response = {
+    const syncResult = await syncTenantBrandingToFinance(db, {
+      stockixTenantId: parsedId.data,
+      appName: inserted.appName,
+      logoUrl: inserted.logoUrl,
+      primaryColor: inserted.primaryColor,
+    });
+    return c.json({
       tenantId: inserted.tenantId,
       appName: inserted.appName,
       logoUrl: inserted.logoUrl,
       primaryColor: inserted.primaryColor,
       branding: inserted.branding ?? null,
-    };
-    void syncTenantBrandingToFinance(db, {
-      stockixTenantId: parsedId.data,
-      appName: response.appName,
-      logoUrl: response.logoUrl,
-      primaryColor: response.primaryColor,
+      syncWarning: syncResult.synced ? null : (syncResult.warning ?? null),
     });
-    return c.json(response);
   });
 }

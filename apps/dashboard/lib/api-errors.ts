@@ -31,6 +31,8 @@ const CODE_MESSAGES: Record<string, string> = {
   owner_must_be_support_agent: "Only support agent accounts can receive organization-scoped access.",
   owner_not_found: "That team member was not found.",
   email_already_exists: "An owner with that email already exists.",
+  finance_email_exists: "This user already exists in this organization.",
+  finance_email_invited: "This user has already been invited. They must accept the invitation email.",
 };
 
 function errorCode(body: unknown): string | null {

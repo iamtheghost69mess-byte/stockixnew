@@ -123,11 +123,31 @@ function mapFinanceUsersError(err: unknown): { status: number; body: Record<stri
   const message = err instanceof Error ? err.message : String(err);
   const statusMatch = message.match(/failed: (\d{3})/);
   const status = statusMatch ? Number(statusMatch[1]) : 502;
+  
+  let errorKey = "finance_users_proxy_failed";
+  let displayMessage = message;
+
+  const jsonMatch = message.match(/failed: \d{3} \| (.*)$/);
+  if (jsonMatch && jsonMatch[1]) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (parsed.message === "EMAIL_EXISTS") {
+        errorKey = "finance_email_exists";
+      } else if (parsed.message === "EMAIL_ALREADY_INVITED") {
+        errorKey = "finance_email_invited";
+      } else if (Array.isArray(parsed.message)) {
+        displayMessage = parsed.message.join(", ");
+      } else if (parsed.message) {
+        displayMessage = parsed.message;
+      }
+    } catch {}
+  }
+
   return {
     status: status >= 400 && status < 600 ? status : 502,
     body: {
-      error: "finance_users_proxy_failed",
-      message,
+      error: errorKey,
+      message: displayMessage,
     },
   };
 }

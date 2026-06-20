@@ -40,6 +40,7 @@ export async function migrateSystemSchema(db: Knex): Promise<void> {
     table.integer('user_id').notNullable();
     table.integer('tenant_id').notNullable();
     table.string('organization_id').notNullable();
+    table.string('role').nullable();
   });
 }
 

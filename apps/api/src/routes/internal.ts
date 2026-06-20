@@ -1091,6 +1091,118 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
         .update(organizations)
         .set({ status: "active", updatedAt: new Date() })
         .where(eq(organizations.id, organizationIdForRow));
+
+      // Extend admin access to new org + send notification — fire-and-forget.
+      // Failures here never block or revert the "active" status above.
+      void (async () => {
+        try {
+          const [orgRow] = await db
+            .select({
+              name: organizations.name,
+              subdomain: organizations.subdomain,
+              financeOrganizationId: organizations.financeOrganizationId,
+            })
+            .from(organizations)
+            .where(eq(organizations.id, organizationIdForRow))
+            .limit(1);
+
+          const adminEmail =
+            typeof orgPayload.adminEmail === "string" && orgPayload.adminEmail.trim()
+              ? orgPayload.adminEmail.trim()
+              : null;
+          const baseUrl =
+            typeof orgPayload.mainTenantInternalBaseUrl === "string"
+              ? orgPayload.mainTenantInternalBaseUrl
+              : null;
+          const stockixTenantId =
+            typeof orgPayload.stockixTenantId === "string"
+              ? orgPayload.stockixTenantId
+              : (currentJob.tenantId ?? null);
+          const orgName =
+            typeof orgPayload.orgName === "string" ? orgPayload.orgName : (orgRow?.name ?? null);
+
+          // Grant Finance membership via attach-user-to-tenant (idempotent)
+          if (adminEmail && baseUrl && orgRow?.financeOrganizationId) {
+            const secret = apiConfig.internalApiSecret;
+            if (secret) {
+              const attachRes = await fetch(
+                `${baseUrl.replace(/\/+$/, "")}/api/internal/attach-user-to-tenant`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "x-internal-secret": secret },
+                  body: JSON.stringify({
+                    email: adminEmail,
+                    organizationId: orgRow.financeOrganizationId,
+                  }),
+                  signal: AbortSignal.timeout(15_000),
+                },
+              ).catch((fetchErr: unknown) => {
+                logger.error("org.provision.admin_grant_failed", fetchErr, {
+                  organizationId: organizationIdForRow,
+                  adminEmail,
+                });
+                return null;
+              });
+
+              if (attachRes?.ok) {
+                logger.info("org.provision.admin_grant_succeeded", {
+                  organizationId: organizationIdForRow,
+                  adminEmail,
+                  financeOrganizationId: orgRow.financeOrganizationId,
+                });
+                if (stockixTenantId && z.string().uuid().safeParse(stockixTenantId).success) {
+                  await logAudit(db, {
+                    actorId: "", // Background worker does not have an actor ID
+                    action: "org.admin_access_granted",
+                    targetTenantId: stockixTenantId,
+                    userAgent: "worker/organization.provision.complete",
+                    metadata: {
+                      organizationId: organizationIdForRow,
+                      name: orgName,
+                      adminEmail,
+                      financeOrganizationId: orgRow.financeOrganizationId,
+                    },
+                  });
+                }
+              } else if (attachRes) {
+                const respText = await attachRes.text().catch(() => "");
+                logger.error("org.provision.admin_grant_failed", undefined, {
+                  organizationId: organizationIdForRow,
+                  adminEmail,
+                  httpStatus: attachRes.status,
+                  body: respText.slice(0, 200),
+                });
+              }
+            } else {
+              logger.warn("org.provision.admin_grant_skipped", {
+                organizationId: organizationIdForRow,
+                reason: "INTERNAL_API_SECRET not configured",
+              });
+            }
+          }
+
+          // Send org-ready email (no password — existing credentials apply)
+          if (adminEmail && orgRow?.subdomain && orgName) {
+            const orgUrl = `${apiConfig.publicBaseUrlScheme ?? "https"}://${orgRow.subdomain}`;
+            const { sendOrgAdminAccessEmail } = await import("../mail/send.js");
+            await sendOrgAdminAccessEmail({
+              to: adminEmail,
+              orgName,
+              orgUrl,
+              tenantId: typeof stockixTenantId === "string" ? stockixTenantId : undefined,
+              organizationId: organizationIdForRow,
+            }).catch((mailErr: unknown) => {
+              logger.error("org.provision.admin_access_email_failed", mailErr, {
+                organizationId: organizationIdForRow,
+              });
+            });
+          }
+        } catch (err) {
+          logger.error("org.provision.admin_grant_or_email_failed", err, {
+            organizationId: organizationIdForRow,
+          });
+        }
+      })();
     }
   }
   if (
