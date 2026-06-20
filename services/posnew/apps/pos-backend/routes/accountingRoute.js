@@ -4,6 +4,7 @@ const ac = require("../middlewares/backofficeAccounting");
 const ctrl = require("../controllers/accountingController");
 const notificationsCtrl = require("../controllers/backofficeNotificationController");
 const { uploadBankCsv } = require("../middlewares/uploadBankCsv");
+const { requireAccountingDirectMode } = require("../middlewares/requireAccountingDirectMode");
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ const arWr = [...authedTenantLocation, ac.requireArWrite];
 const apRd = [...authedTenantLocation, ac.requireApRead];
 const apWr = [...authedTenantLocation, ac.requireApWrite];
 const glRd = [...authedTenantLocation, ac.requireGlRead];
-const glWr = [...authedTenantLocation, ac.requireGlWrite];
+const glWr = [...authedTenantLocation, requireAccountingDirectMode, ac.requireGlWrite];
 const bankRd = [...authedTenantLocation, ac.requireBankRead];
 const bankWr = [...authedTenantLocation, ac.requireBankWrite];
 const periodWr = [...authedTenantLocation, ac.requirePeriodsWrite];

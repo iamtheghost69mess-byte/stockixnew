@@ -55,11 +55,16 @@ import {
   tenants,
   licenses,
   deadLetterJobs,
+  owners,
 } from "@repo/db/schema";
-import { and, eq, sql, isNotNull, lte } from "drizzle-orm";
+import { and, eq, sql, isNotNull, lte, gte } from "drizzle-orm";
 import {
   initEmailLogging,
   processLicenseExpiryFollowUp,
+  syncFinanceLicenseForStockixTenant,
+  sendMail,
+  sendModuleAddedEmail,
+  sendModuleRemovedEmail,
 } from "@repo/platform-worker-shared";
 import { z } from "zod";
 import { checkRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
@@ -80,6 +85,7 @@ import { scrubTenantRuntimeArtifacts } from "../domain/scrub-tenant-artifacts.js
 import { executeOrgProvisionRuntime } from "./org-provision-runtime.js";
 import { executeAddModuleRuntime } from "./provision-runtime.js";
 import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
+import { deprovisionChatwootAccount } from "./chatwoot-provision.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
 const pollMs = Math.max(
@@ -768,8 +774,8 @@ async function runAddModuleJob(
   };
 }> {
   const payload = addModulePayloadSchema.parse(job.payload);
-  const executeAddModule = async () =>
-    executeAddModuleRuntime(
+  const executeAddModule = async () => {
+    const result = await executeAddModuleRuntime(
       db,
       {
         tenantId: payload.tenantId,
@@ -782,6 +788,16 @@ async function runAddModuleJob(
       (m) => logger.info(`[worker][${job.id}] ${m}`),
       job.correlationId ?? randomUUID(),
     );
+    sendModuleAddedEmail({
+      to: payload.adminEmail,
+      tenantName: payload.name,
+      moduleName: payload.module,
+      tenantId: payload.tenantId,
+    }).catch((e: unknown) => {
+      logger.info(`[worker][${job.id}] module-added email failed (non-fatal): ${e instanceof Error ? e.message : String(e)}`);
+    });
+    return result;
+  };
 
   if (payload.tenantId) {
     return withTenantLifecycleAdvisoryLock(db, payload.tenantId, executeAddModule);
@@ -790,18 +806,60 @@ async function runAddModuleJob(
 }
 
 async function runRemoveModuleJob(
-  job: { id: string; payload: Record<string, unknown> },
+  db: ReturnType<typeof createDb>,
+  job: { id: string; tenantId: string | null; payload: Record<string, unknown> },
 ): Promise<void> {
   const payload = removeModulePayloadSchema.parse(job.payload);
+  const log = (m: string) => logger.info(`[worker][${job.id}] ${m}`);
+
+  // Send removal notification before stopping the stack
+  if (job.tenantId) {
+    const [tenantRow] = await db
+      .select({ name: tenants.name, ownerId: tenants.ownerId })
+      .from(tenants)
+      .where(eq(tenants.id, job.tenantId))
+      .limit(1);
+    if (tenantRow?.ownerId) {
+      const [ownerRow] = await db
+        .select({ email: owners.email })
+        .from(owners)
+        .where(eq(owners.id, tenantRow.ownerId))
+        .limit(1);
+      if (ownerRow?.email) {
+        sendModuleRemovedEmail({
+          to: ownerRow.email,
+          tenantName: tenantRow.name,
+          moduleName: payload.module,
+          tenantId: job.tenantId,
+        }).catch((e: unknown) => {
+          log(`module-removed email failed (non-fatal): ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }
+    }
+  }
+
   if (payload.module === "pos" || payload.module === "pms") {
-    await stopModuleStack(payload.slug, payload.module, (m) =>
-      logger.info(`[worker][${job.id}] ${m}`),
-    );
+    await stopModuleStack(payload.slug, payload.module, log);
   }
   if (payload.module === "accounting") {
-    await stopFinanceStack(payload.slug, (m) =>
-      logger.info(`[worker][${job.id}] ${m}`),
-    );
+    await stopFinanceStack(payload.slug, log);
+  }
+  if (payload.module === "chat" && job.tenantId && db) {
+    const [row] = await db
+      .select({ chatwootAccountId: tenants.chatwootAccountId })
+      .from(tenants)
+      .where(eq(tenants.id, job.tenantId))
+      .limit(1);
+    if (row?.chatwootAccountId) {
+      await deprovisionChatwootAccount({
+        db,
+        tenantId: job.tenantId,
+        chatwootAccountId: row.chatwootAccountId,
+        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+        log,
+      });
+    }
   }
 }
 
@@ -812,6 +870,23 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
 }) {
   if (!job.tenantId) throw new Error("tenantId is required");
   await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
+
+  // Clean up external Chatwoot account before destroying the tenant.
+  const [tenantRow] = await db
+    .select({ chatwootAccountId: tenants.chatwootAccountId, slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, job.tenantId))
+    .limit(1);
+  if (tenantRow?.chatwootAccountId) {
+    await deprovisionChatwootAccount({
+      db,
+      tenantId: job.tenantId,
+      chatwootAccountId: tenantRow.chatwootAccountId,
+      chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+      chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+      log: (m) => logger.info(`[worker][${job.id}] ${m}`),
+    });
+  }
   
   if (job.payload.needsScrub) {
     const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
@@ -859,12 +934,66 @@ async function runTenantLifecycleCommand(
   });
 }
 
+async function runLicenseSyncRetryJob(
+  db: ReturnType<typeof createDb>,
+  job: { id: string; tenantId: string | null; payload: Record<string, unknown> },
+): Promise<void> {
+  if (!job.tenantId) throw new Error("tenantId is required for license_sync_retry");
+  const log = (m: string) => logger.info(`[worker][${job.id}] ${m}`);
+
+  const [dep] = await db
+    .select({ financeTenantId: tenantDeployments.financeTenantId })
+    .from(tenantDeployments)
+    .where(eq(tenantDeployments.tenantId, job.tenantId))
+    .limit(1);
+
+  if (!dep?.financeTenantId || dep.financeTenantId <= 0) {
+    log(`[license_sync_retry] No finance_tenant_id for tenant ${job.tenantId} — skipping`);
+    return;
+  }
+
+  await syncFinanceLicenseForStockixTenant(
+    db,
+    { stockixTenantId: job.tenantId, financeTenantId: dep.financeTenantId },
+    log,
+  );
+  log(`[license_sync_retry] Sync succeeded for tenant ${job.tenantId}`);
+}
+
+async function runEmailRetryJob(
+  _db: ReturnType<typeof createDb>,
+  job: { id: string; tenantId: string | null; payload: Record<string, unknown> },
+): Promise<void> {
+  const p = job.payload;
+  const to = String(p.to ?? "");
+  const subject = String(p.subject ?? "");
+  const html = String(p.html ?? "");
+  if (!to || !subject || !html) throw new Error("email_retry: missing to/subject/html in payload");
+
+  const result = await sendMail({
+    to,
+    subject,
+    html,
+    text: typeof p.text === "string" ? p.text : undefined,
+    idempotencyKey: typeof p.idempotencyKey === "string" ? p.idempotencyKey : undefined,
+    templateKey: typeof p.templateKey === "string" ? p.templateKey : "email_retry",
+    tenantId: typeof p.tenantId === "string" ? p.tenantId : job.tenantId ?? undefined,
+  });
+
+  if (result.status === "failed") {
+    throw new Error(`email_retry failed: ${result.error}`);
+  }
+  logger.info(`[worker][${job.id}] email_retry sent to=${to} templateKey=${p.templateKey ?? "unknown"}`);
+}
+
 const handlers = {
   "tenant.provision": runProvisionJob,
   "organization.provision": runOrgProvisionJob,
   "tenant.deprovision": runDeprovisionJob,
   add_module: runAddModuleJob,
-  remove_module: (_db: ReturnType<typeof createDb>, job: ClaimedJob) => runRemoveModuleJob(job),
+  remove_module: (db: ReturnType<typeof createDb>, job: ClaimedJob) => runRemoveModuleJob(db, job),
+  license_sync_retry: runLicenseSyncRetryJob,
+  email_retry: runEmailRetryJob,
   "tenant.lifecycle": (
     db: ReturnType<typeof createDb>,
     job: { tenantId: string | null; id: string; payload: Record<string, unknown> },
@@ -1227,6 +1356,103 @@ async function loop() {
   const db = createDb(databaseUrl);
   initEmailLogging(db);
   logger.info("Email logging initialized in worker", { event: "worker_email_logging_init" });
+
+  // Dead-letter monitor: check every 5 minutes for newly failed jobs and log/alert
+  const DEAD_LETTER_MONITOR_INTERVAL_MS = 5 * 60_000;
+  let lastDeadLetterCheck = new Date(Date.now() - DEAD_LETTER_MONITOR_INTERVAL_MS);
+  setInterval(async () => {
+    try {
+      const since = lastDeadLetterCheck;
+      lastDeadLetterCheck = new Date();
+      const newDeadLetterJobs = await db
+        .select({ id: deadLetterJobs.id, type: deadLetterJobs.type, tenantId: deadLetterJobs.tenantId, lastError: deadLetterJobs.lastError })
+        .from(deadLetterJobs)
+        .where(and(isNotNull(deadLetterJobs.failedAt), gte(deadLetterJobs.failedAt, since)));
+      for (const dlJob of newDeadLetterJobs) {
+        Sentry.captureMessage(`Dead-letter job: ${dlJob.type}`, {
+          level: "error",
+          extra: { jobId: dlJob.id, tenantId: dlJob.tenantId, lastError: dlJob.lastError },
+        });
+        logger.error(`[worker][dead-letter] type=${dlJob.type} id=${dlJob.id} tenant=${dlJob.tenantId ?? "none"} error=${dlJob.lastError?.slice(0, 200) ?? "unknown"}`);
+      }
+    } catch (err) {
+      logger.warn(`[worker][dead-letter-monitor] check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, DEAD_LETTER_MONITOR_INTERVAL_MS);
+
+  // Capacity monitoring: runs every hour
+  const CAPACITY_MONITOR_INTERVAL_MS = 60 * 60_000;
+  const capacityMonitorTick = async () => {
+    const {
+      tenantPortAllocated,
+      tenantPortCapacityPct,
+      diskUsagePct,
+      proxysqlConnectionsPct,
+    } = await import("./worker-prometheus.js");
+
+    // Port exhaustion
+    try {
+      const portMax = parseInt(process.env.TENANT_PORT_RANGE_MAX ?? "65000", 10);
+      const portMin = parseInt(process.env.TENANT_PORT_RANGE_MIN ?? "10000", 10);
+      const [maxPortRow] = await db
+        .select({ maxPort: sql<number>`COALESCE(MAX(${tenantDeployments.internalPort}), ${portMin})` })
+        .from(tenantDeployments);
+      const highest = Number(maxPortRow?.maxPort ?? portMin);
+      tenantPortAllocated.set(highest);
+      const pct = ((highest - portMin) / (portMax - portMin)) * 100;
+      tenantPortCapacityPct.set(Math.min(100, pct));
+      if (pct >= 90) {
+        logger.error(`[worker][capacity] PORT EXHAUSTION WARNING: ${pct.toFixed(1)}% of port range used (highest=${highest}, max=${portMax})`);
+        Sentry.captureMessage("Tenant port range near exhaustion", { level: "error", extra: { highest, portMax, pct } });
+      }
+    } catch (err) {
+      logger.warn(`[worker][capacity] port check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Disk usage
+    try {
+      const envRoot = process.env.TENANT_ENV_ROOT ?? "/opt/tenants";
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execFileAsync = promisify(execFile);
+      const { stdout } = await execFileAsync("df", ["--output=pcent", envRoot]);
+      const match = stdout.match(/(\d+)%/);
+      if (match) {
+        const pct = parseInt(match[1] ?? "0", 10);
+        diskUsagePct.set(pct);
+        if (pct >= 80) {
+          logger.error(`[worker][capacity] DISK WARNING: ${pct}% used on ${envRoot}`);
+          Sentry.captureMessage("Tenant disk usage critical", { level: "warning", extra: { envRoot, pct } });
+        }
+      }
+    } catch (err) {
+      logger.warn(`[worker][capacity] disk check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // ProxySQL connections
+    try {
+      const proxysqlStatsUrl = process.env.PROXYSQL_STATS_URL;
+      if (proxysqlStatsUrl) {
+        const res = await fetch(`${proxysqlStatsUrl}/stats/connections`, { signal: AbortSignal.timeout(5_000) });
+        if (res.ok) {
+          const data = (await res.json()) as { active?: number; max?: number };
+          if (typeof data.active === "number" && typeof data.max === "number" && data.max > 0) {
+            const pct = (data.active / data.max) * 100;
+            proxysqlConnectionsPct.set(pct);
+            if (pct >= 80) {
+              logger.error(`[worker][capacity] PROXYSQL CONNECTION WARNING: ${pct.toFixed(1)}% of max connections used`);
+              Sentry.captureMessage("ProxySQL connections near limit", { level: "warning", extra: { active: data.active, max: data.max, pct } });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`[worker][capacity] proxysql check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  void capacityMonitorTick();
+  setInterval(() => void capacityMonitorTick(), CAPACITY_MONITOR_INTERVAL_MS);
+
   logger.info(
     JSON.stringify({
       level: "info",

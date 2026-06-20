@@ -38,6 +38,7 @@ import {
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
 import { verifyPosBigcapitalIntegration } from "../domain/provisioning/adapters/verify-pos-bigcapital-integration.js";
+import { seedBranchLocationMapping } from "../domain/provisioning/adapters/seed-branch-location-mapping.js";
 import { completeFinanceSetupWizard } from "../domain/provisioning/adapters/complete-finance-setup-wizard.js";
 import {
   clearTenantPartialState,
@@ -511,7 +512,8 @@ export async function rollbackProvision(
     rollbackSlug = slugRow?.slug;
   }
 
-  log(`[rollback] DEBUG: preserving tenant stack and databases for debugging.`);
+  log(`[rollback] DEBUG: preserving tenant stack and containers for debugging.`);
+  /* compose down is disabled in debug mode — databases are intentionally preserved for inspection */
   /*
   if (composeCtx && options.deps) {
     const rolledBack = await composeDownBestEffort(options.deps.docker, composeCtx);
@@ -549,6 +551,24 @@ export async function rollbackProvision(
   */
 
   const journalState = await loadProvisionJournalState(db, correlationId);
+
+  // Clean up MySQL databases created by a failed provision (docker.data_step completed but
+  // provisioning failed after). This prevents MySQL orphans from accumulating.
+  // Failure is non-fatal: the control-plane row is already in failed state.
+  if (rollbackSlug && journalState.completedOps.has("docker.data_step")) {
+    try {
+      const { cleanupMysqlOrphan } = await import("../domain/provisioning/adapters/check-mysql-orphan.js");
+      const cleaned = await cleanupMysqlOrphan(rollbackSlug, log);
+      if (cleaned) {
+        log(`[rollback] MySQL databases cleaned for slug=${rollbackSlug}`);
+      } else {
+        log(`[rollback][warn] MySQL cleanup failed for slug=${rollbackSlug} — use scripts/cleanup-mysql-orphans.mjs to clean manually`);
+      }
+    } catch (mysqlErr) {
+      log(`[rollback][warn] MySQL cleanup error for slug=${rollbackSlug}: ${mysqlErr instanceof Error ? mysqlErr.message : String(mysqlErr)}`);
+    }
+  }
+
   /*
   if (journalState.completedOps.has("pos.schema_migration")) {
     log("[rollback] pos.schema_migration completed — POS compose down + Mongo deprovision will revert schema state");
@@ -828,7 +848,7 @@ export async function executeProvisionRuntime(
   assertNotCancelled?: () => Promise<void>,
   lifecycleJobId?: string,
 ): Promise<ProvisionResult> {
-  await ensureExternalNetworksExist(log);
+  await ensureTenantExternalNetworks(log);
   const runtimeStartedAt = Date.now();
   let tenantId: string | undefined;
   let deploymentId: string | undefined;
@@ -1650,8 +1670,10 @@ export async function executeProvisionRuntime(
         { timeoutMs: COMPOSE_DOWN_TIMEOUT_MS },
       )
       .catch(() => undefined);
-    // Explicitly delete the MySQL named volume — compose down -v may not remove
-    // explicitly named volumes (name: ${MYSQL_VOLUME_NAME}) in all Compose versions.
+    // Explicitly delete per-project named volumes — compose down -v may not remove explicitly
+    // named volumes in all Compose versions. Names follow the {project}_{service} convention.
+    const mysqlVolumeName = `${project}_mysql_data`;
+    const mongoVolumeName = `${project}_mongo_data`;
     await execa("docker", ["volume", "rm", mysqlVolumeName], { stdio: "pipe", reject: false });
     // Explicitly delete the Mongo auto-named volume — stale SCRAM credentials survive compose
     // down -v when the container was previously stopped (not running) because Compose skips
@@ -1662,6 +1684,25 @@ export async function executeProvisionRuntime(
     });
     sideEffectsStarted = true;
     await checkNotCancelled();
+
+    // Preflight: detect MySQL orphans from a previous failed provision for this slug.
+    // If databases exist but no tenant record does, we're about to re-create them which
+    // is fine (CREATE DATABASE IF NOT EXISTS is idempotent). Log the state for visibility.
+    if (!hasOp("docker.data_step")) {
+      try {
+        const { checkMysqlOrphan } = await import("../domain/provisioning/adapters/check-mysql-orphan.js");
+        const orphan = await checkMysqlOrphan(db, input.slug, log);
+        if (orphan.isOrphan) {
+          await trace.event("preflight.orphan_detected", `MySQL orphan found for slug=${input.slug} — will be overwritten by CREATE DATABASE IF NOT EXISTS`, {
+            level: "warn",
+            meta: { slug: input.slug, mysqlDatabase: orphan.mysqlDatabase },
+          });
+        }
+      } catch (orphanCheckErr) {
+        log(`[provision] orphan check failed (non-fatal): ${orphanCheckErr instanceof Error ? orphanCheckErr.message : String(orphanCheckErr)}`);
+      }
+    }
+
      await maybePauseForDebug("Initialize Redis namespace");
      log("[step-start] Initialize Redis namespace");
      if (!hasOp("docker.data_step")) {
@@ -2455,6 +2496,20 @@ export async function executeProvisionRuntime(
           throw new Error(wireError);
         } else {
           integrationWired = true;
+          // Seed the primary branch→location mapping now that both Finance and POS are wired
+          if (tenantId && posOrganizationId && port) {
+            const financeBase = `http://127.0.0.1:${port}`;
+            seedBranchLocationMapping({
+              db,
+              tenantId,
+              posOrganizationId,
+              posHostPort: posOutcome.posHostPort!,
+              financeBaseUrl: financeBase,
+              log,
+            }).catch((mapErr: unknown) => {
+              log(`[provision] branch-location mapping failed (non-fatal): ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
+            });
+          }
         }
       }
     }

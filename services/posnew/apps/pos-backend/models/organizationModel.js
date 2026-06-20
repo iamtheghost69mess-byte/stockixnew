@@ -124,6 +124,13 @@ const organizationSchema = new mongoose.Schema(
     deletionRequestedAt: { type: Date, default: null },
     deletionScheduledAt: { type: Date, default: null },
 
+    /**
+     * When true, POS GL writes are suppressed and accounting reads are proxied from Finance.
+     * Set automatically by the control plane when the accounting (Finance) module is active.
+     * Prevents double-posting when both the POS GL engine and Finance are writing the same events.
+     */
+    accountingRelayMode: { type: Boolean, default: false, index: true },
+
     /** Optional parent org for consolidated reporting (child tenants). */
     parentOrganization: {
       type: mongoose.Schema.Types.ObjectId,

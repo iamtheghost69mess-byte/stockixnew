@@ -48,6 +48,22 @@ import {
   renderOrgAdminAccess,
   renderOrgAdminAccessText,
 } from "./templates/org-admin-access.js";
+import {
+  renderModuleAdded,
+  renderModuleAddedText,
+  renderModuleRemoved,
+  renderModuleRemovedText,
+} from "./templates/module-lifecycle.js";
+import {
+  renderMfaEnabled,
+  renderMfaEnabledText,
+  renderMfaDisabled,
+  renderMfaDisabledText,
+  renderAccountLocked,
+  renderAccountLockedText,
+  renderSuspiciousLogin,
+  renderSuspiciousLoginText,
+} from "./templates/security-alerts.js";
 
 type MailDb = PostgresJsDatabase<typeof schema>;
 
@@ -625,6 +641,41 @@ export async function sendLicenseExpiringEmailToPlatformOwner(
   }
 }
 
+export async function sendModuleAddedEmail(opts: {
+  to: string;
+  tenantName: string;
+  moduleName: string;
+  moduleUrl?: string;
+  tenantId?: string;
+}): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: `${opts.moduleName} module activated`,
+    html: renderModuleAdded({ tenantName: opts.tenantName, moduleName: opts.moduleName, moduleUrl: opts.moduleUrl }),
+    text: renderModuleAddedText({ tenantName: opts.tenantName, moduleName: opts.moduleName, moduleUrl: opts.moduleUrl }),
+    idempotencyKey: `module-added/${opts.tenantId ?? opts.tenantName}/${opts.moduleName}`,
+    templateKey: "module-added",
+    tenantId: opts.tenantId,
+  });
+}
+
+export async function sendModuleRemovedEmail(opts: {
+  to: string;
+  tenantName: string;
+  moduleName: string;
+  tenantId?: string;
+}): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: `${opts.moduleName} module deactivated`,
+    html: renderModuleRemoved({ tenantName: opts.tenantName, moduleName: opts.moduleName }),
+    text: renderModuleRemovedText({ tenantName: opts.tenantName, moduleName: opts.moduleName }),
+    idempotencyKey: `module-removed/${opts.tenantId ?? opts.tenantName}/${opts.moduleName}`,
+    templateKey: "module-removed",
+    tenantId: opts.tenantId,
+  });
+}
+
 export async function sendOrgAdminAccessEmail(opts: {
   to: string;
   orgName: string;
@@ -640,5 +691,49 @@ export async function sendOrgAdminAccessEmail(opts: {
     idempotencyKey: `org-admin-access/${opts.organizationId ?? opts.orgName}`,
     templateKey: "org-admin-access",
     tenantId: opts.tenantId,
+  });
+}
+
+export async function sendMfaEnabledEmail(opts: { to: string; email: string }): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: "Two-factor authentication enabled",
+    html: renderMfaEnabled({ email: opts.email }),
+    text: renderMfaEnabledText({ email: opts.email }),
+    idempotencyKey: `mfa-enabled/${opts.to}/${Date.now()}`,
+    templateKey: "mfa-enabled",
+  });
+}
+
+export async function sendMfaDisabledEmail(opts: { to: string; email: string }): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: "Two-factor authentication disabled",
+    html: renderMfaDisabled({ email: opts.email }),
+    text: renderMfaDisabledText({ email: opts.email }),
+    idempotencyKey: `mfa-disabled/${opts.to}/${Date.now()}`,
+    templateKey: "mfa-disabled",
+  });
+}
+
+export async function sendAccountLockedEmail(opts: { to: string; email: string; lockedUntil: Date }): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: "Your account has been temporarily locked",
+    html: renderAccountLocked({ email: opts.email, lockedUntil: opts.lockedUntil }),
+    text: renderAccountLockedText({ email: opts.email, lockedUntil: opts.lockedUntil }),
+    idempotencyKey: `account-locked/${opts.to}/${opts.lockedUntil.getTime()}`,
+    templateKey: "account-locked",
+  });
+}
+
+export async function sendSuspiciousLoginEmail(opts: { to: string; email: string; ipAddress: string; userAgent: string; timestamp: Date }): Promise<MailSendResult> {
+  return sendMail({
+    to: opts.to,
+    subject: "New sign-in from unrecognized device",
+    html: renderSuspiciousLogin({ email: opts.email, ipAddress: opts.ipAddress, userAgent: opts.userAgent, timestamp: opts.timestamp }),
+    text: renderSuspiciousLoginText({ email: opts.email, ipAddress: opts.ipAddress, userAgent: opts.userAgent, timestamp: opts.timestamp }),
+    idempotencyKey: `suspicious-login/${opts.to}/${opts.timestamp.getTime()}`,
+    templateKey: "suspicious-login",
   });
 }

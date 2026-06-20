@@ -36,6 +36,7 @@ const {
   resetCredentialRolePin,
   resetOrgPin,
   retryProvisioning,
+  patchOrgAccountingMode,
 } = require("../controllers/platformOrgController");
 const {
   wireBigcapitalIntegration,
@@ -233,6 +234,11 @@ router.patch(
   "/organizations/:id/entitlements",
   requirePlatformPermission(P.ORG_WRITE),
   patchEntitlements
+);
+router.put(
+  "/organizations/:id/accounting-mode",
+  requirePlatformPermission(P.ORG_WRITE),
+  patchOrgAccountingMode
 );
 router.delete("/organizations/:id", requirePlatformPermission(P.ORG_WRITE), deleteOrg);
 

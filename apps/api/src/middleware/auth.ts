@@ -303,7 +303,9 @@ export function createActorResolver(
       c.set("actorId", resolved.ownerId);
       c.set("actorRole", "read_only");
       c.set("actorEffectiveRole", "read_only");
-      c.set("actorPermissions", await attachActorPermissions(db, resolved.ownerId));
+      // If the key has scoped permissions, use those; otherwise inherit owner's permissions.
+      const ownerPerms = await attachActorPermissions(db, resolved.ownerId);
+      c.set("actorPermissions", resolved.permissions ?? ownerPerms);
       c.set("apiKeyId", resolved.keyId);
       scheduleApiKeyLastUsedTouch(db, resolved.keyId);
       await next();

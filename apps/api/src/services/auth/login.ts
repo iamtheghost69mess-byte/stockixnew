@@ -5,6 +5,7 @@ import * as schema from "@repo/db/schema";
 import { adminAuditLog, owners } from "@repo/db/schema";
 import type { ApiServiceResult } from "./types.js";
 import { failedLoginsTotal } from "../../lib/prometheus.js";
+import { sendAccountLockedEmail } from "../../mail/send.js";
 
 type LoginSuccess =
   | { requiresMfa: true; ownerId: string }
@@ -56,14 +57,18 @@ export async function loginOwner(
   if (!ok) {
     failedLoginsTotal.inc();
     const nextFailed = (owner.failedLoginCount ?? 0) + 1;
+    const lockedUntil = nextFailed >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
     await db
       .update(owners)
       .set({
         failedLoginCount: nextFailed,
         lastFailedAt: new Date(),
-        lockedUntil: nextFailed >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
+        lockedUntil,
       })
       .where(eq(owners.id, owner.id));
+    if (lockedUntil) {
+      sendAccountLockedEmail({ to: owner.email, email: owner.email, lockedUntil }).catch(() => undefined);
+    }
     await db.insert(adminAuditLog).values({
       actorId: owner.id,
       action: "auth.login_failed",

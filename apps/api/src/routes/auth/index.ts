@@ -27,6 +27,8 @@ import { eq, sql } from "drizzle-orm";
 import { RateLimiterMemory, RateLimiterRedis, RateLimiterRes } from "rate-limiter-flexible";
 import { getControlPlaneRedisClient } from "../../lib/redis.js";
 import { invalidateSessionCache } from "../../middleware/auth.js";
+import { sendMfaEnabledEmail, sendMfaDisabledEmail, sendSuspiciousLoginEmail } from "../../mail/send.js";
+import { createHash } from "node:crypto";
 
 function readCookie(req: Request, name: string): string {
   const cookieHeader = req.headers.get("cookie") ?? "";
@@ -179,13 +181,39 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       response.headers.append("Set-Cookie", expiredMfaCookie());
       return response;
     }
+    // result.data is narrowed to non-MFA branch here (requiresMfa branch returned above)
+    const loginNonMfa = result.data as Extract<typeof result.data, { requiresMfa: false }>;
     const sessionToken = await signSessionToken({
-      sub: result.data.id,
-      role: result.data.role,
-      email: result.data.email,
-      name: result.data.name,
-      sessionVersion: result.data.sessionVersion,
+      sub: loginNonMfa.id,
+      role: loginNonMfa.role,
+      email: loginNonMfa.email,
+      name: loginNonMfa.name,
+      sessionVersion: loginNonMfa.sessionVersion,
     });
+    // Suspicious login detection: alert on first-seen device fingerprint
+    const loginOwnerId = loginNonMfa.id;
+    const loginEmail = loginNonMfa.email;
+    void (async () => {
+      try {
+        const ip = parsed.data.ipAddress ?? c.req.header("x-forwarded-for") ?? "unknown";
+        const ua = parsed.data.userAgent ?? c.req.header("user-agent") ?? "unknown";
+        const fingerprint = createHash("sha256").update(`${loginOwnerId}:${ip.split(",")[0]?.trim() ?? ip}:${ua.slice(0, 200)}`).digest("hex");
+        const deviceKey = `known_device:${loginOwnerId}:${fingerprint}`;
+        const isKnown = redisClient ? await redisClient.get(deviceKey) : null;
+        if (!isKnown) {
+          if (redisClient) await redisClient.set(deviceKey, "1", "EX", 90 * 24 * 60 * 60); // 90 days
+          await sendSuspiciousLoginEmail({
+            to: loginEmail,
+            email: loginEmail,
+            ipAddress: ip,
+            userAgent: ua.slice(0, 200),
+            timestamp: new Date(),
+          });
+        }
+      } catch {
+        // non-fatal
+      }
+    })();
     const response = c.json({ success: true, ok: true });
     response.headers.append("Set-Cookie", sessionCookie(sessionToken));
     response.headers.append("Set-Cookie", expiredMfaCookie());
@@ -215,6 +243,10 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       userAgent: c.req.header("user-agent"),
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    // Fire-and-forget: alert user that MFA was enabled
+    void db.select({ email: schema.owners.email }).from(schema.owners).where(eq(schema.owners.id, session.sub)).limit(1).then(([row]) => {
+      if (row?.email) sendMfaEnabledEmail({ to: row.email, email: row.email }).catch(() => undefined);
+    });
     return c.json({ success: true, ok: true, sessionVersion: result.data.sessionVersion });
   });
 
@@ -232,6 +264,10 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       userAgent: c.req.header("user-agent"),
     });
     if (!result.success) return c.json(result, { status: (result.status ?? 400) as 400 });
+    // Fire-and-forget: alert user that MFA was disabled (high-risk action)
+    void db.select({ email: schema.owners.email }).from(schema.owners).where(eq(schema.owners.id, session.sub)).limit(1).then(([row]) => {
+      if (row?.email) sendMfaDisabledEmail({ to: row.email, email: row.email }).catch(() => undefined);
+    });
     return c.json({ success: true, ok: true, sessionVersion: result.data.sessionVersion });
   });
 

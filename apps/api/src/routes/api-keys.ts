@@ -1,5 +1,6 @@
 import type { createDb } from "@repo/db";
 import { apiKeys } from "@repo/db/schema";
+import { ALL_PERMISSIONS, hasPermission } from "@repo/shared/permissions";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Hono } from "hono";
 import { z } from "zod";
@@ -11,6 +12,7 @@ type Db = ReturnType<typeof createDb>;
 
 const apiKeyCreateBody = z.object({
   name: z.string().min(1).max(255),
+  permissions: z.array(z.string()).optional(),
 });
 
 /**
@@ -67,6 +69,24 @@ app.post("/api-keys", async (c) => {
       400,
     );
   }
+
+  // Validate that requested permissions are a subset of the actor's permissions
+  let scopedPermissions: string[] | null = null;
+  if (body.permissions && body.permissions.length > 0) {
+    const actorPerms: readonly string[] = c.get("actorPermissions") ?? [];
+    const allowed = new Set<string>(ALL_PERMISSIONS);
+    if (hasPermission(actorPerms, "*")) allowed.add("*");
+    const invalid = body.permissions.filter((p) => !allowed.has(p));
+    if (invalid.length > 0) {
+      return c.json({ error: "invalid_permissions", detail: `Unknown permissions: ${invalid.join(", ")}` }, 400);
+    }
+    const exceeds = body.permissions.filter((p) => !hasPermission(actorPerms, p));
+    if (exceeds.length > 0) {
+      return c.json({ error: "forbidden", detail: "Cannot grant permissions you do not have" }, 403);
+    }
+    scopedPermissions = body.permissions;
+  }
+
   const { rawKey, keyPrefix, keyHash } = generateApiKeyMaterial();
   const now = new Date();
   const [inserted] = await db
@@ -76,6 +96,7 @@ app.post("/api-keys", async (c) => {
       name: body.name.trim(),
       keyPrefix,
       keyHash,
+      permissions: scopedPermissions,
       updatedAt: now,
     })
     .returning({

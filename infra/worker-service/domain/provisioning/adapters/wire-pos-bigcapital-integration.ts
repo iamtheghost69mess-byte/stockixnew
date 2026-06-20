@@ -131,5 +131,26 @@ export async function wirePosBigcapitalIntegration(
   }
 
   input.log("[provision][pos] Bigcapital integration wired successfully");
+
+  const relayUrl = `${base}/api/platform/v1/organizations/${input.posOrganizationId}/accounting-mode`;
+  input.log("[provision][pos] enabling accounting relay mode");
+  const relayRes = await fetch(relayUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": apiKey,
+      "X-Forwarded-Proto": "https",
+    },
+    body: JSON.stringify({ relayMode: true }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!relayRes.ok) {
+    const relayText = await relayRes.text().catch(() => "");
+    throw new Error(
+      `wire_pos_relay_mode_failed:${relayRes.status}:${relayText.slice(0, 200)}`,
+    );
+  }
+  input.log("[provision][pos] accounting relay mode enabled");
+
   return { wired: true, internalBaseUrl };
 }

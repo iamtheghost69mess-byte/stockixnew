@@ -4,12 +4,14 @@ import type { createDb } from "@repo/db";
 import {
   adminAuditLog,
   apiKeys,
+  deadLetterJobs,
   organizations,
   owners,
   platformRoles,
   tenantDeployments,
   tenants,
 } from "@repo/db/schema";
+import { insertTenantJob } from "../services/tenant-jobs.js";
 import { ROLES } from "@repo/shared/roles";
 import { and, desc, eq, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -132,6 +134,41 @@ app.delete("/admin/roles/:roleId", async (c) => {
 
 const apiKeyCreateBody = z.object({
   name: z.string().min(1).max(255),
+});
+
+// ── Dead-Letter Job Management ───────────────────────────────────────────────
+app.get("/admin/dead-letter-jobs", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10), 200);
+  const rows = await db
+    .select()
+    .from(deadLetterJobs)
+    .orderBy(desc(deadLetterJobs.failedAt))
+    .limit(limit);
+  return c.json({ jobs: rows });
+});
+
+app.post("/admin/dead-letter-jobs/:id/retry", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const id = c.req.param("id");
+  if (!z.string().uuid().safeParse(id).success) {
+    return c.json({ error: "id must be a UUID" }, 400);
+  }
+  const [dlJob] = await db
+    .select()
+    .from(deadLetterJobs)
+    .where(eq(deadLetterJobs.id, id))
+    .limit(1);
+  if (!dlJob) return c.json({ error: "not_found" }, 404);
+
+  const requeued = await insertTenantJob(db, {
+    type: dlJob.type as Parameters<typeof insertTenantJob>[1]["type"],
+    tenantId: dlJob.tenantId ?? undefined,
+    correlationId: dlJob.correlationId ?? undefined,
+    payload: dlJob.payload,
+    maxAttempts: dlJob.maxAttempts,
+  });
+  return c.json({ ok: true, jobId: requeued?.id });
 });
 
 }

@@ -6,7 +6,8 @@ import * as schema from "@repo/db/schema";
 import { logger } from "../lib/logger.js";
 import type { MailSendResult } from "./mailer.js";
 import { providerMessageIdCandidates } from "./provider-message-id.js";
-import { registerEmailLogHook } from "./mailer.js";
+import { registerEmailLogHook, registerEmailRetryHook } from "./mailer.js";
+import { enqueueEmailRetry } from "../services/tenant-jobs.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -67,6 +68,11 @@ export async function logEmailAttempt(
 export function initEmailLogging(db: Db): void {
   registerEmailLogHook(async (opts) => {
     await logEmailAttempt(db, opts);
+  });
+  registerEmailRetryHook(async (opts) => {
+    await enqueueEmailRetry(db, { ...opts, templateKey: opts.templateKey ?? "retry" }).catch((err) => {
+      logger.info("email retry enqueue failed", { error: err instanceof Error ? err.message : String(err) });
+    });
   });
 }
 

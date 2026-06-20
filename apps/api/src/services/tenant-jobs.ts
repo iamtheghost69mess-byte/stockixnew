@@ -9,7 +9,9 @@ export type TenantLifecycleJobType =
   | "tenant.deprovision"
   | "tenant.lifecycle"
   | "add_module"
-  | "remove_module";
+  | "remove_module"
+  | "license_sync_retry"
+  | "email_retry";
 
 export async function insertTenantJob(
   db: PostgresJsDatabase<typeof schema>,
@@ -50,6 +52,52 @@ export async function insertTenantJob(
     })
     .returning();
   return row ?? null;
+}
+
+export async function enqueueLicenseSyncRetry(
+  db: PostgresJsDatabase<typeof schema>,
+  tenantId: string,
+  payload: Record<string, unknown>,
+  attemptNumber = 1,
+) {
+  const RETRY_DELAYS_MS = [5 * 60_000, 10 * 60_000, 30 * 60_000];
+  const delayMs = RETRY_DELAYS_MS[Math.min(attemptNumber - 1, RETRY_DELAYS_MS.length - 1)] ?? RETRY_DELAYS_MS[0]!;
+  const runAt = new Date(Date.now() + delayMs);
+  return insertTenantJob(db, {
+    type: "license_sync_retry",
+    tenantId,
+    payload: { ...payload, attemptNumber },
+    maxAttempts: 3,
+    runAt,
+  });
+}
+
+const EMAIL_RETRY_DELAYS_MS = [2 * 60_000, 10 * 60_000, 30 * 60_000];
+
+export async function enqueueEmailRetry(
+  db: PostgresJsDatabase<typeof schema>,
+  opts: {
+    templateKey: string;
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+    idempotencyKey?: string;
+    tenantId?: string;
+    ownerId?: string;
+    attemptNumber?: number;
+  },
+) {
+  const attempt = opts.attemptNumber ?? 1;
+  const delayMs = EMAIL_RETRY_DELAYS_MS[Math.min(attempt - 1, EMAIL_RETRY_DELAYS_MS.length - 1)] ?? EMAIL_RETRY_DELAYS_MS[0]!;
+  const runAt = new Date(Date.now() + delayMs);
+  return insertTenantJob(db, {
+    type: "email_retry",
+    tenantId: opts.tenantId ?? undefined,
+    payload: { ...opts, attemptNumber: attempt },
+    maxAttempts: 3,
+    runAt,
+  });
 }
 
 export async function listTenantJobs(

@@ -98,6 +98,15 @@ export function registerEmailLogHook(
   logEmailAttemptFn = fn;
 }
 
+let enqueueEmailRetryFn: ((opts: SendMailOptions & { attemptNumber?: number }) => Promise<void>) | null = null;
+
+/** Register email retry enqueue function (wired in app startup with DB access). */
+export function registerEmailRetryHook(
+  fn: (opts: SendMailOptions & { attemptNumber?: number }) => Promise<void>,
+): void {
+  enqueueEmailRetryFn = fn;
+}
+
 export async function sendMail(options: SendMailOptions): Promise<MailSendResult> {
   const templateKey = options.templateKey ?? "unknown";
 
@@ -154,6 +163,11 @@ export async function sendMail(options: SendMailOptions): Promise<MailSendResult
         ownerId: options.ownerId,
       }).catch((logErr) => {
         console.error("[mail] email log failed:", logErr instanceof Error ? logErr.message : logErr);
+      });
+    }
+    if (enqueueEmailRetryFn) {
+      await enqueueEmailRetryFn(options).catch((retryErr) => {
+        console.error("[mail] email retry enqueue failed:", retryErr instanceof Error ? retryErr.message : retryErr);
       });
     }
     return result;

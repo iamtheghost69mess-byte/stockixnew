@@ -1372,6 +1372,32 @@ const suspendOrg = async (req, res, next) => {
   }
 };
 
+/**
+ * PUT /api/platform/v1/organizations/:id/accounting-mode
+ * Body: { relayMode: boolean }
+ * Enables or disables accounting relay mode (prevents POS GL double-posting when Finance is active).
+ */
+const patchOrgAccountingMode = async (req, res, next) => {
+  try {
+    const { relayMode } = req.body ?? {};
+    if (typeof relayMode !== "boolean") {
+      return next(createHttpError(400, "relayMode must be a boolean."));
+    }
+    const org = await Organization.findById(req.params.id).select("_id slug accountingRelayMode");
+    if (!org) return next(createHttpError(404, "Organization not found."));
+
+    org.accountingRelayMode = relayMode;
+    await org.save();
+
+    res.json({
+      success: true,
+      data: { id: String(org._id), slug: org.slug, accountingRelayMode: org.accountingRelayMode },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
 module.exports = {
   listOrgs,
   listOrgsHealthSummary,
@@ -1392,4 +1418,5 @@ module.exports = {
   resetCredentialRolePin,
   resetOrgPin,
   retryProvisioning,
+  patchOrgAccountingMode,
 };

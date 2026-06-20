@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { statSync, readFileSync as readFileSyncFn } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createConnection } from "node:net";
@@ -73,11 +73,26 @@ function workerProxySqlTenantPort(): number {
   return Number.isFinite(port) ? port : 6033;
 }
 
+function readSecretFile(filePath: string): string | null {
+  try {
+    const content = readFileSyncFn(filePath, "utf8");
+    return typeof content === "string" ? content.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 function proxySqlAdminCredentials(): { user: string; password: string } {
-  return {
-    user: process.env.PROXYSQL_ADMIN_USER ?? "admin",
-    password: process.env.PROXYSQL_ADMIN_PASSWORD ?? "admin",
-  };
+  // Prefer Docker Secret mounts; fall back to env vars for local dev.
+  const password =
+    readSecretFile("/run/secrets/proxysql_admin_password") ??
+    process.env.PROXYSQL_ADMIN_PASSWORD ??
+    "admin";
+  const user =
+    readSecretFile("/run/secrets/proxysql_admin_user") ??
+    process.env.PROXYSQL_ADMIN_USER ??
+    "admin";
+  return { user, password };
 }
 
 function escapeProxySqlLiteral(value: string): string {

@@ -5,6 +5,7 @@ import type { createDb } from "@repo/db";
 import {
   adminAuditLog,
   apiKeys,
+  branchLocationMappings,
   licenseActivations,
   licenses,
   organizations,
@@ -2114,7 +2115,7 @@ app.patch("/tenants/:tenantId/organizations/:orgId", async (c) => {
 
   let syncWarning: string | null = null;
   if (body.name !== undefined) {
-    if (updated.financeOrganizationId == null || updated.financeOrganizationId <= 0) {
+    if (!updated.financeOrganizationId) {
       syncWarning = "Organization has no Finance deployment — name saved but not synced.";
     } else {
       const syncResult = await syncOrganizationNameToFinance(
@@ -3663,5 +3664,20 @@ app.get("/provisioning/:id/logs", async (c) => {
   }
 
   return c.json(logs);
+});
+
+// ── Branch-Location Mappings ────────────────────────────────────────────────
+app.get("/tenants/:id/branch-location-mappings", async (c) => {
+  if (!db) return c.json({ error: "database_unavailable" }, 503);
+  const tenantId = c.req.param("id");
+  if (!(await tenantWithinOwnerScope(db, c, tenantId))) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  const rows = await db
+    .select()
+    .from(branchLocationMappings)
+    .where(eq(branchLocationMappings.tenantId, tenantId))
+    .orderBy(asc(branchLocationMappings.createdAt));
+  return c.json(rows);
 });
 }

@@ -26,17 +26,21 @@ export function generateApiKeyMaterial(): { rawKey: string; keyPrefix: string; k
 export async function findActiveApiKeyByRaw(
   db: Db,
   rawKey: string,
-): Promise<{ keyId: string; ownerId: string } | null> {
+): Promise<{ keyId: string; ownerId: string; permissions: string[] | null } | null> {
   if (!rawKey.startsWith("sk_live_")) return null;
   const keyHash = hashApiKeySecret(rawKey);
   const rows = await db
-    .select({ id: apiKeys.id, ownerId: apiKeys.ownerId })
+    .select({ id: apiKeys.id, ownerId: apiKeys.ownerId, permissions: apiKeys.permissions })
     .from(apiKeys)
     .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  return { keyId: row.id, ownerId: row.ownerId };
+  return {
+    keyId: row.id,
+    ownerId: row.ownerId,
+    permissions: Array.isArray(row.permissions) ? row.permissions : null,
+  };
 }
 
 export function scheduleApiKeyLastUsedTouch(db: Db, keyId: string): void {

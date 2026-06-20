@@ -66,6 +66,13 @@ export function registerResendWebhook(app: Hono<ApiEnv>, db: Db | null): void {
       const svixId = c.req.header("svix-id") ?? "";
       const svixTimestamp = c.req.header("svix-timestamp") ?? "";
       const svixSignature = c.req.header("svix-signature") ?? "";
+
+      // Replay protection: reject webhooks with a timestamp older than 5 minutes
+      const tsSeconds = parseInt(svixTimestamp, 10);
+      if (!tsSeconds || Math.abs(Date.now() / 1000 - tsSeconds) > 300) {
+        return c.json({ error: "webhook_timestamp_invalid" }, 401);
+      }
+
       if (
         !verifySvixSignature(rawBody, {
           id: svixId,
