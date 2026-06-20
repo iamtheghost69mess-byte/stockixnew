@@ -10,11 +10,16 @@ on:
 
 jobs:
   deploy-production:
-    uses: ./.github/workflows/reusable/deploy-stack.yml
-    with:
-      environment: production
-      release_sha: ${{ inputs.release_sha }}
-    secrets:
-      SSH_HOST: ${{ secrets.EC2_HOST }}
-      SSH_USER: ${{ secrets.EC2_USER }}
-      SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            bash /opt/stockix/stockixnew/infra/deploy/deploy.sh "production" "${{ inputs.release_sha }}"
