@@ -10,12 +10,17 @@ on:
 
 jobs:
   deploy-staging:
+    name: Deploy to staging
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    uses: ./.github/workflows/reusable/deploy-stack.yml
-    with:
-      environment: staging
-      release_sha: ${{ github.event.workflow_run.head_sha }}
-    secrets:
-      SSH_HOST: ${{ secrets.STAGING_EC2_HOST }}
-      SSH_USER: ${{ secrets.STAGING_EC2_USER }}
-      SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_EC2_HOST }}
+          username: ${{ secrets.STAGING_EC2_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            bash /opt/stockix/stockixnew/infra/deploy/deploy.sh "staging" "${{ github.event.workflow_run.head_sha }}"
