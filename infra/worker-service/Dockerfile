@@ -46,9 +46,7 @@ COPY apps/api/package.json                    ./apps/api/
 # node_modules/@repo/typescript-config symlink so load-tsconfig can resolve it.
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter api --filter @repo/auth --filter @repo/shared --filter @repo/typescript-config \
- && mkdir -p ./node_modules/@repo \
- && ln -sf ../../packages/typescript-config ./node_modules/@repo/typescript-config
+    pnpm install --frozen-lockfile --filter api --filter @repo/auth --filter @repo/shared --filter @repo/typescript-config --filter @repo/platform-worker-shared
 
 # Copy source for packages the worker needs
 COPY packages/config/               ./packages/config/
@@ -57,8 +55,11 @@ COPY packages/auth/                 ./packages/auth/
 COPY packages/shared/               ./packages/shared/
 COPY packages/typescript-config/    ./packages/typescript-config/
 COPY packages/platform-worker-shared/ ./packages/platform-worker-shared/
-COPY infra/worker-service/          ./infra/worker-service/
-# The worker tsup config lives in apps/api — only this file is needed (not the full app source).
+COPY infra/worker-service/            ./infra/worker-service/
+# apps/api/src is needed: platform-worker-shared imports api/worker-public which
+# resolves to apps/api/src/worker-public.ts (TypeScript source, no pre-build step).
+COPY apps/api/src/        ./apps/api/src/
+COPY apps/api/tsconfig.json ./apps/api/
 COPY apps/api/tsup.worker.config.ts ./apps/api/
 
 # Build shared packages then bundle the worker
