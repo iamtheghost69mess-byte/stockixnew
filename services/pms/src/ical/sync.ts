@@ -1,12 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { pmsBookings, pmsIcalChannels } from "@repo/db/schema";
+import { pmsBookings, pmsIcalChannels } from "@repo/pms-db/schema";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
+import type * as pmsSchema from "@repo/pms-db/schema";
 import { generateICal, generateBufferedEvents } from "../lib/ical.js";
 import { syncCalendars, syncAllTenants } from "../lib/calendar-sync.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = PostgresJsDatabase<typeof pmsSchema>;
 
 // Re-export the production sync engine for the job runner
 export { syncCalendars, syncAllTenants };

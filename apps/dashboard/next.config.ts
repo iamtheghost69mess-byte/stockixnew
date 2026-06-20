@@ -1,4 +1,3 @@
-import "@repo/config";
 import path from "node:path";
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
@@ -57,6 +56,29 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: repoRoot,
 
+  // ── Rewrites ──────────────────────────────────────────────────────────────
+  async rewrites() {
+    const apiUrl = process.env.STOCKIX_API_URL || process.env.NEXT_PUBLIC_STOCKIX_API_URL || "http://127.0.0.1:4000";
+    return [
+      {
+        source: "/api/me",
+        destination: `${apiUrl}/v1/auth/me`,
+      },
+      {
+        source: "/api/security/mfa/:path*",
+        destination: `${apiUrl}/v1/auth/mfa/:path*`,
+      },
+      {
+        source: "/api/pms/:path*",
+        destination: `${apiUrl}/v1/pms/:path*`,
+      },
+      {
+        source: "/api/:path*",
+        destination: `${apiUrl}/v1/:path*`,
+      },
+    ];
+  },
+
   // ── React ─────────────────────────────────────────────────────────────────
   reactStrictMode: true,
 
@@ -97,6 +119,14 @@ const nextConfig: NextConfig = {
         ...reactAliases,
       };
     }
+    
+    // Support NodeNext module resolution with .js extensions from workspace packages
+    config.resolve ??= {};
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+      ".mjs": [".mts", ".mjs"],
+      ".cjs": [".cts", ".cjs"],
+    };
 
     // Dev-mode watch optimisation.
     // A higher aggregateTimeout (2 s) prevents rapid config-change false

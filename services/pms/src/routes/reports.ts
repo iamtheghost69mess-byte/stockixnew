@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
-import { pmsBookings, pmsRooms, pmsPayments } from "@repo/db/schema";
+import { pmsBookings, pmsRooms, pmsPayments } from "@repo/pms-db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, validateReportDateRange } from "./_utils.js";
 import type { PmsEnv } from "../types.js";

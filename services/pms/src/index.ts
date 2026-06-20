@@ -77,7 +77,7 @@ app.get("/api/ical/:token", async (c) => {
 // Public guest pre-arrival form — token possession is the only auth
 app.get("/public/g/:token", async (c) => {
   if (!db) return c.json({ error: "database_unavailable" }, 503);
-  const { pmsGuestFormSubmissions, pmsGuestFormTemplates, pmsBookings, pmsGuests } = await import("@repo/db/schema");
+  const { pmsGuestFormSubmissions, pmsGuestFormTemplates, pmsBookings, pmsGuests } = await import("@repo/pms-db/schema");
   const { eq } = await import("drizzle-orm");
   const token = c.req.param("token");
   if (!token || token.length < 16) return c.json({ error: "invalid_token" }, 400);
@@ -136,7 +136,7 @@ app.get("/public/g/:token", async (c) => {
 
 app.post("/public/g/:token", async (c) => {
   if (!db) return c.json({ error: "database_unavailable" }, 503);
-  const { pmsGuestFormSubmissions, pmsGuestFormTemplates } = await import("@repo/db/schema");
+  const { pmsGuestFormSubmissions, pmsGuestFormTemplates } = await import("@repo/pms-db/schema");
   const { eq } = await import("drizzle-orm");
   const token = c.req.param("token");
   if (!token || token.length < 16) return c.json({ error: "invalid_token" }, 400);
@@ -228,15 +228,17 @@ app.use("/api/*", async (c, next) => {
 });
 
 // ─── RLS context middleware ───────────────────────────────────────────────────
-// Sets app.current_tenant_id on the connection so Postgres RLS policies can
-// scope queries to the authenticated tenant. This is a best-effort session
-// variable; for strict enforcement configure the app to connect as
-// stockix_pms_app (no BYPASSRLS) and use pgBouncer in session mode.
+// Sets app.current_tenant_id at transaction scope (SET LOCAL) so Postgres RLS
+// policies scope queries to the authenticated tenant without leaking the value
+// to the next request on the same connection. Requires stockix_pms_app role
+// (no BYPASSRLS) to enforce isolation at the DB level — see server.ts startup check.
 
 app.use("/api/*", async (c, next) => {
   const tenantId = c.get("stockix")?.tenantId;
   if (tenantId && db) {
-    await db.execute(sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`);
+    // SET LOCAL scopes the variable to the current transaction; it is reset when
+    // the transaction ends, preventing cross-request leakage in connection pools.
+    await db.execute(sql`SET LOCAL "app.current_tenant_id" = ${tenantId}`);
   }
   await next();
 });

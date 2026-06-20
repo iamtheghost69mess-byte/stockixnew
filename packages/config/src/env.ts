@@ -283,7 +283,7 @@ export const env = {
   THROTTLE_GLOBAL_LIMIT: readNumber("THROTTLE_GLOBAL_LIMIT", 2000),
   THROTTLE_AUTH_TTL: readNumber("THROTTLE_AUTH_TTL", 60_000),
   THROTTLE_AUTH_LIMIT: readNumber("THROTTLE_AUTH_LIMIT", 200),
-  npm_package_json: readOptionalString("npm_package_json"),
+  npm_packageon: readOptionalString("npm_packageon"),
   npm_package_type: readOptionalString("npm_package_type"),
 } as const;
 

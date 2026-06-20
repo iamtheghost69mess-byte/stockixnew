@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
-import { pmsCalendarEvents } from "@repo/db/schema";
+import { pmsCalendarEvents } from "@repo/pms-db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";

@@ -7,6 +7,7 @@ import * as schema from "@repo/db/schema";
 import { logLine } from "./lib/logger.js";
 import { triggerFinanceLicenseSync } from "./license-finance-sync.js";
 import { insertLicenseHistory } from "./license-utils.js";
+import { enqueueLicenseSyncRetry } from "./services/tenant-jobs.js";
 import {
   reactivatePosOrgForLicense,
   suspendPosOrgForLicense,
@@ -56,10 +57,13 @@ export async function applyTenantLicenseSuspend(
     await triggerFinanceLicenseSync(db, tenantId, log);
   } catch (err) {
     log(
-      `[tenant-license] Finance sync failed (non-fatal): ${
+      `[tenant-license] Finance sync failed — queuing retry: ${
         err instanceof Error ? err.message : String(err)
       }`,
     );
+    await enqueueLicenseSyncRetry(db, tenantId, { tenantId }, 1).catch((queueErr) => {
+      log(`[tenant-license] Failed to enqueue license_sync_retry: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`);
+    });
   }
 
   const posResult = await suspendPosOrgForLicense(db, tenantId, reason, log);
@@ -132,9 +136,12 @@ export async function applyTenantLicenseReactivate(
     await triggerFinanceLicenseSync(db, tenantId, log);
   } catch (err) {
     log(
-      `[tenant-license] Finance sync failed (non-fatal): ${
+      `[tenant-license] Finance sync failed — queuing retry: ${
         err instanceof Error ? err.message : String(err)
       }`,
     );
+    await enqueueLicenseSyncRetry(db, tenantId, { tenantId }, 1).catch((queueErr) => {
+      log(`[tenant-license] Failed to enqueue license_sync_retry: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`);
+    });
   }
 }

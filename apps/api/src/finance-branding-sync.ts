@@ -9,7 +9,7 @@ export async function syncOrganizationNameToFinance(
   db: ReturnType<typeof createDb>,
   params: {
     stockixTenantId: string;
-    financeOrganizationId: number;
+    financeOrganizationId: string;
     name: string;
   },
   log: (message: string) => void = () => {},

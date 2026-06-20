@@ -7,13 +7,8 @@
 import { and, eq, gte } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
-import {
-  pmsProperties,
-  pmsIcalChannels,
-  pmsBookings,
-  pmsCalendarEvents,
-  pmsDateOverrides,
-} from "@repo/db/schema";
+import type * as pmsSchema from "@repo/pms-db/schema";
+import { pmsProperties, pmsIcalChannels, pmsBookings, pmsCalendarEvents, pmsDateOverrides } from "@repo/pms-db/schema";
 
 export type AuditSeverity = "error" | "warning" | "info";
 
@@ -69,7 +64,7 @@ function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): b
   return aStart < bEnd && aEnd > bStart;
 }
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = PostgresJsDatabase<typeof pmsSchema>;
 
 export async function auditProperty(db: Db, tenantId: string, propertyId: string): Promise<PropertyAuditReport> {
   const todayStr = today();

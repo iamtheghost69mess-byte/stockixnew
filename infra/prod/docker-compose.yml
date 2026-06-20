@@ -171,10 +171,10 @@ services:
     command:
       - --api=true
       - --api.dashboard=true
-      - --providers.docker=true
-      - --providers.docker.endpoint=tcp://socket-proxy:2375
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=stockix_public
+      - --providers.swarm=true
+      - --providers.swarm.endpoint=tcp://socket-proxy:2375
+      - --providers.swarm.exposedbydefault=false
+      - --providers.swarm.network=stockix_public
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
@@ -340,6 +340,8 @@ services:
       - "traefik.http.services.api.loadbalancer.healthcheck.path=/health"
       - "traefik.http.services.api.loadbalancer.healthcheck.interval=10s"
       - "traefik.http.services.api.loadbalancer.healthcheck.timeout=5s"
+    deploy:
+      replicas: 2
 
   api-bullmq:
     image: ${API_IMAGE:-stockix-api:latest}
@@ -370,6 +372,8 @@ services:
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
+    deploy:
+      replicas: 2
 
   dashboard:
     image: ${DASHBOARD_IMAGE:-stockix-dashboard:latest}
@@ -399,6 +403,8 @@ services:
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls.certresolver=cloudflare"
       - "traefik.http.services.dashboard.loadbalancer.server.port=3000"
+    deploy:
+      replicas: 2
 
   infra-worker:
     image: ${WORKER_IMAGE:-stockix-infra-worker:latest}
@@ -552,6 +558,10 @@ services:
     mem_limit: 128m
     cpus: "0.2"
     mem_swappiness: 0
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
 
 volumes:
   postgres_data:
@@ -570,14 +580,14 @@ volumes:
 networks:
   stockix_public:
     name: stockix_public
-    driver: bridge
+    driver: overlay
   stockix_internal:
     name: stockix_internal
-    driver: bridge
+    driver: overlay
     internal: true
   socket_proxy_network:
     name: stockix_socket_proxy_network
-    driver: bridge
+    driver: overlay
     internal: true
   stockix-shared:
     name: stockix-shared

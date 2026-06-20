@@ -1,4 +1,4 @@
 import { pmsConfig } from "@repo/config";
-import { createDb } from "@repo/db";
+import { createPmsDb } from "@repo/pms-db";
 
-export const db = pmsConfig.databaseUrl ? createDb(pmsConfig.databaseUrl) : null;
+export const db = pmsConfig.databaseUrl ? createPmsDb(pmsConfig.databaseUrl) : null;

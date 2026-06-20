@@ -4,6 +4,49 @@ import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as dbSchema from "@repo/db/schema";
 
+export async function deprovisionChatwootAccount(opts: {
+  db: PostgresJsDatabase<typeof dbSchema>;
+  tenantId: string;
+  chatwootAccountId: string;
+  chatwootBaseUrl: string;
+  chatwootApiKey: string;
+  log: (message: string) => void;
+}): Promise<{ success: boolean; error?: string }> {
+  const { db, tenantId, chatwootAccountId, chatwootBaseUrl, chatwootApiKey, log } = opts;
+
+  if (!chatwootBaseUrl || !chatwootApiKey) {
+    log("[chatwoot] CHATWOOT_BASE_URL or CHATWOOT_API_ACCESS_TOKEN not set; skipping deprovision");
+    return { success: true };
+  }
+
+  const base = chatwootBaseUrl.replace(/\/$/, "");
+
+  try {
+    const res = await fetch(`${base}/platform/api/v1/accounts/${chatwootAccountId}`, {
+      method: "DELETE",
+      headers: { api_access_token: chatwootApiKey },
+    });
+
+    if (res.ok || res.status === 404) {
+      await db
+        .update(tenants)
+        .set({ chatwootAccountId: null })
+        .where(eq(tenants.id, tenantId));
+      log(`[chatwoot] account ${chatwootAccountId} deleted for tenant ${tenantId}`);
+      return { success: true };
+    }
+
+    const errorText = await res.text().catch(() => "");
+    const error = `HTTP ${res.status}: ${errorText.slice(0, 200)}`;
+    log(`[chatwoot] deprovision failed: ${error}`);
+    return { success: false, error };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    log(`[chatwoot] deprovision error: ${error}`);
+    return { success: false, error };
+  }
+}
+
 function generateSecurePassword(): string {
   return randomBytes(18).toString("base64url");
 }

@@ -66,12 +66,15 @@ export async function invalidateFlagCache(
     if (tenantId) {
       await redis.del(`ff:${key}:${tenantId}`);
     } else {
-      // Invalidate all keys matching the prefix for this flag if no specific tenant is provided.
-      // This is safe since this is only performed during administrative updates.
-      const keys = await redis.keys(`ff:${key}:*`);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
+      // Use cursor-based SCAN instead of KEYS to avoid blocking Redis on large keyspaces.
+      let cursor = "0";
+      do {
+        const [nextCursor, batch] = await redis.scan(cursor, "MATCH", `ff:${key}:*`, "COUNT", 100);
+        cursor = nextCursor;
+        if (batch.length > 0) {
+          await redis.del(...batch);
+        }
+      } while (cursor !== "0");
     }
   } catch {
     // Fail silent

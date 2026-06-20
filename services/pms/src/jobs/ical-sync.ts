@@ -1,5 +1,6 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
+import type * as pmsSchema from "@repo/pms-db/schema";
 import { syncAllTenants } from "../lib/calendar-sync.js";
 import { pmsConfig } from "@repo/config";
 
@@ -13,7 +14,7 @@ import { pmsConfig } from "@repo/config";
  * - Sync audit logging
  */
 export function startIcalSyncJob(
-  db: PostgresJsDatabase<typeof schema>,
+  db: PostgresJsDatabase<typeof pmsSchema>,
   log: (message: string) => void = console.log,
 ): void {
   const intervalMs = pmsConfig.icalSyncIntervalMs;

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { pmsDateOverrides } from "@repo/db/schema";
+import { pmsDateOverrides } from "@repo/pms-db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import type { PmsEnv } from "../types.js";

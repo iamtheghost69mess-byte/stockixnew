@@ -1,6 +1,6 @@
-// Each value must use a static property access so Next.js can replace it
+// Each value must use a static property access so Next can replace it
 // at bundle time for client components. Dynamic process.env[name] access
-// causes TypeError in Next.js 16+ where process.env is not polyfilled
+// causes TypeError in Next 16+ where process.env is not polyfilled
 // in browser bundles.
 
 function trim(value: string | undefined, fallback: string): string {

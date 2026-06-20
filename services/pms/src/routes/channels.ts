@@ -2,7 +2,7 @@ import { lookup } from "node:dns/promises";
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq, like } from "drizzle-orm";
-import { pmsIcalChannels, pmsSyncLogs } from "@repo/db/schema";
+import { pmsIcalChannels, pmsSyncLogs } from "@repo/pms-db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import { generateExportToken } from "../ical/sync.js";

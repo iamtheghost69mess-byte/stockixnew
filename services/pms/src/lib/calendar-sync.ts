@@ -1,16 +1,12 @@
 import { lookup } from "node:dns/promises";
-import {
-  pmsCalendarEvents,
-  pmsIcalChannels,
-  pmsProperties,
-  pmsSyncLogs,
-} from "@repo/db/schema";
+import { pmsCalendarEvents, pmsIcalChannels, pmsProperties, pmsSyncLogs } from "@repo/pms-db/schema";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@repo/db/schema";
+import type * as pmsSchema from "@repo/pms-db/schema";
 import { parseICal, type ICalEvent } from "./ical.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = PostgresJsDatabase<typeof pmsSchema>;
 
 interface SyncOptions {
   tenantId: string;

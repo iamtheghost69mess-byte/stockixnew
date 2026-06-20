@@ -15,6 +15,7 @@
     "@repo/auth": "workspace:*",
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/pms-db": "workspace:*",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.0",
     "zod": "^3.23.0"

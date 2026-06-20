@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon app.js",
-    "start": "node app.js",
+    "dev": "nodemon --exec \"tsx app.js\"",
+    "start": "tsx app.js",
     "typecheck": "tsc --noEmit",
     "check-types": "tsc --noEmit",
     "worker:platform": "node workers/platformWorker.js",

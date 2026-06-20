@@ -22,9 +22,10 @@ const patchBody = z.object({
   permissions: z.array(z.string()).min(1).optional(),
 });
 
-function sanitizePermissions(perms: string[]): string[] {
+function sanitizePermissions(perms: string[], actorPermissions: readonly string[]): string[] {
+  const actorHasWildcard = hasPermission(actorPermissions, "*");
   const allowed = new Set<string>(ALL_PERMISSIONS);
-  allowed.add("*");
+  if (actorHasWildcard) allowed.add("*");
   return [...new Set(perms.filter((p) => allowed.has(p)))];
 }
 
@@ -47,7 +48,12 @@ export async function handlePlatformRoleCreate(
   if (!parsed.success) {
     return c.json({ error: "invalid_body", detail: parsed.error.flatten() }, 400);
   }
-  const permissions = sanitizePermissions(parsed.data.permissions);
+  const actorPermissions: readonly string[] = c.get("actorPermissions") ?? [];
+  const requestedWildcard = parsed.data.permissions.includes("*");
+  if (requestedWildcard && !hasPermission(actorPermissions, "*")) {
+    return c.json({ error: "forbidden", detail: "Only super_admin may grant wildcard permission" }, 403);
+  }
+  const permissions = sanitizePermissions(parsed.data.permissions, actorPermissions);
   if (permissions.length === 0) {
     return c.json({ error: "no_valid_permissions" }, 400);
   }
@@ -82,9 +88,14 @@ export async function handlePlatformRolePatch(
   const set: Partial<typeof platformRoles.$inferInsert> = {
     updatedAt: new Date(),
   };
+  const actorPermissions: readonly string[] = c.get("actorPermissions") ?? [];
   if (parsed.data.name) set.name = parsed.data.name;
   if (parsed.data.permissions) {
-    const permissions = sanitizePermissions(parsed.data.permissions);
+    const requestedWildcard = parsed.data.permissions.includes("*");
+    if (requestedWildcard && !hasPermission(actorPermissions, "*")) {
+      return c.json({ error: "forbidden", detail: "Only super_admin may grant wildcard permission" }, 403);
+    }
+    const permissions = sanitizePermissions(parsed.data.permissions, actorPermissions);
     if (permissions.length === 0) {
       return c.json({ error: "no_valid_permissions" }, 400);
     }

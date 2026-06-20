@@ -1,5 +1,5 @@
 // Ensure env bootstrapping runs before any env reads in this module.
-import "./env.js";
+import "./env";
 
 export const moduleGatingConfig = {
   /**

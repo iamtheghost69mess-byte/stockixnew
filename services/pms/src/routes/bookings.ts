@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq, gt, lt, gte, lte } from "drizzle-orm";
-import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsProperties, pmsGuests } from "@repo/db/schema";
+import { pmsBookings, pmsRooms, pmsCleaningTasks, pmsProperties, pmsGuests } from "@repo/pms-db/schema";
 import { db } from "../db.js";
 import { tenantId, errors, parsePagination, listMeta } from "./_utils.js";
 import { syncBookingToFinance } from "../lib/finance-sync.js";
