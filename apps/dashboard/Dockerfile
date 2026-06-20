@@ -17,8 +17,14 @@ COPY packages/typescript-config/package.json  ./packages/typescript-config/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter dashboard...
 
-# ── Phase 2: source — only busts install layer when manifests change ──
-COPY . .
+# ── Phase 2: source — only copies dashboard-relevant packages so that
+# changes to scripts/, infra/, apps/api/, etc. don't bust this layer.
+COPY apps/dashboard/              ./apps/dashboard/
+COPY packages/config/             ./packages/config/
+COPY packages/shared/             ./packages/shared/
+COPY packages/ui/                 ./packages/ui/
+COPY packages/eslint-config/      ./packages/eslint-config/
+COPY packages/typescript-config/  ./packages/typescript-config/
 
 ARG NEXT_PUBLIC_STOCKIX_API_URL=https://api.stockix.cloud
 ENV NEXT_PUBLIC_STOCKIX_API_URL=${NEXT_PUBLIC_STOCKIX_API_URL}
