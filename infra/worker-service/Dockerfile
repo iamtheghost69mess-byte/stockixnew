@@ -31,6 +31,7 @@ COPY packages/auth/package.json                      ./packages/auth/
 COPY packages/shared/package.json                    ./packages/shared/
 COPY packages/typescript-config/package.json         ./packages/typescript-config/
 COPY packages/platform-worker-shared/package.json    ./packages/platform-worker-shared/
+COPY packages/eslint-config/package.json             ./packages/eslint-config/
 COPY infra/worker-service/package.json               ./infra/worker-service/
 # apps/api owns tsup.worker.config.ts and has tsup as a devDep — its manifest
 # must be present so `pnpm --filter api exec tsup` can resolve the package.
