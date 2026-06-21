@@ -78,9 +78,10 @@ export async function refreshRedisHealth(): Promise<HealthStatus> {
 export async function refreshDockerHealth(): Promise<HealthStatus> {
   const ts = new Date().toISOString();
   try {
-    // Check if docker is responsive
-    await execa("docker", ["info"], { timeout: 3000 });
-    
+    // Docker Desktop on WSL2 can be slow to respond via the Unix socket — use a
+    // generous timeout so dev health checks don't thrash the error log.
+    await execa("docker", ["info"], { timeout: 15_000 });
+
     // Check if required tenant images exist
     const requiredImages = [
       "stockix-server:local",
@@ -89,7 +90,7 @@ export async function refreshDockerHealth(): Promise<HealthStatus> {
     const missing: string[] = [];
     for (const image of requiredImages) {
       try {
-        await execa("docker", ["image", "inspect", image], { timeout: 2000 });
+        await execa("docker", ["image", "inspect", image], { timeout: 5_000 });
       } catch {
         missing.push(image);
       }
@@ -104,7 +105,7 @@ export async function refreshDockerHealth(): Promise<HealthStatus> {
     return { status: "ok", timestamp: ts };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    logger.error("Health check: Docker / image check failed", err);
+    logger.warn("Health check: Docker / image check failed", { error: err instanceof Error ? err.message : String(err) });
     return { status: "fail", detail, timestamp: ts };
   }
 }

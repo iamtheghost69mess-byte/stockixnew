@@ -51,6 +51,14 @@ function generateSecurePassword(): string {
   return randomBytes(18).toString("base64url");
 }
 
+export class ChatwootConfigError extends Error {
+  readonly code = "CHATWOOT_CONFIG_ERROR" as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "ChatwootConfigError";
+  }
+}
+
 export async function provisionChatwootAccount(opts: {
   db: PostgresJsDatabase<typeof dbSchema>;
   tenantId: string;
@@ -59,11 +67,21 @@ export async function provisionChatwootAccount(opts: {
   chatwootBaseUrl: string;
   chatwootApiKey: string;
   log: (message: string) => void;
+  /** When true, missing env vars surface as a ChatwootConfigError instead of a silent skip. */
+  required?: boolean;
 }): Promise<{ accountId: string | null }> {
-  const { db, tenantId, tenantName, adminEmail, chatwootBaseUrl, chatwootApiKey, log } = opts;
+  const { db, tenantId, tenantName, adminEmail, chatwootBaseUrl, chatwootApiKey, log, required } = opts;
 
   if (!chatwootBaseUrl || !chatwootApiKey) {
-    log("[chatwoot] CHATWOOT_BASE_URL or CHATWOOT_API_ACCESS_TOKEN not set; skipping");
+    const msg =
+      "[chatwoot] CHATWOOT_BASE_URL or CHATWOOT_API_ACCESS_TOKEN is not configured. " +
+      "The 'chat' module was requested but no Chatwoot account will be created. " +
+      "Set both env vars in infra/prod/.env and re-provision the chat module.";
+    if (required) {
+      log(`[chatwoot] ERROR: ${msg}`);
+      throw new ChatwootConfigError(msg);
+    }
+    log(`[chatwoot] ${msg}`);
     return { accountId: null };
   }
 

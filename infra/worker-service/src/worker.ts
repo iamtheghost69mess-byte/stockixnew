@@ -1401,9 +1401,9 @@ async function loop() {
       tenantPortAllocated.set(highest);
       const pct = ((highest - portMin) / (portMax - portMin)) * 100;
       tenantPortCapacityPct.set(Math.min(100, pct));
-      if (pct >= 90) {
-        logger.error(`[worker][capacity] PORT EXHAUSTION WARNING: ${pct.toFixed(1)}% of port range used (highest=${highest}, max=${portMax})`);
-        Sentry.captureMessage("Tenant port range near exhaustion", { level: "error", extra: { highest, portMax, pct } });
+      if (pct >= 50) {
+        logger.error(`[worker][capacity] PORT CAPACITY WARNING: ${pct.toFixed(1)}% of port range used (highest=${highest}, max=${portMax})`);
+        Sentry.captureMessage("Tenant port range above 50% capacity", { level: "warning", extra: { highest, portMax, pct } });
       }
     } catch (err) {
       logger.warn(`[worker][capacity] port check failed: ${err instanceof Error ? err.message : String(err)}`);

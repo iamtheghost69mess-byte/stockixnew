@@ -78,7 +78,7 @@ export async function syncFinanceLicense(
       ? toMySqlDateTime(payload.validFrom)
       : toMySqlDateTime(new Date()),
     expiresAt: payload.expiresAt ? toMySqlDateTime(payload.expiresAt) : null,
-    gracePeriodDays: payload.gracePeriodDays ?? 30,
+    gracePeriodDays: payload.gracePeriodDays ?? 7,
     maxUsers: payload.maxUsers ?? FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
     maxActivations: payload.maxActivations,
     maxOrganizations: payload.maxOrganizations,

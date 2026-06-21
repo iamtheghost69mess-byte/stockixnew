@@ -186,12 +186,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
     : null;
 
-  if (!mounted) {
-    return <aside className="hidden" aria-hidden="true" />;
-  }
-
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="offcanvas" suppressHydrationWarning {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>

@@ -65,7 +65,7 @@ import {
 import { composeDownBestEffort, runDockerExec } from "../domain/provisioning/tenant-docker-workflow.js";
 import { TENANT_SERVER_UP_COMPOSE_ARGS } from "../domain/provisioning/tenant-server-compose-args.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
-import { provisionChatwootAccount } from "./chatwoot-provision.js";
+import { provisionChatwootAccount, ChatwootConfigError } from "./chatwoot-provision.js";
 import {
   hasAccountingAndPos,
   isModuleGatingEnabled,
@@ -1532,21 +1532,31 @@ export async function executeProvisionRuntime(
       if (licensedModules.includes("pms") && tenantId) {
         await provisionPmsStack({ slug: input.slug, tenantId, log });
       }
+      let chatwootWarning: string | null = null;
       if (licensedModules.includes("chat") && tenantId) {
-        await provisionChatwootAccount({
-          db,
-          tenantId,
-          tenantName: input.name,
-          adminEmail: input.adminEmail,
-          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-          log,
-        });
+        try {
+          await provisionChatwootAccount({
+            db,
+            tenantId,
+            tenantName: input.name,
+            adminEmail: input.adminEmail,
+            chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+            chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+            log,
+            required: true,
+          });
+        } catch (err) {
+          if (err instanceof ChatwootConfigError) {
+            chatwootWarning = err.message;
+          } else {
+            throw err;
+          }
+        }
       }
       await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId!));
       await db
         .update(tenantDeployments)
-        .set({ status: "active", lastError: null, updatedAt: new Date() })
+        .set({ status: "active", lastError: chatwootWarning, updatedAt: new Date() })
         .where(eq(tenantDeployments.tenantId, tenantId!));
       return {
         ok: true,
@@ -2533,23 +2543,33 @@ export async function executeProvisionRuntime(
         );
       }
     }
+    let chatwootWarning: string | null = null;
     if (licensedModules.includes("chat") && tenantId) {
-      await provisionChatwootAccount({
-        db,
-        tenantId,
-        tenantName: input.name,
-        adminEmail: input.adminEmail,
-        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-        log,
-      });
+      try {
+        await provisionChatwootAccount({
+          db,
+          tenantId,
+          tenantName: input.name,
+          adminEmail: input.adminEmail,
+          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          log,
+          required: true,
+        });
+      } catch (err) {
+        if (err instanceof ChatwootConfigError) {
+          chatwootWarning = err.message;
+        } else {
+          throw err;
+        }
+      }
     }
 
     if (tenantId) {
       await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId));
       await db
         .update(tenantDeployments)
-        .set({ status: "active", lastError: null, updatedAt: new Date() })
+        .set({ status: "active", lastError: chatwootWarning, updatedAt: new Date() })
         .where(eq(tenantDeployments.tenantId, tenantId));
     }
 
@@ -2611,6 +2631,8 @@ export type AddModuleResult = {
   posApiUrl?: string;
   posDefaultCredentials?: import("../domain/provisioning/types.js").PosDefaultCredentials;
   tenantStatus?: string;
+  /** Non-null when a module provisioned but has a configuration warning (e.g. Chatwoot env vars missing). */
+  lastError?: string | null;
 };
 
 export async function runAddModuleStep(
@@ -2905,18 +2927,26 @@ export async function runAddModuleStep(
       await provisionPmsStack({ slug: input.slug, tenantId: input.tenantId, log });
       result = { ok: true, module: "pms", tenantStatus: "active" };
     } else {
-      const chatwootBaseUrl = process.env.CHATWOOT_BASE_URL ?? "";
-      const chatwootApiKey = process.env.CHATWOOT_API_ACCESS_TOKEN ?? "";
-      await provisionChatwootAccount({
-        db,
-        tenantId: input.tenantId,
-        tenantName: input.name,
-        adminEmail: input.adminEmail,
-        chatwootBaseUrl,
-        chatwootApiKey,
-        log,
-      });
-      result = { ok: true, module: "chat", tenantStatus: "active" };
+      let chatLastError: string | null = null;
+      try {
+        await provisionChatwootAccount({
+          db,
+          tenantId: input.tenantId,
+          tenantName: input.name,
+          adminEmail: input.adminEmail,
+          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          log,
+          required: true,
+        });
+      } catch (err) {
+        if (err instanceof ChatwootConfigError) {
+          chatLastError = err.message;
+        } else {
+          throw err;
+        }
+      }
+      result = { ok: true, module: "chat", tenantStatus: "active", lastError: chatLastError };
     }
 
     if (!result) {
@@ -2929,7 +2959,7 @@ export async function runAddModuleStep(
       .where(eq(tenants.id, input.tenantId));
     await db
       .update(tenantDeployments)
-      .set({ status: "active", lastError: null, updatedAt: new Date() })
+      .set({ status: "active", lastError: result.lastError ?? null, updatedAt: new Date() })
       .where(eq(tenantDeployments.tenantId, input.tenantId));
 
     return result;

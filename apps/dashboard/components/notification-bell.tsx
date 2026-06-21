@@ -307,7 +307,7 @@ export function NotificationBell() {
           </Button>
         }
       />
-      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-0">
+      <PopoverContent align="end" className="z-50 bg-background border shadow-md rounded-md w-[min(24rem,calc(100vw-2rem))] p-0">
         <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold">Notifications</p>

@@ -18,6 +18,10 @@ import {
 
 import type { createDb } from "@repo/db";
 
+import { branchLocationMappings } from "@repo/db/schema";
+
+import { and, eq } from "drizzle-orm";
+
 
 
 type Db = ReturnType<typeof createDb>;
@@ -427,6 +431,66 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
     return withPosModuleAccess(db, c, async () => {
 
       const { data, status } = await posProxyJson("/compliance/export", "GET");
+
+      return c.json(data, status as 200);
+
+    });
+
+  });
+
+
+
+  app.get("/pos/locations", async (c) => {
+
+    return withPosModuleAccess(db, c, async () => {
+
+      const { data, status } = await posProxyJson("/locations", "GET", undefined, {
+        page: c.req.query("page"),
+        pageSize: c.req.query("pageSize"),
+      });
+
+      return c.json(data, status as 200);
+
+    });
+
+  });
+
+
+
+  app.delete("/pos/locations/:id", async (c) => {
+
+    return withPosModuleAccess(db, c, async () => {
+
+      const locationId = c.req.param("id");
+
+      const { data, status } = await posProxyJson(`/locations/${locationId}`, "DELETE");
+
+      if (status >= 200 && status < 300 && db) {
+
+        const tenantId =
+          c.req.query("tenantId")?.trim() ??
+          c.req.query("stockixTenantId")?.trim();
+
+        if (tenantId) {
+
+          await db
+            .delete(branchLocationMappings)
+            .where(
+              and(
+                eq(branchLocationMappings.posLocationId, locationId),
+                eq(branchLocationMappings.tenantId, tenantId),
+              ),
+            ).catch((err: unknown) => {
+              // Non-fatal — log only; the POS delete already succeeded.
+              console.warn(
+                `[pos-proxy] branchLocationMappings cleanup failed for posLocationId=${locationId}:`,
+                err instanceof Error ? err.message : String(err),
+              );
+            });
+
+        }
+
+      }
 
       return c.json(data, status as 200);
 
