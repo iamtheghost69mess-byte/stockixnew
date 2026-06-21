@@ -333,7 +333,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 180s
+      start_period: 360s
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0

@@ -480,7 +480,7 @@ jobs:
             docker rm -f stockix-infra-worker-1 2>/dev/null || true
           fi
           docker compose --env-file .env pull traefik socket-proxy
-          docker compose --env-file .env up -d --no-build --wait --wait-timeout 300 \
+          docker compose --env-file .env up -d --no-build --wait --wait-timeout 600 \
             traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
           sleep 10
           curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
