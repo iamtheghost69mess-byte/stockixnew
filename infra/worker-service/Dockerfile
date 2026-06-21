@@ -1,17 +1,14 @@
 # syntax=docker/dockerfile:1
 #
-# Worker image build — target: under 200MB
+# Worker image build
 #
-# Problem with old Dockerfile:
-#   COPY . .  →  copies entire monorepo including services/stockix-finance (large).
-#   Then installs ALL workspace deps including api, dashboard, pms.
-#   Result: 631MB image.
+# Build stage: installs API deps (only) so pnpm deploy can produce a flat
+# production node_modules, then compiles the worker bundle.
+# Runtime stage: node_modules from pnpm deploy + compiled bundle + docker CLI.
 #
-# Fix:
-#   1. Copy only the packages the worker actually needs.
-#   2. Install only --filter infra:worker:build chain.
-#   3. Runtime stage copies only the compiled bundle + docker CLI.
-#   4. Result: target ~180MB.
+# node_modules are required because the worker bundle marks npm packages
+# (ioredis, drizzle-orm, postgres, bullmq, @sentry/node, execa, zod, etc.)
+# as external — they are not inlined by tsup.
 
 FROM node:22-alpine AS base
 RUN apk add --no-cache docker-cli docker-cli-compose \
@@ -70,8 +67,16 @@ RUN pnpm --filter @repo/auth build \
 # Verify bundle was produced
 RUN test -f infra/worker-service/.runtime/worker.js
 
+# Create a flat production node_modules from the api package (which shares all
+# deps the worker bundle needs at runtime: ioredis, drizzle-orm, postgres,
+# bullmq, @sentry/node, execa, zod, nodemailer, dotenv, etc.)
+# apps/api/package.json has "files":["dist"] — create the dir so pnpm deploy
+# doesn't skip the package when dist hasn't been built in this stage.
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    mkdir -p apps/api/dist && pnpm deploy --filter api --prod /api-deploy
+
 # ─────────────────────────────────────────────────────────────
-# Runtime stage — only the bundle + docker CLI
+# Runtime stage — bundle + node_modules + docker CLI
 # ─────────────────────────────────────────────────────────────
 FROM node:22-alpine AS worker
 
@@ -83,7 +88,11 @@ RUN apk add --no-cache docker-cli docker-cli-compose \
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy the compiled bundle directory — worker.js may import chunk-*.js siblings
+# Production node_modules (flat, no pnpm symlinks) — needed by the worker bundle
+# because tsup keeps npm packages external (not inlined).
+COPY --from=build /api-deploy/node_modules ./node_modules
+
+# Compiled worker bundle — worker.js + chunk-*.js siblings
 COPY --from=build /app/infra/worker-service/.runtime/ ./
 
 EXPOSE 9090
