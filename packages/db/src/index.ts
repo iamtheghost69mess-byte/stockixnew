@@ -25,6 +25,7 @@ export function createDb(connectionString: string) {
     idle_timeout: readPoolInt("DB_IDLE_TIMEOUT_SECONDS", 20),
     connect_timeout: readPoolInt("DB_CONNECT_TIMEOUT_SECONDS", 10),
     max_lifetime: readPoolInt("DB_MAX_LIFETIME_SECONDS", 1800),
+    prepare: false,
     onnotice: () => {},
   });
   return drizzle(client, { schema });
