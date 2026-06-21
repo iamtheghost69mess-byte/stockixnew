@@ -266,6 +266,8 @@ services:
       DATABASES_HOST: postgres
       DATABASES_PORT: 5432
       DATABASES_DBNAME: stockix_platform
+      DATABASES_USER: ${POSTGRES_USER:-postgres}
+      DATABASES_PASSWORD: ${POSTGRES_PASSWORD}
       PGBOUNCER_POOL_MODE: transaction
       PGBOUNCER_MAX_CLIENT_CONN: 200
       PGBOUNCER_DEFAULT_POOL_SIZE: 20
@@ -364,11 +366,7 @@ services:
     networks:
       - stockix_internal
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"const Redis=require('ioredis');const u=process.env.CONTROL_PLANE_REDIS_URL;if(!u)process.exit(1);const c=new Redis(u,{maxRetriesPerRequest:1,connectTimeout:3000,lazyConnect:true});c.connect().then(()=>c.ping()).then(()=>{c.disconnect();process.exit(0)}).catch(()=>process.exit(1))\"",
-        ]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4001/health 2>/dev/null | grep -q ok || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
