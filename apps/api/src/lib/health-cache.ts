@@ -140,10 +140,11 @@ export function getHealthStatus(type: "database" | "redis" | "docker" | "provisi
 export function getGlobalHealthStatus(): GlobalHealthStatus {
   cache.provisioning = refreshProvisioningHealth();
 
+  // docker check is intentionally excluded: the API container has no docker CLI.
+  // Docker image availability is verified by the worker and the post-deploy prebuild step.
   const isReady =
     cache.database.status === "ok" &&
     cache.redis.status === "ok" &&
-    cache.docker.status === "ok" &&
     cache.provisioning.status === "ok";
 
   const mailStatus = getMailHealthStatus();
