@@ -9,6 +9,7 @@ import {
   tenantDeployments,
   tenantLifecycleJobs,
   tenants,
+  branchLocationMappings,
 } from "@repo/db/schema";
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -1582,6 +1583,79 @@ app.post("/internal/jobs/:jobId/cancel", async (c) => {
     .returning();
   if (!updated) return c.json({ error: "job_not_found_or_not_cancellable" }, 404);
   return c.json({ ok: true, job: updated });
+});
+
+app.delete("/internal/branch-location-mapping", async (c) => {
+  if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+  const body = await c.req.json().catch(() => null);
+  const bodyParsed = z
+    .object({
+      posLocationId: z.string().min(1),
+      posOrganizationId: z.string().min(1),
+    })
+    .safeParse(body);
+  if (!bodyParsed.success) {
+    return c.json({ error: "VALIDATION_ERROR" }, 400);
+  }
+
+  const { posLocationId, posOrganizationId } = bodyParsed.data;
+
+  const [org] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.posOrganizationId, posOrganizationId))
+    .limit(1);
+
+  if (!org) {
+    return c.json({ error: "org_not_found" }, 404);
+  }
+
+  const [mapping] = await db
+    .select()
+    .from(branchLocationMappings)
+    .where(
+      and(
+        eq(branchLocationMappings.organizationId, org.id),
+        eq(branchLocationMappings.posLocationId, posLocationId)
+      )
+    )
+    .limit(1);
+
+  if (!mapping) {
+    return c.json({ error: "mapping_not_found" }, 404);
+  }
+
+  await db
+    .delete(branchLocationMappings)
+    .where(eq(branchLocationMappings.id, mapping.id));
+
+  const [deployment] = await db
+    .select({ internalPort: tenantDeployments.internalPort, financeTenantId: tenantDeployments.financeTenantId })
+    .from(tenantDeployments)
+    .where(eq(tenantDeployments.tenantId, mapping.tenantId))
+    .limit(1);
+
+  if (deployment?.internalPort && deployment.financeTenantId) {
+    const host = process.env.STOCKIX_FINANCE_INTERNAL_HOST || "127.0.0.1";
+    const internalUrl = `http://${host}:${deployment.internalPort}`;
+    const secret = apiConfig.internalApiSecret;
+    if (secret) {
+      try {
+        await fetch(`${internalUrl}/api/internal/branches/${mapping.financeBranchId}/archive`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": secret,
+          },
+          body: JSON.stringify({ tenantId: deployment.financeTenantId })
+        });
+      } catch (error) {
+        logger.error("Failed to archive finance branch", { error });
+      }
+    }
+  }
+
+  return c.json({ ok: true });
 });
 
 }

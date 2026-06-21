@@ -19,8 +19,8 @@ import {
 import type { createDb } from "@repo/db";
 
 import { branchLocationMappings } from "@repo/db/schema";
-
 import { and, eq } from "drizzle-orm";
+import { canCreateLocation } from "../plan-limits.js";
 
 
 
@@ -441,18 +441,49 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
 
 
   app.get("/pos/locations", async (c) => {
-
     return withPosModuleAccess(db, c, async () => {
-
       const { data, status } = await posProxyJson("/locations", "GET", undefined, {
         page: c.req.query("page"),
         pageSize: c.req.query("pageSize"),
       });
+      return c.json(data, status as 200);
+    });
+  });
+
+  app.post("/pos/locations", async (c) => {
+    return withPosModuleAccess(db, c, async () => {
+      const tenantId =
+        c.req.query("tenantId")?.trim() ??
+        c.req.query("stockixTenantId")?.trim();
+
+      if (tenantId && db) {
+        const canCreate = await canCreateLocation(db, tenantId);
+        if (!canCreate) {
+          return c.json(
+            { error: "max_locations_reached", message: "Maximum number of locations reached for current plan." },
+            403,
+          );
+        }
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const { data, status } = await posProxyJson("/locations", "POST", body);
+
+      // Task 2-B: Also insert the mapping if creation succeeds.
+      if (status >= 200 && status < 300 && db && tenantId && data && (data as any)._id) {
+        try {
+          await db.insert(branchLocationMappings).values({
+            tenantId,
+            posLocationId: (data as any)._id,
+            posOrganizationId: (data as any).organizationId ?? "",
+          });
+        } catch (err) {
+          console.warn("[pos-proxy] failed to insert branchLocationMapping:", err);
+        }
+      }
 
       return c.json(data, status as 200);
-
     });
-
   });
 
 
@@ -529,9 +560,7 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
       // pos-backend mounts `routes/healthRoute` at `/health` (not Nest `/api/ping`).
 
       const res = await fetch(`${base.replace(/\/+$/, "")}/health`, {
-
         signal: AbortSignal.timeout(4_000),
-
       });
 
       reachable = res.ok;
@@ -560,5 +589,27 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
 
   });
 
+  app.get("/pos/staff", async (c) => {
+    return withPosModuleAccess(db, c, async () => {
+      const { data, status } = await posProxyJson("/staff", "GET", undefined, {
+        page: c.req.query("page"),
+        pageSize: c.req.query("pageSize"),
+        organizationId: c.req.query("organizationId"),
+      });
+      return c.json(data, status as 200);
+    });
+  });
+
+  app.patch("/pos/staff/:id", async (c) => {
+    return withPosModuleAccess(db, c, async () => {
+      const body = await c.req.json().catch(() => ({}));
+      const { data, status } = await posProxyJson(
+        `/staff/${c.req.param("id")}`,
+        "PATCH",
+        body,
+      );
+      return c.json(data, status as 200);
+    });
+  });
 }
 

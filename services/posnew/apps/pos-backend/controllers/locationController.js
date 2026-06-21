@@ -388,6 +388,27 @@ const deleteLocation = async (req, res, next) => {
     if (!doc) {
       return next(createHttpError(404, "Location not found."));
     }
+
+    const cpUrl = process.env.CONTROL_PLANE_INTERNAL_URL || "http://127.0.0.1:3001";
+    const secret = process.env.INTERNAL_API_SECRET;
+    if (secret) {
+      try {
+        await fetch(`${cpUrl}/internal/branch-location-mapping`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": secret,
+          },
+          body: JSON.stringify({
+            posLocationId: String(id),
+            posOrganizationId: String(orgId),
+          })
+        });
+      } catch (err) {
+        console.error("Failed to sync location deletion to control plane", err);
+      }
+    }
+
     res.status(200).json({ success: true, message: "Location deleted." });
   } catch (e) {
     next(e);

@@ -8,6 +8,7 @@ import * as schema from "@repo/db/schema";
 import { posProxyJson } from "../pos-proxy.js";
 import { effectivePosApiUrl } from "../pos-public-url.js";
 import { logAudit } from "../audit.js";
+import { signStockixToken } from "@repo/auth";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import {
   assertTenantModuleLicensed,
@@ -278,5 +279,55 @@ export function registerPosCredentialsRoutes(
       roles,
       posOrganizationId: loaded.posOrganizationId,
     });
+  });
+
+  app.get("/tenants/:tenantId/pos-sso-token", async (c) => {
+    if (!db) return c.json({ error: "DATABASE_URL is not configured" }, 503);
+
+    const actorRole = String(c.get("actorRole") ?? "");
+    if (!canRevealPosCredentials(actorRole)) {
+      return c.json({ error: "forbidden", message: "Insufficient role to access POS" }, 403);
+    }
+
+    const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
+    if (!tenantParsed.success) {
+      return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    const moduleAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "pos");
+    if (!moduleAccess.ok) return respondModuleAccessDenied(c, moduleAccess);
+
+    const loaded = await loadTenantPosOrgId(db, tenantParsed.data);
+    if (!loaded) {
+      return c.json(
+        { error: "pos_org_not_linked", message: "Tenant has no POS organization id" },
+        404,
+      );
+    }
+
+    const actorId = c.get("actorId") as string;
+    const ssoToken = await signStockixToken(
+      {
+        userId: actorId,
+        tenantId: tenantParsed.data,
+        organizationId: loaded.posOrganizationId,
+        modules: ["pos"],
+        roles: ["admin"],
+        planSlug: "pro", // Assume pro for now or fetch from DB
+      },
+      process.env.AUTH_TOKEN_SECRET || "",
+      "1m" // 1 minute short-lived token
+    );
+
+    await logAudit(db, {
+      actorId,
+      action: "tenant.pos_sso_token_generated",
+      targetTenantId: loaded.tenant.id,
+      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      metadata: { posOrganizationId: loaded.posOrganizationId },
+    });
+
+    return c.json({ ssoToken, posUrl: await effectivePosApiUrl(loaded.tenant.slug) });
   });
 }

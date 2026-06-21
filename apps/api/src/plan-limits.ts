@@ -1,4 +1,4 @@
-import { organizations } from "@repo/db/schema";
+import { branchLocationMappings, organizations } from "@repo/db/schema";
 import { and, count, eq, ne } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
@@ -80,6 +80,43 @@ export async function canCreateOrganization(
           ne(organizations.status, "failed"),
         ),
       ),
+  ]);
+  const current = Number(rows[0]?.count ?? 0);
+  return max === -1 || current < max;
+}
+
+/**
+ * Returns the max locations allowed for a tenant's active license.
+ * Returns -1 for unlimited.
+ * Returns 0 if there is no date-valid active license.
+ */
+export async function getMaxLocations(
+  db: PlanLimitsDb | null,
+  tenantId: string,
+): Promise<number> {
+  if (!db) return 0;
+  const license = await getActiveLicenseForTenant(db, tenantId);
+  if (!license) return 0;
+  if (!isLicenseDateValid(license, new Date())) return 0;
+  return license.maxLocations;
+}
+
+/**
+ * Returns true if the tenant is allowed to create one more location.
+ */
+export async function canCreateLocation(
+  db: PlanLimitsDb | null,
+  tenantId: string,
+): Promise<boolean> {
+  if (!db) return false;
+  const elig = await getTenantLicenseEligibility(db, tenantId);
+  if (elig !== "ok") return false;
+  const [max, rows] = await Promise.all([
+    getMaxLocations(db, tenantId),
+    db
+      .select({ count: count() })
+      .from(branchLocationMappings)
+      .where(eq(branchLocationMappings.tenantId, tenantId)),
   ]);
   const current = Number(rows[0]?.count ?? 0);
   return max === -1 || current < max;

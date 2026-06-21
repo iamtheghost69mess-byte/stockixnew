@@ -71,4 +71,35 @@ describe("provision finance license sync", () => {
     expect(postedBody?.maxActivations).toBe(2);
     expect(postedBody?.maxUsers).toBe(25);
   });
+
+  it("syncs gracePeriodDays matching the license row in the DB", async () => {
+    let postedBody: Record<string, unknown> | undefined;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      postedBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }) as typeof fetch;
+
+    const db = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(async () => [{ internalPort: 4100 }]),
+          })),
+        })),
+      })),
+    } as never;
+
+    await syncFinanceLicenseForStockixTenant(
+      db,
+      {
+        stockixTenantId: "tenant-provision-1",
+        financeTenantId: 42,
+        internalBaseUrl: "http://127.0.0.1:4100",
+      },
+      () => {},
+    );
+
+    // The mock DB row returns gracePeriodDays: 7
+    expect(postedBody?.gracePeriodDays).toBe(7);
+  });
 });

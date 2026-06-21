@@ -48,11 +48,12 @@ import {
   getLicenseExpiry,
   getPlanLimits,
   sendFinanceWelcomeEmail,
+  runWirePosIntegrationStep,
+  syncFinanceLicenseForStockixTenant,
   sendPosWelcomeEmail,
 } from "@repo/platform-worker-shared";
 import {
   FINANCE_LICENSE_SYNC_DEFAULT_MAX_USERS,
-  syncFinanceLicense,
 } from "../domain/provisioning/adapters/sync-finance-license.js";
 import { assertRequiredTenantImages } from "../domain/provisioning/check-tenant-images.js";
 import { ensureTenantExternalNetworks } from "../domain/provisioning/ensure-tenant-networks.js";
@@ -65,7 +66,8 @@ import {
 import { composeDownBestEffort, runDockerExec } from "../domain/provisioning/tenant-docker-workflow.js";
 import { TENANT_SERVER_UP_COMPOSE_ARGS } from "../domain/provisioning/tenant-server-compose-args.js";
 import type { ProvisionInput, ProvisionResult } from "../domain/provisioning/types.js";
-import { provisionChatwootAccount, ChatwootConfigError } from "./chatwoot-provision.js";
+import { provisionChatwootAccount } from "./chatwoot-provision.js";
+import { organizations } from "@repo/db/schema";
 import {
   hasAccountingAndPos,
   isModuleGatingEnabled,
@@ -1532,31 +1534,26 @@ export async function executeProvisionRuntime(
       if (licensedModules.includes("pms") && tenantId) {
         await provisionPmsStack({ slug: input.slug, tenantId, log });
       }
-      let chatwootWarning: string | null = null;
       if (licensedModules.includes("chat") && tenantId) {
-        try {
+        const orgId = input.controlPlaneOrgId ?? (await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.tenantId, tenantId)).limit(1).then(r => r[0]?.id));
+        if (orgId) {
           await provisionChatwootAccount({
             db,
-            tenantId,
-            tenantName: input.name,
+            organizationId: orgId,
+            organizationName: input.name,
             adminEmail: input.adminEmail,
             chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
             chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
             log,
-            required: true,
           });
-        } catch (err) {
-          if (err instanceof ChatwootConfigError) {
-            chatwootWarning = err.message;
-          } else {
-            throw err;
-          }
+        } else {
+          log("[chatwoot] No organization found for tenant, skipping chatwoot provision");
         }
       }
       await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId!));
       await db
         .update(tenantDeployments)
-        .set({ status: "active", lastError: chatwootWarning, updatedAt: new Date() })
+        .set({ status: "active", lastError: null, updatedAt: new Date() })
         .where(eq(tenantDeployments.tenantId, tenantId!));
       return {
         ok: true,
@@ -2080,16 +2077,12 @@ export async function executeProvisionRuntime(
               maxUsers: planLimits.maxUsers,
             },
           });
-          await syncFinanceLicense(
-            internalUrl,
+          await syncFinanceLicenseForStockixTenant(
+            db,
             {
-              tenantId: resolvedTenantId,
-              planSlug,
-              status: "active",
-              isPerpetual: true,
-              maxOrganizations: planLimits.maxOrganizations,
-              maxActivations: planLimits.maxActivations,
-              maxUsers: planLimits.maxUsers,
+              stockixTenantId: tenantId,
+              financeTenantId: resolvedTenantId,
+              internalBaseUrl: internalUrl,
             },
             log,
           );
@@ -2543,25 +2536,18 @@ export async function executeProvisionRuntime(
         );
       }
     }
-    let chatwootWarning: string | null = null;
     if (licensedModules.includes("chat") && tenantId) {
-      try {
+      const orgId = input.controlPlaneOrgId ?? (await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.tenantId, tenantId)).limit(1).then(r => r[0]?.id));
+      if (orgId) {
         await provisionChatwootAccount({
           db,
-          tenantId,
-          tenantName: input.name,
+          organizationId: orgId,
+          organizationName: input.name,
           adminEmail: input.adminEmail,
           chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
           chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
           log,
-          required: true,
         });
-      } catch (err) {
-        if (err instanceof ChatwootConfigError) {
-          chatwootWarning = err.message;
-        } else {
-          throw err;
-        }
       }
     }
 
@@ -2569,7 +2555,7 @@ export async function executeProvisionRuntime(
       await db.update(tenants).set({ status: "active" }).where(eq(tenants.id, tenantId));
       await db
         .update(tenantDeployments)
-        .set({ status: "active", lastError: chatwootWarning, updatedAt: new Date() })
+        .set({ status: "active", lastError: null, updatedAt: new Date() })
         .where(eq(tenantDeployments.tenantId, tenantId));
     }
 
@@ -2896,18 +2882,12 @@ export async function runAddModuleStep(
       }
 
       if (financeTenantId && internalUrl) {
-        const planSlug = input.planSlug ?? "starter";
-        const planLimits = await getPlanLimits(db, planSlug);
-        await syncFinanceLicense(
-          internalUrl,
+        await syncFinanceLicenseForStockixTenant(
+          db,
           {
-            tenantId: financeTenantId,
-            planSlug,
-            status: "active",
-            isPerpetual: true,
-            maxOrganizations: planLimits.maxOrganizations,
-            maxActivations: planLimits.maxActivations,
-            maxUsers: planLimits.maxUsers,
+            stockixTenantId: input.tenantId,
+            financeTenantId,
+            internalBaseUrl: internalUrl,
           },
           log,
         );
@@ -2927,26 +2907,19 @@ export async function runAddModuleStep(
       await provisionPmsStack({ slug: input.slug, tenantId: input.tenantId, log });
       result = { ok: true, module: "pms", tenantStatus: "active" };
     } else {
-      let chatLastError: string | null = null;
-      try {
+      const orgId = input.controlPlaneOrgId ?? (await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.tenantId, input.tenantId)).limit(1).then(r => r[0]?.id));
+      if (orgId) {
         await provisionChatwootAccount({
           db,
-          tenantId: input.tenantId,
-          tenantName: input.name,
+          organizationId: orgId,
+          organizationName: input.name,
           adminEmail: input.adminEmail,
           chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
           chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
           log,
-          required: true,
         });
-      } catch (err) {
-        if (err instanceof ChatwootConfigError) {
-          chatLastError = err.message;
-        } else {
-          throw err;
-        }
       }
-      result = { ok: true, module: "chat", tenantStatus: "active", lastError: chatLastError };
+      result = { ok: true, module: "chat", tenantStatus: "active", lastError: null };
     }
 
     if (!result) {

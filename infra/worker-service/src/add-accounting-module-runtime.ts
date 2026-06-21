@@ -8,8 +8,7 @@ import { createProvisionTracer } from "../domain/provision-trace.js";
 import { activateFinanceWarehouses } from "../domain/provisioning/adapters/activate-finance-warehouses.js";
 import { seedFinancePosDefaults } from "../domain/provisioning/adapters/seed-finance-pos-defaults.js";
 import { wirePosBigcapitalIntegration } from "../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
-import { syncFinanceLicense } from "../domain/provisioning/adapters/sync-finance-license.js";
-import { getPlanLimits } from "@repo/platform-worker-shared";
+import { getPlanLimits, syncFinanceLicenseForStockixTenant } from "@repo/platform-worker-shared";
 import type { AddModuleInput, AddModuleResult } from "./provision-runtime.js";
 
 function parseTenantModulesJson(json: string | null | undefined): string[] {
@@ -146,16 +145,12 @@ export async function executeAddAccountingModuleRuntime(
 
   const planSlug = input.planSlug ?? "starter";
   const planLimits = await getPlanLimits(db, planSlug);
-  await syncFinanceLicense(
-    internalUrl,
+  await syncFinanceLicenseForStockixTenant(
+    db,
     {
-      tenantId: financeTenantId,
-      planSlug,
-      status: "active",
-      isPerpetual: true,
-      maxOrganizations: planLimits.maxOrganizations,
-      maxActivations: planLimits.maxActivations,
-      maxUsers: planLimits.maxUsers,
+      stockixTenantId: input.tenantId,
+      financeTenantId,
+      internalBaseUrl: internalUrl,
     },
     log,
   );

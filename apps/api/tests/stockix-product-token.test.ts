@@ -51,7 +51,17 @@ describe("stockix product token", () => {
         modules: ["pos", "accounting"],
       },
     );
-    const payload = await verifyProductToken(token);
+    const mockDb = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ status: "active" }]),
+          }),
+        }),
+      }),
+    } as never;
+
+    const payload = await verifyProductToken(mockDb, token);
     expect(payload.modules).toEqual(["pos", "accounting"]);
     expect(payload.tenantId).toBe("660e8400-e29b-41d4-a716-446655440001");
   });

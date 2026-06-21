@@ -31,7 +31,7 @@ async function attachActorPermissions(db: Db, actorId: string): Promise<string[]
 // TTL is short enough that session revocations (sessionVersion bump) take
 // effect within SESSION_CACHE_TTL_MS milliseconds.
 // ---------------------------------------------------------------------------
-const SESSION_CACHE_TTL_MS = 15_000;
+const SESSION_CACHE_TTL_MS = 5_000;
 type SessionCacheEntry = { ownerId: string; role: string; permissions: string[] };
 const _sessionCache = new Map<string, SessionCacheEntry & { validUntil: number }>();
 
@@ -68,7 +68,7 @@ async function setSessionCache(tokenHash: string, ownerId: string, role: string,
         `session:cache:${tokenHash}`,
         JSON.stringify({ ownerId, role, permissions }),
         "EX",
-        15,
+        5,
       );
     } catch {
       // fallback
@@ -303,9 +303,13 @@ export function createActorResolver(
       c.set("actorId", resolved.ownerId);
       c.set("actorRole", "read_only");
       c.set("actorEffectiveRole", "read_only");
-      // If the key has scoped permissions, use those; otherwise inherit owner's permissions.
+      // Intersect the key's scoped permissions with the owner's current permissions
       const ownerPerms = await attachActorPermissions(db, resolved.ownerId);
-      c.set("actorPermissions", resolved.permissions ?? ownerPerms);
+      if (resolved.permissions) {
+        c.set("actorPermissions", resolved.permissions.filter(p => ownerPerms.includes(p)));
+      } else {
+        c.set("actorPermissions", ownerPerms);
+      }
       c.set("apiKeyId", resolved.keyId);
       scheduleApiKeyLastUsedTouch(db, resolved.keyId);
       await next();

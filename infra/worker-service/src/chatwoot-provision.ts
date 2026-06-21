@@ -1,18 +1,18 @@
 import { randomBytes } from "node:crypto";
-import { tenants } from "@repo/db/schema";
+import { organizations } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as dbSchema from "@repo/db/schema";
 
 export async function deprovisionChatwootAccount(opts: {
   db: PostgresJsDatabase<typeof dbSchema>;
-  tenantId: string;
+  organizationId: string;
   chatwootAccountId: string;
   chatwootBaseUrl: string;
   chatwootApiKey: string;
   log: (message: string) => void;
 }): Promise<{ success: boolean; error?: string }> {
-  const { db, tenantId, chatwootAccountId, chatwootBaseUrl, chatwootApiKey, log } = opts;
+  const { db, organizationId, chatwootAccountId, chatwootBaseUrl, chatwootApiKey, log } = opts;
 
   if (!chatwootBaseUrl || !chatwootApiKey) {
     log("[chatwoot] CHATWOOT_BASE_URL or CHATWOOT_API_ACCESS_TOKEN not set; skipping deprovision");
@@ -29,10 +29,10 @@ export async function deprovisionChatwootAccount(opts: {
 
     if (res.ok || res.status === 404) {
       await db
-        .update(tenants)
+        .update(organizations)
         .set({ chatwootAccountId: null })
-        .where(eq(tenants.id, tenantId));
-      log(`[chatwoot] account ${chatwootAccountId} deleted for tenant ${tenantId}`);
+        .where(eq(organizations.id, organizationId));
+      log(`[chatwoot] account ${chatwootAccountId} deleted for organization ${organizationId}`);
       return { success: true };
     }
 
@@ -51,38 +51,32 @@ function generateSecurePassword(): string {
   return randomBytes(18).toString("base64url");
 }
 
-export class ChatwootConfigError extends Error {
-  readonly code = "CHATWOOT_CONFIG_ERROR" as const;
+export class ConfigurationError extends Error {
+  readonly code = "CONFIGURATION_ERROR" as const;
   constructor(message: string) {
     super(message);
-    this.name = "ChatwootConfigError";
+    this.name = "ConfigurationError";
   }
 }
 
 export async function provisionChatwootAccount(opts: {
   db: PostgresJsDatabase<typeof dbSchema>;
-  tenantId: string;
-  tenantName: string;
+  organizationId: string;
+  organizationName: string;
   adminEmail: string;
   chatwootBaseUrl: string;
   chatwootApiKey: string;
   log: (message: string) => void;
-  /** When true, missing env vars surface as a ChatwootConfigError instead of a silent skip. */
-  required?: boolean;
 }): Promise<{ accountId: string | null }> {
-  const { db, tenantId, tenantName, adminEmail, chatwootBaseUrl, chatwootApiKey, log, required } = opts;
+  const { db, organizationId, organizationName, adminEmail, chatwootBaseUrl, chatwootApiKey, log } = opts;
 
   if (!chatwootBaseUrl || !chatwootApiKey) {
     const msg =
       "[chatwoot] CHATWOOT_BASE_URL or CHATWOOT_API_ACCESS_TOKEN is not configured. " +
       "The 'chat' module was requested but no Chatwoot account will be created. " +
       "Set both env vars in infra/prod/.env and re-provision the chat module.";
-    if (required) {
-      log(`[chatwoot] ERROR: ${msg}`);
-      throw new ChatwootConfigError(msg);
-    }
-    log(`[chatwoot] ${msg}`);
-    return { accountId: null };
+    log(`[chatwoot] ERROR: ${msg}`);
+    throw new ConfigurationError(msg);
   }
 
   const password = generateSecurePassword();
@@ -96,7 +90,7 @@ export async function provisionChatwootAccount(opts: {
         api_access_token: chatwootApiKey,
       },
       body: JSON.stringify({
-        name: tenantName,
+        name: organizationName,
       }),
     });
 
@@ -119,7 +113,7 @@ export async function provisionChatwootAccount(opts: {
           api_access_token: chatwootApiKey,
         },
         body: JSON.stringify({
-          account_name: tenantName,
+          account_name: organizationName,
           email: adminEmail,
           password,
           confirm_password: password,
@@ -140,10 +134,10 @@ export async function provisionChatwootAccount(opts: {
 
     if (accountId) {
       await db
-        .update(tenants)
+        .update(organizations)
         .set({ chatwootAccountId: accountId })
-        .where(eq(tenants.id, tenantId));
-      log(`[chatwoot] account ${accountId} linked to tenant ${tenantId}`);
+        .where(eq(organizations.id, organizationId));
+      log(`[chatwoot] account ${accountId} linked to organization ${organizationId}`);
     }
 
     return { accountId };

@@ -845,20 +845,22 @@ async function runRemoveModuleJob(
     await stopFinanceStack(payload.slug, log);
   }
   if (payload.module === "chat" && job.tenantId && db) {
-    const [row] = await db
-      .select({ chatwootAccountId: tenants.chatwootAccountId })
-      .from(tenants)
-      .where(eq(tenants.id, job.tenantId))
-      .limit(1);
-    if (row?.chatwootAccountId) {
-      await deprovisionChatwootAccount({
-        db,
-        tenantId: job.tenantId,
-        chatwootAccountId: row.chatwootAccountId,
-        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-        log,
-      });
+    const orgs = await db
+      .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
+      .from(organizations)
+      .where(eq(organizations.tenantId, job.tenantId));
+
+    for (const org of orgs) {
+      if (org.chatwootAccountId) {
+        await deprovisionChatwootAccount({
+          db,
+          organizationId: org.id,
+          chatwootAccountId: org.chatwootAccountId,
+          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          log,
+        });
+      }
     }
   }
 }
@@ -872,20 +874,22 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
 
   // Clean up external Chatwoot account before destroying the tenant.
-  const [tenantRow] = await db
-    .select({ chatwootAccountId: tenants.chatwootAccountId, slug: tenants.slug })
-    .from(tenants)
-    .where(eq(tenants.id, job.tenantId))
-    .limit(1);
-  if (tenantRow?.chatwootAccountId) {
-    await deprovisionChatwootAccount({
-      db,
-      tenantId: job.tenantId,
-      chatwootAccountId: tenantRow.chatwootAccountId,
-      chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-      chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-      log: (m) => logger.info(`[worker][${job.id}] ${m}`),
-    });
+  const orgs = await db
+    .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
+    .from(organizations)
+    .where(eq(organizations.tenantId, job.tenantId));
+
+  for (const org of orgs) {
+    if (org.chatwootAccountId) {
+      await deprovisionChatwootAccount({
+        db,
+        organizationId: org.id,
+        chatwootAccountId: org.chatwootAccountId,
+        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+        log: (m) => logger.info(`[worker][${job.id}] ${m}`),
+      });
+    }
   }
   
   if (job.payload.needsScrub) {

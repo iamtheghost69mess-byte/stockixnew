@@ -89,6 +89,26 @@ export async function signProductToken(
   );
 }
 
-export async function verifyProductToken(token: string): Promise<StockixTokenPayload> {
-  return verifyStockixToken(token, authSecretOrThrow());
+export async function verifyProductToken(
+  db: PostgresJsDatabase<typeof schema>,
+  token: string
+): Promise<StockixTokenPayload> {
+  const payload = await verifyStockixToken(token, authSecretOrThrow());
+  
+  // Fast-path DB check to ensure the tenant hasn't been suspended or deleted
+  const [row] = await db
+    .select({ status: tenants.status })
+    .from(tenants)
+    .where(eq(tenants.id, payload.tenantId))
+    .limit(1);
+
+  if (!row) {
+    throw new Error(`tenant_not_found:${payload.tenantId}`);
+  }
+
+  if (row.status === "suspended" || row.status === "deprovisioning" || row.status === "failed") {
+    throw new Error(`tenant_revoked:${payload.tenantId}`);
+  }
+
+  return payload;
 }

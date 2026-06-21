@@ -123,6 +123,7 @@ export const organizations = pgTable(
     financeOrganizationId: varchar("finance_organization_id", { length: 255 }),
     /** Mongo ObjectId of the POS organization wired to this control-plane org. */
     posOrganizationId: text("pos_organization_id"),
+    chatwootAccountId: text("chatwoot_account_id"),
     provisioningError: text("provisioning_error"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
