@@ -28,6 +28,7 @@ import {
 
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { logger } from "../lib/logger.js";
+import { getControlPlaneRedisClient } from "../lib/redis.js";
 import { deliverOwnerInviteEmail } from "../services/invites/owner-invite-delivery.js";
 import { resendOwnerInvite } from "../services/invites/invites.js";
 import { isOwnerInviteMailQueueEnabled } from "../jobs/owner-invite-mail-queue.js";
@@ -169,6 +170,73 @@ app.post("/admin/dead-letter-jobs/:id/retry", async (c) => {
     maxAttempts: dlJob.maxAttempts,
   });
   return c.json({ ok: true, jobId: requeued?.id });
+});
+
+// ─── Feature flags management (super_admin only) ──────────────────────────────
+
+const featureFlagKey = (tenantId: string) => `feature_flags:${tenantId}`;
+
+app.get("/admin/tenants/:tenantId/feature-flags", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const parsed = z.string().uuid().safeParse(tenantId);
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const role = c.get("actorRole");
+  if (role !== "super_admin") return c.json({ error: "forbidden" }, 403);
+
+  const redis = getControlPlaneRedisClient();
+  if (!redis) return c.json({ flags: {} });
+
+  const raw = await redis.hgetall(featureFlagKey(parsed.data));
+  const flags: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(raw ?? {})) {
+    flags[k] = v === "true";
+  }
+  return c.json({ flags });
+});
+
+const featureFlagBody = z.object({
+  key: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_.-]+$/),
+  value: z.boolean(),
+});
+
+app.post("/admin/tenants/:tenantId/feature-flags", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const parsed = z.string().uuid().safeParse(tenantId);
+  if (!parsed.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+
+  const role = c.get("actorRole");
+  if (role !== "super_admin") return c.json({ error: "forbidden" }, 403);
+
+  let body: z.infer<typeof featureFlagBody>;
+  try {
+    body = featureFlagBody.parse(await c.req.json());
+  } catch (e) {
+    return c.json({ error: "invalid_body", detail: e instanceof z.ZodError ? e.flatten() : String(e) }, 400);
+  }
+
+  const redis = getControlPlaneRedisClient();
+  if (!redis) return c.json({ error: "redis_unavailable", message: "CONTROL_PLANE_REDIS_URL is not configured" }, 503);
+
+  await redis.hset(featureFlagKey(parsed.data), body.key, String(body.value));
+  return c.json({ ok: true, key: body.key, value: body.value });
+});
+
+app.delete("/admin/tenants/:tenantId/feature-flags/:key", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const key = c.req.param("key");
+  const parsedId = z.string().uuid().safeParse(tenantId);
+  if (!parsedId.success) return c.json({ error: "tenantId must be a UUID" }, 400);
+  if (!key || key.length < 1) return c.json({ error: "key is required" }, 400);
+
+  const role = c.get("actorRole");
+  if (role !== "super_admin") return c.json({ error: "forbidden" }, 403);
+
+  const redis = getControlPlaneRedisClient();
+  if (!redis) return c.json({ error: "redis_unavailable", message: "CONTROL_PLANE_REDIS_URL is not configured" }, 503);
+
+  const deleted = await redis.hdel(featureFlagKey(parsedId.data), key);
+  return c.json({ ok: true, deleted });
 });
 
 }

@@ -7,6 +7,7 @@ const KNOWN_PATH_PREFIXES = [
   "/webhooks/",
   "/internal/jobs",
   "/internal/organizations",
+  "/internal/product-token",
   "/v1/",
   "/owners",
   "/admin/",

@@ -98,7 +98,8 @@ export async function getMaxLocations(
   const license = await getActiveLicenseForTenant(db, tenantId);
   if (!license) return 0;
   if (!isLicenseDateValid(license, new Date())) return 0;
-  return license.maxLocations;
+  // maxLocations is not yet a license-level column; use the platform default (matches POS entitlementService DEFAULT_MAX_LOCATIONS)
+  return 5;
 }
 
 /**

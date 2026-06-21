@@ -84,6 +84,13 @@ export function createControlPlaneApp(): ControlPlaneApp {
     process.exit(1);
   }
 
+  if (!process.env.CHATWOOT_BASE_URL?.trim()) {
+    logger.warn(
+      'CHATWOOT_BASE_URL is not configured. Tenants with the "chat" module will provision without a Chatwoot account.',
+      { event: "chatwoot_not_configured_startup" },
+    );
+  }
+
   // Auth + webhooks before CORS: session cookies and webhook signature verification.
   if (db) {
     initEmailLogging(db);

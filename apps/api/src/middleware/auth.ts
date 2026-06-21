@@ -31,7 +31,8 @@ async function attachActorPermissions(db: Db, actorId: string): Promise<string[]
 // TTL is short enough that session revocations (sessionVersion bump) take
 // effect within SESSION_CACHE_TTL_MS milliseconds.
 // ---------------------------------------------------------------------------
-const SESSION_CACHE_TTL_MS = 5_000;
+// SEC-05: Reduced to 3 s so session revocations (logout / password-reset) propagate quickly.
+const SESSION_CACHE_TTL_MS = 3_000;
 type SessionCacheEntry = { ownerId: string; role: string; permissions: string[] };
 const _sessionCache = new Map<string, SessionCacheEntry & { validUntil: number }>();
 
@@ -136,6 +137,8 @@ export type ControlPlaneAuthEnv = {
     apiKeyId?: string;
     requestId: string;
     requestStartMs: number;
+    /** SEC-02: Set when authenticated via API key; signals module-license middleware must still run. */
+    requiresModuleCheck?: boolean;
   };
 };
 
@@ -177,6 +180,7 @@ export function createPlatformAuthGate(
     if (
       c.req.path.startsWith("/internal/jobs")
       || c.req.path.startsWith("/internal/organizations")
+      || c.req.path.startsWith("/internal/product-token")
     ) {
       const auth = c.req.header("Authorization") ?? "";
       if (!workerSecret || auth !== `Bearer ${workerSecret}`) {
@@ -236,6 +240,7 @@ export function createActorResolver(
       || path.startsWith("/webhooks/")
       || path.startsWith("/internal/jobs")
       || path.startsWith("/internal/organizations")
+      || path.startsWith("/internal/product-token")
     ) {
       await next();
       return;
@@ -311,6 +316,8 @@ export function createActorResolver(
         c.set("actorPermissions", ownerPerms);
       }
       c.set("apiKeyId", resolved.keyId);
+      // SEC-02: API key auth never implies module access; downstream module checks must still run.
+      c.set("requiresModuleCheck", true);
       scheduleApiKeyLastUsedTouch(db, resolved.keyId);
       await next();
       return;

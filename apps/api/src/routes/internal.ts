@@ -57,9 +57,11 @@ import { isRecord, readNonEmptyString } from "../lib/record-utils.js";
 import { logger } from "../lib/logger.js";
 import {
   parseTenantModules,
+  productTokenAllowKey,
   serializeTenantModules,
   type StockixModule,
 } from "../services/auth/stockix-product-token.js";
+import { getControlPlaneRedisClient } from "../lib/redis.js";
 import { ensureDefaultTenantConfig } from "./tenant-config.js";
 import { handleTerminalProvisionJobFailure } from "../provisioning/provision-failure.js";
 
@@ -1656,6 +1658,36 @@ app.delete("/internal/branch-location-mapping", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+/**
+ * SEC-01: Product-token allowlist check.
+ * Finance and PMS call this (with worker secret in Authorization: Bearer) before trusting
+ * a product-token bearer on sensitive operations — enables near-instant revocation on suspend.
+ *
+ * Returns { valid: true }                      — key present in allowlist
+ *         { valid: false }                     — key absent (tenant suspended / token revoked)
+ *         { valid: true, warning: "..." }      — Redis unavailable (fail open)
+ */
+app.get("/internal/product-token/valid", async (c) => {
+  const tenantId = c.req.query("tenantId")?.trim() ?? "";
+  const userId = c.req.query("userId")?.trim() ?? "";
+
+  if (!tenantId || !userId) {
+    return c.json({ error: "tenantId and userId are required" }, 400);
+  }
+
+  const redis = getControlPlaneRedisClient();
+  if (!redis) {
+    return c.json({ valid: true, warning: "redis_unavailable" });
+  }
+
+  try {
+    const exists = await redis.exists(productTokenAllowKey(tenantId, userId));
+    return c.json({ valid: exists === 1 });
+  } catch {
+    return c.json({ valid: true, warning: "redis_error" });
+  }
 });
 
 }

@@ -25,7 +25,10 @@
     "paths": {
       "@/*": [
         "./*"
-      ]
+      ],
+      "@repo/ui-core": ["../../../packages/ui-core/src/index.ts"],
+      "@repo/ui-shared": ["../../../packages/ui-shared/src/index.ts"],
+      "@repo/theme": ["../../../packages/theme/src/index.css"]
     }
   },
   "include": [

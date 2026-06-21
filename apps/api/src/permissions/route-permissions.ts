@@ -19,6 +19,7 @@ export function requiredPermissionsForRoute(
   if (m === "GET" && pathname.startsWith("/public/tenant/")) return null;
 
   if (pathname === "/admin/orphan-check" && m === "GET") return ["*"];
+  if (/^\/admin\/tenants\/[^/]+\/feature-flags/.test(pathname)) return ["*"];
   if (pathname.startsWith("/admin/roles")) {
     if (m === "GET") return ["roles.manage"];
     return ["roles.manage"];

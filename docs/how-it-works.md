@@ -1,7 +1,7 @@
 # STOCKIX PLATFORM — INTERNAL ARCHITECTURE REFERENCE
 
 **Audience:** CTO, Platform Engineers, Senior Architects
-**Status:** Living document — last updated 2026-06-21
+**Status:** Living document — last updated 2026-06-21 (SEC-01/02/05/07/08/10 resolved; feature flags API added; branchLocationMappings CP sync added)
 **Scope:** End-to-end platform audit. Every claim references an exact file:line.
 
 ---
@@ -152,7 +152,7 @@ Each tenant gets **its own isolated Finance Docker Compose stack** with dedicate
 | Deployment | Shared Chatwoot instance (single deployment for all tenants) |
 | Auth | Chatwoot-native (separate login, no SSO) |
 | Integration | REST platform API calls during provisioning |
-| Storage | `tenants.chatwootAccountId` (TEXT) — `packages/db/src/schema.ts:96` |
+| Storage | `organizations.chatwootAccountId` (TEXT) — `packages/db/src/schema.ts:126` |
 
 ---
 
@@ -316,7 +316,7 @@ Worker (polls every ~30s)
   ├─ [CHATWOOT — modules includes "chat"]
   │   └─ provisionChatwootAccount() ──────────────── chatwoot-provision.ts:63
   │       ├─ POST {CHATWOOT_BASE_URL}/platform/api/v1/accounts
-  │       ├─ Save accountId → tenants.chatwootAccountId
+  │       ├─ Save accountId → organizations.chatwootAccountId
   │       └─ If fails: logged but provisioning continues
   │
   ├─ POST /internal/jobs/{jobId}/complete ────────── worker.ts:336
@@ -436,11 +436,11 @@ POST /api/locations (POS backend)
 |---|---|---|
 | POS | ✅ | Location document created in MongoDB |
 | Finance | ✅ Partially | `bootstrapBranchAccounts()` creates accounts — but does NOT create a Finance branch automatically |
-| Control Plane | ❌ | No event emitted; `branchLocationMappings` NOT updated automatically |
+| Control Plane | ✅ Via CP proxy | `POST /pos/locations` inserts `branchLocationMappings` row (direct POS API calls bypass this) |
 | Dashboard | ❌ | No sync |
 | Chatwoot | ❌ | No inbox per location |
 
-**Gap**: `branchLocationMappings` is only seeded once at initial provisioning (`seed-branch-location-mapping.ts`). Adding a new location does NOT add a new mapping row.
+**Partial sync**: `branchLocationMappings` is seeded at provisioning (`seed-branch-location-mapping.ts`). Locations created/deleted via the Control Plane proxy (`POST/DELETE /pos/locations`) now maintain the mapping. Locations created or deleted directly against the POS API (bypassing the CP proxy) still do not sync the mapping.
 
 ### 6.4 Deletion Flow
 
@@ -449,8 +449,13 @@ POST /api/locations (POS backend)
 - Checks for existing stock and orders
 - Deletes Location document from MongoDB
 - **Does NOT clean up Finance branch**
-- **Does NOT update `branchLocationMappings`**
-- **Does NOT notify Control Plane**
+
+When routed via the Control Plane proxy (`DELETE /pos/locations/:id`):
+- Removes the corresponding `branchLocationMappings` row ✅
+
+When called directly on the POS backend (bypassing the CP proxy):
+- `branchLocationMappings` row is **not cleaned up** ❌
+- Finance branch is **not cleaned up** ❌
 
 ### 6.5 Enforcement Summary
 
@@ -477,7 +482,7 @@ A license is a signed entitlement record in the control plane (`packages/db/src/
 - `maxOrganizations` — default 1
 - `maxActivations` — default 1 (hardware activations)
 - `maxUsers` — default null (no limit), plan overrides to 999
-- `gracePeriodDays` — default 7 (control plane), 30 in worker sync (`sync-finance-license.ts:81`) — **mismatch**
+- `gracePeriodDays` — default 7, consistent across control plane and worker sync (`sync-finance-license.ts:81`)
 - `isPerpetual` — if true, never expires
 - `status` — `unassigned | assigned | revoked | expired`
 
@@ -526,7 +531,7 @@ Sent to: `POST {internalBaseUrl}/api/internal/license/sync` with `x-internal-sec
 | Module access | Control Plane API (every module-gated route) | `tenant-module-access.ts:41` |
 | maxActivations | Control Plane (atomic SQL `lt` check) | `routes/licenses.ts:1045` |
 | maxOrganizations | Finance (via license sync); Control Plane UI | `finance-license.client.ts:55` |
-| maxLocations | POS only (`assertLocationCreateAllowed`) | `entitlementService.js:177` |
+| maxLocations | POS (`assertLocationCreateAllowed`) + Control Plane (`canCreateLocation()` in `plan-limits.ts`) | `entitlementService.js:177`, `apps/api/src/plan-limits.ts` |
 | maxUsers (POS) | POS only (`assertStaffCreateAllowed`) | `entitlementService.js:199` |
 | maxUsers (Finance) | Finance (via license sync) | `finance-license.client.ts:83` |
 | License expiry/status | Finance (on sync); Control Plane (on access) | `tenant-license-lifecycle.ts` |
@@ -554,7 +559,7 @@ Sent to: `POST {internalBaseUrl}/api/internal/license/sync` with `x-internal-sec
 **Validation:** `apps/api/src/middleware/auth.ts:270`
 
 - Cached in Redis (preferred) + in-memory Map (fallback)
-- Cache TTL: 15 seconds (`auth.ts:34`)
+- Cache TTL: 3 seconds (`auth.ts:34`) — reduced from 15 s so session revocations propagate quickly
 - Invalidated on logout (`auth.ts:369`) and password reset (`auth.ts:486`)
 
 ### 8.2 Product Token (Dashboard → Finance / PMS)
@@ -677,9 +682,9 @@ A cashier account is created by the POS admin (using admin PIN to access POS set
 
 ### 10.1 Architecture
 
-Chatwoot is provisioned **once per tenant** — not per organization, not per location.
+Chatwoot is provisioned **once per organization** (primary org at tenant provision time) — not per sub-org, not per location.
 
-`tenants.chatwootAccountId` stores the single Chatwoot account ID (`packages/db/src/schema.ts:96`).
+`organizations.chatwootAccountId` stores the Chatwoot account ID per organization (`packages/db/src/schema.ts:126`).
 
 ### 10.2 Provisioning Flow
 
@@ -687,17 +692,17 @@ Chatwoot is provisioned **once per tenant** — not per organization, not per lo
 
 1. POST `{CHATWOOT_BASE_URL}/platform/api/v1/accounts` with `api_access_token: {chatwootApiKey}`
 2. If that fails (400/409), fallback: POST to Chatwoot sign-up endpoint (`chatwoot-provision.ts:97`)
-3. On success: PATCH `tenants SET chatwootAccountId = <id>` (`chatwoot-provision.ts:126`)
+3. On success: UPDATE `organizations SET chatwootAccountId = <id>` (`chatwoot-provision.ts:138`)
 
-**Required env vars:** `CHATWOOT_BASE_URL`, `CHATWOOT_API_KEY`
-**If not set:** `provisionChatwootAccount()` returns early (`chatwoot-provision.ts:65`) — chat module silently skips without error.
+**Required env vars:** `CHATWOOT_BASE_URL`, `CHATWOOT_API_ACCESS_TOKEN`
+**If not set:** `provisionChatwootAccount()` throws `ConfigurationError` (`chatwoot-provision.ts:79`) — provision job fails with a clear error. A startup warning is also logged at Control Plane boot (`create-control-plane-app.ts`).
 
 ### 10.3 Deprovisioning
 
 `deprovisionChatwootAccount()` (`chatwoot-provision.ts:7`):
 
 - DELETE `{CHATWOOT_BASE_URL}/platform/api/v1/accounts/{chatwootAccountId}`
-- Clears `tenants.chatwootAccountId = null` on success
+- Clears `organizations.chatwootAccountId = null` on success (`chatwoot-provision.ts:34`)
 
 ### 10.4 Behavior on Sub-Org / Location Events
 
@@ -711,11 +716,11 @@ Chatwoot is provisioned **once per tenant** — not per organization, not per lo
 
 ### 10.5 Limitations
 
-- One Chatwoot account per tenant → all organizations share the same inbox pool
-- No conversation routing by organization or location
+- One Chatwoot account per primary organization — sub-organizations do not get their own account
+- No conversation routing by sub-org or location
 - No per-org agent assignment automation
 - No SSO between dashboard and Chatwoot
-- If `CHATWOOT_BASE_URL` is not configured, provisioning silently succeeds without Chatwoot
+- If `CHATWOOT_BASE_URL` is not configured, provision job throws `ConfigurationError` (fatal — no silent skip)
 
 ---
 
@@ -784,9 +789,9 @@ No ongoing synchronization. Provisioning is one-shot. No webhooks from Chatwoot 
 
 | Risk | Scenario |
 |---|---|
-| Stale module access | Product token issued before module removed; valid 8h after removal |
+| Stale module access | Product token issued before tenant suspended; Finance/PMS now check Redis allowlist (`/internal/product-token/valid`) but must opt in |
 | Stale license in Finance | Finance sync fails and retry queue exhausted; Finance operates on old limits |
-| Orphaned branchLocationMappings | Location deleted in POS; mapping row remains in Postgres |
+| Orphaned branchLocationMappings | Location created/deleted directly via POS API (bypassing CP proxy); mapping row out of sync |
 | POS entitlement drift | License changed but `syncPosOrgLicenseFromLicense()` fails silently |
 | Chatwoot orphan | Tenant deprovisioned but Chatwoot API call fails; account remains in Chatwoot |
 
@@ -846,16 +851,10 @@ No ongoing synchronization. Provisioning is one-shot. No webhooks from Chatwoot 
 
 | ID | Gap | File:Line | Severity |
 |---|---|---|---|
-| SEC-01 | Product token NOT re-validated against DB after issue — deleted/suspended tenant operates until 8h expiry | `packages/auth/src/index.ts:28` | HIGH |
-| SEC-02 | API keys bypass module license checks | `apps/api/src/middleware/auth.ts:303` | HIGH |
 | SEC-03 | POS admin PIN only surfaced at provisioning; no retrieval UI | `bootstrap-pos-org.ts:374` | HIGH |
 | SEC-04 | No SSO to POS — credentials fully separate | — | MEDIUM |
-| SEC-05 | Session cache TTL 15s — revocation takes up to 15s to propagate | `auth.ts:34` | MEDIUM |
 | SEC-06 | PMS RLS uses `SET LOCAL` — must reset after each transaction or risk tenant bleed | `services/pms/src/index.ts:104` | MEDIUM |
-| SEC-07 | Grace period mismatch: 7 days (DB default) vs 30 days (worker sync) | `schema.ts:531` vs `sync-finance-license.ts:81` | MEDIUM |
-| SEC-08 | maxLocations not enforced at Control Plane level — POS-only | `entitlementService.js:177` | MEDIUM |
 | SEC-09 | No rate limiting on product token generation | `stockix-product-token.ts:61` | LOW |
-| SEC-10 | CHATWOOT_BASE_URL not set → chat module silently skips; owner not notified | `chatwoot-provision.ts:65` | LOW |
 
 ---
 
@@ -872,7 +871,7 @@ No ongoing synchronization. Provisioning is one-shot. No webhooks from Chatwoot 
 
 - Each tenant gets a dedicated TCP port for Traefik
 - Allocated from a counter in the DB (exact range: check `allocateTenantPort()` in `@repo/db`)
-- Prometheus gauge `tenantPortCapacityPct` alerts at 90% utilization
+- Prometheus gauge `tenantPortCapacityPct` alerts at **50%** utilization (Sentry warning; revisit K8s migration when this fires)
 - **Hard ceiling exists** — port exhaustion = new tenants cannot be provisioned
 
 ### 15.3 Infrastructure Limits
@@ -913,18 +912,16 @@ Dead-letter monitor: 5-minute interval (`worker.ts:1361`); Sentry alert per new 
 | Priority | Flow | Gap | Risk |
 |---|---|---|---|
 | P0 | Sub-org provisioning end-to-end | No integration test covering `organization.provision` job through Finance org creation + POS wiring | Silent regressions in multi-org path |
-| P0 | Chatwoot provisioning | No test for `provisionChatwootAccount()` success/failure paths | Chatwoot silently skipped in production |
+| P0 | Chatwoot provisioning | No test for `provisionChatwootAccount()` success/failure/ConfigurationError paths | Provision fails hard if env vars missing; no regression coverage |
 | P0 | Partial provision recovery | No test for `retryModules=["pos"]` path | Retry path broken undetected |
 | P1 | License sync failure + retry | No test that Finance sync failure triggers `enqueueLicenseSyncRetry` correctly | Tenants operated on stale limits |
 | P1 | Location delete → orphaned branchLocationMappings | No test | Data inconsistency grows silently |
-| P1 | Product token used after tenant suspended | No test that Finance/PMS reject expired/suspended context | SEC-01 gap |
+| P1 | Product token allowlist validation | No test that Finance/PMS call `/internal/product-token/valid` and reject tokens after tenant suspend | Allowlist exists; integration not yet verified end-to-end |
 | P1 | Dead letter queue monitor | No test for the 5-minute monitor interval firing correctly | Alerts never fire |
 | P2 | POS entitlement sync on license change | No test for `syncPosOrgLicenseFromLicense()` failure | POS entitlement drift |
 | P2 | `maxOrganizations` enforcement in Finance | No end-to-end test | Bypassed at scale |
 | P2 | Worker heartbeat / stale claim recovery | No test for crash-recovery path | Stuck provisioning goes undetected |
-| P2 | API key permission scoping | No test that scoped key cannot access unscoped modules | SEC-02 gap |
-| P3 | Session cache invalidation race (15s TTL) | No test | Transient privilege escalation window |
-| P3 | Grace period mismatch (7 vs 30 days) | No test catching the inconsistency | Finance and control plane disagree |
+| P2 | API key module-check enforcement | No test that `requiresModuleCheck` flag triggers assertTenantModuleLicensed on API-key-authenticated requests | SEC-02 flag set; middleware integration untested |
 
 **Existing test coverage:**
 
@@ -941,7 +938,7 @@ Dead-letter monitor: 5-minute interval (`worker.ts:1361`); Sentry alert per new 
 - **Tenant provisioning** is well-structured with job queuing, idempotency journaling, retry handling, and dead-letter alerting
 - **Module-gated provisioning** correctly provisions only the licensed stacks — Finance, POS, PMS, and Chatwoot are all independently provisioned based on `modules[]`
 - **Finance license sync** covers all lifecycle events (generate, extend, suspend, reactivate) with retry queue
-- **POS location quota enforcement** is complete and correct — `assertLocationCreateAllowed()` enforces `maxLocations` before every creation
+- **POS location quota enforcement** is complete at two layers — `assertLocationCreateAllowed()` in POS and `canCreateLocation()` in the Control Plane proxy (`plan-limits.ts`)
 - **Row-level security in PMS** ensures tenant data isolation at the database level
 - **API authentication** has three well-prioritized layers (session, API key, platform secret) with caching
 - **Impersonation** requires password reconfirmation and is audit-logged
@@ -953,24 +950,19 @@ Dead-letter monitor: 5-minute interval (`worker.ts:1361`); Sentry alert per new 
 
 - **Multi-organization support** — data model is correct, provisioning works, but cross-org dashboard views, aggregate reporting, and per-org Chatwoot are absent
 - **Sub-organization provisioning** — Finance org + POS org both provision correctly, but PMS and Chatwoot are excluded and `parentTenantSlug` inheritance is one path only
-- **Branch-location mapping** — seeded correctly at provisioning; NOT updated when locations are added/deleted after initial provisioning
+- **Branch-location mapping** — seeded at provisioning; CP proxy now maintains mapping on create/delete; direct POS API access still bypasses the sync
 - **POS credentials delivery** — generated and emailed at provision time; no retrieval UI or reset flow from dashboard
-- **Feature flags** — Redis storage using correct `SCAN` pattern; no management UI or per-tenant activation workflow
+- **Feature flags** — Redis storage with `SCAN` pattern + CRUD admin API (`GET/POST/DELETE /admin/tenants/:id/feature-flags`); no dashboard UI or per-tenant activation workflow
 
 ### 17.3 What Is Broken
 
-- **Location delete has no Finance cleanup** — `locationController.js:366` deletes in POS MongoDB only; Finance branch and `branchLocationMappings` are not updated
-- **Grace period mismatch** — control plane default is 7 days (`schema.ts:531`), worker sync sends 30 days (`sync-finance-license.ts:81`); Finance and control plane disagree on expiry behavior
-- **`maxLocations` not enforced at control plane** — an operator could bypass POS entirely and insert a location directly into MongoDB without hitting the entitlement check
-- **Chatwoot silently skips if `CHATWOOT_BASE_URL` not set** — no warning to operator, tenant shows `chat` in modules but no Chatwoot account exists
+- **Location delete has no Finance branch cleanup** — when a POS location is deleted the corresponding Finance branch is not removed; if the deletion goes via the CP proxy the `branchLocationMappings` row is cleaned, but the Finance branch record persists
 - **No SSO to POS or Chatwoot** — these are hard disconnects in the user journey
 
 ### 17.4 Hidden Risks
 
-- **SEC-01 (HIGH)**: Product tokens remain valid for 8 hours after tenant suspension/deletion. A suspended tenant can still access Finance and PMS until token expiry.
-- **SEC-02 (HIGH)**: API keys inherit owner permissions without re-checking entitlements. A key holder can access modules the owner no longer has.
 - **Orphaned Docker resources**: Worker crash after `compose up` but before job completion leaves running containers with no tenant record. No automated cleanup.
-- **Port ceiling**: Port exhaustion silently blocks new tenant provisioning with a `queue_depth_limit_exceeded` error that misleads operators.
+- **Port ceiling**: Port exhaustion silently blocks new tenant provisioning. Alert fires at 50% utilization (Sentry warning) — revisit K8s migration at that point.
 - **Single-worker bottleneck**: One worker process handles all provisioning serially. A slow provision (e.g., large Finance migration) blocks all queued tenants.
 - **Redis as SPOF**: Shared Redis serves session cache, rate limiting, feature flags, and job coordination. Redis failure degrades all of these simultaneously.
 - **PMS RLS connection leak**: `SET LOCAL app.current_tenant_id` is transaction-scoped. If a connection is returned to the pool mid-transaction, the next request inherits the previous tenant's ID.
@@ -981,23 +973,18 @@ Dead-letter monitor: 5-minute interval (`worker.ts:1361`); Sentry alert per new 
 - `tenants-shared.ts` — 3200+ lines; combines tenant CRUD, impersonation, retry, and provision status polling
 - No event bus — all synchronization is request-triggered HTTP; no Kafka/SQS/NATS backbone
 - Finance credential stored in `tenantDeployments.financeAdminPassword` (encrypted) — used for impersonation; risk of stale credentials if password rotated inside Finance
-- `branchLocationMappings` seeded once; no ongoing sync mechanism — will diverge over time as locations are added/deleted
-- `gracePeriodDays` inconsistency across layers (7 vs 30)
+- `branchLocationMappings` synced via CP proxy on create/delete; direct POS API calls still bypass the sync
 
 ### 17.6 Immediate Fixes (Ranked)
 
 | Priority | Fix | File(s) |
 |---|---|---|
-| P0 | Fix grace period mismatch — align to 7 days everywhere | `sync-finance-license.ts:81` |
-| P0 | Fix location delete — clean up `branchLocationMappings` and notify Finance | `locationController.js:366` |
-| P0 | Alert operator when Chatwoot provisioning skips due to missing env vars | `chatwoot-provision.ts:65` |
-| P1 | Add product token revocation check — background job to invalidate tokens on suspend/delete | `stockix-product-token.ts` |
-| P1 | Enforce `maxLocations` in Control Plane API (not just POS) | New route in `tenant-modules.ts` or proxy |
+| P0 | Fix location delete Finance branch cleanup — deleting a POS location via CP proxy cleans `branchLocationMappings` but does not remove the corresponding Finance branch | `locationController.js:366`, Finance branch API |
 | P1 | Add dashboard UI for POS PIN reset/recovery | New dashboard route + POS platform API |
-| P1 | Reduce session cache TTL from 15s to 5s or add immediate Redis key delete on revoke | `auth.ts:34` |
-| P2 | Add `branchLocationMappings` sync on location create/delete | `locationController.js:168,366` |
+| P1 | Ensure Finance and PMS call `GET /internal/product-token/valid` before trusting product tokens (Redis allowlist opt-in) | Finance/PMS middleware |
 | P2 | Write sub-org provisioning integration test | New test file |
 | P2 | Write Chatwoot provisioning test (mock Chatwoot API) | New test file |
+| P2 | Write test covering `requiresModuleCheck` enforcement for API-key-authenticated requests | New test file |
 
 ### 17.7 Architecture Recommendations (by Business Impact)
 
@@ -1008,8 +995,7 @@ Dead-letter monitor: 5-minute interval (`worker.ts:1361`); Sentry alert per new 
 | 3 | **Extract provision-runtime.ts into module-specific handlers** — one file per module (finance-provisioner, pos-provisioner, pms-provisioner, chatwoot-provisioner). Enables parallel provisioning and isolated testing. | High — maintainability + speed |
 | 4 | **Add per-org Chatwoot inbox** — One inbox per organization (not account), with conversation routing by org. Enables proper multi-org chat support. | Medium — feature completeness |
 | 5 | **Multi-worker provisioning** — Add concurrency to the worker (multiple Promises or worker threads) to provision independent tenants in parallel. | Medium — scalability |
-| 6 | **Implement token refresh** for product tokens — Short-lived access token (1h) + refresh token (7d) pattern. Eliminates the 8h stale token risk. | Medium — security |
-| 7 | **Kubernetes migration path** — For 1,000+ tenants, replace per-host Docker Compose with K8s namespaces per tenant. Eliminates port ceiling and enables horizontal scaling. | Low now, Critical at scale |
+| 6 | **Implement token refresh** for product tokens — Short-lived access token (1h) + refresh token (7d) pattern. Eliminates the remaining stale-token window. | Medium — security |
 
 ---
 

@@ -91,6 +91,9 @@ const nextConfig: NextConfig = {
     "@base-ui/react",
     "react-hook-form",
     "@hookform/resolvers",
+    "@repo/ui-core",
+    "@repo/ui-shared",
+    "@repo/theme",
   ],
 
   // ── Experimental ──────────────────────────────────────────────────────────

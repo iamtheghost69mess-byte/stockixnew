@@ -10,6 +10,7 @@ import { tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
+import { getControlPlaneRedisClient } from "../../lib/redis.js";
 
 const MODULE_VALUES = ["accounting", "pos", "pms", "chat"] as const;
 
@@ -48,6 +49,32 @@ function authSecretOrThrow(): string {
   return secret;
 }
 
+// SEC-01: Product-token allowlist (Redis). TTL matches JWT expiry + 60 s buffer.
+const PRODUCT_TOKEN_ALLOWLIST_TTL_S = 8 * 3600 + 60;
+
+/** SEC-01: Redis key for a user's product-token allowlist entry. */
+export function productTokenAllowKey(tenantId: string, userId: string): string {
+  return `product-token:allow:${tenantId}:${userId}`;
+}
+
+/**
+ * SEC-01: Revoke all product-token allowlist entries for a tenant (SCAN+DEL, never KEYS).
+ * Call when a tenant is suspended or deleted so Finance/PMS reject tokens within seconds.
+ */
+export async function revokeProductTokensForTenant(tenantId: string): Promise<void> {
+  const redis = getControlPlaneRedisClient();
+  if (!redis) return;
+  const pattern = `product-token:allow:${tenantId}:*`;
+  let cursor = "0";
+  do {
+    const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+    cursor = nextCursor;
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+  } while (cursor !== "0");
+}
+
 export type SignProductTokenInput = {
   userId: string;
   tenantId: string;
@@ -75,7 +102,7 @@ export async function signProductToken(
     modules = parseTenantModules(row.modules);
   }
 
-  return signStockixToken(
+  const token = await signStockixToken(
     {
       userId: input.userId,
       tenantId: input.tenantId,
@@ -87,6 +114,17 @@ export async function signProductToken(
     authSecretOrThrow(),
     input.expiresIn ?? "8h",
   );
+
+  // SEC-01: Record token in Redis allowlist so Finance/PMS can validate it before trust.
+  // Non-fatal: if Redis is down, the token still works; revocation falls back to JWT expiry.
+  const redis = getControlPlaneRedisClient();
+  if (redis) {
+    await redis
+      .set(productTokenAllowKey(input.tenantId, input.userId), "1", "EX", PRODUCT_TOKEN_ALLOWLIST_TTL_S)
+      .catch(() => {/* non-fatal */});
+  }
+
+  return token;
 }
 
 export async function verifyProductToken(

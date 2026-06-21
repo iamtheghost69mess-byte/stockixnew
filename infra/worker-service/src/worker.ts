@@ -56,6 +56,7 @@ import {
   licenses,
   deadLetterJobs,
   owners,
+  organizations,
 } from "@repo/db/schema";
 import { and, eq, sql, isNotNull, lte, gte } from "drizzle-orm";
 import {

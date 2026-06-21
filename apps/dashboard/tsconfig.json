@@ -2,7 +2,12 @@
   "extends": "@repo/typescript-config/nextjs.json",
   "compilerOptions": {
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@repo/ui-core": ["../../packages/ui-core/src/index.ts"],
+      "@repo/ui-core/*": ["../../packages/ui-core/src/*"],
+      "@repo/ui/*": ["../../packages/ui-core/src/*"],
+      "@repo/ui-shared": ["../../packages/ui-shared/src/index.ts"],
+      "@repo/theme": ["../../packages/theme/src/index.css"]
     }
   },
   "include": [

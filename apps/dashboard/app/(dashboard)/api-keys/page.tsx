@@ -26,14 +26,7 @@ import {
 } from "@repo/ui/dialog";
 import { Input } from "@repo/ui/input";
 import { Label } from "@repo/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@repo/ui/table";
+import { MetaTable, type MetaTableColumn } from "@repo/ui-shared";
 import { useMe } from "@/hooks/use-me";
 import { formatApiError } from "@/lib/api-errors";
 
@@ -205,46 +198,31 @@ export default function ApiKeysPage() {
           ) : keys.length === 0 ? (
             <p className="text-muted-foreground text-sm">No API keys yet. Generate your first key.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Prefix</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead className="w-[100px] text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {keys.map((k) => (
-                  <TableRow key={k.id}>
-                    <TableCell className="font-medium">{k.name}</TableCell>
-                    <TableCell>
-                      <code className="text-xs">{k.keyPrefix}</code>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {k.lastUsedAt
-                        ? formatDistanceToNow(new Date(k.lastUsedAt), { addSuffix: true })
-                        : "Never"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => {
-                          setRevokeId(k.id);
-                          setRevokeName(k.name);
-                        }}
-                        aria-label={`Revoke ${k.name}`}
-                      >
-                        <Trash2Icon className="size-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <MetaTable
+              columns={[
+                { key: "name", label: "Name", renderCell: (val) => <span className="font-medium">{val}</span> },
+                { key: "keyPrefix", label: "Prefix", renderCell: (val) => <code className="text-xs">{val}</code> },
+                { key: "lastUsedAt", label: "Last used", renderCell: (val) => <span className="text-muted-foreground text-sm">{val ? formatDistanceToNow(new Date(val), { addSuffix: true }) : "Never"}</span> },
+                { key: "actions", label: "Actions", renderCell: (_, row: ApiKeyRow) => (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setRevokeId(row.id);
+                        setRevokeName(row.name);
+                      }}
+                      aria-label={`Revoke ${row.name}`}
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                  </div>
+                )}
+              ]}
+              data={keys}
+            />
           )}
         </CardContent>
       </Card>

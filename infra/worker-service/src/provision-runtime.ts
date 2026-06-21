@@ -48,7 +48,6 @@ import {
   getLicenseExpiry,
   getPlanLimits,
   sendFinanceWelcomeEmail,
-  runWirePosIntegrationStep,
   syncFinanceLicenseForStockixTenant,
   sendPosWelcomeEmail,
 } from "@repo/platform-worker-shared";
@@ -2080,7 +2079,7 @@ export async function executeProvisionRuntime(
           await syncFinanceLicenseForStockixTenant(
             db,
             {
-              stockixTenantId: tenantId,
+              stockixTenantId: tenantId!,
               financeTenantId: resolvedTenantId,
               internalBaseUrl: internalUrl,
             },
@@ -2605,6 +2604,8 @@ export type AddModuleInput = {
   adminEmail: string;
   module: "pos" | "pms" | "chat" | "accounting";
   planSlug?: string;
+  /** When adding the chat module to a sub-org, the control-plane organization UUID to scope Chatwoot provisioning. */
+  controlPlaneOrgId?: string;
 };
 
 export type AddModuleResult = {

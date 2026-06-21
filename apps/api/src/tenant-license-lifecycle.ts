@@ -13,6 +13,7 @@ import {
   suspendPosOrgForLicense,
   syncPosOrgLicenseFromLicense,
 } from "./pos-license-sync.js";
+import { revokeProductTokensForTenant } from "./services/auth/stockix-product-token.js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -72,6 +73,14 @@ export async function applyTenantLicenseSuspend(
     if (licenseConfig.syncStrict) {
       throw new Error(`pos: ${posResult.error}`);
     }
+  }
+
+  // SEC-01: Clear product-token allowlist so Finance/PMS reject existing tokens within seconds.
+  try {
+    await revokeProductTokensForTenant(tenantId);
+    log(`[tenant-license] Product-token allowlist cleared for tenant ${tenantId}`);
+  } catch (err) {
+    log(`[tenant-license] Product-token allowlist revocation failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

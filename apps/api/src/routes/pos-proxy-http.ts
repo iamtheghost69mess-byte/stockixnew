@@ -18,7 +18,7 @@ import {
 
 import type { createDb } from "@repo/db";
 
-import { branchLocationMappings } from "@repo/db/schema";
+import { branchLocationMappings, organizations } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import { canCreateLocation } from "../plan-limits.js";
 
@@ -469,16 +469,26 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
       const body = await c.req.json().catch(() => ({}));
       const { data, status } = await posProxyJson("/locations", "POST", body);
 
-      // Task 2-B: Also insert the mapping if creation succeeds.
-      if (status >= 200 && status < 300 && db && tenantId && data && (data as any)._id) {
+      // Insert branchLocationMappings row so the new location is tracked (financeBranchId=0 = pending link).
+      const locationId = (data as any)?._id ?? (data as any)?.data?._id;
+      if (status >= 200 && status < 300 && db && tenantId && locationId) {
         try {
-          await db.insert(branchLocationMappings).values({
-            tenantId,
-            posLocationId: (data as any)._id,
-            posOrganizationId: (data as any).organizationId ?? "",
-          });
+          const [primaryOrg] = await db
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(and(eq(organizations.tenantId, tenantId), eq(organizations.isPrimary, true)))
+            .limit(1);
+          if (primaryOrg) {
+            await db.insert(branchLocationMappings).values({
+              tenantId,
+              organizationId: primaryOrg.id,
+              posLocationId: String(locationId),
+              financeBranchId: 0,
+              isPrimary: false,
+            });
+          }
         } catch (err) {
-          console.warn("[pos-proxy] failed to insert branchLocationMapping:", err);
+          console.warn("[pos-proxy] branchLocationMappings insert failed for new location:", err instanceof Error ? err.message : String(err));
         }
       }
 

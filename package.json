@@ -54,7 +54,7 @@
     "provision:smoke": "pnpm --filter api exec node scripts/provision-smoke.mjs --full",
     "provision:test": "node scripts/provision-test-local.mjs",
     "provision:modules": "pnpm --filter api exec node scripts/provision-module-matrix.mjs --",
-    "lint": "turbo run lint",
+    "lint": "turbo run lint && bash scripts/enforce-no-local-ui.sh",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "quality-gate:local": "node scripts/quality-gate-local.mjs",
     "architecture:validate": "node scripts/architecture-validation.mjs",
@@ -72,6 +72,7 @@
     "license:scan": "license-checker --production --excludeLicenses \"MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;CC0-1.0;Python-2.0;Unlicense\" --out license-report.txt"
   },
   "devDependencies": {
+    "@changesets/cli": "2.31.0",
     "concurrently": "9.1.2",
     "license-checker": "^25.0.1",
     "prettier": "^3.7.4",
@@ -143,13 +144,13 @@
     }
   },
   "dependencies": {
-    "@sentry/node": "^8.40.0",
     "@repo/config": "workspace:*",
     "@repo/db": "workspace:*",
-    "@repo/shared": "workspace:*",
     "@repo/platform-worker-shared": "workspace:*",
-    "bullmq": "^5.40.2",
+    "@repo/shared": "workspace:*",
+    "@sentry/node": "^8.40.0",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.40.2",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.45.1",
     "execa": "^9.5.2",
@@ -157,8 +158,8 @@
     "knex": "^3.1.0",
     "mysql2": "^3.11.3",
     "nodemailer": "^6.9.13",
-    "prom-client": "15.1.3",
     "postgres": "^3.4.7",
+    "prom-client": "15.1.3",
     "zod": "^3.24.1"
   }
 }
