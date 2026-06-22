@@ -11,6 +11,7 @@ export default defineConfig({
   bundle: true,
   sourcemap: true,
   clean: true,
+  shims: true,
   // ORIGINAL: external: ["nodemailer", "prom-client"],
   external: [
     "nodemailer",
