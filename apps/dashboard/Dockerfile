@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
-FROM node:22-alpine AS build
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
-WORKDIR /app
+ARG BASE_IMAGE=ghcr.io/iamtheghost69mess-byte/stockix/stockix-base:node22
+FROM ${BASE_IMAGE} AS build
 ENV NODE_OPTIONS=--max-old-space-size=3072
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -35,7 +34,7 @@ ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 RUN pnpm --filter dashboard build
 RUN test -f apps/dashboard/.next/standalone/apps/dashboard/server.js
 
-FROM node:22-alpine AS runner
+FROM ${BASE_IMAGE} AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

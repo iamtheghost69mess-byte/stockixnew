@@ -31,6 +31,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build & push shared base image
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/docker/base
+          file: infra/docker/base/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-base:node22
+            ghcr.io/${{ github.repository }}/stockix-base:node22-${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-base:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-base:cache,mode=max
+
       - name: Build & push API
         uses: docker/build-push-action@v6
         with:

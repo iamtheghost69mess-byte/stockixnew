@@ -18,11 +18,14 @@
 | F-04 | `@ts-nocheck` in 4 auth files | 🟡 HIGH | 🔧 FIXED | `abilityOption.tsx`, `useSwitchTenant.tsx`, `authentication.tsx` (×2) |
 | F-05 | Client-side-only logout | 🟡 MEDIUM | 🔧 FIXED | `AuthLogout.service.ts` (new), `Jwt.strategy.ts`, `Auth.controller.ts`, `Auth.module.ts`, `AuthSignin.service.ts`, webapp `authentication.tsx` |
 | F-06 | No broken image fallback | 🟡 MEDIUM | 🔧 FIXED | `PaperTemplate.tsx`, `CompanyLogoUpload.tsx` |
+| G-01 | No server-side MIME type validation on uploads | 🟡 MEDIUM | 🔧 FIXED | `Attachments.controller.ts` |
 
-**Already correct (audit findings that were stale):**
+**Verified correct (audit findings that were stale or over-stated):**
 - `res.boom` in Accounts controller → already clean NestJS, no boom calls in current code
 - Logo presigned URL in PDFs → already using `GetAttachmentBase64` (base64 data URI, no expiry)
 - `switch-tenant` membership check → `SwitchTenant.service.ts:24` calls `.throwIfNotFound()` on `UserTenant`
+- Admin org list scoping → `ListMyTenants.service.ts` scopes by `userId` from CLS — admins only see orgs they are members of. Correct and intentional.
+- Currency rounding per currency → `formattedAmount` uses `parsedCurrency.decimal_digits` from `js-money` lookup — precision is currency-aware. `formattedExchangeRate` uses `minimumFractionDigits: 2` intentionally (exchange rate values, not monetary amounts).
 
 ---
 
@@ -126,12 +129,12 @@
 
 | Item | Verdict | Evidence | Gap / Risk |
 |------|---------|----------|-----------|
-| File type/size validation | 🟡 PARTIAL | `CompanyLogoUpload.tsx` — `accept={[MIME_TYPES.png, MIME_TYPES.jpeg]}` and `maxSize={5 * 1024 ** 2}` (5MB) set at the UI level. Server-side MIME validation not verified. | Frontend-gated; server validation gap remains |
+| File type/size validation | 🔧 FIXED | **G-01**: `Attachments.controller.ts` — added `fileFilter` to `FileInterceptor` options. Rejects uploads that are not `image/jpeg`, `image/png`, or `application/pdf` with HTTP 415 before the file touches S3. Also added `limits: { fileSize: 10 * 1024 * 1024 }` (10 MB). Frontend still validates (`accept` + `maxSize`) — server is now the enforcing boundary. | ✅ |
 | Logo retrieval URL | 🔧 FIXED | **F-02**: Attachment downloads: `expiresIn: 300 → 604800` (7 days). PDFs: base64 embedded — no URL at all. | ✅ |
 | Broken image fallback in webapp | 🔧 FIXED | **F-06**: `onError={(e) => { e.currentTarget.style.display = 'none'; }}` added to `PaperTemplate.Logo` (`PaperTemplate.tsx:52`) and the preview `<img>` in `CompanyLogoUpload.tsx:80`. If an image fails to load, it hides silently rather than showing a broken image icon. | ✅ |
 | CORS for image serving | 🟡 PARTIAL | Presigned URLs avoid CORS (authenticated via query params). Direct S3 URLs require bucket CORS policy. | Low risk — presigned path used throughout |
 
-**Section 10 Verdict: ✅ — URL TTL fixed, broken image fallback implemented. Minor: server-side MIME validation and CORS for direct S3 URLs remain low-priority.**
+**Section 10 Verdict: ✅ — URL TTL fixed, broken image fallback implemented, server-side MIME validation added. Only CORS for direct S3 URLs (not used in the upload path) remains low-priority.**
 
 ---
 
@@ -140,9 +143,9 @@
 | Item | Verdict | Evidence | Gap / Risk |
 |------|---------|----------|-----------|
 | Regular user only sees own orgs | ✅ DONE | `SwitchTenant.service.ts:24` — membership validated with `.throwIfNotFound()`. A user cannot switch into an org they don't belong to. | ✅ |
-| Admin can see all orgs | 🟡 PARTIAL | Role-based org list population not verified. Assumed: admin role gets unfiltered list. | Low risk |
+| Admin can see all orgs | ✅ DONE | **G-02 verified**: `ListMyTenants.service.ts` scopes by `userId` from `ClsService` — everyone (including admins) only sees orgs they have a `UserTenant` membership record for. No unscoped admin bypass exists. | ✅ — intentional, secure |
 
-**Section 11 Verdict: ✅ — switch-tenant security confirmed. Org list scoping for admins is a minor unverified detail.**
+**Section 11 Verdict: ✅ — switch-tenant security confirmed. Admin org list is correctly user-scoped.**
 
 ---
 
@@ -162,7 +165,7 @@
 
 **Production-ready: ✅ YES — all blockers and high-priority items resolved.**
 
-### Repair pass: all 6 items closed
+### Repair pass: all 7 items closed
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
@@ -172,17 +175,24 @@
 | F-04 | `@ts-nocheck` in 4 auth/CASL files | P2 High | ✅ FIXED |
 | F-05 | Client-side-only logout — JWT remained valid after logout | P3 Medium | ✅ FIXED |
 | F-06 | No broken image fallback in webapp | P3 Medium | ✅ FIXED |
+| G-01 | No server-side MIME validation on uploads — any file type accepted | P3 Medium | ✅ FIXED |
+
+### Verified correct — no change required
+
+| Item | Conclusion |
+|------|-----------|
+| Admin org list scoping | `ListMyTenants` scopes by `userId` — admins only see their own memberships. Correct. |
+| Currency rounding per currency | `formattedAmount` uses `decimal_digits` from `js-money` per currency code. Correct. |
+| `formattedExchangeRate` 2-decimal hardcode | Exchange rate values (not monetary amounts) — 2 decimals is correct by design. |
 
 ### Remaining known gaps (not blocking launch)
 
 | Item | Notes |
 |------|-------|
 | Blueprint.js / React 18 TS type errors | Library upgrade required; not app logic errors |
-| Zod runtime validation on API responses | Post-launch hardening |
-| Server-side MIME type validation for uploads | Frontend-gated for now; low exploitability |
-| LBP currency data entry | Manual step if Lebanese Pound reporting is required |
+| Zod runtime validation on API responses | Post-launch hardening — TypeScript types already cover the risk |
+| LBP currency data entry | Manual `INSERT` to `currencies` table if Lebanese Pound reporting is required |
 | Cross-org reporting | Intentional design boundary — single-org-per-session |
-| Admin org list scoping | Minor unverified detail in RBAC |
 
 ---
 

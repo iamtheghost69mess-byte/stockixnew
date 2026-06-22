@@ -392,11 +392,9 @@ services:
     cpus: "0.5"
     mem_swappiness: 0
     deploy:
-      # Keep at 1 replica until the Redis provision pub/sub bus is implemented.
-      # Scaling to 2+ replicas before that causes provision jobs to fan out
-      # across instances, breaking the job-completion SSE stream.
-      # See: infra/prod/OPERATIONS.md
-      replicas: 1
+      # Redis provision pub/sub is implemented (lib/provision-pubsub.ts).
+      # Requires CONTROL_PLANE_REDIS_URL to be set in infra/prod/.env.
+      replicas: 2
       restart_policy:
         condition: any
         delay: 10s

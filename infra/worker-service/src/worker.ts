@@ -135,6 +135,10 @@ healthServer.listen(workerHealthPort, "0.0.0.0");
 const LICENSE_EXPIRE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 let lastLicenseExpireScanMs = 0;
 
+/** Reconcile Finance license state for all active tenants — catches divergence from missed events. */
+const LICENSE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
+let lastLicenseReconcileScanMs = 0;
+
 async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void> {
   const now = new Date();
   const justExpired = await db
@@ -161,6 +165,34 @@ async function expireDueLicenses(db: ReturnType<typeof createDb>): Promise<void>
     log: (message) => logger.info(message),
   });
 }
+async function reconcileAllFinanceLicenses(db: ReturnType<typeof createDb>): Promise<void> {
+  const activeTenants = await db
+    .select({
+      tenantId: tenantDeployments.tenantId,
+      financeTenantId: tenantDeployments.financeTenantId,
+    })
+    .from(tenantDeployments)
+    .where(and(eq(tenantDeployments.status, "active"), isNotNull(tenantDeployments.financeTenantId)));
+
+  let synced = 0;
+  let failed = 0;
+  for (const row of activeTenants) {
+    if (!row.tenantId || !row.financeTenantId || row.financeTenantId <= 0) continue;
+    try {
+      await syncFinanceLicenseForStockixTenant(
+        db,
+        { stockixTenantId: row.tenantId, financeTenantId: row.financeTenantId },
+        (msg) => logger.debug(`[license-reconcile] ${msg}`),
+      );
+      synced++;
+    } catch (err) {
+      failed++;
+      logger.warn(`[license-reconcile] failed for tenant ${row.tenantId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  logger.info(`[license-reconcile] completed: synced=${synced} failed=${failed} total=${activeTenants.length}`);
+}
+
 /** API_HOST must be [::1] when WSL2 relay only exposes IPv6 (wslrelay.exe → [::1]:port). */
 const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
 const apiBaseUrl = `http://${apiHost}:${apiConfig.port}`;
@@ -1233,6 +1265,15 @@ async function workerPollLoop(db: ReturnType<typeof createDb>, loopId: number): 
             `[worker] reclaim stale jobs scan failed: ${error instanceof Error ? error.message : String(error)}`,
           );
         });
+
+        if (nowMs - lastLicenseReconcileScanMs >= LICENSE_RECONCILE_INTERVAL_MS) {
+          lastLicenseReconcileScanMs = nowMs;
+          await reconcileAllFinanceLicenses(db).catch((error) => {
+            logger.error(
+              `[worker] license reconcile scan failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+        }
       }
       await new Promise((r) => setTimeout(r, pollMs));
       continue;

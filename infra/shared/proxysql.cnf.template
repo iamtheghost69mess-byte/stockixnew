@@ -19,16 +19,31 @@ mysql_variables=
     connect_timeout_server=10000
     monitor_username="root"
     monitor_password="__MYSQL_ROOT_PASSWORD__"
+    # Shun replica from the read pool if it lags more than 30 seconds
+    monitor_replication_lag_interval=10000
+    monitor_replication_lag_timeout=3000
+    max_allowed_packet=67108864
 }
 
 mysql_servers =
 (
     {
+        # Primary — receives all writes (hostgroup 0)
         address="stockix-mysql"
         port=3306
         hostgroup=0
         max_connections=200
-        comment="shared-mysql"
+        comment="primary"
+    },
+    {
+        # Read replica — receives SELECT traffic (hostgroup 1)
+        # Shunned automatically by ProxySQL if replication lag > 30s
+        address="stockix-mysql-replica"
+        port=3306
+        hostgroup=1
+        max_connections=500
+        max_replication_lag=30
+        comment="replica"
     }
 )
 
@@ -46,10 +61,30 @@ mysql_users =
 mysql_query_rules =
 (
     {
+        # SELECT ... FOR UPDATE — must run on primary (acquires row lock)
         rule_id=1
+        active=1
+        match_pattern="^SELECT.*FOR UPDATE"
+        destination_hostgroup=0
+        apply=1
+        comment="locking reads to primary"
+    },
+    {
+        # All other SELECT statements — routed to replica
+        rule_id=2
+        active=1
+        match_pattern="^SELECT"
+        destination_hostgroup=1
+        apply=1
+        comment="reads to replica"
+    },
+    {
+        # Everything else (INSERT/UPDATE/DELETE/DDL) — primary
+        rule_id=3
         active=1
         match_pattern=".*"
         destination_hostgroup=0
         apply=1
+        comment="writes to primary"
     }
 )

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { format } from "date-fns";
-import { ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 
 import {
   Breadcrumb,
@@ -12,85 +12,73 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@repo/ui/breadcrumb";
-import { Button } from "@repo/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@repo/ui/card";
 import { Input } from "@repo/ui/input";
 import { Label } from "@repo/ui/label";
 import { Skeleton } from "@repo/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@repo/ui/table";
+import { MetaTable, type MetaTableColumn } from "@repo/ui-shared";
 import { useMe } from "@/hooks/use-me";
-import { formatApiError } from "@/lib/api-errors";
+import { useEmailLogs, type EmailLogRow } from "./hooks/use-email-logs";
 
-type EmailLogRow = {
-  id: string;
-  templateKey: string;
-  status: string;
-  deliveryStatus: string | null;
-  providerMessageId: string | null;
-  error: string | null;
-  tenantId: string | null;
-  tenantSlug: string | null;
-  tenantName: string | null;
-  createdAt: string;
-};
+const COLUMNS: MetaTableColumn<EmailLogRow>[] = [
+  {
+    key: "createdAt",
+    label: "Sent",
+    width: "140px",
+    renderCell: (v) => (
+      <span className="whitespace-nowrap text-xs">{format(new Date(v as string), "yyyy-MM-dd HH:mm")}</span>
+    ),
+  },
+  {
+    key: "templateKey",
+    label: "Template",
+    renderCell: (v) => <span className="font-mono text-xs">{v}</span>,
+  },
+  { key: "status", label: "Status" },
+  {
+    key: "deliveryStatus",
+    label: "Delivery",
+    renderCell: (v) => v ?? "—",
+  },
+  {
+    key: "tenantName",
+    label: "Tenant",
+    renderCell: (v, row) => (
+      <span className="text-xs">{(v ?? row.tenantSlug ?? "—") as string}</span>
+    ),
+  },
+  {
+    key: "providerMessageId",
+    label: "Provider ID",
+    width: "160px",
+    renderCell: (v, row) => (
+      <span className="block max-w-[140px] truncate font-mono text-xs">
+        {(v ?? (row.error ? `err: ${row.error}` : "—")) as string}
+      </span>
+    ),
+  },
+];
 
 export default function EmailLogsPage() {
   const { me, loading: meLoading } = useMe();
-  const [logs, setLogs] = useState<EmailLogRow[]>([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [templateKey, setTemplateKey] = useState("");
   const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
 
-  const canView = me?.capabilities.canAccessSettings;
+  const canView = Boolean(me?.capabilities.canAccessSettings);
 
-  const load = useCallback(async () => {
-    if (!canView) return;
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams({ page: String(page), pageSize: "25" });
-    if (templateKey.trim()) params.set("templateKey", templateKey.trim());
-    if (status.trim()) params.set("status", status.trim());
-    try {
-      const res = await fetch(`/api/admin/email-logs?${params}`);
-      const data = (await res.json()) as {
-        logs?: EmailLogRow[];
-        totalPages?: number;
-        error?: string;
-      };
-      if (!res.ok) {
-        setError(formatApiError(data, res.statusText));
-        setLogs([]);
-        return;
-      }
-      setLogs(data.logs ?? []);
-      setTotalPages(Math.max(1, data.totalPages ?? 1));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load email logs");
-    } finally {
-      setLoading(false);
-    }
-  }, [canView, page, templateKey, status]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { logs, totalPages, loading, error } = useEmailLogs({
+    canView,
+    templateKey,
+    status,
+    page,
+  });
 
   if (meLoading) {
     return <Skeleton className="h-64 w-full" />;
@@ -98,7 +86,7 @@ export default function EmailLogsPage() {
 
   if (!canView) {
     return (
-      <p className="text-muted-foreground text-sm">
+      <p className="text-sm text-muted-foreground">
         You do not have permission to view email logs.
       </p>
     );
@@ -129,17 +117,14 @@ export default function EmailLogsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 max-w-xl">
+          <div className="grid max-w-xl gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="templateKey">Template</Label>
               <Input
                 id="templateKey"
                 placeholder="e.g. owner-invite"
                 value={templateKey}
-                onChange={(e) => {
-                  setTemplateKey(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setTemplateKey(e.target.value); setPage(1); }}
               />
             </div>
             <div className="space-y-2">
@@ -148,76 +133,25 @@ export default function EmailLogsPage() {
                 id="status"
                 placeholder="sent | failed | skipped"
                 value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setStatus(e.target.value); setPage(1); }}
               />
             </div>
           </div>
 
           {error ? (
-            <p className="text-destructive text-sm">{error}</p>
-          ) : loading ? (
-            <Skeleton className="h-48 w-full" />
-          ) : logs.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No email log entries yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sent</TableHead>
-                  <TableHead>Template</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Delivery</TableHead>
-                  <TableHead>Tenant</TableHead>
-                  <TableHead>Provider ID</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {format(new Date(row.createdAt), "yyyy-MM-dd HH:mm")}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{row.templateKey}</TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>{row.deliveryStatus ?? "—"}</TableCell>
-                    <TableCell className="text-xs">
-                      {row.tenantName ?? row.tenantSlug ?? "—"}
-                    </TableCell>
-                    <TableCell className="max-w-[140px] truncate font-mono text-xs">
-                      {row.providerMessageId ?? (row.error ? `err: ${row.error}` : "—")}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+            <p className="text-sm text-destructive">{error}</p>
+          ) : null}
+
+          <MetaTable
+            columns={COLUMNS}
+            data={logs}
+            isLoading={loading}
+            emptyMessage="No email log entries yet."
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            <ChevronLeft className="size-4" />
-            Previous
-          </Button>
-          <span className="text-muted-foreground text-sm">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-            <ChevronRight className="size-4" />
-          </Button>
-        </CardFooter>
       </Card>
     </div>
   );

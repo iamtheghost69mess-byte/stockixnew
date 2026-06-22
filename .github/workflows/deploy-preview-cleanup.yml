@@ -1,0 +1,70 @@
+name: Cleanup Preview
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  cleanup-preview:
+    name: Tear down PR preview
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - name: Tear down preview stack via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        with:
+          host: ${{ secrets.PREVIEW_SERVER_HOST }}
+          username: ${{ secrets.PREVIEW_SERVER_USER }}
+          key: ${{ secrets.PREVIEW_SERVER_SSH_KEY }}
+          envs: PR_NUMBER
+          script: |
+            set -e
+            bash /opt/stockix/infra/preview/teardown-preview.sh "$PR_NUMBER"
+
+      - name: Delete preview images from GHCR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = ${{ github.event.number }};
+            const tag = `pr-${pr}`;
+            const repo = context.repo.repo;
+            const owner = context.repo.owner;
+
+            for (const pkg of ['api', 'dashboard']) {
+              try {
+                const { data: versions } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                  org: owner,
+                  package_type: 'container',
+                  package_name: `${repo}/${pkg}`,
+                }).catch(() => ({ data: [] }));
+
+                for (const version of versions) {
+                  if (version.metadata?.container?.tags?.includes(tag)) {
+                    await github.rest.packages.deletePackageVersionForOrg({
+                      org: owner,
+                      package_type: 'container',
+                      package_name: `${repo}/${pkg}`,
+                      package_version_id: version.id,
+                    });
+                    console.log(`Deleted ${pkg}:${tag}`);
+                  }
+                }
+              } catch (e) {
+                console.log(`Could not delete ${pkg}:${tag}: ${e.message}`);
+              }
+            }
+
+      - name: Post cleanup comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.issue.number;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              body: `🧹 Preview environment for PR #${pr} has been torn down.`,
+            });

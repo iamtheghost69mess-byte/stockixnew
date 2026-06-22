@@ -1,0 +1,121 @@
+name: Deploy Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: preview-pr-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    name: Deploy PR preview
+    runs-on: ubuntu-latest
+    environment: preview
+    # Only run if the PR is not a draft and the actor is not a bot
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push preview API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/api:pr-${{ github.event.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push preview Dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/dashboard/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/dashboard:pr-${{ github.event.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_STOCKIX_API_URL=https://api.pr-${{ github.event.number }}.preview.${{ vars.ROOT_DOMAIN }}
+            NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN=${{ vars.ROOT_DOMAIN }}
+            NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME=https
+
+      - name: Deploy preview stack via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          GHCR_NAMESPACE: ${{ github.repository }}
+        with:
+          host: ${{ secrets.PREVIEW_SERVER_HOST }}
+          username: ${{ secrets.PREVIEW_SERVER_USER }}
+          key: ${{ secrets.PREVIEW_SERVER_SSH_KEY }}
+          envs: PR_NUMBER,PR_BRANCH,PR_SHA,GHCR_NAMESPACE
+          script: |
+            set -e
+            export PR_NUMBER="$PR_NUMBER"
+            export PR_SHA="$PR_SHA"
+            export GHCR_NAMESPACE="$GHCR_NAMESPACE"
+            bash /opt/stockix/infra/preview/deploy-preview.sh "$PR_NUMBER" "$PR_SHA"
+
+      - name: Post preview URL comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.issue.number;
+            const domain = process.env.ROOT_DOMAIN || 'preview.yourdomain.com';
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+            const body = [
+              `## 🚀 Preview deployed`,
+              ``,
+              `| Service | URL |`,
+              `|---------|-----|`,
+              `| Dashboard | https://dashboard.pr-${pr}.preview.${domain} |`,
+              `| API | https://api.pr-${pr}.preview.${domain}/health |`,
+              ``,
+              `**SHA:** \`${sha}\`  `,
+              `**Branch:** \`${context.payload.pull_request.head.ref}\``,
+              ``,
+              `_Preview will be torn down when this PR is closed._`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+            });
+            const existingComment = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('Preview deployed')
+            );
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }
+        env:
+          ROOT_DOMAIN: ${{ vars.ROOT_DOMAIN }}

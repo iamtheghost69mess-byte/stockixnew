@@ -18,6 +18,7 @@ import {
   Post,
   Res,
   UnauthorizedException,
+  UnsupportedMediaTypeException,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -49,9 +50,31 @@ export class AttachmentsController {
   /**
    * Uploads the attachments to S3 and store the file metadata to DB.
    */
+  private static readonly ALLOWED_MIME_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'application/pdf',
+  ];
+
   @Post()
   @HttpCode(200)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      fileFilter: (_req, file, cb) => {
+        if (AttachmentsController.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(
+            new UnsupportedMediaTypeException(
+              'Only JPEG, PNG, and PDF files are allowed',
+            ),
+            false,
+          );
+        }
+      },
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload attachment to S3' })
   @ApiBody({ description: 'Upload attachment', type: UploadAttachmentDto })

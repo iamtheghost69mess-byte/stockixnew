@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { AlertCircle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
@@ -41,14 +41,14 @@ import {
   TooltipTrigger,
 } from "@repo/ui/tooltip";
 import { useMe } from "@/hooks/use-me";
-import { formatApiError } from "@/lib/api-errors";
+import { useAuditLog } from "./hooks/use-audit-log";
 import type { AuditLogEntry } from "@/types/audit-log";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-/** Short human-readable line for known shapes; otherwise null → render JSON block. */
+/** Short human-readable summary for known action metadata shapes; null → render raw JSON block. */
 function humanMetadataSummary(action: string, metadata: unknown): string | null {
   const m = isRecord(metadata) ? metadata : null;
   if (!m) return null;
@@ -95,21 +95,6 @@ function AuditMetadataCell({ action, metadata }: { action: string; metadata: unk
   );
 }
 
-function parseEntries(body: unknown): AuditLogEntry[] {
-  if (!isRecord(body) || !Array.isArray(body.entries)) return [];
-  return body.entries.filter((row): row is AuditLogEntry => {
-    if (!isRecord(row)) return false;
-    return (
-      typeof row.id === "string"
-      && typeof row.action === "string"
-      && typeof row.actionLabel === "string"
-      && typeof row.actorId === "string"
-      && typeof row.actorLabel === "string"
-      && typeof row.createdAt === "string"
-    );
-  });
-}
-
 const SKELETON_ROWS = 6;
 
 export default function AuditLogPage() {
@@ -117,12 +102,7 @@ export default function AuditLogPage() {
   const canView = Boolean(me?.capabilities.canAccessSettings);
 
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
-  const [listLoading, setListLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const pageSize = 20;
 
   const [actionInput, setActionInput] = useState("");
   const [actionFilter, setActionFilter] = useState("");
@@ -138,48 +118,14 @@ export default function AuditLogPage() {
     setPage(1);
   }, [actionFilter, actorSearch, tenantSearch]);
 
-  const queryString = useMemo(() => {
-    const p = new URLSearchParams();
-    p.set("page", String(page));
-    p.set("pageSize", String(pageSize));
-    if (actionFilter) p.set("action", actionFilter);
-    if (actorSearch.trim()) p.set("actor", actorSearch.trim());
-    if (tenantSearch.trim()) p.set("tenant", tenantSearch.trim());
-    return p.toString();
-  }, [page, pageSize, actionFilter, actorSearch, tenantSearch]);
-
-  const load = useCallback(async () => {
-    if (!canView) return;
-    setListLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/audit-log?${queryString}`);
-      const data: unknown = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(formatApiError(data, res.status === 403 ? "Access denied" : `HTTP ${res.status}`));
-        setEntries([]);
-        setTotal(0);
-        setTotalPages(1);
-        return;
-      }
-      if (!isRecord(data)) {
-        setEntries([]);
-        return;
-      }
-      setEntries(parseEntries(data));
-      setTotal(typeof data.total === "number" ? data.total : 0);
-      setTotalPages(typeof data.totalPages === "number" ? data.totalPages : 1);
-    } catch {
-      setError("Failed to load audit log.");
-      setEntries([]);
-    } finally {
-      setListLoading(false);
-    }
-  }, [queryString, canView]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { entries, total, totalPages, loading: listLoading, error } = useAuditLog({
+    canView,
+    page,
+    pageSize,
+    actionFilter,
+    actorSearch,
+    tenantSearch,
+  });
 
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);

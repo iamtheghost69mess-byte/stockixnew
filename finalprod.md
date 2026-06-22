@@ -22,7 +22,7 @@
 | R-03 | CI has no Postgres service | ❌ | 🔧 FIXED | `.github/workflows/ci.yml` |
 | R-04 | No deploy rollback | ❌ | 🔧 FIXED | `infra/deploy/rollback.sh` (new), `deploy.sh` |
 | R-05 | Finance server not built in CI | ❌ | 🔧 FIXED | `.github/workflows/build-and-publish.yml` |
-| R-06 | Docker Compose → Swarm migration | 🟡 | 🔧 FIXED | `swarm-init.sh` (new), both compose files, `deploy.sh` |
+| R-06 | Docker Compose → Swarm migration | 🟡 | 🔧 FIXED | `swarm-init.sh` (new), both compose files, `deploy.sh` |@
 | R-07 | Secrets in plaintext .env | ❌ | 🔧 SCRIPTED | `infra/deploy/secrets-init.sh` (new — requires server run) |
 | R-08 | Incomplete monitoring coverage | 🟡 | 🔧 FIXED | `prometheus.yml`, `docker-compose.yml` (redis-exporter) |
 | R-09 | Backup recency alert broken | ❌ | 🔧 FIXED | `alerts.yml`, `backup.sh`, `docker-compose.yml` (textfile vol) |

@@ -1,0 +1,187 @@
+# Full local development stack — mirrors production topology.
+#
+# Compose v2 OVERLAY — run on top of the minimal compose:
+#   docker compose -f infra/dev/docker-compose.yml \
+#                  -f infra/dev/docker-compose.full.yml \
+#                  --env-file infra/dev/.env.full up -d
+#
+# Or via the convenience scripts in the root package.json:
+#   pnpm dev:full          → start full stack
+#   pnpm dev:full:down     → stop and remove containers
+#   pnpm dev:full:logs     → tail api + worker logs
+#   pnpm dev:full:build    → build all local images
+#
+# Prerequisites:
+#   • Docker Desktop (Mac/Win) or Docker Engine 24+ (Linux)
+#   • /var/run/docker.sock must be accessible (infra-worker needs it to provision tenants)
+#   • Linux: *.localhost resolves to 127.0.0.1 natively
+#   • Mac/Win: add "127.0.0.1 api.localhost dashboard.localhost" to /etc/hosts
+#
+# Port map:
+#   80     → Traefik HTTP (all hostnames)
+#   8090   → Traefik dashboard (http://localhost:8090)
+#   33060  → MySQL (direct access for DBA tools)
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Traefik v3 — routes *.localhost to the correct container
+  # ─────────────────────────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--log.level=WARN"
+    ports:
+      - "80:80"
+      - "8090:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - stockix_dev_public
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Control-plane API
+  # ─────────────────────────────────────────────────────────────────────────────
+  api:
+    image: ${API_IMAGE:-stockix-api:dev}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockix_platform
+      CONTROL_PLANE_REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-change-for-staging
+      ROOT_DOMAIN: localhost
+      DASHBOARD_URL: http://dashboard.localhost
+      PORT: "4000"
+      WORKER_SECRET: dev-worker-secret
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_test_placeholder}
+      SHARED_MYSQL_HOST: mysql
+      SHARED_MYSQL_ROOT_PASSWORD: devmysqlpassword
+      MYSQL_PROXY_HOST: mysql
+      MYSQL_PROXY_PORT: "3306"
+    networks:
+      - stockix_dev_internal
+      - stockix_dev_public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api-dev.rule=Host(`api.localhost`)"
+      - "traefik.http.routers.api-dev.entrypoints=web"
+      - "traefik.http.services.api-dev.loadbalancer.server.port=4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health 2>/dev/null | grep -q ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Dashboard (Next.js)
+  # ─────────────────────────────────────────────────────────────────────────────
+  dashboard:
+    image: ${DASHBOARD_IMAGE:-stockix-dashboard:dev}
+    build:
+      context: ../..
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        NEXT_PUBLIC_STOCKIX_API_URL: http://api.localhost
+        NEXT_PUBLIC_STOCKIX_ROOT_DOMAIN: localhost
+        NEXT_PUBLIC_STOCKIX_PUBLIC_SCHEME: http
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NEXTAUTH_URL: http://dashboard.localhost
+      NEXTAUTH_SECRET: dev-nextauth-secret-change-for-staging
+      STOCKIX_API_INTERNAL_URL: http://api:4000
+    networks:
+      - stockix_dev_internal
+      - stockix_dev_public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard-dev.rule=Host(`dashboard.localhost`)"
+      - "traefik.http.routers.dashboard-dev.entrypoints=web"
+      - "traefik.http.services.dashboard-dev.loadbalancer.server.port=3000"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Infrastructure worker — provisions tenant stacks; needs Docker socket
+  # ─────────────────────────────────────────────────────────────────────────────
+  infra-worker:
+    build:
+      context: ../..
+      dockerfile: infra/worker-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockix_platform
+      CONTROL_PLANE_REDIS_URL: redis://redis:6379
+      API_HOST: api
+      WORKER_SECRET: dev-worker-secret
+      SHARED_MYSQL_HOST: mysql
+      SHARED_MYSQL_ROOT_PASSWORD: devmysqlpassword
+      TENANT_ENV_ROOT: /opt/tenants
+      DOCKER_HOST: unix:///var/run/docker.sock
+      WORKER_CONCURRENCY: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - tenant_envs_dev:/opt/tenants
+    networks:
+      - stockix_dev_internal
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # MySQL 8 — tenant Finance databases (one DB per tenant: stockix_{slug}_finance)
+  # ─────────────────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0-bookworm
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: devmysqlpassword
+      MYSQL_ROOT_HOST: "%"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=200
+      - --innodb_buffer_pool_size=128M
+    ports:
+      - "33060:3306"
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pdevmysqlpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - stockix_dev_internal
+
+networks:
+  stockix_dev_internal:
+    name: stockix_dev_internal
+  stockix_dev_public:
+    name: stockix_dev_public
+
+volumes:
+  mysql_dev_data:
+  tenant_envs_dev:

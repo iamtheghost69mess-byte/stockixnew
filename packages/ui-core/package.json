@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@base-ui/react": "^1.4.1",
+    "@tanstack/react-table": "^8.21.3",
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.15.3",

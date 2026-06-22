@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { createDb } from "@repo/db";
 
+import { logger } from "../lib/logger.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import { isLegacyVersionedPath } from "../middleware/known-api-paths.js";
 import { registerAdminRoutes } from "./admin.js";
@@ -42,7 +43,9 @@ export function registerControlPlaneRoutes(app: Hono<ControlPlaneAuthEnv>, db: D
   registerPublicRoutes(app, db);
   registerInternalRoutes(app, db);
 
-  // Deprecation middleware — fires after route handler for any matched legacy path
+  // Deprecation middleware — fires after route handler for any matched legacy path.
+  // The logger.warn emits structured "legacy_path_hit" events so operators can
+  // identify remaining callers before the unversioned mount is removed (2026-09-15).
   app.use("*", async (c, next) => {
     await next();
     const path = c.req.path;
@@ -50,6 +53,12 @@ export function registerControlPlaneRoutes(app: Hono<ControlPlaneAuthEnv>, db: D
       c.header("Deprecation", "true");
       c.header("Sunset", SUNSET_DATE);
       c.header("Link", `</v1${path}>; rel="successor-version"`);
+      logger.warn("legacy_path_hit", {
+        path,
+        method: c.req.method,
+        userAgent: c.req.header("user-agent") ?? "unknown",
+        origin: c.req.header("origin") ?? "unknown",
+      });
     }
   });
 

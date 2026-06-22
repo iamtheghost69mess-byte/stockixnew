@@ -20,11 +20,17 @@ import { FormDefinition } from "./schema";
 
 export interface MetaFormProps {
   schema: FormDefinition;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: any) => Promise<void> | void;
   defaultValues?: any;
+  /** Disables the submit button and shows a spinner when true. */
+  isLoading?: boolean;
+  /** API-level error message rendered below the form fields. */
+  serverError?: string | null;
+  /** Submit button label. @default "Submit" */
+  submitLabel?: string;
 }
 
-export function MetaForm({ schema, onSubmit, defaultValues }: MetaFormProps) {
+export function MetaForm({ schema, onSubmit, defaultValues, isLoading = false, serverError, submitLabel = "Submit" }: MetaFormProps) {
   const form = useForm({
     defaultValues: defaultValues || {}
   });
@@ -76,7 +82,18 @@ export function MetaForm({ schema, onSubmit, defaultValues }: MetaFormProps) {
           ))}
         </div>
         
-        <Button type="submit">Submit</Button>
+        {serverError ? (
+          <p className="text-sm text-destructive">{serverError}</p>
+        ) : null}
+
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              {submitLabel}
+            </span>
+          ) : submitLabel}
+        </Button>
       </form>
     </Form>
   );

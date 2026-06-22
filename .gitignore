@@ -25,6 +25,7 @@ services/**/.env
 **/.env
 !**/.env.example
 !.env.example
+infra/dev/.env.full
 
 # Per-tenant Stockix env (provisioner)
 .stockix/
