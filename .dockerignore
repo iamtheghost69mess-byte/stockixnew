@@ -39,8 +39,9 @@ e2e/
 **/*.sql
 **/data/*.json
 
-# Deployment config — never needed inside any Docker image
+# Deployment config and scripts — never needed inside any Docker image
 infra/prod/
+scripts/
 
 # Local workspace / tooling — never needed inside any Docker image
 .pnpm-store/
