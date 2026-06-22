@@ -166,15 +166,21 @@ curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retr
 log INFO "API healthy."
 
 curl --fail --silent --show-error --max-time 30 --retry 6 --retry-delay 5 --retry-all-errors \
-  "${PUBLIC_BASE_URL_SCHEME:-https}://${ROOT_DOMAIN}/" >/dev/null
+  "${PUBLIC_BASE_URL_SCHEME:-https}://app.${ROOT_DOMAIN}/" >/dev/null
 log INFO "Dashboard healthy."
 
 # ── Tenant images ─────────────────────────────────────────────────────────────
 
 cd "${REPO_ROOT}"
-pnpm docker:prebuild || { log ERROR "Tenant prebuild failed — images not updated."; exit 1; }
-node scripts/prebuild-tenant-images.mjs --verify || { log ERROR "Tenant image verification failed."; exit 1; }
-log INFO "Tenant images verified."
+if pnpm docker:prebuild; then
+  if node scripts/prebuild-tenant-images.mjs --verify; then
+    log INFO "Tenant images verified."
+  else
+    log WARN "Tenant image verification failed — tenant provisioning may be slower until images are rebuilt."
+  fi
+else
+  log WARN "Tenant prebuild failed — tenant images not updated. Provisioning may require on-demand builds."
+fi
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 
