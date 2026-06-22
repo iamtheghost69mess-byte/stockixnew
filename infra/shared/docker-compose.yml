@@ -78,7 +78,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 512m
@@ -126,7 +125,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 256m
@@ -184,7 +182,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 640m
@@ -303,7 +300,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 576m
@@ -341,7 +337,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 512m
