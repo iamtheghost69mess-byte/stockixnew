@@ -394,9 +394,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
-      start_period: 30s
-    mem_limit: 256m
-    cpus: "0.25"
+      start_period: 120s
+    mem_limit: 512m
+    cpus: "0.5"
     mem_swappiness: 0
     labels:
       - "traefik.enable=true"
