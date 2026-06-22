@@ -259,20 +259,21 @@ services:
       - no-new-privileges:true
 
   pgbouncer:
-    image: pgbouncer/pgbouncer:latest
+    image: edoburu/pgbouncer:latest
     restart: unless-stopped
     <<: *logging-limits
     environment:
-      DATABASES_HOST: postgres
-      DATABASES_PORT: 5432
-      DATABASES_DBNAME: stockix_platform
-      DATABASES_USER: ${POSTGRES_USER:-postgres}
-      DATABASES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_MAX_CLIENT_CONN: 200
-      PGBOUNCER_DEFAULT_POOL_SIZE: 20
-      PGBOUNCER_AUTH_TYPE: any
-      PGBOUNCER_LISTEN_PORT: 5432
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: stockix_platform
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: any
+      LISTEN_PORT: 5432
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits
     networks:
       - stockix_internal
     healthcheck:
