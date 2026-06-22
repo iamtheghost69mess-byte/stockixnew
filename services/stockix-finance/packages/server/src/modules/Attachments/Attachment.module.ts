@@ -4,6 +4,7 @@ import { S3_CLIENT, S3Module } from "../S3/S3.module";
 import { DeleteAttachment } from "./DeleteAttachment";
 import { GetAttachment } from "./GetAttachment";
 import { GetAttachmentPresignedUrl } from "./GetAttachmentPresignedUrl";
+import { GetAttachmentBase64 } from "./GetAttachmentBase64";
 import { LinkAttachment } from "./LinkAttachment";
 import { UnlinkAttachment } from "./UnlinkAttachment";
 import { ValidateAttachments } from "./ValidateAttachments";
@@ -35,12 +36,13 @@ const models = [
 
 @Module({
   imports: [S3Module, ...models],
-  exports: [...models, GetAttachmentPresignedUrl],
+  exports: [...models, GetAttachmentPresignedUrl, GetAttachmentBase64],
   controllers: [AttachmentsController],
   providers: [
     DeleteAttachment,
     GetAttachment,
     GetAttachmentPresignedUrl,
+    GetAttachmentBase64,
     LinkAttachment,
     UnlinkAttachment,
     ValidateAttachments,

@@ -77,7 +77,12 @@ export function CompanyLogoUpload({
     >
       {imagePreviewUrl ? (
         <span>
-          <img src={imagePreviewUrl} alt="" className={styles.previewImage} />
+          <img
+            src={imagePreviewUrl}
+            alt=""
+            className={styles.previewImage}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
           <Button
             minimal
             intent={Intent.DANGER}

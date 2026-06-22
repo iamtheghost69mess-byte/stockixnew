@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthSigninService } from '../commands/AuthSignin.service';
+import { AuthLogoutService } from '../commands/AuthLogout.service';
 import { JwtPayload } from '../Auth.interfaces';
 import { ConfigService } from '@nestjs/config';
 
@@ -9,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     private readonly authSigninService: AuthSigninService,
+    private readonly authLogout: AuthLogoutService,
     private readonly configService: ConfigService,
   ) {
     super({
@@ -18,7 +20,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  validate(payload: JwtPayload) {
+  async validate(payload: JwtPayload) {
+    if (payload.jti && await this.authLogout.isDenied(payload.jti)) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
     return this.authSigninService.verifyPayload(payload);
   }
 }

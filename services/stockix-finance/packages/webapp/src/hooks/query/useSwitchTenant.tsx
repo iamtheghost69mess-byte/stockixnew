@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useMutation } from 'react-query';
 import useApiRequest from '../useRequest';
 import { setCookie } from '../../utils';
@@ -13,7 +12,7 @@ interface SwitchTenantResponse {
 export function useSwitchTenant() {
   const apiRequest = useApiRequest();
 
-  return useMutation(
+  return useMutation<SwitchTenantResponse, Error, string>(
     async (organizationId: string) => {
       const res = await apiRequest.post(
         'auth/switch-tenant',
@@ -23,11 +22,11 @@ export function useSwitchTenant() {
       return res.data as SwitchTenantResponse;
     },
     {
-      onSuccess: (data) => {
+      onSuccess: (data: SwitchTenantResponse) => {
         setCookie('token', data.access_token);
-        setCookie('authenticated_user_id', data.user_id);
+        setCookie('authenticated_user_id', String(data.user_id));
         setCookie('organization_id', data.organization_id);
-        setCookie('tenant_id', data.tenant_id);
+        setCookie('tenant_id', String(data.tenant_id));
 
         // Full page reload — clears stale Redux and re-reads cookies into initialState.
         window.location.replace('/');

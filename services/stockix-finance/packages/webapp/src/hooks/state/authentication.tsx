@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useDispatch, useSelector } from 'react-redux';
 import { useCallback } from 'react';
 import { isAuthenticated } from '@/store/authentication/authentication.reducer';
@@ -12,7 +11,21 @@ import {
   setLocale,
 } from '@/store/authentication/authentication.actions';
 import { useQueryClient } from 'react-query';
-import { clearMustChangePasswordCookie, removeCookie } from '@/utils';
+import { clearMustChangePasswordCookie, getCookie, removeCookie } from '@/utils';
+
+interface AuthState {
+  token: string | null;
+  organizationId: string | null;
+  tenantId: string | null;
+  userId: string | null;
+  locale: string;
+  verified: boolean;
+  verifyEmail: string | null;
+}
+
+interface RootAuthSlice {
+  authentication: AuthState;
+}
 
 /**
  * Removes the authentication cookies.
@@ -30,8 +43,16 @@ export const useAuthActions = () => {
   const queryClient = useQueryClient();
 
   return {
-    setLogin: useCallback((login) => dispatch(setLogin(login)), [dispatch]),
+    setLogin: useCallback((login: unknown) => dispatch(setLogin(login)), [dispatch]),
     setLogout: useCallback(() => {
+      // Fire-and-forget: revoke the JWT server-side so it can't be replayed.
+      const token = getCookie('token');
+      if (token) {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => { /* non-fatal — local cleanup proceeds regardless */ });
+      }
       queryClient.clear();
       removeAuthenticationCookies();
       clearMustChangePasswordCookie();
@@ -58,36 +79,35 @@ export const useIsAuthenticated = () => {
  * Retrieve the authentication token.
  */
 export const useAuthToken = () => {
-  return useSelector((state) => state.authentication.token);
+  return useSelector((state: RootAuthSlice) => state.authentication.token);
 };
 
 /**
  * Retrieve the authentication user.
  */
 export const useAuthUser = () => {
-  return useSelector((state) => ({}));
+  return useSelector((_state: RootAuthSlice) => ({}));
 };
 
 /**
  * Retrieve the authenticated organization id.
  */
 export const useAuthOrganizationId = () => {
-  return useSelector((state) => state.authentication.organizationId);
+  return useSelector((state: RootAuthSlice) => state.authentication.organizationId);
 };
 
 /**
  * Retrieves the user's email verification status.
  */
 export const useAuthUserVerified = () => {
-  return useSelector((state) => state.authentication.verified);
+  return useSelector((state: RootAuthSlice) => state.authentication.verified);
 };
 
 /**
  * Retrieves the user's email address.
- * @returns {string}
  */
 export const useAuthUserVerifyEmail = () => {
-  return useSelector((state) => state.authentication.verifyEmail);
+  return useSelector((state: RootAuthSlice) => state.authentication.verifyEmail);
 };
 
 /**
@@ -97,7 +117,7 @@ export const useSetAuthEmailConfirmed = () => {
   const dispatch = useDispatch();
 
   return useCallback(
-    (verified?: boolean = true, email: string) =>
+    (verified: boolean = true, email?: string) =>
       dispatch(setEmailConfirmed(verified, email)),
     [dispatch],
   );

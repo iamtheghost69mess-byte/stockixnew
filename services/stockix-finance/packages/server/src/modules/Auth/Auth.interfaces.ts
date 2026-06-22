@@ -6,6 +6,8 @@ import { AuthSignupDto } from './dtos/AuthSignup.dto';
 export interface JwtPayload {
   sub: string;
   organizationId: string;
+  /** Unique token ID — used by the logout denylist to revoke a specific token. */
+  jti?: string;
   iat?: number;
   exp?: number;
 }

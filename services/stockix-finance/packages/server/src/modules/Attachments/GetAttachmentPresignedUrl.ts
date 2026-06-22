@@ -37,7 +37,7 @@ export class GetAttachmentPresignedUrl {
       ResponseContentDisposition,
     });
     const signedUrl = await (getSignedUrl as any)(this.s3Client, command, {
-      expiresIn: 300,
+      expiresIn: 604800, // 7 days — long enough for emailed/stored document links
     });
 
     return signedUrl;

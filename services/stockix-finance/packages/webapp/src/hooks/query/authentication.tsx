@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useMutation } from 'react-query';
+import { useMutation, UseMutationOptions } from 'react-query';
 import useApiRequest, { useAuthApiRequest } from '../useRequest';
 import { clearMustChangePasswordCookie, removeCookie, setCookie } from '../../utils';
 import { useRequestQuery } from '../useQueryRequest';
@@ -16,14 +15,44 @@ const AuthRoute = {
   AuthMeta: 'auth/meta',
 };
 
+interface AuthLoginResponse {
+  access_token: string;
+  organization_id: string;
+  tenant_id: number;
+  user_id: number;
+  must_change_password?: boolean;
+  tenant?: { metadata?: { language?: string } };
+}
+
+interface AuthLoginValues {
+  email: string;
+  password: string;
+}
+
+interface AuthSignupValues {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
+interface AuthChangePasswordValues {
+  password: string;
+}
+
+interface AuthSignUpVerifyValues {
+  token: string;
+  email: string;
+}
+
 /**
  * Saves the response data to cookies.
  */
-export function setAuthLoginCookies(data) {
+export function setAuthLoginCookies(data: AuthLoginResponse) {
   setCookie('token', data.access_token);
-  setCookie('authenticated_user_id', data.user_id);
+  setCookie('authenticated_user_id', String(data.user_id));
   setCookie('organization_id', data.organization_id);
-  setCookie('tenant_id', data.tenant_id);
+  setCookie('tenant_id', String(data.tenant_id));
 
   if (data.must_change_password) {
     setCookie('must_change_password', '1', 1);
@@ -39,44 +68,48 @@ export function setAuthLoginCookies(data) {
 /**
  * Authentication login.
  */
-export const useAuthLogin = (props) => {
+export const useAuthLogin = (
+  props?: UseMutationOptions<{ data: AuthLoginResponse }, Error, AuthLoginValues>,
+) => {
   const apiRequest = useAuthApiRequest();
 
-  return useMutation((values) => apiRequest.post(AuthRoute.Signin, values), {
-    onSuccess: (res) => {
-      // Set authentication cookies.
-      setAuthLoginCookies(res.data);
+  return useMutation<{ data: AuthLoginResponse }, Error, AuthLoginValues>(
+    (values) => apiRequest.post(AuthRoute.Signin, values),
+    {
+      onSuccess: (res) => {
+        setAuthLoginCookies(res.data);
 
-      if (res.data?.must_change_password) {
-        window.location.href = '/auth/change-password?required=true';
-        return;
-      }
-
-      const params = new URLSearchParams(window.location.search);
-      const redirect = params.get('redirect');
-      if (redirect) {
-        const decoded = decodeURIComponent(redirect);
-        // Only follow same-origin relative paths to prevent open-redirect attacks.
-        if (decoded.startsWith('/') && !decoded.startsWith('//')) {
-          window.location.href = decoded;
+        if (res.data?.must_change_password) {
+          window.location.href = '/auth/change-password?required=true';
           return;
         }
-      }
 
-      // Hard-navigate so cookies and Redux are stable before boot queries fire.
-      window.location.href = '/';
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect');
+        if (redirect) {
+          const decoded = decodeURIComponent(redirect);
+          if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+            window.location.href = decoded;
+            return;
+          }
+        }
+
+        window.location.href = '/';
+      },
+      ...props,
     },
-    ...props,
-  });
+  );
 };
 
 /**
  * Authentication register.
  */
-export const useAuthRegister = (props) => {
+export const useAuthRegister = (
+  props?: UseMutationOptions<unknown, Error, AuthSignupValues>,
+) => {
   const apiRequest = useAuthApiRequest();
 
-  return useMutation(
+  return useMutation<unknown, Error, AuthSignupValues>(
     (values) => apiRequest.post(AuthRoute.Signup, values),
     props,
   );
@@ -85,12 +118,13 @@ export const useAuthRegister = (props) => {
 /**
  * Change password while authenticated (bootstrap / must-change flow).
  */
-export const useAuthChangePassword = (props) => {
+export const useAuthChangePassword = (
+  props?: UseMutationOptions<{ data: { must_change_password?: boolean } }, Error, AuthChangePasswordValues>,
+) => {
   const apiRequest = useApiRequest();
 
-  return useMutation(
-    (values: { password: string }) =>
-      apiRequest.post(AuthRoute.ChangePassword, values),
+  return useMutation<{ data: { must_change_password?: boolean } }, Error, AuthChangePasswordValues>(
+    (values) => apiRequest.post(AuthRoute.ChangePassword, values),
     {
       onSuccess: (res) => {
         if (res?.data?.must_change_password === false) {
@@ -105,10 +139,12 @@ export const useAuthChangePassword = (props) => {
 /**
  * Authentication send reset password.
  */
-export const useAuthSendResetPassword = (props) => {
+export const useAuthSendResetPassword = (
+  props?: UseMutationOptions<unknown, Error, { email: string }>,
+) => {
   const apiRequest = useAuthApiRequest();
 
-  return useMutation(
+  return useMutation<unknown, Error, { email: string }>(
     (values) => apiRequest.post(AuthRoute.SendResetPassword, values),
     props,
   );
@@ -117,10 +153,12 @@ export const useAuthSendResetPassword = (props) => {
 /**
  * Authentication reset password.
  */
-export const useAuthResetPassword = (props) => {
+export const useAuthResetPassword = (
+  props?: UseMutationOptions<unknown, Error, [string, { password: string }]>,
+) => {
   const apiRequest = useAuthApiRequest();
 
-  return useMutation(
+  return useMutation<unknown, Error, [string, { password: string }]>(
     ([token, values]) => apiRequest.post(`auth/reset_password/${token}`, values),
     props,
   );
@@ -137,7 +175,7 @@ export const useAuthMetadata = (props = {}) => {
       url: AuthRoute.AuthMeta,
     },
     {
-      select: (res) => res.data,
+      select: (res: { data: unknown }) => res.data,
       defaultData: {},
       requiresAuth: false,
       ...props,
@@ -148,29 +186,27 @@ export const useAuthMetadata = (props = {}) => {
 /**
  * Resend the mail of signup verification.
  */
-export const useAuthSignUpVerifyResendMail = (props) => {
+export const useAuthSignUpVerifyResendMail = (
+  props?: UseMutationOptions<unknown, Error, void>,
+) => {
   const apiRequest = useApiRequest();
 
-  return useMutation(
+  return useMutation<unknown, Error, void>(
     () => apiRequest.post(AuthRoute.SignupVerifyResend),
     props,
   );
 };
 
-interface AuthSignUpVerifyValues {
-  token: string;
-  email: string;
-}
-
 /**
  * Signup verification.
  */
-export const useAuthSignUpVerify = (props) => {
+export const useAuthSignUpVerify = (
+  props?: UseMutationOptions<unknown, Error, AuthSignUpVerifyValues>,
+) => {
   const apiRequest = useAuthApiRequest();
 
-  return useMutation(
-    (values: AuthSignUpVerifyValues) =>
-      apiRequest.post(AuthRoute.SignupVerify, values),
+  return useMutation<unknown, Error, AuthSignUpVerifyValues>(
+    (values) => apiRequest.post(AuthRoute.SignupVerify, values),
     props,
   );
 };

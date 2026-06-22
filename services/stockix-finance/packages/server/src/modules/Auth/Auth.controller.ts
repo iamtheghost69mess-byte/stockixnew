@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
+  HttpCode,
   Inject,
   Param,
   Post,
@@ -34,6 +36,7 @@ import { AuthSigninResponseDto } from './dtos/AuthSigninResponse.dto';
 import { AuthMetaResponseDto } from './dtos/AuthMetaResponse.dto';
 import { LocalAuthGuard } from './guards/Local.guard';
 import { AuthSigninService } from './commands/AuthSignin.service';
+import { AuthLogoutService } from './commands/AuthLogout.service';
 import { TenantModel } from '../System/models/TenantModel';
 import { SystemUser } from '../System/models/SystemUser';
 import UserTenant from '../System/models/UserTenant';
@@ -71,6 +74,7 @@ export class AuthController {
   constructor(
     private readonly authApp: AuthenticationApplication,
     private readonly authSignin: AuthSigninService,
+    private readonly authLogout: AuthLogoutService,
     private readonly jwtService: JwtService,
 
     @Inject(TenantModel.name)
@@ -186,6 +190,25 @@ export class AuthController {
     @Body() body: AuthResetPasswordDto,
   ) {
     return this.authApp.resetPassword(token, body.password);
+  }
+
+  @Post('/logout')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Invalidate the current JWT (server-side logout)' })
+  @ApiResponse({ status: 200, description: 'Token revoked. Client should clear cookies.' })
+  async logout(@Headers('authorization') authHeader: string): Promise<{ success: boolean }> {
+    const token = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '') : '';
+    if (token) {
+      try {
+        const payload = this.jwtService.verify(token) as { jti?: string; exp?: number };
+        if (payload.jti && typeof payload.exp === 'number') {
+          await this.authLogout.denyToken(payload.jti, payload.exp);
+        }
+      } catch {
+        // Token already expired or invalid — nothing to revoke.
+      }
+    }
+    return { success: true };
   }
 
   @Get('/meta')

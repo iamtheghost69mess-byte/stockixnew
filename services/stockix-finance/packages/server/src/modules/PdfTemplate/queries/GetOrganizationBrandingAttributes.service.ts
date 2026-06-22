@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { CommonOrganizationBrandingAttributes } from '../types';
 import { TenancyContext } from '../../Tenancy/TenancyContext.service';
-import { GetAttachmentPresignedUrl } from '@/modules/Attachments/GetAttachmentPresignedUrl';
+import { GetAttachmentBase64 } from '@/modules/Attachments/GetAttachmentBase64';
 
 @Injectable()
 export class GetOrganizationBrandingAttributesService {
   constructor(
     private readonly tenancyContext: TenancyContext,
-    private readonly getPresignedUrlService: GetAttachmentPresignedUrl,
+    private readonly getAttachmentBase64: GetAttachmentBase64,
   ) {}
 
   /**
@@ -27,7 +27,7 @@ export class GetOrganizationBrandingAttributesService {
     if (companyLogoKey) {
       try {
         companyLogoUri =
-          await this.getPresignedUrlService.getPresignedUrl(companyLogoKey);
+          await this.getAttachmentBase64.getBase64(companyLogoKey);
       } catch {
         companyLogoUri = null;
       }

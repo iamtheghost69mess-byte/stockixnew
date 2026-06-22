@@ -1,5 +1,6 @@
 import { ClsService } from 'nestjs-cls';
 import { Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { SystemUser } from '@/modules/System/models/SystemUser';
 import UserTenant from '@/modules/System/models/UserTenant';
@@ -83,8 +84,9 @@ export class AuthSigninService {
 
   /**
    * Signs a JWT for the given user and organization.
+   * Includes a `jti` (JWT ID) so the token can be individually revoked on logout.
    */
   async signToken(user: SystemUser, organizationId: string): Promise<string> {
-    return this.jwtService.sign({ sub: user.email, organizationId });
+    return this.jwtService.sign({ sub: user.email, organizationId, jti: randomUUID() });
   }
 }

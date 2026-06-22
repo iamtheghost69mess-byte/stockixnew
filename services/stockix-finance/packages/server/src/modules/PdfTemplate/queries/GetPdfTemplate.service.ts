@@ -4,7 +4,7 @@ import { GetPdfTemplateTransformer } from './GetPdfTemplate.transformer';
 import { PdfTemplateModel } from '../models/PdfTemplate';
 import { TransformerInjectable } from '../../Transformer/TransformerInjectable.service';
 import { TenantModelProxy } from '@/modules/System/models/TenantBaseModel';
-import { GetAttachmentPresignedUrl } from '@/modules/Attachments/GetAttachmentPresignedUrl';
+import { GetAttachmentBase64 } from '@/modules/Attachments/GetAttachmentBase64';
 
 @Injectable()
 export class GetPdfTemplateService {
@@ -14,7 +14,7 @@ export class GetPdfTemplateService {
       typeof PdfTemplateModel
     >,
     private readonly transformer: TransformerInjectable,
-    private readonly getPresignedUrlService: GetAttachmentPresignedUrl,
+    private readonly getAttachmentBase64: GetAttachmentBase64,
   ) {}
 
   /**
@@ -37,7 +37,7 @@ export class GetPdfTemplateService {
     if (companyLogoKey) {
       try {
         companyLogoUri =
-          await this.getPresignedUrlService.getPresignedUrl(companyLogoKey);
+          await this.getAttachmentBase64.getBase64(companyLogoKey);
       } catch {
         companyLogoUri = null;
       }

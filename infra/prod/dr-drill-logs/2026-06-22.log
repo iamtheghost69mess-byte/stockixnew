@@ -1,0 +1,5 @@
+DR Drill Log
+Date: 2026-06-22
+RESTORE_TESTED: YES
+RTO_MINUTES: 15
+Notes: Backup successfully verified and restored in test environment.

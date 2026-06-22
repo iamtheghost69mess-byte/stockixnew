@@ -49,7 +49,12 @@ interface PaperTemplateLogoProps {
 PaperTemplate.Logo = ({ logoUri }: PaperTemplateLogoProps) => {
   return (
     <div className={styles.logoWrap}>
-      <img className={styles.logoImg} alt="" src={logoUri} />
+      <img
+        className={styles.logoImg}
+        alt=""
+        src={logoUri}
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+      />
     </div>
   );
 };

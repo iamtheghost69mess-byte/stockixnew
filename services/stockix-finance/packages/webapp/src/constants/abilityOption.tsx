@@ -1,4 +1,3 @@
-// @ts-nocheck
 export const AbilitySubject = {
   Item: 'Item',
   InventoryAdjustment: 'InventoryAdjustment',
