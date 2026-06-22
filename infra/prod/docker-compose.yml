@@ -367,10 +367,10 @@ services:
       - stockix_internal
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4001/health 2>/dev/null | grep -q ok || exit 1"]
-      interval: 30s
-      timeout: 10s
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 360s
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
