@@ -31,6 +31,39 @@ describe("stockix product token", () => {
 
   it("parseTenantModules defaults to accounting", async () => {
     const { parseTenantModules } = await import(
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const VALID_SECRET = "super-secret-key-for-tests-only-32chars!!";
+
+vi.mock("@repo/config", () => ({
+  apiConfig: {
+    authTokenSecret: VALID_SECRET,
+    licenseSigningSecret: "test-license-signing-secret-32chars",
+  },
+}));
+
+function setSecret(value: string | undefined) {
+  if (value === undefined) {
+    delete process.env.AUTH_TOKEN_SECRET;
+    delete process.env.SESSION_SECRET;
+  } else {
+    process.env.AUTH_TOKEN_SECRET = value;
+  }
+}
+
+describe("stockix product token", () => {
+  beforeEach(() => {
+    setSecret(VALID_SECRET);
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    setSecret(VALID_SECRET);
+    vi.resetModules();
+  });
+
+  it("parseTenantModules defaults to accounting", async () => {
+    const { parseTenantModules } = await import(
       "../src/services/auth/stockix-product-token.js"
     );
     expect(parseTenantModules(undefined)).toEqual(["accounting"]);
@@ -41,7 +74,7 @@ describe("stockix product token", () => {
     const { signProductToken, verifyProductToken } = await import(
       "../src/services/auth/stockix-product-token.js"
     );
-    const token = await signProductToken(
+    const { accessToken } = await signProductToken(
       {} as never,
       {
         userId: "550e8400-e29b-41d4-a716-446655440000",
@@ -51,6 +84,7 @@ describe("stockix product token", () => {
         modules: ["pos", "accounting"],
       },
     );
+
     const mockDb = {
       select: () => ({
         from: () => ({
@@ -61,7 +95,7 @@ describe("stockix product token", () => {
       }),
     } as never;
 
-    const payload = await verifyProductToken(mockDb, token);
+    const payload = await verifyProductToken(mockDb, accessToken);
     expect(payload.modules).toEqual(["pos", "accounting"]);
     expect(payload.tenantId).toBe("660e8400-e29b-41d4-a716-446655440001");
   });

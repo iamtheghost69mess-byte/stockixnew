@@ -9,10 +9,37 @@ on:
         type: string
 
 jobs:
+  verify-staging:
+    name: Verify staging is healthy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Smoke-test staging /ready endpoint
+        env:
+          STAGING_URL: ${{ secrets.STAGING_API_URL }}
+          EXPECTED_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -e
+          echo "Checking staging health at ${STAGING_URL}/ready ..."
+          RESPONSE=$(curl -fsS --max-time 15 "${STAGING_URL}/ready")
+          echo "Response: ${RESPONSE}"
+
+          if ! echo "${RESPONSE}" | grep -q '"ready":true'; then
+            echo "ERROR: Staging /ready did not return ready:true — aborting production deploy"
+            exit 1
+          fi
+
+          if ! echo "${RESPONSE}" | grep -q "${EXPECTED_SHA}"; then
+            echo "ERROR: SHA ${EXPECTED_SHA} not confirmed in staging /ready — deployment may not be applied yet"
+            exit 1
+          fi
+
+          echo "Staging healthy and running SHA ${EXPECTED_SHA} ✓"
+
   deploy-production:
     name: Deploy to production
     runs-on: ubuntu-latest
     environment: production
+    needs: verify-staging
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3

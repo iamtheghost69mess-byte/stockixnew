@@ -32,11 +32,16 @@ groups:
         for: 10m
         labels:
           severity: p1
-      - alert: BackupCronNotRunning
-        expr: absent(process_start_time_seconds{job="db-backup"}) == 1
-        for: 15m
+      - alert: BackupNotRunInLast26Hours
+        # Fires when backup.sh has not written a success metric in 26 hours.
+        # The metric is written by infra/prod/backup/backup.sh via node_exporter
+        # textfile collector after each successful B2 upload.
+        expr: (time() - stockix_backup_last_success_timestamp) > 93600
+        for: 5m
         labels:
           severity: p1
+        annotations:
+          summary: "Postgres backup has not completed successfully in >26 hours"
       - alert: ApiLatencyHigh
         expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api"}[5m])) > 2
         for: 5m

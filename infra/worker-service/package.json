@@ -1,5 +1,10 @@
 {
   "type": "module",
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "@repo/events": "workspace:*",
+    "@repo/shared": "workspace:*"
+  },
   "scripts": {
     "test": "pnpm -C ../../apps/api test ../../infra/worker-service",
     "lint": "node -e \"console.log('Worker lint: no local eslint config; worker TS is checked via apps/api check-types and root turbo lint')\""

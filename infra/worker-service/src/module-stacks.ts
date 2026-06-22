@@ -1,5 +1,6 @@
 import { isAbsolute, join } from "node:path";
 import { stat } from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
 
 import { execa } from "execa";
 
@@ -342,35 +343,41 @@ function buildPosPublicUrls(
 
 
 async function resolvePosPorts(
-
   db: PostgresJsDatabase<typeof dbSchema> | undefined,
-
   log: (m: string) => void,
-
 ): Promise<{ backendPort: number; frontendPort: number }> {
-
   if (!db) {
-
     return {
-
       backendPort: defaultPosBackendPort(),
-
       frontendPort: defaultPosFrontendPort(),
-
     };
-
   }
-
   const maxPort = apiConfig.maxTenantPort;
-
   const backendPort = await allocateTenantPort(db, maxPort);
-
   const frontendPort = await allocateTenantPort(db, maxPort);
-
   log(`[provision][pos] allocated ports backend=${backendPort} frontend=${frontendPort}`);
-
   return { backendPort, frontendPort };
+}
 
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxAttempts: number,
+  delayMs: number,
+  log: (msg: string) => void,
+  name: string
+): Promise<T> {
+  let attempt = 1;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= maxAttempts) throw error;
+      const msg = error instanceof Error ? error.message : String(error);
+      log(`[retry] ${name} failed (attempt ${attempt}/${maxAttempts}): ${msg}. Retrying in ${delayMs}ms...`);
+      await setTimeout(delayMs);
+      attempt++;
+    }
+  }
 }
 
 
@@ -504,7 +511,14 @@ export async function provisionPosStack(
     rootDomain === "localhost"
       ? buildPosPublicUrls(opts.slug, { backendPort, frontendPort }).posApiUrl
       : posApiUrl;
-  await waitForPosBackend(backendBase, opts.log);
+
+  await withRetry(
+    () => waitForPosBackend(backendBase, opts.log),
+    3,
+    5000,
+    opts.log,
+    "waitForPosBackend"
+  );
 
   let bootstrap: Awaited<ReturnType<typeof bootstrapPosOrganization>>;
   if (opts.trace && opts.hasOp?.("pos.bootstrap_organization")) {
@@ -515,31 +529,25 @@ export async function provisionPosStack(
       posApiUrl: opts.posApiUrl ?? "",
     } as unknown as Awaited<ReturnType<typeof bootstrapPosOrganization>>;
   } else {
-    bootstrap = await bootstrapPosOrganization({
-
-      slug: opts.slug,
-
-      tenantName: opts.tenantName,
-
-      tenantId: opts.tenantId,
-
-      adminEmail: opts.adminEmail,
-
-      log: opts.log,
-
-      licenseExpiresAt: opts.licenseExpiresAt,
-
-      tenantModules: opts.tenantModules,
-
-      maxUsers: opts.maxUsers,
-
-      maxLocations: opts.maxLocations,
-
-      maxOrdersPerMonth: opts.maxOrdersPerMonth,
-
-      posHostPort: backendPort,
-
-    });
+    bootstrap = await withRetry(
+      () => bootstrapPosOrganization({
+        slug: opts.slug,
+        tenantName: opts.tenantName,
+        tenantId: opts.tenantId,
+        adminEmail: opts.adminEmail,
+        log: opts.log,
+        licenseExpiresAt: opts.licenseExpiresAt,
+        tenantModules: opts.tenantModules,
+        maxUsers: opts.maxUsers,
+        maxLocations: opts.maxLocations,
+        maxOrdersPerMonth: opts.maxOrdersPerMonth,
+        posHostPort: backendPort,
+      }),
+      3,
+      5000,
+      opts.log,
+      "bootstrapPosOrganization"
+    );
     await opts.markOp?.("pos.bootstrap_organization", "POS organization bootstrapped", {
       posOrganizationId: bootstrap.posOrganizationId,
     });

@@ -15,6 +15,8 @@ import {
   requestOwnerPasswordReset,
 } from "../../services/auth/password-reset.js";
 import { signMfaToken, signSessionToken, verifyMfaToken, verifySessionToken } from "../../services/auth/tokens.js";
+import { signProductToken } from "../../services/auth/stockix-product-token.js";
+import { verifyStockixRefreshToken } from "@repo/auth";
 import {
   beginMfaSetup,
   disableMfa,
@@ -218,6 +220,45 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
     response.headers.append("Set-Cookie", sessionCookie(sessionToken));
     response.headers.append("Set-Cookie", expiredMfaCookie());
     return response;
+  });
+
+  auth.post("/product-token/refresh", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = z.object({ refreshToken: z.string() }).safeParse(body);
+    if (!parsed.success) return c.json({ success: false, error: "Invalid request body" }, 400);
+
+    try {
+      const payload = await verifyStockixRefreshToken(parsed.data.refreshToken, apiConfig.authTokenSecret);
+      
+      const [owner] = await db
+        .select({ id: schema.owners.id, role: schema.owners.role })
+        .from(schema.owners)
+        .where(eq(schema.owners.id, payload.userId))
+        .limit(1);
+
+      if (!owner) return c.json({ success: false, error: "owner_not_found" }, 401);
+
+      const [tenantRow] = await db
+        .select({ id: schema.tenants.id, planSlug: schema.tenants.planSlug, status: schema.tenants.status })
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, payload.tenantId))
+        .limit(1);
+
+      if (!tenantRow || tenantRow.status !== "active") {
+         return c.json({ success: false, error: "tenant_unavailable" }, 401);
+      }
+
+      const { accessToken } = await signProductToken(db, {
+        userId: payload.userId,
+        tenantId: payload.tenantId,
+        roles: [owner.role],
+        planSlug: tenantRow.planSlug,
+      });
+
+      return c.json({ success: true, accessToken });
+    } catch (err) {
+      return c.json({ success: false, error: "invalid_refresh_token" }, 401);
+    }
   });
 
   auth.post("/mfa/begin", async (c) => {

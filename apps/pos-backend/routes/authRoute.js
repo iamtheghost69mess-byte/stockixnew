@@ -6,6 +6,7 @@ const {
   logout,
   session,
   acceptInvitation,
+  ssoExchange,
 } = require("../controllers/authController");
 const { authedTenant } = require("../middlewares/tenantRouteStacks");
 const { requireTenantRoleOrPermission } = require("../middlewares/requireRoleOrPermission");
@@ -23,6 +24,7 @@ router.post(
 );
 router.get("/session", session);
 router.post("/login", loginRateLimiter, deviceAuth, login);
+router.post("/sso-exchange", loginRateLimiter, ssoExchange);
 router.post("/invitations/accept", loginRateLimiter, acceptInvitation);
 router.post("/refresh", refresh);
 router.post("/logout", ...authedTenant, logout);

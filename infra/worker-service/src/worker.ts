@@ -86,6 +86,7 @@ import { scrubTenantRuntimeArtifacts } from "../domain/scrub-tenant-artifacts.js
 import { executeOrgProvisionRuntime } from "./org-provision-runtime.js";
 import { executeAddModuleRuntime } from "./provision-runtime.js";
 import { stopFinanceStack, stopModuleStack } from "./module-stacks.js";
+import { composeProjectName as resolveComposeProjectName } from "../domain/provisioning/compose-project-name.js";
 import { deprovisionChatwootAccount } from "./chatwoot-provision.js";
 
 const workerId = `infra-worker-${randomUUID()}`;
@@ -916,7 +917,7 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
 
 async function runTenantLifecycleCommand(
   db: ReturnType<typeof createDb>,
-  job: { tenantId: string | null; id: string },
+  job: { tenantId: string | null; id: string; payload: Record<string, unknown> },
   command: string,
 ) {
   if (!job.tenantId) throw new Error("tenantId is required");
@@ -937,6 +938,71 @@ async function runTenantLifecycleCommand(
   await execa("docker", ["compose", "-p", row.composeProjectName, command], {
     timeout: 60_000,
   });
+
+  // Mirror the lifecycle outcome into tenantDeployments.status so the dashboard
+  // reflects the actual container state immediately after the job completes.
+  const statusFromPayload = typeof job.payload.status === "string" ? job.payload.status : null;
+  const derivedStatus = statusFromPayload ?? (command === "stop" ? "suspended" : command === "start" ? "active" : null);
+  if (derivedStatus) {
+    await db
+      .update(tenantDeployments)
+      .set({ status: derivedStatus, updatedAt: new Date() })
+      .where(eq(tenantDeployments.tenantId, job.tenantId));
+  }
+}
+
+async function runTenantSuspendJob(
+  db: ReturnType<typeof createDb>,
+  job: { id: string; tenantId: string | null; payload: Record<string, unknown> },
+): Promise<void> {
+  if (!job.tenantId) throw new Error("tenantId is required");
+  const log = (m: string) => logger.info(`[worker][${job.id}] ${m}`);
+
+  const [row] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, job.tenantId))
+    .limit(1);
+  if (!row) throw new Error("tenant_not_found");
+
+  // Stop the Finance stack using the explicit compose file path (more reliable than -p only).
+  await stopFinanceStack(row.slug, log);
+
+  await db
+    .update(tenantDeployments)
+    .set({ status: "suspended", updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, job.tenantId));
+
+  log(`[tenant.suspend] Finance stack stopped and deployment status set to suspended for slug=${row.slug}`);
+}
+
+async function runTenantReactivateJob(
+  db: ReturnType<typeof createDb>,
+  job: { id: string; tenantId: string | null; payload: Record<string, unknown> },
+): Promise<void> {
+  if (!job.tenantId) throw new Error("tenantId is required");
+  const log = (m: string) => logger.info(`[worker][${job.id}] ${m}`);
+
+  const [row] = await db
+    .select({ slug: tenants.slug, composeProjectName: tenantDeployments.composeProjectName })
+    .from(tenants)
+    .leftJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
+    .where(eq(tenants.id, job.tenantId))
+    .limit(1);
+  if (!row) throw new Error("tenant_not_found");
+
+  const project = row.composeProjectName ?? resolveComposeProjectName(row.slug);
+  log(`[tenant.reactivate] Starting Finance stack project=${project} for slug=${row.slug}`);
+
+  // Restart stopped containers in the existing project (preserves volumes and config).
+  await execa("docker", ["compose", "-p", project, "start"], { timeout: 120_000 });
+
+  await db
+    .update(tenantDeployments)
+    .set({ status: "active", updatedAt: new Date() })
+    .where(eq(tenantDeployments.tenantId, job.tenantId));
+
+  log(`[tenant.reactivate] Finance stack started and deployment status set to active for slug=${row.slug}`);
 }
 
 async function runLicenseSyncRetryJob(
@@ -995,6 +1061,8 @@ const handlers = {
   "tenant.provision": runProvisionJob,
   "organization.provision": runOrgProvisionJob,
   "tenant.deprovision": runDeprovisionJob,
+  "tenant.suspend": runTenantSuspendJob,
+  "tenant.reactivate": runTenantReactivateJob,
   add_module: runAddModuleJob,
   remove_module: (db: ReturnType<typeof createDb>, job: ClaimedJob) => runRemoveModuleJob(db, job),
   license_sync_retry: runLicenseSyncRetryJob,

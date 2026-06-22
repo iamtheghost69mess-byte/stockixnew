@@ -1,0 +1,246 @@
+{
+  "title": "Stockix Infrastructure",
+  "uid": "stockix-infra",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Host CPU usage %",
+      "description": "from node_exporter — cpu iowait + user + system",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "CPU used %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Host memory used %",
+      "description": "from node_exporter",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+          "legendFormat": "Memory used %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Host disk used % (root fs)",
+      "description": "from node_exporter — triggers DiskUsageHigh alert at 85%",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_filesystem_free_bytes{mountpoint=\"/\", fstype!=\"tmpfs\"} / node_filesystem_size_bytes{mountpoint=\"/\", fstype!=\"tmpfs\"}))",
+          "legendFormat": "Disk used %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 75 },
+              { "color": "red", "value": 85 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Backup last success (hours ago)",
+      "description": "from node_exporter textfile — written by backup.sh after each successful B2 upload",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "(time() - stockix_backup_last_success_timestamp) / 3600",
+          "legendFormat": "Hours since last backup"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 14 },
+              { "color": "red", "value": 26 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": { "match": "null", "result": { "text": "No data — backup.sh not yet run or textfile metric not wired", "color": "orange" } }
+            }
+          ]
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "type": "stat",
+      "title": "Postgres active connections",
+      "description": "from postgres_exporter pg_stat_activity",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        {
+          "expr": "pg_stat_activity_count{state=\"active\"}",
+          "legendFormat": "Active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 150 },
+              { "color": "red", "value": 180 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Postgres connection pool (active / idle / waiting)",
+      "description": "from postgres_exporter — watch for idle-in-transaction buildup",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "pg_stat_activity_count{state=\"active\"}",
+          "legendFormat": "active"
+        },
+        {
+          "expr": "pg_stat_activity_count{state=\"idle\"}",
+          "legendFormat": "idle"
+        },
+        {
+          "expr": "pg_stat_activity_count{state=\"idle in transaction\"}",
+          "legendFormat": "idle-in-transaction"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Postgres DB size (stockix_platform)",
+      "description": "from postgres_exporter — track growth trend",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "pg_database_size_bytes{datname=\"stockix_platform\"}",
+          "legendFormat": "DB size"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis memory used (control-plane)",
+      "description": "from redis_exporter — 64MB cap, eviction policy allkeys-lru",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes{addr=~\".*control-plane.*\"}",
+          "legendFormat": "used"
+        },
+        {
+          "expr": "redis_memory_max_bytes{addr=~\".*control-plane.*\"}",
+          "legendFormat": "max (cap)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Postgres transaction rate",
+      "description": "from postgres_exporter — commits + rollbacks per second",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_xact_commit_total{datname=\"stockix_platform\"}[5m])",
+          "legendFormat": "commits/s"
+        },
+        {
+          "expr": "rate(pg_stat_database_xact_rollback_total{datname=\"stockix_platform\"}[5m])",
+          "legendFormat": "rollbacks/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Host network I/O",
+      "description": "from node_exporter",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*\"}[5m])",
+          "legendFormat": "rx {{device}}"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*\"}[5m])",
+          "legendFormat": "tx {{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "Bps" }
+      }
+    }
+  ]
+}

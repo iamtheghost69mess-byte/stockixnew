@@ -16,7 +16,10 @@ B2_ENDPOINT="${BACKUP_B2_ENDPOINT:?BACKUP_B2_ENDPOINT not set}"
 
 B2_PREFIX="${BACKUP_B2_PREFIX:-stockix-platform-backups}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
-POSTGRES_CONTAINER="${BACKUP_POSTGRES_CONTAINER:-stockix-postgres-1}"
+# In Swarm mode, task containers are named like `stackname_service.N.hash` — dynamic lookup required.
+POSTGRES_CONTAINER="${BACKUP_POSTGRES_CONTAINER:-$(docker ps -q -f name=stockix_postgres --filter status=running 2>/dev/null | head -1)}"
+POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-$(docker ps -q -f name=stockix-postgres --filter status=running 2>/dev/null | head -1)}"
+: "${POSTGRES_CONTAINER:?Cannot find postgres container — set BACKUP_POSTGRES_CONTAINER explicitly}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 POSTGRES_DB="${POSTGRES_DB:-stockix_platform}"
 
@@ -52,6 +55,19 @@ aws --endpoint-url "${B2_ENDPOINT}" s3 cp \
   --storage-class STANDARD
 
 echo "[backup] Uploaded: s3://${B2_BUCKET}/${B2_PREFIX}/${BACKUP_FILE}"
+
+# Cross-region replication: if a replica bucket/endpoint is configured, copy there too.
+# Set BACKUP_B2_REPLICA_BUCKET and BACKUP_B2_REPLICA_ENDPOINT in .env to enable.
+if [[ -n "${BACKUP_B2_REPLICA_BUCKET:-}" && -n "${BACKUP_B2_REPLICA_ENDPOINT:-}" ]]; then
+  echo "[backup] Replicating to cross-region bucket: ${BACKUP_B2_REPLICA_BUCKET}..."
+  aws --endpoint-url "${BACKUP_B2_REPLICA_ENDPOINT}" s3 cp \
+    "/tmp/${BACKUP_FILE}" \
+    "s3://${BACKUP_B2_REPLICA_BUCKET}/${B2_PREFIX}/${BACKUP_FILE}" \
+    --storage-class STANDARD && \
+    echo "[backup] Replica uploaded: s3://${BACKUP_B2_REPLICA_BUCKET}/${B2_PREFIX}/${BACKUP_FILE}" || \
+    echo "[backup] WARN: Replica upload failed — primary backup is intact"
+fi
+
 rm -f "/tmp/${BACKUP_FILE}"
 
 echo "[backup] Pruning backups older than ${RETENTION_DAYS} days..."
@@ -77,3 +93,17 @@ fi
 
 echo "[backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) Backup complete."
 echo "[backup] Retention: ${RETENTION_DAYS} days | Bucket: ${B2_BUCKET}/${B2_PREFIX}"
+
+# Write Prometheus textfile metric so node_exporter can expose backup freshness.
+# The BackupNotRunInLast26Hours alert fires if this timestamp goes stale.
+TEXTFILE_DIR="${TEXTFILE_COLLECTOR_DIR:-/var/lib/node_exporter/textfile}"
+if [ -d "$TEXTFILE_DIR" ]; then
+  TMPFILE="${TEXTFILE_DIR}/backup.prom.$$"
+  {
+    echo "# HELP stockix_backup_last_success_timestamp Unix timestamp of last successful Postgres backup upload to B2"
+    echo "# TYPE stockix_backup_last_success_timestamp gauge"
+    echo "stockix_backup_last_success_timestamp $(date +%s)"
+  } > "$TMPFILE"
+  mv "$TMPFILE" "${TEXTFILE_DIR}/backup.prom"
+  echo "[backup] Wrote Prometheus textfile metric: ${TEXTFILE_DIR}/backup.prom"
+fi

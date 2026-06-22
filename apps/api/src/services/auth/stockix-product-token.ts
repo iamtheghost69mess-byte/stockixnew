@@ -1,6 +1,7 @@
 import { apiConfig } from "@repo/config";
 import {
   signStockixToken,
+  signStockixRefreshToken,
   verifyStockixToken,
   type StockixModule,
   type StockixRole,
@@ -88,7 +89,7 @@ export type SignProductTokenInput = {
 export async function signProductToken(
   db: PostgresJsDatabase<typeof schema>,
   input: SignProductTokenInput,
-): Promise<string> {
+): Promise<{ accessToken: string; refreshToken: string }> {
   let modules = input.modules;
   if (!modules) {
     const [row] = await db
@@ -102,7 +103,7 @@ export async function signProductToken(
     modules = parseTenantModules(row.modules);
   }
 
-  const token = await signStockixToken(
+  const accessToken = await signStockixToken(
     {
       userId: input.userId,
       tenantId: input.tenantId,
@@ -112,7 +113,16 @@ export async function signProductToken(
       planSlug: input.planSlug,
     },
     authSecretOrThrow(),
-    input.expiresIn ?? "8h",
+    input.expiresIn ?? "15m", // Reduced to 15m default
+  );
+
+  const refreshToken = await signStockixRefreshToken(
+    {
+      userId: input.userId,
+      tenantId: input.tenantId,
+    },
+    authSecretOrThrow(),
+    "7d",
   );
 
   // SEC-01: Record token in Redis allowlist so Finance/PMS can validate it before trust.
@@ -124,7 +134,7 @@ export async function signProductToken(
       .catch(() => {/* non-fatal */});
   }
 
-  return token;
+  return { accessToken, refreshToken };
 }
 
 export async function verifyProductToken(

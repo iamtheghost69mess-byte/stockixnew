@@ -1,9 +1,14 @@
+import { runPosProvisionStep, runWirePosIntegrationStep, resolvePosBackendHostPort } from "./provisioning-workflows/pos-setup.js";
+import { persistFinanceDeploymentIds, rollbackProvision, revertAddModuleFailure } from "./provisioning-workflows/org-build.js";
+import { encryptDeploymentSecretLocal, decryptDeploymentSecretLocal, resolvePublishedServerHostPort, resolveServerInternalUrl } from "./provisioning-workflows/utils.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { execa } from "execa";
 
 import { apiConfig, posConfig } from "@repo/config";
+import { publishEvent } from "@repo/events";
+import { getControlPlaneRedisClient } from "../../apps/api/src/lib/redis.js";
 import { decryptDeploymentSecret, encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
 import { allocateOrganizationNumber, allocateTenantPort, assertTenantPortAvailable } from "@repo/db";
 import { tenantConfig, tenantDeployments, tenantLifecycleJobs, tenantProvisionEvents, tenants } from "@repo/db/schema";
@@ -117,245 +122,8 @@ function assertProvisionModuleEnv(modules: string[]): void {
   }
 }
 
-async function runPosProvisionStep(params: {
-  licensedModules: string[];
-  slug: string;
-  tenantId: string | undefined;
-  tenantName: string;
-  adminEmail: string;
-  planSlug?: string;
-  financeInternalPort?: number;
-  db: PostgresJsDatabase<typeof dbSchema>;
-  log: (m: string) => void;
-  trace: ReturnType<typeof createProvisionTracer>;
-  hasOp?: (key: string) => boolean;
-  markOp?: (key: string, msg: string, meta?: Record<string, unknown>) => Promise<void>;
-  posOrganizationId?: string;
-  posUrl?: string;
-  posApiUrl?: string;
-}): Promise<PosProvisionOutcome> {
-  if (!params.licensedModules.includes("pos") || !params.tenantId) {
-    return { posStatus: "skipped" };
-  }
-  try {
-    let posOrganizationId = params.posOrganizationId;
-    let posUrl = params.posUrl;
-    let posApiUrl = params.posApiUrl;
-    if (
-      params.hasOp?.("pos.bootstrap_organization")
-      && params.db
-      && params.tenantId
-      && !posOrganizationId?.trim()
-    ) {
-      const [dep] = await params.db
-        .select({
-          posOrganizationId: tenantDeployments.posOrganizationId,
-          posUrl: tenantDeployments.posUrl,
-        })
-        .from(tenantDeployments)
-        .where(eq(tenantDeployments.tenantId, params.tenantId))
-        .limit(1);
-      posOrganizationId = dep?.posOrganizationId ?? undefined;
-      posUrl = dep?.posUrl ?? undefined;
-    }
-    let licenseExpiresAt: Date | null = null;
-    try {
-      licenseExpiresAt = await getLicenseExpiry(params.db, params.tenantId);
-    } catch (licenseErr) {
-      const msg =
-        licenseErr instanceof Error ? licenseErr.message : String(licenseErr);
-      params.log(`[provision][pos] license expiry lookup failed (using default): ${msg}`);
-    }
-    const planSlug = params.planSlug?.trim() || "starter";
-    const planLimits = await getPlanLimits(params.db, planSlug);
-    const posResult = await provisionPosStackTracked(
-      {
-        slug: params.slug,
-        tenantId: params.tenantId,
-        tenantName: params.tenantName,
-        adminEmail: params.adminEmail,
-        db: params.db,
-        log: params.log,
-        financeInternalPort: params.financeInternalPort,
-        licenseExpiresAt,
-        tenantModules: params.licensedModules,
-        planSlug,
-        maxUsers: planLimits.maxUsers,
-        trace: params.trace,
-        hasOp: params.hasOp,
-        markOp: params.markOp,
-        posOrganizationId,
-        posUrl,
-        posApiUrl,
-        afterBootstrap: async () => {
-          if (params.hasOp?.("pos.schema_migration")) {
-            params.log("[provision][pos] Skipping schema migration (already journaled)");
-            return;
-          }
-          const { repoRoot } = getTenantStackPaths();
-          const composeFile = join(repoRoot, "infra", "pos-tenant-stack", "docker-compose.yml");
-          const project = `stockix-pos-${params.slug}`;
-          const envPath = resolvePosTenantEnvPath(params.slug);
-          const tenantEnv = await readTenantEnvFile(params.slug);
-          params.log("[provision] step start: pos.schema_migration");
-          await runDockerExec({
-            composeFile,
-            project,
-            envPath,
-            composeEnv: {
-              ...process.env,
-              ...tenantEnv,
-              COMPOSE_PROJECT_NAME: project,
-            } as Record<string, string>,
-            service: "pos-backend",
-            command: ["node", "scripts/run-schema-migrations.js"],
-            timeoutMs: 60_000,
-            log: params.log,
-          });
-          await params.markOp?.("pos.schema_migration", "POS Mongo schema migrations applied");
-          params.log("[provision] step done: pos.schema_migration");
-        },
-      },
-      params.trace,
-    );
-    const credentials = posResult.posDefaultCredentials?.allRoles ?? [];
-    if (credentials.length > 0 && posResult.posUrl) {
-      try {
-        await sendPosWelcomeEmail({
-          to: params.adminEmail,
-          tenantName: params.tenantName,
-          posUrl: posResult.posUrl,
-          credentials,
-        });
-        params.log(`[provision][pos] credentials email sent to ${params.adminEmail}`);
-      } catch (emailErr) {
-        params.log(
-          `[provision][pos] credentials email failed (non-fatal): ${emailErr instanceof Error ? emailErr.message : String(emailErr)
-          }`,
-        );
-      }
-    }
-    return {
-      posStatus: "ok",
-      posOrganizationId: posResult.posOrganizationId,
-      posUrl: posResult.posUrl,
-      posApiUrl: posResult.posApiUrl,
-      posHostPort: posResult.posHostPort,
-      posDefaultCredentials: posResult.posDefaultCredentials,
-    };
-  } catch (posErr) {
-    const posError = posErr instanceof Error ? posErr.message : String(posErr);
-    params.log(`[provision][pos] failed: ${posError}`);
-    return { posStatus: "failed", posError };
-  }
-}
 
-async function runWirePosIntegrationStep(params: {
-  licensedModules: string[];
-  slug: string;
-  posOrganizationId: string;
-  posHostPort: number;
-  financeInternalPort: number;
-  workerInternalUrl?: string;
-  financeTenantId: number;
-  walkInCustomerId: number;
-  cashAccountId: number;
-  cardAccountId: number;
-  serviceChargeItemId?: number;
-  discountItemId?: number;
-  financeDefaultWarehouseId?: number;
-  defaultVendorId?: number;
-  inventoryAccountId?: number;
-  inventoryVarianceAccountId?: number;
-  log: (m: string) => void;
-  trace: ReturnType<typeof createProvisionTracer>;
-  markOp: (
-    operationKey: string,
-    message: string,
-    meta?: Record<string, unknown>,
-  ) => Promise<void>;
-  hasOp: (key: string) => boolean;
-  /** When true, re-run wire even if journal already recorded (POS-only retry). */
-  forceRerun?: boolean;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!hasAccountingAndPos(params.licensedModules)) {
-    return { ok: true };
-  }
-  if (!params.forceRerun && params.hasOp("tenant.wire_pos_integration")) {
-    const health = await verifyPosBigcapitalIntegration({
-      posOrganizationId: params.posOrganizationId,
-      posHostPort: params.posHostPort,
-      log: params.log,
-    });
-    if (health.healthy) {
-      await params.trace.event("resume", "Skipping POS integration wire (already journaled)", {
-        meta: { operationKey: "tenant.wire_pos_integration" },
-      });
-      return { ok: true };
-    }
-    await params.trace.event(
-      "resume",
-      "Re-wiring POS integration (journaled but health check failed)",
-      {
-        meta: {
-          operationKey: "tenant.wire_pos_integration",
-          healthReason: health.reason ?? "unknown",
-        },
-      },
-    );
-  }
-  try {
-    params.log("[provision] step start: tenant.wire_pos_integration");
-    await params.trace.event("progress", "Wiring POS Bigcapital integration", {
-      meta: {
-        operationKey: "tenant.wire_pos_integration",
-        posOrganizationId: params.posOrganizationId,
-      },
-    });
-    const wired = await wirePosBigcapitalIntegration({
-      posOrganizationId: params.posOrganizationId,
-      posHostPort: params.posHostPort,
-      slug: params.slug,
-      internalPort: params.financeInternalPort,
-      workerInternalUrl: params.workerInternalUrl,
-      financeTenantId: params.financeTenantId,
-      walkInCustomerId: params.walkInCustomerId,
-      cashAccountId: params.cashAccountId,
-      cardAccountId: params.cardAccountId,
-      serviceChargeItemId: params.serviceChargeItemId,
-      discountItemId: params.discountItemId,
-      defaultWarehouseId: params.financeDefaultWarehouseId,
-      defaultVendorId: params.defaultVendorId,
-      inventoryAccountId: params.inventoryAccountId,
-      inventoryVarianceAccountId: params.inventoryVarianceAccountId,
-      log: params.log,
-    });
-    await params.markOp("tenant.wire_pos_integration", "POS Bigcapital integration wired", {
-      internalBaseUrl: wired.internalBaseUrl,
-      posOrganizationId: params.posOrganizationId,
-    });
-    params.log("[provision] step done: tenant.wire_pos_integration");
-    return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await params.trace.event("pos.integration.wire_failed", `Integration wire failed: ${msg}`, {
-      level: "error",
-      meta: { error: msg },
-    });
-    return { ok: false, error: msg };
-  }
-}
 
-async function persistFinanceDeploymentIds(
-  db: PostgresJsDatabase<typeof dbSchema>,
-  deploymentId: string | undefined,
-  ids: {
-    financeTenantId?: number;
-    financeDefaultWarehouseId?: number;
-    walkInCustomerId?: number;
-    cashAccountId?: number;
-    cardAccountId?: number;
-  },
 ): Promise<void> {
   if (!deploymentId) return;
   const patch: Record<string, number> = {};
@@ -381,36 +149,8 @@ async function persistFinanceDeploymentIds(
     .where(eq(tenantDeployments.id, deploymentId));
 }
 
-function encryptDeploymentSecretLocal(plaintext: string): string {
-  return encryptDeploymentSecret(plaintext, apiConfig.deploymentSecretKey);
-}
 
-function decryptDeploymentSecretLocal(ciphertext: string): string {
-  const plain = decryptDeploymentSecret(ciphertext, apiConfig.deploymentSecretKey);
-  if (!plain) {
-    throw new Error("deployment_secret_decrypt_failed");
-  }
-  return plain;
-}
 
-async function resolvePosBackendHostPort(slug: string): Promise<number | null> {
-  const project = `stockix-pos-${slug}`;
-  try {
-    const { stdout } = await execa("docker", [
-      "compose",
-      "-p",
-      project,
-      "port",
-      "pos-backend",
-      "8010",
-    ]);
-    const match = stdout.trim().match(/:(\d+)\s*$/);
-    if (!match?.[1]) return null;
-    return Number(match[1]);
-  } catch {
-    return null;
-  }
-}
 
 import { loadProvisionJournalState } from "./provision-journal.js";
 
@@ -421,16 +161,6 @@ type ComposeRollbackCtx = {
   composeEnv: Record<string, string>;
 };
 
-export async function rollbackProvision(
-  db: PostgresJsDatabase<typeof dbSchema>,
-  tenantId: string,
-  correlationId: string,
-  reason: string,
-  options: {
-    deps?: TenantProvisionServiceDeps;
-    composeCtx?: ComposeRollbackCtx | null;
-    log?: (m: string) => void;
-  } = {},
 ): Promise<void> {
   const log = options.log ?? (() => undefined);
   const trimmedReason = reason.slice(0, 4000);
@@ -648,186 +378,8 @@ export async function rollbackProvision(
 }
 
 /** Module-add failure — restore active tenant without tearing down existing stacks. */
-export async function revertAddModuleFailure(
-  db: PostgresJsDatabase<typeof dbSchema>,
-  tenantId: string,
-  correlationId: string,
-  reason: string,
-  log: (m: string) => void = () => undefined,
-): Promise<void> {
-  const trimmedReason = reason.slice(0, 4000);
-  await db
-    .update(tenants)
-    .set({ status: "active" })
-    .where(eq(tenants.id, tenantId))
-    .catch((error) => {
-      log(
-        `[add-module-revert] tenant status update failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-  await db
-    .update(tenantDeployments)
-    .set({ status: "active", lastError: trimmedReason, updatedAt: new Date() })
-    .where(eq(tenantDeployments.tenantId, tenantId))
-    .catch((error) => {
-      log(
-        `[add-module-revert] deployment update failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-  await db
-    .update(tenantLifecycleJobs)
-    .set({
-      status: "failed",
-      lastError: trimmedReason,
-      completedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(tenantLifecycleJobs.correlationId, correlationId))
-    .catch((error) => {
-      log(
-        `[add-module-revert] lifecycle job update failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-  await db
-    .insert(tenantProvisionEvents)
-    .values({
-      correlationId,
-      tenantId,
-      phase: "api",
-      level: "error",
-      message: trimmedReason,
-    })
-    .catch((error) => {
-      log(
-        `[add-module-revert] provision event insert failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-  log(`[add-module-revert] tenant=${tenantId} correlationId=${correlationId} reason=${trimmedReason}`);
-}
 
-async function resolvePublishedServerHostPort(containerName: string): Promise<number | null> {
-  // Prefer `docker port` — reliable on Windows; complex inspect templates often fail under PowerShell.
-  try {
-    const { stdout } = await execa("docker", ["port", containerName, "3000"], { stdio: "pipe" });
-    const match = stdout.trim().match(/:(\d+)\s*$/);
-    if (match?.[1]) {
-      const port = Number(match[1]);
-      if (Number.isFinite(port) && port > 0) return port;
-    }
-  } catch {
-    // Fall through to inspect.
-  }
-  try {
-    const { stdout } = await execa(
-      "docker",
-      [
-        "inspect",
-        "--format",
-        "{{(index (index .NetworkSettings.Ports \"3000/tcp\") 0).HostPort}}",
-        containerName,
-      ],
-      { stdio: "pipe" },
-    );
-    const port = Number(stdout.trim());
-    if (Number.isFinite(port) && port > 0) return port;
-  } catch {
-    // Fall through to compose port lookup.
-  }
-  return null;
-}
 
-async function resolveServerInternalUrl(params: {
-  composeFile: string;
-  project: string;
-  envPath: string;
-  composeEnv: Record<string, string>;
-  fallbackHost: string;
-  fallbackPort: number;
-  log?: (message: string) => void;
-  preferPublishedPort?: boolean;
-}): Promise<string> {
-  const preferPublishedPort =
-    params.preferPublishedPort
-    ?? (process.platform === "win32" || process.env.NODE_ENV !== "production");
-
-  // Connect the tenant server container to the worker's internal network so the
-  // worker can reach it directly (host-published port forwarding is blocked by
-  // Docker isolation between different bridge networks on Linux).
-  const workerNetwork = process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal";
-  const containerName = `${params.project}-server-1`;
-  if (!preferPublishedPort) {
-    try {
-      await execa("docker", ["network", "connect", workerNetwork, containerName], {
-        stdio: "pipe",
-        reject: false,
-      });
-      const { stdout: inspectOut } = await execa(
-        "docker",
-        [
-          "inspect",
-          "--format",
-          `{{(index .NetworkSettings.Networks "${workerNetwork}").IPAddress}}`,
-          containerName,
-        ],
-        { stdio: "pipe" },
-      );
-      const ip = inspectOut.trim();
-      if (ip && ip !== "<no value>" && ip !== "") {
-        return `http://${ip}:3000`;
-      }
-    } catch {
-      // Fall through to host-port approach.
-    }
-  }
-
-  const publishedPort = await resolvePublishedServerHostPort(containerName);
-  if (publishedPort) {
-    params.log?.(
-      `[provision] resolved Finance server published port ${publishedPort} for ${containerName}`,
-    );
-    return `http://${params.fallbackHost}:${publishedPort}`;
-  }
-
-  try {
-    const { stdout } = await execa(
-      "docker",
-      [
-        "compose",
-        "-f",
-        params.composeFile,
-        "-p",
-        params.project,
-        "--env-file",
-        params.envPath,
-        "port",
-        "server",
-        "3000",
-      ],
-      { env: params.composeEnv, extendEnv: true, stdio: "pipe" },
-    );
-    const trimmed = stdout.trim();
-    const match = trimmed.match(/:(\d+)\s*$/);
-    if (match?.[1]) {
-      const composePort = Number(match[1]);
-      params.log?.(
-        `[provision] resolved Finance server compose port ${composePort} for ${params.project}`,
-      );
-      return `http://${params.fallbackHost}:${composePort}`;
-    }
-  } catch {
-    // Fall through to last-resort fallback.
-  }
-
-  params.log?.(
-    `[provision][warn] could not resolve published server port for ${containerName}; ` +
-      `falling back to ${params.fallbackHost}:${params.fallbackPort} (PUBLIC_PROXY_PORT — likely wrong for health check)`,
-  );
-  return `http://${params.fallbackHost}:${params.fallbackPort}`;
-}
 
 async function guardNoConcurrentProvision(
   db: PostgresJsDatabase<typeof dbSchema>,
@@ -2559,6 +2111,29 @@ export async function executeProvisionRuntime(
     }
 
     log(`[provision] success slug=${input.slug} tenantId=${tenantId}`);
+
+    const redisClient = getControlPlaneRedisClient();
+    if (redisClient && tenantId) {
+      publishEvent(redisClient, "tenant_events", "tenant.provisioned", {
+        tenantId,
+        slug: input.slug,
+        modules: input.modules ?? ["accounting"],
+        timestamp: new Date().toISOString(),
+      }).catch(err => {
+        log(`[provision] failed to publish tenant.provisioned event: ${err}`);
+      });
+      if (posOutcome.posStatus === "ok" && posOrganizationId && posDefaultCredentials) {
+        publishEvent(redisClient, "tenant_events", "pos.credentials.generated", {
+          tenantId,
+          posOrganizationId,
+          credentials: posDefaultCredentials.allRoles,
+          timestamp: new Date().toISOString(),
+        }).catch(err => {
+          log(`[provision] failed to publish pos.credentials.generated event: ${err}`);
+        });
+      }
+    }
+
     return {
       ok: true,
       tenantId: tenantId!,

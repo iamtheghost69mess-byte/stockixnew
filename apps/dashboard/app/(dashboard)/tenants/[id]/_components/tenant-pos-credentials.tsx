@@ -46,6 +46,27 @@ export function TenantPosCredentials({
     { role: string; username: string; pin: string; masked?: boolean }[]
   >([]);
   const [posPinResettingRole, setPosPinResettingRole] = useState<string | null>(null);
+  const [ssoLoading, setSsoLoading] = useState(false);
+
+  const openPosWithSso = async () => {
+    if (!posUrl) return;
+    setSsoLoading(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/pos-sso-token`);
+      const body = await res.json();
+      if (res.ok && body.ssoToken && body.posUrl) {
+        window.open(`${body.posUrl}/sso?token=${body.ssoToken}`, "_blank");
+      } else {
+        throw new Error(body.message || "Failed to generate SSO token");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("SSO failed. Opening standard POS login.");
+      window.open(posUrl, "_blank");
+    } finally {
+      setSsoLoading(false);
+    }
+  };
 
   const loadPosCredentials = async () => {
     setPosCredentialsLoading(true);
@@ -127,15 +148,16 @@ export function TenantPosCredentials({
         <CardContent className="space-y-4 text-sm">
           {posUrl ? (
             <div className="flex flex-wrap items-center gap-2">
-              <a
-                href={posUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(buttonVariants({ size: "sm" }), "inline-flex")}
+              <Button
+                size="sm"
+                variant="default"
+                className="inline-flex"
+                onClick={openPosWithSso}
+                disabled={ssoLoading}
               >
-                <ExternalLink className="mr-1 h-4 w-4" />
-                Open POS
-              </a>
+                {ssoLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-1 h-4 w-4" />}
+                Open POS (SSO)
+              </Button>
               <span className="font-mono text-xs text-muted-foreground">{posUrl}</span>
             </div>
           ) : (

@@ -25,6 +25,14 @@ export interface StockixTokenPayload {
   exp?: number;
 }
 
+export interface StockixRefreshTokenPayload {
+  userId: string;
+  tenantId: string;
+  type: "refresh";
+  iat?: number;
+  exp?: number;
+}
+
 export async function verifyStockixToken(
   token: string,
   secret: string,
@@ -70,9 +78,35 @@ export async function signStockixToken(
     .sign(key);
 }
 
+export async function signStockixRefreshToken(
+  payload: Omit<StockixRefreshTokenPayload, "iat" | "exp" | "type">,
+  secret: string,
+  expiresIn: string = "7d",
+): Promise<string> {
+  const key = new TextEncoder().encode(secret);
+  return new SignJWT({ ...payload, type: "refresh" } as Record<string, unknown>)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(expiresIn)
+    .sign(key);
+}
+
+export async function verifyStockixRefreshToken(
+  token: string,
+  secret: string,
+): Promise<StockixRefreshTokenPayload> {
+  const key = new TextEncoder().encode(secret);
+  const { payload } = await jwtVerify(token, key);
+  if (payload.type !== "refresh") {
+    throw new Error("Invalid token type");
+  }
+  return payload as unknown as StockixRefreshTokenPayload;
+}
+
 export function createExpressAuthMiddleware(
   secret: string,
   requiredModule?: StockixModule,
+  validateTokenFn?: (token: string) => Promise<boolean>
 ) {
   return async (req: {
     headers: { authorization?: string };
@@ -103,6 +137,14 @@ export function createExpressAuthMiddleware(
         return;
       }
 
+      if (validateTokenFn) {
+        const isValid = await validateTokenFn(token);
+        if (!isValid) {
+          res.status(401).json({ error: "token_revoked" });
+          return;
+        }
+      }
+
       req.stockix = payload;
       next();
     } catch {
@@ -114,6 +156,7 @@ export function createExpressAuthMiddleware(
 export function createHonoAuthMiddleware(
   secret: string,
   requiredModule?: StockixModule,
+  validateTokenFn?: (token: string) => Promise<boolean>
 ) {
   return async (c: {
     req: {
@@ -147,6 +190,13 @@ export function createHonoAuthMiddleware(
         }, 403);
       }
 
+      if (validateTokenFn) {
+        const isValid = await validateTokenFn(token);
+        if (!isValid) {
+          return c.json({ error: "token_revoked" }, 401);
+        }
+      }
+
       c.set("stockix", payload);
       await next();
     } catch {
@@ -158,6 +208,7 @@ export function createHonoAuthMiddleware(
 export function createNestGuard(
   secret: string,
   requiredModule?: StockixModule,
+  validateTokenFn?: (token: string) => Promise<boolean>
 ) {
   return class StockixAuthGuard {
     async canActivate(context: {
@@ -182,6 +233,10 @@ export function createNestGuard(
         const payload = await verifyStockixToken(token, secret);
         if (requiredModule && !hasModule(payload, requiredModule)) {
           return false;
+        }
+        if (validateTokenFn) {
+          const isValid = await validateTokenFn(token);
+          if (!isValid) return false;
         }
         request.stockix = payload;
         return true;

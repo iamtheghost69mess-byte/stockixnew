@@ -13,7 +13,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && chown node:nod
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml lerna.json .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/server/package.json ./packages/server/
 COPY packages/webapp/package.json ./packages/webapp/
 COPY packages/shared/package.json ./packages/shared/

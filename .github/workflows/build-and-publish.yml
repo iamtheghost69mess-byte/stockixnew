@@ -66,3 +66,15 @@ jobs:
             ghcr.io/${{ github.repository }}/stockix-infra-worker:latest
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-infra-worker:cache,mode=max
+
+      - name: Build & push Finance Server
+        uses: docker/build-push-action@v6
+        with:
+          context: services/stockix-finance
+          file: services/stockix-finance/packages/server/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/stockix-finance-server:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/stockix-finance-server:latest
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-finance-server:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/stockix-finance-server:cache,mode=max

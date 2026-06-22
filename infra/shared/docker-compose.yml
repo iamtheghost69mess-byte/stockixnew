@@ -69,6 +69,15 @@ services:
     oom_kill_disable: false
     security_opt:
       - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
 
   # ─────────────────────────────────────────────────────────────
   # ProxySQL — connection pooler for tenant Finance/POS MySQL traffic.
@@ -108,6 +117,15 @@ services:
     mem_swappiness: 0
     security_opt:
       - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
 
   # ─────────────────────────────────────────────────────────────
   # MongoDB 6 — one database per tenant ({slug}_pos)
@@ -146,7 +164,9 @@ services:
       - no-new-privileges:true
 
   # One-shot: initiates rs0 after mongod is up; idempotent on restarts.
-  # Invoked automatically on `compose up` and synchronously via `compose run` from pnpm dev.
+  # In Swarm mode this task runs once and exits — swarm-init.sh runs the RS init
+  # via `docker run --network stockix-shared` instead, so this service is a no-op
+  # when deployed via docker stack deploy. Kept for `docker compose up` compatibility.
   stockix-mongo-rs-init:
     image: mongo:6.0
     restart: "no"
@@ -160,7 +180,10 @@ services:
       - /scripts/rs-init.sh
     volumes:
       - ./mongo/rs-init.sh:/scripts/rs-init.sh:ro
-    # No mem/cpu cap: one-shot job; mongosh 2.x needs >128m and image requirements can change.
+    deploy:
+      restart_policy:
+        condition: none
+      # No resource cap: one-shot job; mongosh 2.x needs >128m
 
   # ─────────────────────────────────────────────────────────────
   # Tenant Redis — BullMQ + Finance Agenda jobs for ALL tenants.
@@ -213,6 +236,15 @@ services:
     oom_kill_disable: false
     security_opt:
       - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 5
+      resources:
+        limits:
+          memory: 576m
+          cpus: "0.25"
 
   # ─────────────────────────────────────────────────────────────
   # Gotenberg — shared PDF renderer (Chromium-based).
@@ -242,6 +274,15 @@ services:
     mem_swappiness: 0
     security_opt:
       - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
 
 volumes:
   shared_mysql_data:
@@ -254,12 +295,13 @@ volumes:
     name: stockix_shared_proxysql
 
 networks:
+  # overlay + attachable: non-Swarm per-tenant containers can join via `external: true`
+  # Created by swarm-init.sh before this stack deploys — do not let compose create it.
   stockix-shared:
     name: stockix-shared
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
+    driver: overlay
+    attachable: true
+    external: true
   stockix_internal:
     name: stockix_internal
     external: true

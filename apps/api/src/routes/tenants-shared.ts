@@ -3053,9 +3053,9 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
     );
   }
   const job = await insertTenantJob(db, {
-    type: "tenant.lifecycle",
+    type: "tenant.suspend",
     tenantId: parsed.data,
-    payload: { tenantId: parsed.data, slug: row.slug, command: "stop", status: "suspended" },
+    payload: { tenantId: parsed.data, slug: row.slug },
   });
 
   const childOrgs = await db
@@ -3075,14 +3075,9 @@ app.post("/tenants/:tenantId/suspend", async (c) => {
 
     if (childTenant && childTenant.id !== parsed.data) {
       await insertTenantJob(db, {
-        type: "tenant.lifecycle",
+        type: "tenant.suspend",
         tenantId: childTenant.id,
-        payload: {
-          tenantId: childTenant.id,
-          slug: childTenant.slug,
-          command: "stop",
-          status: "suspended",
-        },
+        payload: { tenantId: childTenant.id, slug: childTenant.slug },
       });
     }
 
@@ -3311,9 +3306,9 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
     return c.json({ error: "tenant_not_suspended" }, 409);
   }
   const job = await insertTenantJob(db, {
-    type: "tenant.lifecycle",
+    type: "tenant.reactivate",
     tenantId: parsed.data,
-    payload: { tenantId: parsed.data, slug: row.slug, command: "start", status: "active" },
+    payload: { tenantId: parsed.data, slug: row.slug },
   });
 
   const suspendedOrgs = await db
@@ -3333,14 +3328,9 @@ app.post("/tenants/:tenantId/reactivate", async (c) => {
 
     if (childTenant && childTenant.id !== parsed.data) {
       await insertTenantJob(db, {
-        type: "tenant.lifecycle",
+        type: "tenant.reactivate",
         tenantId: childTenant.id,
-        payload: {
-          tenantId: childTenant.id,
-          slug: childTenant.slug,
-          command: "start",
-          status: "active",
-        },
+        payload: { tenantId: childTenant.id, slug: childTenant.slug },
       });
     }
 

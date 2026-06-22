@@ -594,6 +594,58 @@ const acceptInvitation = async (req, res, next) => {
   }
 };
 
+const ssoExchange = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return next(createHttpError(400, "SSO token is required."));
+    }
+
+    const { verifyStockixToken } = require("@repo/auth");
+    const AUTH_TOKEN_SECRET = process.env.AUTH_TOKEN_SECRET;
+
+    if (!AUTH_TOKEN_SECRET) {
+      return next(createHttpError(500, "AUTH_TOKEN_SECRET not configured."));
+    }
+
+    let payload;
+    try {
+      payload = await verifyStockixToken(token, AUTH_TOKEN_SECRET);
+    } catch {
+      return next(createHttpError(401, "Invalid or expired SSO token."));
+    }
+
+    if (!payload.organizationId) {
+      return next(createHttpError(400, "SSO token missing organizationId."));
+    }
+
+    let user = await User.findOne({
+      organization: payload.organizationId,
+      role: { $in: ["admin", "manager"] }
+    }).populate("location", "name code").populate("locations", "name code").populate("organization", "lifecycle name");
+
+    if (!user) {
+      return res.status(403).json({ success: false, message: "No POS admin found for this organization to SSO into." });
+    }
+
+    await assertOrganizationActiveForUser(user, res.locals?.requestId);
+
+    const { accessToken, refreshToken } = await issueTokenPair(user);
+    setAuthCookies(res, accessToken, refreshToken);
+
+    res.status(200).json({
+      success: true,
+      message: "SSO login successful.",
+      data: user.toJSON(),
+      accessToken,
+      refreshToken,
+      stockixToken: token
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -603,4 +655,5 @@ module.exports = {
   loginWithPin,
   loginWithPassword,
   acceptInvitation,
+  ssoExchange,
 };
