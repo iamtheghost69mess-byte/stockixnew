@@ -386,6 +386,7 @@ services:
     environment:
       <<: *stockix-platform-env
       NEXT_PUBLIC_API_URL: ${STOCKIX_API_URL}
+      STOCKIX_SERVER_API_URL: http://api:4000
     networks:
       - stockix_public
       - stockix_internal
