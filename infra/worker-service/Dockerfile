@@ -93,8 +93,9 @@ WORKDIR /app
 # because tsup keeps npm packages external (not inlined).
 COPY --from=build /api-deploy/node_modules ./node_modules
 
-# Compiled worker bundle — worker.js + chunk-*.js siblings
+# Compiled worker bundle (CJS, no chunk files)
 COPY --from=build /app/infra/worker-service/.runtime/ ./
+RUN test -f /app/worker.js
 
 EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

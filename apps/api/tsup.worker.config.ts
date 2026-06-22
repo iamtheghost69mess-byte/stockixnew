@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   entry: ["../../infra/worker-service/src/worker.ts"],
-  format: ["esm"],
+  format: ["cjs"],
+  outExtension: () => ({ js: ".js" }),
   outDir: "../../infra/worker-service/.runtime",
   target: "node20",
   bundle: true,
