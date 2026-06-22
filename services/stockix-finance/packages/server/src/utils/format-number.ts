@@ -15,6 +15,13 @@ const getCurrencySign = (currencyCode) => {
   return get(Currencies, `${currencyCode}.symbol`);
 };
 
+/** Returns the number of decimal places prescribed by ISO 4217 for the given currency. Falls back to 2. */
+const getCurrencyPrecision = (currencyCode?: string): number => {
+  if (!currencyCode) return 2;
+  const meta = get(Currencies, currencyCode);
+  return typeof meta?.decimal_digits === 'number' ? meta.decimal_digits : 2;
+};
+
 export interface IFormatNumberSettings {
   precision?: number;
   divideOn1000?: boolean;
@@ -31,7 +38,7 @@ export interface IFormatNumberSettings {
 export const formatNumber = (
   balance,
   {
-    precision = 2,
+    precision,
     divideOn1000 = false,
     excerptZero = false,
     negativeFormat = 'mines',
@@ -43,6 +50,7 @@ export const formatNumber = (
     symbol = '',
   }: IFormatNumberSettings,
 ) => {
+  const resolvedPrecision = precision ?? getCurrencyPrecision(currencyCode);
   const formattedSymbol = getCurrencySign(currencyCode);
   const negForamt = getNegativeFormat(negativeFormat);
   const format = '%s%v';
@@ -55,7 +63,7 @@ export const formatNumber = (
   return accounting.formatMoney(
     formattedBalance,
     money ? formattedSymbol : symbol ? symbol : '',
-    precision,
+    resolvedPrecision,
     thousand,
     decimal,
     {

@@ -43,10 +43,10 @@ export const useAuthActions = () => {
   const queryClient = useQueryClient();
 
   return {
-    setLogin: useCallback((login: unknown) => dispatch(setLogin(login)), [dispatch]),
+    setLogin: useCallback((_login?: unknown) => dispatch(setLogin()), [dispatch]),
     setLogout: useCallback(() => {
       // Fire-and-forget: revoke the JWT server-side so it can't be replayed.
-      const token = getCookie('token');
+      const token = getCookie('token', undefined);
       if (token) {
         fetch('/api/auth/logout', {
           method: 'POST',

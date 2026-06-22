@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Scope } from '@nestjs/common';
 import { SendResetPasswordMailQueue } from '../Auth.constants';
 import { Job } from 'bullmq';
-import { AuthenticationMailMesssages } from '../AuthMailMessages.esrvice';
+import { AuthenticationMailMesssages } from '../AuthMailMessages.service';
 import { ModelObject } from 'objection';
 import { SystemUser } from '@/modules/System/models/SystemUser';
 

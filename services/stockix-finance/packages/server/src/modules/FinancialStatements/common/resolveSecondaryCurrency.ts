@@ -21,6 +21,15 @@ export async function resolveSecondaryCurrency(
     asOfDate,
   );
 
+  if (!rateRow) {
+    // Exchange rates are entered manually. If no rate exists for this date,
+    // secondary-currency columns will show zero — operators should add the rate first.
+    console.warn(
+      `[resolveSecondaryCurrency] No exchange rate found for ${secondaryCurrency} on or before ${asOfDate}. ` +
+      'Secondary-currency report columns will show 0. Add the rate via POST /exchange-rates.',
+    );
+  }
+
   return {
     secondaryCurrency,
     secondaryRate: Number(rateRow?.exchangeRate ?? 0),

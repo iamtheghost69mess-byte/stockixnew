@@ -13,7 +13,7 @@ export default function useApiRequest() {
         return http.get(`/api/${normalizeApiPath(resource)}`, params);
       },
 
-      post(resource, params, config) {
+      post(resource, params, config = undefined) {
         return http.post(`/api/${normalizeApiPath(resource)}`, params, config);
       },
 
@@ -25,7 +25,7 @@ export default function useApiRequest() {
         return http.put(`/api/${normalizeApiPath(resource)}`, params);
       },
 
-      patch(resource, params, config) {
+      patch(resource, params, config = undefined) {
         return http.patch(`/api/${normalizeApiPath(resource)}`, params, config);
       },
 
@@ -46,7 +46,7 @@ export function useAuthApiRequest() {
       get(resource, params) {
         return httpInstance.get(`/api/${normalizeApiPath(resource)}`, params);
       },
-      post(resource, params, config) {
+      post(resource, params, config = undefined) {
         return httpInstance.post(`/api/${normalizeApiPath(resource)}`, params, config);
       },
       update(resource, slug, params) {
@@ -55,7 +55,7 @@ export function useAuthApiRequest() {
       put(resource, params) {
         return httpInstance.put(`/api/${normalizeApiPath(resource)}`, params);
       },
-      patch(resource, params, config) {
+      patch(resource, params, config = undefined) {
         return httpInstance.patch(`/api/${normalizeApiPath(resource)}`, params, config);
       },
       delete(resource, params) {

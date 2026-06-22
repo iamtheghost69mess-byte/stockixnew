@@ -2,11 +2,11 @@ import {
   Controller,
   Get,
   Query,
-  Req,
   UsePipes,
   ValidationPipe,
+  NotFoundException,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { ClsService } from 'nestjs-cls';
 import {
   ApiOperation,
   ApiTags,
@@ -18,16 +18,14 @@ import { ExchangeRateLatestQueryDto } from './dtos/ExchangeRateLatestQuery.dto';
 import { ExchangeRateLatestResponseDto } from './dtos/ExchangeRateLatestResponse.dto';
 import { ExchangeRateByDateQueryDto } from './dtos/ExchangeRateByDateQuery.dto';
 import { ExchangeRateByDateResponseDto } from './dtos/ExchangeRateByDateResponse.dto';
-import { NotFoundException } from '@nestjs/common';
-
-interface RequestWithTenantId extends Request {
-  tenantId: number;
-}
 
 @Controller('exchange-rates')
 @ApiTags('Exchange Rates')
 export class ExchangeRatesController {
-  constructor(private readonly exchangeRateApp: ExchangeRateApplication) {}
+  constructor(
+    private readonly exchangeRateApp: ExchangeRateApplication,
+    private readonly cls: ClsService,
+  ) {}
 
   @Get('/latest')
   @UsePipes(
@@ -63,9 +61,8 @@ export class ExchangeRatesController {
   })
   async getLatestExchangeRate(
     @Query() query: ExchangeRateLatestQueryDto,
-    @Req() req: RequestWithTenantId,
   ): Promise<ExchangeRateLatestResponseDto> {
-    const tenantId = req.tenantId;
+    const tenantId = this.cls.get<number>('tenantId');
 
     const exchangeRate = await this.exchangeRateApp.latest(tenantId, {
       fromCurrency: query.from_currency,

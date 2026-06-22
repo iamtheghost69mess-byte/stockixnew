@@ -2,7 +2,7 @@ import { Scope } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { SendSignupVerificationMailQueue } from '../Auth.constants';
-import { AuthenticationMailMesssages } from '../AuthMailMessages.esrvice';
+import { AuthenticationMailMesssages } from '../AuthMailMessages.service';
 
 @Processor({
   name: SendSignupVerificationMailQueue,

@@ -11,7 +11,7 @@ import { AuthSignupService } from './commands/AuthSignup.service';
 import { AuthSigninService } from './commands/AuthSignin.service';
 import { PasswordReset } from './models/PasswordReset';
 import { TenantDBManagerModule } from '../TenantDBManager/TenantDBManager.module';
-import { AuthenticationMailMesssages } from './AuthMailMessages.esrvice';
+import { AuthenticationMailMesssages } from './AuthMailMessages.service';
 import { LocalStrategy } from './strategies/Local.strategy';
 import { PassportModule } from '@nestjs/passport';
 import { APP_GUARD } from '@nestjs/core';

@@ -3,6 +3,7 @@ export const InitialCurrencies = [
   'CAD',
   'EUR',
   'LYD',
+  'LBP',
   'GBP',
   'CNY',
   'AUD',
