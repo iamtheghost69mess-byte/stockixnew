@@ -142,6 +142,7 @@ docker build \
   -f apps/dashboard/Dockerfile . 2>&1 | tee -a "${LOG_FILE}"
 
 docker build \
+  --build-arg "BUILD_SHA=${SHA}" \
   -t "stockix-infra-worker:${SHA}" -t "stockix-infra-worker:latest" \
   -f infra/worker-service/Dockerfile . 2>&1 | tee -a "${LOG_FILE}"
 

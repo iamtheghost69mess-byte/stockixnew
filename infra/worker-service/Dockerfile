@@ -93,9 +93,14 @@ WORKDIR /app
 # because tsup keeps npm packages external (not inlined).
 COPY --from=build /api-deploy/node_modules ./node_modules
 
+# BUILD_SHA changes every deploy, busting the layer cache for the .runtime/ copy
+# so stale ESM worker.js is never served from cache after switching to CJS format.
+ARG BUILD_SHA=unknown
+RUN echo "build=${BUILD_SHA}"
+
 # Compiled worker bundle (CJS, no chunk files)
 COPY --from=build /app/infra/worker-service/.runtime/ ./
-RUN test -f /app/worker.js
+RUN test -f /app/worker.js && ! grep -q "chunk-PKT6FF3H" /app/worker.js
 
 EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
