@@ -271,7 +271,7 @@ services:
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 200
       DEFAULT_POOL_SIZE: 20
-      AUTH_TYPE: any
+      AUTH_TYPE: trust
       LISTEN_PORT: 5432
       IGNORE_STARTUP_PARAMETERS: extra_float_digits
     networks:
