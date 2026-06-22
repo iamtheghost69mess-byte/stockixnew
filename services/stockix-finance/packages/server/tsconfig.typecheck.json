@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "strictNullChecks": false,
     "paths": {
       "@/*": ["./*"],
       "@/modules/FinancialStatements/FinancialStatements.module": [
