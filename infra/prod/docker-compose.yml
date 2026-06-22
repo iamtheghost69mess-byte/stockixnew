@@ -416,6 +416,7 @@ services:
         condition: service_healthy
     environment:
       <<: *stockix-worker-env
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/stockix_platform
     volumes:
       - ${TENANT_ENV_ROOT:-/opt/stockix/tenants}:/opt/stockix/tenants
       - ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}:/opt/stockix/traefik-dynamic
