@@ -10,7 +10,8 @@
     "strict": true,                              // Enables strict type-checking options
     "moduleResolution": "node",                  // Resolve modules using Node.js-style resolution
     "skipLibCheck": true,                        // Skip type checking of declaration files
-    "forceConsistentCasingInFileNames": true     // Enforces consistent casing in import paths
+    "forceConsistentCasingInFileNames": true,    // Enforces consistent casing in import paths
+    "types": ["node"]                            // Prevent auto-discovery of @types/* (e.g. minimatch) that may not exist in Docker build context
   },
   "include": ["src/**/*"],                       // Includes all TypeScript files in the src directory
   "exclude": ["node_modules"]                    // Excludes node_modules from being compiled
