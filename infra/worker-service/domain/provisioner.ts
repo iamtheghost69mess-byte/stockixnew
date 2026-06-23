@@ -824,13 +824,21 @@ export async function deprovisionTenant(
       dockerStatus = "skipped";
       cleanupResults.financeCompose = true;
     } else {
-      await stat(envPath);
       const downArgs = ["down", "--remove-orphans", "--timeout", "30"];
       if (options.removeVolumes) downArgs.push("-v");
       if (options.removeImages) downArgs.push("--rmi", "local");
-      await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, {
-        timeoutMs: 2 * 60 * 1000,
-      });
+      let envFileExists = false;
+      try { await stat(envPath); envFileExists = true; } catch { /* missing — use compose-file-only down */ }
+      if (envFileExists) {
+        await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, {
+          timeoutMs: 2 * 60 * 1000,
+        });
+      } else {
+        log(`[deprovision] env file missing at ${envPath}; running compose down without --env-file`);
+        await execa("docker", ["compose", "-f", composeFile, "-p", project, ...downArgs], {
+          env: composeEnv, stdio: "pipe", extendEnv: true, timeout: 2 * 60 * 1000,
+        });
+      }
       await assertFinanceStackStopped(project);
       dockerStatus = "stopped";
       cleanupResults.financeCompose = true;
@@ -846,14 +854,18 @@ export async function deprovisionTenant(
     const posProject = `stockix-pos-${row.slug}`;
     const posComposeFile = join(repoRoot, "infra", "pos-tenant-stack", "docker-compose.yml");
     try {
-      await dockerRunner.run(
-        posComposeFile,
-        posProject,
-        envPath,
-        { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: posProject },
-        ["down", "--remove-orphans", "--timeout", "30"],
-        { timeoutMs: 2 * 60 * 1000 },
-      );
+      if (envFileExists) {
+        await dockerRunner.run(
+          posComposeFile, posProject, envPath,
+          { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: posProject },
+          ["down", "--remove-orphans", "--timeout", "30"],
+          { timeoutMs: 2 * 60 * 1000 },
+        );
+      } else {
+        await execa("docker", ["compose", "-f", posComposeFile, "-p", posProject, "down", "--remove-orphans", "--timeout", "30"], {
+          env: { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: posProject }, stdio: "pipe", extendEnv: true, timeout: 2 * 60 * 1000,
+        });
+      }
       log(`[deprovision] POS stack ${posProject} removed`);
       cleanupResults.posCompose = true;
     } catch (err) {
@@ -871,14 +883,18 @@ export async function deprovisionTenant(
     const pmsProject = `stockix-pms-${row.slug}`;
     const pmsComposeFile = join(repoRoot, "infra", "pms-tenant-stack", "docker-compose.yml");
     try {
-      await dockerRunner.run(
-        pmsComposeFile,
-        pmsProject,
-        envPath,
-        { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: pmsProject },
-        ["down", "--remove-orphans", "--timeout", "30"],
-        { timeoutMs: 2 * 60 * 1000 },
-      );
+      if (envFileExists) {
+        await dockerRunner.run(
+          pmsComposeFile, pmsProject, envPath,
+          { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: pmsProject },
+          ["down", "--remove-orphans", "--timeout", "30"],
+          { timeoutMs: 2 * 60 * 1000 },
+        );
+      } else {
+        await execa("docker", ["compose", "-f", pmsComposeFile, "-p", pmsProject, "down", "--remove-orphans", "--timeout", "30"], {
+          env: { ...moduleComposeEnv, COMPOSE_PROJECT_NAME: pmsProject }, stdio: "pipe", extendEnv: true, timeout: 2 * 60 * 1000,
+        });
+      }
       log(`[deprovision] PMS stack ${pmsProject} removed`);
       cleanupResults.pmsCompose = true;
     } catch (err) {
