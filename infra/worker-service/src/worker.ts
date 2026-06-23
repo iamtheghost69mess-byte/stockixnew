@@ -911,29 +911,36 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   if (!job.tenantId) throw new Error("tenantId is required");
   await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
 
-  // Clean up external Chatwoot account before destroying the tenant.
-  // Wrapped in try-catch: if organizations.chatwoot_account_id doesn't exist yet
-  // (schema drift on older deployments) we skip Chatwoot cleanup gracefully.
-  try {
-    const orgs = await db
-      .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
-      .from(organizations)
-      .where(eq(organizations.tenantId, job.tenantId));
+  // Clean up Chatwoot accounts only if the tenant has the "chat" module.
+  const [tenantRow] = await db
+    .select({ modules: tenants.modules })
+    .from(tenants)
+    .where(eq(tenants.id, job.tenantId))
+    .limit(1);
+  const licensedModules: string[] = JSON.parse(tenantRow?.modules ?? "[]");
 
-    for (const org of orgs) {
-      if (org.chatwootAccountId) {
-        await deprovisionChatwootAccount({
-          db,
-          organizationId: org.id,
-          chatwootAccountId: org.chatwootAccountId,
-          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-          log: (m) => logger.info(`[worker][${job.id}] ${m}`),
-        });
+  if (licensedModules.includes("chat")) {
+    try {
+      const orgs = await db
+        .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
+        .from(organizations)
+        .where(eq(organizations.tenantId, job.tenantId));
+
+      for (const org of orgs) {
+        if (org.chatwootAccountId) {
+          await deprovisionChatwootAccount({
+            db,
+            organizationId: org.id,
+            chatwootAccountId: org.chatwootAccountId,
+            chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+            chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+            log: (m) => logger.info(`[worker][${job.id}] ${m}`),
+          });
+        }
       }
+    } catch (chatwootErr) {
+      logger.warn(`[worker][${job.id}] chatwoot cleanup skipped: ${chatwootErr instanceof Error ? chatwootErr.message : String(chatwootErr)}`);
     }
-  } catch (chatwootErr) {
-    logger.warn(`[worker][${job.id}] chatwoot cleanup skipped: ${chatwootErr instanceof Error ? chatwootErr.message : String(chatwootErr)}`);
   }
 
   if (job.payload.needsScrub) {
