@@ -10,6 +10,7 @@
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Dev Scripts](#dev-scripts)
+- [License Management](#license-management)
 - [Environment Configuration](#environment-configuration)
 - [Schema Changes](#schema-changes)
 - [Build](#build)
@@ -164,6 +165,13 @@ pnpm dev
 | `pnpm provision:modules` | Module matrix test (accounting / POS / both) |
 | `pnpm provision:smoke` | Single quick provision smoke test |
 | `pnpm provision:diagnose` | Hang diagnosis with live event/Docker snapshots |
+
+### Licenses
+
+| Script | Purpose |
+|--------|---------|
+| `pnpm exec tsx scripts/generate-license.ts` | Generate one license for any module/plan/term — assign to a tenant or leave as pool key |
+| `pnpm exec tsx scripts/seed-licenses.ts` | Seed all 20 license scenarios (every module combo × plan tier) as unassigned pool keys |
 
 ### Env & Infra
 
@@ -426,6 +434,113 @@ Enable on GitHub under **Settings → Branches → Add rule → `main`**:
 
 ---
 
+## License Management
+
+Stockix licenses gate which product modules a tenant can use (`accounting`, `pos`, `pms`, `chat`).
+Two scripts cover every scenario.
+
+### `scripts/generate-license.ts` — create a single license
+
+```sh
+pnpm exec tsx scripts/generate-license.ts [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--tenant <slug\|id>` | — | Assign to a tenant immediately (omit for an unassigned pool key) |
+| `--plan <slug>` | `starter` | `starter` \| `growth` \| `pro` \| `enterprise` |
+| `--modules <list>` | `accounting` | Comma-separated: `accounting,pos,pms,chat` |
+| `--term <days>` | `365` | Validity period in days |
+| `--perpetual` | off | Create a never-expiring license |
+| `--location <id>` | — | POS/PMS location ObjectId — triggers STXI key format (tenant+location-bound) |
+| `--force` | off | Revoke the existing active license and replace it |
+| `--dry-run` | off | Print what would be created without writing to DB |
+
+**Key format rules:**
+- **STKX** (`STKX-XXXX-XXXX-XXXX`) — random, poolable. Used for `accounting`-only, `chat`, or when no `--location` is given.
+- **STXI** (`STXI-TENANT-LOCATION-CHECKSUM`) — deterministic, tenant+location-bound, HMAC-signed. Auto-selected when `pos` or `pms` modules + `--location` is provided.
+
+**Common scenarios:**
+
+```sh
+# Finance only — assign to tenant "acme", 1 year
+pnpm exec tsx scripts/generate-license.ts --tenant acme --plan starter --modules accounting
+
+# Finance + POS with STXI key (location-bound)
+pnpm exec tsx scripts/generate-license.ts --tenant acme --plan pro \
+  --modules accounting,pos --location 507f1f77bcf86cd799439011
+
+# Finance + PMS
+pnpm exec tsx scripts/generate-license.ts --tenant acme --plan pro \
+  --modules accounting,pms --location 507f1f77bcf86cd799439011
+
+# Finance + POS + PMS + Chat (all modules), 2 years
+pnpm exec tsx scripts/generate-license.ts --tenant acme --plan enterprise \
+  --modules accounting,pos,pms,chat --term 730
+
+# Perpetual license
+pnpm exec tsx scripts/generate-license.ts --tenant acme --plan enterprise \
+  --modules accounting,pos --perpetual
+
+# Unassigned pool key (assign via dashboard later)
+pnpm exec tsx scripts/generate-license.ts --plan growth --modules accounting,pos
+
+# Replace an existing active license
+pnpm exec tsx scripts/generate-license.ts --tenant acme --plan enterprise \
+  --modules accounting,pos,pms,chat --force
+
+# Always preview first
+pnpm exec tsx scripts/generate-license.ts ... --dry-run
+```
+
+---
+
+### `scripts/seed-licenses.ts` — create all 20 scenarios at once
+
+Seeds one unassigned pool key for every meaningful module × plan × term combination.
+Idempotent — tracks created scenarios via `licenses.notes` so re-running skips existing entries.
+
+```sh
+pnpm exec tsx scripts/seed-licenses.ts            # seed all 20 scenarios
+pnpm exec tsx scripts/seed-licenses.ts --dry-run  # preview table, no DB writes
+pnpm exec tsx scripts/seed-licenses.ts --reset    # revoke + re-create all seed licenses
+```
+
+**Scenarios seeded:**
+
+| Modules | Plan | Term | Key format |
+|---------|------|------|-----------|
+| Finance | Starter | 1 year | STKX |
+| Finance | Growth | 1 year | STKX |
+| Finance | Pro | Perpetual | STKX |
+| Finance | Enterprise | Perpetual | STKX |
+| Finance + POS | Starter | 1 year | STKX |
+| Finance + POS | Pro | Perpetual | STKX |
+| Finance + POS | Pro | 1 year | **STXI** (location-scoped) |
+| Finance + POS | Enterprise | Perpetual | **STXI** (location-scoped) |
+| Finance + PMS | Growth | 1 year | STKX |
+| Finance + PMS | Pro | Perpetual | STKX |
+| Finance + Chat | Starter | 1 year | STKX |
+| Finance + Chat | Growth | 1 year | STKX |
+| Finance + POS + PMS | Pro | 1 year | STKX |
+| Finance + POS + PMS | Enterprise | 2 years | STKX |
+| Finance + POS + Chat | Pro | 1 year | STKX |
+| Finance + PMS + Chat | Pro | 1 year | STKX |
+| All modules | Enterprise | 2 years | STKX |
+| All modules | Enterprise | Perpetual | STKX |
+| Finance (trial) | Starter | 30 days | STKX |
+| Finance + POS (trial) | Growth | 30 days | STKX |
+
+After seeding, unassigned licenses appear in the dashboard under **Licenses → Unassigned**.
+Assign one to a tenant via the dashboard or:
+
+```sh
+pnpm exec tsx scripts/generate-license.ts --tenant <slug> --plan <plan> \
+  --modules <modules> --force
+```
+
+---
+
 ## Repo-Root Files Reference
 
 | File | Purpose |
@@ -433,3 +548,5 @@ Enable on GitHub under **Settings → Branches → Add rule → `main`**:
 | `provisioning.lock` | Stability marker — signals provisioning pipeline is frozen. Not an OS lockfile; do not delete. |
 | `scripts/decrypt-tenant-env.mjs` | Decrypts `enc:v1:*` values in a tenant `.env`. Usage: `node scripts/decrypt-tenant-env.mjs <path>` |
 | `scripts/inspect-monorepo.sh` | Prints workspace package list, lockfile version, and dependency summary |
+| `scripts/generate-license.ts` | Generate a single license for any module/plan/term combination and optionally assign it to a tenant |
+| `scripts/seed-licenses.ts` | Seed all 20 license scenarios (every module combo × plan tier) as unassigned pool keys |
