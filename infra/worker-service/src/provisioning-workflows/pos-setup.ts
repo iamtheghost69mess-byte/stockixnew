@@ -1,13 +1,23 @@
 // Extracted POS functions
 import { eq } from "drizzle-orm";
 import { tenantDeployments } from "@repo/db/schema";
-import { getLicenseExpiry, getPlanLimits } from "../provision-runtime.js";
-import { provisionPosStackTracked } from "../module-stacks.js";
-import { getTenantStackPaths, readTenantEnvFile } from "../../domain/provisioning/tenant-env.js";
-import { resolvePosTenantEnvPath } from "../module-stacks.js";
+import {
+  provisionPosStackTracked,
+  resolvePosTenantEnvPath,
+  hasAccountingAndPos,
+} from "../module-stacks.js";
+import { getTenantStackPaths } from "../../domain/provision-paths.js";
+import { readTenantEnvFile } from "../../domain/provisioning/tenant-env.js";
 import { join } from "node:path";
-import { runDockerExec } from "../../domain/provisioning/adapters/execa-docker-compose-runner.js";
-import { sendPosWelcomeEmail } from "../../domain/provisioning/adapters/send-pos-welcome.js";
+import { runDockerExec } from "../../domain/provisioning/tenant-docker-workflow.js";
+import { verifyPosBigcapitalIntegration } from "../../domain/provisioning/adapters/verify-pos-bigcapital-integration.js";
+import { wirePosBigcapitalIntegration } from "../../domain/provisioning/adapters/wire-pos-bigcapital-integration.js";
+import { execa } from "execa";
+import {
+  sendPosWelcomeEmail,
+  getLicenseExpiry,
+  getPlanLimits,
+} from "@repo/platform-worker-shared";
 import { apiConfig } from "@repo/config";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as dbSchema from "@repo/db/schema";

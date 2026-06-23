@@ -19,6 +19,8 @@ export type ProvisionInput = {
   planSlug?: string;
   /** Licensed product modules for this tenant. */
   modules?: string[];
+  /** Optional pre-existing license ID to attach to this tenant. */
+  assignExistingLicenseId?: string | null;
   /** Parent Stockix tenant slug (same password key for all org stacks under this tenant). */
   parentTenantSlug?: string;
   /** Internal base URL of the parent tenant's primary deployment (org provisioning only). */

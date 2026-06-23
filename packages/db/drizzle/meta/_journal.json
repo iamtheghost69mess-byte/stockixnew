@@ -477,6 +477,13 @@
       "when": 1750502400000,
       "tag": "0067_audit_log_protection",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1750690800000,
+      "tag": "0072_organizations_chatwoot_account_id",
+      "breakpoints": true
     }
   ]
 }

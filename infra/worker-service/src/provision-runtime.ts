@@ -8,7 +8,7 @@ import { execa } from "execa";
 
 import { apiConfig, posConfig } from "@repo/config";
 import { publishEvent } from "@repo/events";
-import { getControlPlaneRedisClient } from "../../apps/api/src/lib/redis.js";
+import { getControlPlaneRedisClient } from "../../../apps/api/src/lib/redis.js";
 import { decryptDeploymentSecret, encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
 import { allocateOrganizationNumber, allocateTenantPort, assertTenantPortAvailable } from "@repo/db";
 import { tenantConfig, tenantDeployments, tenantLifecycleJobs, tenantProvisionEvents, tenants } from "@repo/db/schema";
@@ -82,6 +82,7 @@ import {
   resolvePosTenantEnvPath,
   resolveTenantModules,
 } from "./module-stacks.js";
+import { loadProvisionJournalState } from "./provision-journal.js";
 
 type PosProvisionOutcome = {
   posStatus: "ok" | "failed" | "skipped";
@@ -121,265 +122,6 @@ function assertProvisionModuleEnv(modules: string[]): void {
     );
   }
 }
-
-
-
-): Promise<void> {
-  if (!deploymentId) return;
-  const patch: Record<string, number> = {};
-  if (ids.financeTenantId && ids.financeTenantId > 0) {
-    patch.financeTenantId = ids.financeTenantId;
-  }
-  if (ids.financeDefaultWarehouseId && ids.financeDefaultWarehouseId > 0) {
-    patch.financeDefaultWarehouseId = ids.financeDefaultWarehouseId;
-  }
-  if (ids.walkInCustomerId && ids.walkInCustomerId > 0) {
-    patch.financeWalkInCustomerId = ids.walkInCustomerId;
-  }
-  if (ids.cashAccountId && ids.cashAccountId > 0) {
-    patch.financeCashAccountId = ids.cashAccountId;
-  }
-  if (ids.cardAccountId && ids.cardAccountId > 0) {
-    patch.financeCardAccountId = ids.cardAccountId;
-  }
-  if (Object.keys(patch).length === 0) return;
-  await db
-    .update(tenantDeployments)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(tenantDeployments.id, deploymentId));
-}
-
-
-
-
-import { loadProvisionJournalState } from "./provision-journal.js";
-
-type ComposeRollbackCtx = {
-  composeFile: string;
-  project: string;
-  envPath: string;
-  composeEnv: Record<string, string>;
-};
-
-): Promise<void> {
-  const log = options.log ?? (() => undefined);
-  const trimmedReason = reason.slice(0, 4000);
-
-  // Keep the Postgres tenant row in `failed` status as the ops handle when rollback
-  // cleanup is incomplete — never delete tenant rows from rollbackProvision().
-  await db
-    .update(tenants)
-    .set({ status: "failed" })
-    .where(eq(tenants.id, tenantId))
-    .catch((error) => {
-      log(
-        `[rollback] tenant status update failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-
-  await db
-    .update(tenantDeployments)
-    .set({ status: "failed", lastError: trimmedReason, updatedAt: new Date() })
-    .where(eq(tenantDeployments.tenantId, tenantId))
-    .catch((error) => {
-      log(
-        `[rollback] deployment status update failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-
-  const jobTerminalStatus = trimmedReason.startsWith("cancelled_by_user") ? "cancelled" : "failed";
-  await db
-    .update(tenantLifecycleJobs)
-    .set({
-      status: jobTerminalStatus,
-      lastError: trimmedReason,
-      completedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(tenantLifecycleJobs.correlationId, correlationId))
-    .catch((error) => {
-      log(
-        `[rollback] lifecycle job update failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-
-  let composeCtx = options.composeCtx ?? null;
-  let rollbackSlug: string | undefined;
-  if (!composeCtx) {
-    const [depRow] = await db
-      .select({
-        slug: tenants.slug,
-        composeProjectName: tenantDeployments.composeProjectName,
-        internalPort: tenantDeployments.internalPort,
-      })
-      .from(tenants)
-      .innerJoin(tenantDeployments, eq(tenantDeployments.tenantId, tenants.id))
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-    rollbackSlug = depRow?.slug;
-    if (depRow?.slug && depRow.composeProjectName) {
-      const { tenantComposeFile: composeFile, stockixFinanceRoot } = getTenantStackPaths();
-      const tenantEnvRoot = defaultTenantEnvRoot();
-      const envPath = join(tenantEnvRoot, depRow.slug, ".env");
-      composeCtx = {
-        composeFile,
-        project: depRow.composeProjectName,
-        envPath,
-        composeEnv: {
-          STOCKIX_TENANT_APP_ROOT: stockixFinanceRoot,
-          COMPOSE_PROJECT_NAME: depRow.composeProjectName,
-        },
-      };
-    }
-  } else {
-    const [slugRow] = await db
-      .select({ slug: tenants.slug })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-    rollbackSlug = slugRow?.slug;
-  }
-
-  log(`[rollback] DEBUG: preserving tenant stack and containers for debugging.`);
-  /* compose down is disabled in debug mode — databases are intentionally preserved for inspection */
-  /*
-  if (composeCtx && options.deps) {
-    const rolledBack = await composeDownBestEffort(options.deps.docker, composeCtx);
-    log(
-      `[rollback] compose cleanup ${rolledBack ? "completed" : "failed"} project=${composeCtx.project}`,
-    );
-  } else if (composeCtx) {
-    try {
-      await execa(
-        "docker",
-        [
-          "compose",
-          "-f",
-          composeCtx.composeFile,
-          "-p",
-          composeCtx.project,
-          "--env-file",
-          composeCtx.envPath,
-          "down",
-          "--remove-orphans",
-          "-v",
-          "--timeout",
-          "30",
-        ],
-        { env: composeCtx.composeEnv, extendEnv: true, stdio: "pipe", timeout: COMPOSE_DOWN_TIMEOUT_MS },
-      );
-      log(`[rollback] compose cleanup completed project=${composeCtx.project}`);
-    } catch (cleanupErr) {
-      log(
-        `[rollback] compose cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
-        }`,
-      );
-    }
-  }
-  */
-
-  const journalState = await loadProvisionJournalState(db, correlationId);
-
-  // Clean up MySQL databases created by a failed provision (docker.data_step completed but
-  // provisioning failed after). This prevents MySQL orphans from accumulating.
-  // Failure is non-fatal: the control-plane row is already in failed state.
-  if (rollbackSlug && journalState.completedOps.has("docker.data_step")) {
-    try {
-      const { cleanupMysqlOrphan } = await import("../domain/provisioning/adapters/check-mysql-orphan.js");
-      const cleaned = await cleanupMysqlOrphan(rollbackSlug, log);
-      if (cleaned) {
-        log(`[rollback] MySQL databases cleaned for slug=${rollbackSlug}`);
-      } else {
-        log(`[rollback][warn] MySQL cleanup failed for slug=${rollbackSlug} — use scripts/cleanup-mysql-orphans.mjs to clean manually`);
-      }
-    } catch (mysqlErr) {
-      log(`[rollback][warn] MySQL cleanup error for slug=${rollbackSlug}: ${mysqlErr instanceof Error ? mysqlErr.message : String(mysqlErr)}`);
-    }
-  }
-
-  /*
-  if (journalState.completedOps.has("pos.schema_migration")) {
-    log("[rollback] pos.schema_migration completed — POS compose down + Mongo deprovision will revert schema state");
-  }
-  if (rollbackSlug && journalState.completedOps.has("docker.data_step")) {
-    const cleanupResult = await deprovisionTenantDatabases(rollbackSlug, log);
-    const cleanupComplete =
-      cleanupResult.mysqlDbs && cleanupResult.mongoDb && cleanupResult.redisKeys;
-    if (cleanupComplete) {
-      log(`[rollback] shared DB teardown completed for slug=${rollbackSlug}`);
-    } else {
-      log(
-        JSON.stringify({
-          level: "warn",
-          event: "rollback_incomplete",
-          cleanupResult,
-          slug: rollbackSlug,
-          reason: trimmedReason,
-        }),
-      );
-      await db
-        .insert(tenantProvisionEvents)
-        .values({
-          correlationId,
-          tenantId,
-          phase: "rollback",
-          level: "warn",
-          message: "rollback_incomplete",
-          meta: {
-            operationKey: "rollback_incomplete",
-            cleanupResult,
-            slug: rollbackSlug,
-            reason: trimmedReason,
-          },
-        })
-        .catch((error) => {
-          log(
-            `[rollback] rollback_incomplete event insert failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        });
-      throw new Error(
-        `[rollback] Shared DB teardown incomplete for slug=${rollbackSlug} ` +
-          `(mysqlDbs=${cleanupResult.mysqlDbs}, mongoDb=${cleanupResult.mongoDb}, ` +
-          `redisKeys=${cleanupResult.redisKeys}). Postgres tenant row kept in failed status — ` +
-          "run M2 orphan cleanup or retry deprovision.",
-      );
-    }
-  }
-  */
-
-  if (composeCtx?.envPath) {
-    await rm(join(composeCtx.envPath, ".."), { recursive: true, force: true }).catch((rmErr) => {
-      log(`[rollback] env dir cleanup failed: ${rmErr instanceof Error ? rmErr.message : String(rmErr)}`);
-    });
-  }
-
-  await db
-    .insert(tenantProvisionEvents)
-    .values({
-      correlationId,
-      tenantId,
-      phase: "api",
-      level: "error",
-      message: trimmedReason,
-    })
-    .catch((error) => {
-      log(
-        `[rollback] provision event insert failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
-
-  log(`[rollback] tenant=${tenantId} correlationId=${correlationId} reason=${trimmedReason}`);
-}
-
-/** Module-add failure — restore active tenant without tearing down existing stacks. */
-
-
 
 async function guardNoConcurrentProvision(
   db: PostgresJsDatabase<typeof dbSchema>,
@@ -1009,6 +751,36 @@ export async function executeProvisionRuntime(
           mongoUrl: mongoUrlPersisted,
         }).returning({ id: tenantDeployments.id });
         deploymentId = dRow!.id;
+
+        if (input.assignExistingLicenseId) {
+          await tx
+            .update(dbSchema.licenses)
+            .set({
+              tenantId,
+              status: "active",
+              activatedAt: new Date(),
+            })
+            .where(eq(dbSchema.licenses.id, input.assignExistingLicenseId));
+        } else {
+          const bytes = randomBytes(12);
+          const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+          let raw = "";
+          for (const b of bytes) {
+            raw += CHARSET[b! % CHARSET.length];
+          }
+          const licenseKey = `STKX-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+
+          await tx.insert(dbSchema.licenses).values({
+            tenantId,
+            licenseKey,
+            keyFormat: "stkx",
+            product: "platform",
+            modules: JSON.stringify(moduleList),
+            planSlug: input.planSlug ?? "starter",
+            status: "active",
+            activatedAt: new Date(),
+          });
+        }
       });
       log("[step-end] Create tenant record");
     }

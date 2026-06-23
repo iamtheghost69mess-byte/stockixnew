@@ -879,22 +879,26 @@ async function runRemoveModuleJob(
     await stopFinanceStack(payload.slug, log);
   }
   if (payload.module === "chat" && job.tenantId && db) {
-    const orgs = await db
-      .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
-      .from(organizations)
-      .where(eq(organizations.tenantId, job.tenantId));
+    try {
+      const orgs = await db
+        .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
+        .from(organizations)
+        .where(eq(organizations.tenantId, job.tenantId));
 
-    for (const org of orgs) {
-      if (org.chatwootAccountId) {
-        await deprovisionChatwootAccount({
-          db,
-          organizationId: org.id,
-          chatwootAccountId: org.chatwootAccountId,
-          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-          log,
-        });
+      for (const org of orgs) {
+        if (org.chatwootAccountId) {
+          await deprovisionChatwootAccount({
+            db,
+            organizationId: org.id,
+            chatwootAccountId: org.chatwootAccountId,
+            chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+            chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+            log,
+          });
+        }
       }
+    } catch (chatwootErr) {
+      log(`[chatwoot] cleanup skipped: ${chatwootErr instanceof Error ? chatwootErr.message : String(chatwootErr)}`);
     }
   }
 }
@@ -908,24 +912,30 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   await assertNoConcurrentTenantLifecycleJob(db, job.tenantId, job.id);
 
   // Clean up external Chatwoot account before destroying the tenant.
-  const orgs = await db
-    .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
-    .from(organizations)
-    .where(eq(organizations.tenantId, job.tenantId));
+  // Wrapped in try-catch: if organizations.chatwoot_account_id doesn't exist yet
+  // (schema drift on older deployments) we skip Chatwoot cleanup gracefully.
+  try {
+    const orgs = await db
+      .select({ id: organizations.id, chatwootAccountId: organizations.chatwootAccountId })
+      .from(organizations)
+      .where(eq(organizations.tenantId, job.tenantId));
 
-  for (const org of orgs) {
-    if (org.chatwootAccountId) {
-      await deprovisionChatwootAccount({
-        db,
-        organizationId: org.id,
-        chatwootAccountId: org.chatwootAccountId,
-        chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-        chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
-        log: (m) => logger.info(`[worker][${job.id}] ${m}`),
-      });
+    for (const org of orgs) {
+      if (org.chatwootAccountId) {
+        await deprovisionChatwootAccount({
+          db,
+          organizationId: org.id,
+          chatwootAccountId: org.chatwootAccountId,
+          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
+          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          log: (m) => logger.info(`[worker][${job.id}] ${m}`),
+        });
+      }
     }
+  } catch (chatwootErr) {
+    logger.warn(`[worker][${job.id}] chatwoot cleanup skipped: ${chatwootErr instanceof Error ? chatwootErr.message : String(chatwootErr)}`);
   }
-  
+
   if (job.payload.needsScrub) {
     const rows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1);
     if (rows[0]) {

@@ -42,6 +42,7 @@ export default defineConfig({
         dirname,
         "../../packages/platform-worker-shared/src/index.ts",
       ),
+      "@repo/events": path.resolve(dirname, "../../packages/events/src/index.ts"),
     };
   },
 });
