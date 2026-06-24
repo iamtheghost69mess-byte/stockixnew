@@ -21,8 +21,23 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
   const logout = usePosLogout();
   const user = usePosAuthStore((s) => s.user);
   const permissions = user?.permissions ?? [];
+  const relayMode = user?.organization?.accountingRelayMode ?? false;
+  const financeUrl = user?.organization?.financeUrl ?? "";
   const navSource = isHostessUser(user) ? hostessSidebarItems : sidebarItems;
-  const filteredGroups = filterSidebarGroupsByPermissions(navSource, permissions);
+  const filtered = filterSidebarGroupsByPermissions(navSource, permissions, relayMode);
+  const filteredGroups = relayMode && financeUrl
+    ? filtered.map((group) => {
+        if (group.id !== 1) return group;
+        return {
+          ...group,
+          items: group.items.map((item) =>
+            item.title === "Finance"
+              ? { ...item, url: financeUrl, newTab: true }
+              : item,
+          ),
+        };
+      })
+    : filtered;
   const brandHref = isHostessUser(user) ? "/dashboard/floor" : "/dashboard/default";
   const { sidebarVariant, sidebarCollapsible, isSynced } = usePreferencesStore(
     useShallow((s) => ({

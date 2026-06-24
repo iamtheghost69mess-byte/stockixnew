@@ -1,4 +1,11 @@
 import type { NavGroup } from "@restaurant-pos/ui/shell";
+
+declare module "@restaurant-pos/ui/shell" {
+  interface NavMainItem {
+    /** Hidden in Finance relay mode — use Finance app for GL writes. */
+    requiresDirectMode?: boolean;
+  }
+}
 import {
   Activity,
   Banknote,
@@ -338,21 +345,25 @@ export const sidebarItems: NavGroup[] = [
         title: "Chart of accounts",
         url: "/dashboard/accounting/accounts",
         icon: Landmark,
+        requiresDirectMode: true,
       },
       {
         title: "Entries",
         url: "/dashboard/accounting/ledger",
         icon: ScrollText,
+        requiresDirectMode: true,
       },
       {
         title: "GL settings",
         url: "/dashboard/accounting/settings",
         icon: Settings2,
+        requiresDirectMode: true,
       },
       {
         title: "Register sessions",
         url: "/dashboard/accounting/sessions",
         icon: Timer,
+        requiresDirectMode: true,
       },
       {
         title: "Trial balance",
@@ -394,6 +405,7 @@ export const sidebarItems: NavGroup[] = [
         title: "Budgets",
         url: "/dashboard/accounting/budgets",
         icon: Wallet,
+        requiresDirectMode: true,
       },
       {
         title: "Exchange rates",
@@ -404,16 +416,19 @@ export const sidebarItems: NavGroup[] = [
         title: "Recurring journals",
         url: "/dashboard/accounting/recurring-journals",
         icon: Repeat2,
+        requiresDirectMode: true,
       },
       {
         title: "Invoices (AR)",
         url: "/dashboard/accounting/invoices",
         icon: Receipt,
+        requiresDirectMode: true,
       },
       {
         title: "Recurring invoices",
         url: "/dashboard/accounting/recurring-invoices",
         icon: CalendarSync,
+        requiresDirectMode: true,
       },
       {
         title: "AR aging",
@@ -434,23 +449,27 @@ export const sidebarItems: NavGroup[] = [
         title: "Credit notes",
         url: "/dashboard/accounting/credit-notes",
         icon: FileBadge,
+        requiresDirectMode: true,
       },
       {
         title: "Vendor bills (AP)",
         url: "/dashboard/accounting/vendor-bills",
         icon: FileStack,
+        requiresDirectMode: true,
       },
       {
         title: "Expense reports",
         url: "/dashboard/accounting/expense-reports",
         icon: ClipboardCheck,
         permission: "backoffice.accounting.expenses.read",
+        requiresDirectMode: true,
       },
       {
         title: "Approvals inbox",
         url: "/dashboard/accounting/approvals",
         icon: FileCheck2,
         permission: "backoffice.accounting.approvals.read",
+        requiresDirectMode: true,
       },
       {
         title: "Consolidated reports",
@@ -472,16 +491,19 @@ export const sidebarItems: NavGroup[] = [
         title: "Gift cards",
         url: "/dashboard/accounting/gift-cards",
         icon: Gift,
+        requiresDirectMode: true,
       },
       {
         title: "Order GL tools",
         url: "/dashboard/accounting/order-gl",
         icon: RefreshCw,
+        requiresDirectMode: true,
       },
       {
         title: "Bank (beta)",
         url: "/dashboard/accounting/bank",
         icon: PiggyBank,
+        requiresDirectMode: true,
       },
     ],
   },

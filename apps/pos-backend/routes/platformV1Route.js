@@ -37,6 +37,7 @@ const {
   resetOrgPin,
   retryProvisioning,
   patchOrgAccountingMode,
+  patchOrgFinanceUrl,
 } = require("../controllers/platformOrgController");
 const {
   wireBigcapitalIntegration,
@@ -239,6 +240,11 @@ router.put(
   "/organizations/:id/accounting-mode",
   requirePlatformPermission(P.ORG_WRITE),
   patchOrgAccountingMode
+);
+router.put(
+  "/organizations/:id/finance-url",
+  requirePlatformPermission(P.ORG_WRITE),
+  patchOrgFinanceUrl
 );
 router.delete("/organizations/:id", requirePlatformPermission(P.ORG_WRITE), deleteOrg);
 

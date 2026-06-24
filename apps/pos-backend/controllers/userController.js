@@ -15,7 +15,7 @@ async function getUserProfilePayload(userFromReq) {
   const user = await User.findById(userFromReq._id)
     .populate("location", "name code waiterCanPrintReceipt")
     .populate("locations", "name code waiterCanPrintReceipt")
-    .populate("organization", "name slug");
+    .populate("organization", "name slug accountingRelayMode financeUrl");
   const doc = await loadConfigDoc(resolveOrganizationIdFromUser(user));
   const roles = buildRolesFromConfigDoc(doc);
   const key = rbacRoleKey(user);

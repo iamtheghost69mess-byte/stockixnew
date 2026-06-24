@@ -9,23 +9,25 @@ const { requireAccountingDirectMode } = require("../middlewares/requireAccountin
 const router = express.Router();
 
 /** Role-agnostic: accountant roles use backoffice.accounting.* without being admin/manager. */
-const rd = [...authedTenantLocation, ac.requireAccountingRead];
-const wr = [...authedTenantLocation, ac.requireAccountingWrite];
+const rd             = [...authedTenantLocation, ac.requireAccountingRead];
+const wr             = [...authedTenantLocation, requireAccountingDirectMode, ac.requireAccountingWrite];
+/** Exempt from relay-mode guard: idempotent acks and notification reads carry no GL side-effects. */
+const wrUnguarded    = [...authedTenantLocation, ac.requireAccountingWrite];
 
-const arRd = [...authedTenantLocation, ac.requireArRead];
-const arWr = [...authedTenantLocation, ac.requireArWrite];
-const apRd = [...authedTenantLocation, ac.requireApRead];
-const apWr = [...authedTenantLocation, ac.requireApWrite];
-const glRd = [...authedTenantLocation, ac.requireGlRead];
-const glWr = [...authedTenantLocation, requireAccountingDirectMode, ac.requireGlWrite];
-const bankRd = [...authedTenantLocation, ac.requireBankRead];
-const bankWr = [...authedTenantLocation, ac.requireBankWrite];
-const periodWr = [...authedTenantLocation, ac.requirePeriodsWrite];
-const expensesRd = [...authedTenantLocation, ac.requireExpensesRead];
-const expensesWr = [...authedTenantLocation, ac.requireExpensesWrite];
-const expensesApprove = [...authedTenantLocation, ac.requireExpensesApprove];
-const approvalsRd = [...authedTenantLocation, ac.requireApprovalsRead];
-const approvalsWr = [...authedTenantLocation, ac.requireApprovalsWrite];
+const arRd           = [...authedTenantLocation, ac.requireArRead];
+const arWr           = [...authedTenantLocation, requireAccountingDirectMode, ac.requireArWrite];
+const apRd           = [...authedTenantLocation, ac.requireApRead];
+const apWr           = [...authedTenantLocation, requireAccountingDirectMode, ac.requireApWrite];
+const glRd           = [...authedTenantLocation, ac.requireGlRead];
+const glWr           = [...authedTenantLocation, requireAccountingDirectMode, ac.requireGlWrite];
+const bankRd         = [...authedTenantLocation, ac.requireBankRead];
+const bankWr         = [...authedTenantLocation, requireAccountingDirectMode, ac.requireBankWrite];
+const periodWr       = [...authedTenantLocation, requireAccountingDirectMode, ac.requirePeriodsWrite];
+const expensesRd     = [...authedTenantLocation, ac.requireExpensesRead];
+const expensesWr     = [...authedTenantLocation, requireAccountingDirectMode, ac.requireExpensesWrite];
+const expensesApprove = [...authedTenantLocation, requireAccountingDirectMode, ac.requireExpensesApprove];
+const approvalsRd    = [...authedTenantLocation, ac.requireApprovalsRead];
+const approvalsWr    = [...authedTenantLocation, requireAccountingDirectMode, ac.requireApprovalsWrite];
 const consolidatedRd = [...authedTenantLocation, ac.requireConsolidatedRead];
 
 router.post("/ensure-defaults", ...wr, ctrl.ensureDefaults);
@@ -58,11 +60,11 @@ router.get("/export/integration.json", ...glRd, ctrl.exportIntegrationJson);
 router.get("/export/trial-balance.xlsx", ...glRd, ctrl.exportTrialBalanceXlsx);
 router.get("/export/trial-balance.pdf", ...glRd, ctrl.exportTrialBalancePdf);
 router.get("/audit-log", ...rd, ctrl.listAuditLogs);
-router.post("/sync/ack", ...wr, ctrl.acknowledgeSync);
+router.post("/sync/ack", ...wrUnguarded, ctrl.acknowledgeSync);
 router.get("/notifications", ...rd, notificationsCtrl.listBackofficeNotifications);
 router.get("/notifications/unread-count", ...rd, notificationsCtrl.getBackofficeUnreadNotificationCount);
-router.post("/notifications/all/read", ...wr, notificationsCtrl.markAllBackofficeNotificationsRead);
-router.post("/notifications/:id/read", ...wr, notificationsCtrl.markBackofficeNotificationRead);
+router.post("/notifications/all/read", ...wrUnguarded, notificationsCtrl.markAllBackofficeNotificationsRead);
+router.post("/notifications/:id/read", ...wrUnguarded, notificationsCtrl.markBackofficeNotificationRead);
 router.post("/post-order/:orderId", ...wr, ctrl.repostOrder);
 router.post("/reverse-order/:orderId", ...wr, ctrl.reverseOrder);
 router.post("/refunds/:orderId", ac.requireOrderRefundAdmin, ...wr, ctrl.postRefund);

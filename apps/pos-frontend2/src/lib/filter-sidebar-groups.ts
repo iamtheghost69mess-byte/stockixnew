@@ -4,16 +4,21 @@ import { posCan } from "@/lib/pos-permissions";
 
 /**
  * Drops nav items the current user cannot access (permission strings from GET /api/user).
+ * When `relayMode` is true, items flagged with `requiresDirectMode` are also hidden.
  */
 export function filterSidebarGroupsByPermissions(
   groups: readonly NavGroup[],
   permissions: readonly string[],
+  relayMode?: boolean,
 ): NavGroup[] {
   return groups
     .map((group) => {
       const items = group.items
         .map((item) => {
           if (item.permission && !posCan([...permissions], item.permission)) {
+            return null;
+          }
+          if (relayMode && (item as { requiresDirectMode?: boolean }).requiresDirectMode) {
             return null;
           }
           if (item.subItems?.length) {

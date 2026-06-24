@@ -172,73 +172,51 @@ export class InternalPosInventoryService {
         payload.varianceAccountId,
       );
 
-    let netDebitInventory = 0;
-    const detailNotes: string[] = [];
+    const journals: unknown[] = [];
 
-    for (const line of lines) {
+    for (const [idx, line] of lines.entries()) {
       const qty = Number(line.quantity);
       const unitCost = Number(line.unitCost);
       const amount = Math.round(qty * unitCost * 100) / 100;
       if (Math.abs(amount) < 0.005) continue;
-      netDebitInventory += amount;
-      detailNotes.push(
-        `${line.description || `item ${line.itemId}`}: ${qty} × ${unitCost}`,
-      );
+
+      const absAmt = Math.abs(amount);
+      const lineRef = `${referenceNo}-${String(idx + 1).padStart(3, '0')}`;
+      const lineDesc =
+        line.description ||
+        `POS inventory variance · ${lineRef}`;
+
+      const journalDto = new CreateManualJournalDto();
+      journalDto.date = payload.journalDate as unknown as Date;
+      journalDto.publish = true;
+      journalDto.reference = lineRef;
+      journalDto.description = lineDesc;
+
+      if (amount > 0) {
+        journalDto.entries = [
+          { index: 1, debit: absAmt, accountId: inventoryAccountId, note: lineDesc },
+          { index: 2, credit: absAmt, accountId: varianceAccountId, note: lineDesc },
+        ];
+      } else {
+        journalDto.entries = [
+          { index: 1, debit: absAmt, accountId: varianceAccountId, note: lineDesc },
+          { index: 2, credit: absAmt, accountId: inventoryAccountId, note: lineDesc },
+        ];
+      }
+
+      const journal =
+        await this.manualJournalsApplication.createManualJournal(journalDto);
+      journals.push(journal);
     }
 
-    netDebitInventory = Math.round(netDebitInventory * 100) / 100;
-    if (Math.abs(netDebitInventory) < 0.005) {
+    if (!journals.length) {
       return { success: true, skipped: true, reason: 'zero_net' };
     }
 
-    const absAmt = Math.abs(netDebitInventory);
-    const journalDto = new CreateManualJournalDto();
-    journalDto.date = payload.journalDate as unknown as Date;
-    journalDto.publish = true;
-    journalDto.reference = referenceNo;
-    journalDto.description =
-      payload.description ||
-      `POS inventory variance · ${detailNotes.slice(0, 3).join('; ')}`;
-
-    if (netDebitInventory > 0) {
-      journalDto.entries = [
-        {
-          index: 1,
-          debit: absAmt,
-          accountId: inventoryAccountId,
-          note: 'POS stock increase',
-        },
-        {
-          index: 2,
-          credit: absAmt,
-          accountId: varianceAccountId,
-          note: 'POS stock increase offset',
-        },
-      ];
-    } else {
-      journalDto.entries = [
-        {
-          index: 1,
-          debit: absAmt,
-          accountId: varianceAccountId,
-          note: 'POS stock decrease / waste',
-        },
-        {
-          index: 2,
-          credit: absAmt,
-          accountId: inventoryAccountId,
-          note: 'POS stock decrease offset',
-        },
-      ];
-    }
-
-    const journal =
-      await this.manualJournalsApplication.createManualJournal(journalDto);
-
     return {
       success: true,
-      data: journal,
-      netAmount: netDebitInventory,
+      data: journals,
+      count: journals.length,
       idempotent: false,
     };
   }

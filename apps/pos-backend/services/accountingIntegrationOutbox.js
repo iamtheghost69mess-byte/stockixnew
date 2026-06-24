@@ -183,6 +183,19 @@ async function drainPendingAccountingOutbox(handlers, limit = 25) {
   return { processed, scanned: rows.length };
 }
 
+/**
+ * Returns the count of outbox rows stuck in `failed` status for longer than
+ * `thresholdMinutes` for a given organization. Used to trigger operator alerts.
+ */
+async function countStuckOutboxRows(organizationId, thresholdMinutes = 30) {
+  const cutoff = new Date(Date.now() - thresholdMinutes * 60_000);
+  return AccountingIntegrationOutbox.countDocuments({
+    organization: organizationId,
+    status: "failed",
+    updatedAt: { $lt: cutoff },
+  });
+}
+
 module.exports = {
   QUEUE_NAME,
   JOB_NAME_BY_EVENT,
@@ -191,4 +204,5 @@ module.exports = {
   markOutboxCompleted,
   markOutboxFailed,
   drainPendingAccountingOutbox,
+  countStuckOutboxRows,
 };

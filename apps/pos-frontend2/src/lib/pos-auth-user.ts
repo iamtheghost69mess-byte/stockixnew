@@ -4,6 +4,8 @@ export type PosOrgRef = {
   _id?: string;
   name?: string;
   slug?: string;
+  accountingRelayMode?: boolean;
+  financeUrl?: string;
 };
 
 export type PosAuthUser = {
@@ -62,6 +64,8 @@ function normalizeOrgRef(raw: unknown): PosOrgRef | null {
     _id: typeof o._id === "string" ? o._id : undefined,
     name: typeof o.name === "string" ? o.name : undefined,
     slug: typeof o.slug === "string" ? o.slug : undefined,
+    accountingRelayMode: typeof o.accountingRelayMode === "boolean" ? o.accountingRelayMode : undefined,
+    financeUrl: typeof o.financeUrl === "string" && o.financeUrl ? o.financeUrl : undefined,
   };
 }
 

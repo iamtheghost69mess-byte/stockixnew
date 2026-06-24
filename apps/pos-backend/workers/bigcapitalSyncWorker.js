@@ -21,10 +21,17 @@ const {
   markOutboxCompleted,
   markOutboxFailed,
   drainPendingAccountingOutbox,
+  countStuckOutboxRows,
 } = require("../services/accountingIntegrationOutbox");
+const AccountingIntegrationOutbox = require("../models/accountingIntegrationOutboxModel");
+const {
+  NOTIFICATION_EVENTS,
+  createBackofficeNotificationFromEvent,
+} = require("../services/backofficeNotificationEvents");
 
 const QUEUE_NAME = "bigcapital_sync";
 const OUTBOX_DRAIN_MS = Number(process.env.ACCOUNTING_OUTBOX_DRAIN_MS || 45_000);
+const STUCK_CHECK_MS = Number(process.env.ACCOUNTING_STUCK_CHECK_MS || 15 * 60_000);
 
 async function runWithOutbox(job, handler) {
   const outboxId = job?.data?.outboxId;
@@ -108,6 +115,29 @@ async function main() {
 
   setInterval(drainOutbox, OUTBOX_DRAIN_MS);
   void drainOutbox();
+
+  const alertStuckOrgs = async () => {
+    try {
+      const stuckOrgIds = await AccountingIntegrationOutbox.distinct("organization", {
+        status: "failed",
+        updatedAt: { $lt: new Date(Date.now() - 30 * 60_000) },
+      });
+      for (const orgId of stuckOrgIds) {
+        const count = await countStuckOutboxRows(orgId);
+        if (count <= 0) continue;
+        await createBackofficeNotificationFromEvent(
+          NOTIFICATION_EVENTS.ACCOUNTING_SYNC_STUCK,
+          { organizationId: String(orgId), stuckCount: count },
+        ).catch(() => {});
+      }
+    } catch (err) {
+      console.error("[BigcapitalSync] Stuck check error:", err?.message || err);
+    }
+  };
+
+  const stuckTimer = setInterval(alertStuckOrgs, STUCK_CHECK_MS);
+  if (stuckTimer.unref) stuckTimer.unref();
+  void alertStuckOrgs();
 
   console.log("[BigcapitalSync] Worker started on queue:", QUEUE_NAME);
 }

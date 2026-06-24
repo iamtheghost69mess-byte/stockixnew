@@ -130,6 +130,8 @@ const organizationSchema = new mongoose.Schema(
      * Prevents double-posting when both the POS GL engine and Finance are writing the same events.
      */
     accountingRelayMode: { type: Boolean, default: false, index: true },
+    /** Finance application URL — set by control plane when accounting module is provisioned. */
+    financeUrl: { type: String, trim: true, default: "" },
 
     /** Optional parent org for consolidated reporting (child tenants). */
     parentOrganization: {

@@ -64,6 +64,7 @@ import {
 import { getControlPlaneRedisClient } from "../lib/redis.js";
 import { ensureDefaultTenantConfig } from "./tenant-config.js";
 import { handleTerminalProvisionJobFailure } from "../provisioning/provision-failure.js";
+import { posProxyJson } from "../pos-proxy.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -1327,6 +1328,80 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
           module: moduleFromPayload,
           correlationId: currentJob.correlationId,
         });
+      }
+    }
+    if (moduleFromPayload === "accounting") {
+      const effectivePosOrgId = posOrganizationIdFromResult
+        ?? (await db
+            .select({ posOrganizationId: tenantDeployments.posOrganizationId })
+            .from(tenantDeployments)
+            .where(eq(tenantDeployments.tenantId, currentJob.tenantId))
+            .limit(1))[0]?.posOrganizationId
+        ?? null;
+
+      if (effectivePosOrgId) {
+        const [tenantRow] = await db
+          .select({ slug: tenants.slug })
+          .from(tenants)
+          .where(eq(tenants.id, currentJob.tenantId))
+          .limit(1);
+        const root = rootDomainForOrganizationSubdomain();
+        const moduleFinanceUrl =
+          root && tenantRow?.slug
+            ? `${apiConfig.publicBaseUrlScheme ?? "https"}://${tenantRow.slug}.${root}`
+            : null;
+
+        const { status: relayStatus } = await posProxyJson(
+          `/organizations/${encodeURIComponent(effectivePosOrgId)}/accounting-mode`,
+          "PUT",
+          { relayMode: true },
+        ).catch((err: unknown) => {
+          logger.error("add_module: failed to enable relay mode", { posOrgId: effectivePosOrgId, err: String(err) });
+          return { status: 0, data: null };
+        });
+        if (relayStatus >= 200 && relayStatus < 300) {
+          logger.info("add_module: accounting relay mode enabled", { posOrgId: effectivePosOrgId });
+        } else {
+          logger.warn("add_module: relay mode call returned non-2xx", { posOrgId: effectivePosOrgId, relayStatus });
+        }
+
+        if (moduleFinanceUrl) {
+          await posProxyJson(
+            `/organizations/${encodeURIComponent(effectivePosOrgId)}/finance-url`,
+            "PUT",
+            { financeUrl: moduleFinanceUrl },
+          ).catch((err: unknown) => {
+            logger.error("add_module: failed to set financeUrl", { posOrgId: effectivePosOrgId, err: String(err) });
+          });
+        }
+      }
+    }
+  }
+  if (currentJob?.type === "remove_module" && currentJob.tenantId) {
+    const removedModule =
+      currentJob.payload &&
+      typeof currentJob.payload === "object" &&
+      "module" in currentJob.payload &&
+      typeof (currentJob.payload as { module?: unknown }).module === "string"
+        ? String((currentJob.payload as { module: string }).module)
+        : null;
+
+    if (removedModule === "accounting") {
+      const [deployRow] = await db
+        .select({ posOrganizationId: tenantDeployments.posOrganizationId })
+        .from(tenantDeployments)
+        .where(eq(tenantDeployments.tenantId, currentJob.tenantId))
+        .limit(1);
+      const posOrgId = deployRow?.posOrganizationId ?? null;
+      if (posOrgId) {
+        await posProxyJson(
+          `/organizations/${encodeURIComponent(posOrgId)}/accounting-mode`,
+          "PUT",
+          { relayMode: false },
+        ).catch((err: unknown) => {
+          logger.error("remove_module: failed to disable relay mode", { posOrgId, err: String(err) });
+        });
+        logger.info("remove_module: accounting relay mode disabled", { posOrgId });
       }
     }
   }

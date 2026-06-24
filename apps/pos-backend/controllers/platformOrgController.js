@@ -1398,6 +1398,33 @@ const patchOrgAccountingMode = async (req, res, next) => {
   }
 };
 
+/**
+ * PUT /api/platform/v1/organizations/:id/finance-url
+ * Body: { financeUrl: string }
+ * Stores the Finance application URL for display in the POS sidebar.
+ */
+const patchOrgFinanceUrl = async (req, res, next) => {
+  try {
+    const { financeUrl } = req.body ?? {};
+    if (typeof financeUrl !== "string") {
+      return next(createHttpError(400, "financeUrl must be a string."));
+    }
+    const url = financeUrl.trim();
+    const org = await Organization.findById(req.params.id).select("_id slug financeUrl");
+    if (!org) return next(createHttpError(404, "Organization not found."));
+
+    org.financeUrl = url;
+    await org.save();
+
+    res.json({
+      success: true,
+      data: { id: String(org._id), slug: org.slug, financeUrl: org.financeUrl },
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
 module.exports = {
   listOrgs,
   listOrgsHealthSummary,
@@ -1419,4 +1446,5 @@ module.exports = {
   resetOrgPin,
   retryProvisioning,
   patchOrgAccountingMode,
+  patchOrgFinanceUrl,
 };

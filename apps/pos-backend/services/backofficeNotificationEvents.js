@@ -10,6 +10,7 @@ const NOTIFICATION_EVENTS = {
   RECURRING_INVOICE_FAILED: "accounting.recurring_invoice_failed",
   RECURRING_INVOICE_SKIPPED: "accounting.recurring_invoice_skipped",
   INTEGRATION_SYNC_UNMAPPED: "integration.sync_unmapped_items",
+  ACCOUNTING_SYNC_STUCK: "accounting.sync_stuck",
 };
 
 function buildEventPayload(eventKey, input) {
@@ -135,6 +136,20 @@ function buildEventPayload(eventKey, input) {
           unmappedCount: Number(input.unmappedCount || 0),
         },
       };
+    case NOTIFICATION_EVENTS.ACCOUNTING_SYNC_STUCK: {
+      const count = input.stuckCount ?? "multiple";
+      return {
+        type: "integration",
+        title: "Finance sync stalled",
+        body: `${count} Finance sync event(s) have been failing for more than 30 minutes. Check the Finance integration configuration or Finance service availability.`,
+        severity: "error",
+        href: "/dashboard/accounting/finance-integration",
+        sourceType: "integration",
+        dedupeKey: `accounting_sync_stuck:${input.organizationId || ""}`,
+        dedupeWindowMs: 30 * 60 * 1000,
+        metadata: { eventKey, stuckCount: Number(count) },
+      };
+    }
     default:
       return null;
   }
