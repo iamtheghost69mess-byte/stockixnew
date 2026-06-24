@@ -34,6 +34,15 @@ export class EditAccountDTO {
   @IsOptional()
   @IsString()
   @ApiProperty({
+    description: 'Currency code for the account (ISO 4217)',
+    example: 'USD',
+    required: false,
+  })
+  currencyCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({
     description: 'The description of the account',
     example: 'This is a description',
   })

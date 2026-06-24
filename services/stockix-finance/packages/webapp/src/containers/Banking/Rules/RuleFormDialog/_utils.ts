@@ -41,12 +41,19 @@ export const Fields = [
   { value: 'description', text: 'Description' },
   { value: 'amount', text: 'Amount' },
   { value: 'payee', text: 'Payee' },
+  { value: 'currency_code', text: 'Currency' },
 ];
 
 export const TextFieldConditions = [
   { value: 'contains', text: 'Contains' },
   { value: 'equals', text: 'Equals' },
+  { value: 'not_equals', text: 'Not Equals' },
   { value: 'not_contains', text: 'Not Contains' },
+];
+
+export const CurrencyFieldConditions = [
+  { value: 'equals', text: 'Equals' },
+  { value: 'not_equals', text: 'Not Equals' },
 ];
 export const NumberFieldConditions = [
   { value: 'equal', text: 'Equal' },
@@ -75,6 +82,8 @@ export const getFieldConditionsByFieldKey = (fieldKey?: string) => {
   switch (fieldKey) {
     case 'amount':
       return NumberFieldConditions;
+    case 'currency_code':
+      return CurrencyFieldConditions;
     default:
       return TextFieldConditions;
   }
@@ -84,6 +93,8 @@ export const getDefaultFieldConditionByFieldKey = (fieldKey?: string) => {
   switch (fieldKey) {
     case 'amount':
       return 'bigger_or_equal';
+    case 'currency_code':
+      return 'equals';
     default:
       return 'contains';
   }

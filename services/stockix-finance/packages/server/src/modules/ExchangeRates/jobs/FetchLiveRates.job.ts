@@ -52,6 +52,8 @@ export class FetchLiveRatesJob {
                 continue;
               }
 
+              // Stores Indirect Quote: "1 base = X foreign" (e.g. 1 USD = 0.925 EUR).
+              // Used ONLY for report secondary-currency columns, never for transaction-level GL computation.
               const latestRate = await this.exchangeRatesService.latest(tenant.id, {
                 fromCurrency: baseCurrency,
                 toCurrency: currency.currencyCode,

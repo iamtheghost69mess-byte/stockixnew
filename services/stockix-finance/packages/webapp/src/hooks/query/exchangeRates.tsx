@@ -150,6 +150,25 @@ export function useExchangeRateByDate(currencyCode: string, date: string, props?
   );
 }
 
+/**
+ * Returns exchange rate sync status for all currencies.
+ * A currency is stale when it has no rate stored within the last 7 days.
+ * Used by Preferences → Currencies to show a "No rate" warning tag.
+ */
+export function useExchangeRateSyncStatus(props?) {
+  const apiRequest = useApiRequest();
+
+  return useQueryTenant(
+    ['EXCHANGE_RATE_SYNC_STATUS'],
+    () => apiRequest.get('exchange-rates/sync-status'),
+    {
+      select: (res) => res.data as Array<{ currencyCode: string; lastRateDate: string | null; isStale: boolean }>,
+      staleTime: 5 * 60 * 1000,
+      ...props,
+    },
+  );
+}
+
 /** Alias used by AutoExchangeProvider: fetches latest exchange rate for a currency. */
 export function useLatestExchangeRate(
   { fromCurrency }: { fromCurrency: string },

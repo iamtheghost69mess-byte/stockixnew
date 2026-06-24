@@ -71,4 +71,13 @@ export class ARAgingSummaryQueryDto extends FinancialSheetBranchesQueryDto {
     example: [1, 2, 3],
   })
   customersIds: number[];
+
+  @Transform(({ value }) => parseBoolean(value, false))
+  @IsBoolean()
+  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Group aging rows by currency code',
+    example: false,
+  })
+  groupByCurrency: boolean;
 }

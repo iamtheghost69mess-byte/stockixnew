@@ -94,7 +94,7 @@ export class BuildOrganizationDto {
 
   @IsOptional()
   @IsArray()
-  @IsISO4217CurrencyCode({ each: true })
+  @IsString({ each: true })
   @ApiPropertyOptional({
     description: 'Additional currencies to display alongside the base currency',
     example: ['EUR', 'GBP'],
@@ -226,7 +226,7 @@ export class UpdateOrganizationDto {
 
   @IsOptional()
   @IsArray()
-  @IsISO4217CurrencyCode({ each: true })
+  @IsString({ each: true })
   @ApiPropertyOptional({
     description: 'Additional currencies to display alongside the base currency',
     example: ['EUR', 'GBP'],

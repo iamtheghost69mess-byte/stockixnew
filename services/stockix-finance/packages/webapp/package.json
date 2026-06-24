@@ -141,7 +141,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
     "test": "node scripts/test.js",
-    "storybook": "start-storybook -p 6006"
+    "storybook": "start-storybook -p 6006",
+    "i18n:check": "node scripts/i18n-check.js"
   },
   "eslintConfig": {
     "extends": [

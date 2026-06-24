@@ -11,6 +11,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsPositive,
   IsString,
   Min,
   ValidateNested,
@@ -107,11 +108,11 @@ class CommandSaleInvoiceDto {
   @IsOptional()
   @ToNumber()
   @IsNumber()
-  @Min(0)
+  @IsPositive()
   @ApiProperty({
-    description: 'Exchange rate',
+    description: 'Exchange rate: 1 unit of currencyCode = X units of base currency',
     required: false,
-    minimum: 0,
+    minimum: 0.000001,
     example: 1.0,
   })
   exchangeRate?: number;

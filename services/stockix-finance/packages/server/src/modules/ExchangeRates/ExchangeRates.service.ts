@@ -59,4 +59,27 @@ export class ExchangeRatesService {
 
     return rate ?? null;
   }
+
+  /**
+   * Returns the sync status for all configured currencies.
+   * A currency is considered "stale" if it has no exchange rate within the last 7 days.
+   * Used by the Currencies UI to surface missing-rate warnings.
+   */
+  public async syncStatus(): Promise<Array<{ currencyCode: string; lastRateDate: string | null; isStale: boolean }>> {
+    const sevenDaysAgo = moment().subtract(7, 'days').format('YYYY-MM-DD');
+    const today = moment().format('YYYY-MM-DD');
+
+    // Get all currencies that have ANY stored rate, and the most recent date
+    const rates = await this.exchangeRateModel()
+      .query()
+      .select('currencyCode')
+      .max('date as lastRateDate')
+      .groupBy('currencyCode');
+
+    return rates.map((r: any) => ({
+      currencyCode: r.currencyCode,
+      lastRateDate: r.lastRateDate,
+      isStale: !r.lastRateDate || r.lastRateDate < sevenDaysAgo,
+    }));
+  }
 }

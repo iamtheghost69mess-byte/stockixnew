@@ -8,6 +8,7 @@ import {
   IsArray,
   IsNotEmpty,
   IsInt,
+  IsPositive,
   ValidateNested,
 } from 'class-validator';
 import { ToNumber } from '@/common/decorators/Validators';
@@ -66,8 +67,9 @@ export class CommandPaymentReceivedDto {
   @IsOptional()
   @ToNumber()
   @IsNumber()
+  @IsPositive()
   @ApiProperty({
-    description: 'The exchange rate of the payment received',
+    description: 'The exchange rate of the payment received: 1 unit of currencyCode = X units of base currency',
     example: 1,
   })
   exchangeRate?: number;

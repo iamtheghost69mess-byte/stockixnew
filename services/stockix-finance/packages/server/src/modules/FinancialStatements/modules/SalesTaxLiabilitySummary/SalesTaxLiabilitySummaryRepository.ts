@@ -106,6 +106,29 @@ export class SalesTaxLiabilitySummaryRepository {
   }
 
   /**
+   * Finds foreign-currency invoices and bills that were saved with exchangeRate = 1.
+   * These are likely missing a user-entered rate, which would produce incorrect tax totals.
+   * @param {string} baseCurrency - Org base currency to exclude.
+   * @param {Date} fromDate
+   * @param {Date} toDate
+   * @returns {Promise<number>} Count of suspect transactions.
+   */
+  public async countTransactionsWithSuspectRate(
+    baseCurrency: string,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<number> {
+    const result = await this.accountTransactionModel()
+      .query()
+      .whereNot('currency_code', baseCurrency)
+      .where('exchange_rate', 1)
+      .whereBetween('date', [fromDate, toDate])
+      .count('id as count')
+      .first();
+    return Number((result as any)?.count ?? 0);
+  }
+
+  /**
    * Retrieve taxes sales sum grouped by tax rate id.
    * @returns {Promise<SalesTaxLiabilitySummarySalesById>}
    */

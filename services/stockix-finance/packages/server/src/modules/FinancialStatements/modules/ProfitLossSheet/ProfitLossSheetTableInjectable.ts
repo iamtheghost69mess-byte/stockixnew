@@ -8,7 +8,7 @@ import {
   IProfitLossSheetTable,
 } from './ProfitLossSheet.types';
 import { I18nService } from 'nestjs-i18n';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class ProfitLossSheetTableInjectable {
@@ -39,6 +39,13 @@ export class ProfitLossSheetTableInjectable {
       filter.toDate
         ? new Date(filter.toDate as string | Date)
         : new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.toDate
+        ? new Date(filter.toDate as string | Date
     );
 
     const table = new ProfitLossSheetTable(

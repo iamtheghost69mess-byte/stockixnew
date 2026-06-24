@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { I18nService } from 'nestjs-i18n';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 import { JournalSheetService } from './JournalSheetService';
 import { IJournalReportQuery, IJournalTable } from './JournalSheet.types';
 import { JournalSheetTable } from './JournalSheetTable';
@@ -24,6 +24,12 @@ export class JournalSheetTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       query.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.toDate ?? new Date()
     );
 
     const table = new JournalSheetTable(

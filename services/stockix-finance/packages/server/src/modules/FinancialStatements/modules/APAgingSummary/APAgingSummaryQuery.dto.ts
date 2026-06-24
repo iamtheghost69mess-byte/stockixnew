@@ -71,4 +71,13 @@ export class APAgingSummaryQueryDto extends FinancialSheetBranchesQueryDto {
     example: [1, 2, 3],
   })
   vendorsIds: number[];
+
+  @Transform(({ value }) => parseBoolean(value, false))
+  @IsBoolean()
+  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Group aging rows by currency code',
+    example: false,
+  })
+  groupByCurrency: boolean;
 }

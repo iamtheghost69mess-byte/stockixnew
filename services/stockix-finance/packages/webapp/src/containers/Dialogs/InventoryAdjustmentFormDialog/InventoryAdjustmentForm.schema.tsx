@@ -26,6 +26,15 @@ const Schema = Yup.object().shape({
   publish: Yup.boolean(),
   branch_id: Yup.string(),
   warehouse_id: Yup.string(),
+  currency_code: Yup.string(),
+  exchange_rate: Yup.number()
+    .when('currency_code', {
+      is: (val) => val && val.length > 0,
+      then: Yup.number()
+        .positive('Exchange rate must be greater than zero.')
+        .required('Exchange rate is required for foreign currency adjustments.'),
+      otherwise: Yup.number().min(0),
+    }),
 });
 
 export const CreateInventoryAdjustmentFormSchema = Schema;

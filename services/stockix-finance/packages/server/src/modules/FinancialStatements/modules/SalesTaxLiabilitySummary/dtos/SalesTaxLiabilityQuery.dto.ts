@@ -1,5 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsDateString, IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
+import { parseBoolean } from '@/utils/parse-boolean';
 
 export class SalesTaxLiabilitySummaryQueryDto {
   @ApiProperty({
@@ -26,4 +28,13 @@ export class SalesTaxLiabilitySummaryQueryDto {
   @IsEnum(['cash', 'accrual'])
   @IsNotEmpty()
   basis: 'cash' | 'accrual';
+
+  @Transform(({ value }) => parseBoolean(value, false))
+  @IsBoolean()
+  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Show per-currency breakdown of tax totals',
+    example: false,
+  })
+  groupByCurrency: boolean;
 }

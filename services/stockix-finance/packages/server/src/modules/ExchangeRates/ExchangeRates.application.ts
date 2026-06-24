@@ -25,4 +25,11 @@ export class ExchangeRateApplication {
   public rateByDate(currencyCode: string, date: string) {
     return this.exchangeRateService.lookupRateByDate(currencyCode, date);
   }
+
+  /**
+   * Returns sync status for all currencies — used by the UI to surface stale-rate warnings.
+   */
+  public syncStatus() {
+    return this.exchangeRateService.syncStatus();
+  }
 }

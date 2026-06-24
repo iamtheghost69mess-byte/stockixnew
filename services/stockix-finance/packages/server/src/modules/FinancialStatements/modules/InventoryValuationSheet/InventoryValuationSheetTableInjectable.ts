@@ -7,7 +7,7 @@ import { InventoryValuationSheetTable } from './InventoryValuationSheetTable';
 import { Injectable } from '@nestjs/common';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class InventoryValuationSheetTableInjectable {
@@ -27,6 +27,12 @@ export class InventoryValuationSheetTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       filter.asDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.asDate ?? new Date()
     );
 
     const table = new InventoryValuationSheetTable(data, secondaryCurrency, secondaryRate);

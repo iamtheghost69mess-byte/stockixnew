@@ -23,7 +23,12 @@ const initialValues = {
 const validationSchema = Yup.object({
   logoKey: Yup.string().optional(),
   logoUri: Yup.string().optional(),
-  primaryColor: Yup.string().optional(),
+  primaryColor: Yup.string()
+    .optional()
+    .matches(
+      /^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})?$/,
+      'Must be a valid hex color (e.g. #fff or #ffffff)',
+    ),
 });
 
 interface PreferencesBrandingFormProps {

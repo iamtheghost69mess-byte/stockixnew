@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { I18nService } from 'nestjs-i18n';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 import { BalanceSheetInjectable } from './BalanceSheetInjectable';
 import { buildBalanceSheetTable } from './build-balance-sheet-table';
 import { IBalanceSheetQuery, IBalanceSheetTable } from './BalanceSheet.types';
@@ -32,6 +32,12 @@ export class BalanceSheetTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       query.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.toDate ?? new Date()
     );
 
     const table = buildBalanceSheetTable(

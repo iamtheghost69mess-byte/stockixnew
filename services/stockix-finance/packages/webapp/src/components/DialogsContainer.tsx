@@ -4,6 +4,7 @@ import InviteUserDialog from '@/containers/Dialogs/InviteUserDialog';
 import UserFormDialog from '@/containers/Dialogs/UserFormDialog';
 import ItemCategoryDialog from '@/containers/Dialogs/ItemCategoryDialog';
 import CurrencyFormDialog from '@/containers/Dialogs/CurrencyFormDialog';
+import ExchangeRateFormDialog from '@/containers/Dialogs/ExchangeRateFormDialog';
 import InventoryAdjustmentDialog from '@/containers/Dialogs/InventoryAdjustmentFormDialog';
 import KeyboardShortcutsDialog from '@/containers/Dialogs/keyboardShortcutsDialog';
 import ContactDuplicateDialog from '@/containers/Dialogs/ContactDuplicateDialog';
@@ -74,6 +75,7 @@ export default function DialogsContainer() {
     <div>
       <AccountDialog dialogName={DialogsName.AccountForm} />
       <CurrencyFormDialog dialogName={DialogsName.CurrencyForm} />
+      <ExchangeRateFormDialog dialogName={DialogsName.ExchangeRateForm} />
       <InviteUserDialog dialogName={DialogsName.InviteForm} />
       <UserFormDialog dialogName={DialogsName.UserForm} />
       <UserProfileDialog dialogName={DialogsName.UserProfileForm} />

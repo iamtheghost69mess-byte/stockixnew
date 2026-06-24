@@ -6,6 +6,7 @@ export enum BankRuleConditionField {
   Amount = 'amount',
   Description = 'description',
   Payee = 'payee',
+  CurrencyCode = 'currency_code',
 }
 
 export enum BankRuleConditionComparator {
@@ -13,6 +14,7 @@ export enum BankRuleConditionComparator {
   Equals = 'equals',
   Equal = 'equal',
   NotContain = 'not_contains',
+  NotEquals = 'not_equals',
   Bigger = 'bigger',
   BiggerOrEqual = 'bigger_or_equal',
   Smaller = 'smaller',
@@ -63,6 +65,7 @@ export enum BankRuleAssignCategory {
 export type BankRuleComparator =
   | 'contains'
   | 'equals'
+  | 'not_equals'
   | 'not_contains'
   | 'equal'
   | 'bigger'

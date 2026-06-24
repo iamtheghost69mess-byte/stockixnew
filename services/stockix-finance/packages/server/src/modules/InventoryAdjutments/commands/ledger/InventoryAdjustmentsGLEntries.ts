@@ -35,9 +35,13 @@ export class InventoryAdjustmentsGLEntries {
 
     const tenantMeta = await this.tenancyContext.getTenantMetadata();
 
+    const currencyCode = adjustment.currencyCode ?? tenantMeta.baseCurrency;
+    const exchangeRate = adjustment.exchangeRate ?? 1;
+
     // Retrieves the inventory adjustment GL entries.
     const ledger = new InventoryAdjustmentsGL(adjustment)
       .setBaseCurrency(tenantMeta.baseCurrency)
+      .setCurrency(currencyCode, exchangeRate)
       .getAdjustmentGL();
 
     // Commits the ledger entries to the storage.

@@ -42,8 +42,13 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(rootDir, 'src'),
         '@public': path.resolve(rootDir, 'public'),
         path: 'path-browserify',
+        // Force tiptap packages to use Finance service's pinned 2.1.x versions,
+        // not the monorepo-root's newer versions that are incompatible with @tiptap/core@2.1.x
+        '@tiptap/extension-horizontal-rule': path.resolve(rootDir, '../../node_modules/@tiptap/extension-horizontal-rule'),
+        '@tiptap/core': path.resolve(rootDir, '../../node_modules/@tiptap/core'),
+        '@tiptap/pm': path.resolve(rootDir, '../../node_modules/@tiptap/pm'),
       },
-      dedupe: ['react', 'react-dom'],
+      dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom', 'history'],
     },
     define: {
       // Fix: ReferenceError: global is not defined at runtime.

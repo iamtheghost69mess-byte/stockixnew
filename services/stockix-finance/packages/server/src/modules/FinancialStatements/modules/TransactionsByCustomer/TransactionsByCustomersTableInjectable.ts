@@ -8,7 +8,7 @@ import { TransactionsByCustomersSheet } from './TransactionsByCustomersService';
 import { TransactionsByCustomersTable } from './TransactionsByCustomersTable';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class TransactionsByCustomersTableInjectable {
@@ -30,6 +30,12 @@ export class TransactionsByCustomersTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       filter.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.toDate ?? new Date()
     );
 
     const table = new TransactionsByCustomersTable(

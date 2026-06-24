@@ -34,6 +34,8 @@ export class OpenExchangeRate implements IExchangeRateService {
           symbols: toCurrency,
         },
       });
+      // Returns Indirect Quote: how many toCurrency units equal 1 baseCurrency unit.
+      // e.g. base=USD, to=EUR → returns 0.925 (1 USD = 0.925 EUR).
       return result.data.rates[toCurrency] || (1 as number);
     } catch (error) {
       this.handleLatestErrors(error);

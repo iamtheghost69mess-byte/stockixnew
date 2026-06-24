@@ -8,7 +8,7 @@ import { InventoryDetailsService } from './InventoryItemDetails.service';
 import { InventoryItemDetailsTable } from './InventoryItemDetailsTable';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class InventoryDetailsTableInjectable {
@@ -35,6 +35,12 @@ export class InventoryDetailsTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       query.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.toDate ?? new Date()
     );
 
     const table = new InventoryItemDetailsTable(

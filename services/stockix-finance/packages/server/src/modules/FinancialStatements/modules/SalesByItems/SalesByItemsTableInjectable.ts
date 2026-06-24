@@ -4,7 +4,7 @@ import { SalesByItemsTable } from './SalesByItemsTable';
 import { Injectable } from '@nestjs/common';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class SalesByItemsTableInjectable {
@@ -22,6 +22,12 @@ export class SalesByItemsTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       filter.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.toDate ?? new Date()
     );
 
     const table = new SalesByItemsTable(data, secondaryCurrency, secondaryRate);

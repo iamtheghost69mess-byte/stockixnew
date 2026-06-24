@@ -11,6 +11,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   MaxLength,
   ValidateNested,
@@ -111,8 +112,9 @@ export class CommandExpenseDto {
 
   @ToNumber()
   @IsNumber()
+  @IsPositive()
   @IsOptional()
-  @ApiProperty({ description: 'The exchange rate of the expense', example: 1 })
+  @ApiProperty({ description: 'The exchange rate of the expense: 1 unit of currencyCode = X units of base currency', example: 1 })
   exchangeRate?: number;
 
   @IsString()

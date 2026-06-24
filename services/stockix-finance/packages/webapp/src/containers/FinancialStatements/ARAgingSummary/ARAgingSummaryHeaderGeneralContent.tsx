@@ -9,6 +9,7 @@ import {
   FieldHint,
   FInputGroup,
   FFormGroup,
+  FCheckbox,
   CustomersMultiSelect,
   FDateInput,
 } from '@/components';
@@ -87,6 +88,18 @@ export default function ARAgingSummaryHeaderGeneralContent() {
             label={<T id={'specific_customers'} />}
           >
             <CustomersMultiSelect name="customersIds" items={customers} />
+          </FFormGroup>
+        </Col>
+      </Row>
+
+      <Row>
+        <Col xs={5}>
+          <FFormGroup label={' '} name={'groupByCurrency'} inline fastField>
+            <FCheckbox
+              name={'groupByCurrency'}
+              label={'Group by Currency'}
+              fastField
+            />
           </FFormGroup>
         </Col>
       </Row>

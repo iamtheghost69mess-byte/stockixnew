@@ -19,9 +19,9 @@ function SetupSubscription({
   }, [initSubscriptionPlans]);
 
   useEffect(() => {
+    if (!window.LemonSqueezy) return;
     window.LemonSqueezy.Setup({
       eventHandler: (event) => {
-        // Do whatever you want with this event data
         if (event.event === 'Checkout.Success') {
         }
       },

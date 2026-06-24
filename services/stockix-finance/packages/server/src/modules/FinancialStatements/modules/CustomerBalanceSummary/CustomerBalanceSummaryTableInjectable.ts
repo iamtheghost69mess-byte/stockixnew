@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { I18nService } from 'nestjs-i18n';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 import { CustomerBalanceSummaryService } from './CustomerBalanceSummaryService';
 import {
   ICustomerBalanceSummaryQuery,
@@ -30,6 +30,12 @@ export class CustomerBalanceSummaryTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       filter.asDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      filter.asDate ?? new Date()
     );
 
     const table = new CustomerBalanceSummaryTable(data, filter, this.i18n, secondaryCurrency, secondaryRate);

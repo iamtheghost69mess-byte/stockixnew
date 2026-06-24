@@ -9,6 +9,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   ValidateNested,
 } from 'class-validator';
@@ -40,9 +41,10 @@ export class CommandVendorCreditDto {
 
   @ToNumber()
   @IsNumber()
+  @IsPositive()
   @IsOptional()
   @ApiProperty({
-    description: 'The exchange rate of the vendor credit',
+    description: 'The exchange rate of the vendor credit: 1 unit of currencyCode = X units of base currency',
     example: 1,
   })
   exchangeRate?: number;

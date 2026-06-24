@@ -14,6 +14,19 @@ export class SalesTaxLiabilitySummaryService {
   ) {}
 
   /**
+   * Counts foreign-currency transactions in the period with exchangeRate=1.
+   * Used to produce a warning in the tax liability report when rates may be missing.
+   */
+  public async countSuspectRateTransactions(
+    baseCurrency: string,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<number> {
+    await this.repository.load();
+    return this.repository.countTransactionsWithSuspectRate(baseCurrency, fromDate, toDate);
+  }
+
+  /**
    * Retrieve sales tax liability summary.
    * @param {SalesTaxLiabilitySummaryQuery} query
    * @returns

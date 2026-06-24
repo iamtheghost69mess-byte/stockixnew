@@ -71,6 +71,13 @@ export class ExchangeRatesController {
     return exchangeRate;
   }
 
+  @Get('/sync-status')
+  @ApiOperation({ summary: 'Returns exchange rate sync status for all currencies. Stale = no rate in last 7 days.' })
+  @ApiResponse({ status: 200, description: 'Array of { currencyCode, lastRateDate, isStale }' })
+  async getSyncStatus(): Promise<Array<{ currencyCode: string; lastRateDate: string | null; isStale: boolean }>> {
+    return this.exchangeRateApp.syncStatus();
+  }
+
   @Get('/by-date')
   @UsePipes(
     new ValidationPipe({

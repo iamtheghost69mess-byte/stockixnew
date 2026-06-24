@@ -19,6 +19,8 @@ export interface IQuickInventoryAdjustmentDTO {
 
   warehouseId?: number;
   branchId?: number;
+  currencyCode?: string;
+  exchangeRate?: number;
 }
 export interface IInventoryAdjustmentsFilter extends IDynamicListFilter {
   page?: number;

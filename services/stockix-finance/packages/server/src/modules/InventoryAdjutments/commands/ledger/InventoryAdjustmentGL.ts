@@ -8,6 +8,8 @@ import { Ledger } from '../../../Ledger/Ledger';
 export class InventoryAdjustmentsGL {
   private inventoryAdjustment: InventoryAdjustment;
   private baseCurrency: string;
+  private _currencyCode: string;
+  private _exchangeRate: number;
 
   constructor(inventoryAdjustmentModel: InventoryAdjustment) {
     this.inventoryAdjustment = inventoryAdjustmentModel;
@@ -24,13 +26,26 @@ export class InventoryAdjustmentsGL {
   }
 
   /**
+   * Sets the transaction currency and exchange rate (Direct Quote: 1 foreign = X base).
+   * When not called, defaults to base currency at rate 1.
+   * @param {string} currencyCode - ISO 4217 currency code.
+   * @param {number} exchangeRate - How many base units equal 1 unit of currencyCode.
+   * @returns {InventoryAdjustmentsGL}
+   */
+  public setCurrency(currencyCode: string, exchangeRate: number) {
+    this._currencyCode = currencyCode;
+    this._exchangeRate = exchangeRate;
+    return this;
+  }
+
+  /**
    * Retrieves the inventory adjustment common GL entry.
    * @returns {ILedgerEntry}
    */
   private get adjustmentGLCommonEntry() {
     return {
-      currencyCode: this.baseCurrency,
-      exchangeRate: 1,
+      currencyCode: this._currencyCode ?? this.baseCurrency,
+      exchangeRate: this._exchangeRate ?? 1,
 
       transactionId: this.inventoryAdjustment.id,
       transactionType: 'InventoryAdjustment',

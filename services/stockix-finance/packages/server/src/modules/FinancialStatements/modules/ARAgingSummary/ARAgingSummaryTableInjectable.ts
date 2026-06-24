@@ -5,7 +5,7 @@ import { ARAgingSummaryQueryDto } from './ARAgingSummaryQuery.dto';
 import { buildAgingSummaryTable } from '../AgingSummary/build-aging-summary-table';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class ARAgingSummaryTableInjectable {
@@ -27,17 +27,24 @@ export class ARAgingSummaryTableInjectable {
       query.asDate ?? new Date(),
     );
 
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.asDate ?? new Date()
+    );
+
     const table = buildAgingSummaryTable(report.data, report.columns, {
       contactNameLabel: 'Customer name',
       contactNameKey: 'customer_name',
       contactNameAccessor: 'customerName',
       secondaryCurrency,
       secondaryRate,
+      groupByCurrency: query.groupByCurrency ?? false,
     });
 
     return {
       table,
-      meta: report.meta,
+      meta: { ...report.meta, groupByCurrency: query.groupByCurrency ?? false },
       query,
     };
   }

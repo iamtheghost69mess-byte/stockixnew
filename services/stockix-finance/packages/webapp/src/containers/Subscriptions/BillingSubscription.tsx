@@ -25,6 +25,7 @@ function SubscriptionRoot({ openAlert, openDrawer }) {
     openAlert('resume-main-subscription');
   };
   const handleUpdatePaymentMethod = () => {
+    if (!window.LemonSqueezy) return;
     window.LemonSqueezy.Url.Open(
       mainSubscription.lemonUrls?.updatePaymentMethod,
     );

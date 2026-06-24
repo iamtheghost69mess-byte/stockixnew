@@ -12,6 +12,7 @@ import {
   FInputGroup,
   FTextArea,
   FSelect,
+  ExchangeRateInputGroup,
 } from '@/components';
 import { useAutofocus } from '@/hooks';
 import {
@@ -28,6 +29,7 @@ import { Features, CLASSES } from '@/constants';
 
 import { useInventoryAdjContext } from './InventoryAdjustmentFormProvider';
 import { useFeatureCan } from '@/hooks/state';
+import { useCurrentOrganization, useCurrencies } from '@/hooks/state';
 
 import InventoryAdjustmentQuantityFields from './InventoryAdjustmentQuantityFields';
 import {
@@ -52,6 +54,12 @@ export default function InventoryAdjustmentFormDialogFields() {
   // Inventory adjustment dialog context.
   const { accounts, branches, warehouses } = useInventoryAdjContext();
   const { values, setFieldValue } = useFormikContext();
+
+  // Currency support.
+  const currentOrg = useCurrentOrganization();
+  const { data: currencies } = useCurrencies();
+  const baseCurrency = currentOrg?.base_currency ?? '';
+  const isForeignCurrency = values.currency_code && values.currency_code !== baseCurrency;
 
   // Sets the primary warehouse to form.
   useSetPrimaryWarehouseToForm();
@@ -181,6 +189,47 @@ export default function InventoryAdjustmentFormDialogFields() {
       >
         <FInputGroup name={'reference_no'} fastField />
       </FFormGroup>
+
+      {/*------------ Currency -----------*/}
+      <Row>
+        <Col xs={5}>
+          <FFormGroup
+            name={'currency_code'}
+            label={<T id={'currency'} />}
+            fill
+            fastField
+          >
+            <FSelect
+              name={'currency_code'}
+              items={currencies || []}
+              valueAccessor={'currency_code'}
+              textAccessor={'currency_code'}
+              labelAccessor={'currency_code'}
+              popoverProps={{ minimal: true }}
+              fill
+              fastField
+            />
+          </FFormGroup>
+        </Col>
+
+        {isForeignCurrency && (
+          <Col xs={5}>
+            <FFormGroup
+              name={'exchange_rate'}
+              label={<T id={'exchange_rate'} />}
+              fill
+              fastField
+            >
+              <ExchangeRateInputGroup
+                name={'exchange_rate'}
+                fromCurrency={values.currency_code}
+                toCurrency={baseCurrency}
+                formGroupProps={{ label: ' ', inline: false }}
+              />
+            </FFormGroup>
+          </Col>
+        )}
+      </Row>
 
       {/*------------ Adjustment reasons -----------*/}
       <FFormGroup

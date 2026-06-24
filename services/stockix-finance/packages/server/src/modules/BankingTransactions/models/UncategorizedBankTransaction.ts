@@ -14,6 +14,7 @@ export class UncategorizedBankTransaction extends TenantBaseModel {
   readonly referenceNo!: string;
   readonly payee!: string;
   readonly description!: string;
+  readonly currency_code!: string;
   readonly plaidTransactionId!: string;
   readonly recognizedTransactionId!: number;
   readonly excludedAt: Date;

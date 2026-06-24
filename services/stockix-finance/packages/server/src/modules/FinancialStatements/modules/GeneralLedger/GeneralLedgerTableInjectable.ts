@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ExchangeRatesService } from '@/modules/ExchangeRates/ExchangeRates.service';
 import { TenancyContext } from '@/modules/Tenancy/TenancyContext.service';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 import {
   IGeneralLedgerSheetQuery,
   IGeneralLedgerTableData,
@@ -31,6 +31,12 @@ export class GeneralLedgerTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       query.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      query.toDate ?? new Date()
     );
 
     const table = new GeneralLedgerTable(sheetData, sheetQuery, sheetMeta, secondaryCurrency, secondaryRate);

@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import intl from 'react-intl-universal';
 
 import { CurrenciesProvider } from './CurrenciesProvider';
+import CurrenciesActionsBar from './CurrenciesActionsBar';
 import CurrenciesDataTable from './CurrenciesDataTable';
 
 import { withDashboardActions } from '@/containers/Dashboard/withDashboardActions';
@@ -19,6 +20,7 @@ function CurrenciesList({
 
   return (
     <CurrenciesProvider>
+      <CurrenciesActionsBar />
       <CurrenciesDataTable />
     </CurrenciesProvider>
   );

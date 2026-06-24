@@ -175,6 +175,44 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
         </SecondaryCurrencyRow>
       </FFormGroup>
 
+      {/* ---------- Display Currencies (moved here for prominence, near secondary currency) ---------- */}
+      {globalCurrencies.length > 0 && Array.isArray(values.display_currencies) && (
+        <FFormGroup
+          name={'display_currencies'}
+          label={'Display Currencies'}
+          inline={true}
+          helperText={'Currencies shown as extra columns on reports and transaction forms. Enter exchange rates manually via Preferences → Currencies.'}
+          fastField={false}
+        >
+          <FMultiSelect
+            name={'display_currencies'}
+            items={globalCurrencies}
+            valueAccessor={(item) => item.currency_code}
+            labelAccessor={(item) => item.currency_code}
+            tagRenderer={getCurrencyCode}
+            itemRenderer={(item, { handleClick, modifiers }, { isSelected }) => (
+              <MenuItem
+                key={item.currency_code}
+                active={modifiers.active}
+                icon={isSelected ? 'tick' : 'blank'}
+                text={item.currency_name}
+                label={item.currency_code}
+                onClick={handleClick}
+              />
+            )}
+            itemPredicate={(query, item) => {
+              const q = query.toLowerCase();
+              return (
+                item.currency_code.toLowerCase().includes(q) ||
+                item.currency_name.toLowerCase().includes(q)
+              );
+            }}
+            popoverProps={{ minimal: true }}
+            placeholder={intl.get('select_display_currencies')}
+          />
+        </FFormGroup>
+      )}
+
       {/* --------- Fiscal Year ----------- */}
       <FFormGroup
         name={'fiscal_year'}
@@ -260,45 +298,6 @@ export default function PreferencesGeneralForm({ isSubmitting, values, setFieldV
           fastField={true}
         />
       </FFormGroup>
-
-      {/* ---------- Display Currencies ---------- */}
-      {globalCurrencies.length > 0 && Array.isArray(values.display_currencies) && (
-        <FFormGroup
-          name={'display_currencies'}
-          label={<T id={'display_currencies'} />}
-          inline={true}
-          helperText={<T id={'display_currencies_helper'} />}
-          fastField={false}
-        >
-          <FMultiSelect
-            name={'display_currencies'}
-            items={globalCurrencies}
-            valueAccessor={(item) => item.currency_code}
-            labelAccessor={(item) => item.currency_code}
-            tagRenderer={getCurrencyCode}
-            itemRenderer={(item, { handleClick, modifiers }, { isSelected }) => (
-              <MenuItem
-                key={item.currency_code}
-                active={modifiers.active}
-                icon={isSelected ? 'tick' : 'blank'}
-                text={item.currency_name}
-                label={item.currency_code}
-                onClick={handleClick}
-              />
-            )}
-            itemPredicate={(query, item) => {
-              const q = query.toLowerCase();
-              return (
-                item.currency_code.toLowerCase().includes(q) ||
-                item.currency_name.toLowerCase().includes(q)
-              );
-            }}
-            popoverProps={{ minimal: true }}
-            // ORIGINAL: placeholder={<T id={'select_display_currencies'} />}
-            placeholder={intl.get('select_display_currencies')}
-          />
-        </FFormGroup>
-      )}
 
       <CardFooterActions>
         <Button loading={isSubmitting} intent={Intent.PRIMARY} type="submit">

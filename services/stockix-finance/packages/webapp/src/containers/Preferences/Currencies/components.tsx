@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import intl from 'react-intl-universal';
 import styled from 'styled-components';
+import { useCurrenciesContext } from './CurrenciesProvider';
 import {
   Menu,
   Popover,
@@ -114,6 +115,9 @@ const DateText = styled.span`
 `;
 
 function CurrentRateAccessor(row) {
+  const { syncStatusByCode } = useCurrenciesContext();
+  const syncEntry = syncStatusByCode?.[row.currency_code];
+
   if (row.is_base_currency) {
     return (
       <Tag minimal round>
@@ -139,6 +143,13 @@ function CurrentRateAccessor(row) {
           maximumFractionDigits: 4,
         })}
       </RateText>
+      {syncEntry?.isStale && (
+        <Tooltip content={`Rate is older than 7 days (last: ${syncEntry.lastRateDate ?? 'unknown'}). Auto-sync may not support this currency — enter rate manually.`}>
+          <Tag minimal intent={Intent.WARNING} round style={{ fontSize: 10 }}>
+            Stale
+          </Tag>
+        </Tooltip>
+      )}
     </RateCell>
   );
 }

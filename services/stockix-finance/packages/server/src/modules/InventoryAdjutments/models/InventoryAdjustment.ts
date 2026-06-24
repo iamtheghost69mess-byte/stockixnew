@@ -18,6 +18,9 @@ export class InventoryAdjustment extends TenantBaseModel {
   public readonly branchId!: number;
   public readonly warehouseId!: number;
 
+  public readonly currencyCode?: string;
+  public readonly exchangeRate?: number;
+
   public readonly createdAt!: Date | string;
   public readonly entries: InventoryAdjustmentEntry[];
 

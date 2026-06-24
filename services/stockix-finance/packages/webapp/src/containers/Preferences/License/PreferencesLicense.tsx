@@ -79,12 +79,12 @@ function PreferencesLicense({ changePreferencesPageTitle }: { changePreferencesP
   }
 
   const {
-    licenseStatus,
-    licenseExpiresAt,
-    licenseGracePeriodEndsAt,
-    planSlug,
-    licenseKey,
-    isPerpetual,
+    license_status: licenseStatus,
+    license_expires_at: licenseExpiresAt,
+    license_grace_period_ends_at: licenseGracePeriodEndsAt,
+    plan_slug: planSlug,
+    license_key: licenseKey,
+    is_perpetual: isPerpetual,
   } = data;
 
   return (

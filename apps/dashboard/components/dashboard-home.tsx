@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import {
@@ -96,11 +97,14 @@ export function DashboardHome() {
   const canReadLicenses = useHasPermission("licenses.read");
   const { tenants, licenses, isLoading, error, refetch } = useDashboardStats();
 
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const [greeting, setGreeting] = useState("Good morning");
+  const [todayLine, setTodayLine] = useState("");
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreeting(hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening");
+    setTodayLine(format(new Date(), "EEEE, MMMM d, yyyy"));
+  }, []);
   const ownerName = me?.name?.trim() ? me.name : "there";
-  const todayLine = format(new Date(), "EEEE, MMMM d, yyyy");
 
   const canProvision = Boolean(me?.capabilities.canManageTenants);
   const canGenerate = me?.role === "super_admin";

@@ -66,6 +66,8 @@ const matchTextCondition = (
     case BankRuleConditionComparator.Equals:
     case BankRuleConditionComparator.Equal:
       return transactionValue === condition.value;
+    case BankRuleConditionComparator.NotEquals:
+      return transactionValue !== condition.value;
     case BankRuleConditionComparator.Contains:
       const fieldValue = lowerCase(transactionValue);
       const conditionValue = lowerCase(condition.value);
@@ -110,6 +112,7 @@ const determineFieldType = (field: string): string => {
       return 'number';
     case 'description':
     case 'payee':
+    case 'currency_code':
     default:
       return 'text';
   }

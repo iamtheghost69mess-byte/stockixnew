@@ -30,6 +30,8 @@ const defaultInitialValues = {
   publish: '',
   branch_id: '',
   warehouse_id: '',
+  currency_code: '',
+  exchange_rate: 1,
 };
 
 /**

@@ -8,6 +8,7 @@ import {
   IsNumber,
   IsPositive,
   IsString,
+  IsISO4217CurrencyCode,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { IsOptional, ToNumber } from '@/common/decorators/Validators';
@@ -90,4 +91,17 @@ export class CreateQuickInventoryAdjustmentDto {
   @IsInt()
   @IsPositive()
   branchId?: number;
+
+  @ApiPropertyOptional({ description: 'Currency code (ISO 4217). Defaults to org base currency.' })
+  @IsOptional()
+  @IsString()
+  @IsISO4217CurrencyCode()
+  currencyCode?: string;
+
+  @ApiPropertyOptional({ description: 'Exchange rate: 1 unit of currencyCode = X units of base currency. Required when currencyCode differs from base.' })
+  @IsOptional()
+  @ToNumber()
+  @IsNumber()
+  @IsPositive()
+  exchangeRate?: number;
 }

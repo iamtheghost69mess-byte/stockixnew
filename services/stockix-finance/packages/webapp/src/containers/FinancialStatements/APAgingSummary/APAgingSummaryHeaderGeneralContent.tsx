@@ -10,6 +10,7 @@ import {
   VendorsMultiSelect,
   FDateInput,
   FInputGroup,
+  FCheckbox,
 } from '@/components';
 import { useAPAgingSummaryGeneralContext } from './APAgingSummaryGeneralProvider';
 import FinancialStatementsFilter from '../FinancialStatementsFilter';
@@ -82,6 +83,18 @@ export default function APAgingSummaryHeaderGeneralContent() {
         <Col xs={5}>
           <FFormGroup label={<T id={'specific_vendors'} />} name={'vendorsIds'}>
             <VendorsMultiSelect name={'vendorsIds'} items={vendors} />
+          </FFormGroup>
+        </Col>
+      </Row>
+
+      <Row>
+        <Col xs={5}>
+          <FFormGroup label={' '} name={'groupByCurrency'} inline fastField>
+            <FCheckbox
+              name={'groupByCurrency'}
+              label={'Group by Currency'}
+              fastField
+            />
           </FFormGroup>
         </Col>
       </Row>

@@ -8,7 +8,7 @@ import {
   ICashFlowStatementQuery,
   ICashFlowStatementTable,
 } from './Cashflow.types';
-import { resolveSecondaryCurrency } from '../../common/resolveSecondaryCurrency';
+import { resolveSecondaryCurrency, resolveDisplayCurrencies, DisplayCurrencyContext } from '../../common/resolveSecondaryCurrency';
 
 @Injectable()
 export class CashflowTableInjectable {
@@ -36,6 +36,12 @@ export class CashflowTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       cashflowDOO.query.toDate ?? new Date(),
+    );
+
+    const displayCurrencies: DisplayCurrencyContext[] = await resolveDisplayCurrencies(
+      tenantMetadata,
+      this.exchangeRatesService,
+      cashflowDOO.query.toDate ?? new Date()
     );
 
     const cashflowTable = new CashFlowTable(
