@@ -54,6 +54,40 @@ services:
     networks:
       - stockix_internal
 
+  chatwoot-sidekiq:
+    build:
+      context: ../../services/chatlive
+      dockerfile: docker/Dockerfile
+    image: stockix-chatlive:local
+    restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: "0.5"
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    environment:
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
+      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-https://chat.${ROOT_DOMAIN}}
+      - INSTALLATION_NAME=${CHATWOOT_INSTALLATION_NAME:-Stockix}
+      - POSTGRES_HOST=chatwoot-postgres
+      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_USERNAME=chatwoot
+      - POSTGRES_PASSWORD=${CHATWOOT_DB_PASSWORD}
+      - REDIS_URL=redis://chatwoot-redis:6379
+      - MAILER_SENDER_EMAIL=${MAIL_FROM_ADDRESS:-}
+      - SMTP_ADDRESS=${MAIL_HOST:-}
+      - SMTP_PORT=${MAIL_PORT:-587}
+      - SMTP_USERNAME=${MAIL_USERNAME:-}
+      - SMTP_PASSWORD=${MAIL_PASSWORD:-}
+      - RAILS_ENV=production
+      - INSTALLATION_ENV=docker
+    depends_on:
+      chatwoot-postgres:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+    networks:
+      - stockix_internal
+
   chatwoot-postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
