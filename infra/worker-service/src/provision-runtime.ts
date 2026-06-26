@@ -828,7 +828,7 @@ export async function executeProvisionRuntime(
   assertNotCancelled?: () => Promise<void>,
   lifecycleJobId?: string,
 ): Promise<ProvisionResult> {
-  await ensureExternalNetworksExist(log);
+  await ensureTenantExternalNetworks(log);
   const runtimeStartedAt = Date.now();
   let tenantId: string | undefined;
   let deploymentId: string | undefined;
@@ -1652,10 +1652,12 @@ export async function executeProvisionRuntime(
       .catch(() => undefined);
     // Explicitly delete the MySQL named volume — compose down -v may not remove
     // explicitly named volumes (name: ${MYSQL_VOLUME_NAME}) in all Compose versions.
+    const mysqlVolumeName = `${project}_mysql_data`;
     await execa("docker", ["volume", "rm", mysqlVolumeName], { stdio: "pipe", reject: false });
     // Explicitly delete the Mongo auto-named volume — stale SCRAM credentials survive compose
     // down -v when the container was previously stopped (not running) because Compose skips
     // volume removal for stopped containers in some versions.
+    const mongoVolumeName = `${project}_mongo_data`;
     await execa("docker", ["volume", "rm", mongoVolumeName], { stdio: "pipe", reject: false });
     await trace.event("preflight.cleanup", "completed", {
       meta: { composeProjectName: project },
