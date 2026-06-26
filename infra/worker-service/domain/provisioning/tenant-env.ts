@@ -272,6 +272,11 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
     THROTTLE_GLOBAL_LIMIT: String(env.THROTTLE_GLOBAL_LIMIT),
     THROTTLE_AUTH_TTL: String(env.THROTTLE_AUTH_TTL),
     THROTTLE_AUTH_LIMIT: String(env.THROTTLE_AUTH_LIMIT),
+    // ── Gotenberg PDF renderer (shared instance on stockix-shared network) ────
+    GOTENBERG_URL: process.env.GOTENBERG_URL ?? "http://stockix-gotenberg:3000",
+    // Finance server's own /public/ endpoint that Gotenberg fetches HTML assets FROM.
+    GOTENBERG_DOCS_URL: process.env.GOTENBERG_DOCS_URL ?? "http://server:3000/public/",
+
     // ── Observability (optional — set SENTRY_DSN in platform env) ─────
     SENTRY_DSN: process.env.SENTRY_DSN?.trim() ?? "",
     SENTRY_ENVIRONMENT: `tenant-${slug}`,
