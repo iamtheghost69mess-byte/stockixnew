@@ -15,7 +15,7 @@
  *   hostess 1006   Dev Hostess
  */
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+require("dotenv").config({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
 const mongoose = require("mongoose");
 const config = require("../config/config");
 const User = require("../models/userModel");

@@ -142,8 +142,11 @@ services:
       context: ${STOCKIX_REPO_ROOT}
       dockerfile: apps/pos-frontend2/Dockerfile
       args:
-        NEXT_PUBLIC_POS_API_ORIGIN: ${POS_BACKEND_URL:-http://localhost:8010}
+        NEXT_PUBLIC_POS_API_ORIGIN: ${POS_BACKEND_URL}
     restart: unless-stopped
+    depends_on:
+      pos-backend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
@@ -151,7 +154,7 @@ services:
       retries: 3
       start_period: 45s
     environment:
-      - NEXT_PUBLIC_POS_API_ORIGIN=${POS_BACKEND_URL:-http://localhost:8010}
+      - NEXT_PUBLIC_POS_API_ORIGIN=${POS_BACKEND_URL}
     ports:
       - "127.0.0.1:${POS_FRONTEND_HOST_PORT:-3001}:3000"
     networks:

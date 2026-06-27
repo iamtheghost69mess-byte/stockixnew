@@ -1,7 +1,10 @@
 const path = require("path");
-// Always load backend `.env` from this package root (not `process.cwd()`), so PIN
-// lookup HMAC and JWT signing use the same secret when started via Nx/monorepo.
-require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+const { loadEnvIfDev } = require("../lib/load-env-if-dev");
+// Load .env only in development — production env is injected by Docker compose.
+// Load from monorepo root .env — single source of truth for dev.
+loadEnvIfDev({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
+// Validate required production vars before any service code reads them.
+require("./env-validate");
 
 const jwtSecret = process.env.JWT_SECRET;
 /** HMAC key for `pinLookup` on PIN-only users; must match value used when users were saved. */
@@ -27,6 +30,9 @@ const impersonationEnabled =
   String(process.env.PLATFORM_IMPERSONATION_ENABLED || "").toLowerCase() ===
   "true";
 
+if (!process.env.PUBLIC_APP_URL && process.env.NODE_ENV === "production") {
+  throw new Error("[pos-backend] PUBLIC_APP_URL is required in production — used as CORS origin and QR code base URL");
+}
 const publicAppUrl =
   process.env.PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:5173";
 

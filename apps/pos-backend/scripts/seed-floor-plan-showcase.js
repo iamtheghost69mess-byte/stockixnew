@@ -13,7 +13,7 @@
  * Refuses production unless ALLOW_DEV_SEED=1 (same guard as seed:dev).
  */
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+require("dotenv").config({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
 const mongoose = require("mongoose");
 const config = require("../config/config");
 const Organization = require("../models/organizationModel");

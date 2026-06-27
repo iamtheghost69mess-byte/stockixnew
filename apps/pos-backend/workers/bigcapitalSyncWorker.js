@@ -1,8 +1,9 @@
 /**
  * BullMQ worker — run: `npm run worker:bigcapital`
  */
+const path = require("path");
 const { loadEnvIfDev } = require("../lib/load-env-if-dev");
-loadEnvIfDev();
+loadEnvIfDev({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
 const connectDB = require("../config/database");
 const { createWorker } = require("../services/jobQueue");
 const {

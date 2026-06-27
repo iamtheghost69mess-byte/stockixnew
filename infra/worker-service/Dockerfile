@@ -64,7 +64,7 @@ RUN test -f infra/worker-service/.runtime/worker.js
 # ─────────────────────────────────────────────────────────────
 FROM node:22-alpine AS worker
 
-RUN apk add --no-cache docker-cli docker-cli-compose \
+RUN apk add --no-cache docker-cli docker-cli-compose dumb-init \
     && apk upgrade --no-cache \
     && rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
@@ -72,11 +72,16 @@ RUN apk add --no-cache docker-cli docker-cli-compose \
 ENV NODE_ENV=production
 WORKDIR /app
 
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001 -G nodejs
+
 # Copy the compiled bundle and all dynamic-import chunks produced by tsup splitting
-COPY --from=build /app/infra/worker-service/.runtime/ ./
+COPY --from=build --chown=nodejs:nodejs /app/infra/worker-service/.runtime/ ./
+
+USER nodejs
 
 EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "worker.js"]

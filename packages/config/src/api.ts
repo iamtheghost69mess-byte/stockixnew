@@ -62,9 +62,11 @@ export const apiConfig = {
   get port() {
     return env.PORT;
   },
-  /** Control-plane API hostname for worker → API calls (Docker: `api`; host dev: `127.0.0.1`). */
+  /** Control-plane API hostname for worker → API calls. Must be set explicitly: `api` in Docker, `127.0.0.1` on host. */
   get apiHost() {
-    return env.API_HOST?.trim() || "127.0.0.1";
+    const host = env.API_HOST?.trim();
+    if (!host) throw new Error("[config] API_HOST is required — set to 'api' for containerized worker, '127.0.0.1' for host-run worker");
+    return host;
   },
   get controlPlaneApiBaseUrl() {
     return `http://${this.apiHost}:${this.port}`;

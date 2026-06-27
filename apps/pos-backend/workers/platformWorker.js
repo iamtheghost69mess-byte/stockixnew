@@ -4,7 +4,7 @@
  */
 const path = require("path");
 const { loadEnvIfDev } = require("../lib/load-env-if-dev");
-loadEnvIfDev({ path: path.resolve(__dirname, "..", ".env") });
+loadEnvIfDev({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
 const mongoose = require("mongoose");
 const connectDB = require("../config/database");
 const config = require("../config/config");

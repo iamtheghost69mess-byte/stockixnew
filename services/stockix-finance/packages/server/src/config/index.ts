@@ -2,7 +2,30 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { castCommaListEnvVarToArray, parseBoolean } from '@/utils';
 
-dotenv.config();
+// Load .env only in development — production env is injected by Docker compose.
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
+
+// Validate required production vars before the config object is built.
+if (process.env.NODE_ENV === 'production') {
+  const required: Array<[string, string]> = [
+    ['PORT',             'HTTP server port'],
+    ['JWT_SECRET',       'JWT signing key'],
+    ['SYSTEM_DB_HOST',   'System database host'],
+    ['SYSTEM_DB_USER',   'System database user'],
+    ['SYSTEM_DB_PASSWORD','System database password'],
+    ['SYSTEM_DB_NAME',   'System database name'],
+  ];
+  const missing = required.filter(([k]) => !process.env[k]?.trim());
+  if (missing.length > 0) {
+    throw new Error(
+      `[finance] Missing required production environment variables:\n` +
+      missing.map(([k, d]) => `  • ${k.padEnd(25)} ${d}`).join('\n') +
+      '\n\nSet these in the Finance tenant compose stack environment section.\n'
+    );
+  }
+}
 
 const config = {
   /**

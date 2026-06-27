@@ -1,5 +1,6 @@
+const path = require("path");
 const { loadEnvIfDev } = require("../lib/load-env-if-dev");
-loadEnvIfDev();
+loadEnvIfDev({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
 const mongoose = require("mongoose");
 const escpos = require("@node-escpos/core");
 const USB = require("@node-escpos/usb-adapter");

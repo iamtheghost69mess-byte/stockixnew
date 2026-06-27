@@ -407,7 +407,7 @@ export async function executeProvisionRuntime(
       await checkNotCancelled();
       const workerInternalUrl =
         port > 0
-          ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
+          ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost}:${port}`
           : undefined;
       let retryServiceChargeItemId: number | undefined;
       let retryDiscountItemId: number | undefined;
@@ -555,7 +555,7 @@ export async function executeProvisionRuntime(
         ) {
           const workerInternalUrl =
             port > 0
-              ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
+              ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost}:${port}`
               : undefined;
           let retryServiceChargeItemId: number | undefined;
           let retryDiscountItemId: number | undefined;
@@ -1831,7 +1831,7 @@ export async function executeProvisionRuntime(
           integrationWired = true;
           // Seed the primary branch→location mapping now that both Finance and POS are wired
           if (tenantId && posOrganizationId && port) {
-            const financeBase = `http://127.0.0.1:${port}`;
+            const financeBase = `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost}:${port}`;
             seedBranchLocationMapping({
               db,
               tenantId,
@@ -2041,7 +2041,7 @@ export async function runAddModuleStep(
     const financeInternalPort = row.internalPort ?? undefined;
     const internalUrl =
       financeInternalPort && financeInternalPort > 0
-        ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${financeInternalPort}`
+        ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost}:${financeInternalPort}`
         : undefined;
     const rootDomain = apiConfig.rootDomain || "example.com";
     const publicScheme = apiConfig.publicBaseUrlScheme;

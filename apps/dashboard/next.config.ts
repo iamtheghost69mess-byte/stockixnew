@@ -58,27 +58,31 @@ const nextConfig: NextConfig = {
 
   // ── Rewrites ──────────────────────────────────────────────────────────────
   async rewrites() {
-    const apiUrl = process.env.STOCKIX_API_URL || process.env.NEXT_PUBLIC_STOCKIX_API_URL || "http://127.0.0.1:4000";
+    const apiUrl = process.env.STOCKIX_API_URL || process.env.NEXT_PUBLIC_STOCKIX_API_URL;
+    if (!apiUrl && process.env.NODE_ENV === "production") {
+      throw new Error("[dashboard] STOCKIX_API_URL or NEXT_PUBLIC_STOCKIX_API_URL is required in production");
+    }
+    const resolvedApiUrl = apiUrl || "http://127.0.0.1:4000";
     return [
       {
         source: "/api/health",
-        destination: `${apiUrl}/health`,
+        destination: `${resolvedApiUrl}/health`,
       },
       {
         source: "/api/me",
-        destination: `${apiUrl}/v1/auth/me`,
+        destination: `${resolvedApiUrl}/v1/auth/me`,
       },
       {
         source: "/api/security/mfa/:path*",
-        destination: `${apiUrl}/v1/auth/mfa/:path*`,
+        destination: `${resolvedApiUrl}/v1/auth/mfa/:path*`,
       },
       {
         source: "/api/pms/:path*",
-        destination: `${apiUrl}/v1/pms/:path*`,
+        destination: `${resolvedApiUrl}/v1/pms/:path*`,
       },
       {
         source: "/api/:path*",
-        destination: `${apiUrl}/v1/:path*`,
+        destination: `${resolvedApiUrl}/v1/:path*`,
       },
     ];
   },

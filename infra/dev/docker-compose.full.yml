@@ -170,11 +170,37 @@ services:
       DOCKER_HOST: unix:///var/run/docker.sock
       WORKER_CONCURRENCY: "1"
       WORKER_HEALTH_PORT: "9090"
+      TENANT_INTERNAL_HOST: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - tenant_envs_dev:/opt/tenants
     networks:
       - stockix_dev_internal
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # MongoDB 6 — tenant POS databases (one DB per tenant: {slug}_pos)
+  # Referenced by SHARED_MONGO_HOST: mongo in worker + api environments.
+  # ─────────────────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_dev_data:/data/db
+    networks:
+      - stockix_dev_internal
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mongosh --quiet --eval "quit(db.adminCommand({ping:1}).ok === 1 ? 0 : 1)"'
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # ─────────────────────────────────────────────────────────────────────────────
   # MySQL 8 — tenant Finance databases (one DB per tenant: stockix_{slug}_finance)
@@ -212,4 +238,5 @@ networks:
 
 volumes:
   mysql_dev_data:
+  mongo_dev_data:
   tenant_envs_dev:

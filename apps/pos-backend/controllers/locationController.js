@@ -389,9 +389,10 @@ const deleteLocation = async (req, res, next) => {
       return next(createHttpError(404, "Location not found."));
     }
 
-    const cpUrl = process.env.CONTROL_PLANE_INTERNAL_URL || "http://127.0.0.1:3001";
     const secret = process.env.INTERNAL_API_SECRET;
     if (secret) {
+      const cpUrl = process.env.CONTROL_PLANE_INTERNAL_URL;
+      if (!cpUrl) throw new Error("[pos-backend] CONTROL_PLANE_INTERNAL_URL is required when INTERNAL_API_SECRET is set");
       try {
         await fetch(`${cpUrl}/internal/branch-location-mapping`, {
           method: "DELETE",

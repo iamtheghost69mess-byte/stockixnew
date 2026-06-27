@@ -299,23 +299,37 @@ services:
           cpus: "0.2"
 
   pgbouncer:
-    image: pgbouncer/pgbouncer:latest
+    image: pgbouncer/pgbouncer:1.23.1
     restart: unless-stopped
     <<: *logging-limits
     environment:
       DATABASES_HOST: postgres
       DATABASES_PORT: 5432
       DATABASES_DBNAME: stockix_platform
+      DATABASES_USER: postgres
+      DATABASES_PASSWORD: ${POSTGRES_PASSWORD}
       PGBOUNCER_POOL_MODE: transaction
       PGBOUNCER_MAX_CLIENT_CONN: 200
       PGBOUNCER_DEFAULT_POOL_SIZE: 20
-      PGBOUNCER_AUTH_TYPE: any
+      PGBOUNCER_AUTH_TYPE: md5
+      PGBOUNCER_AUTH_USER: postgres
       PGBOUNCER_LISTEN_PORT: 5432
     networks:
       - stockix_internal
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres -d stockix_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 128m
+    cpus: "0.2"
+    mem_swappiness: 0
+    security_opt:
+      - no-new-privileges:true
     deploy:
       restart_policy:
         condition: any
@@ -543,6 +557,12 @@ services:
       - --collector.textfile.directory=/var/lib/node_exporter/textfile
     networks:
       - stockix_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9100/metrics 2>/dev/null | head -1 | grep -q '#' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     mem_limit: 64m
     cpus: "0.1"
     deploy:
@@ -563,6 +583,12 @@ services:
       REDIS_ADDR: redis://control-plane-redis:6379
     networks:
       - stockix_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9121/metrics 2>/dev/null | head -1 | grep -q '#' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     mem_limit: 32m
     cpus: "0.05"
     deploy:
@@ -587,6 +613,12 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=15d"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/healthy 2>/dev/null | grep -q 'Healthy' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     mem_limit: 256m
     cpus: "0.25"
     deploy:
@@ -607,6 +639,12 @@ services:
     networks:
       - stockix_internal
       - stockix_public
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9093/-/healthy 2>/dev/null | grep -q 'OK' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     mem_limit: 64m
     cpus: "0.1"
     deploy:
@@ -625,7 +663,7 @@ services:
         - "traefik.http.services.alertmanager.loadbalancer.server.port=9093"
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.5.0
     restart: unless-stopped
     <<: *logging-limits
     command: ["-config.file=/etc/tempo/tempo.yaml"]
@@ -676,6 +714,7 @@ services:
         - "traefik.http.routers.grafana.rule=Host(`grafana.${ROOT_DOMAIN}`)"
         - "traefik.http.routers.grafana.entrypoints=websecure"
         - "traefik.http.routers.grafana.tls.certresolver=cloudflare"
+        - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
   db-backup:
     image: alpine:3.20

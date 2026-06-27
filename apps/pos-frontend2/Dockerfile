@@ -40,18 +40,24 @@ RUN pnpm run build
 
 FROM node:22-alpine AS runner
 
-RUN apk update && apk upgrade --no-cache \
+RUN apk add --no-cache dumb-init && apk upgrade --no-cache \
     && rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=build /pos/apps/pos-frontend2/.next/standalone ./
-COPY --from=build /pos/apps/pos-frontend2/.next/static ./apps/pos-frontend2/.next/static
-COPY --from=build /pos/apps/pos-frontend2/public ./apps/pos-frontend2/public
+COPY --from=build --chown=nodejs:nodejs /pos/apps/pos-frontend2/.next/standalone ./
+COPY --from=build --chown=nodejs:nodejs /pos/apps/pos-frontend2/.next/static ./apps/pos-frontend2/.next/static
+COPY --from=build --chown=nodejs:nodejs /pos/apps/pos-frontend2/public ./apps/pos-frontend2/public
+
+USER nodejs
 
 EXPOSE 3000
 
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "apps/pos-frontend2/server.js"]

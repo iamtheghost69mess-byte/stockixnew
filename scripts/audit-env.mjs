@@ -35,8 +35,10 @@ function status(v) {
 
 const root = parseEnv(".env");
 const prod = parseEnv("infra/prod/.env");
-const pos = parseEnv("services/posnew/apps/pos-backend/.env");
 const example = parseEnv(".env.example");
+
+// POS backend loads from root .env — no separate POS env file needed.
+// All root↔POS alignment checks are implicit (same file).
 
 const critical = [
   "DATABASE_URL",
@@ -66,22 +68,27 @@ const critical = [
   "CHATWOOT_API_ACCESS_TOKEN",
   "POS_FINANCE_INTERNAL_HOST",
   "STOCKIX_FINANCE_INTERNAL_HOST",
+  // POS-specific vars now in root .env
+  "MONGODB_URI",
+  "REDIS_URL",
+  "PUBLIC_APP_URL",
+  "TENANT_ID",
+  "WORKER_HEALTH_PORT",
 ];
 
 console.log("=== CRITICAL VARS ===");
 for (const k of critical) {
-  console.log(`${k}: root=${status(root[k])} prod=${status(prod[k])} pos=${status(pos[k])}`);
+  console.log(`${k}: root=${status(root[k])} prod=${status(prod[k])}`);
 }
 
-console.log("\n=== ALIGNMENT ===");
+console.log("\n=== ALIGNMENT (root ↔ prod) ===");
 
-/** @returns {{ line: string, fail: boolean }} */
 function align(name, a, b, { expectedMismatch = false } = {}) {
-  if (!a || !b) return { line: `${name}: MISSING_SIDE`, fail: false };
+  if (!a || !b) return { line: `${name}: MISSING_SIDE`, fail: !expectedMismatch };
   if (a === b) return { line: `${name}: MATCH`, fail: false };
   if (expectedMismatch && !strictProdSecrets) {
     return {
-      line: `${name}: MISMATCH (info — expected; prod uses different secrets than local root)`,
+      line: `${name}: MISMATCH (info — prod uses different secrets from local)`,
       fail: false,
     };
   }
@@ -89,15 +96,17 @@ function align(name, a, b, { expectedMismatch = false } = {}) {
 }
 
 const alignments = [
-  align("AUTH_TOKEN_SECRET root↔pos", root.AUTH_TOKEN_SECRET, pos.AUTH_TOKEN_SECRET),
-  align("POS_PLATFORM_API_KEY root↔pos", root.POS_PLATFORM_API_KEY, pos.POS_PLATFORM_API_KEY),
   align("AUTH_TOKEN_SECRET root↔prod", root.AUTH_TOKEN_SECRET, prod.AUTH_TOKEN_SECRET, {
     expectedMismatch: true,
   }),
   align("POS_PLATFORM_API_KEY root↔prod", root.POS_PLATFORM_API_KEY, prod.POS_PLATFORM_API_KEY, {
     expectedMismatch: true,
   }),
+  align("LICENSE_SIGNING_SECRET root↔prod", root.LICENSE_SIGNING_SECRET, prod.LICENSE_SIGNING_SECRET, {
+    expectedMismatch: true,
+  }),
 ];
+
 for (const row of alignments) {
   console.log(row.line);
 }
@@ -110,7 +119,7 @@ console.log("\n=== KEY COUNTS ===");
 console.log(`example: ${exKeys.size} root: ${rootKeys.size} prod: ${Object.keys(prod).length}`);
 console.log(`missing from root (in example): ${missingFromRoot.length}`);
 if (missingFromRoot.length) console.log(missingFromRoot.join(", "));
-console.log(`extra in root: ${extraInRoot.length}`);
+console.log(`extra in root (POS dev vars + infra overrides): ${extraInRoot.length}`);
 if (extraInRoot.length) console.log(extraInRoot.join(", "));
 
 const prodHardBlockers = [];
@@ -127,17 +136,26 @@ console.log(
       : "none",
 );
 
+// Local dev: POS reads from root .env — only check root has the required vars.
 console.log("\n=== LOCAL DEV READINESS ===");
-const localOk =
-  root.AUTH_TOKEN_SECRET
-  && pos.AUTH_TOKEN_SECRET
-  && root.AUTH_TOKEN_SECRET === pos.AUTH_TOKEN_SECRET
-  && root.POS_PLATFORM_API_KEY
-  && pos.POS_PLATFORM_API_KEY
-  && root.POS_PLATFORM_API_KEY === pos.POS_PLATFORM_API_KEY
-  && root.POS_FINANCE_INTERNAL_HOST
-  && root.STOCKIX_FINANCE_INTERNAL_HOST;
-console.log(localOk ? "READY (root ↔ POS aligned)" : "NOT READY — run: pnpm env:align-local && pnpm env:sync-pos");
+const localRequired = [
+  "AUTH_TOKEN_SECRET",
+  "POS_PLATFORM_API_KEY",
+  "POS_FINANCE_INTERNAL_HOST",
+  "STOCKIX_FINANCE_INTERNAL_HOST",
+  "MONGODB_URI",
+  "REDIS_URL",
+  "PUBLIC_APP_URL",
+  "TENANT_ID",
+  "WORKER_HEALTH_PORT",
+];
+const localMissing = localRequired.filter((k) => !root[k]?.trim());
+if (localMissing.length === 0) {
+  console.log("READY — root .env is the single source for all local services");
+} else {
+  console.log(`NOT READY — missing from root .env: ${localMissing.join(", ")}`);
+  console.log("  Run: pnpm env:pos-vars && pnpm env:align-local");
+}
 
 console.log("\n=== PRODUCTION COMPOSE READINESS ===");
 const prodOk =
@@ -152,15 +170,14 @@ console.log(prodOk ? `READY except manual: ${prodTls}, Chatwoot token post-boot`
 
 const alignmentFailures = alignments.filter((row) => row.fail);
 let exitCode = 0;
-if (!localOk) exitCode = 1;
+if (localMissing.length > 0) exitCode = 1;
 if (prodHardBlockers.length > 0) exitCode = 1;
 if (alignmentFailures.length > 0) exitCode = 1;
 
+console.log("\n=== RESULT ===");
 if (exitCode === 0) {
-  console.log("\n=== RESULT ===");
-  console.log("PASS — no blocking env issues (root↔prod secret differences are informational unless --strict-prod-secrets)");
+  console.log("PASS — root .env covers all services; prod env is complete");
 } else {
-  console.log("\n=== RESULT ===");
   console.log("FAIL — fix blocking issues above");
   if (alignmentFailures.length > 0) {
     console.log(`Alignment failures: ${alignmentFailures.map((r) => r.line).join("; ")}`);

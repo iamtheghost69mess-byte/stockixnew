@@ -153,7 +153,7 @@ const baseSchema = z.object({
   MAX_TENANT_PORT: z.coerce.number().default(49999),
   TENANT_PORT_RANGE_MAX: z.coerce.number().default(65000),
   TENANT_PORT_RANGE_MIN: z.coerce.number().default(10000),
-  TENANT_INTERNAL_HOST: z.string().default("127.0.0.1"),
+  TENANT_INTERNAL_HOST: z.string().min(1),
   STOCKIX_TENANT_APP_ROOT: z.string().optional(),
   
   // Docker

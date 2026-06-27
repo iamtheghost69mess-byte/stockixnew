@@ -109,8 +109,9 @@ function startWorker() {
 }
 
 if (require.main === module) {
+  const path = require("path");
   const { loadEnvIfDev } = require("../lib/load-env-if-dev");
-  loadEnvIfDev();
+  loadEnvIfDev({ path: path.resolve(__dirname, "..", "..", "..", ".env") });
   const connectDB = require("../config/database");
   (async () => {
     await connectDB();
