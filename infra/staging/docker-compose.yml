@@ -3,12 +3,88 @@
 # Purpose: test deployments before production
 # Data: reset regularly — no real customer data
 # Subdomains: staging-api.* / staging.*
+#
+# Deploy: docker stack deploy -c infra/prod/docker-compose.yml \
+#                             -c infra/staging/docker-compose.yml \
+#                             --env-file infra/staging/.env stockix-staging
+# (Requires Docker Swarm — run `docker swarm init` first if not already a manager)
 # ═══════════════════════════════════════════════════════
 
 name: stockix-staging
 
-include:
-  - path: ../prod/docker-compose.yml
+# ── Staging-specific overrides ───────────────────────────────────────────────
+# Applied on top of infra/prod/docker-compose.yml via compose merge (-f flag).
+# Deploy command:
+#   docker stack deploy \
+#     -c infra/prod/docker-compose.yml \
+#     -c infra/staging/docker-compose.yml \
+#     --env-file infra/staging/.env stockix-staging
+# These REPLACE prod values for staging. All other prod config applies unchanged.
 
-# Staging overrides: single API replica, reduced limits applied via deploy section
-# where supported. Primary differences are in infra/staging/.env (domains, B2 prefix).
+services:
+  # Single API replica in staging (prod runs 2)
+  api:
+    environment:
+      NODE_ENV: staging
+      SENTRY_ENVIRONMENT: staging
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 10s
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+
+  # Single dashboard replica in staging (prod runs 2)
+  dashboard:
+    environment:
+      NODE_ENV: staging
+      SENTRY_ENVIRONMENT: staging
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 10s
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+
+  api-bullmq:
+    environment:
+      NODE_ENV: staging
+      SENTRY_ENVIRONMENT: staging
+
+  infra-worker:
+    environment:
+      NODE_ENV: staging
+      SENTRY_ENVIRONMENT: staging
+
+  # Disable full monitoring stack in staging — saves ~800m RAM
+  # Comment these out if you need metrics for a staging debug session.
+  prometheus:
+    deploy:
+      replicas: 0
+  alertmanager:
+    deploy:
+      replicas: 0
+  grafana:
+    deploy:
+      replicas: 0
+  tempo:
+    deploy:
+      replicas: 0
+  # Override mode global → replicated so replicas: 0 is valid in Swarm
+  # (Swarm does not allow the replicas field on mode: global services)
+  node-exporter:
+    deploy:
+      mode: replicated
+      replicas: 0
+  redis-exporter:
+    deploy:
+      replicas: 0
+  postgres-exporter:
+    deploy:
+      replicas: 0
