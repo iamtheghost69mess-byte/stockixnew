@@ -549,6 +549,8 @@ const provisionPayloadSchema = z.object({
     .optional(),
   needsScrub: z.boolean().optional(),
   debug: z.boolean().optional(),
+  skipTenantCreation: z.boolean().optional(),
+  existingTenantId: z.string().uuid().optional(),
 });
 
 const orgProvisionPayloadSchema = z.object({
@@ -646,6 +648,8 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
         controlPlaneOrgId: payload.organizationId ?? undefined,
         retryModules: payload.retryModules,
         debug: payload.debug ?? false,
+        skipTenantCreation: payload.skipTenantCreation ?? false,
+        existingTenantId: payload.existingTenantId,
       },
       (m) => logger.info(`[worker][${job.id}] ${m}`),
       job.correlationId ?? randomUUID(),
