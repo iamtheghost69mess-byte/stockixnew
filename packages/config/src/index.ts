@@ -210,7 +210,7 @@ export const env = {
   SECURITY_X_CONTENT_TYPE_OPTIONS: readString("SECURITY_X_CONTENT_TYPE_OPTIONS", "nosniff"),
   SECURITY_CSP_BASE: readString(
     "SECURITY_CSP_BASE",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   ),
   STOCKIX_API_URL: readString("STOCKIX_API_URL", "http://localhost:4000"),
   STOCKIX_SERVER_API_URL: readOptionalString("STOCKIX_SERVER_API_URL"),
