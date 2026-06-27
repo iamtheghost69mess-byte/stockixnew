@@ -141,6 +141,7 @@ export default function TenantCreateWizard(props: Props) {
   ]);
   const rootDomain = publicConfig.stockixRootDomain;
   const prevDialogOpen = useRef(false);
+  const submittingRef = useRef(false);
 
   const activeProfile = PROVISION_PROFILES.find((p) => p.id === provisionProfile);
   const selectedLicense = unassignedLicenses.find((l) => l.id === existingLicenseId);
@@ -258,12 +259,10 @@ export default function TenantCreateWizard(props: Props) {
     (licenseMode === "auto" || (licenseMode === "existing" && existingLicenseId.length > 0));
 
   const submit = async () => {
-      console.log('[WIZARD] submit() called, step:', step, 'loading:', loading);
-
+    if (submittingRef.current || loading) return;
+    submittingRef.current = true;
     setFormError(null);
     try {
-          console.log('[WIZARD] calling onProvision with:', { slug, name, adminEmail, planSlug });
-
       await onProvision({
         slug: slug.trim(),
         name: name.trim(),
@@ -275,8 +274,9 @@ export default function TenantCreateWizard(props: Props) {
         assignExistingLicenseId: licenseMode === "existing" ? existingLicenseId : null,
       });
     } catch (e) {
-      console.error('[WIZARD] onProvision threw:', e);
       setFormError(String(e));
+    } finally {
+      submittingRef.current = false;
     }
   };
 

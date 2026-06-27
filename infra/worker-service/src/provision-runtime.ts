@@ -1397,11 +1397,16 @@ export async function executeProvisionRuntime(
       log(`[provision] add-module finance stack for existing tenant=${tenantId} slug=${existing.slug}`);
     } else {
       const existingSlug = await db
-        .select({ id: tenants.id })
+        .select({ id: tenants.id, status: tenants.status })
         .from(tenants)
         .where(eq(tenants.slug, input.slug))
         .limit(1);
       if (existingSlug.length > 0) {
+        if (existingSlug[0]?.status === "provisioning") {
+          // Concurrent duplicate job: a sibling job already claimed this slug.
+          log(`[provision] slug ${input.slug} is already provisioning — duplicate job, exiting.`);
+          return;
+        }
         throw new Error(`tenant_slug_exists:${input.slug}`);
       }
       organizationNumber = await allocateOrganizationNumber(db);
