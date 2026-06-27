@@ -1405,7 +1405,7 @@ export async function executeProvisionRuntime(
         if (existingSlug[0]?.status === "provisioning") {
           // Concurrent duplicate job: a sibling job already claimed this slug.
           log(`[provision] slug ${input.slug} is already provisioning — duplicate job, exiting.`);
-          return;
+          return { ok: false, message: `duplicate_provision_job:${input.slug}` };
         }
         throw new Error(`tenant_slug_exists:${input.slug}`);
       }

@@ -884,6 +884,7 @@ function isPermanentWorkerError(message: string): boolean {
   const lowered = message.toLowerCase();
   return (
     message.startsWith("tenant_slug_exists:") ||
+    message.startsWith("duplicate_provision_job:") ||
     lowered.includes("tenants_slug_unique") ||
     lowered.includes("duplicate key value violates unique constraint") ||
     message.includes("POS_FRONTEND_STUB_IMAGE") ||
