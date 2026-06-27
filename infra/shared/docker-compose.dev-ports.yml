@@ -15,7 +15,8 @@ services:
   stockix-mysql-proxy:
     ports:
       # 6032 (ProxySQL admin) stays on stockix_internal only — avoids host port clashes.
-      # Host 16033 when 6033 is stuck (Docker Desktop ghost bind on Windows).
+      # Host 16033 when 6033 is stuck (Docker Desktop ghost bind on WSL2/Windows).
+      # Set WORKER_MYSQL_PROXY_PORT=16033 in root .env so the host-run worker uses this port.
       - "127.0.0.1:16033:6033"
   stockix-mongo:
     ports:

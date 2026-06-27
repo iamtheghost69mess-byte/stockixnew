@@ -36,7 +36,7 @@ export function registerPublicRoutes(app: Hono<ApiEnv>, db: Db | null): void {
       status: globalStatus.ready ? "ok" : "fail",
       checks: globalStatus.checks,
       mail: getMailHealthStatus(),
-    });
+    }, globalStatus.ready ? 200 : 503);
   });
 
   app.get("/health/redis", (c) => {

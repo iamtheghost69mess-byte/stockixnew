@@ -72,8 +72,8 @@ RUN apk add --no-cache docker-cli docker-cli-compose \
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy only the compiled bundle — not source, not node_modules
-COPY --from=build /app/infra/worker-service/.runtime/worker.js ./worker.js
+# Copy the compiled bundle and all dynamic-import chunks produced by tsup splitting
+COPY --from=build /app/infra/worker-service/.runtime/ ./
 
 EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

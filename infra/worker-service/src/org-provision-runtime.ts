@@ -229,6 +229,8 @@ export async function executeOrgProvisionRuntime(
   const newFinanceOrganizationId = registered.organizationId;
   const newFinanceTenantId = registered.tenantId;
 
+  try {
+
   const signinSession = await signinToFinanceSessionOrThrow(
     mainBase,
     input.adminEmail,
@@ -424,6 +426,17 @@ export async function executeOrgProvisionRuntime(
     }
   } else {
     log("[org-provision] Skipping combined POS provision for primary organization");
+  }
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`[org-provision] Org provision failed after registration; marking org as failed for manual cleanup (financeTenantId=${newFinanceTenantId}). Error: ${msg}`);
+    await patchControlPlaneOrganization(
+      input.organizationId,
+      { provisioningError: `orphan_needs_cleanup: ${msg.slice(0, 500)}` },
+      log,
+    ).catch((e) => log(`[org-provision] Failed to patch control plane error: ${e}`));
+    throw err;
   }
 }
 

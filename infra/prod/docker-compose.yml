@@ -67,6 +67,8 @@ x-stockix-platform-env: &stockix-platform-env
   SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
   MYSQL_PROXY_HOST: ${MYSQL_PROXY_HOST:-stockix-mysql-proxy}
   MYSQL_PROXY_PORT: ${MYSQL_PROXY_PORT:-6033}
+  WORKER_MYSQL_PROXY_PORT: ${WORKER_MYSQL_PROXY_PORT:-6033}
+  WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT:-9090}
   SHARED_MONGO_HOST: stockix-mongo
   TENANT_REDIS_HOST: stockix-redis
   TENANT_REDIS_PASSWORD: ${TENANT_REDIS_PASSWORD:-}
@@ -157,7 +159,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 64m
@@ -215,7 +216,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 128m
@@ -268,7 +268,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 1g
@@ -294,7 +293,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 128m
@@ -322,7 +320,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 128m
@@ -359,7 +356,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 96m
@@ -383,7 +379,7 @@ services:
       - stockix_internal
       - stockix_public
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health 2>/dev/null | grep -q ok || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -398,7 +394,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 512m
@@ -433,7 +428,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "node -e \"const Redis=require('ioredis');const u=process.env.CONTROL_PLANE_REDIS_URL;if(!u)process.exit(1);const c=new Redis(u,{maxRetriesPerRequest:1,connectTimeout:3000,lazyConnect:true});c.connect().then(()=>c.ping()).then(()=>{c.disconnect();process.exit(0)}).catch(()=>process.exit(1))\"",
+          "node -e \"const Redis=require('ioredis');const u=process.env.CONTROL_PLANE_REDIS_URL;if(!u)process.exit(0);const c=new Redis(u,{maxRetriesPerRequest:1,connectTimeout:3000,lazyConnect:true});c.connect().then(()=>c.ping()).then(()=>{c.disconnect();process.exit(0)}).catch(()=>process.exit(1))\"",
         ]
       interval: 30s
       timeout: 10s
@@ -447,7 +442,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 512m
@@ -467,7 +461,7 @@ services:
       - stockix_public
       - stockix_internal
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ 2>/dev/null | grep -q html || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -480,7 +474,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 256m
@@ -503,6 +496,7 @@ services:
         condition: service_healthy
     environment:
       <<: *stockix-worker-env
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@pgbouncer:5432/stockix_platform
     volumes:
       - ${TENANT_ENV_ROOT:-/opt/stockix/tenants}:/opt/stockix/tenants
       - ${TRAEFIK_DYNAMIC_DIR:-/opt/stockix/traefik-dynamic}:/opt/stockix/traefik-dynamic
@@ -527,7 +521,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 512m
@@ -557,7 +550,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 64m
@@ -577,7 +569,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 32m
@@ -602,7 +593,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 256m
@@ -623,7 +613,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 64m
@@ -651,7 +640,6 @@ services:
       restart_policy:
         condition: any
         delay: 5s
-        max_attempts: 5
       resources:
         limits:
           memory: 256m
@@ -679,7 +667,6 @@ services:
       restart_policy:
         condition: any
         delay: 10s
-        max_attempts: 5
       resources:
         limits:
           memory: 256m

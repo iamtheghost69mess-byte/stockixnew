@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs post-edit",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs post-edit'",
             "timeout": 10000
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs post-bash",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs post-bash'",
             "timeout": 5000
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs route",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs route'",
             "timeout": 10000
           }
         ]
@@ -39,12 +39,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs session-restore",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs session-restore'",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/auto-memory-hook.mjs import",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/auto-memory-hook.mjs import'",
             "timeout": 8000
           }
         ]
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs session-end",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs session-end'",
             "timeout": 10000
           }
         ]
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/auto-memory-hook.mjs sync",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/auto-memory-hook.mjs sync'",
             "timeout": 10000
           }
         ]
@@ -78,11 +78,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs compact-manual"
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs compact-manual'"
           },
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs session-end",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs session-end'",
             "timeout": 5000
           }
         ]
@@ -92,11 +92,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs compact-auto"
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs compact-auto'"
           },
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs session-end",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs session-end'",
             "timeout": 6000
           }
         ]
@@ -107,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs status",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs status'",
             "timeout": 3000
           }
         ]
@@ -118,7 +118,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs post-task",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs post-task'",
             "timeout": 5000
           }
         ]
@@ -129,7 +129,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/hook-handler.cjs notify",
+            "command": "bash -lc 'node $CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs notify'",
             "timeout": 3000
           }
         ]
@@ -161,9 +161,9 @@
     "version": "3.0.0",
     "enabled": true,
     "platform": {
-      "os": "windows",
+      "os": "linux",
       "arch": "x64",
-      "shell": "powershell"
+      "shell": "bash"
     },
     "modelPreferences": {
       "default": "claude-opus-4-7",

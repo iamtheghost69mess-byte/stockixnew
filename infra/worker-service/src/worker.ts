@@ -24,15 +24,15 @@ function getWorkerRedisClient(): Redis | null {
   return workerControlPlaneRedis;
 }
 
-if (process.env.SENTRY_DSN?.trim()) {
+if (apiConfig.sentryDsn?.trim()) {
   Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
-    release: process.env.RELEASE_VERSION,
+    dsn: apiConfig.sentryDsn,
+    environment: apiConfig.sentryEnvironment ?? apiConfig.nodeEnv ?? "development",
+    release: apiConfig.releaseVersion,
     tracesSampleRate: 0.1,
     integrations: [Sentry.httpIntegration()],
   });
-} else if (process.env.NODE_ENV === "production") {
+} else if (apiConfig.nodeEnv === "production") {
   logger.warn(
     "SENTRY_DSN not configured — errors will not be tracked in Sentry. " +
       "Set SENTRY_DSN in infra/prod/.env to enable production error monitoring.",
@@ -95,10 +95,7 @@ const pollMs = Math.max(
   parseInt(process.env.PROVISION_POLL_MS ?? String(apiConfig.provisionPollMs), 10) || apiConfig.provisionPollMs,
 );
 const POLL_INTERVAL_MS = pollMs;
-const workerConcurrency = Math.max(
-  1,
-  parseInt(process.env.WORKER_CONCURRENCY ?? String(apiConfig.workerConcurrency), 10) || 1,
-);
+const workerConcurrency = apiConfig.workerConcurrency;
 let lastSuccessfulPollAt = Date.now();
 
 const healthServer = http.createServer(async (req, res) => {
@@ -119,7 +116,7 @@ const healthServer = http.createServer(async (req, res) => {
   res.writeHead(404);
   res.end();
 });
-const workerHealthPort = parseInt(process.env.WORKER_HEALTH_PORT ?? "9090", 10);
+const workerHealthPort = apiConfig.workerHealthPort;
 healthServer.on("error", (err) => {
   const code = (err as NodeJS.ErrnoException).code;
   if (code === "EADDRINUSE") {
@@ -193,15 +190,14 @@ async function reconcileAllFinanceLicenses(db: ReturnType<typeof createDb>): Pro
   logger.info(`[license-reconcile] completed: synced=${synced} failed=${failed} total=${activeTenants.length}`);
 }
 
-/** API_HOST must be [::1] when WSL2 relay only exposes IPv6 (wslrelay.exe → [::1]:port). */
-const apiHost = process.env.API_HOST?.trim() || "127.0.0.1";
+const apiHost = apiConfig.apiHost;
 const apiBaseUrl = `http://${apiHost}:${apiConfig.port}`;
 const requestTimeoutMs = 10_000;
 const jobExecutionTimeoutMs = apiConfig.workerJobExecutionTimeoutMs;
 const heartbeatIntervalMs = 30_000;
 const apiReadyMaxWaitMs = 180_000;
 const apiUnreachableLogIntervalMs = 30_000;
-const startupGraceMs = parseInt(process.env.WORKER_STARTUP_GRACE_MS ?? "5000", 10);
+const startupGraceMs = apiConfig.workerStartupGraceMs;
 let shuttingDown = false;
 let lastApiUnreachableLogMs = 0;
 let apiUnreachableCount = 0;
@@ -650,7 +646,7 @@ async function runProvisionJob(db: ReturnType<typeof createDb>, job: {
   };
   const payload = provisionPayloadSchema.parse(job.payload);
   if (payload.needsScrub) {
-    // await scrubTenantRuntimeArtifacts(payload.slug);
+    await scrubTenantRuntimeArtifacts(payload.slug);
     if (job.correlationId) {
       await db.insert(tenantProvisionEvents).values({
         correlationId: job.correlationId,
@@ -891,8 +887,8 @@ async function runRemoveModuleJob(
             db,
             organizationId: org.id,
             chatwootAccountId: org.chatwootAccountId,
-            chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-            chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+            chatwootBaseUrl: apiConfig.chatwootBaseUrl ?? "",
+            chatwootApiKey: apiConfig.chatwootApiAccessToken ?? "",
             log,
           });
         }
@@ -932,8 +928,8 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
             db,
             organizationId: org.id,
             chatwootAccountId: org.chatwootAccountId,
-            chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-            chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+            chatwootBaseUrl: apiConfig.chatwootBaseUrl ?? "",
+            chatwootApiKey: apiConfig.chatwootApiAccessToken ?? "",
             log: (m) => logger.info(`[worker][${job.id}] ${m}`),
           });
         }
@@ -1523,8 +1519,8 @@ async function loop() {
 
     // Port exhaustion
     try {
-      const portMax = parseInt(process.env.TENANT_PORT_RANGE_MAX ?? "65000", 10);
-      const portMin = parseInt(process.env.TENANT_PORT_RANGE_MIN ?? "10000", 10);
+      const portMax = apiConfig.tenantPortRangeMax;
+      const portMin = apiConfig.tenantPortRangeMin;
       const [maxPortRow] = await db
         .select({ maxPort: sql<number>`COALESCE(MAX(${tenantDeployments.internalPort}), ${portMin})` })
         .from(tenantDeployments);
@@ -1542,7 +1538,7 @@ async function loop() {
 
     // Disk usage
     try {
-      const envRoot = process.env.TENANT_ENV_ROOT ?? "/opt/tenants";
+      const envRoot = apiConfig.tenantEnvRoot;
       const { execFile } = await import("node:child_process");
       const { promisify } = await import("node:util");
       const execFileAsync = promisify(execFile);
@@ -1562,7 +1558,7 @@ async function loop() {
 
     // ProxySQL connections
     try {
-      const proxysqlStatsUrl = process.env.PROXYSQL_STATS_URL;
+      const proxysqlStatsUrl = apiConfig.proxysqlStatsUrl;
       if (proxysqlStatsUrl) {
         const res = await fetch(`${proxysqlStatsUrl}/stats/connections`, { signal: AbortSignal.timeout(5_000) });
         if (res.ok) {

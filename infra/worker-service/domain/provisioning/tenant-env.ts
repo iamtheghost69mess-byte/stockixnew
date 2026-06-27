@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultTenantEnvRoot } from "../env-paths.js";
 import { slugToMysqlSafe, tenantMysqlUsername } from "../provisioner.js";
-import { apiConfig, env } from "@repo/config";
+import { apiConfig, env, infraConfig } from "@repo/config";
 
 export type TenantEnvFileParams = {
   slug: string;
@@ -80,11 +80,11 @@ function tenantMysqlProxyPort(): string {
 }
 
 function sharedMongoHost(): string {
-  return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
+  return infraConfig.sharedMongoHost ?? "stockix-mongo";
 }
 
 function tenantRedisHost(): string {
-  return process.env.TENANT_REDIS_HOST ?? "stockix-redis";
+  return infraConfig.tenantRedisHost ?? "stockix-redis";
 }
 
 /**
@@ -177,6 +177,11 @@ export function buildTenantEnvMap(params: TenantEnvFileParams): Record<string, s
   return {
     STOCKIX_TENANT_APP_ROOT: params.stockixFinanceRoot,
     BASE_URL: params.baseUrl,
+    TENANT_SLUG: params.tenantSlug ?? slug,
+    TENANT_ROOT_DOMAIN: params.tenantRootDomain ?? apiConfig.rootDomain ?? "",
+    TRAEFIK_LABELS_ENABLED: params.traefikLabelsEnabled ?? "false",
+    TRAEFIK_NETWORK: params.traefikNetwork ?? "stockix_public",
+    WORKER_INTERNAL_NETWORK: params.workerInternalNetwork ?? "stockix_internal",
 
     // ── MySQL (stockix-mysql-proxy:6033 → stockix-mysql) ───────────────
     DB_CLIENT: "mysql",

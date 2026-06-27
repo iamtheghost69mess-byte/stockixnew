@@ -25,8 +25,8 @@ WORKDIR /app/apps/pos-backend
 FROM node:22-alpine AS runner
 
 RUN apk add --no-cache dumb-init eudev-libs \
-    && apk upgrade --no-cache \
-    && rm -rf /usr/local/lib/node_modules/npm \
+    && apk upgrade --no-cache
+RUN rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production

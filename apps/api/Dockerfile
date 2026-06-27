@@ -31,7 +31,13 @@ FROM ${BASE_IMAGE} AS runner
 
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=build /deploy /app
+
+USER root
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+COPY --from=build --chown=nodejs:nodejs /deploy /app
+
+USER nodejs
 
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

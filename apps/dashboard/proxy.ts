@@ -49,7 +49,7 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Stale service workers from older builds hit /sw.js and slow dev (500 + retries).
   if (request.nextUrl.pathname === "/sw.js") {
     return new NextResponse(null, { status: 404 });

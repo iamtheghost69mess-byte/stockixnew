@@ -97,7 +97,7 @@ type PosProvisionOutcome = {
 
 /** Non-production E2E hook: slugs `e2e-fail-inject-*` simulate a worker crash after a journaled step. */
 export function maybeInjectProvisionTestFailure(slug: string, operationKey: string): void {
-  if (process.env.NODE_ENV === "production") return;
+  if (apiConfig.nodeEnv === "production") return;
   if (!slug.startsWith("e2e-fail-inject-")) return;
   if (operationKey !== "docker.data_step") return;
   throw new Error(
@@ -407,7 +407,7 @@ export async function executeProvisionRuntime(
       await checkNotCancelled();
       const workerInternalUrl =
         port > 0
-          ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
+          ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
           : undefined;
       let retryServiceChargeItemId: number | undefined;
       let retryDiscountItemId: number | undefined;
@@ -555,7 +555,7 @@ export async function executeProvisionRuntime(
         ) {
           const workerInternalUrl =
             port > 0
-              ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
+              ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${port}`
               : undefined;
           let retryServiceChargeItemId: number | undefined;
           let retryDiscountItemId: number | undefined;
@@ -818,6 +818,13 @@ export async function executeProvisionRuntime(
         stockixAppName: input.name,
         stockixLogoUrl: "",
         stockixPrimaryColor: "#ca8a04",
+        redisPassword,
+        mongoRootPassword,
+        tenantSlug: input.slug,
+        tenantRootDomain: apiConfig.rootDomain || "example.com",
+        traefikLabelsEnabled: apiConfig.nodeEnv === "production" ? "true" : "false",
+        traefikNetwork: "stockix_public",
+        workerInternalNetwork: apiConfig.workerInternalNetwork ?? "stockix_internal",
       });
       await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), posOnlyTenantEnvMap);
       log(`[provision] POS-only path: tenant .env written before POS stack`);
@@ -865,8 +872,8 @@ export async function executeProvisionRuntime(
             organizationId: orgId,
             organizationName: input.name,
             adminEmail: input.adminEmail,
-            chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-            chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+            chatwootBaseUrl: apiConfig.chatwootBaseUrl ?? "",
+            chatwootApiKey: apiConfig.chatwootApiAccessToken ?? "",
             log,
           });
         } else {
@@ -949,9 +956,9 @@ export async function executeProvisionRuntime(
       // Networking / Traefik — consumed by tenant docker-compose.yml
       tenantSlug: input.slug,
       tenantRootDomain: rootDomain,
-      traefikLabelsEnabled: process.env.TRAEFIK_LABELS_ENABLED === "true" ? "true" : "false",
-      traefikNetwork: process.env.TRAEFIK_NETWORK ?? "stockix_public",
-      workerInternalNetwork: process.env.WORKER_INTERNAL_NETWORK ?? "stockix_internal",
+      traefikLabelsEnabled: apiConfig.traefikLabelsEnabled ? "true" : "false",
+      traefikNetwork: apiConfig.traefikNetwork,
+      workerInternalNetwork: apiConfig.workerInternalNetwork,
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
     if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
@@ -1111,7 +1118,7 @@ export async function executeProvisionRuntime(
     // Connect the tenant server container to stockix_internal so the infra-worker can
     // reach it directly (host.docker.internal NAT is blocked by iptables on Linux).
     const serverContainerName = `${project}-server-1`;
-    const internalNetworkName = process.env.WORKER_INTERNAL_NETWORK ?? process.env.STOCKIX_INTERNAL_NETWORK ?? "stockix_internal";
+    const internalNetworkName = apiConfig.workerInternalNetwork;
     let tenantServerInternalIp: string | undefined;
     let localDevFallback = false;
     if (!hasOp("docker.network_connect")) {
@@ -1133,7 +1140,7 @@ export async function executeProvisionRuntime(
         });
       } catch (netErr) {
         const msg = netErr instanceof Error ? netErr.message : String(netErr);
-        if (process.env.NODE_ENV !== "production") {
+        if (apiConfig.nodeEnv !== "production") {
           localDevFallback = true;
           log(
             "[provision] stockix_internal unavailable in local dev — resolving published server port for host.docker.internal",
@@ -1156,7 +1163,7 @@ export async function executeProvisionRuntime(
     const preferHostPublishedPort =
       localDevFallback
       || process.platform === "win32"
-      || process.env.NODE_ENV !== "production";
+      || apiConfig.nodeEnv !== "production";
 
     const internalUrl = tenantServerInternalIp && !preferHostPublishedPort
       ? `http://${tenantServerInternalIp}:3000`
@@ -1867,8 +1874,8 @@ export async function executeProvisionRuntime(
           organizationId: orgId,
           organizationName: input.name,
           adminEmail: input.adminEmail,
-          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          chatwootBaseUrl: apiConfig.chatwootBaseUrl ?? "",
+          chatwootApiKey: apiConfig.chatwootApiAccessToken ?? "",
           log,
         });
       }
@@ -2034,7 +2041,7 @@ export async function runAddModuleStep(
     const financeInternalPort = row.internalPort ?? undefined;
     const internalUrl =
       financeInternalPort && financeInternalPort > 0
-        ? `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${financeInternalPort}`
+        ? `http://${apiConfig.posFinanceInternalHost ?? apiConfig.tenantInternalHost ?? "127.0.0.1"}:${financeInternalPort}`
         : undefined;
     const rootDomain = apiConfig.rootDomain || "example.com";
     const publicScheme = apiConfig.publicBaseUrlScheme;
@@ -2262,8 +2269,8 @@ export async function runAddModuleStep(
           organizationId: orgId,
           organizationName: input.name,
           adminEmail: input.adminEmail,
-          chatwootBaseUrl: process.env.CHATWOOT_BASE_URL ?? "",
-          chatwootApiKey: process.env.CHATWOOT_API_ACCESS_TOKEN ?? "",
+          chatwootBaseUrl: apiConfig.chatwootBaseUrl ?? "",
+          chatwootApiKey: apiConfig.chatwootApiAccessToken ?? "",
           log,
         });
       }

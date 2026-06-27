@@ -1,10 +1,9 @@
-import { Request, Response, NextFunction } from "express";
 const createHttpError = require("http-errors");
 const { verifyStockixToken, hasModule } = require("@repo/auth");
 
 const AUTH_TOKEN_SECRET = process.env.AUTH_TOKEN_SECRET;
 
-async function verifyStockixJWT(req: Request, res: Response, next: NextFunction) {
+async function verifyStockixJWT(req, res, next) {
   const header = req.headers.authorization ?? "";
   const cookieToken = req.cookies?.["stockix-session"];
   const token = header.startsWith("Bearer ")
@@ -29,12 +28,12 @@ async function verifyStockixJWT(req: Request, res: Response, next: NextFunction)
       });
     }
 
-    (req as any).stockix = payload;
-    (req as any).tenantId = payload.tenantId;
+    req.stockix = payload;
+    req.tenantId = payload.tenantId;
     next();
   } catch {
     return res.status(401).json({ error: "invalid_token" });
   }
 }
 
-export = { verifyStockixJWT };
+module.exports = { verifyStockixJWT };

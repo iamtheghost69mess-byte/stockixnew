@@ -1,8 +1,7 @@
-import { Request, Response } from "express";
 const PlatformAuditLog = require("../models/platformAuditLogModel");
 const PlatformNotification = require("../models/platformNotificationModel");
 
-const NOTIFICATION_EVENTS: Record<string, { severity: string; title: string }> = {
+const NOTIFICATION_EVENTS = {
   "platform.org.create": { severity: "info", title: "Organization created" },
   "platform.org.provisioning_retry": {
     severity: "warning",
@@ -39,8 +38,8 @@ const NOTIFICATION_EVENTS: Record<string, { severity: string; title: string }> =
   },
 };
 
-async function writeAudit(entry: any) {
-  const doc: any = {
+async function writeAudit(entry) {
+  const doc = {
     action: entry.action,
     actorType: entry.actorType || "platform_user",
     organization: entry.organization || null,
@@ -69,7 +68,7 @@ async function writeAudit(entry: any) {
   }
 }
 
-function auditFromRequest(req: Request, res: Response, extra: any = {}) {
+function auditFromRequest(req, res, extra = {}) {
   return {
     requestId: res?.locals?.requestId || "",
     traceparent: res?.locals?.traceparent || "",
@@ -77,4 +76,4 @@ function auditFromRequest(req: Request, res: Response, extra: any = {}) {
   };
 }
 
-export = { writeAudit, auditFromRequest };
+module.exports = { writeAudit, auditFromRequest };

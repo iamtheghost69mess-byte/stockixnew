@@ -8,6 +8,7 @@ export default defineConfig({
   outDir: "../../infra/worker-service/.runtime",
   target: "node20",
   bundle: true,
+  splitting: true,
   sourcemap: true,
   clean: true,
   // ORIGINAL: external: ["nodemailer", "prom-client"],

@@ -28,7 +28,7 @@ import { ExecaDockerComposeRunner } from "../domain/provisioning/adapters/execa-
 import type { ProvisionTracer } from "../domain/provision-trace.js";
 import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
 import { redactComposeLogLine } from "../domain/provisioning/redact-compose-log.js";
-import { isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
+import { dockerImageExists, isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
 import { ProvisionError } from "../domain/provisioning/provision-error.js";
 
 import {
@@ -79,7 +79,7 @@ export function resolvePosJwtEnv(): {
   FIELD_ENCRYPTION_KEY: string;
 } {
   const jwtSecret = apiConfig.authTokenSecret;
-  const platformFromEnv = process.env.PLATFORM_JWT_SECRET?.trim() || apiConfig.platformJwtSecret?.trim();
+  const platformFromEnv = apiConfig.platformJwtSecret?.trim();
   const platformJwtSecret =
     platformFromEnv
     || (apiConfig.nodeEnv !== "production" && jwtSecret
@@ -94,7 +94,7 @@ export function resolvePosJwtEnv(): {
     JWT_SECRET: jwtSecret,
     PLATFORM_JWT_SECRET: platformJwtSecret,
     LICENSE_SIGNING_SECRET: apiConfig.licenseSigningSecret,
-    FIELD_ENCRYPTION_KEY: process.env.FIELD_ENCRYPTION_KEY?.trim() ?? "",
+    FIELD_ENCRYPTION_KEY: apiConfig.fieldEncryptionKey?.trim() ?? "",
   };
 }
 
@@ -111,7 +111,7 @@ export async function persistPosSecretsToTenantEnv(slug: string): Promise<void> 
 
 /** Require explicit Resend API key for POS email (no SMTP password fallback). */
 export function resolvePosResendApiKey(): string {
-  const key = process.env.RESEND_API_KEY?.trim();
+  const key = apiConfig.resendApiKey?.trim();
   if (!key) {
     throw new Error(
       "[provision][pos] RESEND_API_KEY is required when provisioning POS (set in platform env)",
@@ -299,7 +299,7 @@ export type ProvisionPosStackResult = BootstrapPosOrgResult & {
 
 function defaultPosBackendPort(): number {
 
-  const raw = process.env.POS_HOST_PORT ?? "8010";
+  const raw = apiConfig.posHostPort ?? "8010";
 
   const port = Number(raw);
 
@@ -311,7 +311,7 @@ function defaultPosBackendPort(): number {
 
 function defaultPosFrontendPort(): number {
 
-  const raw = process.env.POS_FRONTEND_HOST_PORT ?? "3001";
+  const raw = apiConfig.posFrontendHostPort ?? "3001";
 
   const port = Number(raw);
 
@@ -343,9 +343,24 @@ function buildPosPublicUrls(
 
 
 async function resolvePosPorts(
+  slug: string,
   db: PostgresJsDatabase<typeof dbSchema> | undefined,
   log: (m: string) => void,
 ): Promise<{ backendPort: number; frontendPort: number }> {
+  try {
+    const existingEnv = await readTenantEnvFile(slug);
+    if (existingEnv.POS_HOST_PORT && existingEnv.POS_FRONTEND_HOST_PORT) {
+      const backendPort = Number(existingEnv.POS_HOST_PORT);
+      const frontendPort = Number(existingEnv.POS_FRONTEND_HOST_PORT);
+      if (Number.isFinite(backendPort) && backendPort > 0 && Number.isFinite(frontendPort) && frontendPort > 0) {
+        log(`[provision][pos] reused existing ports from .env backend=${backendPort} frontend=${frontendPort}`);
+        return { backendPort, frontendPort };
+      }
+    }
+  } catch {
+    // Ignore error, allocate new ports
+  }
+
   if (!db) {
     return {
       backendPort: defaultPosBackendPort(),
@@ -392,7 +407,7 @@ export async function provisionPosStack(
 
   const project = `stockix-pos-${opts.slug}`;
 
-  const posAppRootRaw = process.env.POS_APP_ROOT ?? join("apps", "pos-backend");
+  const posAppRootRaw = apiConfig.posAppRoot ?? join("apps", "pos-backend");
   const posAppRoot = isAbsolute(posAppRootRaw)
     ? posAppRootRaw
     : join(repoRoot(), posAppRootRaw);
@@ -401,7 +416,7 @@ export async function provisionPosStack(
 
   const rootDomain = apiConfig.rootDomain || "example.com";
 
-  const { backendPort, frontendPort } = await resolvePosPorts(opts.db, opts.log);
+  const { backendPort, frontendPort } = await resolvePosPorts(opts.slug, opts.db, opts.log);
 
   const { posUrl, posApiUrl } = buildPosPublicUrls(opts.slug, { backendPort, frontendPort });
 
@@ -420,7 +435,7 @@ export async function provisionPosStack(
   const stockixRepoRoot = repoRoot();
   const resendApiKey = resolvePosResendApiKey();
   const resendFromEmail =
-    process.env.RESEND_FROM_EMAIL?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
+    apiConfig.resendFromEmail?.trim() || env.MAIL_FROM_ADDRESS?.trim() || "";
   await persistPosSecretsToTenantEnv(opts.slug);
   const posJwtEnv = resolvePosJwtEnv();
 
@@ -442,7 +457,7 @@ export async function provisionPosStack(
     STOCKIX_REPO_ROOT: stockixRepoRoot,
     POS_APP_ROOT: posAppRoot,
     POS_HOST_PORT: String(backendPort),
-    POS_PORT: String(backendPort),
+    POS_PORT: "8010",
     POS_FRONTEND_HOST_PORT: String(frontendPort),
     TENANT_ID: opts.tenantId,
     AUTH_TOKEN_SECRET: apiConfig.authTokenSecret ?? "",
@@ -764,15 +779,22 @@ export async function provisionPmsStack(opts: {
 
   const project = `stockix-pms-${opts.slug}`;
 
-  const pmsAppRoot = process.env.PMS_APP_ROOT ?? join(repoRoot(), "services", "pms");
+  const pmsAppRoot = apiConfig.pmsAppRoot ?? join(repoRoot(), "services", "pms");
 
   opts.log(`[provision][pms] compose up project=${project}`);
+
+  const hasImage = await dockerImageExists("stockix-pms:local");
+  const upArgs = ["up", "-d"];
+  if (!hasImage) {
+    opts.log(`[provision][pms] building stockix-pms:local...`);
+    upArgs.push("--build");
+  }
 
   await execa(
 
     "docker",
 
-    ["compose", "-f", composeFile, "-p", project, "up", "-d", "--build"],
+    ["compose", "-f", composeFile, "-p", project, ...upArgs],
 
     {
 

@@ -28,6 +28,7 @@ import { ExecaDockerComposeRunner } from "./provisioning/adapters/execa-docker-c
 import { FetchStockixFinanceBootstrap } from "./provisioning/adapters/fetch-stockix-finance-bootstrap.js";
 import { TraefikEdgePublisher } from "./provisioning/adapters/traefik-edge-publisher.js";
 import { removePosTraefikConfig } from "./traefik-config.js";
+import { infraConfig } from "@repo/config";
 
 const dockerRunner = new ExecaDockerComposeRunner();
 const edgePublisher = new TraefikEdgePublisher();
@@ -43,7 +44,7 @@ const tenantProvisionService = new TenantProvisionService({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function sharedMysqlHost(): string {
-  return process.env.SHARED_MYSQL_HOST ?? "stockix-mysql";
+  return infraConfig.sharedMysqlHost ?? "stockix-mysql";
 }
 
 // REPAIRED: worker host override for host-run worker 2026-06-05
@@ -57,19 +58,20 @@ function sharedMysqlRootPassword(): string {
 }
 
 function sharedMongoHost(): string {
-  return process.env.SHARED_MONGO_HOST ?? "stockix-mongo";
+  return infraConfig.sharedMongoHost ?? "stockix-mongo";
 }
 
 function workerProxySqlAdminHost(): string {
   if (process.env.WORKER_SHARED_MYSQL_HOST?.trim() === "127.0.0.1") {
     return "127.0.0.1";
   }
-  return process.env.MYSQL_PROXY_HOST ?? "stockix-mysql-proxy";
+  return infraConfig.mysqlProxyHost ?? "stockix-mysql-proxy";
 }
 
 function workerProxySqlTenantPort(): number {
-  const raw = process.env.MYSQL_PROXY_PORT ?? "6033";
-  const port = parseInt(String(raw), 10);
+  // WORKER_MYSQL_PROXY_PORT overrides for host-run worker (e.g. 16033 when dev-ports
+  // overlay maps container:6033 to host:16033 on WSL2).
+  const port = infraConfig.workerMysqlProxyPort ?? infraConfig.mysqlProxyPort ?? 6033;
   return Number.isFinite(port) ? port : 6033;
 }
 
@@ -812,6 +814,9 @@ export async function deprovisionTenant(
   };
 
   try {
+    let envFileExists = false;
+    try { await stat(envPath); envFileExists = true; } catch { /* missing — use compose-file-only down */ }
+
     const financeRunning = await financeStackContainersRunning(project);
     if (!financeRunning) {
       log(
@@ -827,8 +832,6 @@ export async function deprovisionTenant(
       const downArgs = ["down", "--remove-orphans", "--timeout", "30"];
       if (options.removeVolumes) downArgs.push("-v");
       if (options.removeImages) downArgs.push("--rmi", "local");
-      let envFileExists = false;
-      try { await stat(envPath); envFileExists = true; } catch { /* missing — use compose-file-only down */ }
       if (envFileExists) {
         await dockerRunner.run(composeFile, project, envPath, composeEnv, downArgs, {
           timeoutMs: 2 * 60 * 1000,

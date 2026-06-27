@@ -43,9 +43,14 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=build /app/apps/dashboard/.next/standalone ./
-COPY --from=build /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
-COPY --from=build /app/apps/dashboard/public ./apps/dashboard/public
+USER root
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+COPY --from=build --chown=nodejs:nodejs /app/apps/dashboard/.next/standalone ./
+COPY --from=build --chown=nodejs:nodejs /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
+COPY --from=build --chown=nodejs:nodejs /app/apps/dashboard/public ./apps/dashboard/public
+
+USER nodejs
 
 EXPOSE 3000
 CMD ["node", "apps/dashboard/server.js"]

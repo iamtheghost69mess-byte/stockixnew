@@ -11,9 +11,21 @@ export const infraConfig = {
   get mysqlProxyPort() {
     return env.MYSQL_PROXY_PORT;
   },
+  get workerMysqlProxyPort() {
+    return env.WORKER_MYSQL_PROXY_PORT;
+  },
+  get sharedMysqlHost() {
+    return env.SHARED_MYSQL_HOST;
+  },
   get tenantRedisPassword(): string | undefined {
     const raw = env.TENANT_REDIS_PASSWORD?.trim();
     return raw && raw.length > 0 ? raw : undefined;
+  },
+  get sharedMongoHost() {
+    return env.SHARED_MONGO_HOST;
+  },
+  get tenantRedisHost() {
+    return env.TENANT_REDIS_HOST;
   },
   /** How often the stuck-provisioning reconciler runs in ms (default: 60 000). */
   get provisionReconcileIntervalMs() {

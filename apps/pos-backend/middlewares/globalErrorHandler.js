@@ -1,8 +1,7 @@
-import { Request, Response, NextFunction } from "express";
 const config = require("../config/config");
 const { captureError } = require("../services/observability");
 
-function wantsProblemJson(req: Request) {
+function wantsProblemJson(req) {
   const url = req.originalUrl || req.url || "";
   const acc = req.get("Accept") || "";
   return (
@@ -11,19 +10,19 @@ function wantsProblemJson(req: Request) {
   );
 }
 
-const globalErrorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
+const globalErrorHandler = (err, req, res, next) => {
   const statusCode = err.status || err.statusCode || 500;
   const message = err.message || "Internal server error";
 
   if (statusCode >= 500) {
     captureError(err, {
       requestId: res.locals?.requestId,
-      organizationId: (req as any)?.tenantOrganizationId || (req as any)?.user?.organization,
+      organizationId: req?.tenantOrganizationId || req?.user?.organization,
     });
   }
 
-  if (typeof (res as any).problem === "function" && wantsProblemJson(req)) {
-    const ext: any = {
+  if (typeof res.problem === "function" && wantsProblemJson(req)) {
+    const ext = {
       requestId: res?.locals?.requestId,
     };
     if (err.code) {
@@ -32,7 +31,7 @@ const globalErrorHandler = (err: any, req: Request, res: Response, next: NextFun
     if (config.nodeEnv === "development" && err.stack) {
       ext.stack = err.stack;
     }
-    return (res as any).problem(
+    return res.problem(
       statusCode,
       err.type || "about:blank",
       message,
@@ -41,7 +40,7 @@ const globalErrorHandler = (err: any, req: Request, res: Response, next: NextFun
     );
   }
 
-  const body: any = {
+  const body = {
     success: false,
     message,
     requestId: res?.locals?.requestId,
@@ -52,4 +51,4 @@ const globalErrorHandler = (err: any, req: Request, res: Response, next: NextFun
   return res.status(statusCode).json(body);
 };
 
-export = globalErrorHandler;
+module.exports = globalErrorHandler;

@@ -10,6 +10,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { TenantProvisionServiceDeps } from "../../domain/provisioning/tenant-provision-service.js";
 import * as dbSchema from "@repo/db/schema";
 import { loadProvisionJournalState } from "../provision-journal.js";
+import { cleanupMysqlOrphan } from "../../domain/provisioning/adapters/check-mysql-orphan.js";
 
 type ComposeRollbackCtx = {
   composeFile: string;
@@ -148,7 +149,6 @@ export async function rollbackProvision(
 
   if (rollbackSlug && journalState.completedOps.has("docker.data_step")) {
     try {
-      const { cleanupMysqlOrphan } = await import("../domain/provisioning/adapters/check-mysql-orphan.js");
       const cleaned = await cleanupMysqlOrphan(rollbackSlug, log);
       if (cleaned) {
         log(`[rollback] MySQL databases cleaned for slug=${rollbackSlug}`);

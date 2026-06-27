@@ -68,12 +68,26 @@ services:
       ROOT_DOMAIN: localhost
       DASHBOARD_URL: http://dashboard.localhost
       PORT: "4000"
-      WORKER_SECRET: dev-worker-secret
+      WORKER_SECRET: dev-worker-secret-must-be-32-chars
+      PLATFORM_API_SECRET: dev-platform-api-secret-1234567890
+      SESSION_SECRET: dev-session-secret-1234567890
+      AUTH_TOKEN_SECRET: dev-auth-token-secret-1234567890
+      DEPLOYMENT_SECRET_KEY: dev-deployment-secret-key-1234567890
+      LICENSE_SIGNING_SECRET: dev-license-signing-secret-1234567890
+      TENANT_REDIS_HOST: redis
+      SHARED_MONGO_HOST: mongo
+      PROXYSQL_ADMIN_USER: admin
+      PROXYSQL_ADMIN_PASSWORD: admin
+      WORKER_INTERNAL_NETWORK: stockix_dev_internal
+      TENANT_ENV_ROOT: /opt/tenants
       RESEND_API_KEY: ${RESEND_API_KEY:-re_test_placeholder}
       SHARED_MYSQL_HOST: mysql
       SHARED_MYSQL_ROOT_PASSWORD: devmysqlpassword
       MYSQL_PROXY_HOST: mysql
       MYSQL_PROXY_PORT: "3306"
+      WORKER_MYSQL_PROXY_PORT: "3306"
+      WORKER_CONCURRENCY: "1"
+      WORKER_HEALTH_PORT: "9090"
     networks:
       - stockix_dev_internal
       - stockix_dev_public
@@ -83,7 +97,7 @@ services:
       - "traefik.http.routers.api-dev.entrypoints=web"
       - "traefik.http.services.api-dev.loadbalancer.server.port=4000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health 2>/dev/null | grep -q ok || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -136,12 +150,26 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockix_platform
       CONTROL_PLANE_REDIS_URL: redis://redis:6379
       API_HOST: api
-      WORKER_SECRET: dev-worker-secret
+      WORKER_SECRET: dev-worker-secret-must-be-32-chars
+      PLATFORM_API_SECRET: dev-platform-api-secret-1234567890
+      SESSION_SECRET: dev-session-secret-1234567890
+      AUTH_TOKEN_SECRET: dev-auth-token-secret-1234567890
+      DEPLOYMENT_SECRET_KEY: dev-deployment-secret-key-1234567890
+      LICENSE_SIGNING_SECRET: dev-license-signing-secret-1234567890
+      TENANT_REDIS_HOST: redis
+      SHARED_MONGO_HOST: mongo
+      PROXYSQL_ADMIN_USER: admin
+      PROXYSQL_ADMIN_PASSWORD: admin
+      WORKER_INTERNAL_NETWORK: stockix_dev_internal
       SHARED_MYSQL_HOST: mysql
       SHARED_MYSQL_ROOT_PASSWORD: devmysqlpassword
+      MYSQL_PROXY_HOST: mysql
+      MYSQL_PROXY_PORT: "3306"
+      WORKER_MYSQL_PROXY_PORT: "3306"
       TENANT_ENV_ROOT: /opt/tenants
       DOCKER_HOST: unix:///var/run/docker.sock
       WORKER_CONCURRENCY: "1"
+      WORKER_HEALTH_PORT: "9090"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - tenant_envs_dev:/opt/tenants

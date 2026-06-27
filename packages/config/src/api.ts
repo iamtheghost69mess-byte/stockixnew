@@ -212,6 +212,66 @@ export const apiConfig = {
   get workerStaleLeaseThresholdMs() {
     return env.WORKER_STALE_LEASE_THRESHOLD_MS;
   },
+  get sentryEnvironment() {
+    return env.SENTRY_ENVIRONMENT;
+  },
+  get releaseVersion() {
+    return env.RELEASE_VERSION;
+  },
+  get workerHealthPort() {
+    return env.WORKER_HEALTH_PORT;
+  },
+  get workerStartupGraceMs() {
+    return env.WORKER_STARTUP_GRACE_MS;
+  },
+  get chatwootBaseUrl() {
+    return env.CHATWOOT_BASE_URL;
+  },
+  get chatwootApiAccessToken() {
+    return env.CHATWOOT_API_ACCESS_TOKEN;
+  },
+  get tenantPortRangeMax() {
+    return env.TENANT_PORT_RANGE_MAX;
+  },
+  get tenantPortRangeMin() {
+    return env.TENANT_PORT_RANGE_MIN;
+  },
+  get proxysqlStatsUrl() {
+    return env.PROXYSQL_STATS_URL;
+  },
+  get fieldEncryptionKey() {
+    return env.FIELD_ENCRYPTION_KEY;
+  },
+  get resendApiKey() {
+    return env.RESEND_API_KEY;
+  },
+  get posHostPort() {
+    return env.POS_HOST_PORT;
+  },
+  get posFrontendHostPort() {
+    return env.POS_FRONTEND_HOST_PORT;
+  },
+  get posAppRoot() {
+    return env.POS_APP_ROOT;
+  },
+  get pmsAppRoot() {
+    return env.PMS_APP_ROOT;
+  },
+  get resendFromEmail() {
+    return env.RESEND_FROM_EMAIL;
+  },
+  get dockerHost() {
+    return env.DOCKER_HOST;
+  },
+  get posFinanceInternalUrlTemplate() {
+    return env.POS_FINANCE_INTERNAL_URL_TEMPLATE;
+  },
+  get posFinanceUseTraefikUrl() {
+    return env.POS_FINANCE_USE_TRAEFIK_URL;
+  },
+  get posFinanceInternalHost() {
+    return env.POS_FINANCE_INTERNAL_HOST;
+  },
   validateRequiredEnv() {
     validateRequiredEnvForProfile(env.NODE_ENV);
     validateWorkerSecret(env.NODE_ENV, env.WORKER_SECRET);
@@ -223,6 +283,14 @@ export const apiConfig = {
       const redisPassword = env.TENANT_REDIS_PASSWORD?.trim();
       if (!redisPassword || redisPassword === "__MUST_OVERRIDE__") {
         throw new Error("[config] TENANT_REDIS_PASSWORD must be set in production");
+      }
+      const platformJwtSecret = env.PLATFORM_JWT_SECRET?.trim();
+      if (!platformJwtSecret || platformJwtSecret === "__MUST_OVERRIDE__") {
+        throw new Error("[config] PLATFORM_JWT_SECRET must be set in production");
+      }
+      const posPlatformApiKey = env.POS_PLATFORM_API_KEY?.trim();
+      if (!posPlatformApiKey || posPlatformApiKey === "__MUST_OVERRIDE__") {
+        throw new Error("[config] POS_PLATFORM_API_KEY must be set in production");
       }
     }
   },
