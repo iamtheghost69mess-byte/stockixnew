@@ -10,6 +10,8 @@ COPY apps/dashboard/package.json              ./apps/dashboard/
 COPY packages/config/package.json             ./packages/config/
 COPY packages/shared/package.json             ./packages/shared/
 COPY packages/ui/package.json                 ./packages/ui/
+COPY packages/ui-core/package.json            ./packages/ui-core/
+COPY packages/theme/package.json              ./packages/theme/
 COPY packages/eslint-config/package.json      ./packages/eslint-config/
 COPY packages/typescript-config/package.json  ./packages/typescript-config/
 

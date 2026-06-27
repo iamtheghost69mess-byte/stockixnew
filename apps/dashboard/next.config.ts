@@ -61,6 +61,10 @@ const nextConfig: NextConfig = {
     const apiUrl = process.env.STOCKIX_API_URL || process.env.NEXT_PUBLIC_STOCKIX_API_URL || "http://127.0.0.1:4000";
     return [
       {
+        source: "/api/health",
+        destination: `${apiUrl}/health`,
+      },
+      {
         source: "/api/me",
         destination: `${apiUrl}/v1/auth/me`,
       },

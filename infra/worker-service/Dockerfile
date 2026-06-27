@@ -54,7 +54,6 @@ COPY apps/api/tsup.worker.config.ts ./apps/api/
 
 # Build shared packages then bundle the worker
 RUN pnpm --filter @repo/auth build \
- && pnpm --filter @repo/shared build \
  && pnpm infra:worker:build
 
 # Verify bundle was produced

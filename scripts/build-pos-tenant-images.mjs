@@ -23,7 +23,7 @@ const FORCE = process.argv.includes("--force");
 const BACKEND_ONLY = process.argv.includes("--backend-only");
 const STUB_FRONTEND = process.argv.includes("--stub-frontend");
 const FULL_FRONTEND = !STUB_FRONTEND;
-const posAppRaw = process.env.POS_APP_ROOT?.trim() || path.join("services", "posnew");
+const posAppRaw = process.env.POS_APP_ROOT?.trim() || path.join("apps", "pos-backend");
 const POS_ROOT = path.isAbsolute(posAppRaw) ? posAppRaw : path.join(ROOT, posAppRaw);
 const COMPOSE = path.join(ROOT, "infra", "pos-tenant-stack", "docker-compose.yml");
 

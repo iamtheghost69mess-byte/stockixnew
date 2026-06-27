@@ -14,9 +14,8 @@ import { findFreePort } from "./find-free-port.mjs";
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnvFilesAtRoot(repoRoot);
 
-const posRoot = path.join(repoRoot, process.env.POS_APP_ROOT || "services/posnew");
-const backendDir = path.join(posRoot, "apps", "pos-backend");
-const frontendDir = path.join(posRoot, "apps", "pos-frontend2");
+const backendDir = path.join(repoRoot, "apps", "pos-backend");
+const frontendDir = path.join(repoRoot, "apps", "pos-frontend2");
 
 function skip(message) {
   console.warn(`[dev-pos] ${message}`);
@@ -120,7 +119,7 @@ function startPos(label, cwd, cmd, args, env) {
 startPos("api", repoRoot, "pnpm", ["--filter", "pos-backend", "dev"], backendEnv);
 startPos(
   "ui",
-  path.join(repoRoot, "services", "posnew", "apps", "pos-frontend2"),
+  frontendDir,
   "pnpm",
   ["exec", "next", "dev", "--port", String(uiPort)],
   frontendEnv,

@@ -28,8 +28,8 @@ export type UseAuditLogOptions = {
   page: number;
   pageSize: number;
   actionFilter: string;
-  actorSearch: string;
-  tenantSearch: string;
+  actorId: string;
+  tenantId: string;
 };
 
 export type UseAuditLogResult = {
@@ -40,7 +40,7 @@ export type UseAuditLogResult = {
   error: string | null;
 };
 
-export function useAuditLog({ canView, page, pageSize, actionFilter, actorSearch, tenantSearch }: UseAuditLogOptions): UseAuditLogResult {
+export function useAuditLog({ canView, page, pageSize, actionFilter, actorId, tenantId }: UseAuditLogOptions): UseAuditLogResult {
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -52,10 +52,10 @@ export function useAuditLog({ canView, page, pageSize, actionFilter, actorSearch
     p.set("page", String(page));
     p.set("pageSize", String(pageSize));
     if (actionFilter) p.set("action", actionFilter);
-    if (actorSearch.trim()) p.set("actor", actorSearch.trim());
-    if (tenantSearch.trim()) p.set("tenant", tenantSearch.trim());
+    if (actorId.trim()) p.set("actorId", actorId.trim());
+    if (tenantId.trim()) p.set("tenantId", tenantId.trim());
     return p.toString();
-  }, [page, pageSize, actionFilter, actorSearch, tenantSearch]);
+  }, [page, pageSize, actionFilter, actorId, tenantId]);
 
   const load = useCallback(async () => {
     if (!canView) return;

@@ -3,7 +3,6 @@ packages:
   - "packages/*"
   - "services/pms"
   - "services/pms/frontend"
-  - "services/posnew/packages/*"
   - "services/stockix-finance"
   - "services/stockix-finance/packages/*"
   - "services/stockix-finance/shared/*"

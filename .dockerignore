@@ -16,20 +16,9 @@ infra/worker-service/.tmp-dist/
 # Exclude all services from the root build context.
 # Finance builds: prebuild-tenant-images.mjs uses cwd=FINANCE_ROOT as context, so
 #   this file never applies to them.
-# POS builds: build-pos-tenant-images.mjs uses context=STOCKIX_REPO_ROOT (repo root),
-#   so services/posnew MUST be re-included here.
-# IMPORTANT: use services/* (glob), not services/ (directory match). The glob form
-#   makes Docker traverse into services/ so the !services/posnew negation is evaluated.
-#   With services/, Docker stops at the directory and ignores all negations below it.
+# POS builds: build-pos-tenant-images.mjs uses context=STOCKIX_REPO_ROOT (repo root).
+#   POS code is under apps/pos-backend and apps/pos-frontend2 (not services/).
 services/*
-!services/posnew
-
-# Exclude large/unnecessary sub-trees within services/posnew.
-# POS Dockerfiles COPY compiled packages; raw TypeScript source is not needed.
-services/posnew/packages/domain-access/src/
-services/posnew/packages/platform-api/src/
-# POS backend app is plain JS — tests are never needed inside the image.
-services/posnew/apps/pos-backend/tests/
 
 # E2E tests never needed inside Docker images
 e2e/

@@ -45,7 +45,8 @@ export class ProfitLossSheetTableInjectable {
       tenantMetadata,
       this.exchangeRatesService,
       filter.toDate
-        ? new Date(filter.toDate as string | Date
+        ? new Date(filter.toDate as string | Date)
+        : new Date(),
     );
 
     const table = new ProfitLossSheetTable(

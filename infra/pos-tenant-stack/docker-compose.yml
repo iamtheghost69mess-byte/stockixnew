@@ -18,7 +18,7 @@ services:
     image: stockix-pos-backend:local
     build:
       context: ${STOCKIX_REPO_ROOT}
-      dockerfile: services/posnew/apps/pos-backend/Dockerfile
+      dockerfile: apps/pos-backend/Dockerfile
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8010/health || exit 1"]
@@ -140,7 +140,9 @@ services:
     image: stockix-pos-frontend:local
     build:
       context: ${STOCKIX_REPO_ROOT}
-      dockerfile: services/posnew/apps/pos-frontend2/Dockerfile
+      dockerfile: apps/pos-frontend2/Dockerfile
+      args:
+        NEXT_PUBLIC_POS_API_ORIGIN: ${POS_BACKEND_URL:-http://localhost:8010}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
@@ -149,7 +151,7 @@ services:
       retries: 3
       start_period: 45s
     environment:
-      - NEXT_PUBLIC_POS_API_URL=${POS_BACKEND_URL:-http://localhost:8010}
+      - NEXT_PUBLIC_POS_API_ORIGIN=${POS_BACKEND_URL:-http://localhost:8010}
     ports:
       - "127.0.0.1:${POS_FRONTEND_HOST_PORT:-3001}:3000"
     networks:

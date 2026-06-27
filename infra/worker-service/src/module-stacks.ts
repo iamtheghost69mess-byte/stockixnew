@@ -392,7 +392,7 @@ export async function provisionPosStack(
 
   const project = `stockix-pos-${opts.slug}`;
 
-  const posAppRootRaw = process.env.POS_APP_ROOT ?? join("services", "posnew");
+  const posAppRootRaw = process.env.POS_APP_ROOT ?? join("apps", "pos-backend");
   const posAppRoot = isAbsolute(posAppRootRaw)
     ? posAppRootRaw
     : join(repoRoot(), posAppRootRaw);

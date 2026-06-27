@@ -18,7 +18,7 @@ export function MailHealthBanner() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/health/mail", { cache: "no-store" });
+        const res = await fetch("/api/health", { cache: "no-store" });
         const data = (await res.json()) as {
           mail?: { configured?: boolean };
         };

@@ -95,6 +95,10 @@ function AuditMetadataCell({ action, metadata }: { action: string; metadata: unk
   );
 }
 
+import { ActionCombobox } from "@/components/action-combobox";
+import { ActorCombobox } from "@/components/actor-combobox";
+import { TenantCombobox } from "@/components/tenant-combobox";
+
 const SKELETON_ROWS = 6;
 
 export default function AuditLogPage() {
@@ -104,27 +108,21 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  const [actionInput, setActionInput] = useState("");
   const [actionFilter, setActionFilter] = useState("");
-  const [actorSearch, setActorSearch] = useState("");
-  const [tenantSearch, setTenantSearch] = useState("");
-
-  useEffect(() => {
-    const id = window.setTimeout(() => setActionFilter(actionInput.trim()), 300);
-    return () => window.clearTimeout(id);
-  }, [actionInput]);
+  const [actorId, setActorId] = useState("");
+  const [tenantId, setTenantId] = useState("");
 
   useEffect(() => {
     setPage(1);
-  }, [actionFilter, actorSearch, tenantSearch]);
+  }, [actionFilter, actorId, tenantId]);
 
   const { entries, total, totalPages, loading: listLoading, error } = useAuditLog({
     canView,
     page,
     pageSize,
     actionFilter,
-    actorSearch,
-    tenantSearch,
+    actorId,
+    tenantId,
   });
 
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -202,36 +200,18 @@ export default function AuditLogPage() {
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="audit-action">Action</Label>
-              <Input
-                id="audit-action"
-                value={actionInput}
-                onChange={(e) => setActionInput(e.target.value)}
-                placeholder="e.g. tenant.suspend, license"
-                autoComplete="off"
-              />
+              <ActionCombobox value={actionFilter} onValueChange={setActionFilter} />
               <p className="text-xs text-muted-foreground">
                 Matches the event code (dot-separated), not the friendly label.
               </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="audit-actor">Actor</Label>
-              <Input
-                id="audit-actor"
-                value={actorSearch}
-                onChange={(e) => setActorSearch(e.target.value)}
-                placeholder="Name or email"
-                autoComplete="off"
-              />
+              <ActorCombobox value={actorId} onValueChange={setActorId} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="audit-tenant">Target tenant</Label>
-              <Input
-                id="audit-tenant"
-                value={tenantSearch}
-                onChange={(e) => setTenantSearch(e.target.value)}
-                placeholder="Name or slug"
-                autoComplete="off"
-              />
+              <TenantCombobox value={tenantId} onValueChange={setTenantId} />
             </div>
             <div className="flex items-end gap-2">
               <Button
@@ -239,10 +219,9 @@ export default function AuditLogPage() {
                 variant="outline"
                 className="w-full sm:w-auto"
                 onClick={() => {
-                  setActionInput("");
                   setActionFilter("");
-                  setActorSearch("");
-                  setTenantSearch("");
+                  setActorId("");
+                  setTenantId("");
                   setPage(1);
                 }}
               >
@@ -394,8 +373,26 @@ export default function AuditLogPage() {
                         <TableCell className="min-w-0 align-top whitespace-normal py-2.5 text-sm">
                           <AuditMetadataCell action={row.action} metadata={row.metadata} />
                         </TableCell>
-                        <TableCell className="hidden min-w-0 align-top whitespace-nowrap border-l border-border/50 bg-muted/15 px-3 font-mono text-xs text-muted-foreground lg:table-cell">
-                          {row.ipAddress ?? "—"}
+                        <TableCell className="hidden min-w-0 max-w-[120px] align-top border-l border-border/50 bg-muted/15 px-3 py-3 lg:table-cell">
+                          {row.ipAddress ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    className="block w-full cursor-default border-0 bg-transparent p-0 text-left font-mono text-xs text-muted-foreground truncate hover:text-foreground transition-colors"
+                                  >
+                                    {row.ipAddress}
+                                  </button>
+                                }
+                              />
+                              <TooltipContent side="top" className="font-mono text-xs">
+                                {row.ipAddress}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="font-mono text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

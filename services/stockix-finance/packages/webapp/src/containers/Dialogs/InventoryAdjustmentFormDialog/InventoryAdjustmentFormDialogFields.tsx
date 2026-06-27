@@ -29,7 +29,8 @@ import { Features, CLASSES } from '@/constants';
 
 import { useInventoryAdjContext } from './InventoryAdjustmentFormProvider';
 import { useFeatureCan } from '@/hooks/state';
-import { useCurrentOrganization, useCurrencies } from '@/hooks/state';
+import { useCurrentOrganization } from '@/hooks/state';
+import { useCurrencies } from '@/hooks/query';
 
 import InventoryAdjustmentQuantityFields from './InventoryAdjustmentQuantityFields';
 import {

@@ -10,8 +10,9 @@ COPY apps/api/package.json                            ./apps/api/
 COPY packages/auth/package.json                       ./packages/auth/
 COPY packages/config/package.json                     ./packages/config/
 COPY packages/db/package.json                         ./packages/db/
+COPY packages/events/package.json                     ./packages/events/
 COPY packages/shared/package.json                     ./packages/shared/
-COPY packages/platform-worker-shared/package.json     ./packages/platform-worker-shared/
+COPY packages/typescript-config/package.json          ./packages/typescript-config/
 COPY packages/eslint-config/package.json              ./packages/eslint-config/
 
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \

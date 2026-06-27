@@ -101,6 +101,8 @@ export async function pollUntilTenantRemoved(
   const started = Date.now();
   let stepIndex = 0;
   const deadline = started + DELETE_MAX_WAIT_MS;
+  let consecutiveNetworkErrors = 0;
+  const MAX_NETWORK_RETRIES = 5;
 
   while (Date.now() < deadline) {
     const elapsedSec = Math.floor((Date.now() - started) / 1000);
@@ -109,7 +111,22 @@ export async function pollUntilTenantRemoved(
       elapsedSec,
     );
 
-    const res = await fetch(`/api/tenants/${tenantId}?poll_delete=true`);
+    let res: Response;
+    try {
+      res = await fetch(`/api/tenants/${tenantId}?poll_delete=true`);
+      consecutiveNetworkErrors = 0;
+    } catch (fetchErr) {
+      consecutiveNetworkErrors++;
+      if (consecutiveNetworkErrors >= MAX_NETWORK_RETRIES) {
+        throw new Error(
+          `API unreachable after ${MAX_NETWORK_RETRIES} retries during tenant removal. ` +
+            `The worker may still be cleaning up in the background. Last error: ${String(fetchErr)}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, DELETE_POLL_MS * consecutiveNetworkErrors));
+      continue;
+    }
+
     if (res.status === 404) {
       onProgress("Tenant removed completely.", elapsedSec);
       return;

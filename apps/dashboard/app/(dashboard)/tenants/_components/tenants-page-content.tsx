@@ -633,11 +633,26 @@ export function TenantsPageContent() {
   ): Promise<ProvisionPollComplete> => {
     const deadline = Date.now() + MAX_WAIT_MS;
     let completeSeenAt: number | null = null;
+    let consecutiveNetworkErrors = 0;
+    const MAX_NETWORK_RETRIES = 5;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_MS));
-      const sr = await fetch(
-        `/api/tenants/provision-status/${correlationId}`,
-      );
+      let sr: Response;
+      try {
+        sr = await fetch(`/api/tenants/provision-status/${correlationId}`);
+        consecutiveNetworkErrors = 0;
+      } catch (fetchErr) {
+        consecutiveNetworkErrors++;
+        if (consecutiveNetworkErrors >= MAX_NETWORK_RETRIES) {
+          throw new Error(
+            `API unreachable after ${MAX_NETWORK_RETRIES} retries during provisioning. Check that the API is running. Last error: ${String(fetchErr)}`,
+          );
+        }
+        // Transient network reset (ERR_CONNECTION_RESET, etc.) — provisioning may still be running.
+        // Back off and retry rather than aborting the entire flow.
+        await new Promise((r) => setTimeout(r, POLL_MS * consecutiveNetworkErrors));
+        continue;
+      }
       const sj = (await readJson(sr)) as
         | ProvisionPollRunning
         | ProvisionPollComplete

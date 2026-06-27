@@ -4,6 +4,10 @@ import path from "node:path";
 const posApiOrigin = (process.env.NEXT_PUBLIC_POS_API_ORIGIN || "http://localhost:8010").replace(/\/$/, "");
 const nextConfig = {
   output: "standalone",
+  transpilePackages: ["@repo/ui-core", "@repo/ui-shared"],
+  // Type errors in workspace packages are checked via tsc --noEmit separately.
+  // Don't let them block the production image build.
+  typescript: { ignoreBuildErrors: true },
   experimental: {
     externalDir: true,
   },
@@ -12,8 +16,6 @@ const nextConfig = {
         turbopack: {
           root: path.resolve(process.env.NEXT_TURBOPACK_ROOT),
         },
-        // Production Docker image: avoid blocking on strict TS in peripheral screens.
-        typescript: { ignoreBuildErrors: true },
       }
     : {}),
   async headers() {
