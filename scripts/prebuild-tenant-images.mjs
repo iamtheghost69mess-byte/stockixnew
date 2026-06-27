@@ -14,7 +14,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadRootEnv } from "./load-root-env.mjs";
@@ -67,6 +67,12 @@ function run(label, cmd, cwd = ROOT, extraEnv = {}) {
 const FINANCE_SHARED_LINK = path.join(FINANCE_ROOT, "packages", "shared");
 const MONOREPO_SHARED = path.resolve(ROOT, "packages", "shared");
 
+// Source files that import monorepo-only packages (not resolvable in standalone Docker build).
+const FINANCE_SHARED_EXCLUDED_SOURCES = new Set(["feature-flags.ts"]);
+// Runtime deps that only exist in the monorepo workspace and must not appear in the
+// standalone finance package.json (they are not in the finance pnpm-lock.yaml).
+const MONOREPO_ONLY_DEPS = new Set(["@repo/db", "drizzle-orm", "ioredis"]);
+
 function syncFinanceSharedPackage() {
   if (!existsSync(MONOREPO_SHARED)) {
     throw new Error(`Shared package not found: ${MONOREPO_SHARED}`);
@@ -79,7 +85,31 @@ function syncFinanceSharedPackage() {
     filter: (src) => !src.includes("node_modules"),
   });
 
-  console.log("[prebuild] Synced shared package → finance");
+  // Remove source files that import monorepo-only packages.
+  for (const file of FINANCE_SHARED_EXCLUDED_SOURCES) {
+    const target = path.join(FINANCE_SHARED_LINK, "src", file);
+    if (existsSync(target)) unlinkSync(target);
+  }
+
+  // Strip monorepo-only deps and their exports from package.json.
+  const pkgPath = path.join(FINANCE_SHARED_LINK, "package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  for (const section of ["dependencies", "devDependencies", "peerDependencies"]) {
+    if (pkg[section]) {
+      for (const dep of MONOREPO_ONLY_DEPS) delete pkg[section][dep];
+      if (Object.keys(pkg[section]).length === 0) delete pkg[section];
+    }
+  }
+  // Remove exports that reference excluded source files.
+  if (pkg.exports) {
+    for (const [key, val] of Object.entries(pkg.exports)) {
+      const basename = path.basename(String(val));
+      if (FINANCE_SHARED_EXCLUDED_SOURCES.has(basename)) delete pkg.exports[key];
+    }
+  }
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+
+  console.log("[prebuild] Synced shared package → finance (monorepo-only deps stripped)");
 }
 
 // ─────────────────────────────────────────────────────────────
