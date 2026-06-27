@@ -46,6 +46,9 @@ if (sentryDsn) {
     dsn: sentryDsn,
     environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'production',
     tracesSampleRate: 0.1,
+    // tedious (MSSQL) is a transitive dep that doesn't export tediousIntegration in the
+    // installed version — Sentry's auto-detection crashes at startup without this filter.
+    integrations: (integrations) => integrations.filter((i) => i.name !== 'Tedious'),
   });
 }
 
