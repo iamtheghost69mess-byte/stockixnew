@@ -126,6 +126,7 @@ services:
       CONFIGS: 0
       PLUGINS: 0
       POST: 1
+      EXEC: 1
       BUILD: 0
       EVENTS: 1
       LOG_LEVEL: warning
