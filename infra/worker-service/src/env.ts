@@ -21,18 +21,19 @@ const envSchema = z.object({
   TRAEFIK_DYNAMIC_DIR: z.string().min(1, 'TRAEFIK_DYNAMIC_DIR is required'),
   STOCKIX_TENANT_APP_ROOT: z.string().min(1, 'STOCKIX_TENANT_APP_ROOT is required'),
 
-  // Shared services — must be Docker DNS names, not localhost
+  // Shared services — must be Docker DNS names in production; localhost allowed in dev
+  // (dev worker runs on the host and reaches MySQL/ProxySQL via published ports)
   WORKER_SHARED_MYSQL_HOST: z.string()
     .min(1, 'WORKER_SHARED_MYSQL_HOST is required')
     .refine(
-      (val) => val !== 'localhost' && val !== '127.0.0.1',
-      'WORKER_SHARED_MYSQL_HOST must be a Docker service name, not localhost or 127.0.0.1'
+      (val) => process.env.NODE_ENV === 'development' || (val !== 'localhost' && val !== '127.0.0.1'),
+      'WORKER_SHARED_MYSQL_HOST must be a Docker service name, not localhost or 127.0.0.1 (production)'
     ),
   MYSQL_PROXY_HOST: z.string()
     .min(1, 'MYSQL_PROXY_HOST is required')
     .refine(
-      (val) => val !== 'localhost' && val !== '127.0.0.1',
-      'MYSQL_PROXY_HOST must be a Docker service name (e.g. stockix-mysql-proxy)'
+      (val) => process.env.NODE_ENV === 'development' || (val !== 'localhost' && val !== '127.0.0.1'),
+      'MYSQL_PROXY_HOST must be a Docker service name, e.g. stockix-mysql-proxy (production)'
     ),
 
   // Redis

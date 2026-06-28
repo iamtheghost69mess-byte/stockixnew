@@ -1,6 +1,6 @@
-declare module '@repo/shared/deployment-secrets' {
-  export function decryptEncryptedEnvVars(
-    envKeys: string[],
-    secretKeyHex: string | undefined,
-  ): void;
-}
+declare module '@stockix-finance/shared/deployment-secrets' {
+  export function decryptEncryptedEnvVars(
+    envKeys: string[],
+    secretKeyHex: string | undefined,
+  ): void;
+}

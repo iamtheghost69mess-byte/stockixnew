@@ -16,20 +16,20 @@ const envSchema = z.object({
   TENANT_DB_USER: z.string().min(1, 'TENANT_DB_USER is required'),
   TENANT_DB_PASSWORD: z.string().min(1, 'TENANT_DB_PASSWORD is required'),
 
-  // Redis — required, no localhost fallback permitted
+  // Redis — Docker service name in production; localhost allowed in dev
   REDIS_HOST: z.string()
     .min(1, 'REDIS_HOST is required')
     .refine(
-      (val) => val !== 'localhost' && val !== '127.0.0.1',
-      'REDIS_HOST must be a Docker service name (e.g. stockix-redis), not localhost'
+      (val) => process.env.NODE_ENV === 'development' || (val !== 'localhost' && val !== '127.0.0.1'),
+      'REDIS_HOST must be a Docker service name (e.g. stockix-redis), not localhost (production)'
     ),
 
-  // Queue — required, no localhost fallback permitted  
+  // Queue — Docker service name in production; localhost allowed in dev
   QUEUE_HOST: z.string()
     .min(1, 'QUEUE_HOST is required')
     .refine(
-      (val) => val !== 'localhost' && val !== '127.0.0.1',
-      'QUEUE_HOST must be a Docker service name (e.g. stockix-redis), not localhost'
+      (val) => process.env.NODE_ENV === 'development' || (val !== 'localhost' && val !== '127.0.0.1'),
+      'QUEUE_HOST must be a Docker service name (e.g. stockix-redis), not localhost (production)'
     ),
 
   // Auth

@@ -50,6 +50,7 @@
     "@nestjs/throttler": "^4.2.1",
     "@nestjs/websockets": "^9.4.3",
     "@repo/shared": "workspace:*",
+    "@stockix-finance/shared": "workspace:*",
     "@sentry/node": "^8.40.0",
     "@stockix/email-components": "workspace:*",
     "@stockix/pdf-templates": "workspace:*",

@@ -1,5 +1,5 @@
 import { Injectable, LoggerService, LogLevel } from '@nestjs/common';
-import { logger } from '@repo/shared/structured-logger';
+import { logger } from '@stockix-finance/shared/structured-logger';
 
 function parseMessage(message: unknown): { msg: string; meta?: Record<string, unknown> } {
   if (typeof message === 'string') {

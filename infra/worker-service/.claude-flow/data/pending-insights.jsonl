@@ -11,3 +11,10 @@
 {"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/apps/api/src/routes/auth/index.ts","timestamp":1782640199715,"sessionId":null}
 {"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/apps/api/src/routes/auth/index.ts","timestamp":1782640255169,"sessionId":null}
 {"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/apps/api/src/routes/auth/index.ts","timestamp":1782640261494,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/services/stockix-finance/packages/shared/package.json","timestamp":1782643057711,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/services/stockix-finance/packages/server/src/bootstrap-decrypt-env.ts","timestamp":1782643075772,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/services/stockix-finance/packages/server/src/main.ts","timestamp":1782643076595,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/services/stockix-finance/packages/server/src/types/deployment-secrets.d.ts","timestamp":1782643077718,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/services/stockix-finance/packages/server/src/common/logging/structured-nest-logger.service.ts","timestamp":1782643078502,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/packages/shared/src/index.ts","timestamp":1782643101946,"sessionId":null}
+{"type":"edit","file":"/home/jad/dev/stokcix/stockixnew/apps/api/tsconfig.json","timestamp":1782643118387,"sessionId":null}

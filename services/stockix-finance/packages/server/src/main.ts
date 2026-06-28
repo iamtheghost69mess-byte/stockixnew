@@ -15,7 +15,7 @@ import {
   resolveHttpAllowedOrigins,
 } from './common/http/http-allowed-origins';
 import { StructuredNestLogger } from './common/logging/structured-nest-logger.service';
-import { logger } from '@repo/shared/structured-logger';
+import { logger } from '@stockix-finance/shared/structured-logger';
 
 global.__public_dirname = path.join(__dirname, '..', 'public');
 global.__static_dirname = path.join(__dirname, '../static');
