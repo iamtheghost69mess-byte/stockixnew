@@ -125,7 +125,7 @@ const baseSchema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().min(1),
   WORKER_HEALTH_PORT: z.coerce.number().min(1),
   WORKER_STARTUP_GRACE_MS: z.coerce.number().default(5000),
-  WORKER_JOB_EXECUTION_TIMEOUT_MS: z.coerce.number().default(45 * 60 * 1000),
+  WORKER_JOB_EXECUTION_TIMEOUT_MS: z.coerce.number().default(600_000),
   WORKER_HEARTBEAT_STALE_MS: z.coerce.number().default(600_000),
   WORKER_STALE_LEASE_THRESHOLD_MS: z.coerce.number().default(3_000_000),
   WORKER_JOB_ID: z.string().optional(),

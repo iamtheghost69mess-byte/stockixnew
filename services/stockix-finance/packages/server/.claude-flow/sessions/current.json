@@ -1,0 +1,12 @@
+{
+  "id": "session-1782641162334",
+  "startedAt": "2026-06-28T10:06:02.334Z",
+  "cwd": "/home/jad/dev/stokcix/stockixnew/services/stockix-finance/packages/server",
+  "context": {},
+  "metrics": {
+    "edits": 9,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  }
+}

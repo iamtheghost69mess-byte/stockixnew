@@ -111,7 +111,7 @@ jobs:
         run: pnpm --filter @stockix/pms exec tsc --noEmit
 
       - name: TypeScript compilation check — Finance
-        run: pnpm --filter @stockix/server exec tsc --noEmit
+        run: pnpm --filter @stockix/server exec tsc --project tsconfig.stockix.json
 
   build-images:
     name: Build and Push Docker Images
