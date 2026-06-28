@@ -153,7 +153,7 @@ export function mapStockixLicenseStatus(
   return "active";
 }
 
-import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
+import { buildTenantServiceUrl } from "@repo/shared/tenant-dns";
 
 export async function resolveTenantInternalBaseUrl(
   db: Db,

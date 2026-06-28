@@ -1596,12 +1596,28 @@ export async function executeProvisionRuntime(
           && internalUrl
           && !hasOp("tenant.complete_setup_wizard")
         ) {
-          const setupResult = await completeFinanceSetupWizard({
-            internalBaseUrl: internalUrl,
-            financeTenantId,
-            log,
-          });
-          if (setupResult.ok) {
+          await markOpStarted(db, correlationId, "tenant.complete_setup_wizard");
+
+          let setupResult: Awaited<ReturnType<typeof completeFinanceSetupWizard>> | undefined;
+
+          try {
+            setupResult = await withStepTimeout("tenant.complete_setup_wizard", 30_000, async () => {
+              return await completeFinanceSetupWizard({
+                internalBaseUrl: internalUrl,
+                financeTenantId: financeTenantId!,
+                log,
+              });
+            });
+          } catch (err: unknown) {
+            const status = (err as { response?: { status?: number } })?.response?.status;
+            if (status === 400 || status === 409) {
+              log(`[provision] setup wizard already completed (treating duplicate as success) correlationId=${correlationId} status=${status}`);
+            } else {
+              throw err;
+            }
+          }
+
+          if (!setupResult || setupResult.ok) {
             await markOp("tenant.complete_setup_wizard", "Setup wizard marked complete", {
               financeTenantId,
             });

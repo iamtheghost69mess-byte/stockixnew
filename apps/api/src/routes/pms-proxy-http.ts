@@ -27,7 +27,7 @@ function buildInternalHeaders(tenantId: string): Record<string, string> {
   return headers;
 }
 
-import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
+import { buildTenantServiceUrl } from "@repo/shared/tenant-dns";
 import { tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 

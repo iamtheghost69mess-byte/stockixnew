@@ -15,6 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
+      - name: Verify triggering workflow succeeded
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "Upstream build workflow did not succeed. Aborting staging deploy."
+            echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"
+            exit 1
+          fi
+          echo "Upstream workflow succeeded. Proceeding with staging deploy."
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:

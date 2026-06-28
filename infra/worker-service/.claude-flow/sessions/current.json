@@ -1,0 +1,12 @@
+{
+  "id": "session-1782640178852",
+  "startedAt": "2026-06-28T09:49:38.853Z",
+  "cwd": "/home/jad/dev/stokcix/stockixnew/infra/worker-service",
+  "context": {},
+  "metrics": {
+    "edits": 4,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  }
+}

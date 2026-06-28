@@ -186,6 +186,22 @@ async function verifyProxySqlTenantLogin(
   }
 }
 
+/**
+ * Registers a tenant MySQL user in ProxySQL.
+ *
+ * Port contract (DO NOT CHANGE):
+ * - Admin interface (DDL operations): stockix-mysql-proxy:6032
+ * - Query interface (tenant connections): stockix-mysql-proxy:6033
+ * - Direct MySQL (CREATE DATABASE / DDL only): stockix-mysql:3306
+ *
+ * This function connects to the ADMIN port (6032) to manage mysql_users.
+ * Tenant services connect to the QUERY port (6033) for all data operations.
+ * Direct MySQL port 3306 is used ONLY for DDL (CREATE DATABASE, CREATE USER).
+ *
+ * Idempotency: DELETE before INSERT ensures safe re-execution on retry.
+ * Verification: verifyProxySqlTenantLogin() confirms the user is reachable
+ * on the query port (6033) after sync.
+ */
 async function registerMysqlUserInProxySql(
   username: string,
   password: string,

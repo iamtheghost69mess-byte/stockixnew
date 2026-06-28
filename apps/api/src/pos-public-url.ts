@@ -1,6 +1,6 @@
 import { apiConfig } from "@repo/config";
 import { publicConfig } from "@repo/config/public";
-import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
+import { buildTenantServiceUrl } from "@repo/shared/tenant-dns";
 
 function publicScheme(): string {
   return (apiConfig.publicBaseUrlScheme ?? "http").replace(/:+$/, "");

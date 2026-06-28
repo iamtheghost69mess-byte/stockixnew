@@ -4,7 +4,7 @@ function getPosPlatformBase(override?: string): string {
   const url = override?.trim() || posConfig.platformBaseUrl?.trim();
   if (!url) {
     throw new Error(
-      "POS_PLATFORM_BASE_URL is required. Set it in .env. Example: http://localhost:8010",
+      "POS_PLATFORM_BASE_URL is required. In production this is constructed from tenant slug via buildTenantServiceUrl.",
     );
   }
   return url;

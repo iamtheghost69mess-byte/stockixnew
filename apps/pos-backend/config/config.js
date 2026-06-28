@@ -66,17 +66,12 @@ function isWildcardPosOrigin(origin) {
   return matchesWildcardPosOrigin(origin);
 }
 
-// Production requires explicit MONGODB_URI (per-tenant {slug}_pos DB)
-// Localhost fallback only permitted in local development
 const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri && process.env.NODE_ENV === "production") {
-  throw new Error(
-    "[pos-backend] MONGODB_URI is required in production. " +
-      "Cannot start without explicit per-tenant MongoDB URI. " +
-      "Check tenant .env file injection in pos-tenant-stack.",
-  );
+if (!mongoUri && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: MONGODB_URI is required in production');
+  process.exit(1);
 }
-const databaseURI = mongoUri ?? "mongodb://localhost:27017/pos-db";
+const databaseURI = mongoUri ?? "mongodb://localhost:27017/pos-db"; // localhost only valid in dev
 
 const config = Object.freeze({
   port: process.env.PORT || 3000,

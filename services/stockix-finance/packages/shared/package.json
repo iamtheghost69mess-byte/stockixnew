@@ -12,7 +12,8 @@
     "./pos-entitlements-from-modules": "./src/pos-entitlements-from-modules.ts",
     "./deployment-secrets": "./src/deployment-secrets.ts",
     "./structured-logger": "./src/structured-logger.ts",
-    "./feature-flags": "./src/feature-flags.ts"
+    "./feature-flags": "./src/feature-flags.ts",
+    "./tenant-dns": "./src/tenant-dns.ts"
   },
   "dependencies": {},
   "devDependencies": {

@@ -7,6 +7,7 @@ import { apiConfig } from "@repo/config";
 import { logger } from "../../lib/logger.js";
 
 import { capabilitiesFromPermissions } from "@repo/shared/permissions";
+import type { StockixRole } from "@repo/auth";
 import { validateAndResolveOwnerAuth } from "../../permissions/resolve-owner-permissions.js";
 import { validateOwnerSession } from "../../services/auth/session-validation.js";
 import { loginOwner, reconfirmOwnerPassword } from "../../services/auth/login.js";
@@ -251,7 +252,7 @@ export function buildAuthRoutes(db: PostgresJsDatabase<typeof schema>) {
       const { accessToken } = await signProductToken(db, {
         userId: payload.userId,
         tenantId: payload.tenantId,
-        roles: [owner.role],
+        roles: [owner.role as StockixRole],
         planSlug: tenantRow.planSlug,
       });
 

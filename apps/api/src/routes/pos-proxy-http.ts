@@ -18,9 +18,10 @@ import {
 
 import type { createDb } from "@repo/db";
 
-import { branchLocationMappings, organizations } from "@repo/db/schema";
+import { branchLocationMappings, organizations, tenants } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import { canCreateLocation } from "../plan-limits.js";
+import { buildTenantServiceUrl } from "@repo/shared/tenant-dns";
 
 
 
@@ -548,10 +549,26 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
     let frontendUrl: string;
 
     try {
+      const tenantId = c.req.query("tenantId")?.trim() ?? c.req.query("stockixTenantId")?.trim();
+      let tenantSlug: string | undefined;
 
-      base = requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
+      if (tenantId && db) {
+        const tenant = await db
+          .select({ slug: tenants.slug })
+          .from(tenants)
+          .where(eq(tenants.id, tenantId))
+          .limit(1)
+          .then((res) => res[0]);
+        tenantSlug = tenant?.slug;
+      }
 
-      frontendUrl = requireEnv("POS_FRONTEND_URL", "http://localhost:3001");
+      if (tenantSlug) {
+        base = buildTenantServiceUrl(tenantSlug, "pos-backend", 8010);
+        frontendUrl = buildTenantServiceUrl(tenantSlug, "pos-frontend", 3000);
+      } else {
+        base = requireEnv("POS_PLATFORM_BASE_URL");
+        frontendUrl = requireEnv("POS_FRONTEND_URL");
+      }
 
     } catch (err) {
 

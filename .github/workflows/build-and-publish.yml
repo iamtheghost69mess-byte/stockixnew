@@ -13,8 +13,109 @@ permissions:
   packages: write
 
 jobs:
+  gate-checks:
+    name: Run All Architecture Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail on localhost/127.0.0.1 in container runtime code
+        run: |
+          FOUND=$(grep -rn "127\.0\.0\.1\|localhost" \
+            apps/api/src/ \
+            apps/pos-backend/config/ \
+            infra/worker-service/src/ \
+            infra/worker-service/domain/ \
+            services/stockix-finance/packages/server/src/ \
+            --include="*.ts" \
+            --include="*.js" \
+            --exclude-dir=node_modules \
+            --exclude="*.test.ts" \
+            --exclude="*.spec.ts" \
+            | grep -v "mongodb://localhost" \
+            | grep -v "localhost only valid in dev" \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "GATE FAILURE: localhost or 127.0.0.1 found in container runtime code:"
+            echo "$FOUND"
+            exit 1
+          fi
+
+      - name: Fail on unapproved Node versions in Dockerfiles
+        run: |
+          FOUND=$(grep -rn "FROM node:" \
+            --include="Dockerfile" \
+            --include="Dockerfile.*" \
+            . \
+            | grep -v "node:22-alpine" \
+            | grep -v "node:22-bookworm-slim" \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "GATE FAILURE: Unapproved Node base image:"
+            echo "$FOUND"
+            exit 1
+          fi
+
+      - name: Fail on host-bound ports in prod compose
+        run: |
+          FOUND=$(grep -n '"\?[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+:[0-9]\+:[0-9]\+' \
+            infra/prod/docker-compose.yml \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "GATE FAILURE: Host-bound ports in prod compose:"
+            echo "$FOUND"
+            exit 1
+          fi
+
+      - name: Fail on docker compose up in worker code
+        run: |
+          FOUND=$(grep -rn "docker compose up\|docker-compose up" \
+            infra/worker-service/src/ \
+            infra/worker-service/domain/ \
+            --include="*.ts" \
+            --exclude="*.test.ts" \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "GATE FAILURE: docker compose up found in worker (must use docker stack deploy):"
+            echo "$FOUND"
+            exit 1
+          fi
+
+      - name: Verify all boot validators exist
+        run: |
+          test -f apps/api/src/env.ts || { echo "GATE FAILURE: apps/api/src/env.ts missing"; exit 1; }
+          test -f apps/pos-backend/env-validate-boot.js || { echo "GATE FAILURE: apps/pos-backend/env-validate-boot.js missing"; exit 1; }
+          test -f services/pms/src/env.ts || { echo "GATE FAILURE: services/pms/src/env.ts missing"; exit 1; }
+          test -f services/stockix-finance/packages/server/src/env.ts || { echo "GATE FAILURE: services/stockix-finance/packages/server/src/env.ts missing"; exit 1; }
+          test -f infra/worker-service/src/env.ts || { echo "GATE FAILURE: infra/worker-service/src/env.ts missing"; exit 1; }
+          echo "All boot validators present."
+
+      - name: Setup Node and pnpm for typecheck
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9.15.9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript compilation check — API
+        run: pnpm --filter api exec tsc --noEmit
+
+      - name: TypeScript compilation check — Worker
+        run: pnpm --filter ./infra/worker-service exec tsc --noEmit
+
+      - name: TypeScript compilation check — PMS
+        run: pnpm --filter @stockix/pms exec tsc --noEmit
+
+      - name: TypeScript compilation check — Finance
+        run: pnpm --filter @stockix/server exec tsc --noEmit
+
   build-images:
     name: Build and Push Docker Images
+    needs: [gate-checks]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

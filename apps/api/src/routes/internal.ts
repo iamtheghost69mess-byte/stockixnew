@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
+import { buildTenantServiceUrl } from "@repo/shared/tenant-dns";
 import { apiConfig } from "@repo/config";
 import type { createDb } from "@repo/db";
 import {
