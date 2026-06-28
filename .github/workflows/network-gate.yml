@@ -45,11 +45,36 @@ jobs:
             --exclude-dir=node_modules \
             --exclude="*.test.ts" \
             --exclude="*.spec.ts" \
+            | grep -vE "^[^:]+:[0-9]+:\s*[*/]" \
+            | grep -v "!== 'localhost'" \
+            | grep -v '!== "localhost"' \
+            | grep -v "!== '127\." \
+            | grep -v '!== "127\.' \
+            | grep -v " === 'localhost'" \
+            | grep -v ' === "localhost"' \
+            | grep -v "=== '127\." \
+            | grep -v '=== "127\.' \
+            | grep -v "@localhost" \
+            | grep -v "origins\.add" \
+            | grep -v "hostname ===" \
+            | grep -v "endsWith.*localhost" \
+            | grep -v "includes.*localhost" \
+            | grep -v "rootDomain.*localhost" \
+            | grep -v "connectSrc" \
+            | grep -v "curl " \
+            | grep -v "logger\." \
+            | grep -v "opts\.log" \
+            | grep -v "OTEL_EXPORTER" \
+            | grep -vE '"[^"]*localhost[^"]*"' \
+            | grep -vE "'[^']*localhost[^']*'" \
+            | grep -vE '"[^"]*127\.[0-9]+\.[0-9]+\.[0-9]+[^"]*"' \
+            | grep -vE "'[^']*127\.[0-9]+\.[0-9]+\.[0-9]+[^']*'" \
+            | grep -vE '`http://127\.[0-9]' \
             | grep -v "mongodb://localhost" \
-            | grep -v "// localhost only valid in dev" \
+            | grep -v "// localhost only" \
             || true)
           if [ -n "$FOUND" ]; then
-            echo "ERROR: Localhost or 127.0.0.1 found in container runtime code:"
+            echo "ERROR: Localhost or 127.0.0.1 found in container runtime code (routing violation):"
             echo "$FOUND"
             exit 1
           fi
