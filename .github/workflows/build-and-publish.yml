@@ -32,6 +32,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push shared base image
+        if: false # DEPRECATED: stockix-base eliminated in Layer 2 repair
         uses: docker/build-push-action@v6
         with:
           context: infra/docker/base

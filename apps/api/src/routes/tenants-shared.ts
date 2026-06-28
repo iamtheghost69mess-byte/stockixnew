@@ -164,15 +164,8 @@ export function parseSigninAccessToken(body: unknown): string | null {
   return accessToken ?? null;
 }
 
-/** Mirrors `apps/dashboard/lib/tenant-url.ts` for the browser origin of a tenant Finance stack. */
 export function tenantFinanceBrowserOrigin(slug: string, internalPort: number | null): string | null {
   const scheme = publicConfig.stockixPublicScheme.replace(/:+$/, "");
-  if (publicConfig.stockixRootDomain === "localhost" && internalPort != null) {
-    return `${scheme}://${publicConfig.stockixLocalTenantHost}:${internalPort}`;
-  }
-  if (publicConfig.stockixRootDomain === "localhost") {
-    return null;
-  }
   return `${scheme}://${slug}.${publicConfig.stockixRootDomain}`;
 }
 
@@ -237,12 +230,7 @@ export function serializeOrganizationRow(
 ) {
   const root = rootDomainForOrganizationSubdomain();
   const scheme = (apiConfig.publicBaseUrlScheme ?? "http").replace(/:+$/, "");
-  const publicUrl =
-    root === "localhost" &&
-    stackPublicPort != null &&
-    Number.isFinite(stackPublicPort)
-      ? `${scheme}://${row.subdomain}:${stackPublicPort}`
-      : null;
+  const publicUrl = `${scheme}://${row.subdomain}.${root}`;
 
   return {
     id: row.id,

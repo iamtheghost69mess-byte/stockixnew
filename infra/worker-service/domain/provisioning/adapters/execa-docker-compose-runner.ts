@@ -21,11 +21,21 @@ export class ExecaDockerComposeRunner implements IDockerComposeRunner {
       forceKillAfterDelay: 500,
       timeout: options?.timeoutMs,
     };
-    const subprocess = execa(
-      "docker",
-      ["compose", "-f", composeFile, "-p", project, "--env-file", envFile, ...args],
-      execaOptions,
-    );
+
+    const slug = project.replace(/^stockix-/, '');
+    const stackName = `stockix_tenant_${slug.replace(/-/g, '_')}`;
+
+    let execArgs: string[] = [];
+    
+    if (args[0] === "up") {
+      execArgs = ["stack", "deploy", "--compose-file", composeFile, "--with-registry-auth", stackName];
+    } else if (args[0] === "down") {
+      execArgs = ["stack", "rm", stackName];
+    } else {
+      execArgs = ["compose", "-f", composeFile, "-p", project, "--env-file", envFile, ...args];
+    }
+
+    const subprocess = execa("docker", execArgs, execaOptions);
     let abortHandler: (() => void) | undefined;
     const cancelSignal = options?.cancelSignal;
     if (cancelSignal) {

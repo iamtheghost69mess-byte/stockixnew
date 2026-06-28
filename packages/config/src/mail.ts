@@ -5,7 +5,7 @@ export const mailConfig = {
   port: parseInt(env.MAIL_PORT ?? "587", 10),
   username: env.MAIL_USERNAME ?? "",
   password: env.MAIL_PASSWORD ?? "",
-  secure: env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1",
+  secure: !!env.MAIL_SECURE,
   fromName: env.MAIL_FROM_NAME ?? "Stockix",
   fromAddress: env.MAIL_FROM_ADDRESS ?? "",
   transport: (env.MAIL_TRANSPORT ?? "").trim().toLowerCase(),

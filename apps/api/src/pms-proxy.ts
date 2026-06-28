@@ -2,8 +2,8 @@ import { requireEnv } from "./lib/require-env.js";
 
 const PMS_PROXY_TIMEOUT_MS = 15_000;
 
-function getPmsBase(): string {
-  return requireEnv("PMS_BASE_URL", "http://localhost:3003");
+function getPmsBase(override?: string): string {
+  return override?.trim() || requireEnv("PMS_BASE_URL", "http://pms-api:3003");
 }
 
 export async function pmsProxy(
@@ -14,9 +14,10 @@ export async function pmsProxy(
     headers?: Record<string, string>;
     query?: Record<string, string | undefined>;
     requestId?: string;
+    baseUrl?: string;
   },
 ): Promise<Response> {
-  const url = new URL(`${getPmsBase()}${path.startsWith("/") ? path : `/${path}`}`);
+  const url = new URL(`${getPmsBase(options?.baseUrl)}${path.startsWith("/") ? path : `/${path}`}`);
   if (options?.query) {
     for (const [key, value] of Object.entries(options.query)) {
       if (value !== undefined) url.searchParams.set(key, value);
@@ -55,6 +56,7 @@ export async function pmsProxyJson(
     headers?: Record<string, string>;
     query?: Record<string, string | undefined>;
     requestId?: string;
+    baseUrl?: string;
   },
 ): Promise<{ data: unknown; status: number }> {
   const res = await pmsProxy(path, method, options);

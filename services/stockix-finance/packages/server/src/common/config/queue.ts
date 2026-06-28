@@ -1,7 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('queue', () => {
-  const host = process.env.QUEUE_HOST || process.env.REDIS_HOST || (process.env.NODE_ENV === 'production' ? '' : 'localhost');
+  const host = process.env.QUEUE_HOST || process.env.REDIS_HOST || '';
   if (!host) {
     throw new Error('QUEUE_HOST or REDIS_HOST environment variable is missing.');
   }

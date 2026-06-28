@@ -1,3 +1,4 @@
+import './env'; // Boot validation — must be first
 import './bootstrap-decrypt-env';
 import './before';
 import * as Sentry from '@sentry/node';

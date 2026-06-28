@@ -18,7 +18,7 @@
     "@repo/pms-db": "workspace:*",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.0",
-    "zod": "^3.23.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

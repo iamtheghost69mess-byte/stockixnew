@@ -71,7 +71,7 @@ export async function executeAddAccountingModuleRuntime(
     );
   }
 
-  const internalUrl = `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? "127.0.0.1"}:${financeInternalPort}`;
+  const internalUrl = `http://${process.env.STOCKIX_FINANCE_INTERNAL_HOST ?? "stockix-finance-server"}:${financeInternalPort}`;
 
   let financeDefaultWarehouseId = row.financeDefaultWarehouseId ?? undefined;
   let walkInCustomerId = row.financeWalkInCustomerId ?? undefined;

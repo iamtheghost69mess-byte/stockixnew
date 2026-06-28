@@ -1,0 +1,59 @@
+name: Layer 2 Image Lock Gate
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  image-lock-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail on unapproved Node versions in Dockerfiles
+        run: |
+          echo "Scanning for unapproved Node versions..."
+          FOUND=$(grep -rn "FROM node:" \
+            --include="Dockerfile" \
+            --include="Dockerfile.*" \
+            . \
+            | grep -v "node:22-alpine" \
+            | grep -v "node:22-bookworm-slim" \
+            | grep -v "^Binary" \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "IMAGE LOCK VIOLATION: Unapproved Node base image found:"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Clean."
+
+      - name: Fail on BASE_IMAGE ARG pattern in Dockerfiles
+        run: |
+          echo "Scanning for dynamic BASE_IMAGE ARG usage..."
+          FOUND=$(grep -rn "ARG BASE_IMAGE" \
+            --include="Dockerfile" \
+            --include="Dockerfile.*" \
+            . \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "IMAGE LOCK VIOLATION: Dynamic BASE_IMAGE ARG found — all images must be pinned:"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Clean."
+
+      - name: Fail on apk commands in bookworm-slim Dockerfiles
+        run: |
+          echo "Scanning Finance Dockerfile for apk usage..."
+          FOUND=$(grep -n "apk" \
+            services/stockix-finance/packages/server/Dockerfile \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "IMAGE LOCK VIOLATION: apk found in bookworm-slim Dockerfile (use apt-get):"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Clean."

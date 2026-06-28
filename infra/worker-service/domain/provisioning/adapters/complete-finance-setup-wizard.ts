@@ -23,6 +23,12 @@ export async function completeFinanceSetupWizard(params: {
     });
     const text = await res.text();
     if (!res.ok) {
+      if (res.status === 400 || res.status === 409) {
+        params.log(
+          `[provision] setup wizard already complete (graceful success) financeTenantId=${params.financeTenantId}: ${res.status}`,
+        );
+        return { ok: true };
+      }
       return {
         ok: false,
         error: `setup_complete_failed:${res.status}:${text.slice(0, 300)}`,

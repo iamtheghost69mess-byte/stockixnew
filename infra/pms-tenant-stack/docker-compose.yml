@@ -3,7 +3,9 @@ services:
     image: stockix-pms-frontend:local
     build:
       context: ${PMS_APP_ROOT}/frontend
-    restart: unless-stopped
+    deploy:
+      restart_policy:
+        condition: on-failure
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
@@ -13,14 +15,14 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_PMS_API_URL=http://pms-api:3003
-    ports:
-      - "127.0.0.1:${PMS_FRONTEND_HOST_PORT:-3004}:3000"
-    depends_on:
-      pms-api:
-        condition: service_healthy
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.pms_frontend_${COMPOSE_PROJECT_NAME:-default}.rule=Host(`${PMS_FRONTEND_URL_HOST:-}`)"
+        - "traefik.http.services.pms_frontend_${COMPOSE_PROJECT_NAME:-default}.loadbalancer.server.port=3000"
+        - "traefik.docker.network=stockix_public"
     networks:
       - stockix_public
-      - pms_internal
     mem_limit: 256m
     cpus: "0.25"
     mem_swappiness: 0
@@ -30,7 +32,9 @@ services:
     image: stockix-pms:local
     build:
       context: ${PMS_APP_ROOT}
-    restart: unless-stopped
+    deploy:
+      restart_policy:
+        condition: on-failure
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3003/health || exit 1"]
       interval: 20s
@@ -44,10 +48,15 @@ services:
       - AUTH_TOKEN_SECRET=${AUTH_TOKEN_SECRET}
       - PLATFORM_API_SECRET=${PLATFORM_API_SECRET}
       - TENANT_ID=${TENANT_ID}
-    ports:
-      - "127.0.0.1:${PMS_HOST_PORT:-3003}:3003"
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.pms_${COMPOSE_PROJECT_NAME:-default}.rule=Host(`${PUBLIC_APP_URL_HOST:-}`)"
+        - "traefik.http.services.pms_${COMPOSE_PROJECT_NAME:-default}.loadbalancer.server.port=3003"
+        - "traefik.docker.network=stockix_public"
     networks:
-      - pms_internal
+      - stockix_public
+      - stockix-shared
     mem_limit: 512m
     cpus: "0.5"
     mem_swappiness: 0
@@ -60,6 +69,6 @@ networks:
   stockix_public:
     name: stockix_public
     external: true
-  # Internal network scoped to this PMS tenant stack only
-  pms_internal:
-    driver: bridge
+  stockix-shared:
+    name: stockix-shared
+    external: true

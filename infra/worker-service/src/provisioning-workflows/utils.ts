@@ -1,6 +1,7 @@
 // Extracted utility functions
 import { apiConfig } from "@repo/config";
 import { encryptDeploymentSecret, decryptDeploymentSecret } from "@repo/shared/deployment-secrets";
+import { execa } from "execa";
 
 export function encryptDeploymentSecretLocal(plaintext: string): string {
   return encryptDeploymentSecret(plaintext, apiConfig.deploymentSecretKey);

@@ -27,12 +27,16 @@ function buildInternalHeaders(tenantId: string): Record<string, string> {
   return headers;
 }
 
+import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
+import { tenants } from "@repo/db/schema";
+import { eq } from "drizzle-orm";
+
 export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db | null): void {
   app.get("/pms/status", async (c) => {
     try {
       return c.json({
         configured: true,
-        baseUrl: requireEnv("PMS_BASE_URL", "http://localhost:3003"),
+        baseUrl: requireEnv("PMS_BASE_URL", "http://pms-api:3003"),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -52,6 +56,8 @@ export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
       return c.json({ error: "bad_request", message: "tenantId query parameter is required and must be a valid UUID" }, 400);
     }
 
+    let tenantSlug = "";
+
     if (db) {
       // Check the tenant has the PMS module licensed
       const access = await assertTenantModuleLicensed(db, rawTenantId, "pms");
@@ -65,6 +71,19 @@ export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
       if (!hasScope) {
         return c.json({ error: "forbidden", message: "Access to this tenant is not permitted" }, 403);
       }
+
+      const [tenant] = await db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, rawTenantId))
+        .limit(1);
+      if (tenant?.slug) {
+        tenantSlug = tenant.slug;
+      }
+    }
+
+    if (!tenantSlug) {
+      return c.json({ error: "not_found", message: "Tenant not found or slug missing" }, 404);
     }
 
     const subPath = c.req.path.replace(/^\/pms/, "");
@@ -75,12 +94,15 @@ export function registerPmsProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
         : await c.req.json().catch(() => undefined);
 
     const requestId = c.get("requestId");
+    
+    const pmsBaseUrl = buildTenantServiceUrl(tenantSlug, "pms-api", 3003);
 
     const { data, status } = await pmsProxyJson(subPath, method, {
       body,
       headers: buildInternalHeaders(rawTenantId),
       query: Object.fromEntries(new URL(c.req.url).searchParams.entries()),
       requestId,
+      baseUrl: pmsBaseUrl,
     });
     return c.json(data, status as 200);
   });

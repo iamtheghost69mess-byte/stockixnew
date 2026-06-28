@@ -2,7 +2,7 @@
 # packages/shared is synced from monorepo root before docker build.
 # Targets: runtime | migration-runtime
 
-FROM node:22-alpine AS deps
+FROM node:22-bookworm-slim AS deps
 
 USER root
 
@@ -54,12 +54,12 @@ COPY packages/server/src/database/system ./packages/server/src/database/system
 FROM migration-source AS migration-prod-deps
 RUN pnpm prune --prod
 
-FROM node:22-alpine AS migration-runtime
+FROM node:22-bookworm-slim AS migration-runtime
 
 ENV NODE_ENV=production
 WORKDIR /app/packages/server
 
-RUN addgroup -g 1001 -S stockix && adduser -S stockix -u 1001 -G stockix
+RUN groupadd --system --gid 1001 stockix && useradd --system --uid 1001 --gid stockix stockix
 
 COPY --from=migration-prod-deps /app/node_modules /app/node_modules
 COPY --from=migration-prod-deps /app/packages/server/package.json ./package.json
@@ -70,12 +70,12 @@ USER stockix
 CMD ["node", "./scripts/run-system-migrate.mjs"]
 
 # runtime MUST remain the final stage so `docker build` without --target is safe.
-FROM node:22-alpine AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app
 
-RUN addgroup -g 1001 -S stockix && adduser -S stockix -u 1001 -G stockix
+RUN groupadd --system --gid 1001 stockix && useradd --system --uid 1001 --gid stockix stockix
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./

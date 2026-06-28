@@ -1,0 +1,37 @@
+name: Layer 1 Network Architecture Gate
+on:
+  pull_request:
+    paths:
+      - 'infra/**/*'
+      - 'apps/api/src/**/*'
+      - 'packages/shared/src/tenant-dns.ts'
+
+jobs:
+  enforce-swarm-architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Forbid loopback ports in Compose files
+        run: |
+          if grep -rn "127.0.0.1:" infra/tenant-stack/ infra/pos-tenant-stack/ infra/pms-tenant-stack/; then
+            echo "ERROR: Loopback ports (127.0.0.1) found in tenant compose files. Tenant stacks must rely on Swarm DNS routing via Traefik labels."
+            exit 1
+          fi
+
+      - name: Forbid legacy dynamic compose spawning
+        run: |
+          if grep -rn "execa.*docker.*compose.*up" infra/worker-service/domain/provisioning/; then
+            echo "ERROR: Found dynamic docker-compose up execution. Tenant stacks must be deployed via docker stack deploy."
+            exit 1
+          fi
+
+      - name: Forbid loopback URLs in tenant proxy API
+        run: |
+          if grep -rn "localhost:[0-9]" apps/api/src/pos-proxy.ts apps/api/src/pos-public-url.ts apps/api/src/pms-proxy.ts apps/api/src/routes/pos-proxy-http.ts apps/api/src/routes/pms-proxy-http.ts; then
+            echo "ERROR: Localhost port hardcoding found in API proxy logic. Use buildTenantServiceUrl from @repo/shared/tenant-dns."
+            exit 1
+          fi
+
+      - name: Check pass
+        run: echo "Network architecture validation passed."

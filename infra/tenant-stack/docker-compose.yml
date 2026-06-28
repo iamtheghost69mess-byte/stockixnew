@@ -17,7 +17,6 @@ services:
 
   server:
     image: stockix-server:local
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/ping || exit 1"]
       interval: 20s
@@ -120,10 +119,14 @@ services:
       # GOTENBERG_DOCS_URL is the base URL that Gotenberg fetches HTML assets FROM
       # (i.e., the Finance server's own /public/ endpoint, not Gotenberg's URL).
       - GOTENBERG_DOCS_URL=${GOTENBERG_DOCS_URL}
-    ports:
-      # Bind on loopback only — Traefik reaches the container via the stockix_public network.
-      # infra-worker uses FINANCE_INTERNAL_BASE_URL (stockix-shared network) not host networking.
-      - "127.0.0.1:${PUBLIC_PROXY_PORT}:3000"
+    deploy:
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.tenant_${COMPOSE_PROJECT_NAME:-default}.rule=Host(`${PUBLIC_BASE_URL_HOST:-}`)"
+        - "traefik.http.services.tenant_${COMPOSE_PROJECT_NAME:-default}.loadbalancer.server.port=3000"
+        - "traefik.docker.network=stockix_public"
     depends_on:
       database_migration:
         condition: service_completed_successfully

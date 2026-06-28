@@ -1,3 +1,4 @@
+import './env'; // Boot validation — must be first
 import { createServer } from "node:http";
 import { getRequestListener } from "@hono/node-server";
 import { dbConfig, pmsConfig } from "@repo/config";

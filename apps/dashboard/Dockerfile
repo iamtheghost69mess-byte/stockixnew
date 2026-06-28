@@ -1,6 +1,13 @@
 # syntax=docker/dockerfile:1
-ARG BASE_IMAGE=ghcr.io/iamtheghost69mess-byte/stockix/stockix-base:node22
-FROM ${BASE_IMAGE} AS build
+FROM node:22-alpine AS build
+
+RUN apk upgrade --no-cache && \
+    apk add --no-cache libc6-compat dumb-init
+
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+WORKDIR /app
+
 ENV NODE_OPTIONS=--max-old-space-size=3072
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -36,8 +43,16 @@ ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 RUN pnpm --filter dashboard build
 RUN test -f apps/dashboard/.next/standalone/apps/dashboard/server.js
 
-FROM ${BASE_IMAGE} AS runner
+FROM node:22-alpine AS runner
+
+RUN apk upgrade --no-cache && \
+    apk add --no-cache libc6-compat dumb-init
+
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
 WORKDIR /app
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
 ENV NODE_ENV=production
 ENV PORT=3000

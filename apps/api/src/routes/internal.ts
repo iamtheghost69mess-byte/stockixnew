@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
 import { apiConfig } from "@repo/config";
 import type { createDb } from "@repo/db";
 import {
@@ -1707,14 +1708,14 @@ app.delete("/internal/branch-location-mapping", async (c) => {
     .where(eq(branchLocationMappings.id, mapping.id));
 
   const [deployment] = await db
-    .select({ internalPort: tenantDeployments.internalPort, financeTenantId: tenantDeployments.financeTenantId })
+    .select({ financeTenantId: tenantDeployments.financeTenantId, slug: tenants.slug })
     .from(tenantDeployments)
+    .innerJoin(tenants, eq(tenants.id, tenantDeployments.tenantId))
     .where(eq(tenantDeployments.tenantId, mapping.tenantId))
     .limit(1);
 
-  if (deployment?.internalPort && deployment.financeTenantId) {
-    const host = process.env.STOCKIX_FINANCE_INTERNAL_HOST || "127.0.0.1";
-    const internalUrl = `http://${host}:${deployment.internalPort}`;
+  if (deployment?.financeTenantId && deployment.slug) {
+    const internalUrl = buildTenantServiceUrl(deployment.slug, "server", 3000);
     const secret = apiConfig.internalApiSecret;
     if (secret) {
       try {

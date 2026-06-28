@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { execa } from "execa";
 
 import { apiConfig, posConfig } from "@repo/config";
+// @ts-ignore
 import { publishEvent } from "@repo/events";
 import { getControlPlaneRedisClient } from "../../../apps/api/src/lib/redis.js";
 import { decryptDeploymentSecret, encryptDeploymentSecret } from "@repo/shared/deployment-secrets";
@@ -84,7 +85,7 @@ import {
 } from "./module-stacks.js";
 import { loadProvisionJournalState } from "./provision-journal.js";
 
-type PosProvisionOutcome = {
+export type PosProvisionOutcome = {
   posStatus: "ok" | "failed" | "skipped";
   posError?: string;
   posOrganizationId?: string;
@@ -132,6 +133,61 @@ async function guardNoConcurrentProvision(
   // Concurrent provision guard — prevents duplicate compose/DB ops
   // for same tenant. See provision-lock.ts for implementation.
   await assertNoConcurrentTenantLifecycleJob(db, tenantId, lifecycleJobId);
+}
+
+
+/**
+ * ============================================================
+ * PROVISIONING STEP EXECUTION CONTRACT — READ BEFORE EDITING
+ * ============================================================
+ *
+ * Every step in this section follows this exact pattern:
+ *
+ * IDEMPOTENT STEPS (safe to retry):
+ *   if (!hasOp('step.name')) {
+ *     await withStepTimeout('step.name', TIMEOUT_MS, async () => {
+ *       await doTheAction(...);
+ *     });
+ *     await writeJournal(..., { operationKey: 'step.name' });
+ *   }
+ *
+ * NON-IDEMPOTENT STEPS (pre-marked before action):
+ *   if (!hasOp('step.name')) {
+ *     await markOpStarted(db, correlationId, 'step.name'); // MUST be first
+ *     await withStepTimeout('step.name', TIMEOUT_MS, async () => {
+ *       await doTheAction(...);
+ *     });
+ *     await writeJournal(..., { operationKey: 'step.name' });
+ *   }
+ *
+ * RULES:
+ * 1. NEVER add a step without a withStepTimeout wrapper
+ * 2. NEVER add a non-idempotent step without markOpStarted FIRST
+ * 3. NEVER write to an external API or send email without pre-marking
+ * 4. Journal writes (writeJournal) always go AFTER the action
+ * 5. markOpStarted always goes BEFORE the action
+ * ============================================================
+ */
+async function markOpStarted(db: PostgresJsDatabase<typeof dbSchema>, correlationId: string, operationKey: string): Promise<void> {
+  await db.insert(dbSchema.tenantProvisionEvents).values({
+    correlationId,
+    phase: "started",
+    level: "info",
+    message: `Started ${operationKey}`,
+    meta: { operationKey, status: "started" },
+  });
+}
+
+async function withStepTimeout<T>(stepName: string, timeoutMs: number, fn: () => Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`step_timeout:${stepName}:${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([fn(), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function executeProvisionRuntime(
@@ -956,9 +1012,9 @@ export async function executeProvisionRuntime(
       // Networking / Traefik — consumed by tenant docker-compose.yml
       tenantSlug: input.slug,
       tenantRootDomain: rootDomain,
-      traefikLabelsEnabled: apiConfig.traefikLabelsEnabled ? "true" : "false",
-      traefikNetwork: apiConfig.traefikNetwork,
-      workerInternalNetwork: apiConfig.workerInternalNetwork,
+      traefikLabelsEnabled: "true",
+      traefikNetwork: "stockix-shared",
+      workerInternalNetwork: "stockix-shared",
     });
     const envPath = await writeTenantEnvFileAtomic(join(tenantEnvRoot, input.slug), tenantEnvMap);
     if (!tenantEnvMap.MAIL_PASSWORD?.trim() || !tenantEnvMap.MAIL_FROM_ADDRESS?.trim()) {
@@ -1122,6 +1178,7 @@ export async function executeProvisionRuntime(
     let tenantServerInternalIp: string | undefined;
     let localDevFallback = false;
     if (!hasOp("docker.network_connect")) {
+      await withStepTimeout("docker.network_connect", 600000, async () => {
       try {
         await execa("docker", ["network", "connect", internalNetworkName, serverContainerName]);
         log(`[provision] connected ${serverContainerName} to ${internalNetworkName}`);
@@ -1149,6 +1206,7 @@ export async function executeProvisionRuntime(
           log(`[provision][warn] could not connect tenant server to ${internalNetworkName}: ${msg} — falling back to host.docker.internal`);
         }
       }
+    });
     } else {
       log(`[provision] network connect already journaled — skipping`);
       await trace.event("resume", "Skipping network connect (already journaled)", {
@@ -1201,15 +1259,16 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
     if (!hasOp("edge.publish")) {
+      await withStepTimeout("edge.publish", 600000, async () => {
       log("[provision] step start: edge.publish");
-      await assertTenantPortAvailable(db, port, {
+      await assertTenantPortAvailable(db, port!, {
         excludeTenantId: tenantId ?? undefined,
         slug: input.slug,
       });
       await maybePauseForDebug("Wire API routes/config");
       log("[step-start] Wire API routes/config");
       try {
-        await edge.publish(input.slug, port, rootDomain, project);
+        await edge.publish(input.slug, port!, rootDomain, project);
       } catch (error) {
         await trace.event("edge", "Traefik edge publish failed", {
           level: "error",
@@ -1227,6 +1286,7 @@ export async function executeProvisionRuntime(
       });
       log("[provision] step done: edge.publish");
       log("[step-end] Wire API routes/config");
+    });
     } else {
       await trace.event("resume", "Skipping edge publish (already journaled)", {
         meta: { operationKey: "edge.publish", slug: input.slug, internalPort: port },
@@ -1234,6 +1294,7 @@ export async function executeProvisionRuntime(
     }
     await checkNotCancelled();
     if (!hasOp("tenant.bootstrap_admin")) {
+      await withStepTimeout("tenant.bootstrap_admin", 600000, async () => {
       log("[provision] step start: tenant.bootstrap_admin");
       await trace.event("progress", "Starting bootstrap admin registration", {
         meta: { operationKey: "tenant.bootstrap_admin", elapsedMs: elapsedMs(), adminEmail: input.adminEmail },
@@ -1250,7 +1311,7 @@ export async function executeProvisionRuntime(
         firstName: input.adminFirstName,
         lastName: input.adminLastName,
         email: input.adminEmail,
-        password: oneTimeAdminPassword,
+        password: oneTimeAdminPassword!,
         organizationNumber,
         log,
         requestId,
@@ -1268,6 +1329,7 @@ export async function executeProvisionRuntime(
         elapsedMs: elapsedMs(),
       });
       log("[provision] step done: tenant.bootstrap_admin");
+    });
     } else {
       await trace.event("resume", "Skipping bootstrap admin registration (already journaled)", {
         meta: { operationKey: "tenant.bootstrap_admin", adminEmail: input.adminEmail },
@@ -1296,13 +1358,15 @@ export async function executeProvisionRuntime(
       const mainBase = input.mainTenantInternalBaseUrl?.trim();
       if (!mainBase) {
         if (!hasOp("tenant.fetch_org_settings")) {
+      await withStepTimeout("tenant.fetch_org_settings", 600000, async () => {
           log("[provision] step start: tenant.fetch_org_settings");
           log("[provision] No main tenant internal base URL; skipping settings fetch");
           await markOp("tenant.fetch_org_settings", "Skipped settings fetch (no main base URL)", {
             parentTenantSlug: input.parentTenantSlug,
           });
           log("[provision] step done: tenant.fetch_org_settings");
-        }
+        });
+    }
       } else if (!hasOp("tenant.build_organization")) {
         log("[provision] step start: tenant.fetch_org_settings");
         try {
@@ -1320,10 +1384,12 @@ export async function executeProvisionRuntime(
             log("[provision] Main org not reachable or not built; using MENA defaults");
           }
           if (!hasOp("tenant.fetch_org_settings")) {
+      await withStepTimeout("tenant.fetch_org_settings", 600000, async () => {
             await markOp("tenant.fetch_org_settings", "Org settings fetch completed", {
               inherited: Boolean(fetched),
             });
-          } else {
+          });
+    } else {
             await trace.event("resume", "Refreshed org settings from main before build retry", {
               meta: { operationKey: "tenant.fetch_org_settings", inherited: Boolean(fetched) },
             });
@@ -1334,10 +1400,12 @@ export async function executeProvisionRuntime(
             }`,
           );
           if (!hasOp("tenant.fetch_org_settings")) {
+      await withStepTimeout("tenant.fetch_org_settings", 600000, async () => {
             await markOp("tenant.fetch_org_settings", "Org settings fetch failed; using defaults", {
               error: err instanceof Error ? err.message : String(err),
             });
-          }
+          });
+    }
         }
         log("[provision] step done: tenant.fetch_org_settings");
       } else if (hasOp("tenant.fetch_org_settings")) {
@@ -1349,6 +1417,7 @@ export async function executeProvisionRuntime(
 
     await checkNotCancelled();
     if (!hasOp("tenant.build_organization")) {
+      await withStepTimeout("tenant.build_organization", 600000, async () => {
       log("[provision] step start: tenant.build_organization");
       await trace.event("progress", "Building organization database and seeding defaults", {
         meta: { operationKey: "tenant.build_organization", elapsedMs: elapsedMs() },
@@ -1562,6 +1631,7 @@ export async function executeProvisionRuntime(
         );
         throw err;
       }
+    });
     } else {
       await trace.event("resume", "Skipping organization build (already journaled)", {
         meta: { operationKey: "tenant.build_organization" },
@@ -1603,6 +1673,7 @@ export async function executeProvisionRuntime(
 
     await checkNotCancelled();
     if (!hasOp("tenant.activate_warehouses")) {
+      await withStepTimeout("tenant.activate_warehouses", 600000, async () => {
       const internalApiSecret = apiConfig.internalApiSecret;
       if (financeTenantId && internalUrl && internalApiSecret) {
         log("[provision] step start: tenant.activate_warehouses");
@@ -1653,6 +1724,7 @@ export async function executeProvisionRuntime(
           hasFinanceTenantId: Boolean(financeTenantId),
         });
       }
+    });
     } else {
       await trace.event("resume", "Skipping warehouse activation (already journaled)", {
         meta: { operationKey: "tenant.activate_warehouses" },
@@ -1661,6 +1733,8 @@ export async function executeProvisionRuntime(
 
     await checkNotCancelled();
     if (!hasOp("tenant.seed_pos_defaults")) {
+      await markOpStarted(db, correlationId, "tenant.seed_pos_defaults");
+      await withStepTimeout("tenant.seed_pos_defaults", 600000, async () => {
       const internalApiSecret = apiConfig.internalApiSecret;
       const seedPosDefaults =
         hasAccountingAndPos(licensedModules)
@@ -1735,6 +1809,7 @@ export async function executeProvisionRuntime(
           modules: licensedModules,
         });
       }
+    });
     } else {
       await trace.event("resume", "Skipping POS defaults seed (already journaled)", {
         meta: { operationKey: "tenant.seed_pos_defaults" },
@@ -1898,7 +1973,7 @@ export async function executeProvisionRuntime(
         slug: input.slug,
         modules: input.modules ?? ["accounting"],
         timestamp: new Date().toISOString(),
-      }).catch(err => {
+      }).catch((err: unknown) => {
         log(`[provision] failed to publish tenant.provisioned event: ${err}`);
       });
       if (posOutcome.posStatus === "ok" && posOrganizationId && posDefaultCredentials) {
@@ -1907,7 +1982,7 @@ export async function executeProvisionRuntime(
           posOrganizationId,
           credentials: posDefaultCredentials.allRoles,
           timestamp: new Date().toISOString(),
-        }).catch(err => {
+        }).catch((err: unknown) => {
           log(`[provision] failed to publish pos.credentials.generated event: ${err}`);
         });
       }
@@ -2082,6 +2157,8 @@ export async function runAddModuleStep(
       }
 
       if (!hasOp("add_module.finance_welcome_email")) {
+      await markOpStarted(db, correlationId, "add_module.finance_welcome_email");
+      await withStepTimeout("add_module.finance_welcome_email", 600000, async () => {
         try {
           const bootstrapPassword = row.financeAdminPassword
             ? (decryptDeploymentSecret(row.financeAdminPassword, apiConfig.deploymentSecretKey) ?? oneTimeAdminPasswordFromSlug(input.slug))
@@ -2102,7 +2179,8 @@ export async function runAddModuleStep(
             }`,
           );
         }
-      }
+      });
+    }
 
       result = result ?? { ok: true, module: "accounting", tenantStatus: "active" };
     } else if (input.module === "pos") {

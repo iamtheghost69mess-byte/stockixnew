@@ -1,3 +1,4 @@
+import './env'; // Boot validation — must be first
 import { initTracing } from "./instrumentation.js";
 initTracing();
 

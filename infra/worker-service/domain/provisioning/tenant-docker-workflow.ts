@@ -38,21 +38,26 @@ export async function runDockerExec(params: {
   timeoutMs?: number;
   log?: (message: string) => void;
 }): Promise<void> {
-  const { composeFile, project, envPath, composeEnv, service, command, timeoutMs, log } = params;
+  const { project, composeEnv, service, command, timeoutMs, log } = params;
   log?.(`[docker] exec ${project}/${service}: ${command.join(" ")}`);
+
+  const slug = project.replace(/^stockix-/, '');
+  const stackName = `stockix_tenant_${slug.replace(/-/g, '_')}`;
+  const serviceName = `${stackName}_${service}`;
+
+  const psResult = await execa("docker", ["ps", "-q", "-f", `name=${serviceName}`]);
+  const containerId = psResult.stdout.split('\n')[0]?.trim();
+
+  if (!containerId) {
+    throw new Error(`Container for service ${serviceName} not found`);
+  }
+
   await execa(
     "docker",
     [
-      "compose",
-      "-f",
-      composeFile,
-      "-p",
-      project,
-      "--env-file",
-      envPath,
       "exec",
       "-T",
-      service,
+      containerId,
       ...command,
     ],
     {

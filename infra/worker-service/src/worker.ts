@@ -1,3 +1,4 @@
+import './env'; // Boot validation — must be first
 import * as Sentry from "@sentry/node";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -960,6 +961,22 @@ async function runDeprovisionJob(db: ReturnType<typeof createDb>, job: {
   if (!result.ok) throw new Error(result.message);
 }
 
+async function scaleAllTenantServices(slug: string, scale: 0 | 1): Promise<void> {
+  const stackName = `stockix_tenant_${slug.replace(/-/g, '_')}`;
+  const services = [
+    `${stackName}_server`,
+    `${stackName}_pos-backend`,
+    `${stackName}_pos-frontend`,
+    `${stackName}_pos-platform-worker`,
+    `${stackName}_pos-bigcapital-worker`,
+    `${stackName}_pms-api`,
+    `${stackName}_pms-frontend`,
+  ];
+  for (const srv of services) {
+    await execa("docker", ["service", "scale", `${srv}=${scale}`], { reject: false });
+  }
+}
+
 async function runTenantLifecycleCommand(
   db: ReturnType<typeof createDb>,
   job: { tenantId: string | null; id: string; payload: Record<string, unknown> },
@@ -980,9 +997,16 @@ async function runTenantLifecycleCommand(
   if (!row || !row.composeProjectName) {
     throw new Error("tenant_not_found");
   }
-  await execa("docker", ["compose", "-p", row.composeProjectName, command], {
-    timeout: 60_000,
-  });
+
+  if (command === "stop" || command === "pause") {
+    await scaleAllTenantServices(row.slug, 0);
+  } else if (command === "start" || command === "unpause") {
+    await scaleAllTenantServices(row.slug, 1);
+  } else {
+    // If command is restart
+    await scaleAllTenantServices(row.slug, 0);
+    await scaleAllTenantServices(row.slug, 1);
+  }
 
   // Mirror the lifecycle outcome into tenantDeployments.status so the dashboard
   // reflects the actual container state immediately after the job completes.
@@ -1010,8 +1034,7 @@ async function runTenantSuspendJob(
     .limit(1);
   if (!row) throw new Error("tenant_not_found");
 
-  // Stop the Finance stack using the explicit compose file path (more reliable than -p only).
-  await stopFinanceStack(row.slug, log);
+  await scaleAllTenantServices(row.slug, 0);
 
   await db
     .update(tenantDeployments)
@@ -1039,8 +1062,7 @@ async function runTenantReactivateJob(
   const project = row.composeProjectName ?? resolveComposeProjectName(row.slug);
   log(`[tenant.reactivate] Starting Finance stack project=${project} for slug=${row.slug}`);
 
-  // Restart stopped containers in the existing project (preserves volumes and config).
-  await execa("docker", ["compose", "-p", project, "start"], { timeout: 120_000 });
+  await scaleAllTenantServices(row.slug, 1);
 
   await db
     .update(tenantDeployments)

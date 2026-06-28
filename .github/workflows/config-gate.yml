@@ -1,0 +1,61 @@
+name: Layer 3 Config Gate
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  config-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify API boot validator exists and is imported first
+        run: |
+          echo "Checking API boot validator..."
+          test -f apps/api/src/env.ts || { echo "MISSING: apps/api/src/env.ts"; exit 1; }
+          head -5 apps/api/src/index.ts | grep -q "env" || { echo "BOOT VALIDATOR NOT FIRST IMPORT in apps/api/src/index.ts"; exit 1; }
+          echo "OK"
+
+      - name: Verify POS boot validator exists and is imported first
+        run: |
+          echo "Checking POS boot validator..."
+          test -f apps/pos-backend/env-validate-boot.js || { echo "MISSING: apps/pos-backend/env-validate-boot.js"; exit 1; }
+          head -5 apps/pos-backend/app.js | grep -q "env-validate-boot" || { echo "BOOT VALIDATOR NOT FIRST in apps/pos-backend/app.js"; exit 1; }
+          echo "OK"
+
+      - name: Verify PMS boot validator exists and is imported first
+        run: |
+          echo "Checking PMS boot validator..."
+          test -f services/pms/src/env.ts || { echo "MISSING: services/pms/src/env.ts"; exit 1; }
+          head -5 services/pms/src/server.ts | grep -q "env" || { echo "BOOT VALIDATOR NOT FIRST in services/pms/src/server.ts"; exit 1; }
+          echo "OK"
+
+      - name: Verify Finance boot validator exists and is imported first
+        run: |
+          echo "Checking Finance boot validator..."
+          test -f services/stockix-finance/packages/server/src/env.ts || { echo "MISSING: services/stockix-finance/packages/server/src/env.ts"; exit 1; }
+          head -5 services/stockix-finance/packages/server/src/main.ts | grep -q "env" || { echo "BOOT VALIDATOR NOT FIRST in main.ts"; exit 1; }
+          echo "OK"
+
+      - name: Verify Worker boot validator exists and is imported first
+        run: |
+          echo "Checking Worker boot validator..."
+          test -f infra/worker-service/src/env.ts || { echo "MISSING: infra/worker-service/src/env.ts"; exit 1; }
+          head -5 infra/worker-service/src/worker.ts | grep -q "env" || { echo "BOOT VALIDATOR NOT FIRST in worker.ts"; exit 1; }
+          echo "OK"
+
+      - name: Fail on localhost fallback in Finance queue config
+        run: |
+          echo "Scanning Finance queue config for localhost fallback..."
+          FOUND=$(grep -n "localhost" \
+            services/stockix-finance/packages/server/src/common/config/queue.ts \
+            || true)
+          if [ -n "$FOUND" ]; then
+            echo "CONFIG GATE VIOLATION: localhost found in Finance queue config:"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Clean."

@@ -128,12 +128,12 @@ export const apiConfig = {
     return env.PLATFORM_JWT_SECRET;
   },
   get allowBootstrapLogin() {
-    return env.ALLOW_BOOTSTRAP_LOGIN === "true" || env.ALLOW_BOOTSTRAP_LOGIN === "1";
+    return !!env.ALLOW_BOOTSTRAP_LOGIN;
   },
   get signupDisabled(): boolean {
     const val = env.SIGNUP_DISABLED;
     if (val === undefined || val === null) return true;
-    return val === "true" || val === "1";
+    return !!val;
   },
   get signupAllowedDomains(): string {
     return env.SIGNUP_ALLOWED_DOMAINS ?? "";
@@ -289,10 +289,6 @@ export const apiConfig = {
       const platformJwtSecret = env.PLATFORM_JWT_SECRET?.trim();
       if (!platformJwtSecret || platformJwtSecret === "__MUST_OVERRIDE__") {
         throw new Error("[config] PLATFORM_JWT_SECRET must be set in production");
-      }
-      const posPlatformApiKey = env.POS_PLATFORM_API_KEY?.trim();
-      if (!posPlatformApiKey || posPlatformApiKey === "__MUST_OVERRIDE__") {
-        throw new Error("[config] POS_PLATFORM_API_KEY must be set in production");
       }
     }
   },

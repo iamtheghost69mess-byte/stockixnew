@@ -28,7 +28,7 @@ import { ExecaDockerComposeRunner } from "../domain/provisioning/adapters/execa-
 import type { ProvisionTracer } from "../domain/provision-trace.js";
 import { buildPosCorsOrigins } from "../domain/provisioning/pos-cors-origins.js";
 import { redactComposeLogLine } from "../domain/provisioning/redact-compose-log.js";
-import { dockerImageExists, isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
+import { isPosFrontendStubImage } from "../domain/provisioning/check-tenant-images.js";
 import { ProvisionError } from "../domain/provisioning/provision-error.js";
 
 import {
@@ -126,7 +126,7 @@ function repoRoot(): string {
 
 }
 
-async function dockerImageExists(tag: string): Promise<boolean> {
+async function imageExists(tag: string): Promise<boolean> {
   try {
     await execa("docker", ["image", "inspect", tag], { stdio: "pipe" });
     return true;
@@ -474,12 +474,12 @@ export async function provisionPosStack(
       : {}),
   };
 
-  if (!(await dockerImageExists("stockix-pos-backend:local"))) {
+  if (!(await imageExists("stockix-pos-backend:local"))) {
     throw new Error(
       "stockix-pos-backend:local not found — run pnpm pos:images:build before POS provision",
     );
   }
-  if (!(await dockerImageExists("stockix-pos-frontend:local"))) {
+  if (!(await imageExists("stockix-pos-frontend:local"))) {
     throw new Error(
       "stockix-pos-frontend:local not found — run pnpm pos:images:build before POS provision",
     );
@@ -708,12 +708,11 @@ export async function stopFinanceStack(
   slug: string,
   log: (m: string) => void,
 ): Promise<void> {
-  const composeFile = join(repoRoot(), "infra", "tenant-stack", "docker-compose.yml");
-  const project = composeProjectName(slug);
-  log(`[module-stop][accounting] compose stop project=${project}`);
+  const stackName = `stockix_tenant_${slug.replace(/-/g, '_')}`;
+  log(`[module-stop][finance] docker service scale ${stackName}_server=0`);
   await execa(
     "docker",
-    ["compose", "-f", composeFile, "-p", project, "stop"],
+    ["service", "scale", `${stackName}_server=0`],
     { stdio: "pipe", reject: false },
   );
 }
@@ -724,43 +723,21 @@ export async function stopModuleStack(
   module: "pos" | "pms",
   log: (m: string) => void,
 ): Promise<void> {
+  const stackName = `stockix_tenant_${slug.replace(/-/g, '_')}`;
+  log(`[module-stop][${module}] scaling ${stackName} services to 0`);
   if (module === "pos") {
-    const composeFile = join(repoRoot(), "infra", "pos-tenant-stack", "docker-compose.yml");
-    const project = `stockix-pos-${slug}`;
-    const envPath = resolvePosTenantEnvPath(slug);
-    let composeEnv: Record<string, string> = {
-      ...process.env,
-      COMPOSE_PROJECT_NAME: project,
-    } as Record<string, string>;
-    try {
-      composeEnv = { ...composeEnv, ...(await readTenantEnvFile(slug)) };
-    } catch {
-      // Best-effort teardown when env file is missing.
-    }
-    log(`[module-stop][pos] compose down project=${project}`);
-    await posDockerRunner.run(
-      composeFile,
-      project,
-      envPath,
-      composeEnv,
-      ["down", "--remove-orphans"],
-      { timeoutMs: 2 * 60 * 1000 },
-    ).catch((error) => {
-      log(
-        `[module-stop][pos] compose down warning: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
+    await execa("docker", ["service", "scale", `${stackName}_pos-backend=0`], { reject: false });
+    await execa("docker", ["service", "scale", `${stackName}_pos-frontend=0`], { reject: false });
+    await execa("docker", ["service", "scale", `${stackName}_pos-platform-worker=0`], { reject: false });
+    await execa("docker", ["service", "scale", `${stackName}_pos-bigcapital-worker=0`], { reject: false });
     await unpublishPosTraefik(slug);
     return;
   }
-  const composeFile = join(repoRoot(), "infra", "pms-tenant-stack", "docker-compose.yml");
-  const project = `stockix-pms-${slug}`;
-  log(`[module-stop][pms] compose down project=${project}`);
-  await execa(
-    "docker",
-    ["compose", "-f", composeFile, "-p", project, "down", "--remove-orphans"],
-    { stdio: "pipe", reject: false },
-  );
+  if (module === "pms") {
+    await execa("docker", ["service", "scale", `${stackName}_pms-api=0`], { reject: false });
+    await execa("docker", ["service", "scale", `${stackName}_pms-frontend=0`], { reject: false });
+    return;
+  }
 }
 
 
@@ -783,7 +760,7 @@ export async function provisionPmsStack(opts: {
 
   opts.log(`[provision][pms] compose up project=${project}`);
 
-  const hasImage = await dockerImageExists("stockix-pms:local");
+  const hasImage = await imageExists("stockix-pms:local");
   const upArgs = ["up", "-d"];
   if (!hasImage) {
     opts.log(`[provision][pms] building stockix-pms:local...`);

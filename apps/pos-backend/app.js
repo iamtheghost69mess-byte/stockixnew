@@ -1,3 +1,4 @@
+require('./env-validate-boot'); // Boot validation — must be first
 const http = require("http");
 const express = require("express");
 const path = require("path");
@@ -20,17 +21,7 @@ const processErrorHandlersFlag = "__POS_PROCESS_ERROR_HANDLERS__";
 
 const PORT = config.port;
 
-if (!config.accessTokenSecret || !config.refreshTokenSecret) {
-  logger.error(
-    "Set JWT_SECRET in .env (required). JWT_REFRESH_SECRET is optional; it defaults to JWT_SECRET with a suffix."
-  );
-  process.exit(1);
-}
 
-if (config.nodeEnv === "production" && !process.env.PLATFORM_JWT_SECRET) {
-  logger.error("PLATFORM_JWT_SECRET must be set in production.");
-  process.exit(1);
-}
 
 initSentry();
 connectDB();

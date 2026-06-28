@@ -60,7 +60,7 @@ export function buildTenantSignupEnv(): {
 }
 
 function mailSecureEnvValue(): string {
-  return env.MAIL_SECURE === "true" || env.MAIL_SECURE === "1" ? "true" : "";
+  return env.MAIL_SECURE ? "true" : "";
 }
 
 

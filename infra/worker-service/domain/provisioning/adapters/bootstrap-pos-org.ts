@@ -1,5 +1,6 @@
 import { posConfig } from "@repo/config";
 import { buildPosEntitlementsForProvision } from "@repo/shared/pos-entitlements-from-modules";
+import { buildTenantServiceUrl } from "@repo/shared/tenant-dns";
 
 export type PosRoleCredential = {
   role: string;
@@ -55,12 +56,9 @@ const PLATFORM_AUTH_TIMEOUT_MS = 30_000;
 const PLATFORM_AUTH_INTERVAL_MS = 1_000;
 
 function posApiBase(input: BootstrapPosOrgInput): string {
-  const port = input.posHostPort ?? Number(process.env.POS_HOST_PORT ?? 8010);
-  const fromEnv = input.posBaseUrl ?? posConfig.platformBaseUrl;
-  if (fromEnv && !fromEnv.includes("localhost:8010")) {
-    return fromEnv.replace(/\/+$/, "");
-  }
-  return `http://127.0.0.1:${port}`;
+  // Host ports removed in Layer 1. POS backend is reached via Swarm DNS.
+  // The URL is constructed by buildTenantServiceUrl from @repo/shared/tenant-dns
+  return buildTenantServiceUrl(input.slug, 'pos-backend', 8010);
 }
 
 function apiKeyOrThrow(): string {

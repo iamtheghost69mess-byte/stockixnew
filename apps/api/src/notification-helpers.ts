@@ -49,13 +49,7 @@ async function loadTenantContext(db: Db, tenantId: string) {
 function financePublicUrl(slug: string, internalPort: number | null): string | null {
   const root = apiConfig.rootDomain?.trim() || "localhost";
   const scheme = (apiConfig.publicBaseUrlScheme ?? "http").replace(/:+$/, "");
-  if (root === "localhost" && internalPort != null && Number.isFinite(internalPort)) {
-    return `${scheme}://${slug}.${root}:${internalPort}`;
-  }
-  if (root !== "localhost") {
-    return `${scheme}://${slug}.${root}`;
-  }
-  return null;
+  return `${scheme}://${slug}.${root}`;
 }
 
 export function notifyProvisionOutcome(

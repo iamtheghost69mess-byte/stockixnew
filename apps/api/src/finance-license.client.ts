@@ -5,7 +5,7 @@ import { requireEnv } from "./lib/require-env.js";
 function isFinanceLicenseSyncOptional(): boolean {
   return apiConfig.financeLicenseSyncOptional;
 }
-import { tenantDeployments } from "@repo/db/schema";
+import { tenantDeployments, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@repo/db/schema";
@@ -153,22 +153,23 @@ export function mapStockixLicenseStatus(
   return "active";
 }
 
+import { buildTenantServiceUrl } from "../../../packages/shared/src/tenant-dns.js";
+
 export async function resolveTenantInternalBaseUrl(
   db: Db,
   stockixTenantId: string,
 ): Promise<string | null> {
-  const [deployment] = await db
-    .select({ internalPort: tenantDeployments.internalPort })
-    .from(tenantDeployments)
-    .where(eq(tenantDeployments.tenantId, stockixTenantId))
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, stockixTenantId))
     .limit(1);
 
-  if (!deployment?.internalPort) {
+  if (!tenant?.slug) {
     return null;
   }
 
-  const host = requireEnv("STOCKIX_FINANCE_INTERNAL_HOST", "127.0.0.1");
-  return `http://${host}:${deployment.internalPort}`;
+  return buildTenantServiceUrl(tenant.slug, "server", 3000);
 }
 
 export async function syncFinanceLicenseForStockixTenant(
