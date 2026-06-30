@@ -2,7 +2,7 @@ name: Build and Publish Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, architecture2]
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}

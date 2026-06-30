@@ -1,0 +1,248 @@
+# Stockix staging shared infrastructure — mirrors infra/shared/ with isolated volumes and network.
+# Stack name: stockix-staging-shared
+# Network: stockix-staging-shared (separate from prod stockix-shared)
+#
+# Run before deploying the staging main stack:
+#   docker stack deploy \
+#     -c infra/staging-shared/docker-compose.yml \
+#     --env-file infra/staging/.env \
+#     stockix-staging-shared
+#
+# All staging tenant containers join `stockix-staging-shared`.
+# Hostname aliases are identical to prod so SHARED_MYSQL_HOST=stockix-mysql etc. resolve correctly.
+# MySQL replica is omitted — not needed in staging.
+
+name: stockix-staging-shared
+
+services:
+
+  stockix-mysql:
+    image: mysql:8.0-bookworm
+    restart: unless-stopped
+    hostname: stockix-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=500
+      - --wait_timeout=60
+      - --interactive_timeout=60
+      - --connect_timeout=10
+      - --innodb-buffer-pool-size=128M
+      - --innodb-log-file-size=32M
+      - --slow-query-log=ON
+      - --long-query-time=2
+      - --server-id=1
+      - --log_bin=mysql-bin
+      - --binlog_format=ROW
+      - --binlog_expire_logs_seconds=86400
+    volumes:
+      - staging_shared_mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      stockix-staging-shared:
+        aliases:
+          - shared-mysql
+          - stockix-mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "--password=${SHARED_MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 384m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+      resources:
+        limits:
+          memory: 384m
+          cpus: "0.5"
+
+  stockix-mysql-proxy:
+    image: proxysql/proxysql:2.6.2
+    restart: unless-stopped
+    hostname: stockix-mysql-proxy
+    depends_on:
+      stockix-mysql:
+        condition: service_healthy
+    environment:
+      SHARED_MYSQL_ROOT_PASSWORD: ${SHARED_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ../shared/proxysql.cnf.template:/etc/proxysql.cnf.template:ro
+      - ../shared/proxysql-entrypoint.sh:/usr/local/bin/proxysql-entrypoint.sh:ro
+      - staging_shared_proxysql_data:/var/lib/proxysql
+    entrypoint: ["/bin/sh", "/usr/local/bin/proxysql-entrypoint.sh"]
+    networks:
+      stockix-staging-shared:
+        aliases:
+          - stockix-mysql-proxy
+          - mysql-proxy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysql -h127.0.0.1 -P6033 -uroot -p"$$SHARED_MYSQL_ROOT_PASSWORD" -e "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 192m
+    cpus: "0.25"
+    mem_swappiness: 0
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+      resources:
+        limits:
+          memory: 192m
+          cpus: "0.25"
+
+  stockix-mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    hostname: stockix-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+    volumes:
+      - staging_shared_mongo_data:/data/db
+    networks:
+      stockix-staging-shared:
+        aliases:
+          - shared-mongo
+          - stockix-mongo
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mongosh --quiet --eval "quit(db.adminCommand({ping:1}).ok === 1 ? 0 : 1)"'
+      interval: 15s
+      timeout: 15s
+      retries: 10
+      start_period: 45s
+    mem_limit: 384m
+    cpus: "0.5"
+    mem_swappiness: 0
+    oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+
+  stockix-mongo-rs-init:
+    image: mongo:6.0
+    restart: "no"
+    depends_on:
+      stockix-mongo:
+        condition: service_healthy
+    networks:
+      - stockix-staging-shared
+    entrypoint:
+      - bash
+      - /scripts/rs-init.sh
+    volumes:
+      - ../shared/mongo/rs-init.sh:/scripts/rs-init.sh:ro
+    deploy:
+      restart_policy:
+        condition: none
+
+  stockix-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    hostname: stockix-redis
+    environment:
+      TENANT_REDIS_PASSWORD: ${TENANT_REDIS_PASSWORD}
+    command:
+      - redis-server
+      - --requirepass
+      - ${TENANT_REDIS_PASSWORD}
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - "900 1"
+      - --appendonly
+      - "yes"
+    volumes:
+      - staging_shared_tenant_redis_data:/data
+    networks:
+      stockix-staging-shared:
+        aliases:
+          - tenant-redis
+          - stockix-redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$TENANT_REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    mem_limit: 320m
+    cpus: "0.25"
+    mem_swappiness: 0
+    oom_kill_disable: false
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 320m
+          cpus: "0.25"
+
+  stockix-gotenberg:
+    image: gotenberg/gotenberg:7
+    restart: unless-stopped
+    hostname: stockix-gotenberg
+    expose:
+      - '3000'
+    networks:
+      stockix-staging-shared:
+        aliases:
+          - stockix-gotenberg
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 512m
+    cpus: "0.5"
+    mem_swappiness: 0
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 10s
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+
+volumes:
+  staging_shared_mysql_data:
+    name: stockix_staging_shared_mysql
+  staging_shared_mongo_data:
+    name: stockix_staging_shared_mongo
+  staging_shared_tenant_redis_data:
+    name: stockix_staging_shared_tenant_redis
+  staging_shared_proxysql_data:
+    name: stockix_staging_shared_proxysql
+
+networks:
+  stockix-staging-shared:
+    name: stockix-staging-shared
+    driver: overlay
+    attachable: true
+    external: true

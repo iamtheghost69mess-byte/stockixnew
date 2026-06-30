@@ -88,3 +88,11 @@ services:
   postgres-exporter:
     deploy:
       replicas: 0
+
+# Redirect the inherited stockix-shared network to the staging-specific overlay.
+# All services that join stockix-shared in the prod compose will instead join
+# stockix-staging-shared, giving staging its own isolated MySQL/MongoDB/Redis.
+networks:
+  stockix-shared:
+    name: stockix-staging-shared
+    external: true

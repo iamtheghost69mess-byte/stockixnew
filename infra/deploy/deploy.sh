@@ -29,6 +29,10 @@ STATE_DIR="/opt/stockix"
 STATE_FILE="${STATE_DIR}/.last-deploy-state"
 GHCR_PREFIX="ghcr.io/iamtheghost69mess-byte/stockix"
 
+# Stack name differs between environments
+STACK_NAME="stockix"
+[ "$ENV_NAME" = "staging" ] && STACK_NAME="stockix-staging"
+
 # ── Detect Swarm mode ──────────────────────────────────────────
 SWARM_STATE=$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo "inactive")
 USE_SWARM=false
@@ -36,9 +40,11 @@ USE_SWARM=false
 echo "Runtime mode: $( $USE_SWARM && echo 'Docker Swarm (docker stack deploy)' || echo 'Docker Compose' )"
 
 # ── Fetch latest repo changes ──────────────────────────────────
-git fetch origin main
-git checkout main
-git reset --hard "origin/main"
+DEPLOY_BRANCH="main"
+[ "$ENV_NAME" = "staging" ] && DEPLOY_BRANCH="architecture2"
+git fetch origin "$DEPLOY_BRANCH"
+git checkout "$DEPLOY_BRANCH"
+git reset --hard "origin/$DEPLOY_BRANCH"
 
 # ── Load env ───────────────────────────────────────────────────
 if [ ! -x scripts/load-env-file.sh ]; then
@@ -56,7 +62,7 @@ mkdir -p "$STATE_DIR"
     # In Swarm mode, get image from service spec
     for svc in api dashboard infra-worker; do
       img=$(docker service inspect --format='{{.Spec.TaskTemplate.ContainerSpec.Image}}' \
-        "stockix_${svc}" 2>/dev/null || echo "not-running")
+        "${STACK_NAME}_${svc}" 2>/dev/null || echo "not-running")
       KEY=$(echo "PREV_IMAGE_STOCKIX_${svc}" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
       echo "${KEY}=${img}"
     done
@@ -99,17 +105,43 @@ docker tag "${GHCR_PREFIX}-dashboard:${RELEASE_SHA}"     stockix-dashboard:lates
 docker tag "${GHCR_PREFIX}-infra-worker:${RELEASE_SHA}"  stockix-infra-worker:latest
 
 # ── Deploy ─────────────────────────────────────────────────────
-cd "infra/${ENV_NAME}"
-
 if $USE_SWARM; then
   echo "Deploying via docker stack deploy..."
-  # Pull infra images that Swarm downloads from registry (traefik, socket-proxy, etc.)
-  docker compose --env-file .env pull traefik socket-proxy >/dev/null 2>&1 || true
 
-  docker stack deploy \
-    --compose-file docker-compose.yml \
-    --with-registry-auth \
-    stockix
+  if [ "$ENV_NAME" = "staging" ]; then
+    # ── 1. Deploy staging-shared first (MySQL, MongoDB, Redis, ProxySQL) ──────
+    echo "Deploying stockix-staging-shared infrastructure..."
+    docker stack deploy \
+      --compose-file "${REPO_ROOT}/infra/staging-shared/docker-compose.yml" \
+      --with-registry-auth \
+      stockix-staging-shared
+
+    echo "Waiting 45s for staging-shared to converge..."
+    sleep 45
+
+    # ── 2. Deploy staging main stack (prod compose + staging overlay merged) ──
+    echo "Deploying stockix-staging main stack..."
+    docker compose \
+      -f "${REPO_ROOT}/infra/prod/docker-compose.yml" \
+      -f "${REPO_ROOT}/infra/staging/docker-compose.yml" \
+      --env-file "${REPO_ROOT}/infra/staging/.env" \
+      pull traefik socket-proxy >/dev/null 2>&1 || true
+
+    docker stack deploy \
+      -c "${REPO_ROOT}/infra/prod/docker-compose.yml" \
+      -c "${REPO_ROOT}/infra/staging/docker-compose.yml" \
+      --with-registry-auth \
+      stockix-staging
+  else
+    # ── Production: single compose ────────────────────────────────────────────
+    cd "${REPO_ROOT}/infra/${ENV_NAME}"
+    docker compose --env-file .env pull traefik socket-proxy >/dev/null 2>&1 || true
+
+    docker stack deploy \
+      --compose-file docker-compose.yml \
+      --with-registry-auth \
+      stockix
+  fi
 
   echo "Stack submitted. Waiting 90s for services to converge..."
   sleep 90
@@ -118,6 +150,7 @@ if $USE_SWARM; then
   docker service ls --format 'table {{.Name}}\t{{.Replicas}}'
 else
   echo "Deploying via docker compose..."
+  cd "${REPO_ROOT}/infra/${ENV_NAME}"
   docker compose --env-file .env pull traefik socket-proxy
   docker compose --env-file .env up -d --no-build --wait --wait-timeout 300 \
     traefik postgres control-plane-redis socket-proxy api api-bullmq dashboard infra-worker db-backup
