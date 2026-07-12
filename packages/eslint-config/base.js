@@ -27,6 +27,6 @@ export const config = [
     },
   },
   {
-    ignores: ["dist/**"],
+    ignores: ["dist/**", "playwright-report/**", "test-results/**"],
   },
 ];

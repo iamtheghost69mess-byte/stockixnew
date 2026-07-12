@@ -24,6 +24,11 @@ export const nextJsConfig = [
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated Playwright test output — vendored/minified trace-viewer bundles,
+    // not source code. Linting these produces hundreds of meaningless warnings
+    // (phantom React Hook violations, undefined Buffer, etc. from mangled code).
+    "playwright-report/**",
+    "test-results/**",
   ]),
   {
     ...pluginReact.configs.flat.recommended,
