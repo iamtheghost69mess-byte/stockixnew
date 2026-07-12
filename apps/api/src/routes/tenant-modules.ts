@@ -1,7 +1,6 @@
-import * as schema from "@repo/db/schema";
 import { licenses, tenantDeployments, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { createDb } from "@repo/db";
 import type { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -17,8 +16,9 @@ import {
   serializeTenantModules,
 } from "../services/auth/stockix-product-token.js";
 import { insertTenantJob } from "../services/tenant-jobs.js";
+import { tenantWithinOwnerScope } from "./tenants-shared.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = ReturnType<typeof createDb>;
 
 const stockixTenantIdParam = z.string().uuid();
 
@@ -65,6 +65,10 @@ export function registerTenantModulesRoutes(
     const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
     }
 
     const bodyParsed = moduleBodySchema.safeParse(await c.req.json().catch(() => ({})));
@@ -159,6 +163,10 @@ export function registerTenantModulesRoutes(
     const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
     }
 
     const bodyParsed = removeModuleBodySchema.safeParse(await c.req.json().catch(() => ({})));

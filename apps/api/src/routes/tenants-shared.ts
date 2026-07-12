@@ -115,6 +115,18 @@ function decryptProvisionSecretLocal(ciphertext: string): string | null {
   return decryptProvisionSecret(ciphertext);
 }
 
+/** Thrown inside the organization-creation transaction to roll it back and
+ * carry the HTTP response back out to the route handler. */
+class OrganizationCreateBusinessError extends Error {
+  constructor(
+    public status: 402 | 500,
+    public errorCode: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export async function tenantWithinOwnerScope(
   client: DbClient,
   c: { get: (key: string) => unknown },
@@ -1916,62 +1928,73 @@ app.post("/tenants/:tenantId/organizations", async (c) => {
     );
   }
 
-  const elig = await getTenantLicenseEligibility(db, parsed.data);
-  if (elig === "license_expired") {
-    return c.json(
-      {
-        error: "LICENSE_EXPIRED",
-        message: "This tenant's license has expired. Renew or assign a new license before adding organizations.",
-      },
-      402,
-    );
-  }
-  if (elig === "no_active_license") {
-    return c.json(
-      {
-        error: "NO_ACTIVE_LICENSE",
-        message: "Assign an active license to this tenant before adding organizations.",
-      },
-      402,
-    );
-  }
-
-  const allowed = await canCreateOrganization(db, parsed.data);
-  if (!allowed) {
-    return c.json(
-      {
-        error: "PLAN_LIMIT_REACHED",
-        message: "Upgrade your plan to add more organizations",
-      },
-      402,
-    );
-  }
-
-  const existingOrgCountRows = await db
-    .select({ count: count() })
-    .from(organizations)
-    .where(eq(organizations.tenantId, parsed.data));
-  const existingOrgCount = Number(existingOrgCountRows[0]?.count ?? 0);
-  const isFirstOrg = existingOrgCount === 0;
-
   const slug = await pickUniqueOrganizationSlug(db, body.name);
   const root = rootDomainForOrganizationSubdomain();
   const subdomain = `${slug}.${root}`.slice(0, 255);
 
-  const [inserted] = await db
-    .insert(organizations)
-    .values({
-      tenantId: parsed.data,
-      name: body.name,
-      slug,
-      subdomain,
-      status: "provisioning",
-      isPrimary: isFirstOrg,
-    })
-    .returning();
+  let inserted: typeof organizations.$inferSelect;
+  try {
+    inserted = await db.transaction(async (tx) => {
+      // Lock the parent tenant row for the duration of the transaction so two
+      // concurrent org-creation requests for the same tenant can't both pass
+      // the plan-limit check or both land as isPrimary — same "lock the parent
+      // row" idiom used for job-claiming in internal.ts.
+      await tx.execute(sql`SELECT id FROM ${tenants} WHERE ${tenants.id} = ${parsed.data} FOR UPDATE`);
 
-  if (!inserted) {
-    return c.json({ error: "organization_create_failed" }, 500);
+      const elig = await getTenantLicenseEligibility(tx, parsed.data);
+      if (elig === "license_expired") {
+        throw new OrganizationCreateBusinessError(
+          402,
+          "LICENSE_EXPIRED",
+          "This tenant's license has expired. Renew or assign a new license before adding organizations.",
+        );
+      }
+      if (elig === "no_active_license") {
+        throw new OrganizationCreateBusinessError(
+          402,
+          "NO_ACTIVE_LICENSE",
+          "Assign an active license to this tenant before adding organizations.",
+        );
+      }
+
+      const allowed = await canCreateOrganization(tx, parsed.data);
+      if (!allowed) {
+        throw new OrganizationCreateBusinessError(
+          402,
+          "PLAN_LIMIT_REACHED",
+          "Upgrade your plan to add more organizations",
+        );
+      }
+
+      const existingOrgCountRows = await tx
+        .select({ count: count() })
+        .from(organizations)
+        .where(eq(organizations.tenantId, parsed.data));
+      const existingOrgCount = Number(existingOrgCountRows[0]?.count ?? 0);
+      const isFirstOrg = existingOrgCount === 0;
+
+      const [row] = await tx
+        .insert(organizations)
+        .values({
+          tenantId: parsed.data,
+          name: body.name,
+          slug,
+          subdomain,
+          status: "provisioning",
+          isPrimary: isFirstOrg,
+        })
+        .returning();
+
+      if (!row) {
+        throw new OrganizationCreateBusinessError(500, "organization_create_failed", "Could not create organization");
+      }
+      return row;
+    });
+  } catch (err) {
+    if (err instanceof OrganizationCreateBusinessError) {
+      return c.json({ error: err.errorCode, message: err.message }, err.status);
+    }
+    throw err;
   }
 
   void enqueueOrgProvisioning(db, inserted.id, parsed.data).catch((err) => {

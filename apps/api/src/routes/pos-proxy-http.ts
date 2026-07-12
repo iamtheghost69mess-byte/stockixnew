@@ -437,63 +437,63 @@ export function registerPosProxyRoutes(app: Hono<ControlPlaneAuthEnv>, db?: Db |
 
 
   app.get("/pos/status", async (c) => {
+    return withPosModuleAccess(db, c, async () => {
+      let base: string;
 
-    let base: string;
+      let frontendUrl: string;
 
-    let frontendUrl: string;
+      try {
 
-    try {
+        base = requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
 
-      base = requireEnv("POS_PLATFORM_BASE_URL", "http://localhost:8010");
+        frontendUrl = requireEnv("POS_FRONTEND_URL", "http://localhost:3001");
 
-      frontendUrl = requireEnv("POS_FRONTEND_URL", "http://localhost:3001");
+      } catch (err) {
 
-    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
 
-      const message = err instanceof Error ? err.message : String(err);
+        return c.json({ configured: false, error: message }, 503);
 
-      return c.json({ configured: false, error: message }, 503);
+      }
 
-    }
+      let reachable = false;
 
-    let reachable = false;
+      let pingError: string | undefined;
 
-    let pingError: string | undefined;
+      try {
 
-    try {
+        // pos-backend mounts `routes/healthRoute` at `/health` (not Nest `/api/ping`).
 
-      // pos-backend mounts `routes/healthRoute` at `/health` (not Nest `/api/ping`).
+        const res = await fetch(`${base.replace(/\/+$/, "")}/health`, {
 
-      const res = await fetch(`${base.replace(/\/+$/, "")}/health`, {
+          signal: AbortSignal.timeout(4_000),
 
-        signal: AbortSignal.timeout(4_000),
+        });
+
+        reachable = res.ok;
+
+        if (!reachable) pingError = `HTTP ${res.status}`;
+
+      } catch (err) {
+
+        pingError = err instanceof Error ? err.message : String(err);
+
+      }
+
+      return c.json({
+
+        configured: base.length > 0,
+
+        reachable,
+
+        baseUrl: base,
+
+        frontendUrl,
+
+        ...(pingError ? { pingError } : {}),
 
       });
-
-      reachable = res.ok;
-
-      if (!reachable) pingError = `HTTP ${res.status}`;
-
-    } catch (err) {
-
-      pingError = err instanceof Error ? err.message : String(err);
-
-    }
-
-    return c.json({
-
-      configured: base.length > 0,
-
-      reachable,
-
-      baseUrl: base,
-
-      frontendUrl,
-
-      ...(pingError ? { pingError } : {}),
-
     });
-
   });
 
 }

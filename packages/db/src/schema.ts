@@ -134,6 +134,11 @@ export const organizations = pgTable(
   (t) => [
     index("organizations_tenant_id_idx").on(t.tenantId),
     uniqueIndex("organizations_tenant_slug_unique").on(t.tenantId, t.slug),
+    // At most one primary organization per tenant — backs the double-primary
+    // race fixed alongside the org-creation transaction lock.
+    uniqueIndex("organizations_one_primary_per_tenant")
+      .on(t.tenantId)
+      .where(sql`${t.isPrimary} = true`),
   ],
 );
 

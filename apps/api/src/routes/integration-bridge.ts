@@ -1,17 +1,17 @@
 import { tenantDeployments, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { createDb } from "@repo/db";
 import type { Hono } from "hono";
 import { z } from "zod";
-import * as schema from "@repo/db/schema";
 import { posProxyJson } from "../pos-proxy.js";
 import type { ControlPlaneAuthEnv } from "../middleware/auth.js";
 import {
   assertTenantModuleLicensed,
   respondModuleAccessDenied,
 } from "../lib/tenant-module-access.js";
+import { tenantWithinOwnerScope } from "./tenants-shared.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = ReturnType<typeof createDb>;
 
 const stockixTenantIdParam = z.string().uuid();
 
@@ -25,6 +25,10 @@ export function registerIntegrationBridgeRoutes(
     const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
     }
 
     const posAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "pos");

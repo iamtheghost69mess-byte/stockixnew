@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { createDb } from "@repo/db";
 import { syncTenantBrandingToFinance } from "../finance-branding-sync.js";
 import { generatePublicDiscoverySlug } from "../lib/tenant-discovery-slug.js";
+import { tenantWithinOwnerScope } from "./tenants-shared.js";
 type ApiEnv = {
   Variables: {
     actorId: string;
@@ -75,6 +76,10 @@ export function registerTenantConfigApi(
       .limit(1);
     if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
 
+    if (!(await tenantWithinOwnerScope(db, c, parsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
+    }
+
     const [row] = await db
       .select()
       .from(tenantConfig)
@@ -122,6 +127,10 @@ export function registerTenantConfigApi(
       .where(eq(tenants.id, parsedId.data))
       .limit(1);
     if (!tenantRow) return c.json({ error: "tenant_not_found" }, 404);
+
+    if (!(await tenantWithinOwnerScope(db, c, parsedId.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
+    }
 
     const patch = parsedBody.data;
     const [existing] = await db

@@ -1,11 +1,10 @@
 import { apiConfig } from "@repo/config";
 import { tenantDeployments, tenants } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { createDb } from "@repo/db";
 import type { Context } from "hono";
 import type { Hono } from "hono";
 import { z } from "zod";
-import * as schema from "@repo/db/schema";
 import {
   createFinanceUsersClient,
   type CreateFinanceUserDto,
@@ -17,8 +16,9 @@ import {
   assertTenantModuleLicensed,
   respondModuleAccessDenied,
 } from "../lib/tenant-module-access.js";
+import { tenantWithinOwnerScope } from "./tenants-shared.js";
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = ReturnType<typeof createDb>;
 
 const stockixTenantIdParam = z.string().uuid();
 const financeUserIdParam = z.coerce.number().int().positive();
@@ -138,6 +138,10 @@ async function withFinanceUsersContext(
   stockixTenantId: string,
   handler: (ctx: TenantFinanceUsersContext) => Promise<Response>,
 ): Promise<Response> {
+  if (!(await tenantWithinOwnerScope(db, c, stockixTenantId))) {
+    return c.json({ error: "tenant_not_found" }, 404);
+  }
+
   const moduleAccess = await assertTenantModuleLicensed(db, stockixTenantId, "accounting");
   if (!moduleAccess.ok) {
     return respondModuleAccessDenied(c, moduleAccess);
@@ -170,6 +174,10 @@ export function registerTenantFinanceUsersApi(
     const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
     }
 
     const moduleAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "accounting");

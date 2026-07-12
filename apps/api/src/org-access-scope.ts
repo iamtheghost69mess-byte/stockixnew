@@ -9,20 +9,25 @@ const { ownerOrganizationAccess } = schema;
 type Db = PostgresJsDatabase<typeof schema>;
 
 /**
- * Owners with `tenants.org_scope` (or legacy support_agent) may be limited to tenants
- * listed in `owner_organization_access`. Empty rows = full tenant access (legacy).
+ * Owners with `tenants.org_scope` (or legacy support_agent) are limited to tenants/orgs
+ * listed in `owner_organization_access`. Zero rows = zero access (default-deny) until a
+ * super_admin assigns grants — a role that never uses org scope (e.g. super_admin) is the
+ * only case that gets unrestricted access, signaled by returning `null` below.
  */
 export function ownerUsesTenantOrgScope(
   permissions: readonly string[],
   roleSlug: string,
 ): boolean {
-  if (hasPermission(permissions, "tenants.org_scope")) return true;
+  // Wildcard = super_admin unrestricted access — never apply org scope restriction
+  if (permissions.includes("*")) return false;
+  if (permissions.includes("tenants.org_scope")) return true;
   return roleSlug === "support_agent";
 }
 
 /**
- * Distinct tenant IDs this owner may access when org-scoped rows exist.
- * Returns `null` when no scope rows (full access) or owner is not org-scoped.
+ * Distinct tenant IDs this owner may access. Returns `null` only when the owner's role
+ * doesn't use org scope at all (unrestricted). An org-scoped owner with zero grant rows
+ * gets back `[]` — no tenants — rather than unrestricted access.
  */
 export async function getScopedTenantIdsForOwner(
   db: Db,
@@ -36,8 +41,6 @@ export async function getScopedTenantIdsForOwner(
     .select({ tenantId: ownerOrganizationAccess.tenantId })
     .from(ownerOrganizationAccess)
     .where(eq(ownerOrganizationAccess.ownerId, ownerId));
-
-  if (rows.length === 0) return null;
 
   return [...new Set(rows.map((r) => r.tenantId))];
 }
@@ -55,9 +58,9 @@ export async function assertTenantInOwnerScope(
 }
 
 /**
- * When a support_agent has at least one `owner_organization_access` row for this tenant,
- * they may only read or mutate organizations whose id appears in that set.
- * When there are no rows, they retain full tenant-level access (legacy behavior).
+ * Organization ids this owner may access within this tenant, for callers whose role uses
+ * org scope (checked via `ownerUsesTenantOrgScope` at the call site). Zero rows means zero
+ * organizations — callers must not treat an empty array as unrestricted.
  */
 export async function getSupportScopedOrgIdsForTenant(
   db: Db,
@@ -70,7 +73,6 @@ export async function getSupportScopedOrgIdsForTenant(
     .where(
       and(eq(ownerOrganizationAccess.ownerId, ownerId), eq(ownerOrganizationAccess.tenantId, tenantId)),
     );
-  if (rows.length === 0) return null;
   return [...new Set(rows.map((r) => r.organizationId))];
 }
 

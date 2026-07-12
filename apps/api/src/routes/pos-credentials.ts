@@ -18,6 +18,7 @@ import {
   type PosDefaultCredentialsPayload,
   provisionPosCredentialsCache,
 } from "../lib/provision-caches.js";
+import { tenantWithinOwnerScope } from "./tenants-shared.js";
 
 type Db = ReturnType<typeof createDb>;
 
@@ -131,6 +132,10 @@ export function registerPosCredentialsRoutes(
       return c.json({ error: "tenantId must be a UUID" }, 400);
     }
 
+    if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
+    }
+
     const moduleAccess = await assertTenantModuleLicensed(db, tenantParsed.data, "pos");
     if (!moduleAccess.ok) return respondModuleAccessDenied(c, moduleAccess);
 
@@ -215,6 +220,10 @@ export function registerPosCredentialsRoutes(
     const tenantParsed = stockixTenantIdParam.safeParse(c.req.param("tenantId"));
     if (!tenantParsed.success) {
       return c.json({ error: "tenantId must be a UUID" }, 400);
+    }
+
+    if (!(await tenantWithinOwnerScope(db, c, tenantParsed.data))) {
+      return c.json({ error: "tenant_not_found" }, 404);
     }
 
     const bodyParsed = resetPinBody.safeParse(await c.req.json().catch(() => ({})));

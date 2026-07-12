@@ -900,47 +900,65 @@ app.post("/internal/jobs/:jobId/complete", async (c) => {
       }
 
       if (updated.type === "tenant.provision" && financeOrganizationIdFromResult) {
-        const existingPrimary = await db
-          .select({ id: organizations.id })
-          .from(organizations)
-          .where(
-            and(
-              eq(organizations.tenantId, targetTenantId),
-              eq(organizations.isPrimary, true),
-            ),
-          )
-          .limit(1);
+        // Wrapped in a transaction with a row lock on the tenant, same idiom as the
+        // dashboard's org-creation route — job-completion callbacks can be retried
+        // (worker network retry, at-least-once delivery), so this check-then-insert
+        // must be race-safe too. The partial unique index on organizations.isPrimary
+        // is the hard backstop if two callbacks still interleave despite the lock;
+        // the unique-violation catch below makes that case a no-op instead of a 500.
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT id FROM ${tenants} WHERE ${tenants.id} = ${targetTenantId} FOR UPDATE`);
 
-        if (existingPrimary.length === 0) {
-          const [tenant] = await db
-            .select()
-            .from(tenants)
-            .where(eq(tenants.id, targetTenantId))
+          const existingPrimary = await tx
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(
+              and(
+                eq(organizations.tenantId, targetTenantId),
+                eq(organizations.isPrimary, true),
+              ),
+            )
             .limit(1);
 
-          if (tenant) {
-            const root = rootDomainForOrganizationSubdomain();
-            const subdomain = `${tenant.slug}.${root}`.slice(0, 255);
-            await db.insert(organizations).values({
-              tenantId: tenant.id,
-              name: tenant.name,
-              slug: tenant.slug,
-              subdomain,
-              status: "active",
-              isPrimary: true,
-              financeOrganizationId: financeOrganizationIdFromResult,
-            });
+          if (existingPrimary.length === 0) {
+            const [tenant] = await tx
+              .select()
+              .from(tenants)
+              .where(eq(tenants.id, targetTenantId))
+              .limit(1);
+
+            if (tenant) {
+              const root = rootDomainForOrganizationSubdomain();
+              const subdomain = `${tenant.slug}.${root}`.slice(0, 255);
+              try {
+                await tx.insert(organizations).values({
+                  tenantId: tenant.id,
+                  name: tenant.name,
+                  slug: tenant.slug,
+                  subdomain,
+                  status: "active",
+                  isPrimary: true,
+                  financeOrganizationId: financeOrganizationIdFromResult,
+                });
+              } catch (err) {
+                const code = (err as { code?: string } | null)?.code;
+                if (code !== "23505") throw err; // not a unique-violation — real error
+                logger.warn("primary organization already existed (concurrent provision completion)", {
+                  tenantId: targetTenantId,
+                });
+              }
+            }
+          } else {
+            await tx
+              .update(organizations)
+              .set({
+                status: "active",
+                financeOrganizationId: financeOrganizationIdFromResult,
+                updatedAt: new Date(),
+              })
+              .where(eq(organizations.id, existingPrimary[0]!.id));
           }
-        } else {
-          await db
-            .update(organizations)
-            .set({
-              status: "active",
-              financeOrganizationId: financeOrganizationIdFromResult,
-              updatedAt: new Date(),
-            })
-            .where(eq(organizations.id, existingPrimary[0]!.id));
-        }
+        });
       }
     }
 
